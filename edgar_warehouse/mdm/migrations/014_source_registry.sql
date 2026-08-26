@@ -115,3 +115,25 @@ BEGIN
     END IF;
 END;
 $$;
+
+-- Ticket 30 (change-propagation map) sibling gap: the REVOKE above only
+-- closes application's own direct grant, exactly like 013_acquisition_ledger.sql's
+-- original application-only REVOKE did before that fix -- application also
+-- carries an ambient, platform-managed, INHERIT-true membership in Snowflake
+-- Postgres's snowflake_write role, which independently grants full DML on
+-- these two objects and was never revoked here. Confirmed live 2026-08-26:
+-- has_table_privilege('application', 'source_registry_version', 'SELECT')
+-- returned true even after the REVOKE above ran, because snowflake_write's
+-- own direct grant (inherited by application) was untouched. This is the
+-- same gap 013 already had fixed for its nine tables; it was never ported to
+-- this file when 014 was written. Guarded on snowflake_write existing at all
+-- (Snowflake-Postgres-managed platform infrastructure, not present on a
+-- local/test Postgres instance) for the same reason 013's equivalent block is.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'snowflake_write') THEN
+        REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage
+        FROM snowflake_write;
+    END IF;
+END;
+$$;

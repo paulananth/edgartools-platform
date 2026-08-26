@@ -1532,8 +1532,76 @@ graph. This is the same class of gap the "MDM Postgres migration-011 schema drif
 "Manifest-pipeline ownership" incidents above already document for other subsystems — a real
 role graph is not optional coverage for anything that fences a table by role.
 
-**Not yet deployed** as of this entry — migration `014_source_registry.sql` has not been applied
-to prod, and no image rebuild has happened for this fix.
+**Deployed 2026-08-26** — migration `014_source_registry.sql` (this fix) applied live to prod via
+`bootstrap-prod-mdm.sh`'s `snowflake_admin` path, alongside the Ticket 30 `snowflake_write`
+REVOKE fix below, which found 014 had its own sibling gap of that same shape. See
+"snowflake_write RESET ACCESS re-grant" 5-whys below for the full deploy story and a second,
+more severe platform behavior it surfaced.
+
+## snowflake_write RESET ACCESS re-grant 5-whys (fixed, deployed to prod 2026-08-26)
+
+**Problem:** Deploying Ticket 30's `snowflake_write` REVOKE fix (change-propagation map — see
+"Manifest-pipeline ownership" and the Ticket 20 entry above for the sibling incidents this one
+continues) via `bootstrap-prod-mdm.sh` completed with `mdm migrate` reporting success and no
+errors, but a live `has_table_privilege` sweep immediately after showed `application` and
+`snowflake_write` **still** fully leaking DML access on all 11 fenced acquisition-ledger/registry
+objects — contradicting an error-free migration run.
+
+1. Symptom: `has_table_privilege('snowflake_write', 'source_fetch_decision', 'SELECT')` returned
+   `true` right after a `mdm migrate` run whose own code path (confirmed by direct inspection and
+   by calling `_apply_acquisition_ledger_migration` as a raw Python import) unconditionally issues
+   `REVOKE ALL PRIVILEGES ... FROM snowflake_write` on that exact table when `may_manage` is true
+   (confirmed true: `pg_has_role('snowflake_admin', 'edgartools_acquisition_owner', 'MEMBER')`).
+2. Why does a successful REVOKE not show as revoked moments later? Calling
+   `_apply_acquisition_ledger_migration(engine)` directly (bypassing the `mdm migrate` CLI
+   entirely) revoked it immediately and the change held — proving the REVOKE mechanism itself is
+   correct. The CLI path and the direct-call path use the identical source file and function; the
+   only structural difference between the two test runs was how many
+   `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` calls happened around each one.
+3. Why would RESET ACCESS matter? Isolated with a minimal repro: REVOKE, verify revoked (`false`),
+   call `RESET ACCESS FOR 'snowflake_admin'` again with **zero other writes** in between, re-verify
+   — the privilege came back (`true`). Repeated for `RESET ACCESS FOR 'application'` with the same
+   result. **Root cause: Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML
+   access to these objects as a platform side effect of resetting *either* role's access** — a
+   previously-undocumented behavior, distinct from and more severe than the standing
+   `pg_default_acl` rule Ticket 30's original investigation already found (that rule explains why
+   *new* tables get the grant; this explains why an *already-revoked* table's grant comes back).
+4. Why did this make the fix ineffective in practice, not just in this one test? `bootstrap-prod-mdm.sh`'s
+   normal run order is `mdm migrate` (applies the REVOKE) *then* `RESET ACCESS FOR 'application'`
+   (part of the very same script, run on every single invocation) — so the script's own final step
+   silently reopened the fence on every normal run, not just during ad hoc diagnostics.
+5. **Root cause, restated:** the fix assumed "REVOKE persists once applied," which holds for plain
+   Postgres but not for this platform's managed-role reconciliation, and nothing in the deploy
+   script re-verified the end state after its own later steps ran.
+
+**Compounding finding, same investigation:** migration 014 (`014_source_registry.sql`, Ticket 20)
+had the identical original gap 013 once had — its own `application`-only REVOKE never got a
+`snowflake_write` counterpart when it was written, so its two tables leaked via the same inherited-membership
+path documented in Ticket 30's original writeup. Fixed the same way, mirroring 013's block.
+
+**Fix:** `bootstrap-prod-mdm.sh` gained a new step — a fresh `snowflake_admin` rotation followed by
+re-running `mdm migrate` (idempotent) — inserted after the `application` RESET ACCESS + secret
+write and before the optional Snowflake-secret population, so it becomes the script's true last
+database-mutating operation and both RESET ACCESS calls' side effects get corrected before the
+script exits. `014_source_registry.sql` gained the same `snowflake_write` REVOKE block 013 has.
+Live state after both fixes, verified via a full `has_table_privilege` sweep across all 11 objects
+× both roles × SELECT/INSERT/UPDATE/DELETE: zero leaks.
+
+**Open, unresolved risk:** this fix only protects runs that go through `bootstrap-prod-mdm.sh`
+end-to-end. Any future credential rotation of either role — including one run outside this script,
+e.g. manual incident response — reopens the fence until the next `mdm migrate` run, and nothing
+currently monitors for that drift. A periodic live `has_table_privilege` check, alerting if either
+role regains access, is the natural follow-up; not yet built. See
+[Ticket 30](.scratch/change-propagation/issues/30-fence-application-from-acquisition-tables-under-snowflake-write.md)'s
+"Bullet 4 resolved" section for full detail.
+
+**Process note:** while diagnosing this live, a `RESET ACCESS FOR 'application'` command's raw
+output was briefly piped through `tail` into visible output instead of straight into a
+credential-consuming script, exposing the new plaintext password in that session's transcript.
+Caught immediately; invalidated by rotating `application` again through the correct piped pattern
+before any further action, with the AWS secret rewritten to match. A reminder that even a "just
+checking it ran" command against this script's output needs the same discipline as every other
+credential-handling step — there is no safe shortcut for a quick manual peek.
 
 ## LOAD_SILVER_LANDING_TASK credit-burn 5-whys (resolved 2026-08-25, widened further 2026-08-26)
 

@@ -47,8 +47,11 @@ defines.
 **Blocked by:** None — can start immediately. Surfaced while resolving
 [29 — Deploy the gated acquisition path to prod and dry-run it](29-deploy-and-dry-run-gated-acquisition-path.md).
 
-**Status:** in-progress (bullets 1, 2, and 3 done; bullet 4 blocked on Ticket
-43/a privileged credential — see Progress below)
+**Status:** resolved (2026-08-26) — all four bullets done, verified live
+against prod: zero leaked privileges across all 11 fenced objects × both
+roles. See the "Bullet 4 resolved" section below for the second platform
+behavior this surfaced (RESET ACCESS reopens the fence) and the open
+monitoring gap that follows from it.
 
 - [x] Confirm whether `snowflake_write`'s blanket grant on new tables is a
   Snowflake Postgres platform guarantee (i.e. will recur for every future
@@ -61,7 +64,7 @@ defines.
 - [x] Correct `models.py`'s `SourceExpectedProducerRecord` docstring to match
   whatever the real, verified enforcement boundary is after this ticket,
   not the aspirational claim it makes today.
-- [ ] Verify live against prod: `application` (no `SET ROLE`) can no longer
+- [x] Verify live against prod: `application` (no `SET ROLE`) can no longer
   read/write the nine objects directly, while `SET ROLE
   edgartools_acquisition_processor` (etc.) still can.
 
@@ -167,3 +170,73 @@ silently no-ops before reaching this statement (Ticket 43). Live prod
 verification (`application` denied, `SET ROLE
 edgartools_acquisition_processor` etc. still permitted) needs either Ticket
 43 resolved or a more privileged Postgres connection supplied by the user.
+
+## Bullet 4 resolved (2026-08-26) — and a second, more severe platform behavior found live
+
+Ticket 43 unblocked the deploy path (`bootstrap-prod-mdm.sh`'s `snowflake_admin`
+credential). Ran it live against prod. `mdm migrate` completed successfully
+and the REVOKE statement executed with no error — but a full `has_table_privilege`
+sweep immediately after showed **all 11 objects (the original 9 plus the two
+014/Ticket-20 registry tables) still fully leaking for both `application` and
+`snowflake_write`**, contradicting a successful, error-free migration run.
+
+**Root cause, confirmed by direct, isolated reproduction (apply REVOKE,
+verify revoked, call `RESET ACCESS` again with zero other writes in between,
+re-verify):** `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` itself
+re-grants `snowflake_write`'s baseline DML access to these objects as a
+platform side effect — confirmed for **both** `RESET ACCESS FOR
+'snowflake_admin'` and `RESET ACCESS FOR 'application'`. This is a
+previously-undocumented Snowflake Postgres platform behavior, distinct from
+and more severe than the standing `pg_default_acl` rule bullet 1 already
+found (that rule explains why *new* tables get the grant; this explains why
+an *already-revoked* table's grant comes back). Practical consequence:
+`bootstrap-prod-mdm.sh`'s own normal run order — `mdm migrate` (applies the
+REVOKE) *then* `RESET ACCESS FOR 'application'` (silently reopens it) — means
+**every normal run of the script left the fence open**, not just my
+diagnostic rotations.
+
+**Second, independent gap found in the same pass:** migration 014
+(`014_source_registry.sql`, Ticket 20) only ever revoked `application`'s own
+direct grant on `source_registry_version`/`source_registry_coverage` — it
+never got the equivalent `snowflake_write` REVOKE this ticket added to 013.
+Same shape as 013's original gap, on the sibling migration; fixed the same
+way (mirrored block, guarded on `snowflake_write` existing).
+
+**Fixes shipped:**
+- `014_source_registry.sql` gained the same `snowflake_write` REVOKE block
+  013 has, scoped to its two objects.
+- `bootstrap-prod-mdm.sh` gained a new step, immediately after the
+  `application` RESET ACCESS + secret write and before the optional
+  Snowflake-secret population: a fresh `snowflake_admin` rotation followed
+  by re-running `mdm migrate` (idempotent) as the script's true last
+  database-mutating operation — so both RESET ACCESS calls' side effects are
+  corrected before the script exits, not just the first.
+
+**Live state after both fixes, verified via `has_table_privilege` across all
+11 objects × both roles × SELECT/INSERT/UPDATE/DELETE: zero leaks.** This is
+the first time bullet 4's acceptance criterion has actually been met.
+
+**Open, unresolved risk — this is a live gap, not just a historical note:**
+any future credential rotation of `snowflake_admin` or `application` on this
+instance (including one run *outside* `bootstrap-prod-mdm.sh`, e.g. a manual
+`RESET ACCESS` for incident response) reopens this fence until the next `mdm
+migrate` run, and **nothing currently monitors for that drift**. The fix
+inside `bootstrap-prod-mdm.sh` only protects runs that go through that exact
+script end-to-end. A periodic live check (the same `has_table_privilege`
+sweep used to verify this ticket) running on a schedule, alerting if either
+role regains access, is the natural follow-up — not filed as its own ticket
+yet; flagging here for whoever picks this map back up.
+
+**Process note:** while diagnosing this, a `snow sql ... RESET ACCESS FOR
+'application'` command's raw JSON output (containing the new plaintext
+`application` password) was piped through `tail` directly into visible tool
+output instead of straight into a credential-consuming script, briefly
+exposing it in this session's transcript. Caught immediately; the exposed
+password was invalidated by rotating `application` again through the correct
+piped pattern (`snow sql ... | python3 <extractor> | bootstrap-aws-mdm-secrets.sh
+--password-stdin`, never touching stdout) before any further action, and the
+AWS secret was rewritten to match. No other script or process ever saw the
+exposed value. Every other credential handled in this session's diagnostics
+went through the same safe piped pattern from the start; this was the one
+exception, caused by an ad hoc one-off command written outside that pattern
+for a quick manual check.
