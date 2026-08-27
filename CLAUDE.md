@@ -1775,6 +1775,74 @@ Registry" entries above (SQLite can't model Postgres's real GRANT/role semantics
 DuckDB table can't model DuckDB's real ADD-COLUMN-with-DEFAULT row-rewrite semantics) — a real,
 populated fixture is not optional coverage for anything that touches existing rows.
 
+## sec_financial_fact retirement publish-conflict 5-whys (partially resolved 2026-08-27)
+
+**Problem:** immediately after the migration 010 fix above unblocked local schema evolution, the
+same Ticket 46 verification run's `daily-incremental` still failed (exit 2) — this time at the
+final silver-publish step, with `SemanticMergeConflictError`:
+`434805 ambiguous same-key conflict(s) block publication: sec_financial_fact{...}: ['valid_from',
+'is_current']` for every one of the 434,805 pre-existing rows.
+
+1. Symptom: `merge_candidate_into_canonical` (`silver_protection.py`) treats every pre-existing
+   `sec_financial_fact` row as an unresolvable conflict on its first publish after Ticket 33.
+2. Why? Built a direct repro against the real function (not just read the code): this table's
+   `_comparable_columns` diff includes `valid_from`/`is_current` (no `provenance_columns`
+   exemption for them existed), and the additive schema-reconciliation step — canonical learning
+   about the 3 new columns for the first time — added them via a bare
+   `ALTER TABLE ... ADD COLUMN IF NOT EXISTS {type}` with **no default**, leaving every
+   pre-existing canonical row `NULL`. The candidate's own local schema migration
+   (`_add_company_facts_retirement_columns`) had already backfilled real values. NULL-vs-real-value
+   on a comparable column reads as a genuine conflict.
+3. Why does that block the whole publish instead of resolving via the authority column? This
+   table's `authority_column` is `ingested_at` — untouched by either side here (same original
+   capture timestamp both places), so it ties, and `_resolve_conflict` returns `None`
+   (ambiguous) on an exact tie, aborting the merge.
+4. Why did this never surface before? `daily-incremental` hadn't successfully published to prod's
+   real canonical silver in 3+ weeks (same root fact as the migration 010 entry above) — this was
+   the first real publish attempt since Ticket 33 shipped its new columns at all.
+5. **Root cause, part A (fixed):** the additive-column backfill had no notion of "what default did
+   the candidate's own schema declare for this column" — it always left new columns NULL, which is
+   only ever correct when the source schema itself declares no default either.
+   **Root cause, part B (confirmed real, deliberately left open):** even after fixing A, a second,
+   deeper repro proved a **genuine future retirement can never publish either** —
+   `retire_financial_facts_not_in_snapshot` (`silver_store.py:4092`) sets `is_current`/`valid_to`
+   but never touches `ingested_at` by design (it represents true capture time, not last-touched).
+   So a real retirement always ties on the authority column too, and always hits the same
+   ambiguous-conflict abort. Ticket 33's whole retirement feature has, as far as this investigation
+   found, never actually been able to reach canonical silver — not a first-publish artifact, a
+   standing gap.
+
+**Resolution, part A only** (part B deliberately scoped out — see below): `merge_candidate_into_
+canonical`'s additive `ADD COLUMN` step now reads the candidate's own declared `DEFAULT` (via a
+new `_column_defaults` helper, `information_schema.columns.column_default`) and applies it to
+canonical's newly-added column instead of leaving it NULL — matches the `is_current DEFAULT TRUE`
+case exactly (both sides now agree). `valid_from DEFAULT NOW()` still needed a second, targeted
+fix on top: `NOW()` evaluates to a genuinely different literal each time it runs, so no shared
+default expression can ever make two independent backfills agree — `sec_financial_fact`'s (and
+`sec_accounting_flag`'s) registry entries now declare `provenance_columns=frozenset({"valid_from"})`,
+safe because `valid_from` is set once at first capture and never touched again by design (same
+guarantee that already makes `mdm_entity_id`'s existing exemption safe elsewhere in this registry).
+Deliberately did **not** add `valid_to`/`is_current` to `provenance_columns` — that would silently
+stop retirement writes from ever reaching canonical at all (a worse, silent-data-loss bug), not
+fix anything; those columns carry real business content that a genuine future candidate needs to
+update, so blocking on a real conflict there is *currently correct*, just currently permanent
+because of part B.
+
+**Part B is an open design question, not fixed here** — user explicitly scoped it out mid-session
+rather than have it decided unilaterally. Candidate resolution policies considered but not chosen:
+bump `ingested_at` (or a new field) on retirement so the existing authority-column mechanism
+naturally resolves it (changes `ingested_at`'s semantic meaning elsewhere); a dedicated
+`valid_to`/`is_current` resolver mirroring the existing narrow `mdm_entity_id`-regression-guard
+precedent (`silver_protection.py`'s "candidate wins on comparable columns but never drags
+`mdm_entity_id` backward" special case); something else. Needs its own decision session before
+retirement can actually publish to prod canonical silver.
+
+Tests: 3 new (`tests/unit/test_silver_financial_fact_retirement_provenance.py`) — the first-publish
+false-conflict regression (fails before the fix, passes after — verified both ways), a
+valid_from-only-difference-does-not-block-or-get-copied case, and a **positive control** proving a
+genuine retirement conflict still correctly blocks (i.e. confirming `is_current`/`valid_to` were
+not accidentally exempted alongside `valid_from`). Full repo suite green.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
