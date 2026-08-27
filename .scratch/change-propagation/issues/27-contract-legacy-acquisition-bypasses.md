@@ -7,9 +7,10 @@ published processing status.
 
 **Blocked by:** 21 — Migrate submissions snapshots and pagination; 22 — Migrate
 company-facts snapshots; 23 — Migrate reference catalogs; 24 — Migrate ADV
-sources; 25 — Add conflict, repair, exclusion, and evidence-import workflows
+sources; 25 — Add conflict, repair, exclusion, and evidence-import workflows;
+46 — Wire `filing_artifact`'s gated driver into `daily_incremental`
 
-**Status:** ready-for-agent (corrected 2026-08-27). Ticket 26 removed from
+**Status:** blocked on Ticket 46 (added 2026-08-27 — see below). Ticket 26 removed from
 this ticket's blockers — [Ticket 10](10-decide-migration-cutover-rollback.md)'s
 Decision 5 found it was never a genuine prerequisite (ordinary per-family
 cutover doesn't route through Ticket 26's rebuild machinery at all). Ticket
@@ -18,13 +19,21 @@ not partial. Ticket 22 (bullets 1/4/5) and Ticket 23 (bullet 1) still carry
 named partial bullets, but per this map's established convention (see
 Ticket 26's own prior correction) a `resolved`-prefixed status satisfies
 blocking regardless of partial detail — every listed blocker is resolved.
-**Not yet reflected in this ticket's own scope, worth resolving before
-starting:** Ticket 10's Decision 2 (side-by-side verification per family
-before retiring its legacy call) and the newly-confirmed fact that none of
-the new drivers are wired into any schedule yet (also Ticket 10) — this
-ticket's bullets below predate both findings and may need a pass to
-incorporate them (e.g. the actual removal work is gated per-family on
-Decision 2's diff proof, not a single all-families-at-once removal).
+**Corrected again 2026-08-27:** the "worth resolving before starting" note
+above has been resolved by actually starting — live investigation into how
+to wire `filing_artifact` into a real schedule (Ticket 10's Decision 4)
+found the mechanism substantially more delicate than either this ticket or
+Ticket 10 assumed (`daily_incremental`'s Step Function definition has
+SEC-fetch lease acquisition/release, refresh-mode branching, and deferred-
+execution handling — the same state machine behind two prior documented
+incidents in CLAUDE.md). That concrete first slice — wiring one family's
+driver into one schedule, the prerequisite for this ticket's own removal
+work to have any real evidence to act on — is split out as its own ticket:
+[46 — Wire `filing_artifact`'s gated driver into `daily_incremental`](46-wire-filing-artifact-into-daily-incremental.md).
+This ticket (27) now additionally depends on 46's outcome for its own
+bullets to be actionable — its removal-evidence bullets cannot be attempted
+for any family until that family has been through a real Decision-2
+side-by-side window, and none has yet.
 
 - [ ] Architecture tests prove every approved low-level source adapter is
   reachable only through the ledger-gated Facade.
