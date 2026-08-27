@@ -630,3 +630,157 @@ def test_migration_widens_fund_index_to_bigint_and_preserves_old_rows(tmp_path, 
         db.close()
 
     assert "sec_adv_private_fund" in caplog.text
+
+
+# Pre-Ticket-33 DDL for sec_financial_fact/sec_accounting_flag (no
+# valid_from/valid_to/is_current) -- the exact shape migration 010 exists to
+# repair. Matches the two tables' real schema as of commit 798f9a1b~1
+# (immediately before Ticket 33 added the retirement columns).
+_OLD_FINANCIAL_FACT_PRE_RETIREMENT_DDL = """
+CREATE TABLE sec_financial_fact (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    fiscal_period       TEXT NOT NULL,
+    period_end          DATE NOT NULL,
+    period_start        DATE NOT NULL,
+    form_type           TEXT NOT NULL,
+    concept             TEXT NOT NULL,
+    value               DOUBLE,
+    unit                TEXT,
+    decimals            INTEGER,
+    segment             TEXT NOT NULL DEFAULT 'consolidated',
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment, period_end, period_start)
+);
+"""
+
+_OLD_ACCOUNTING_FLAG_PRE_RETIREMENT_DDL = """
+CREATE TABLE sec_accounting_flag (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    period_end          DATE,
+    form_type           TEXT NOT NULL,
+    auditor_name        TEXT,
+    auditor_pcaob_id    TEXT,
+    auditor_location    TEXT,
+    icfr_attestation    BOOLEAN,
+    auditor_changed     BOOLEAN,
+    beneish_m_score     DOUBLE,
+    altman_z_score      DOUBLE,
+    piotroski_f_score   INTEGER,
+    PRIMARY KEY (cik, accession_number)
+);
+"""
+
+
+def _build_pre_retirement_columns_store(db_path: str) -> None:
+    """Build a pre-Ticket-33 store with at least one existing row in each
+    table -- the row is the load-bearing part. DuckDB 1.5.2's
+    ALTER TABLE ADD COLUMN ... DEFAULT <expr> against a table with rows
+    triggers an internal backfill rewrite; against an EMPTY table it is a
+    pure metadata change. An empty pre-migration table (what every other
+    test in this file that touches these tables implicitly uses, since none
+    of them predate Ticket 33) never exercises the bug this test locks down.
+    """
+    conn = duckdb.connect(db_path)
+    try:
+        conn.execute(_OLD_FINANCIAL_FACT_PRE_RETIREMENT_DDL)
+        conn.execute(_OLD_ACCOUNTING_FLAG_PRE_RETIREMENT_DDL)
+        conn.execute(
+            """
+            INSERT INTO sec_financial_fact
+                (cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
+                 form_type, concept, value, unit, decimals, segment, parser_version)
+            VALUES (320193, '0000320193-24-000123', 2024, 'FY', '2024-09-28', '2023-09-30',
+                    '10-K', 'us-gaap/Revenues', 391035000000, 'USD', 0,
+                    'consolidated', 'pre-retirement-test')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO sec_accounting_flag (cik, accession_number, fiscal_year, form_type)
+            VALUES (320193, '0000320193-24-000123', 2024, '10-K')
+            """
+        )
+    finally:
+        conn.close()
+
+
+def test_migration_010_adds_retirement_columns_to_populated_tables(tmp_path):
+    """Regression test for a real prod outage: migration 010
+    (_add_company_facts_retirement_columns) crashed with
+    `_duckdb.TransactionException: ... another transaction has altered this
+    table` when opened against prod's real, populated sec_financial_fact --
+    every prior test of this migration opened it against an empty table
+    (via the fresh-store path in test_schema_migrations_are_recorded_in_
+    order_and_idempotent), which never exercises DuckDB's row-backfill
+    rewrite path and so never caught this.
+
+    Root cause: DuckDB 1.5.2's ALTER TABLE ADD COLUMN ... DEFAULT <expr>
+    against a non-empty table bumps the table's internal version via a row
+    backfill; a second ALTER TABLE against that same table inside the same
+    explicit transaction then hits that bump at COMMIT. Fixed by marking
+    this migration `requires_transaction=False` in _schema_migrations() --
+    safe because every statement it issues is ADD COLUMN IF NOT EXISTS,
+    already idempotent under interrupt-and-retry.
+    """
+    db_path = str(tmp_path / "silver.duckdb")
+    _build_pre_retirement_columns_store(db_path)
+
+    # This must not raise -- before the fix, this line crashed with
+    # _duckdb.TransactionException on the real bug's shape.
+    db = SilverDatabase(db_path)
+    try:
+        fact_columns = {
+            row[1] for row in db._conn.execute("PRAGMA table_info('sec_financial_fact')").fetchall()
+        }
+        flag_columns = {
+            row[1] for row in db._conn.execute("PRAGMA table_info('sec_accounting_flag')").fetchall()
+        }
+        for column in ("valid_from", "valid_to", "is_current"):
+            assert column in fact_columns
+            assert column in flag_columns
+
+        # The pre-existing row survived the migration (no data loss) and
+        # was backfilled to "became valid at migration time, currently
+        # valid" -- the documented backfill semantics.
+        fact_row = db.fetch(
+            "SELECT valid_from, valid_to, is_current FROM sec_financial_fact "
+            "WHERE accession_number = '0000320193-24-000123'"
+        )[0]
+        assert fact_row["valid_from"] is not None
+        assert fact_row["valid_to"] is None
+        assert fact_row["is_current"] is True
+
+        flag_row = db.fetch(
+            "SELECT valid_from, valid_to, is_current FROM sec_accounting_flag "
+            "WHERE accession_number = '0000320193-24-000123'"
+        )[0]
+        assert flag_row["valid_from"] is not None
+        assert flag_row["valid_to"] is None
+        assert flag_row["is_current"] is True
+
+        recorded = db.fetch(
+            "SELECT migration_name FROM schema_migration "
+            "WHERE migration_name = '010_company_facts_retirement_columns'"
+        )
+        assert len(recorded) == 1
+
+        # A second open against the now-migrated store must still be a
+        # clean no-op (idempotency under the new requires_transaction=False
+        # path, not just the transactional one).
+    finally:
+        db.close()
+
+    db2 = SilverDatabase(db_path)
+    try:
+        recorded_again = db2.fetch(
+            "SELECT migration_name FROM schema_migration "
+            "WHERE migration_name = '010_company_facts_retirement_columns'"
+        )
+        assert len(recorded_again) == 1
+    finally:
+        db2.close()

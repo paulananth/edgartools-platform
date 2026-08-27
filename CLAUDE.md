@@ -1703,6 +1703,78 @@ budget up front, the same way this fix had to retrofit one after the fact.
 Full write-up: `.scratch/silver-landing-task-cost/issues/01-cap-load-silver-landing-task-credit-spend.md`,
 `.scratch/silver-landing-task-cost/issues/02-widen-load-silver-landing-task-to-0.3-0.5-credit-day.md`.
 
+## Migration 010 DuckDB commit-conflict 5-whys (resolved 2026-08-27)
+
+**Problem:** A live-prod `daily-incremental` run (kicked off to verify the change-propagation
+map's Ticket 46) crashed before any of Ticket 46's own code ran at all — the ECS task exited 1
+while merely opening the local Silver DuckDB, hydrated fresh from prod's canonical
+`silver.duckdb` (1.59GB). `_duckdb.TransactionException: TransactionContext Error: Failed to
+commit: Attempting to modify table sec_financial_fact but another transaction has altered this
+table`, raised from `_apply_schema_migration`'s own `self._conn.execute("COMMIT")`.
+
+1. Symptom: the exception traces through `_ensure_schema_evolution` applying migration
+   `010_company_facts_retirement_columns` (`_add_company_facts_retirement_columns`, Ticket 33's
+   own migration adding `valid_from`/`valid_to`/`is_current` to `sec_financial_fact`/
+   `sec_accounting_flag`) — not anything from this session's Ticket 46 work.
+2. Why did the COMMIT fail claiming "another transaction" touched the table, when only one
+   transaction (this process's own explicit `BEGIN TRANSACTION`) ever ran? Built a tight,
+   deterministic repro (`SilverDatabase` opened against a hand-built pre-Ticket-33 store) and
+   isolated it via direct pairwise testing of the migration's own ALTER statements: DuckDB
+   1.5.2's `ALTER TABLE ... ADD COLUMN ... DEFAULT <expr>` against a table with **existing rows**
+   triggers an internal row-backfill rewrite that bumps the table's version — confirmed via a
+   1-row repro (crashes) vs. a 0-row repro (succeeds cleanly), deterministic either way.
+3. Why does a version bump break the commit? A **second** `ALTER TABLE` statement against that
+   same table, inside the **same explicit transaction**, then hits DuckDB's commit-time conflict
+   check against that bump — reproduced directly: `valid_from DEFAULT NOW()` then `valid_to`
+   (no default) on the same table, same transaction → crash; either statement alone → fine;
+   without the explicit `BEGIN TRANSACTION` wrapper (autocommit per statement) → fine. Confirmed
+   this isn't fixable by reordering: two default-bearing columns (`valid_from`, `is_current`)
+   both need backfill, and only one statement can be last regardless of order — every ordering
+   with 2+ default-bearing `ADD COLUMN`s on one table in one transaction crashes.
+4. Why did migration 010 hit this specific shape? It issues exactly 3 `ADD COLUMN` statements per
+   table (two default-bearing: `valid_from`, `is_current`), on two tables, inside
+   `_apply_schema_migration`'s shared explicit-transaction wrapper — the same wrapper every other
+   migration in `_schema_migrations()` also uses.
+5. **Root cause:** no test ever exercised migration 010 against a **non-empty** pre-migration
+   table — every existing test in `test_silver_store_schema_migration.py` either opens a fresh
+   store (already has the columns via `_DDL`, migration no-ops) or predates Ticket 33 entirely
+   (migration 010 not yet defined). And daily-incremental itself had not run successfully in prod
+   in 3+ weeks (confirmed: last `SUCCEEDED` execution was 2026-08-04; zero active EventBridge
+   rules for it at all) — so this Ticket 46 verification run was the **first real attempt** to
+   apply migration 010 against prod's actual, populated `sec_financial_fact`. Checked all 6 other
+   plain-ALTER migrations (003/004/005/006/008/009) for the same shape (2+ `ADD COLUMN`
+   statements on one table, at least one with a `DEFAULT`, inside the shared transaction) — none
+   of the others have it (005/006/009 loop over multiple tables/columns but never combine a
+   default-bearing `ADD COLUMN` with a second statement on the *same* table); migration 010 is
+   the only one affected among everything currently shipped.
+
+**Resolution:** `_schema_migrations()`'s tuples gained a 4th field, `requires_transaction: bool`
+(`True` for every existing migration, preserving current behavior exactly); migration 010 is the
+one entry marked `False`. `_apply_schema_migration` now only wraps `migrate()` in
+`BEGIN TRANSACTION`/`COMMIT`/`ROLLBACK` when `requires_transaction` is `True` — when `False`, each
+statement `migrate()` issues autocommits on its own, and `_record_schema_migration` runs as its
+own trivial autocommitted `INSERT`. Safe specifically for migration 010 because every statement it
+issues is `ADD COLUMN IF NOT EXISTS` — already idempotent under interrupt-and-retry. **Not** applied
+globally: `_backup_and_recreate_table`-based migrations (001/002/007) genuinely need the shared
+transactional envelope — their `RENAME` → `CREATE TABLE IF NOT EXISTS` → `INSERT...SELECT`
+sequence is not safely retriable without it (a crash mid-sequence would leave the renamed-away
+backup table orphaned and the main table's own retry-detection query finding nothing to recreate,
+since it checks the live table's current PK, and there's no live table to check).
+
+New regression test, `test_migration_010_adds_retirement_columns_to_populated_tables`
+(`tests/unit/test_silver_store_schema_migration.py`) — builds a pre-Ticket-33 store with ≥1
+row in each affected table (the exact shape no prior test covered), confirmed to reproduce the
+crash verbatim before the fix (reverted the fix locally, reran, watched it fail with the identical
+`_duckdb.TransactionException`) and pass after. Full repo suite green after the fix.
+
+**Lesson:** a schema migration's own unit tests can all pass while still never exercising the one
+precondition (a genuinely populated table) that matters in production — an empty-table-only test
+suite for a migration is unproven for exactly the thing migrations exist to do: evolve real data.
+Same class of gap as the "MDM Postgres migration-011 schema drift" and "Ticket 20 Source Family
+Registry" entries above (SQLite can't model Postgres's real GRANT/role semantics; here, an empty
+DuckDB table can't model DuckDB's real ADD-COLUMN-with-DEFAULT row-rewrite semantics) — a real,
+populated fixture is not optional coverage for anything that touches existing rows.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
