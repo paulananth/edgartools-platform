@@ -1,10 +1,20 @@
-# Thin Landing-Zone Backfill Rows Null Out Every Non-Coalesced Column
+# 04 — Thin Landing-Zone Backfill Rows Null Out Every Non-Coalesced Column
 
-Status: moved — consolidated into
-[`silver-retirement-integrity`](../../silver-retirement-integrity/map.md)'s
-[Ticket 04](../../silver-retirement-integrity/issues/04-thin-backfill-nulls-other-columns.md)
-on 2026-08-27 (content preserved verbatim there). This file is kept for
-history; track and resolve the ticket at the new location, not here.
+Type: grilling
+
+**Blocked by:** None — independent of Tickets 01/02/03. Different layer
+(Snowflake landing-zone dbt collapse, not the local DuckDB canonical
+merge), same table family (`sec_accounting_flag`).
+
+**Status:** open
+
+**Moved here 2026-08-27** from its original standalone location
+(`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md`,
+content preserved verbatim below with a redirect note left at the original
+path) — consolidated into this map because it's the same class of finding
+(a column set doesn't line up correctly across a partial write, causing
+silent data loss on the same table family) discovered in the same session
+as Tickets 01–03, even though the actual mechanism is unrelated to those.
 
 ## Summary
 
@@ -59,6 +69,14 @@ result = con.execute("""
 """).fetchall()
 print(result)  # [(1, 'acc-1', None, 2.5)] -- auditor_name is None, not 'Deloitte'
 ```
+
+Confirmed (2026-08-27, this map's charting session) that the corresponding
+**local DuckDB** write (`update_accounting_flag_scores`'s own
+`UPDATE sec_accounting_flag SET beneish_m_score = COALESCE(?, ...), ...`) is
+unaffected — a plain SQL `UPDATE` only touches the columns named in its
+`SET` clause, so the local canonical table's other columns (including
+`valid_from`/`valid_to`/`is_current`) are never nulled. This bug is confined
+to the Snowflake landing-zone/dbt collapse path.
 
 ## Impact
 
