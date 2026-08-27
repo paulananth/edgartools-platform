@@ -346,6 +346,7 @@ class WarehousePathResolver:
             "reconcile-relationship-release",
             "capture-filing-artifact",
             "drive-filing-discovery-for-date",
+            "drive-adv-filing-discovery-for-date",
             "drive-submissions-discovery",
             "drive-company-facts-discovery",
             "drive-reference-catalog-discovery",

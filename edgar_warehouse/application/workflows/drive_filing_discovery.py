@@ -1,4 +1,5 @@
-"""Workflow entrypoint for ``drive-filing-discovery-for-date`` (Ticket 16/19/29).
+"""Workflow entrypoint for ``drive-filing-discovery-for-date`` (Ticket 16/19/29)
+and ``drive-adv-filing-discovery-for-date`` (Ticket 24 bullet 4).
 
 Turns an already-sealed SEC daily form index observation
 (``load-daily-form-index-for-date``'s own output: ``stg_daily_index_filing``
@@ -21,6 +22,21 @@ the shared ``acquisition_run_writes`` helpers also used by
 ``capture-filing-artifact``, and folds the interval's own completion summary
 into the consolidated manifest's ``row_counts`` so completion is legible
 from the durable artifact, not only the process exit code.
+
+Ticket 24 bullet 4: ``adv_filing`` reuses ``FilingArtifactPolicy`` verbatim
+under its own source family/coverage row (own ``in_scope_forms`` -- the 9 ADV
+form variants), declared in the Source Family Registry but, until now, never
+actually driven -- ADV filings still went through the pre-Ticket-14 legacy
+``_run_parse_adv_bronze`` path. The mechanism this module implements
+(sealed-daily-index -> manifest -> ledger-gated capture -> Silver
+acceptance) is already fully generic in ``discovery.py``/``silver_acceptance.py``
+(both already take ``source_family``/``required_producers`` as parameters,
+not hardcoded constants) -- the only thing hardcoded to ``filing_artifact``
+was this workflow function itself. ``_run_daily_index_driven_discovery``
+below is that shared body, parameterized by family/command name; both public
+entry points are thin wrappers over it -- Strategy reuse across families,
+same discipline ``source_family_registry.py``'s own reuse note already
+established for the Policy layer, not a new Template Method superclass.
 """
 
 from __future__ import annotations
@@ -50,7 +66,10 @@ from edgar_warehouse.acquisition.silver_acceptance import (
     FilingArtifactSilverAcceptanceResult,
     drive_filing_artifact_silver_acceptance,
 )
-from edgar_warehouse.acquisition.source_family_registry import FILING_ARTIFACT_SOURCE_FAMILY
+from edgar_warehouse.acquisition.source_family_registry import (
+    ADV_FILING_SOURCE_FAMILY,
+    FILING_ARTIFACT_SOURCE_FAMILY,
+)
 from edgar_warehouse.application.acquisition_command_registry import (
     acquisition_command_registration,
 )
@@ -70,6 +89,8 @@ from edgar_warehouse.silver_support.session import open_silver_database
 DEFAULT_LEASE_SECONDS = 300
 DEFAULT_REGISTRY_VERSION = "filing_artifact-v1"
 COMMAND_NAME = "drive-filing-discovery-for-date"
+ADV_FILING_DEFAULT_REGISTRY_VERSION = "adv_filing-v1"
+ADV_FILING_COMMAND_NAME = "drive-adv-filing-discovery-for-date"
 
 # Ticket 32 bullet 1: the only discovery mechanism this module implements --
 # a covered family's registry coverage declaring anything else is a real
@@ -82,18 +103,45 @@ class UnsupportedDiscoveryPolicy(WarehouseRuntimeError):
 
 
 def run_drive_filing_discovery_for_date(args: Any) -> int:
-    context = _build_warehouse_context(COMMAND_NAME)
+    return _run_daily_index_driven_discovery(
+        args,
+        source_family=FILING_ARTIFACT_SOURCE_FAMILY,
+        command_name=COMMAND_NAME,
+        default_registry_version=DEFAULT_REGISTRY_VERSION,
+        default_required_producer=FILING_ARTIFACT_PRODUCER_NAME,
+    )
+
+
+def run_drive_adv_filing_discovery_for_date(args: Any) -> int:
+    return _run_daily_index_driven_discovery(
+        args,
+        source_family=ADV_FILING_SOURCE_FAMILY,
+        command_name=ADV_FILING_COMMAND_NAME,
+        default_registry_version=ADV_FILING_DEFAULT_REGISTRY_VERSION,
+        default_required_producer=FILING_ARTIFACT_PRODUCER_NAME,
+    )
+
+
+def _run_daily_index_driven_discovery(
+    args: Any,
+    *,
+    source_family: str,
+    command_name: str,
+    default_registry_version: str,
+    default_required_producer: str,
+) -> int:
+    context = _build_warehouse_context(command_name)
     now = datetime.now(UTC)
     run_id = getattr(args, "run_id", None) or uuid.uuid4().hex
     business_date = str(args.business_date)
     business_date_value = date.fromisoformat(business_date)
     arguments = {"business_date": business_date}
 
-    registration = acquisition_command_registration(COMMAND_NAME)
-    assert registration is not None, f"{COMMAND_NAME} is not registered"
+    registration = acquisition_command_registration(command_name)
+    assert registration is not None, f"{command_name} is not registered"
     scope = registration.resolve_scope(arguments=arguments, now=now, silver_root=None)
     manifest_writes = write_declared_layer_manifests(
-        command_name=COMMAND_NAME, context=context, run_id=run_id, arguments=arguments, scope=scope, now=now
+        command_name=command_name, context=context, run_id=run_id, arguments=arguments, scope=scope, now=now
     )
 
     # The Silver connection stays open across discovery + capture + revision
@@ -119,7 +167,7 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
     # registry reads originally defaulted to date.today() despite
     # business_date_value already being in scope right here.)
     in_scope_forms = active_in_scope_forms(
-        engine, FILING_ARTIFACT_SOURCE_FAMILY, as_of_date=business_date_value
+        engine, source_family, as_of_date=business_date_value
     )
     # Ticket 32 bullet 1: the registry's discovery_policy and
     # required_producers become real gates here, not inert audit fields --
@@ -128,25 +176,26 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
     # contract just above (an empty in_scope_forms already makes this run a
     # no-op interval regardless).
     coverage = active_family_coverage(
-        engine, FILING_ARTIFACT_SOURCE_FAMILY, as_of_date=business_date_value
+        engine, source_family, as_of_date=business_date_value
     )
     if coverage is not None and coverage.discovery_policy != DAILY_INDEX_DRIVEN_DISCOVERY_POLICY:
         raise UnsupportedDiscoveryPolicy(
-            f"source_family={FILING_ARTIFACT_SOURCE_FAMILY!r} declares "
+            f"source_family={source_family!r} declares "
             f"discovery_policy={coverage.discovery_policy!r}, but this driver "
             f"only implements {DAILY_INDEX_DRIVEN_DISCOVERY_POLICY!r}"
         )
     # No active coverage means in_scope_forms is already empty (nothing will
     # reach CAPTURED this run), but the value still has to be *something*
     # drive_filing_artifact_silver_acceptance's own upfront validation
-    # accepts -- its default is exactly the one producer filing_artifact's
-    # write body knows, so falling back to it here (instead of an empty
-    # tuple) avoids a spurious UnsupportedRequiredProducers on a genuinely
-    # empty, otherwise-trivially-complete interval.
+    # accepts -- its default is exactly the one producer both families'
+    # write bodies know (they reuse the identical "sec_raw_object" capture
+    # producer), so falling back to it here (instead of an empty tuple)
+    # avoids a spurious UnsupportedRequiredProducers on a genuinely empty,
+    # otherwise-trivially-complete interval.
     required_producers = (
         coverage.required_producers
         if coverage is not None
-        else (FILING_ARTIFACT_PRODUCER_NAME,)
+        else (default_required_producer,)
     )
 
     _hydrate_silver_database_from_storage(context)
@@ -154,7 +203,7 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
     try:
         rows = _load_sealed_discovery_rows(db, business_date)
         manifest = build_discovery_manifest(
-            rows, business_date=business_date, in_scope_forms=in_scope_forms
+            rows, business_date=business_date, source_family=source_family, in_scope_forms=in_scope_forms
         )
 
         ledger = AcquisitionLedger(engine)
@@ -164,9 +213,9 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
         registry = build_active_source_family_registry(
             engine, identity=context.identity, as_of_date=business_date_value
         )
-        worker_id = getattr(args, "worker_id", None) or f"drive-filing-discovery-{os.getpid()}"
+        worker_id = getattr(args, "worker_id", None) or f"{command_name}-{os.getpid()}"
         lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
-        registry_version = getattr(args, "registry_version", None) or DEFAULT_REGISTRY_VERSION
+        registry_version = getattr(args, "registry_version", None) or default_registry_version
 
         result = drive_discovery_manifest(
             ledger,
@@ -195,13 +244,13 @@ def run_drive_filing_discovery_for_date(args: Any) -> int:
         # no separate cross-database prover, this run's own success *is*
         # the proof for this one business date.
         SourceRegistryLedger(engine).record_catchup_progress(
-            FILING_ARTIFACT_SOURCE_FAMILY, date.fromisoformat(business_date)
+            source_family, date.fromisoformat(business_date)
         )
 
     _publish_silver_database_with_retry(context)
 
     write_consolidated_run_manifest(
-        command_name=COMMAND_NAME,
+        command_name=command_name,
         context=context,
         run_id=run_id,
         arguments=arguments,

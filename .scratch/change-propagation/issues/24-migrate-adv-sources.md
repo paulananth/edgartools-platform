@@ -7,8 +7,7 @@ disclosure, fund, and roster Silver outcomes.
 **Blocked by:** 17 — Make Bronze capture retry-safe and recoverable; 20 —
 Version and activate the Acquisition Universe
 
-**Status:** resolved (partially — see Answer for the one bullet that depends
-on a later ticket)
+**Status:** resolved
 
 - [x] The ADV Strategy distinguishes filing or accession identity from complete
   bulk-dataset identity and declares the proper scopes for each.
@@ -16,7 +15,7 @@ on a later ticket)
   archive, filing, or roster scope.
 - [x] Complete, incomplete, unchanged, superseding, replayed, and valid-empty
   inputs produce explicit verified outcomes.
-- [~] ADV parsing remains outside the acquisition Facade and cannot begin until
+- [x] ADV parsing remains outside the acquisition Facade and cannot begin until
   its exact Bronze evidence is verified and ledger-bound.
 - [x] ADV acquisition uses bundled Command registration without introducing a
   Template Method superclass for merely similar family workflows.
@@ -81,33 +80,90 @@ silently dropping rows), without re-deriving a business-key mapping that
 could drift from what the writer actually does (the class of bug Ticket 23's
 Standards review caught for the blank-ticker case).
 
-**Bullet 4 — resolved for `adv_bulk_dataset`, honestly partial for
-`adv_filing`'s per-accession parsing path.** `AdvBulkDatasetPolicy`'s Bronze
-capture is now fully ledger-gated end-to-end (verified live via a real
-command-level integration test:
-`test_drive_adv_bulk_dataset_discovery_command.py`). The `adv_filing` family
-declares accession identity's own scope (bullet 1), but no
-`drive-adv-filing-discovery-for-date` command exists yet to actually drive
-capture through it — `drive_filing_discovery.py` (the real, working
-`daily_index_driven` implementation) is hardcoded to
-`FILING_ARTIFACT_SOURCE_FAMILY` only, not parameterized per family. ADV
-filing documents are therefore still captured via the pre-Ticket-14 legacy
-path `_run_parse_adv_bronze` reads from (`discover_adv_bronze_artifacts` →
-`sec_company_filing`/`sec_filing_attachment`/`sec_raw_object`, confirmed live
-by reading that module directly) — `_run_parse_adv_bronze` itself was **not**
-modified to gate on a materialized `SourceRevisionRecord` existing for each
-accession, since without a driver to ever populate one for the `adv_filing`
-family, adding that gate now would make ADV parsing permanently refuse to
-run rather than genuinely enforce ledger-boundedness. Closing this requires
-either generalizing `drive_filing_discovery.py` to take a `source_family`
-parameter (reuse) or a new sibling driver (duplication, consistent with
-bullet 5) — a real, scoped follow-up, not silently carried forward as done.
+**Bullet 4 — resolved for both `adv_bulk_dataset` and `adv_filing`.**
+`AdvBulkDatasetPolicy`'s Bronze capture is fully ledger-gated end-to-end
+(verified live via a real command-level integration test:
+`test_drive_adv_bulk_dataset_discovery_command.py`). The `adv_filing`
+family's own gap — no driver existed to actually drive capture through its
+already-declared coverage row — is now closed: `drive_filing_discovery.py`'s
+`run_drive_filing_discovery_for_date` was generalized into a shared
+`_run_daily_index_driven_discovery(args, *, source_family, command_name,
+default_registry_version, default_required_producer)` body, parameterized
+by family/command name rather than hardcoded to `FILING_ARTIFACT_SOURCE_FAMILY`
+(reuse, the option this ticket's own text named as preferred — the mechanism
+was already fully generic one layer down in `discovery.py`/
+`silver_acceptance.py`, which already took `source_family`/
+`required_producers` as parameters; only this workflow function itself was
+hardcoded). `run_drive_adv_filing_discovery_for_date` is the new thin
+wrapper, registered as `drive-adv-filing-discovery-for-date`
+(`acquisition_command_registry.py`, `cli.py`, `dataset_path_catalog.py`'s
+shared manifest-path bucket). ADV filing documents can now flow through this
+real, ledger-gated driver as an available path.
+
+**Correction (caught by `/code-review`'s Spec pass, not overclaimed as a
+clean replacement):** this driver does **not** retire either pre-existing
+legacy path for ADV, and this ticket's first draft wording ("instead of...
+going forward") overstated that. Two separate legacy mechanisms remain
+untouched: `_run_parse_adv_bronze`/`discover_adv_bronze_artifacts`
+(downstream business-data parsing off already-captured Bronze — correctly
+scoped out of this ticket already, per bullet 4's own text), and, newly
+surfaced by review, `warehouse_orchestrator.py`'s standard artifact-fetch
+pipeline (`fetch_filing_artifacts`, gated by `_is_configured_parser_form`,
+which still lists `ADV_FORMS` unmodified) — the same `bootstrap-next`/
+`load_history` path that independently captures ADV documents into the
+identical `sec_raw_object`/`sec_filing_attachment` tables, entirely outside
+the ledger. Verified this is **not a new gap this ticket introduced**: the
+identical overlap already exists for `filing_artifact`'s own ownership forms
+(`OWNERSHIP_FORMS`, same function, never removed by Tickets 16/17/29) and
+was never disclosed in those tickets' own Answer sections either — this new
+`adv_filing` driver is scoped exactly the same way its `filing_artifact`
+sibling was: it adds the new ledger-gated path, it does not retire the old
+one. Retiring either legacy artifact-fetch path for any family is
+explicitly [Ticket 27](27-contract-legacy-acquisition-bypasses.md)'s job
+("Remove bypasses only after every source family proves the authoritative
+path"), already tracked, not a new follow-up this correction needs to spawn.
+
+**A second, genuine bug found and fixed while wiring the new driver, not
+anticipated by this ticket's own bullet-4 writeup:**
+`discovery.discovery_candidate_id(business_date, accession_number)` keyed
+Fetch-Decision identity on interval + accession only, with no
+`source_family` component — accidentally globally unique so long as exactly
+one family ever drove daily-index discovery. Running the new `drive-adv-filing-discovery-for-date` against the exact same
+sealed daily index `drive-filing-discovery-for-date` also reads reproduced
+this live: the same business_date + accession pair is a genuine
+candidate in *both* families' manifests (in-scope for one, excluded for the
+other), and `AcquisitionLedger.create_fetch_decision`'s `candidate_id`
+uniqueness check is global, not scoped by `source_family` — so the second
+family's driver failed outright with "already has a different Source Fetch
+Decision." Fixed by adding an optional `source_family` keyword to
+`discovery_candidate_id`, **deliberately preserving `filing_artifact`'s
+exact legacy id format unchanged** (no family segment) rather than adding it
+uniformly: Ticket 29 already ran a real prod dry run that wrote live ledger
+rows under the old format, and that id is exactly what lets a replay
+recognize an already-CAPTURED candidate without a real SEC fetch (this
+repo's "SEC data idempotency" policy) — uniformly changing the format would
+have silently broken that recognition on the very next prod replay for an
+already-processed date, causing a real re-fetch from SEC. Every other family
+(including the new `adv_filing`) gets the family segment, since none of them
+has live ledger history whose format needs preserving. Locked in by two new
+tests in `tests/acquisition/test_discovery.py`: one pinning
+`filing_artifact`'s exact legacy string, one proving `adv_filing` produces a
+distinct id for the same interval/accession.
+
 Confirmed the collision risk an earlier design pass flagged (bulk-archive
 rows sharing `sec_adv_filing`'s single-column `accession_number` PK with
 real EDGAR accessions) does **not** exist: bulk rows are keyed
 `iapd-adv:{filing_id}`, structurally distinct from EDGAR's
 `NNNNNNNNNN-YY-NNNNNN` accession shape, verified by reading
 `adv_bulk_ingest.py` directly — no defensive keying needed.
+
+**Tests (bullet 4 follow-up):** new
+`tests/application/test_drive_adv_filing_discovery_command.py` (4 tests) —
+capture + exclusion, no-op replay, fail-closed on unsealed discovery, and
+the real proof this gap needed: both families' drivers running against the
+exact same sealed daily-index observation, each only ever touching its own
+in-scope forms, with no ledger collision. Plus the two `discovery_candidate_id`
+regression tests above.
 
 **Tests:** 13 new (7 `test_adv_bulk_dataset_discovery.py`, 5
 `test_adv_bulk_dataset_silver_acceptance.py`, 1 command-level integration
