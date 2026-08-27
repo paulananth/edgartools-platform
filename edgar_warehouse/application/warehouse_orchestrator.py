@@ -1567,6 +1567,37 @@ def _publish_shard_if_remote_with_retry(
             _time.sleep(delay)
 
 
+def _run_filing_artifact_gated_capture(
+    context: WarehouseCommandContext,
+    db: SilverDatabase,
+    business_date: str,
+    run_id: str,
+) -> dict[str, Any]:
+    """Ticket 46: dispatch filing_artifact's gated discovery/capture core
+    in-process, reusing daily-incremental's own already-open Silver
+    connection and MDM engine rather than a second hydrate/publish cycle.
+
+    Local import breaks the module cycle -- drive_filing_discovery imports
+    _build_warehouse_context/_hydrate_silver_database_from_storage/
+    _publish_silver_database_with_retry from this module at its own module
+    level, so importing it back at this module's top level would be
+    circular. Matches this file's existing local-import convention for
+    command-branch-specific dependencies (see e.g. the mdm_entity_backfill/
+    adv_bulk_ingest imports elsewhere in this file).
+
+    Raises on failure -- the caller (daily-incremental's own per-date loop)
+    owns failure isolation, not this dispatcher.
+    """
+    from edgar_warehouse.application.workflows.drive_filing_discovery import (
+        run_filing_artifact_gated_capture_for_business_date,
+    )
+
+    outcome = run_filing_artifact_gated_capture_for_business_date(
+        context=context, db=db, business_date=business_date, run_id=run_id,
+    )
+    return {"interval_complete": outcome.interval_complete}
+
+
 def _capture_bronze_raw(
     context: WarehouseCommandContext,
     db: SilverDatabase,
@@ -1709,6 +1740,36 @@ def _capture_bronze_raw(
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
             _merge_capture_network_metrics(metrics, result)
+        # Ticket 46 (change-propagation map): filing_artifact's ledger-gated
+        # discovery/capture, run in-process alongside the legacy
+        # artifact-fetch path above -- Ticket 10 Decision 2's side-by-side
+        # verification window. Off by default. Scoped to business_date_end
+        # only, not every date the recurring loop just sealed, to bound the
+        # extra SEC-fetch/memory cost this adds on top of a task with
+        # documented OOM history (see "Gold-build memory / daily_incremental
+        # OOM 5-whys" in CLAUDE.md) -- and skipped outright if this run's own
+        # daily-index loop ended partial, since there is nothing newly sealed
+        # to drive discovery from. Any failure here is caught and folded into
+        # metrics rather than raised, so it can never fail daily-incremental's
+        # own retry budget -- but that isolation is about failure only: a
+        # successful call is a real, deliberate write (it advances the
+        # Source Family Registry's catch-up progress, the signal Ticket 27's
+        # removal-evidence bullets gate on), not passive observation.
+        if arguments.get("enable_filing_artifact_gated_capture") and metrics["sync_status"] != "partial":
+            gated_capture: dict[str, Any] = {"business_date": business_date_end.isoformat()}
+            try:
+                gated_outcome = _run_filing_artifact_gated_capture(
+                    context=context,
+                    db=db,
+                    business_date=business_date_end.isoformat(),
+                    run_id=sync_run_id,
+                )
+                gated_capture["status"] = "ok"
+                gated_capture.update(gated_outcome)
+            except Exception as exc:  # noqa: BLE001 -- deliberate, see comment above
+                gated_capture["status"] = "error"
+                gated_capture["error"] = str(exc)
+            metrics["filing_artifact_gated_capture"] = gated_capture
         return raw_writes, metrics
 
     if command_name == "load-daily-form-index-for-date":

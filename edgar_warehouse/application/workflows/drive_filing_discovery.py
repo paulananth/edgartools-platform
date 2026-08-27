@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -122,6 +123,165 @@ def run_drive_adv_filing_discovery_for_date(args: Any) -> int:
     )
 
 
+@dataclass
+class GatedDiscoveryOutcome:
+    """Ticket 46: the shared core's result, extracted so a second caller
+    (daily-incremental's own in-process gated capture) can inspect
+    completeness without going through this module's stdout/exit-code
+    contract, which is specific to running as a standalone CLI command.
+    """
+
+    interval_complete: bool
+    result: DiscoveryDriveResult
+    silver_result: FilingArtifactSilverAcceptanceResult
+
+
+def run_gated_discovery_for_business_date(
+    *,
+    context: Any,
+    db: Any,
+    engine: Any,
+    business_date: str,
+    business_date_value: date,
+    source_family: str,
+    default_registry_version: str,
+    default_required_producer: str,
+    worker_id: str,
+    lease_seconds: int,
+    registry_version: str,
+) -> GatedDiscoveryOutcome:
+    """Ticket 16/19/29's ledger-gated discovery/capture/Silver-acceptance
+    body for one already-sealed business date, extracted (Ticket 46) so both
+    this module's own CLI entrypoints (which additionally hydrate, publish,
+    and write run manifests around this) and daily-incremental's in-process
+    gated capture (which reuses its own already-open Silver connection and
+    does its own manifest/publish bookkeeping) can share one implementation.
+    Caller owns hydrate/publish/db lifecycle -- this function assumes `db`
+    is already open and does not close or publish it.
+    """
+    # Ticket 20: which forms are in scope now comes from the active Source
+    # Family Registry version, not discovery.py's own hardcoded default --
+    # a covered-but-not-yet-activated family, or one 'remove'd, must not
+    # silently fall back to acquiring everything DISCOVERY_IN_SCOPE_FORMS
+    # would have covered before the registry existed.
+    in_scope_forms = active_in_scope_forms(
+        engine, source_family, as_of_date=business_date_value
+    )
+    # Ticket 32 bullet 1: the registry's discovery_policy and
+    # required_producers become real gates here, not inert audit fields.
+    coverage = active_family_coverage(
+        engine, source_family, as_of_date=business_date_value
+    )
+    if coverage is not None and coverage.discovery_policy != DAILY_INDEX_DRIVEN_DISCOVERY_POLICY:
+        raise UnsupportedDiscoveryPolicy(
+            f"source_family={source_family!r} declares "
+            f"discovery_policy={coverage.discovery_policy!r}, but this driver "
+            f"only implements {DAILY_INDEX_DRIVEN_DISCOVERY_POLICY!r}"
+        )
+    required_producers = (
+        coverage.required_producers
+        if coverage is not None
+        else (default_required_producer,)
+    )
+
+    rows = _load_sealed_discovery_rows(db, business_date)
+    manifest = build_discovery_manifest(
+        rows, business_date=business_date, source_family=source_family, in_scope_forms=in_scope_forms
+    )
+
+    ledger = AcquisitionLedger(engine)
+    revisions = SourceRevisionLedger(engine)
+    processing = ProcessingLedger(engine)
+    finalizer = SilverFinalizer(engine)
+    registry = build_active_source_family_registry(
+        engine, identity=context.identity, as_of_date=business_date_value
+    )
+
+    result = drive_discovery_manifest(
+        ledger,
+        context.bronze_root,
+        registry,
+        manifest,
+        worker_id=worker_id,
+        registry_version=registry_version,
+        lease_seconds=lease_seconds,
+    )
+    silver_result = drive_filing_artifact_silver_acceptance(
+        ledger,
+        revisions,
+        processing,
+        finalizer,
+        db,
+        result,
+        required_producers=required_producers,
+    )
+
+    if result.interval_complete and silver_result.interval_complete:
+        # Ticket 20's catch-up obligation, advanced by the exact same
+        # completeness signal Ticket 29 already proved live end-to-end.
+        SourceRegistryLedger(engine).record_catchup_progress(
+            source_family, business_date_value
+        )
+
+    return GatedDiscoveryOutcome(
+        interval_complete=result.interval_complete and silver_result.interval_complete,
+        result=result,
+        silver_result=silver_result,
+    )
+
+
+def run_filing_artifact_gated_capture_for_business_date(
+    *,
+    context: Any,
+    db: Any,
+    business_date: str,
+    run_id: str,
+) -> GatedDiscoveryOutcome:
+    """Ticket 46: filing_artifact's gated discovery/capture, run in-process
+    against daily-incremental's own already-open Silver connection.
+
+    Deliberately in-process rather than a separate Step Functions state --
+    see Ticket 46's Answer for the full rationale, but the load-bearing
+    reason is the shared ``sec_fetch_active`` lease: this call makes real SEC
+    network fetches (via ``drive_discovery_manifest``), and daily-incremental's
+    ASL already holds that cross-command lease around the whole ECS task this
+    runs inside. A separate Step Functions state would either fetch SEC data
+    outside the lease window entirely, or require inserting a new state into
+    daily-incremental's lease-acquire/release/Catch region -- the exact
+    fragility this ticket was split out to avoid touching.
+
+    Raises on any failure (including ``UnsupportedDiscoveryPolicy``) --
+    unlike this module's own CLI entrypoints, this function does not decide
+    failure isolation. Ticket 46's caller (daily-incremental's own per-date
+    loop) wraps this call and folds any exception into its own metrics
+    instead of failing the whole command, so it can never trip the state
+    machine's ``MaxAttempts: 3`` retry on its own account. That isolation is
+    about failure only -- a *successful* call is not passive observation:
+    like the CLI path it shares this core with, it calls
+    ``SourceRegistryLedger.record_catchup_progress`` on a completed
+    interval, the same real catch-up-progress signal Ticket 27's
+    removal-evidence bullets gate on. Turning this on for Ticket 10
+    Decision 2's verification window deliberately advances that state, not
+    just observes it (/code-review's Spec pass caught this docstring
+    originally calling it "observation-only," which understated the effect).
+    """
+    engine = get_engine()
+    business_date_value = date.fromisoformat(business_date)
+    return run_gated_discovery_for_business_date(
+        context=context,
+        db=db,
+        engine=engine,
+        business_date=business_date,
+        business_date_value=business_date_value,
+        source_family=FILING_ARTIFACT_SOURCE_FAMILY,
+        default_registry_version=DEFAULT_REGISTRY_VERSION,
+        default_required_producer=FILING_ARTIFACT_PRODUCER_NAME,
+        worker_id=f"daily-incremental-gated-capture-{run_id}",
+        lease_seconds=DEFAULT_LEASE_SECONDS,
+        registry_version=DEFAULT_REGISTRY_VERSION,
+    )
+
+
 def _run_daily_index_driven_discovery(
     args: Any,
     *,
@@ -152,100 +312,35 @@ def _run_daily_index_driven_discovery(
     # per-candidate, matching every other silver-writing command's
     # hydrate-once/publish-once shape.
     engine = get_engine()
-    # Ticket 20: which forms are in scope now comes from the active Source
-    # Family Registry version, not discovery.py's own hardcoded default --
-    # a covered-but-not-yet-activated family, or one 'remove'd, must not
-    # silently fall back to acquiring everything DISCOVERY_IN_SCOPE_FORMS
-    # would have covered before the registry existed.
-    #
-    # Ticket 32 bullet 2's coverage_end_date boundary is evaluated against
-    # this run's own business_date, not server wall-clock date -- this
-    # driver runs per business date, including late replays of an
-    # already-in-window historical date, so "as of" has to mean "as of the
-    # date being processed," never "as of whenever this process happens to
-    # execute." (/code-review's Spec pass caught this: every one of these
-    # registry reads originally defaulted to date.today() despite
-    # business_date_value already being in scope right here.)
-    in_scope_forms = active_in_scope_forms(
-        engine, source_family, as_of_date=business_date_value
-    )
-    # Ticket 32 bullet 1: the registry's discovery_policy and
-    # required_producers become real gates here, not inert audit fields --
-    # None (no active coverage for this family) is left unvalidated, matching
-    # active_in_scope_forms's own "no coverage is not a hard failure"
-    # contract just above (an empty in_scope_forms already makes this run a
-    # no-op interval regardless).
-    coverage = active_family_coverage(
-        engine, source_family, as_of_date=business_date_value
-    )
-    if coverage is not None and coverage.discovery_policy != DAILY_INDEX_DRIVEN_DISCOVERY_POLICY:
-        raise UnsupportedDiscoveryPolicy(
-            f"source_family={source_family!r} declares "
-            f"discovery_policy={coverage.discovery_policy!r}, but this driver "
-            f"only implements {DAILY_INDEX_DRIVEN_DISCOVERY_POLICY!r}"
-        )
-    # No active coverage means in_scope_forms is already empty (nothing will
-    # reach CAPTURED this run), but the value still has to be *something*
-    # drive_filing_artifact_silver_acceptance's own upfront validation
-    # accepts -- its default is exactly the one producer both families'
-    # write bodies know (they reuse the identical "sec_raw_object" capture
-    # producer), so falling back to it here (instead of an empty tuple)
-    # avoids a spurious UnsupportedRequiredProducers on a genuinely empty,
-    # otherwise-trivially-complete interval.
-    required_producers = (
-        coverage.required_producers
-        if coverage is not None
-        else (default_required_producer,)
-    )
+    worker_id = getattr(args, "worker_id", None) or f"{command_name}-{os.getpid()}"
+    lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
+    registry_version = getattr(args, "registry_version", None) or default_registry_version
 
     _hydrate_silver_database_from_storage(context)
     db = open_silver_database(context.silver_root)
     try:
-        rows = _load_sealed_discovery_rows(db, business_date)
-        manifest = build_discovery_manifest(
-            rows, business_date=business_date, source_family=source_family, in_scope_forms=in_scope_forms
-        )
-
-        ledger = AcquisitionLedger(engine)
-        revisions = SourceRevisionLedger(engine)
-        processing = ProcessingLedger(engine)
-        finalizer = SilverFinalizer(engine)
-        registry = build_active_source_family_registry(
-            engine, identity=context.identity, as_of_date=business_date_value
-        )
-        worker_id = getattr(args, "worker_id", None) or f"{command_name}-{os.getpid()}"
-        lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
-        registry_version = getattr(args, "registry_version", None) or default_registry_version
-
-        result = drive_discovery_manifest(
-            ledger,
-            context.bronze_root,
-            registry,
-            manifest,
+        # Ticket 46 extracted the discovery/capture/Silver-acceptance body
+        # below into run_gated_discovery_for_business_date, shared with
+        # daily-incremental's own in-process gated capture -- this call is
+        # behavior-identical to the inline body it replaced.
+        outcome = run_gated_discovery_for_business_date(
+            context=context,
+            db=db,
+            engine=engine,
+            business_date=business_date,
+            business_date_value=business_date_value,
+            source_family=source_family,
+            default_registry_version=default_registry_version,
+            default_required_producer=default_required_producer,
             worker_id=worker_id,
-            registry_version=registry_version,
             lease_seconds=lease_seconds,
-        )
-        silver_result = drive_filing_artifact_silver_acceptance(
-            ledger,
-            revisions,
-            processing,
-            finalizer,
-            db,
-            result,
-            required_producers=required_producers,
+            registry_version=registry_version,
         )
     finally:
         db.close()
 
-    if result.interval_complete and silver_result.interval_complete:
-        # Ticket 20's catch-up obligation, advanced by the exact same
-        # completeness signal Ticket 29 already proved live end-to-end --
-        # no separate cross-database prover, this run's own success *is*
-        # the proof for this one business date.
-        SourceRegistryLedger(engine).record_catchup_progress(
-            source_family, date.fromisoformat(business_date)
-        )
+    result = outcome.result
+    silver_result = outcome.silver_result
 
     _publish_silver_database_with_retry(context)
 

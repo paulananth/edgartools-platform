@@ -505,6 +505,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="0-based offset into the ordered CIK list for windowed chunking",
     )
+    daily_incremental.add_argument(
+        "--enable-filing-artifact-gated-capture",
+        dest="enable_filing_artifact_gated_capture",
+        action="store_true",
+        default=False,
+        help=(
+            "Ticket 46 (change-propagation map): also run filing_artifact's "
+            "ledger-gated discovery/capture in-process for this run's final "
+            "business date, alongside the legacy artifact-fetch path, for "
+            "Ticket 10 Decision 2's side-by-side verification window. Off by "
+            "default. A failure here never fails this command -- but a "
+            "successful run is NOT passive observation: it advances the "
+            "Source Family Registry's real catch-up progress for "
+            "filing_artifact, the same signal Ticket 27's removal-evidence "
+            "bullets gate on."
+        ),
+    )
     _add_run_id_arg(daily_incremental)
     daily_incremental.set_defaults(handler=_handle_daily_incremental)
 
