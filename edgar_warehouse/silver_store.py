@@ -928,65 +928,92 @@ class SilverDatabase:
 
     def _ensure_schema_evolution(self) -> None:
         self._conn.execute(_SCHEMA_MIGRATION_TABLE_DDL)
-        for migration_name, description, migrate in self._schema_migrations():
+        for migration_name, description, migrate, requires_transaction in self._schema_migrations():
             if self._schema_migration_applied(migration_name):
                 continue
-            self._apply_schema_migration(migration_name, description, migrate)
+            self._apply_schema_migration(migration_name, description, migrate, requires_transaction)
 
-    def _schema_migrations(self) -> tuple[tuple[str, str, Any], ...]:
+    def _schema_migrations(self) -> tuple[tuple[str, str, Any, bool], ...]:
         return (
             (
                 "001_financial_period_end_pk",
                 "Recreate financial tables whose primary keys predate period_end.",
                 self._migrate_financial_period_end_pk,
+                True,
             ),
             (
                 "002_financial_fact_period_start_pk",
                 "Recreate sec_financial_fact whose primary key predates period_start.",
                 self._migrate_financial_fact_period_start_pk,
+                True,
             ),
             (
                 "003_parse_run_rows_written",
                 "Add rows_written to sec_parse_run.",
                 self._add_parse_run_rows_written,
+                True,
             ),
             (
                 "004_source_checkpoint_bronze_path",
                 "Add bronze_path to sec_source_checkpoint.",
                 self._add_source_checkpoint_bronze_path,
+                True,
             ),
             (
                 "005_financial_derived_factor_columns",
                 "Add accounting factor input columns to sec_financial_derived.",
                 self._add_financial_derived_factor_columns,
+                True,
             ),
             (
                 "006_adv_pfid_lineage",
                 "Add IAPD FilingID, CRD, PFID, section, effective-date and source lineage.",
                 self._add_adv_pfid_lineage,
+                True,
             ),
             (
                 "007_adv_private_fund_fund_index_bigint",
                 "Widen sec_adv_private_fund.fund_index SMALLINT -> BIGINT (a real single "
                 "March-2026 filing hit 22,277 of the 32,767 SMALLINT ceiling).",
                 self._widen_adv_fund_index_to_bigint,
+                True,
             ),
             (
                 "008_pipeline_run_lease_backstop_overdue",
                 "Add backstop_overdue to pipeline_run_lease.",
                 self._add_pipeline_run_lease_backstop_overdue,
+                True,
             ),
             (
                 "009_mdm_entity_id_columns",
                 "Add mdm_entity_id to the 5 MDM-ahead-of-silver source tables "
                 "(company, adviser, person, fund, security).",
                 self._add_mdm_entity_id_columns,
+                True,
             ),
             (
                 "010_company_facts_retirement_columns",
                 "Add valid_from/valid_to/is_current to sec_financial_fact and "
                 "sec_accounting_flag (change-propagation map Ticket 33).",
                 self._add_company_facts_retirement_columns,
+                # False: DuckDB 1.5.2's ALTER TABLE ADD COLUMN ... DEFAULT <expr>
+                # against a non-empty table triggers an internal row-backfill
+                # rewrite that bumps the table's version; a second ALTER TABLE
+                # statement against that same table inside the same explicit
+                # transaction then hits
+                # "TransactionException: ... another transaction has altered
+                # this table" at COMMIT -- reproduced live against real prod
+                # data (a 1-row sec_financial_fact table is enough; an empty
+                # one never triggers it, which is why no prior test caught
+                # this). This migration issues exactly that shape (3 ADD
+                # COLUMN statements per table, two of them DEFAULT-bearing) on
+                # two tables. Every statement uses IF NOT EXISTS, so it is
+                # already safe to run outside the shared transactional
+                # envelope (interrupt-and-retry just re-runs any not-yet-added
+                # column as a no-op) -- unlike _backup_and_recreate_table-based
+                # migrations (001/002/007), which genuinely need that envelope
+                # for atomicity across their RENAME+CREATE+INSERT sequence.
+                False,
             ),
         )
 
@@ -1001,7 +1028,18 @@ class SilverDatabase:
         ).fetchone()
         return row is not None
 
-    def _apply_schema_migration(self, migration_name: str, description: str, migrate: Any) -> None:
+    def _apply_schema_migration(
+        self, migration_name: str, description: str, migrate: Any, requires_transaction: bool = True
+    ) -> None:
+        if not requires_transaction:
+            # No explicit BEGIN/COMMIT: each statement migrate() issues
+            # autocommits on its own. Only safe for a migration whose
+            # statements are independently idempotent (e.g. all
+            # ADD COLUMN IF NOT EXISTS) -- see the "010_company_facts_
+            # retirement_columns" entry above for why this exists.
+            migrate()
+            self._record_schema_migration(migration_name, description)
+            return
         self._conn.execute("BEGIN TRANSACTION")
         try:
             migrate()
