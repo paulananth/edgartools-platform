@@ -48,6 +48,13 @@ CONFLICT_MIGRATION = (
     / "migrations"
     / "015_source_evidence_conflict.sql"
 )
+EXCLUSION_IMPORT_MIGRATION = (
+    Path(__file__).parents[2]
+    / "edgar_warehouse"
+    / "mdm"
+    / "migrations"
+    / "017_source_exclusion_and_evidence_import.sql"
+)
 
 
 @dataclass(frozen=True)
@@ -122,6 +129,17 @@ def postgres_conflict() -> Iterator[PostgresConflict]:
         assert copied_conflict.returncode == 0, copied_conflict.stderr
         migrated_conflict = _psql_file(container, "/tmp/conflict.sql")
         assert migrated_conflict.returncode == 0, migrated_conflict.stderr
+
+        # Ticket 34: SourceFetchDecisionRecord's ORM mapping now includes
+        # exclusion_reason -- this fixture's round-trip tests read/write
+        # source_fetch_decision through the real ORM, so 017 must be applied
+        # here too or those reads fail with UndefinedColumn.
+        copied_exclusion_import = _run(
+            "docker", "cp", str(EXCLUSION_IMPORT_MIGRATION), f"{container}:/tmp/exclusion_import.sql"
+        )
+        assert copied_exclusion_import.returncode == 0, copied_exclusion_import.stderr
+        migrated_exclusion_import = _psql_file(container, "/tmp/exclusion_import.sql")
+        assert migrated_exclusion_import.returncode == 0, migrated_exclusion_import.stderr
 
         port_result = _run("docker", "port", container, "5432/tcp")
         assert port_result.returncode == 0, port_result.stderr

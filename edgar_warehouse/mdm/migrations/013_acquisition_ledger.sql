@@ -676,31 +676,54 @@ GRANT EXECUTE ON FUNCTION finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMEST
 GRANT EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)
     TO edgartools_acquisition_coordinator, edgartools_acquisition_operator;
 
-CREATE OR REPLACE VIEW source_change_status AS
-SELECT
-    decision.decision_id,
-    decision.candidate_id,
-    decision.source_family,
-    decision.logical_source_key,
-    decision.observation_position,
-    decision.cause,
-    decision.fetch_disposition,
-    work.fetch_state,
-    decision.blocker,
-    decision.verified_evidence_reference,
-    decision.scope_proof_reference,
-    decision.operator_authorization_reference,
-    CASE work.fetch_state
-        WHEN 'LEASED' THEN 'FETCH_SOURCE'
-        WHEN 'CAPTURED' THEN 'MATERIALIZE_SOURCE_REVISION'
-        WHEN 'FAILED' THEN 'RETRY_FETCH'
-        ELSE decision.next_action
-    END AS next_action,
-    decision.next_eligible_at,
-    decision.created_at
-FROM source_fetch_decision AS decision
-LEFT JOIN source_fetch_work AS work
-  ON work.decision_id = decision.decision_id;
+-- Ticket 34 (017_source_exclusion_and_evidence_import.sql) later widens
+-- this view with an appended exclusion_reason column via its own
+-- CREATE OR REPLACE VIEW. Postgres allows CREATE OR REPLACE to append
+-- columns but never to narrow a view back down ("cannot drop columns from
+-- view") -- so on any full rerun of this file by an owner-privileged
+-- caller (013's self-managing wrapper reruns unconditionally once granted
+-- owner membership) *after* 017 has already widened the view once, this
+-- exact statement would otherwise abort the whole migration permanently.
+-- Reproduced live: a real disaster-recovery-style admin rerun of the full
+-- migrate() sequence broke here. Wrapped so a rerun that finds the view
+-- already (harmlessly) widened by a later migration is a no-op, not a
+-- fatal error -- a fresh install (where the view doesn't exist yet in any
+-- shape) still creates it identically to before.
+DO $$
+BEGIN
+    EXECUTE '
+        CREATE OR REPLACE VIEW source_change_status AS
+        SELECT
+            decision.decision_id,
+            decision.candidate_id,
+            decision.source_family,
+            decision.logical_source_key,
+            decision.observation_position,
+            decision.cause,
+            decision.fetch_disposition,
+            work.fetch_state,
+            decision.blocker,
+            decision.verified_evidence_reference,
+            decision.scope_proof_reference,
+            decision.operator_authorization_reference,
+            CASE work.fetch_state
+                WHEN ''LEASED'' THEN ''FETCH_SOURCE''
+                WHEN ''CAPTURED'' THEN ''MATERIALIZE_SOURCE_REVISION''
+                WHEN ''FAILED'' THEN ''RETRY_FETCH''
+                ELSE decision.next_action
+            END AS next_action,
+            decision.next_eligible_at,
+            decision.created_at
+        FROM source_fetch_decision AS decision
+        LEFT JOIN source_fetch_work AS work
+          ON work.decision_id = decision.decision_id
+    ';
+EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%cannot drop columns from view%' THEN
+        RAISE;
+    END IF;
+END;
+$$;
 
 GRANT SELECT ON source_change_status TO
     edgartools_acquisition_coordinator,

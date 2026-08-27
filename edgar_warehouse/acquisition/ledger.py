@@ -135,6 +135,7 @@ class FetchDecisionRequest:
     verified_evidence_reference: str | None = None
     scope_proof_reference: str | None = None
     operator_authorization_reference: str | None = None
+    exclusion_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -152,6 +153,7 @@ class SourceChangeStatus:
     blocker: str | None
     next_action: str
     is_terminal: bool
+    exclusion_reason: str | None = None
 
     @property
     def may_fetch(self) -> bool:
@@ -211,6 +213,7 @@ class AcquisitionLedger:
                     operator_authorization_reference=(
                         request.operator_authorization_reference
                     ),
+                    exclusion_reason=request.exclusion_reason,
                 )
                 session.add(decision)
                 session.flush()
@@ -587,6 +590,7 @@ def _status_from_record(
         blocker=decision.blocker,
         next_action=next_action,
         is_terminal=disposition in TERMINAL_NO_DOWNLOAD_DISPOSITIONS,
+        exclusion_reason=decision.exclusion_reason,
     )
 
 
@@ -654,6 +658,15 @@ def _validate_terminal_evidence(request: FetchDecisionRequest) -> None:
         raise InvalidDecisionEvidence(
             f"{request.disposition.value} requires {required_reference[0]}"
         )
+    if request.disposition is FetchDisposition.OPERATOR_EXCLUDED and (
+        not request.exclusion_reason or not request.exclusion_reason.strip()
+    ):
+        # Ticket 34: distinct from operator_authorization_reference (proof of
+        # *who* authorized this) -- exclusion_reason is the human-readable
+        # *why*, required so an exclusion is reasoned, not just authorized.
+        raise InvalidDecisionEvidence(
+            f"{request.disposition.value} requires exclusion_reason"
+        )
 
 
 def _require_worker_role(actor_role: FetchTransitionRole) -> None:
@@ -688,6 +701,20 @@ def require_silver_finalizer_role(actor_role: ProcessingTransitionRole) -> None:
         raise UnauthorizedTransitionRole(
             "Silver finalization requires "
             f"{ProcessingTransitionRole.ACQUISITION_SILVER_FINALIZER.value}"
+        )
+
+
+def require_operator_role(actor_role: DecisionOwnerRole) -> None:
+    """Shared by evidence_import.py (Ticket 34) -- an explicit, deliberate
+    operator action, not an automated fetch/processing/silver-finalizer
+    transition, so it reuses ``DecisionOwnerRole.ACQUISITION_OPERATOR`` (the
+    same role OPERATOR_REQUEST/OPERATOR_EXCLUDED fetch decisions already
+    require) rather than provisioning a new enum or a new Postgres role.
+    """
+
+    if actor_role is not DecisionOwnerRole.ACQUISITION_OPERATOR:
+        raise UnauthorizedTransitionRole(
+            f"this action requires {DecisionOwnerRole.ACQUISITION_OPERATOR.value}"
         )
 
 
@@ -734,6 +761,7 @@ def _decision_matches_request(
         and decision.scope_proof_reference == request.scope_proof_reference
         and decision.operator_authorization_reference
         == request.operator_authorization_reference
+        and decision.exclusion_reason == request.exclusion_reason
         and _normalized_datetime(decision.next_eligible_at)
         == _normalized_datetime(request.next_eligible_at)
     )

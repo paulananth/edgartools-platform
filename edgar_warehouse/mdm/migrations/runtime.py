@@ -400,6 +400,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_source_registry_migration(engine)
         _apply_source_evidence_conflict_migration(engine)
         _apply_sql_file(engine, "016_serialize_graph_generation.sql")
+        _apply_exclusion_and_evidence_import_migration(engine)
 
     if seed:
         with Session(engine) as session:
@@ -522,6 +523,56 @@ def _apply_source_evidence_conflict_migration(engine: Engine) -> bool:
             if not may_manage:
                 _log_privileged_rerun_skipped(
                     "015_source_evidence_conflict", "edgartools_acquisition_owner"
+                )
+                return False
+
+        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
+        for statement in statements:
+            conn.execute(text(statement))
+    return True
+
+
+def _apply_exclusion_and_evidence_import_migration(engine: Engine) -> bool:
+    """Apply privileged exclusion-reason + evidence-import DDL, or preserve
+    it for `application` (Ticket 34).
+
+    Same self-managing shape as :func:`_apply_source_evidence_conflict_migration`
+    -- no new role is provisioned (source_evidence_import's operational
+    GRANTs go to 013's existing edgartools_acquisition_operator role), but
+    the ALTER TABLE and CREATE TABLE both still require
+    edgartools_acquisition_owner, since CREATE/ALTER on schema public was
+    only ever granted to that role.
+    """
+    if engine.dialect.name != "postgresql":
+        _apply_sql_file(engine, "017_source_exclusion_and_evidence_import.sql")
+        return True
+
+    statements = _sql_file_statements("017_source_exclusion_and_evidence_import.sql")
+    with engine.begin() as conn:
+        # to_regclass, not information_schema.columns: the latter is
+        # privilege-filtered (a role only sees columns of tables it has some
+        # grant on), and `application` has zero grants on
+        # source_fetch_decision by design (013's own REVOKE) -- it would
+        # always read back "not installed" even after a real install,
+        # sending every rerun straight at SET LOCAL ROLE instead of the
+        # graceful skip. to_regclass checks relation existence only, not
+        # privilege, so it works for any caller regardless of role.
+        installed = bool(
+            conn.scalar(text("SELECT to_regclass('source_evidence_import') IS NOT NULL"))
+        )
+        if installed:
+            may_manage = bool(
+                conn.scalar(
+                    text(
+                        "SELECT pg_has_role(current_user, "
+                        "'edgartools_acquisition_owner', 'MEMBER')"
+                    )
+                )
+            )
+            if not may_manage:
+                _log_privileged_rerun_skipped(
+                    "017_source_exclusion_and_evidence_import",
+                    "edgartools_acquisition_owner",
                 )
                 return False
 

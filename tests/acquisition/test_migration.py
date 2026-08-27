@@ -15,6 +15,7 @@ from edgar_warehouse.mdm.migrations import runtime as migrations
 
 MIGRATION_NAME = "013_acquisition_ledger.sql"
 CONFLICT_MIGRATION_NAME = "015_source_evidence_conflict.sql"
+EXCLUSION_IMPORT_MIGRATION_NAME = "017_source_exclusion_and_evidence_import.sql"
 REPO_ROOT = Path(__file__).parents[2]
 
 
@@ -28,6 +29,14 @@ def _conflict_migration_sql() -> str:
     return (
         Path(migrations.__file__)
         .with_name(CONFLICT_MIGRATION_NAME)
+        .read_text(encoding="utf-8")
+    )
+
+
+def _exclusion_import_migration_sql() -> str:
+    return (
+        Path(migrations.__file__)
+        .with_name(EXCLUSION_IMPORT_MIGRATION_NAME)
         .read_text(encoding="utf-8")
     )
 
@@ -270,5 +279,80 @@ def test_bootstrap_and_restore_cover_evidence_conflict() -> None:
     assert "to_regclass('public.source_evidence_conflict') IS NOT NULL" in restore
     assert (
         "ALTER TABLE source_evidence_conflict OWNER TO edgartools_acquisition_owner"
+        in restore
+    )
+
+
+def test_exclusion_and_evidence_import_migration_is_registered() -> None:
+    assert EXCLUSION_IMPORT_MIGRATION_NAME in Path(migrations.__file__).read_text(
+        encoding="utf-8"
+    )
+
+
+def test_exclusion_reason_migration_guards_its_check_constraint_for_rerun_safety() -> None:
+    """Postgres has no `ADD CONSTRAINT IF NOT EXISTS` for CHECK constraints --
+    a bare `ALTER TABLE ... ADD CONSTRAINT` here would fail with
+    "already exists" on any rerun by a role with real owner membership
+    (reproduced live against Postgres before this guard was added)."""
+
+    normalized = " ".join(_exclusion_import_migration_sql().lower().split())
+
+    assert "add column if not exists exclusion_reason" in normalized
+    assert "select 1 from pg_constraint" in normalized
+    assert "ck_source_fetch_decision_exclusion_reason" in normalized
+    assert (
+        "check (fetch_disposition <> 'operator_excluded' or exclusion_reason is not null)"
+        in normalized
+    )
+    # Ticket 34 bullet 1, "visible in Source Change Status": the real
+    # operator-facing view, not just the Python dataclass, must also expose it.
+    assert "create or replace view source_change_status as" in normalized
+    assert "decision.exclusion_reason" in normalized
+
+
+def test_evidence_import_migration_defines_source_evidence_import_and_reuses_existing_013_roles() -> (
+    None
+):
+    """Ticket 34: the import table, its lineage uniqueness constraint, and
+    (critically) the *absence* of a new role-provisioning DO block -- this
+    migration reuses 013's roles: owned by edgartools_acquisition_owner
+    (CREATE on schema public was only ever granted to the owner role), with
+    operational GRANTs to the existing edgartools_acquisition_operator (an
+    import is a deliberate operator action, same class of responsibility as
+    OPERATOR_REQUEST/OPERATOR_EXCLUDED fetch decisions). No new role."""
+
+    normalized = " ".join(_exclusion_import_migration_sql().lower().split())
+
+    assert "create table if not exists source_evidence_import" in normalized
+    assert "uq_source_evidence_import_source_reference" in normalized
+    assert "unique (source_environment, source_bronze_reference)" in normalized
+    assert "grant select, insert on source_evidence_import to edgartools_acquisition_operator" in normalized
+    assert "owner to edgartools_acquisition_owner" in normalized
+    assert "create role" not in normalized
+
+
+def test_evidence_import_migration_grants_read_access_to_every_other_acquisition_role() -> (
+    None
+):
+    normalized = " ".join(_exclusion_import_migration_sql().lower().split())
+
+    assert "grant select on source_evidence_import to" in normalized
+    for role in (
+        "edgartools_acquisition_coordinator",
+        "edgartools_acquisition_worker",
+        "edgartools_acquisition_processor",
+        "edgartools_acquisition_silver_finalizer",
+    ):
+        assert role in normalized
+
+
+def test_bootstrap_and_restore_cover_exclusion_and_evidence_import() -> None:
+    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+    restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
+
+    assert "source_evidence_import" in bootstrap
+    assert "to_regclass('public.source_evidence_import') IS NOT NULL" in restore
+    assert (
+        "ALTER TABLE source_evidence_import OWNER TO edgartools_acquisition_owner"
         in restore
     )
