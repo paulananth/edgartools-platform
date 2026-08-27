@@ -296,6 +296,22 @@ def test_daily_incremental_cli_preserves_explicit_date_range_discovery() -> None
     assert run_command.call_args.args[1].recurring_index_lookback_days == 0
 
 
+def test_daily_incremental_cli_gated_capture_flag_is_off_by_default() -> None:
+    from edgar_warehouse.cli import build_parser
+
+    args = build_parser().parse_args(["daily-incremental"])
+    assert args.enable_filing_artifact_gated_capture is False
+
+
+def test_daily_incremental_cli_gated_capture_flag_can_be_enabled() -> None:
+    from edgar_warehouse.cli import build_parser
+
+    args = build_parser().parse_args(
+        ["daily-incremental", "--enable-filing-artifact-gated-capture"]
+    )
+    assert args.enable_filing_artifact_gated_capture is True
+
+
 def test_bootstrap_next_claims_discovery_ciks_before_submissions(tmp_path) -> None:
     db = MagicMock()
     db.get_tracked_ciks.return_value = [100, 200]
