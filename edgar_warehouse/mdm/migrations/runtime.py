@@ -399,6 +399,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_acquisition_ledger_migration(engine)
         _apply_source_registry_migration(engine)
         _apply_source_evidence_conflict_migration(engine)
+        _apply_sql_file(engine, "016_serialize_graph_generation.sql")
 
     if seed:
         with Session(engine) as session:

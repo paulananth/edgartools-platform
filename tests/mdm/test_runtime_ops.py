@@ -93,6 +93,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "013_acquisition_ledger.sql",
         "014_source_registry.sql",
         "015_source_evidence_conflict.sql",
+        "016_serialize_graph_generation.sql",
     ]
 
 

@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.database import (
@@ -34,6 +35,18 @@ from edgar_warehouse.mdm.database import (
 )
 
 BUILT_STATUSES = ("built", "reused")
+
+
+class ConcurrentGenerationBuildRejected(RuntimeError):
+    """A non-terminal ('building' or 'verified') graph generation already
+    exists (Ticket 40, change-propagation map).
+
+    Enforced by ``uq_graph_generation_single_non_terminal``, a database-level
+    partial unique index -- not a lease or advisory lock. A rejected attempt
+    fails outright: callers must not queue or retry internally, since a
+    queued retry risks replaying a now-stale request instead of picking up
+    current state on the next natural trigger.
+    """
 
 
 def _utcnow() -> datetime:
@@ -66,7 +79,11 @@ def create_generation(
     schema_version: str,
     committed_watermark: Optional[datetime] = None,
 ) -> MdmGraphGeneration:
-    """Freeze a committed MDM watermark and open a new generation in 'building'."""
+    """Freeze a committed MDM watermark and open a new generation in 'building'.
+
+    Raises ``ConcurrentGenerationBuildRejected`` if a non-terminal generation
+    already exists (Ticket 40) -- callers must not retry internally.
+    """
     generation = MdmGraphGeneration(
         status="building",
         committed_watermark=committed_watermark or _utcnow(),
@@ -74,7 +91,13 @@ def create_generation(
         schema_version=schema_version,
     )
     session.add(generation)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise ConcurrentGenerationBuildRejected(
+            "a non-terminal graph generation build is already in progress"
+        ) from exc
     return generation
 
 
