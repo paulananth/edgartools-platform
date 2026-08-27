@@ -19,6 +19,7 @@ from edgar_warehouse.mdm.database import (
     Base,
     MdmEntity,
     MdmEntityTypeDefinition,
+    MdmGraphGeneration,
     MdmGraphPartition,
     MdmRelationshipInstance,
     MdmRelationshipType,
@@ -111,6 +112,17 @@ def _build_all(session: Session, partitions: list[MdmGraphPartition]) -> None:
     session.commit()
 
 
+def _finish_generation(session: Session, gen, status: str = "activated") -> None:
+    """Move a generation to a terminal status so a later test can open a new
+    one -- required since Ticket 40's uq_graph_generation_single_non_terminal
+    now rejects a second 'building'/'verified' generation while one exists.
+    Content-addressed reuse itself is unaffected: built partitions are reused
+    "from any generation" (Ticket 08's Answer) regardless of the parent
+    generation's own status."""
+    gen.status = status
+    session.commit()
+
+
 # ---------------------------------------------------------------------------
 # Task 1: planning, sharding, reuse, retry
 # ---------------------------------------------------------------------------
@@ -184,6 +196,7 @@ class TestContentAddressedReuse:
         partitions1 = generation.plan_generation_partitions(session, gen1.generation_id)
         session.commit()
         _build_all(session, partitions1)
+        _finish_generation(session, gen1)
 
         gen2 = _new_generation(session, committed_watermark=FIXED_WATERMARK)
         partitions2 = generation.plan_generation_partitions(session, gen2.generation_id)
@@ -201,6 +214,7 @@ class TestContentAddressedReuse:
         partitions1 = generation.plan_generation_partitions(session, gen1.generation_id)
         session.commit()
         _build_all(session, partitions1)
+        _finish_generation(session, gen1)
 
         _add_entity(session, "company")  # population changed
         session.commit()
@@ -219,6 +233,7 @@ class TestContentAddressedReuse:
         partitions1 = generation.plan_generation_partitions(session, gen1.generation_id)
         session.commit()
         _build_all(session, partitions1)
+        _finish_generation(session, gen1)
 
         gen2 = _new_generation(session, rule_version="v2", committed_watermark=FIXED_WATERMARK)
         partitions2 = generation.plan_generation_partitions(session, gen2.generation_id)
@@ -234,6 +249,7 @@ class TestContentAddressedReuse:
         partitions1 = generation.plan_generation_partitions(session, gen1.generation_id)
         session.commit()
         _build_all(session, partitions1)
+        _finish_generation(session, gen1)
 
         gen2 = _new_generation(session, schema_version="s2", committed_watermark=FIXED_WATERMARK)
         partitions2 = generation.plan_generation_partitions(session, gen2.generation_id)
@@ -249,6 +265,7 @@ class TestContentAddressedReuse:
         partitions1 = generation.plan_generation_partitions(session, gen1.generation_id)
         session.commit()
         _build_all(session, partitions1)
+        _finish_generation(session, gen1)
 
         later_watermark = datetime(2026, 1, 2, tzinfo=timezone.utc)
         gen2 = _new_generation(session, committed_watermark=later_watermark)
@@ -443,16 +460,53 @@ class TestFanIn:
 # ---------------------------------------------------------------------------
 
 class TestConcurrentGenerationsNotBlocked:
-    def test_a_second_generation_can_open_while_the_first_is_still_building(self, world, session):
-        """No uniqueness/singleton constraint on mdm_graph_generation should
-        prevent more than one 'building' generation existing at once -- this is
-        what lets an ECS worker keep planning/building the next generation
-        while a prior one is still mid fan-out, mid fan-in, or awaiting
-        activation."""
+    def test_a_second_concurrent_generation_build_is_rejected_outright(self, world, session):
+        """Ticket 40 (change-propagation map): at most one non-terminal
+        generation may exist at a time, enforced by
+        uq_graph_generation_single_non_terminal -- closing the map's own
+        charted "normal graph workflow tails can sync a new generation while
+        verifying the previously active one" gap. A rejected attempt fails
+        outright (no internal queue/retry) and does not corrupt the first
+        attempt's state."""
         first = _new_generation(session)
         assert first.status == "building"
 
-        second = _new_generation(session)  # must not raise / must not block
+        with pytest.raises(generation.ConcurrentGenerationBuildRejected):
+            _new_generation(session)
+
+        # The rejected attempt must not have disturbed the first generation
+        # (create_generation already rolled back internally on conflict).
+        refreshed = session.get(MdmGraphGeneration, first.generation_id)
+        assert refreshed is not None
+        assert refreshed.status == "building"
+
+    @pytest.mark.parametrize("non_terminal_status", ["building", "verified"])
+    def test_second_generation_rejected_for_every_non_terminal_status(
+        self, world, session, non_terminal_status
+    ):
+        """'verified' is non-terminal too (not yet 'activated') -- a second
+        build attempt must be rejected in both non-terminal states, not just
+        the initial 'building' one."""
+        first = _new_generation(session)
+        first.status = non_terminal_status
+        session.commit()
+
+        with pytest.raises(generation.ConcurrentGenerationBuildRejected):
+            _new_generation(session)
+
+    @pytest.mark.parametrize("terminal_status", ["activated", "failed"])
+    def test_new_generation_allowed_once_prior_reaches_a_terminal_status(
+        self, world, session, terminal_status
+    ):
+        """Once the prior generation reaches a terminal status ('activated'
+        or 'failed'), a new build is not blocked -- the guard only ever
+        serializes concurrent in-flight builds, never ordinary sequential
+        generations."""
+        first = _new_generation(session)
+        first.status = terminal_status
+        session.commit()
+
+        second = _new_generation(session)  # must not raise
         assert second.status == "building"
         assert second.generation_id != first.generation_id
 

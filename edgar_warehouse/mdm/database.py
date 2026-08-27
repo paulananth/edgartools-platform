@@ -1079,6 +1079,17 @@ class MdmGraphGeneration(Base):
             "status IN ('building','verified','activated','failed')",
             name="ck_graph_generation_status",
         ),
+        # At most one row may be non-terminal ('building' or 'verified') at a
+        # time (Ticket 40, change-propagation map) -- a partial unique index
+        # on a constant expression, mirroring
+        # uq_source_registry_version_single_active.
+        Index(
+            "uq_graph_generation_single_non_terminal",
+            text("1"),
+            unique=True,
+            sqlite_where=text("status IN ('building', 'verified')"),
+            postgresql_where=text("status IN ('building', 'verified')"),
+        ),
     )
 
 
