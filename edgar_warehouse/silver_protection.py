@@ -250,6 +250,24 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         "sec_financial_fact",
         ("cik", "accession_number", "concept", "fiscal_period", "segment", "period_end", "period_start"),
         authority_column="ingested_at",
+        # valid_from (Ticket 33) is set once at first capture and never
+        # touched again by design ("valid_from marks first capture" --
+        # silver_store.py's sec_financial_fact DDL comment) -- the same
+        # write-once-immutable guarantee that already makes mdm_entity_id's
+        # own provenance_columns exemption above safe. Necessary, not just
+        # convenient: DEFAULT NOW() means two independent backfills (the
+        # candidate's own local migration vs. canonical's schema-
+        # reconciliation ALTER at merge time, see _column_defaults below)
+        # produce two genuinely different timestamps for the exact same
+        # "became valid" event -- no shared default expression can make them
+        # equal, so this column can never be made comparable here.
+        # Deliberately does NOT include valid_to/is_current -- those carry
+        # real retirement-state content that a future candidate legitimately
+        # needs to update, and blocking on a genuine conflict there is
+        # correct today; how retirement conflicts *should* resolve is a
+        # separate, open design question (see CLAUDE.md's "sec_financial_fact
+        # retirement publish-conflict" 5-whys).
+        provenance_columns=frozenset({"valid_from"}),
     ),
     "sec_financial_derived": ProtectedTablePolicy(
         "sec_financial_derived",
@@ -260,7 +278,12 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         "sec_earnings_release", ("cik", "accession_number"), authority_column="ingested_at"
     ),
     "sec_accounting_flag": ProtectedTablePolicy(
-        "sec_accounting_flag", ("cik", "accession_number"), authority_column="ingested_at"
+        "sec_accounting_flag",
+        ("cik", "accession_number"),
+        authority_column="ingested_at",
+        # Same reasoning as sec_financial_fact's own valid_from exemption
+        # above -- both tables gained identical Ticket 33 retirement columns.
+        provenance_columns=frozenset({"valid_from"}),
     ),
     "sec_executive_record": ProtectedTablePolicy(
         "sec_executive_record", ("cik", "accession_number", "exec_name"), authority_column="ingested_at"
@@ -408,6 +431,25 @@ def _table_names(conn: duckdb.DuckDBPyConnection, catalog: str) -> set[str]:
 def _columns(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> dict[str, str]:
     rows = conn.execute(
         "SELECT column_name, data_type FROM information_schema.columns "
+        "WHERE table_catalog = ? AND table_schema = 'main' AND table_name = ? "
+        "ORDER BY ordinal_position",
+        [catalog, table_name],
+    ).fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
+def _column_defaults(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> dict[str, str | None]:
+    """Column name -> the candidate's own declared DEFAULT expression (raw
+    SQL, e.g. ``'now()'``), or None if the column has no default.
+
+    Only used for backfilling a column canonical is learning about for the
+    first time (see the additive schema-reconciliation loop below) -- every
+    other column-metadata read in this module stays on the plain
+    ``_columns()`` shape, so this is a separate helper rather than widening
+    that one's return type across its 8 other call sites.
+    """
+    rows = conn.execute(
+        "SELECT column_name, column_default FROM information_schema.columns "
         "WHERE table_catalog = ? AND table_schema = 'main' AND table_name = ? "
         "ORDER BY ordinal_position",
         [catalog, table_name],
@@ -865,10 +907,36 @@ def merge_candidate_into_canonical(
                     "change; use the explicit repair workflow instead)"
                 )
             # Additive: candidate may declare extra columns beyond canonical.
+            #
+            # A candidate's schema always predates canonical learning about a
+            # new column (candidate hydrated from canonical, then ran its own
+            # local schema migration before this merge runs) -- so backfill
+            # canonical's newly-added column using the *candidate's own
+            # declared DEFAULT*, not a bare NULL. Reproduced live (change-
+            # propagation Ticket 46's verification run, 2026-08-27): leaving
+            # this NULL made every one of sec_financial_fact's pre-existing
+            # rows differ from the candidate's migration-backfilled
+            # valid_from/is_current on canonical's very first publish after
+            # Ticket 33 shipped -- 434,805 false "ambiguous same-key
+            # conflict"s, since a NULL-vs-backfilled-value difference on a
+            # comparable column is indistinguishable from a real content
+            # change to _comparable_columns/_resolve_conflict below. Using the
+            # candidate's own default (e.g. DEFAULT NOW() for valid_from,
+            # DEFAULT TRUE for is_current) makes canonical's freshly-added
+            # column start from the exact same "became valid at migration
+            # time, currently valid" backfill semantics
+            # _add_company_facts_retirement_columns already documents, instead
+            # of an implicit NULL neither side's migration ever intended.
+            # Columns with no declared default (e.g. valid_to) are unaffected
+            # -- NULL is already the correct starting value for those.
+            extra_defaults = _column_defaults(conn, "cand", table_name)
             for extra_col in set(cand_columns) - set(out_columns):
+                default_expr = extra_defaults.get(extra_col)
+                default_clause = f" DEFAULT {default_expr}" if default_expr is not None else ""
                 conn.execute(
                     f"ALTER TABLE out.main.{_quote_ident(table_name)} "
-                    f"ADD COLUMN IF NOT EXISTS {_quote_ident(extra_col)} {cand_columns[extra_col]}"
+                    f"ADD COLUMN IF NOT EXISTS {_quote_ident(extra_col)} "
+                    f"{cand_columns[extra_col]}{default_clause}"
                 )
 
             all_columns = list(_columns(conn, "out", table_name).keys())
