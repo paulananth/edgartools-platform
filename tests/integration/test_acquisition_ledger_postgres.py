@@ -45,6 +45,13 @@ MIGRATION = (
     / "migrations"
     / "013_acquisition_ledger.sql"
 )
+EXCLUSION_IMPORT_MIGRATION = (
+    Path(__file__).parents[2]
+    / "edgar_warehouse"
+    / "mdm"
+    / "migrations"
+    / "017_source_exclusion_and_evidence_import.sql"
+)
 
 
 @dataclass(frozen=True)
@@ -143,6 +150,23 @@ def postgres_ledger() -> Iterator[PostgresLedger]:
             "/tmp/ledger.sql",
         )
         assert migrated.returncode == 0, migrated.stderr
+
+        # Ticket 34: SourceFetchDecisionRecord's ORM mapping now includes
+        # exclusion_reason -- every real-Postgres fixture that migrates
+        # source_fetch_decision needs 017 applied too, or any ORM read/write
+        # against it fails with UndefinedColumn (reproduced live before this
+        # was added).
+        copied_exclusion_import = _run(
+            "docker", "cp", str(EXCLUSION_IMPORT_MIGRATION), f"{container}:/tmp/exclusion_import.sql"
+        )
+        assert copied_exclusion_import.returncode == 0, copied_exclusion_import.stderr
+        migrated_exclusion_import = _run(
+            "docker", "exec", "-e", "PGPASSWORD=test", container,
+            "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres",
+            "-f", "/tmp/exclusion_import.sql",
+        )
+        assert migrated_exclusion_import.returncode == 0, migrated_exclusion_import.stderr
+
         port_result = _run("docker", "port", container, "5432/tcp")
         assert port_result.returncode == 0, port_result.stderr
         port = port_result.stdout.strip().rsplit(":", 1)[-1]
@@ -243,13 +267,14 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
             candidate_id, source_family, logical_source_key, source_url,
             observation_position, cause, cause_reference, owner_role,
             fetch_disposition, blocker, next_action,
-            operator_authorization_reference
+            operator_authorization_reference, exclusion_reason
         ) VALUES (
             'candidate-cross-role', 'filing_artifact', 'cross-role/document',
             'https://www.sec.gov/Archives/cross-role.txt', 1,
             'OPERATOR_REQUEST', 'operator-request-cross-role',
             'ACQUISITION_OPERATOR', 'OPERATOR_EXCLUDED',
-            'cross-role exclusion', 'NONE', 'operator-proof-cross-role'
+            'cross-role exclusion', 'NONE', 'operator-proof-cross-role',
+            'attempted cross-role exclusion'
         );
         """,
         user="application",
@@ -341,13 +366,13 @@ def test_postgres_roles_proofs_and_fencing_are_enforced(
             candidate_id, source_family, logical_source_key, source_url,
             observation_position, cause, cause_reference, owner_role,
             fetch_disposition, blocker, next_action,
-            operator_authorization_reference
+            operator_authorization_reference, exclusion_reason
         ) VALUES (
             'candidate-operator', 'filing_artifact', 'operator/document',
             'https://www.sec.gov/Archives/operator.txt', 1,
             'OPERATOR_REQUEST', 'operator-request-1', 'ACQUISITION_OPERATOR',
             'OPERATOR_EXCLUDED', 'operator exclusion', 'NONE',
-            'operator-authorization-1'
+            'operator-authorization-1', 'genuine operator exclusion'
         );
         """,
         user="application",

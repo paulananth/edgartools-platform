@@ -301,7 +301,11 @@ for stmt in [
     # earlier attempt to own this table under edgartools_acquisition_processor
     # instead failed with "permission denied for schema public" running the
     # migration as `application`), so it belongs in this same REVOKE list.
-    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision, source_processing_decision, source_expected_producer, source_evidence_conflict FROM application;",
+    # Ticket 34: source_evidence_import is owned by edgartools_acquisition_owner
+    # too, same reasoning as source_evidence_conflict just above -- CREATE on
+    # schema public was never granted to any operational role, only the
+    # owner role, so it belongs in this same REVOKE list.
+    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision, source_processing_decision, source_expected_producer, source_evidence_conflict, source_evidence_import FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status FROM application;",
     "REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;",
     "RESET ROLE;",

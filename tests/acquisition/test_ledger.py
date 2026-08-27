@@ -147,11 +147,13 @@ def test_operator_exclusion_requires_the_operator_decision_role() -> None:
             next_action="NONE",
             owner_role=DecisionOwnerRole.ACQUISITION_OPERATOR,
             operator_authorization_reference="operator-exclusion-42",
+            exclusion_reason="Legal hold #42 excludes this filing from acquisition.",
         )
     )
 
     assert status.fetch_disposition is FetchDisposition.OPERATOR_EXCLUDED
     assert status.is_terminal is True
+    assert status.exclusion_reason == "Legal hold #42 excludes this filing from acquisition."
 
     with pytest.raises(UnauthorizedDecisionRole):
         ledger.create_fetch_decision(
@@ -166,6 +168,33 @@ def test_operator_exclusion_requires_the_operator_decision_role() -> None:
                 blocker="attempted exclusion",
                 next_action="NONE",
                 operator_authorization_reference="operator-exclusion-43",
+                exclusion_reason="Attempted exclusion.",
+            )
+        )
+
+
+def test_operator_exclusion_requires_a_non_empty_reason() -> None:
+    """Ticket 34: an exclusion must be reasoned, not just authorized --
+    exclusion_reason and operator_authorization_reference are two distinct
+    kinds of evidence (why vs. proof-of-authority), each independently
+    required."""
+    ledger = _ledger()
+
+    with pytest.raises(InvalidDecisionEvidence, match="exclusion_reason"):
+        ledger.create_fetch_decision(
+            FetchDecisionRequest(
+                candidate_id="candidate-unreasoned-exclusion",
+                source_family="filing_artifact",
+                logical_source_key="accession/unreasoned",
+                source_url="https://www.sec.gov/Archives/unreasoned.txt",
+                cause=DecisionCause.OPERATOR_REQUEST,
+                cause_reference="operator-exclusion-44",
+                disposition=FetchDisposition.OPERATOR_EXCLUDED,
+                blocker="attempted exclusion",
+                next_action="NONE",
+                owner_role=DecisionOwnerRole.ACQUISITION_OPERATOR,
+                operator_authorization_reference="operator-exclusion-44",
+                exclusion_reason="   ",
             )
         )
 

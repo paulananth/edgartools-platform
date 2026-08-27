@@ -64,6 +64,7 @@ class SourceFetchDecisionRecord(AcquisitionBase):
     operator_authorization_reference: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
+    exclusion_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_eligible_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -130,6 +131,10 @@ class SourceFetchDecisionRecord(AcquisitionBase):
             "fetch_disposition <> 'OPERATOR_EXCLUDED' OR "
             "operator_authorization_reference IS NOT NULL",
             name="ck_source_fetch_decision_operator_authorization",
+        ),
+        CheckConstraint(
+            "fetch_disposition <> 'OPERATOR_EXCLUDED' OR exclusion_reason IS NOT NULL",
+            name="ck_source_fetch_decision_exclusion_reason",
         ),
     )
 
@@ -650,5 +655,48 @@ class SourceEvidenceConflictRecord(AcquisitionBase):
             "repair_revision_id IS NOT NULL AND resolved_at IS NOT NULL AND "
             "operator_authorization_reference IS NOT NULL AND resolution_reason IS NOT NULL)",
             name="ck_source_evidence_conflict_resolution_complete",
+        ),
+    )
+
+
+class SourceEvidenceImportRecord(AcquisitionBase):
+    """Checksum-verified Bronze evidence imported from another environment
+    or account (Ticket 34), and the lineage proving where it came from.
+
+    Distinct from ``SourceEvidenceConflictRecord``: a conflict is *detected*
+    passively (two byte-sets already both claim one identity); an import is
+    a *deliberate* operator action bringing foreign evidence in on purpose,
+    always with full source/local context up front -- so, unlike the
+    conflict table, ``source_family``/``logical_source_key`` are required
+    here, not nullable.
+
+    Idempotent per ``(source_environment, source_bronze_reference)``: a
+    replayed import of the exact same foreign evidence returns the existing
+    row rather than duplicating the audit trail (mirrors
+    ``source_evidence_conflict``'s own
+    idempotent-per-``quarantine_bronze_reference`` shape).
+    """
+
+    __tablename__ = "source_evidence_import"
+
+    import_id: Mapped[str] = mapped_column(GUID(), primary_key=True, default=_uuid_string)
+    source_family: Mapped[str] = mapped_column(Text, nullable=False)
+    logical_source_key: Mapped[str] = mapped_column(Text, nullable=False)
+    source_environment: Mapped[str] = mapped_column(Text, nullable=False)
+    source_bronze_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_checksum: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_evidence_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    local_bronze_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    operator_authorization_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_environment",
+            "source_bronze_reference",
+            name="uq_source_evidence_import_source_reference",
         ),
     )

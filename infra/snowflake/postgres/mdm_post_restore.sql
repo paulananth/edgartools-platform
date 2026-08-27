@@ -183,6 +183,22 @@ BEGIN
     REVOKE ALL PRIVILEGES ON source_evidence_conflict FROM application;
     EXECUTE 'ALTER TABLE source_evidence_conflict OWNER TO edgartools_acquisition_owner';
   END IF;
+  -- Ticket 34: a restore predating source_evidence_import has none yet --
+  -- the privileged migration creates it, owned by edgartools_acquisition_owner
+  -- (no new dedicated role -- import_evidence runs as the existing
+  -- edgartools_acquisition_operator role, the same one OPERATOR_REQUEST/
+  -- OPERATOR_EXCLUDED fetch decisions already require). exclusion_reason
+  -- (a plain column added to the already-restored source_fetch_decision)
+  -- needs no entry here -- it's covered by that table's existing table-level
+  -- REVOKE/GRANT, which a new column automatically inherits.
+  IF to_regclass('public.source_evidence_import') IS NOT NULL THEN
+    GRANT SELECT, INSERT ON source_evidence_import TO edgartools_acquisition_operator;
+    GRANT SELECT ON source_evidence_import TO
+      edgartools_acquisition_coordinator, edgartools_acquisition_worker,
+      edgartools_acquisition_processor, edgartools_acquisition_silver_finalizer;
+    REVOKE ALL PRIVILEGES ON source_evidence_import FROM application;
+    EXECUTE 'ALTER TABLE source_evidence_import OWNER TO edgartools_acquisition_owner';
+  END IF;
 END;
 $$;
 
