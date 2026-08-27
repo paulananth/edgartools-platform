@@ -7,16 +7,24 @@ published processing status.
 
 **Blocked by:** 21 — Migrate submissions snapshots and pagination; 22 — Migrate
 company-facts snapshots; 23 — Migrate reference catalogs; 24 — Migrate ADV
-sources; 25 — Add conflict, repair, exclusion, and evidence-import workflows;
-26 — Rebuild and activate a ledger epoch
+sources; 25 — Add conflict, repair, exclusion, and evidence-import workflows
 
-**Status:** blocked — transitively blocked through Ticket 26 (itself blocked
-on the still-open Ticket 10), and even setting that aside, three direct
-blockers are only partially resolved with named unfinished bullets: Ticket
-22 (bullets 1/4/5 partial — conditional-fetch, retirement schema, full
-Facade purity), Ticket 23 (bullet 1 partial — conditional-fetch), Ticket 24
-(bullet 4 partial — `adv_filing` has no discovery driver yet). Corrected
-2026-08-26; this file previously said `ready-for-agent`.
+**Status:** ready-for-agent (corrected 2026-08-27). Ticket 26 removed from
+this ticket's blockers — [Ticket 10](10-decide-migration-cutover-rollback.md)'s
+Decision 5 found it was never a genuine prerequisite (ordinary per-family
+cutover doesn't route through Ticket 26's rebuild machinery at all). Ticket
+24's bullet 4 (`adv_filing` had no discovery driver) is now fully resolved,
+not partial. Ticket 22 (bullets 1/4/5) and Ticket 23 (bullet 1) still carry
+named partial bullets, but per this map's established convention (see
+Ticket 26's own prior correction) a `resolved`-prefixed status satisfies
+blocking regardless of partial detail — every listed blocker is resolved.
+**Not yet reflected in this ticket's own scope, worth resolving before
+starting:** Ticket 10's Decision 2 (side-by-side verification per family
+before retiring its legacy call) and the newly-confirmed fact that none of
+the new drivers are wired into any schedule yet (also Ticket 10) — this
+ticket's bullets below predate both findings and may need a pass to
+incorporate them (e.g. the actual removal work is gated per-family on
+Decision 2's diff proof, not a single all-families-at-once removal).
 
 - [ ] Architecture tests prove every approved low-level source adapter is
   reachable only through the ledger-gated Facade.
