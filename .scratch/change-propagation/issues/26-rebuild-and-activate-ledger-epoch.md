@@ -10,11 +10,16 @@ contract; 10 — Decide baseline, migration, cutover, and rollback sequencing;
 snapshots; 23 — Migrate reference catalogs; 24 — Migrate ADV sources; 25 — Add
 conflict, repair, exclusion, and evidence-import workflows
 
-**Status:** blocked — Ticket 10 ("Decide baseline, migration, cutover, and
-rollback sequencing") is still `open`, not resolved (corrected 2026-08-26;
-this file previously said `ready-for-agent`, which was stale — every other
-listed blocker is resolved, but a ticket needs *all* its blockers resolved,
-not most). Not actionable until Ticket 10 is decided.
+**Status:** ready-for-agent (corrected 2026-08-27 — Ticket 10 resolved, so
+every listed blocker is now satisfied). Ticket 10's own Answer narrowed this
+ticket's real-world necessity: ordinary per-family cutover onto the gated
+acquisition path (Tickets 21-25's own families) does **not** route through
+this ticket's rebuild machinery at all — it starts capturing forward from
+each family's already-trusted existing data instead. This ticket is
+reserved strictly for genuine ledger loss/reinitialization, and per Ticket
+10's Decision 5, no longer blocks [Ticket 27](27-contract-legacy-acquisition-bypasses.md).
+Still a legitimate, real piece of disaster-recovery machinery worth
+building — just off the critical path to legacy-bypass removal.
 
 - [ ] Operator authorization fixes the reason, coverage contract, cutoff,
   deployment cohort, and new Ledger Epoch before rebuild begins.
