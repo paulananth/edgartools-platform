@@ -161,6 +161,10 @@ def _handle_drive_filing_discovery_for_date(args: argparse.Namespace) -> int:
     return run_command("drive-filing-discovery-for-date", args)
 
 
+def _handle_drive_adv_filing_discovery_for_date(args: argparse.Namespace) -> int:
+    return run_command("drive-adv-filing-discovery-for-date", args)
+
+
 def _handle_drive_submissions_discovery(args: argparse.Namespace) -> int:
     return run_command("drive-submissions-discovery", args)
 
@@ -586,6 +590,38 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(drive_filing_discovery_for_date)
     drive_filing_discovery_for_date.set_defaults(
         handler=_handle_drive_filing_discovery_for_date
+    )
+
+    drive_adv_filing_discovery_for_date = subparsers.add_parser(
+        "drive-adv-filing-discovery-for-date",
+        help="Seal one business date's already-captured SEC daily index into a "
+        "Discovery Manifest and drive each in-scope ADV filing candidate "
+        "(Form ADV and its siblings) through the ledger-gated acquisition "
+        "Facade -- the adv_filing sibling of drive-filing-discovery-for-date.",
+    )
+    drive_adv_filing_discovery_for_date.add_argument(
+        "business_date", help="Business date in YYYY-MM-DD format"
+    )
+    drive_adv_filing_discovery_for_date.add_argument(
+        "--worker-id",
+        default=None,
+        help="Fencing worker identity; defaults to a process-derived value",
+    )
+    drive_adv_filing_discovery_for_date.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=None,
+        help="Fetch-work lease duration in seconds (default: 300)",
+    )
+    drive_adv_filing_discovery_for_date.add_argument(
+        "--registry-version",
+        default=None,
+        help="Source Family Registry version tied to issued decisions "
+        "(default: adv_filing-v1)",
+    )
+    _add_run_id_arg(drive_adv_filing_discovery_for_date)
+    drive_adv_filing_discovery_for_date.set_defaults(
+        handler=_handle_drive_adv_filing_discovery_for_date
     )
 
     drive_submissions_discovery = subparsers.add_parser(

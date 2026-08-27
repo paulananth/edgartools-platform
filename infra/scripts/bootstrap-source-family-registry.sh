@@ -137,16 +137,16 @@ cat > "${coverage_file}" <<JSON
   }
 ]
 JSON
-# Ticket 24 bullet 1: adv_filing declares ADV accession identity's own scope
-# (in_scope_forms above), distinct from adv_bulk_dataset's bulk-snapshot
-# identity. Reuses FilingArtifactPolicy's Strategy and filing_artifact's own
-# "daily_index_driven" mechanism/producer shape (see source_family_registry.py's
-# ADV_FILING_SOURCE_FAMILY docstring) -- but no drive-adv-filing-discovery-for-date
-# command exists yet to actually populate coverage through this family (unlike
-# filing_artifact's real drive-filing-discovery-for-date driver, which is hardcoded
-# to FILING_ARTIFACT_SOURCE_FAMILY only). This coverage row is a declared, inert
-# scope until that follow-up driver ships; ADV filing documents are still captured
-# via the pre-Ticket-14 legacy path _run_parse_adv_bronze reads from.
+# Ticket 24 bullet 1 (closed by bullet 4's own follow-up): adv_filing declares
+# ADV accession identity's own scope (in_scope_forms above), distinct from
+# adv_bulk_dataset's bulk-snapshot identity. Reuses FilingArtifactPolicy's
+# Strategy and filing_artifact's own "daily_index_driven" mechanism/producer
+# shape (see source_family_registry.py's ADV_FILING_SOURCE_FAMILY docstring).
+# drive-adv-filing-discovery-for-date (edgar_warehouse/application/workflows/
+# drive_filing_discovery.py's generalized _run_daily_index_driven_discovery,
+# parameterized for this family) now actually drives capture through this
+# coverage row, replacing the pre-Ticket-14 legacy _run_parse_adv_bronze path
+# for ADV filing documents going forward.
 
 draft_output="$("${EDGAR_WAREHOUSE[@]}" mdm registry-open-draft \
   --coverage "${coverage_file}" \

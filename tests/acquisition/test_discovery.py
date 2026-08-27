@@ -424,6 +424,40 @@ def test_discovery_candidate_id_is_deterministic_per_interval_and_accession() ->
     assert first != different_date
 
 
+def test_discovery_candidate_id_preserves_filing_artifacts_legacy_format() -> None:
+    """Ticket 24 bullet 4: filing_artifact already has real prod ledger rows
+    (Ticket 29's dry run) keyed on this exact format -- changing it would
+    silently break replay recognition and cause a real SEC re-fetch on the
+    next run for an already-processed date. Locks in the id string itself,
+    not just its determinism, so a future refactor can't silently drift it.
+    """
+
+    assert discovery_candidate_id("2026-08-24", "0001-26-000001") == (
+        "filing-discovery/2026-08-24/0001-26-000001"
+    )
+    assert discovery_candidate_id(
+        "2026-08-24", "0001-26-000001", source_family="filing_artifact"
+    ) == "filing-discovery/2026-08-24/0001-26-000001"
+
+
+def test_discovery_candidate_id_scopes_other_families_to_avoid_collision() -> None:
+    """The real bug this ticket found: the same business_date + accession is
+    a genuine candidate in more than one family's manifest (one in-scope,
+    one excluded) when two families' drivers read the same sealed daily
+    index -- without source_family in the id, the second family's decision
+    collides with the first's.
+    """
+
+    filing_id = discovery_candidate_id(
+        "2026-08-24", "0001-26-000001", source_family="filing_artifact"
+    )
+    adv_id = discovery_candidate_id(
+        "2026-08-24", "0001-26-000001", source_family="adv_filing"
+    )
+    assert filing_id != adv_id
+    assert adv_id == "filing-discovery/adv_filing/2026-08-24/0001-26-000001"
+
+
 def test_conflicting_replay_with_a_different_registry_version_does_not_abort_the_rest_of_the_interval(
     tmp_path,
 ) -> None:

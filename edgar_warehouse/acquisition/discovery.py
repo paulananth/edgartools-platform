@@ -162,15 +162,45 @@ class DiscoveryDriveResult:
         )
 
 
-def discovery_candidate_id(business_date: str, accession_number: str) -> str:
-    """Deterministic candidate identity: same interval + accession -> same id.
+def discovery_candidate_id(
+    business_date: str, accession_number: str, *, source_family: str = FILING_DISCOVERY_SOURCE_FAMILY
+) -> str:
+    """Deterministic candidate identity: same interval + accession + family -> same id.
 
     This is what makes replaying the same discovery evidence idempotent at
     the ledger layer (``AcquisitionLedger.create_fetch_decision`` is keyed
-    by ``candidate_id``) without this module needing its own dedupe state.
+    globally by ``candidate_id``, not scoped by ``source_family``) without
+    this module needing its own dedupe state.
+
+    Ticket 24 bullet 4 found a real, previously-unexercised bug here: this
+    module was written when only ``filing_artifact`` ever drove daily-index
+    discovery, so a candidate_id keyed on interval+accession alone was
+    accidentally already globally unique. That stopped being true once
+    ``adv_filing`` reused the same sealed daily-index observation: the same
+    business_date + accession pair is a real candidate in *both* families'
+    manifests (one in-scope, one excluded), so without source_family in the
+    id, the second family's driver collided with the first's already-
+    registered decision for that accession -- reproduced live while wiring
+    the new ``drive-adv-filing-discovery-for-date`` driver, not a
+    hypothetical.
+
+    The fix deliberately does NOT change ``filing_artifact``'s own id format
+    (still ``filing-discovery/{business_date}/{accession_number}``, no
+    family segment): Ticket 29 already ran a real prod dry run that wrote
+    live ledger rows under that exact format, and this id is exactly what
+    makes a re-run recognize an already-CAPTURED candidate without a real
+    SEC fetch (this file's own "SEC data idempotency" policy, CLAUDE.md).
+    Changing the format for an already-covered family would silently break
+    that recognition on the very next replay -- a new candidate_id means no
+    ``existing`` row is found, a fresh Fetch Decision is created, and the
+    facade re-fetches from SEC over the network. Every other family's id
+    does include the family segment, since no other family has any live
+    ledger history whose format this would need to preserve.
     """
 
-    return f"filing-discovery/{business_date}/{accession_number}"
+    if source_family == FILING_DISCOVERY_SOURCE_FAMILY:
+        return f"filing-discovery/{business_date}/{accession_number}"
+    return f"filing-discovery/{source_family}/{business_date}/{accession_number}"
 
 
 def drive_discovery_manifest(
@@ -272,7 +302,9 @@ def drive_discovery_manifest(
 def _build_fetch_decision_request(
     candidate: DiscoveryCandidate, cause_reference: str, manifest: DiscoveryManifest
 ) -> FetchDecisionRequest:
-    candidate_id = discovery_candidate_id(manifest.business_date, candidate.accession_number)
+    candidate_id = discovery_candidate_id(
+        manifest.business_date, candidate.accession_number, source_family=manifest.source_family
+    )
     if not candidate.in_scope:
         return FetchDecisionRequest(
             candidate_id=candidate_id,
