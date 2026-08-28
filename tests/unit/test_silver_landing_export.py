@@ -68,11 +68,10 @@ def test_upsert_singular_methods_record_a_single_row(tmp_path):
 
 
 def test_accounting_flag_score_backfill_only_records_on_real_match(tmp_path):
-    """update_accounting_flag_scores must record a partial landing row only
-    when a real row matched (its RETURNING-based success signal) -- an
-    unmatched backfill call recording a spurious row would silently teach
-    the dbt silver model's IGNORE NULLS collapse to see a key that was
-    never actually written."""
+    """update_accounting_flag_scores must record a landing row only when a
+    real row matched (its RETURNING-based success signal) -- an unmatched
+    backfill call recording a spurious row would silently teach the dbt
+    silver model's collapse to see a key that was never actually written."""
     buffer = LandingExportBuffer()
     db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
     try:
@@ -81,9 +80,7 @@ def test_accounting_flag_score_backfill_only_records_on_real_match(tmp_path):
         assert matched is False
         assert buffer.row_count("sec_accounting_flag") == 0
 
-        # Insert the base row, then backfill -- now it must record, and the
-        # recorded row must carry only the score columns (+ key), matching
-        # what generate_silver_dbt_models.py's IGNORE NULLS collapse expects.
+        # Insert the base row, then backfill -- now it must record.
         db.merge_accounting_flags(
             [{"cik": 320193, "accession_number": "0001-25-000001", "fiscal_year": 2025, "form_type": "10-K"}],
             "run-1",
@@ -96,13 +93,77 @@ def test_accounting_flag_score_backfill_only_records_on_real_match(tmp_path):
     recorded = buffer.tables()["sec_accounting_flag"]
     assert len(recorded) == 2
     score_row = recorded[1]
+    assert score_row.pop("ingested_at") is not None
+    assert score_row.pop("valid_from") is not None
     assert score_row == {
         "cik": 320193,
         "accession_number": "0001-25-000001",
+        "fiscal_year": 2025,
+        "period_end": None,
+        "form_type": "10-K",
+        "auditor_name": None,
+        "auditor_pcaob_id": None,
+        "auditor_location": None,
+        "icfr_attestation": None,
+        "auditor_changed": None,
         "beneish_m_score": 1.5,
         "altman_z_score": 2.5,
         "piotroski_f_score": 3,
+        "parser_version": None,
+        "valid_to": None,
+        "is_current": True,
     }
+
+
+def test_accounting_flag_score_backfill_preserves_other_columns_in_landing_row(tmp_path):
+    """silver-retirement-integrity Ticket 04: a thin backfill row (only the
+    score columns + key) would win the dbt collapse's per-key QUALIFY once it
+    had the newest parse_sequence, silently nulling out every column it
+    didn't carry (auditor_name, fiscal_year, period_end, form_type, the
+    Ticket-33 validity-interval trio, ...). The recorded landing row must
+    carry the full sec_accounting_flag record, including columns this call
+    never touches, so the collapse never sees a thin row for this table at
+    all."""
+    buffer = LandingExportBuffer()
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    try:
+        db.merge_accounting_flags(
+            [
+                {
+                    "cik": 320193,
+                    "accession_number": "0001-25-000001",
+                    "fiscal_year": 2025,
+                    "period_end": "2025-09-30",
+                    "form_type": "10-K",
+                    "auditor_name": "Deloitte",
+                    "auditor_pcaob_id": "34",
+                    "auditor_location": "San Jose, CA",
+                    "icfr_attestation": True,
+                    "auditor_changed": False,
+                    "parser_version": "v1",
+                }
+            ],
+            "run-1",
+        )
+        matched = db.update_accounting_flag_scores(320193, "0001-25-000001", 1.5, 2.5, 3)
+        assert matched is True
+    finally:
+        db.close()
+
+    recorded = buffer.tables()["sec_accounting_flag"]
+    backfill_row = recorded[1]
+    assert backfill_row["auditor_name"] == "Deloitte"
+    assert backfill_row["auditor_pcaob_id"] == "34"
+    assert backfill_row["auditor_location"] == "San Jose, CA"
+    assert backfill_row["icfr_attestation"] is True
+    assert backfill_row["auditor_changed"] is False
+    assert backfill_row["fiscal_year"] == 2025
+    assert backfill_row["form_type"] == "10-K"
+    assert backfill_row["is_current"] is True
+    assert backfill_row["valid_to"] is None
+    assert backfill_row["beneish_m_score"] == 1.5
+    assert backfill_row["altman_z_score"] == 2.5
+    assert backfill_row["piotroski_f_score"] == 3
 
 
 def test_replace_company_tickers_records_the_enriched_row_not_the_raw_input(tmp_path):

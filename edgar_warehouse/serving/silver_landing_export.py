@@ -7,8 +7,12 @@ silver.duckdb (which would re-export rows that were already exported by an
 earlier run, defeating "append-only" the moment two runs overlap in
 content). `SilverDatabase` is the single chokepoint every one of those
 methods lives on, so this buffer attaches there via decorators
-(`track_landing_rows`/`track_landing_row`/`track_landing_accounting_flag_scores`
-below) rather than requiring changes at every external call site.
+(`track_landing_rows`/`track_landing_row` below) rather than requiring
+changes at every external call site. `update_accounting_flag_scores`
+(silver_store.py) records into the buffer directly instead of via a
+decorator -- see its docstring for why (silver-retirement-integrity
+Ticket 04: it must record the full post-update row, not just its own
+scalar arguments).
 
 Opt-in and a complete no-op by default: `SilverDatabase(db_path)` with no
 `landing_export` argument behaves exactly as it does today -- every
@@ -100,45 +104,3 @@ def track_landing_row(table_name: str) -> Callable:
         return wrapper
 
     return decorator
-
-
-def track_landing_accounting_flag_scores(method: Callable) -> Callable:
-    """Decorator for `update_accounting_flag_scores`'s scalar-arg partial backfill.
-
-    That method takes individually-named scalar args (cik, accession_number,
-    beneish_m_score, altman_z_score, piotroski_f_score), not a rows/row
-    dict, and returns True only when a real row matched (its own
-    RETURNING-based success signal -- see its docstring). Records only on a
-    real match, and only the five columns this call actually carries; every
-    other sec_accounting_flag column is absent from the recorded row. This
-    is safe specifically because the dbt silver model for sec_accounting_flag
-    uses LAST_VALUE(... IGNORE NULLS) for these three score columns
-    (generate_silver_dbt_models.py's _COALESCE_PRESERVING_COLUMNS) -- a
-    plain last-row-wins collapse would treat this partial row's absent
-    columns as "now NULL" and silently wipe out the rest of the record.
-    """
-    sig = inspect.signature(method)
-
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        result = method(self, *args, **kwargs)
-        landing_export = getattr(self, "landing_export", None)
-        if result and landing_export is not None:
-            bound = sig.bind(self, *args, **kwargs)
-            bound.apply_defaults()
-            a = bound.arguments
-            landing_export.record(
-                "sec_accounting_flag",
-                [
-                    {
-                        "cik": a["cik"],
-                        "accession_number": a["accession_number"],
-                        "beneish_m_score": a["beneish_m_score"],
-                        "altman_z_score": a["altman_z_score"],
-                        "piotroski_f_score": a["piotroski_f_score"],
-                    }
-                ],
-            )
-        return result
-
-    return wrapper
