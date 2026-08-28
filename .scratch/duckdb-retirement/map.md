@@ -65,7 +65,13 @@ implement it.
   scope now: `tests/unit/` DuckDB-backed fixtures (broad — grep
   `SilverDatabase(` and `duckdb.connect(` across `tests/` before scoping
   Ticket 05), and `edgar_warehouse/application/warehouse_orchestrator.py`'s
-  `bootstrap-batch` CIK-sharded hydrate/publish path.
+  `bootstrap-batch` CIK-sharded hydrate/publish path. **Added 2026-08-28**:
+  `edgar_warehouse/acquisition/silver_acceptance.py`, a `SilverDatabase`
+  caller that postdates this map's own charting — see
+  [Ticket 09](issues/09-account-for-silver-acceptance-in-write-path-cutover.md).
+  Check the [change-propagation map](../change-propagation/map.md)'s Domain
+  list for any other post-2026-08-16 `SilverDatabase` callers before
+  treating this list as exhaustive again.
 - This repo has documented incidents from getting cross-stage
   sequencing/coupling assumptions wrong (CLAUDE.md's
   "INSTITUTIONAL_HOLDS/EMPLOYED_BY" and "Manifest-pipeline ownership +
@@ -101,8 +107,14 @@ charting; new fog may surface as tickets resolve)
 
 ## Frontier
 
-(none — every ticket on this map is resolved; the map is ready to hand off
-for implementation)
+- [Account for `silver_acceptance.py`'s `SilverDatabase` coupling in the
+  write-path cutover](issues/09-account-for-silver-acceptance-in-write-path-cutover.md) —
+  open, unblocked, unclaimed. Surfaced 2026-08-28 by
+  [change-propagation's Ticket 45](../change-propagation/issues/45-coordinate-with-duckdb-retirement-cutover.md):
+  this map's plan (decided 2026-08-16) predates and never accounts for a
+  real, hard `SilverDatabase` dependency introduced by that map's own
+  Ticket 46 on 2026-08-27. **This map is not actually ready to hand off for
+  implementation until this ticket resolves.**
 
 ## Out of scope
 
