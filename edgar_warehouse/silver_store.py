@@ -2627,9 +2627,12 @@ class SilverDatabase:
         overhead). Same fix as merge_filings/_merge_rows_bulk elsewhere in
         this file: stage all rows in one shot via a registered Arrow table,
         then apply the upsert as a single set-based SQL statement (measured
-        0.02-0.12s for 3,000 rows). QUALIFY dedupes same-key rows within one
-        batch, keeping the highest-`seq` (last) occurrence to match the
-        original loop's last-write-wins semantics.
+        0.02-0.12s for 3,000 rows). A ROW_NUMBER()-ranked subquery (`WHERE
+        rn = 1`, not QUALIFY -- this table survives the DuckDB write-path
+        cutover and must stay SQLite-portable, see DuckDB Retirement
+        Ticket 01) dedupes same-key rows within one batch, keeping the
+        highest-`seq` (last) occurrence to match the original loop's
+        last-write-wins semantics.
         """
         if not rows:
             return 0
@@ -2708,10 +2711,17 @@ class SilverDatabase:
                        business_date, source_year, source_quarter, row_ordinal,
                        form, company_name, cik, filing_date, file_name,
                        accession_number, filing_txt_url, record_hash, staged_at
-                FROM stg_daily_index_filing_bulk
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY business_date, accession_number ORDER BY seq DESC
-                ) = 1
+                FROM (
+                    SELECT sync_run_id, raw_object_id, source_name, source_url,
+                           business_date, source_year, source_quarter, row_ordinal,
+                           form, company_name, cik, filing_date, file_name,
+                           accession_number, filing_txt_url, record_hash, staged_at,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY business_date, accession_number ORDER BY seq DESC
+                           ) AS rn
+                    FROM stg_daily_index_filing_bulk
+                ) ranked
+                WHERE rn = 1
                 ON CONFLICT (business_date, accession_number) DO UPDATE SET
                     sync_run_id = excluded.sync_run_id,
                     raw_object_id = excluded.raw_object_id,
