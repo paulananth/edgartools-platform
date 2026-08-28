@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 05, 07
+Blocked by: 07, 23
 
 ## Question
 
@@ -12,3 +12,8 @@ Define an immutable release manifest, active-reference audit, rollback
 protection, atomic update order, and a read-only drift check. The cleanup must
 fail closed when a running task, state machine, rollback cohort, or release
 candidate reference cannot be resolved.
+
+Use the live reconciliation's 458 provisional retirement candidates only as a
+counting check. Generate a fresh exact-ARN manifest after the protected
+rollback cohort is decided; never deregister by age, revision range, image
+equality, or `latest-N`.

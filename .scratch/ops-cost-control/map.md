@@ -51,6 +51,8 @@ currently running images, and an explicit two-image rollback capability.
 - Whether seven days of lower-volume logs produces enough savings to justify
   changing Step Functions logging level as well. Do not change it without a
   measured contributor.
+- The canonical ECR repository topology and whether the live legacy split
+  repositories can be retired after image/task-definition/reference audit.
 
 ## Out of scope
 
