@@ -2515,17 +2515,32 @@ Key routing rules:
 - Resume context → invoke /context-restore
 - Author a backlog-ready spec/issue → invoke /spec
 
-**Before starting any non-trivial coding task, consult `/gof-refactor-reviewer`**
-on the code area you're about to touch — it flags pattern-shaped structural
-problems (repeated-change axes, duplicated conditionals, etc.) worth knowing
-about before adding to them, per its own Rule 0 (default verdict is "leave
-it" — only real, evidenced findings block anything). This is in addition to,
-not instead of, the code-review pass below.
+**HARD RULE — no exceptions for "small" tickets: before writing or editing
+any production code file, consult `/gof-refactor-reviewer`** on the code
+area you're about to touch — it flags pattern-shaped structural problems
+(repeated-change axes, duplicated conditionals, etc.) worth knowing about
+before adding to them, per its own Rule 0 (default verdict is "leave it" —
+only real, evidenced findings block anything, so this consult costs seconds
+on a small change and comes back clean). "This ticket is tiny/mechanical" is
+not a reason to skip it — that's exactly the judgement call Rule 0 already
+makes for you. This is in addition to, not instead of, the code-review pass
+below.
 
-**`/code-review` must include a `/gof-refactor-reviewer` pass** on the
-changed files as part of its checks, alongside the Standards/Spec axes —
-findings from it are reported the same way (evidenced, adjudicated, capped),
-not just a lint pass.
+**HARD RULE — `/code-review` always runs three axes, not two: Standards,
+Spec, and GoF.** The `/code-review` skill file's own template (Step 4) only
+lists two sub-agent calls (Standards, Spec) — that template does NOT
+override this rule; add a third `general-purpose` sub-agent call in the same
+parallel batch, briefed with the `/gof-refactor-reviewer` skill's own
+instructions run against the same diff/changed files. Aggregate its findings
+under their own `## GoF` heading in step 5, reported the same way as the
+other axes (evidenced, adjudicated, capped at 3 findings per its own
+format) — never silently merged into Standards, and never skipped because
+the skill file you loaded didn't mention it. Confirmed live 2026-08-28: a
+Claude session ran `/code-review` with only the two axes the skill file
+lists, missing this CLAUDE.md rule entirely until the user asked "what
+happened to the GoF review" after the fact — the skill file's own steps are
+not a complete checklist for this repo without this rule layered on top,
+every time, not just when remembered.
 
 ## Agent skills
 
