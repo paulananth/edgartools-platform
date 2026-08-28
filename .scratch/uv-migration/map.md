@@ -49,6 +49,15 @@ call sites that don't need or benefit from it.
   measured ~450ms/call `uv run` overhead would be pure cost with no
   correctness or consistency benefit, since these scripts have nothing to
   do with the locked project environment at all.
+- [Scope boundary: internal automation vs. user-facing install hints](issues/01-scope-boundary-internal-vs-user-facing.md) —
+  Category 1 only (this repo's own internal automation). README.md's
+  published-package install line, the runbook's pip/uv dependency-table row,
+  and verify-pr1/preflight.sh's operator bootstrapping hints are out of
+  scope. `docs/runbook.md`/`pipeline-setup.md`'s `dbt` invocation lines were
+  never actually ambiguous and stay in scope (Ticket 03, now unblocked).
+  `examples/dashboard/README.md`'s bare `pip install` — confirmed drift
+  against CLAUDE.md's own `uv pip install` dev command for the same
+  directory — graduates to Ticket 04.
 - [snowflake-cli-labs multi-step CI pattern](issues/02-snowflake-cli-uv-pattern.md) —
   `uv tool install snowflake-cli-labs` (persistent PATH shim), not
   `uv run --with`/`uvx` (both are per-call-site prefixes over an ephemeral
@@ -60,27 +69,16 @@ call sites that don't need or benefit from it.
 
 ## Not yet specified
 
-- Whether public-facing package-install instructions (README.md's
-  `pip install "edgartools>=5.29.0"` for people installing the *published*
-  PyPI package into *their own* projects, and any similar "here's how to
-  install the `snow` CLI on your machine" hints in scripts/verify-pr1 and
-  scripts/ops/preflight.sh) are even the same category of problem as this
-  repo's *own internal automation* using bare pip — or a different, out-of-
-  scope concern entirely. This is the scope-boundary question the first
-  ticket resolves; several other fog items below likely collapse once it's
-  answered.
-- Site-by-site disposition for docs/runbook.md's `dbt deps`/`dbt run
-  --target prod`/`dbt test --target prod` lines and
-  edgar/ai/skills/platform/pipeline-setup.md's `dbt run`/`dbt test` lines —
-  do these need the explicit `uv run --with dbt-snowflake` prefix, or are
-  they written assuming a shell context (an activated venv, a documented
-  prior step) where bare `dbt` is already legitimate? Needs reading each
-  file's surrounding context, not just the grep hit.
-- Whether examples/dashboard's `pip install -r requirements.txt` (its own
-  README) is inconsistent with CLAUDE.md's own documented dev command for
-  the same directory (`uv pip install -r requirements.txt`) — looks like a
-  real doc drift, but not yet confirmed against the actual file.
+None currently — Ticket 01's scope-boundary answer resolved every open fog
+item this map had.
 
 ## Out of scope
 
-(none yet)
+- Public-facing package-install instructions: README.md's
+  `pip install "edgartools>=5.29.0"` (installing the *published* PyPI
+  package into an unrelated consumer project), `docs/runbook.md`'s
+  dependency-table `pip / uv` bootstrapping row, and
+  `scripts/verify-pr1/*`/`scripts/ops/preflight.sh`'s operator-facing `snow`
+  install hints. Category 2 per
+  [Ticket 01](issues/01-scope-boundary-internal-vs-user-facing.md) — none of
+  these are this repo's own internal automation reaching for bare pip.
