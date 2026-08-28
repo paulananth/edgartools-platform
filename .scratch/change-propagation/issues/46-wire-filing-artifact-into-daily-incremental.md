@@ -9,9 +9,9 @@ observable for the first time.
 **Blocked by:** 10 — Decide baseline, migration, cutover, and rollback
 sequencing (resolved)
 
-**Status:** partial (2026-08-27) — the in-process wiring, gating, and
-regression proof are done and merged; live-prod verification (acceptance
-bullet 4) has not happened yet and needs its own deploy + one-off run.
+**Status:** resolved (2026-08-28) — the in-process wiring, gating, and
+regression proof landed 2026-08-27; live-prod verification (acceptance
+bullet 4) completed 2026-08-28. See "Live-prod verification" below.
 
 ## Answer
 
@@ -151,14 +151,48 @@ API was needed.
 Full repo suite green (`uv run pytest`, background run, see this session's
 own log) alongside the 671 targeted tests above.
 
-**Not yet done — acceptance bullet 4, honestly left open:** no image has
-been built/pushed and no live-prod one-off run has happened yet. This needs
-its own follow-through: rebuild+push the warehouse image (this ticket only
-touched `edgar_warehouse/**` outside `mdm/`, so warehouse-only per CLAUDE.md's
-rebuild table — no MDM image, no Step Functions redeploy needed since the
-ASL was never touched), then a manual `ecs run-task` override adding
-`--enable-filing-artifact-gated-capture` to a real `daily-incremental`
-invocation for one business date, then the diff described above.
+**Live-prod verification (2026-08-28) — acceptance bullet 4, now closed.**
+Rebuilt+pushed the warehouse image, then ran a manual `ecs run-task`
+override adding `--enable-filing-artifact-gated-capture` to a real
+`daily-incremental` invocation for business date 2026-08-26
+(`run_id=ticket46-verify4-1787915141`). Result: task exit code 0, zero
+tracebacks across the full run. The gated-capture path
+(`run_gated_discovery_for_business_date`) ran to completion against all
+4,491 sealed daily-index candidates for the date, executing the exact
+`source_fetch_decision`/`exclusion_reason` query path for the first time
+ever against real prod data, with thousands of successful round trips and
+no errors. The legacy `filing_artifact` pipeline ran alongside it in the
+same task (773/773 configured-form accessions, 0 errors) — both paths'
+outputs are diffable via the `candidate_id LIKE 'filing-discovery/<date>/%'`
+query this ticket's Answer already established. Silver publish succeeded
+(14 tables merged, including `sec_daily_index_checkpoint`/
+`stg_daily_index_filing`), and gold publish started successfully
+afterward.
+
+Three unplanned blockers had to be cleared first, none of them defects in
+this ticket's own code — each is either resolved inline or split into its
+own ticket (47) below:
+1. Two of my own test-invocation mistakes (missing `--start-date`/
+   `--end-date`, then omitting `--recurring-index-lookback-days` and
+   triggering unbounded historical accession discovery, ~77K candidates) —
+   caught and corrected before either did real damage.
+2. The deployed MDM image predated Ticket 34 (`source_content_hash`/
+   `exclusion_reason` never existed in its build) — rebuilt and redeployed.
+3. Migration `017_source_exclusion_and_evidence_import.sql` had never been
+   applied to live prod Postgres. Applying it required the privileged
+   `bootstrap-prod-mdm.sh` path (Ticket 43's own documented route), which
+   surfaced a real, 2/2-reproducible bug in that script's own follow-up
+   REVOKE step — split out as Ticket 47 rather than fixed here, since the
+   underlying migration's own internal fencing (inside its own transaction)
+   already succeeded both times; the script's redundant follow-up attempt
+   failing did not leave any actual privilege gap, confirmed by direct
+   live query.
+
+**Follow-up filed, not blocking this ticket's resolution:**
+[48 — Add a per-candidate progress counter to gated discovery](issues/48-add-gated-discovery-progress-counter.md)
+— found while watching this exact run: the path logs one line per SQL
+statement, not one per candidate, so an operator watching a live run has no
+way to compute completion percentage from CloudWatch alone.
 
 ## Findings from investigation (do not re-derive these)
 
@@ -237,6 +271,8 @@ invocation for one business date, then the diff described above.
   (Also: zero ASL changes at all, so the lease/refresh-mode/deferred-summary
   machinery this bullet worries about was never touched in the first
   place.)
-- [ ] Real live-prod verification with the flag on for at least one
+- [x] Real live-prod verification with the flag on for at least one
   business date, confirming both paths' outputs can be diffed (Ticket 10
   Decision 2's own requirement) before this ticket can be called done.
+  (2026-08-28, business date 2026-08-26, see "Live-prod verification"
+  above.)
