@@ -1,6 +1,6 @@
-# 10 — DuckDB Retirement Cleanup
+# 12 — DuckDB Retirement Cleanup
 
-**What to build:** Once [Ticket 09](09-post-cutover-reconciliation-gate.md)'s
+**What to build:** Once [Ticket 11](11-post-cutover-reconciliation-gate.md)'s
 human approval confirms the cutover is stable, remove the DuckDB code and
 files that no longer have any live caller:
 
@@ -10,9 +10,9 @@ files that no longer have any live caller:
   consumer off it.
 - Delete `edgar_warehouse/silver_support/sharded_reader.py`'s DuckDB-backed
   `ShardedSilverReader` implementation, left pending from
-  [Ticket 03](03-cutover-mdm-reader-to-snowflake.md).
+  [Ticket 05](05-cutover-mdm-reader-to-snowflake.md).
 - Delete the shared `shard-{0-3}.duckdb` file infrastructure, left pending
-  from [Ticket 04](04-retire-bootstrap-batch-sharding.md).
+  from [Ticket 06](06-retire-bootstrap-batch-sharding.md).
 - Apply DuckDB file disposition for the canonical `silver.duckdb`/shard
   objects still in S3: extend the existing
   `expire-noncurrent-silver-canonical-versions` lifecycle-rule precedent —
@@ -26,7 +26,7 @@ This is deliberately the **last** ticket — deleting old code before Ticket
 09's approval would remove the only known-good fallback if reconciliation
 finds a problem.
 
-**Blocked by:** [Ticket 09](09-post-cutover-reconciliation-gate.md)
+**Blocked by:** [Ticket 11](11-post-cutover-reconciliation-gate.md)
 
 **Status:** blocked
 

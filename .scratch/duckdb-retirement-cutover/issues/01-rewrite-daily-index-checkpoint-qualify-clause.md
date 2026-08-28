@@ -24,7 +24,7 @@ against real `stg_daily_index_filing_bulk` data (not just a syntax check) —
 same row selected, same tie-breaking on `seq DESC`, same `ON CONFLICT
 (business_date, accession_number) DO UPDATE SET ...` behavior downstream.
 
-This is a prerequisite for [Ticket 07](07-complete-sqlite-test-port.md)'s
+This is a prerequisite for [Ticket 09](09-complete-sqlite-test-port.md)'s
 SQLite port, not the port itself — it just removes the one syntax blocker
 standing in the way of that method's tests running under SQLite at all.
 
@@ -49,7 +49,7 @@ standing in the way of that method's tests running under SQLite at all.
       directly (outside the test suite, since SQLite isn't this table's
       target yet) to confirm the derived-table + `ROW_NUMBER()` +
       `ON CONFLICT ... DO UPDATE` shape is valid, portable syntax ahead of
-      Ticket 07's actual port.
+      Ticket 09's actual port.
 - [x] The `ON CONFLICT` upsert behavior downstream of the rewritten SELECT is
       unchanged — all 3 existing tests in `test_daily_index_filing_merge.py`
       (upsert-updates-existing-row, the new dedup test, and the
@@ -57,6 +57,6 @@ standing in the way of that method's tests running under SQLite at all.
       suite green: 2706 passed, 4 skipped.
 - [x] Confirmed via grep: no other `QUALIFY` clause remains in any method
       that isn't already scheduled for deletion by the atomic cutover
-      ([Ticket 08](08-atomic-write-path-cutover.md)) — the 10 remaining
+      ([Ticket 10](10-atomic-write-path-cutover.md)) — the 10 remaining
       `silver_store.py` clauses are all in the 5 content-merge methods
       named above.

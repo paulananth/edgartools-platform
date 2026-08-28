@@ -1,4 +1,4 @@
-# 06 — Build the Table-Specific Reconciliation Tooling for This Cutover
+# 08 — Build the Table-Specific Reconciliation Tooling for This Cutover
 
 **What to build:** DuckDB Retirement's Ticket 07 (wayfinder decision) chose
 this repo's existing Production Release Readiness vocabulary as the cutover

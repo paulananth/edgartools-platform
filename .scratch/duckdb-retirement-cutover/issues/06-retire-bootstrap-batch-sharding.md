@@ -1,4 +1,4 @@
-# 04 — Retire `bootstrap-batch`'s CIK-Sharded DuckDB Hydrate/Publish Mechanism
+# 06 — Retire `bootstrap-batch`'s CIK-Sharded DuckDB Hydrate/Publish Mechanism
 
 **What to build:** DuckDB Retirement's Ticket 04 decided the CIK-sharded
 DuckDB hydrate/publish mechanism (`pipeline-throughput-architecture`'s
@@ -31,7 +31,7 @@ ticket's work.
       removed from `warehouse_orchestrator.py`
 - [ ] The shared `shard-{0-3}.duckdb` file infrastructure (S3 keys,
       promotion/merge logic specific to shards) is removed or left dead
-      pending [Ticket 10](10-duckdb-retirement-cleanup.md)'s final sweep
+      pending [Ticket 12](12-duckdb-retirement-cleanup.md)'s final sweep
 - [ ] `bootstrap-batch` still writes to the Snowflake landing zone
       correctly with the sharding code removed (no regression in the
       dual-write path that was already live)
