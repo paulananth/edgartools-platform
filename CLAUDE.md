@@ -100,6 +100,24 @@ must not share an uncoordinated edit surface.
   like `main`/`codex/main-sync` that another runtime is actively using),
   create/check out your own branch (in your own worktree) before making
   any commits.
+- **HARD RULE: never commit directly to `main`, for any reason, including a
+  quick fix or a single-file doc change.** The moment you pick up a ticket or
+  issue — before writing any code, before the first edit — create your own
+  `<runtime>/<topic>` branch (in your own worktree per the rule above) and
+  commit there. Confirmed live 2026-08-28: a Codex session started and
+  finished real implementation work for ecs-cost-sizing Ticket 08 (rollback
+  registry, CLI, deploy script, tests) as a local, unpushed commit sitting
+  directly on `main` in the shared working directory — no branch at all,
+  not even a wrongly-prefixed one. It was only caught because a Claude
+  session happened to notice local `main` was one commit ahead of
+  `origin/main` before pushing anything; had that push happened first, it
+  would have put unreviewed work straight on `main` with no branch, no PR,
+  and no review gate. Recovered by branching off that commit
+  (`codex/ecs-cost-sizing-revision-retirement-gates`), pushing it, then
+  hard-resetting local `main` back to `origin/main`. If you ever find
+  yourself with uncommitted or committed changes on `main` for ticket/issue
+  work, stop, branch off `HEAD` immediately, and reset `main` back to
+  `origin/main` before doing anything else.
 - Treat current Codex or Grok work as protected unless the user explicitly hands it off.
 - Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
 - Before editing, run `git status --short` and `git log -1` and inspect
