@@ -154,6 +154,27 @@ Options:
                                     (treat-missing-data=breaching). Same SNS topic as
                                     --configure-daily-incremental-alarms. This standalone
                                     action never deploys workloads or enables schedules.
+  --configure-publication-drain-schedule <enable|disable>
+                                    Off-by-default operator control (Ticket 36, change-
+                                    propagation map) for the scheduled consumer side of the
+                                    MDM->graph publication outbox: creates/updates (enable) or
+                                    removes (disable) one EventBridge rule invoking
+                                    edgartools-<env>-mdm-utility with
+                                    {"mode": "mdm_publication_drain"} every 5 minutes (matches
+                                    publication.py's own WARNING_AGE_SECONDS=300 freshness SLO
+                                    -- draining slower than the warning threshold would trip
+                                    the SLO on a healthy queue by construction). Never runs as
+                                    a side effect of an ordinary deploy; run this flag alone,
+                                    after an explicit operator go, once `mdm run` (the
+                                    producer -- MDMPipeline.run_all) is confirmed enqueuing
+                                    real requests. Exits immediately after configuring.
+  --publication-drain-scheduler-role-arn <arn>
+                                    IAM role ARN EventBridge assumes to start
+                                    edgartools-<env>-mdm-utility for the publication-drain
+                                    schedule. Required with
+                                    --configure-publication-drain-schedule enable. Same role
+                                    shape as --fence-monitor-scheduler-role-arn (EventBridge ->
+                                    StartExecution on this one state machine).
   -h, --help                        Show this help.
 USAGE
 }
@@ -250,6 +271,8 @@ CONFIGURE_MDM_ENTITY_BACKFILL_ALARM=""
 CONFIGURE_FENCE_MONITOR_SCHEDULE=""
 FENCE_MONITOR_SCHEDULER_ROLE_ARN=""
 CONFIGURE_FENCE_MONITOR_ALARM=""
+CONFIGURE_PUBLICATION_DRAIN_SCHEDULE=""
+PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -311,6 +334,8 @@ while [[ $# -gt 0 ]]; do
     --configure-mdm-entity-backfill-alarm) CONFIGURE_MDM_ENTITY_BACKFILL_ALARM="${2:?}"; shift 2 ;;
     --configure-fence-monitor-schedule) CONFIGURE_FENCE_MONITOR_SCHEDULE="${2:?}"; shift 2 ;;
     --fence-monitor-scheduler-role-arn) FENCE_MONITOR_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
+    --configure-publication-drain-schedule) CONFIGURE_PUBLICATION_DRAIN_SCHEDULE="${2:?}"; shift 2 ;;
+    --publication-drain-scheduler-role-arn) PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     --configure-fence-monitor-alarm) CONFIGURE_FENCE_MONITOR_ALARM="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -387,6 +412,15 @@ if ! is_empty "$CONFIGURE_FENCE_MONITOR_SCHEDULE"; then
   esac
   if [[ "$CONFIGURE_FENCE_MONITOR_SCHEDULE" == "enable" ]] && is_empty "$FENCE_MONITOR_SCHEDULER_ROLE_ARN"; then
     fail "--fence-monitor-scheduler-role-arn is required with --configure-fence-monitor-schedule enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE"; then
+  case "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE" in
+    enable|disable) ;;
+    *) fail "--configure-publication-drain-schedule must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE" == "enable" ]] && is_empty "$PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN"; then
+    fail "--publication-drain-scheduler-role-arn is required with --configure-publication-drain-schedule enable"
   fi
 fi
 
@@ -818,6 +852,63 @@ PY
   aws_cli events put-targets --rule "$rule_name" --targets "$targets_json" >/dev/null
   log "EventBridge rule ${rule_name} configured (rate(4 hours))"
 }
+
+# Ticket 36 (change-propagation map): the scheduled consumer side of the
+# MDM->graph publication outbox (edgar_warehouse/mdm/publication.py). The
+# producer side (MDMPipeline.run_all -> request_publication, one request per
+# `mdm run` invocation) is unconditional and always live; this schedule is
+# the off-by-default counterpart that actually drains the queue via
+# `mdm publication-drain` (mode mdm_publication_drain on the same
+# already-consolidated mdm-utility machine, mirroring
+# configure_fence_monitor_schedule immediately above -- see
+# write_mdm_utility_definition's own comment for why this reuses that
+# machine instead of a bespoke new one). 5-minute cadence matches
+# publication.py's own WARNING_AGE_SECONDS=300 freshness SLO: draining any
+# slower than the warning threshold would trip it on an otherwise-healthy
+# queue by construction.
+configure_publication_drain_schedule() {
+  local action="$1" role_arn="$2"
+  local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-utility"
+  local rule_name="${NAME_PREFIX}-publication-drain"
+
+  if [[ "$action" == "disable" ]]; then
+    if aws_cli events describe-rule --name "$rule_name" >/dev/null 2>&1; then
+      aws_cli events remove-targets --rule "$rule_name" --ids publication-drain-sfn >/dev/null
+      aws_cli events delete-rule --name "$rule_name"
+      log "Deleted EventBridge rule ${rule_name}"
+    else
+      log "EventBridge rule ${rule_name} does not exist -- nothing to disable"
+    fi
+    return 0
+  fi
+
+  local targets_json
+  targets_json="$(python3 - "$state_machine_arn" "$role_arn" <<'PY'
+import json
+import sys
+
+arn, role_arn = sys.argv[1:3]
+print(json.dumps([{
+    "Id": "publication-drain-sfn",
+    "Arn": arn,
+    "RoleArn": role_arn,
+    "Input": json.dumps({"mode": "mdm_publication_drain"}),
+}]))
+PY
+)"
+  aws_cli events put-rule \
+    --name "$rule_name" \
+    --schedule-expression "rate(5 minutes)" \
+    --state ENABLED \
+    --description "Ticket 36 (change-propagation map): recurring MDM->graph publication outbox drain" >/dev/null
+  aws_cli events put-targets --rule "$rule_name" --targets "$targets_json" >/dev/null
+  log "EventBridge rule ${rule_name} configured (rate(5 minutes))"
+}
+
+if ! is_empty "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE"; then
+  configure_publication_drain_schedule "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE" "$PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN"
+  exit 0
+fi
 
 if ! is_empty "$CONFIGURE_FENCE_MONITOR_SCHEDULE"; then
   configure_fence_monitor_schedule "$CONFIGURE_FENCE_MONITOR_SCHEDULE" "$FENCE_MONITOR_SCHEDULER_ROLE_ARN"
@@ -1530,7 +1621,10 @@ task_definition_for_mdm_workflow() {
     # read-only has_table_privilege/pg_class queries -- the same "small" size
     # every other cheap, non-full-universe MDM command uses.
     mdm_migrate|mdm_check_connectivity|mdm_check_fence|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
-    mdm_run|mdm_backfill_relationships|mdm_sync_graph) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
+    # mdm_publication_drain (Ticket 36, change-propagation map) calls both the
+    # sync-graph and verify-graph machinery in one invocation -- sized like
+    # mdm_sync_graph (medium), not the smaller mdm_verify_graph-alone cost.
+    mdm_run|mdm_backfill_relationships|mdm_sync_graph|mdm_publication_drain) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
 }
@@ -1673,6 +1767,7 @@ mdm_workflow_command_expression() {
       ;;
     mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'verify-graph')" ;;
     mdm_check_fence) printf '%s\n' "States.Array('mdm', 'check-fence')" ;;
+    mdm_publication_drain) printf '%s\n' "States.Array('mdm', 'publication-drain')" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
     mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}')" ;;
     *) fail "unknown MDM workflow: $1" ;;
@@ -2146,8 +2241,9 @@ PY
 # after CONTEXT.md's "MDM Utility Machine" naming was locked): consolidates
 # the genuinely-uniform single-command MDM CLI wrappers -- mdm_migrate,
 # mdm_check_connectivity, mdm_run, mdm_backfill_relationships, mdm_sync_graph,
-# mdm_verify_graph, mdm_counts, and (Ticket 44, change-propagation map)
-# mdm_check_fence -- into one deployed machine, selected via execution input
+# mdm_verify_graph, mdm_counts, (Ticket 44, change-propagation map)
+# mdm_check_fence, and (Ticket 36, change-propagation map)
+# mdm_publication_drain -- into one deployed machine, selected via execution input
 # {"mode": "<workflow>"}. Each mode's override chain (limit /
 # relationship_type / limit_per_type) is copied verbatim from
 # write_mdm_workflow_definition's own branching, just with every state name
@@ -2160,7 +2256,7 @@ write_mdm_utility_definition() {
   local output_file="$1"
   local workflows_json="[" first="true" workflow task_arn default_cmd limit_cmd relationship_cmd relationship_limit_cmd limit_per_type_cmd entry
 
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence; do
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence mdm_publication_drain; do
     task_arn="$(task_definition_for_mdm_workflow "$workflow")"
     default_cmd="$(mdm_workflow_command_expression "$workflow")"
     limit_cmd="$(mdm_workflow_limit_command_expression "$workflow")"

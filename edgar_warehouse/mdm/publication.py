@@ -16,9 +16,10 @@ writers -- this module is pure MDM/Postgres queue mechanics.
 """
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -186,6 +187,84 @@ def advance_publication_lifecycle(
         request.activated_at = _utcnow()
     session.flush()
     return request
+
+
+def drain_publication_queue(
+    session: Session,
+    *,
+    owner: str,
+    sync_fn: Callable[[str], Any],
+    verify_fn: Callable[[str], bool],
+    lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    max_requests: int = 1,
+) -> list[dict[str, Any]]:
+    """Claim and advance up to ``max_requests`` eligible requests through
+    graph_building -> graph_verified -> graph_active (RSYNC-01/03, ticket 36).
+
+    ``sync_fn``/``verify_fn`` are injected rather than called directly so
+    this coordinator is provable against real Postgres with a stubbed
+    Snowflake sync/verify step -- the real CLI caller (``mdm
+    publication-drain``) wires them to
+    ``SnowflakeGraphSyncExecutor.sync``/``SnowflakeGraphVerifier.verify``,
+    the same machinery ``mdm sync-graph``/``mdm verify-graph`` already use
+    in prod. Each is called with the request's ``generation_id`` (a fresh
+    UUID minted on first claim, then persisted and reused across any retry
+    of the same request).
+
+    ``release_expired_claims`` runs first so a request whose prior owner
+    crashed mid-drain is retried by this call rather than stuck forever.
+    Any exception from ``sync_fn``/``verify_fn`` (or an explicit ``False``
+    from ``verify_fn``) transitions the request to ``failed`` with the
+    error recorded, rather than raising out of this function -- one bad
+    request must not block the rest of the queue or crash the scheduled
+    caller. Each transition is committed individually so a mid-loop crash
+    (process kill, OOM) leaves the request's lease/state on disk for the
+    next drain or ``release_expired_claims`` to pick up, not silently lost
+    to an uncommitted transaction.
+    """
+    release_expired_claims(session)
+    session.commit()
+
+    results: list[dict[str, Any]] = []
+    for _ in range(max_requests):
+        request = claim_next_publication_request(session, owner=owner, lease_seconds=lease_seconds)
+        if request is None:
+            break
+        session.commit()
+        request_id = request.request_id
+        generation_id = request.generation_id or str(uuid.uuid4())
+        try:
+            advance_publication_lifecycle(
+                session, request_id, "graph_building", generation_id=generation_id
+            )
+            session.commit()
+            sync_fn(generation_id)
+            advance_publication_lifecycle(
+                session, request_id, "graph_verified", generation_id=generation_id
+            )
+            session.commit()
+            if not verify_fn(generation_id):
+                raise RuntimeError(f"graph verification failed for generation_id={generation_id}")
+            advance_publication_lifecycle(
+                session, request_id, "graph_active", generation_id=generation_id
+            )
+            session.commit()
+            results.append(
+                {"request_id": request_id, "generation_id": generation_id, "status": "graph_active"}
+            )
+        except Exception as exc:  # noqa: BLE001 - one bad request must not sink the drain
+            session.rollback()
+            advance_publication_lifecycle(session, request_id, "failed", error=str(exc))
+            session.commit()
+            results.append(
+                {
+                    "request_id": request_id,
+                    "generation_id": generation_id,
+                    "status": "failed",
+                    "error": str(exc),
+                }
+            )
+    return results
 
 
 @dataclass(frozen=True)

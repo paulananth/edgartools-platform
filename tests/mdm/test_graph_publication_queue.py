@@ -295,3 +295,118 @@ class TestPublicationFreshness:
         status = publication.compute_publication_freshness(session)
         assert status.lifecycle_counts["graph_active"] == 1
         assert status.lifecycle_counts["mdm_committed"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Ticket 36 (change-propagation map): the drain coordinator
+# ---------------------------------------------------------------------------
+
+class TestDrainPublicationQueue:
+    def test_empty_queue_drains_nothing(self, session):
+        results = publication.drain_publication_queue(
+            session, owner="worker-a", sync_fn=lambda gid: None, verify_fn=lambda gid: True,
+        )
+        assert results == []
+
+    def test_successful_drain_advances_request_to_graph_active(self, session):
+        request = publication.request_publication(session)
+        session.commit()
+
+        sync_calls: list[str] = []
+        verify_calls: list[str] = []
+        results = publication.drain_publication_queue(
+            session,
+            owner="worker-a",
+            sync_fn=lambda gid: sync_calls.append(gid),
+            verify_fn=lambda gid: verify_calls.append(gid) or True,
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "graph_active"
+        assert results[0]["request_id"] == request.request_id
+        assert sync_calls == [results[0]["generation_id"]]
+        assert verify_calls == [results[0]["generation_id"]]
+
+        persisted = session.get(MdmPublicationRequest, request.request_id)
+        assert persisted.lifecycle_state == "graph_active"
+        assert persisted.generation_id == results[0]["generation_id"]
+        assert persisted.activated_at is not None
+
+    def test_sync_fn_exception_marks_request_failed_not_raised(self, session):
+        publication.request_publication(session)
+        session.commit()
+
+        def _boom(generation_id: str) -> None:
+            raise RuntimeError("snowflake unreachable")
+
+        results = publication.drain_publication_queue(
+            session, owner="worker-a", sync_fn=_boom, verify_fn=lambda gid: True,
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "failed"
+        assert "snowflake unreachable" in results[0]["error"]
+
+        persisted = session.get(MdmPublicationRequest, results[0]["request_id"])
+        assert persisted.lifecycle_state == "failed"
+        assert "snowflake unreachable" in persisted.last_error
+
+    def test_verify_fn_returning_false_marks_request_failed(self, session):
+        publication.request_publication(session)
+        session.commit()
+
+        results = publication.drain_publication_queue(
+            session, owner="worker-a", sync_fn=lambda gid: None, verify_fn=lambda gid: False,
+        )
+
+        assert results[0]["status"] == "failed"
+        persisted = session.get(MdmPublicationRequest, results[0]["request_id"])
+        assert persisted.lifecycle_state == "failed"
+
+    def test_max_requests_bounds_the_drain(self, session):
+        publication.request_publication(session)
+        publication.request_publication(session)
+        publication.request_publication(session)
+        session.commit()
+
+        results = publication.drain_publication_queue(
+            session, owner="worker-a", sync_fn=lambda gid: None, verify_fn=lambda gid: True,
+            max_requests=2,
+        )
+        assert len(results) == 2
+        assert all(item["status"] == "graph_active" for item in results)
+
+        remaining = list(session.scalars(select(MdmPublicationRequest)))
+        assert sum(1 for r in remaining if r.lifecycle_state == "mdm_committed") == 1
+
+    def test_drain_recovers_a_request_stuck_under_an_expired_lease(self, session):
+        request = publication.request_publication(session)
+        session.commit()
+        publication.claim_next_publication_request(session, owner="crashed-worker", lease_seconds=1)
+        session.commit()
+        stuck = session.get(MdmPublicationRequest, request.request_id)
+        stuck.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        session.commit()
+
+        results = publication.drain_publication_queue(
+            session, owner="worker-b", sync_fn=lambda gid: None, verify_fn=lambda gid: True,
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "graph_active"
+
+    def test_generation_id_persisted_on_first_claim_is_reused_not_regenerated(self, session):
+        request = publication.request_publication(session)
+        session.commit()
+
+        seen_generation_ids: list[str] = []
+        publication.drain_publication_queue(
+            session,
+            owner="worker-a",
+            sync_fn=lambda gid: seen_generation_ids.append(gid),
+            verify_fn=lambda gid: True,
+        )
+        assert len(seen_generation_ids) == 1
+
+        persisted = session.get(MdmPublicationRequest, request.request_id)
+        assert persisted.generation_id == seen_generation_ids[0]

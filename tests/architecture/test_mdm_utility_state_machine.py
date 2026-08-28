@@ -42,6 +42,7 @@ _EXPECTED_MODES = {
     "mdm_verify_graph",
     "mdm_counts",
     "mdm_check_fence",
+    "mdm_publication_drain",
 }
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
@@ -170,7 +171,7 @@ def test_no_override_workflows_route_straight_to_a_single_task_state(definition:
     # mdm_migrate/mdm_check_connectivity/mdm_counts have no limit or
     # relationship overrides at all -- their mode should route directly to
     # one Task state, no Choice wrapping.
-    for mode in ("mdm_migrate", "mdm_check_connectivity", "mdm_counts"):
+    for mode in ("mdm_migrate", "mdm_check_connectivity", "mdm_counts", "mdm_check_fence", "mdm_publication_drain"):
         start = next(
             c["Next"] for c in definition["States"]["SelectMode"]["Choices"]
             if c["StringEquals"] == mode

@@ -131,6 +131,35 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     run.set_defaults(handler=_logged_handler("run", _handle_run))
 
+    pub_drain = mdm_sub.add_parser(
+        "publication-drain",
+        help=(
+            "RSYNC-01/03 ticket 36: claim mdm_publication_request rows queued by "
+            "'mdm run' and advance them through graph_building -> graph_verified -> "
+            "graph_active, using the same SnowflakeGraphSyncExecutor/SnowflakeGraphVerifier "
+            "machinery 'mdm sync-graph'/'mdm verify-graph' already use in prod."
+        ),
+    )
+    pub_drain.add_argument(
+        "--owner",
+        default=None,
+        help="Claim-lease owner identity recorded on the request; defaults to a fresh uuid4 per invocation.",
+    )
+    pub_drain.add_argument("--max-requests", type=int, default=1, help="Maximum requests to drain in one invocation.")
+    pub_drain.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=None,
+        help="Claim lease duration; defaults to publication.py's DEFAULT_LEASE_SECONDS.",
+    )
+    pub_drain.add_argument(
+        "--skip-native-app",
+        action="store_true",
+        default=False,
+        help="Skip Native App smoke checks in the verify step; not valid for live acceptance.",
+    )
+    pub_drain.set_defaults(handler=_logged_handler("publication-drain", _handle_publication_drain))
+
     cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
     cov.set_defaults(handler=_logged_handler("coverage-report", _handle_coverage_report))
 
@@ -908,6 +937,89 @@ def _handle_run(args) -> int:
         return 0
     finally:
         session.close()
+
+
+def _handle_publication_drain(args) -> int:
+    """RSYNC-01/03 ticket 36: the scheduled consumer side of the MDM
+    publication outbox -- 'mdm run' (see _handle_run/MDMPipeline.run_all)
+    is the producer, this is the coordinator. Wires
+    publication.drain_publication_queue's injected sync_fn/verify_fn to the
+    same SnowflakeGraphSyncExecutor/SnowflakeGraphVerifier machinery
+    'mdm sync-graph'/'mdm verify-graph' already call in prod, so a drained
+    request causes a real Snowflake graph write, not just a Postgres status
+    flip (see the mdm/generation.py generation-builder pipeline for the
+    cautionary counter-example: its own build_partition never wires to
+    real Snowflake work at all).
+    """
+    import uuid
+
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+    from edgar_warehouse.mdm.publication import DEFAULT_LEASE_SECONDS, drain_publication_queue
+    from edgar_warehouse.mdm.snowflake_graph import (
+        DEFAULT_MDM_SCHEMA,
+        DEFAULT_NATIVE_APP_COMPUTE_POOL,
+        DEFAULT_NATIVE_APP_DATABASE_ROLE,
+        DEFAULT_NATIVE_APP_NAME,
+        DEFAULT_TARGET_SCHEMA,
+        SnowflakeGraphSyncExecutor,
+        SnowflakeGraphVerificationConfig,
+        SnowflakeGraphVerifier,
+    )
+
+    def sync_fn(generation_id: str) -> None:
+        SnowflakeGraphSyncExecutor.from_env().sync(
+            _snowflake_graph_sync_config(
+                entity_types=None,
+                relationship_types=None,
+                limit=None,
+                limit_per_type=None,
+                generation_id=generation_id,
+            )
+        )
+
+    def verify_fn(generation_id: str) -> bool:
+        settings = SnowflakeConnectionSettings.from_env()
+        connection = settings.connect()
+        try:
+            result = SnowflakeGraphVerifier(
+                connection, default_database=settings.database
+            ).verify(
+                SnowflakeGraphVerificationConfig(
+                    target_database=settings.database,
+                    target_schema=DEFAULT_TARGET_SCHEMA,
+                    mdm_database=settings.database,
+                    mdm_schema=DEFAULT_MDM_SCHEMA,
+                    verify_native_app=not args.skip_native_app,
+                    native_app_name=DEFAULT_NATIVE_APP_NAME,
+                    native_app_database_role=DEFAULT_NATIVE_APP_DATABASE_ROLE,
+                    native_app_compute_pool=DEFAULT_NATIVE_APP_COMPUTE_POOL,
+                    generation_id=generation_id,
+                )
+            )
+            return result.passed
+        finally:
+            connection.close()
+
+    owner = args.owner or str(uuid.uuid4())
+    lease_seconds = args.lease_seconds if args.lease_seconds is not None else DEFAULT_LEASE_SECONDS
+
+    session = _session()
+    try:
+        results = drain_publication_queue(
+            session,
+            owner=owner,
+            sync_fn=sync_fn,
+            verify_fn=verify_fn,
+            lease_seconds=lease_seconds,
+            max_requests=args.max_requests,
+        )
+    finally:
+        session.close()
+
+    print(json.dumps({"owner": owner, "drained": results}, indent=2, sort_keys=True))
+    if any(item["status"] == "failed" for item in results):
+        return 1
+    return 0
 
 
 def _handle_coverage_report(args) -> int:

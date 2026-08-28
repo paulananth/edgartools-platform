@@ -35,7 +35,12 @@ import pytest
 from sqlalchemy import select
 
 from edgar_warehouse.mdm import pipeline as pipeline_module
-from edgar_warehouse.mdm.database import MdmCompany, MdmEntityTypeDefinition, MdmRelationshipType
+from edgar_warehouse.mdm.database import (
+    MdmCompany,
+    MdmEntityTypeDefinition,
+    MdmPublicationRequest,
+    MdmRelationshipType,
+)
 from edgar_warehouse.mdm.pipeline import MDMPipeline
 from edgar_warehouse.silver_store import SilverDatabase
 
@@ -184,6 +189,95 @@ class TestRunAllCorrectness:
         # own disconnected in-memory state.
         resolved = {row.cik for row in session.execute(select(MdmCompany)).scalars().all()}
         assert resolved == {900000, 900001, 900002}
+
+
+class TestRunAllEnqueuesPublicationRequest:
+    """Ticket 36 (change-propagation map): run_all() is the outbox's
+    producer -- it must enqueue exactly one MdmPublicationRequest per
+    invocation that actually resolved/derived something, and none when
+    there was nothing to do."""
+
+    def test_a_run_that_resolves_companies_enqueues_one_request(self) -> None:
+        session = _seeded_sqlite_session(static_pool=True)
+        silver = _real_silver_with_companies(3)
+        _seed_fundamentals_relationship_types(session)
+        outer_pipeline = MDMPipeline(session=session, silver=silver, run_id="test-run-abc")
+
+        stats = outer_pipeline.run_all()
+        assert stats.companies_processed == 3
+
+        requests = list(session.execute(select(MdmPublicationRequest)).scalars().all())
+        assert len(requests) == 1
+        assert requests[0].lifecycle_state == "mdm_committed"
+        assert requests[0].source_summary["run_id"] == "test-run-abc"
+        assert requests[0].source_summary["companies_processed"] == 3
+
+    def test_a_run_with_nothing_to_resolve_enqueues_no_request(self) -> None:
+        session = _seeded_sqlite_session(static_pool=True)
+        silver = _real_silver_with_companies(0)
+        _seed_fundamentals_relationship_types(session)
+        outer_pipeline = MDMPipeline(session=session, silver=silver)
+
+        stats = outer_pipeline.run_all()
+        assert stats.companies_processed == 0
+        assert stats.relationships_written == 0
+
+        requests = list(session.execute(select(MdmPublicationRequest)).scalars().all())
+        assert requests == []
+
+    def test_full_chain_from_run_all_through_drain_reaches_graph_active(self) -> None:
+        """Ticket 36 bullet 3: a real MDM commit (run_all) enqueues a
+        request, a coordinator (drain_publication_queue) claims and
+        advances it through graph_pending -> graph_building ->
+        graph_verified -> graph_active, and compute_publication_freshness
+        reports healthy status throughout -- proven end-to-end against a
+        real SQLAlchemy session (SQLite here; the same code path runs
+        against Postgres in prod). sync_fn/verify_fn are stubbed since real
+        Snowflake access isn't available in this test environment -- see
+        this ticket's Answer for what remains unverified against live
+        Snowflake."""
+        from edgar_warehouse.mdm.publication import (
+            compute_publication_freshness,
+            drain_publication_queue,
+        )
+
+        session = _seeded_sqlite_session(static_pool=True)
+        silver = _real_silver_with_companies(2)
+        _seed_fundamentals_relationship_types(session)
+        outer_pipeline = MDMPipeline(session=session, silver=silver, run_id="e2e-run")
+
+        stats = outer_pipeline.run_all()
+        assert stats.companies_processed == 2
+
+        pre_drain_status = compute_publication_freshness(session)
+        assert pre_drain_status.status == "normal"
+        assert pre_drain_status.lifecycle_counts["mdm_committed"] == 1
+
+        results = drain_publication_queue(
+            session,
+            owner="e2e-coordinator",
+            sync_fn=lambda gid: None,
+            verify_fn=lambda gid: True,
+        )
+        assert len(results) == 1
+        assert results[0]["status"] == "graph_active"
+
+        post_drain_status = compute_publication_freshness(session)
+        assert post_drain_status.status == "normal"
+        assert post_drain_status.lifecycle_counts["graph_active"] == 1
+        assert post_drain_status.lifecycle_counts["mdm_committed"] == 0
+
+    def test_a_run_without_an_explicit_run_id_still_enqueues_with_a_generated_identity(self) -> None:
+        session = _seeded_sqlite_session(static_pool=True)
+        silver = _real_silver_with_companies(1)
+        _seed_fundamentals_relationship_types(session)
+        outer_pipeline = MDMPipeline(session=session, silver=silver)
+
+        outer_pipeline.run_all()
+
+        requests = list(session.execute(select(MdmPublicationRequest)).scalars().all())
+        assert len(requests) == 1
+        assert requests[0].source_summary["run_id"]
 
 
 class TestRunAllFailsFast:

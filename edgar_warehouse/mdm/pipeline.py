@@ -2073,6 +2073,41 @@ class MDMPipeline:
         stats.relationships_written = sum(
             int(item["inserted"] or 0) for item in stats.relationship_counts_by_type.values()
         )
+
+        # RSYNC-01/03, ticket 36: enqueue exactly one publication request per
+        # run_all() invocation -- ticket 06 decided "once per upstream cause
+        # reference," but nothing under edgar_warehouse/mdm/ carries a
+        # cause_reference (that field lives only on the acquisition ledger's
+        # source_fetch_decision, a different subsystem run_all() never reads)
+        # -- so this Run's own run_id is the identity used instead, generated
+        # here if the caller didn't supply one (mirrors the uuid.uuid4()
+        # fallback mdm sync-graph already uses for generation_id). Gated on
+        # non-trivial output so an empty run_all() (nothing left to resolve)
+        # doesn't enqueue a no-op publication request every invocation.
+        resolved_total = (
+            stats.companies_processed
+            + stats.advisers_processed
+            + stats.securities_processed
+            + stats.persons_processed
+            + stats.funds_processed
+        )
+        if resolved_total > 0 or stats.relationships_written > 0:
+            from edgar_warehouse.mdm.publication import request_publication
+
+            effective_run_id = pipeline_run_id or str(uuid.uuid4())
+            request_publication(
+                self.session,
+                source_summary={
+                    "run_id": effective_run_id,
+                    "companies_processed": stats.companies_processed,
+                    "advisers_processed": stats.advisers_processed,
+                    "securities_processed": stats.securities_processed,
+                    "persons_processed": stats.persons_processed,
+                    "funds_processed": stats.funds_processed,
+                    "relationships_written": stats.relationships_written,
+                },
+            )
+            self.session.commit()
         return stats
 
     def _relationship_type_names(self, relationship_types: Optional[Iterable[str]]) -> list[str]:
