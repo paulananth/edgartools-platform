@@ -111,6 +111,20 @@ implement it.
 (none yet — breadth-first frontier below covers everything surfaced during
 charting; new fog may surface as tickets resolve)
 
+## Implementation
+
+Published 2026-08-28 via `/to-tickets`, reviewed against live code before
+publishing (found and fixed a stale premise in `dbt-gold-silver-rewiring`'s
+Ticket 07 along the way — see that map's own history). 10 vertical-slice
+tickets under
+[`.scratch/duckdb-retirement-cutover/issues/`](../duckdb-retirement-cutover/issues/):
+Tickets 01-06 are independent "expand" slices (each provable while DuckDB is
+still live); the gold-builder-retirement slice is fulfilled by the existing
+`dbt-gold-silver-rewiring` 7-ticket chain by reference, not duplicated;
+Tickets 07-10 are the wide-refactor "contract" tail — the atomic cutover
+itself (08, indivisible per Ticket 01's rollback-atomicity answer), its
+reconciliation/GO-NO-GO gate (09), and final cleanup (10).
+
 ## Frontier
 
 (none — every ticket on this map is resolved, including Ticket 09's
