@@ -29,7 +29,9 @@ production `join()`. Then give operators a sibling VersionId Reclaim tool (ADR 0
 contract, not the staging script) that dry-runs a reviewed TSV, deletes only listed
 VersionIds after a distinct confirm flag, never touches current Canonical Silver,
 skips in-flight Identity Refresh Run directories younger than 24 hours, and keeps
-the union of per-table newest gold `run_id=` prefixes. Report bytes reclaimed.
+the newest complete gold `run_id` (current parquet for every gold table in the
+listing; fall back to the per-table newest union only if no run is complete).
+Report bytes reclaimed.
 Do not change CloudWatch retention (seven-day Operational Forensics Window stands).
 Do not delete current bronze SEC objects.
 
@@ -66,7 +68,7 @@ Do not delete current bronze SEC objects.
 29. As a platform operator, I want historical Identity Refresh Run directories reclaimed, so that 19 GiB of unique current keys go away without waiting for the new 7-day rule to age them.
 30. As a platform operator, I want Identity Refresh Run directories whose newest object is younger than 24 hours skipped on the one-shot, so that an in-flight reducer is not deleted mid-run.
 31. As a platform operator, I want gold parquet `run_id=` copies reclaimed except the keep-set, so that seven copies of each table are not billed.
-32. As a platform operator, I want the gold keep-set to be the union of per-table newest `LastModified` `run_id=` prefixes, so that UUID sort cannot keep a stale run and a partial newer run cannot orphan another table's latest complete file.
+32. As a platform operator, I want the gold keep-set to be the newest complete `run_id` (current parquet for every gold table in the listing, ranked by `LastModified`), so that a partial newer run is reclaimed and cannot displace the last complete snapshot.
 33. As a platform operator, I want gold noncurrent versions of deleted historical `run_id=` keys reclaimed too, so that 0.89 GiB of leftover versions is not left billed.
 34. As a platform operator, I want staging VersionId Reclaim out of this work (already done), so that the tool does not re-scan an empty prefix unless proving emptiness.
 35. As a platform operator, I want incomplete multipart uploads with zero parts ignored as zero-bill, so that I do not confuse MPU abort with VersionId Reclaim.
@@ -90,7 +92,7 @@ Do not delete current bronze SEC objects.
 - Architecture test: read lifecycle HCL as text (same style as ECR lifecycle and CloudWatch retention architecture tests) *and* call production object-storage `join()` on a root ending in `/warehouse`. Negative case: `silverstage/` is not a prefix of joined staging keys. Fail if join output and HCL staging prefix diverge.
 - Reclaim tool is a **sibling** of the ADR 0004 staging cleanup, not an extension of that script. Staging cleanup keeps `IsLatest=true` under the ephemeral prefix. Reclaim selectors: (1) `IsLatest=false` on Canonical Silver shard keys and the single noncurrent canonical duckdb version; (2) current unique keys under `warehouse/identity_refresh/` whose run directory newest object is older than 24 hours; (3) gold `run_id=` objects not in the keep-set, including their noncurrent versions.
 - Deny-list: current (`IsLatest=true`) Canonical Silver duckdb and shard-0..3. Any apply manifest containing those VersionIds is a hard fail.
-- Gold keep-set: for each table prefix, take the `run_id=` with the newest current-object `LastModified`; union those `run_id=` values across tables; keep every current object whose `run_id=` is in that union. Do not sort UUIDs. This is the synthesis of GSD GOLD-01 and the incomplete-run warning; wayfinder grilling on "complete run" was still open and this is the locked default.
+- Gold keep-set: the newest complete `run_id` — a run that has a current parquet object for every gold hive table present in the listing, ranked by that run's newest current `LastModified`. Do not sort UUIDs except as a LastModified tie-break. A partial newer run is reclaimable. If no run is complete, fall back to the union of per-table newest `LastModified` `run_id=` values. Locked by [What is the latest complete gold run we must keep?](issues/02-define-latest-complete-gold-run.md).
 - One-shot identity skip: 24-hour newest-object age on the run directory. Standing 7-day lifecycle does not skip RUNNING maps (already locked).
 - Default is dry-run. Apply requires a distinct confirm flag and a reviewed manifest. Batches of 100. Post-list must show listed VersionIds absent. Empty candidate set is success. Report count + GiB per prefix.
 - Evidence lands under warehouse release-evidence for this reclaim, analogous to staging-cleanup evidence, not only a local temp dir.
@@ -102,7 +104,7 @@ Do not delete current bronze SEC objects.
 
 - Good tests assert observable contracts: HCL prefix strings, `join()` key prefixes, dry-run TSV columns, deny-list refusal, keep-set membership, empty-run success. They do not assert internal helper names or live AWS.
 - Architecture tests (no credentials): warehouse lifecycle prefixes vs production `join()`. Prior art: ECR image lifecycle architecture test; CloudWatch seven-day retention architecture test.
-- Reclaim unit/contract tests: feed a synthetic version listing (in-memory or fixture JSON) and assert the TSV keep/drop set. Must cover: noncurrent shard kept vs current shard denied; identity run younger than 24h skipped; gold keep-set union; manifest that includes deny-listed VersionId rejected; second run on empty set succeeds.
+- Reclaim unit/contract tests: feed a synthetic version listing (in-memory or fixture JSON) and assert the TSV keep/drop set. Must cover: noncurrent shard kept vs current shard denied; identity run younger than 24h skipped; gold keep-set is the newest complete run (partial newer run dropped; no-complete fallback to per-table newest union); manifest that includes deny-listed VersionId rejected; second run on empty set succeeds.
 - Do not require a prod apply in CI. Operator apply remains a human-gated step after tests pass.
 - Do not use integration tests that call `delete-objects` against prod.
 
@@ -122,6 +124,6 @@ Do not delete current bronze SEC objects.
 ## Further Notes
 
 - Live inventory 2026-08-21 (read-only): see [04-live-warehouse-leftover-inventory.md](research/04-live-warehouse-leftover-inventory.md) and [05-bronze-duplicate-inventory.md](research/05-bronze-duplicate-inventory.md).
-- Wayfinder [Keep, drop, or rewrite the three-day CloudWatch retention requirement?](issues/01-decide-cloudwatch-retention-vs-seven-day-floor.md) is resolved: drop CW-01, keep seven days. [How do we detect an in-flight Identity Refresh Run for one-shot skip?](issues/03-decide-in-flight-identity-refresh-skip.md) is resolved: 24-hour newest LastModified on the run directory. [Does ADR 0004’s staging cleanup contract extend, or do we need a sibling reclaim contract?](issues/06-decide-reclaim-contract-beyond-staging.md) is resolved: ADR 0004 stays staging-only; sibling VersionId Reclaim for warehouse duplicates. [Is the 7-day Canonical Silver noncurrent rule enough after the one-shot?](issues/11-keep-seven-day-silver-noncurrent-window.md) is resolved: keep 7-day noncurrent-only; do not shorten.
+- Wayfinder [Keep, drop, or rewrite the three-day CloudWatch retention requirement?](issues/01-decide-cloudwatch-retention-vs-seven-day-floor.md) is resolved: drop CW-01, keep seven days. [What is the latest complete gold run we must keep?](issues/02-define-latest-complete-gold-run.md) is resolved: newest complete `run_id`. [How do we detect an in-flight Identity Refresh Run for one-shot skip?](issues/03-decide-in-flight-identity-refresh-skip.md) is resolved: 24-hour newest LastModified on the run directory. [Does ADR 0004’s staging cleanup contract extend, or do we need a sibling reclaim contract?](issues/06-decide-reclaim-contract-beyond-staging.md) is resolved: ADR 0004 stays staging-only; sibling VersionId Reclaim for warehouse duplicates. [Is the 7-day Canonical Silver noncurrent rule enough after the one-shot?](issues/11-keep-seven-day-silver-noncurrent-window.md) is resolved: keep 7-day noncurrent-only; do not shorten.
 - `/to-tickets` already sliced leak-seal vs reclaim as (1) architecture test + lifecycle HCL, (2) targeted apply runbook, (3) reclaim tool + fixtures, (4) operator dry-run then apply against shards / identity / gold. One-shot evidence lives under the warehouse release-evidence prefix.
 - Vocabulary: Canonical Silver, Joined Live Key, VersionId Reclaim, Staged Warehouse Object, Identity Refresh Run — root `CONTEXT.md`.
