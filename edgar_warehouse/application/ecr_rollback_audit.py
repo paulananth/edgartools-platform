@@ -30,12 +30,12 @@ from datetime import datetime, timedelta
 from edgar_warehouse.application.ecr_rollback_registry import (
     ROLE_NAMES,
     SLOT_ORDER,
-    expected_mirror_tags,
+    expected_protected_tags,
     protected_digests_from_registry,
     validate_registry,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MINIMUM_VERIFIED_COHORTS = len(SLOT_ORDER)
 
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -55,6 +55,13 @@ def _parse_utc(value: object, label: str) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
         return None
     return parsed
+
+
+def _repository_from_digest_ref(image_ref: object) -> str | None:
+    value = str(image_ref)
+    if "@" not in value:
+        return None
+    return value.rsplit("@", 1)[0].rsplit("/", 1)[-1]
 
 
 @dataclass(frozen=True)
@@ -89,6 +96,7 @@ class Plan:
     candidate_digests: tuple[str, ...]
     estimated_reclaimed_bytes: int
     pagination_counts: dict
+    reference_drift: tuple[str, ...]
     errors: tuple[str, ...]
     fail_closed_reasons: tuple[str, ...]
     plan_sha256: str = field(default="")
@@ -105,6 +113,7 @@ class Plan:
             "candidate_digests": list(self.candidate_digests),
             "estimated_reclaimed_bytes": self.estimated_reclaimed_bytes,
             "pagination_counts": dict(self.pagination_counts),
+            "reference_drift": list(self.reference_drift),
             "errors": list(self.errors),
             "fail_closed_reasons": list(self.fail_closed_reasons),
         }
@@ -119,6 +128,58 @@ def _canonical_hash(body: dict) -> str:
 def is_appliable(plan: Plan) -> bool:
     """A plan may only be applied when it found zero errors and zero fail-closed reasons."""
     return not plan.errors and not plan.fail_closed_reasons
+
+
+def post_deregistration_findings(
+    reviewed_plan: Plan,
+    current_plan: Plan,
+    *,
+    expected_remaining_stale_task_definition_arns: tuple[str, ...] = (),
+) -> list[str]:
+    """Validate the second read-only audit before any ECR image deletion.
+
+    Deregistering the reviewed stale task definitions intentionally changes
+    AWS state, so the original plan hash cannot remain identical. The safe
+    invariant is narrower: identity is unchanged, the repeated audit is
+    appliable, only the not-yet-processed stale batch remains, and every digest
+    approved in the reviewed plan is still independently eligible for deletion.
+    """
+    findings: list[str] = []
+    for field_name in ("account_id", "region", "repository"):
+        reviewed_value = getattr(reviewed_plan, field_name)
+        current_value = getattr(current_plan, field_name)
+        if current_value != reviewed_value:
+            findings.append(
+                f"post-deregistration {field_name} changed from {reviewed_value!r} to {current_value!r}"
+            )
+
+    if not is_appliable(current_plan):
+        findings.extend(
+            f"post-deregistration audit is not appliable: {reason}"
+            for reason in (*current_plan.errors, *current_plan.fail_closed_reasons)
+        )
+
+    expected_remaining = tuple(sorted(expected_remaining_stale_task_definition_arns))
+    actual_remaining = tuple(sorted(current_plan.stale_task_definition_arns))
+    if actual_remaining != expected_remaining:
+        if not expected_remaining:
+            findings.append(
+                "post-deregistration audit still reports stale task definitions: "
+                + ", ".join(actual_remaining)
+            )
+        else:
+            findings.append(
+                "post-deregistration stale task-definition set changed: expected "
+                f"{list(expected_remaining)!r}, found {list(actual_remaining)!r}"
+            )
+
+    current_candidates = set(current_plan.candidate_digests)
+    for digest in reviewed_plan.candidate_digests:
+        if digest not in current_candidates:
+            findings.append(
+                f"reviewed deletion candidate {digest!r} is no longer eligible after task-definition retirement"
+            )
+    return findings
 
 
 def compute_plan(
@@ -146,6 +207,7 @@ def compute_plan(
     """
     errors = list(errors)
     fail_closed_reasons: list[str] = list(errors)
+    reference_drift: list[str] = []
 
     registry_findings = validate_registry(registry)
     fail_closed_reasons.extend(f"registry: {finding.message}" for finding in registry_findings)
@@ -163,12 +225,25 @@ def compute_plan(
             "retain-all applies; no tagged image may be deleted until full rollback history exists"
         )
 
-    expected_mirrors = expected_mirror_tags(registry) if not registry_findings else {}
-    for tag, expected_digest in expected_mirrors.items():
+    for cohort in cohorts:
+        if not isinstance(cohort, dict):
+            continue
+        for role in ROLE_NAMES:
+            role_entry = cohort.get(role)
+            if isinstance(role_entry, dict) and role_entry.get("repository") != repository:
+                fail_closed_reasons.append(
+                    f"registry {cohort.get('slot')!r} {role!r} cohort repository "
+                    f"{role_entry.get('repository')!r} does not match audited repository {repository!r}"
+                )
+
+    expected_tags = expected_protected_tags(registry) if not registry_findings else {}
+    for tag, expected_digest in expected_tags.items():
         resolved = mirror_tag_digests.get(tag)
         if resolved != expected_digest:
+            tag_kind = "mirror" if tag.startswith("retain-") else "immutable cohort"
             fail_closed_reasons.append(
-                f"mirror tag {tag!r} resolves to {resolved!r}, expected {expected_digest!r} per registry"
+                f"{tag_kind} tag {tag!r} resolves to {resolved!r}, "
+                f"expected {expected_digest!r} per registry"
             )
 
     if ecs_services:
@@ -193,6 +268,7 @@ def compute_plan(
     # protection -- every active task definition would trivially "reference
     # itself" otherwise, and staleness detection would never fire.
     referenced_task_definition_arns: set[str] = set()
+    registry_task_definition_arns: set[str] = set()
     for cohort in registry.get("cohorts", []) if isinstance(registry.get("cohorts"), list) else []:
         for role in ROLE_NAMES:
             role_entry = cohort.get(role)
@@ -200,28 +276,66 @@ def compute_plan(
                 for arn in role_entry.get("task_definition_arns") or []:
                     if isinstance(arn, str):
                         referenced_task_definition_arns.add(arn)
+                        registry_task_definition_arns.add(arn)
 
+    current_release_task_definitions: dict[str, tuple[str, str]] = {}
+    current_cohort = next(
+        (cohort for cohort in cohorts if isinstance(cohort, dict) and cohort.get("slot") == "current"),
+        None,
+    )
+    if current_cohort is not None and not registry_findings:
+        for role in ROLE_NAMES:
+            role_entry = current_cohort.get(role)
+            if not isinstance(role_entry, dict):
+                continue
+            current_expected_digest = role_entry.get("digest")
+            for arn in role_entry.get("task_definition_arns") or []:
+                if isinstance(arn, str) and isinstance(current_expected_digest, str):
+                    current_release_task_definitions[arn] = (role, current_expected_digest)
+
+    task_definitions_by_arn: dict[str, dict] = {}
     for task_def in task_definitions:
         arn = task_def.get("arn")
-        for image_ref in task_def.get("images", []):
-            match = _DIGEST_REF_RE.search(str(image_ref))
-            if not match:
-                fail_closed_reasons.append(
-                    f"task definition {arn!r} references a tag-pinned (not digest-pinned) "
-                    f"image {image_ref!r} — cannot resolve unambiguously"
-                )
-                continue
-            if repository not in str(image_ref):
-                fail_closed_reasons.append(
-                    f"task definition {arn!r} references an image outside the expected "
-                    f"repository {repository!r}: {image_ref!r}"
-                )
-                continue
-            _protect(match.group(1), f"active_task_definition:{arn}")
+        if not isinstance(arn, str):
+            reference_drift.append(f"active task-definition inventory contains an invalid ARN: {arn!r}")
+            continue
+        if arn in task_definitions_by_arn:
+            reference_drift.append(f"active task-definition inventory contains duplicate ARN {arn!r}")
+            continue
+        task_definitions_by_arn[arn] = task_def
+
+    for arn, (role, expected_digest) in current_release_task_definitions.items():
+        current_task_def = task_definitions_by_arn.get(arn)
+        if current_task_def is None:
+            reference_drift.append(
+                f"registry current release task definition {arn!r} for role {role!r} is not ACTIVE"
+            )
+            continue
+        actual_digests = {
+            match.group(1)
+            for image_ref in current_task_def.get("images", [])
+            if _repository_from_digest_ref(image_ref) == repository
+            and (match := _DIGEST_REF_RE.search(str(image_ref)))
+        }
+        if actual_digests != {expected_digest}:
+            reference_drift.append(
+                f"registry current release task definition {arn!r} for role {role!r} resolves to "
+                f"{sorted(actual_digests)!r}, expected release digest {expected_digest!r}"
+            )
 
     for state_machine, arns in workflow_task_definition_arns.items():
         for arn in arns:
             referenced_task_definition_arns.add(arn)
+            if arn not in task_definitions_by_arn:
+                reference_drift.append(
+                    f"state machine {state_machine!r} references {arn!r}, which cannot be resolved "
+                    "in the ACTIVE task-definition inventory"
+                )
+            elif current_release_task_definitions and arn not in current_release_task_definitions:
+                reference_drift.append(
+                    f"state machine {state_machine!r} references {arn!r}, which is outside the "
+                    "registry current release cohort"
+                )
 
     for task in live_tasks:
         task_arn = task.get("task_arn")
@@ -243,19 +357,84 @@ def compute_plan(
         task_def_arn = task.get("task_definition_arn")
         if isinstance(task_def_arn, str):
             referenced_task_definition_arns.add(task_def_arn)
+            if task_def_arn not in task_definitions_by_arn:
+                reference_drift.append(
+                    f"live task {task_arn!r} references task definition {task_def_arn!r}, "
+                    "which cannot be resolved in the ACTIVE task-definition inventory"
+                )
+        else:
+            reference_drift.append(
+                f"live task {task_arn!r} has no resolvable task-definition ARN"
+            )
+
+    for arn in sorted(registry_task_definition_arns):
+        if arn not in task_definitions_by_arn:
+            reference_drift.append(
+                f"rollback registry references task definition {arn!r}, which is not ACTIVE"
+            )
+
+    # Only protected references must resolve to the audited runtime repository.
+    # An unreferenced definition is an exact-ARN retirement candidate; legacy
+    # definitions may legitimately point at the pre-consolidation repository
+    # and must not block their own reviewed deregistration.
+    for arn in sorted(referenced_task_definition_arns):
+        referenced_task_def = task_definitions_by_arn.get(arn)
+        if referenced_task_def is None:
+            continue
+        image_refs = referenced_task_def.get("images", [])
+        if not isinstance(image_refs, list) or not image_refs:
+            reference_drift.append(
+                f"protected task definition {arn!r} has no resolvable container image reference"
+            )
+            continue
+        for image_ref in image_refs:
+            match = _DIGEST_REF_RE.search(str(image_ref))
+            if not match:
+                fail_closed_reasons.append(
+                    f"task definition {arn!r} references a tag-pinned (not digest-pinned) "
+                    f"image {image_ref!r} — cannot resolve unambiguously"
+                )
+                continue
+            if _repository_from_digest_ref(image_ref) != repository:
+                fail_closed_reasons.append(
+                    f"task definition {arn!r} references an image outside the expected "
+                    f"repository {repository!r}: {image_ref!r}"
+                )
+                continue
+            _protect(match.group(1), f"protected_task_definition:{arn}")
+
+    reference_drift = sorted(set(reference_drift))
+    fail_closed_reasons.extend(f"reference drift: {finding}" for finding in reference_drift)
 
     audit_started_dt = _parse_utc(audit_started_at, "audit_started_at")
     if audit_started_dt is None:
         fail_closed_reasons.append(f"audit_started_at {audit_started_at!r} is not a valid UTC timestamp")
+    current_verified_dt = (
+        _parse_utc(current_cohort.get("verified_at"), "current cohort verified_at")
+        if current_cohort is not None
+        else None
+    )
 
     dispositions: list[ImageDisposition] = []
     candidate_digests: list[str] = []
     estimated_reclaimed_bytes = 0
 
     for image in ecr_images:
-        digest = image.get("digest")
-        tags = tuple(image.get("tags") or [])
-        pushed_at = image.get("pushed_at", "")
+        raw_digest = image.get("digest")
+        if not isinstance(raw_digest, str) or not _DIGEST_RE.fullmatch(raw_digest):
+            fail_closed_reasons.append(
+                f"ECR inventory contains an invalid image digest: {raw_digest!r}"
+            )
+            continue
+        digest = raw_digest
+        raw_tags = image.get("tags") or []
+        tags = tuple(tag for tag in raw_tags if isinstance(tag, str))
+        if len(tags) != len(raw_tags):
+            fail_closed_reasons.append(
+                f"ECR image {digest!r} contains a non-string tag"
+            )
+        raw_pushed_at = image.get("pushed_at", "")
+        pushed_at = raw_pushed_at if isinstance(raw_pushed_at, str) else ""
         size_bytes = int(image.get("size_bytes") or 0)
 
         if digest in protected:
@@ -282,6 +461,18 @@ def compute_plan(
         pushed_dt = _parse_utc(pushed_at, "pushed_at")
         if audit_started_dt is not None and (pushed_dt is None or pushed_dt > audit_started_dt):
             dispositions.append(ImageDisposition(digest, tags, pushed_at, size_bytes, "protected", ("pushed_after_audit_start",)))
+            continue
+        if current_verified_dt is not None and pushed_dt is not None and pushed_dt > current_verified_dt:
+            dispositions.append(
+                ImageDisposition(
+                    digest,
+                    tags,
+                    pushed_at,
+                    size_bytes,
+                    "protected",
+                    ("pushed_after_current_verified_cohort",),
+                )
+            )
             continue
 
         dispositions.append(ImageDisposition(digest, tags, pushed_at, size_bytes, "candidate", ()))
@@ -311,10 +502,16 @@ def compute_plan(
         "candidate_digests": sorted(candidate_digests),
         "estimated_reclaimed_bytes": estimated_reclaimed_bytes,
         "pagination_counts": dict(pagination_counts),
+        "reference_drift": list(reference_drift),
         "errors": list(errors),
         "fail_closed_reasons": list(fail_closed_reasons),
     }
-    plan_sha256 = _canonical_hash(body)
+    # The reviewed plan hash binds AWS state and decisions, not the wall-clock
+    # instant at which the same state was observed. ``apply`` deliberately
+    # re-runs the audit; including audit_started_at made every recomputation
+    # produce a different hash even when nothing in AWS changed.
+    hash_body = {key: value for key, value in body.items() if key != "audit_started_at"}
+    plan_sha256 = _canonical_hash(hash_body)
 
     return Plan(
         schema_version=SCHEMA_VERSION,
@@ -327,6 +524,7 @@ def compute_plan(
         candidate_digests=tuple(sorted(candidate_digests)),
         estimated_reclaimed_bytes=estimated_reclaimed_bytes,
         pagination_counts=dict(pagination_counts),
+        reference_drift=tuple(reference_drift),
         errors=tuple(errors),
         fail_closed_reasons=tuple(fail_closed_reasons),
         plan_sha256=plan_sha256,

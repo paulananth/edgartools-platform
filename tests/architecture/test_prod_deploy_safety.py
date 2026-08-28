@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 CLEANUP = REPO_ROOT / "infra" / "scripts" / "cleanup-ecr-images.sh"
@@ -23,3 +22,15 @@ def test_ecr_cleanup_retains_tagged_and_active_task_images() -> None:
     assert "'--family-name', family" not in script
     assert 'if image_in_use "$full_repo" "$digest"; then' in script
     assert "keep   = bool(tags)" in script
+
+
+def test_deploy_holds_the_release_cleanup_lock_while_registering_candidates() -> None:
+    script = DEPLOY.read_text(encoding="utf-8")
+
+    acquire = script.index("acquire-lock")
+    register = script.index('TASK_DEF_SMALL_ARN="$(register_task_definition')
+    release = script.index("release-lock")
+
+    assert acquire < register
+    assert "ROLLBACK_CLEANUP_LOCK_HELD" in script
+    assert release < register  # release command is defined in the EXIT trap before deployment begins

@@ -20,6 +20,11 @@ Subcommands:
     Gather every AWS fact the audit needs, compute a dry-run plan, and print
     it (default) or write it to a file. Never mutates AWS state.
 
+``check``
+    Run the same read-only reconciliation as ``plan`` but return a non-zero
+    exit status when drift or any other fail-closed condition is present, so
+    deployment gates and operator automation can use it directly.
+
 ``apply``
     Re-gather every fact from scratch (never trusts a stale ``plan``
     in-process), recompute the plan, and refuse to proceed unless its hash
@@ -35,6 +40,12 @@ Subcommands:
     deliberate manual/operator step, not something a deploy wires up
     automatically (a deploy has not yet been verified at the moment it
     completes).
+
+``acquire-lock`` / ``release-lock``
+    Coordinate deployment and cohort recording with cleanup. A deployment
+    holds the same durable lock while new task definitions are temporarily an
+    unreferenced release candidate, preventing cleanup from classifying them
+    as stale during the sequential Step Functions update.
 
 Example::
 
@@ -54,8 +65,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from edgar_warehouse.application.ecr_rollback_audit import Plan, compute_plan, is_appliable
-from edgar_warehouse.application.ecr_rollback_registry import advance_registry, empty_registry
+from edgar_warehouse.application.ecr_rollback_audit import (
+    Plan,
+    compute_plan,
+    is_appliable,
+    post_deregistration_findings,
+)
+from edgar_warehouse.application.ecr_rollback_registry import (
+    advance_registry,
+    empty_registry,
+    expected_protected_tags,
+)
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 DEFAULT_REGISTRY_RELATIVE_PATH = "warehouse/release/ecr_rollback_registry.json"
@@ -65,6 +85,19 @@ FAMILY_PREFIX_SUFFIX = ""  # family prefix is the caller's --name-prefix as-is
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _utc_iso(value: object) -> str:
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        return ""
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def _storage(bucket: str) -> StorageLocation:
@@ -143,9 +176,7 @@ def gather_ecr_images(ecr_client: Any, repository: str) -> tuple[list[dict], dic
                 {
                     "digest": detail.get("imageDigest"),
                     "tags": detail.get("imageTags") or [],
-                    "pushed_at": detail.get("imagePushedAt").isoformat().replace("+00:00", "Z")
-                    if detail.get("imagePushedAt")
-                    else "",
+                    "pushed_at": _utc_iso(detail.get("imagePushedAt")),
                     "size_bytes": detail.get("imageSizeInBytes") or 0,
                 }
             )
@@ -165,13 +196,29 @@ def resolve_mirror_tags(ecr_client: Any, repository: str, tags: list[str]) -> di
     return resolved
 
 
-def gather_task_definitions(ecs_client: Any, family_prefix: str, repository_hint: str) -> tuple[list[dict], dict[str, int]]:
+def gather_task_definitions(ecs_client: Any, family_prefix: str) -> tuple[list[dict], dict[str, int]]:
+    families: list[str] = []
+    family_pages = 0
+    family_paginator = ecs_client.get_paginator("list_task_definition_families")
+    for page in family_paginator.paginate(familyPrefix=family_prefix, status="ACTIVE"):
+        family_pages += 1
+        families.extend(
+            family
+            for family in page.get("families", [])
+            if family == family_prefix or family.startswith(f"{family_prefix}-")
+        )
+
     arns: list[str] = []
     pages = 0
     paginator = ecs_client.get_paginator("list_task_definitions")
-    for page in paginator.paginate(familyPrefix=family_prefix, status="ACTIVE"):
-        pages += 1
-        arns.extend(page.get("taskDefinitionArns", []))
+    for family in sorted(set(families)):
+        for page in paginator.paginate(familyPrefix=family, status="ACTIVE"):
+            pages += 1
+            arns.extend(
+                arn
+                for arn in page.get("taskDefinitionArns", [])
+                if arn.rsplit("/", 1)[-1].rsplit(":", 1)[0] == family
+            )
 
     definitions: list[dict] = []
     for arn in arns:
@@ -179,25 +226,40 @@ def gather_task_definitions(ecs_client: Any, family_prefix: str, repository_hint
         images = [
             c["image"]
             for c in described.get("containerDefinitions", [])
-            if isinstance(c.get("image"), str) and repository_hint in c["image"]
+            if isinstance(c.get("image"), str)
         ]
         definitions.append({"arn": described["taskDefinitionArn"], "images": images})
-    return definitions, {"ecs_list_task_definitions_pages": pages, "task_definitions_described": len(arns)}
+    return definitions, {
+        "ecs_list_task_definition_families_pages": family_pages,
+        "task_definition_families_matched": len(set(families)),
+        "ecs_list_task_definitions_pages": pages,
+        "task_definitions_described": len(arns),
+    }
 
 
-def _walk_task_definition_arns(node: Any, found: set[str]) -> None:
+def _walk_task_definition_arns(
+    node: Any,
+    found: set[str],
+    unresolved: set[str] | None = None,
+) -> None:
     if isinstance(node, dict):
         for key, value in node.items():
-            if key == "TaskDefinition" and isinstance(value, str) and value.startswith("arn:aws:ecs:"):
-                found.add(value)
+            if key in ("TaskDefinition", "TaskDefinition.$"):
+                if isinstance(value, str) and value.startswith("arn:aws:ecs:"):
+                    found.add(value)
+                elif unresolved is not None:
+                    unresolved.add(str(value))
             else:
-                _walk_task_definition_arns(value, found)
+                _walk_task_definition_arns(value, found, unresolved)
     elif isinstance(node, list):
         for item in node:
-            _walk_task_definition_arns(item, found)
+            _walk_task_definition_arns(item, found, unresolved)
 
 
-def gather_workflow_task_definition_arns(sfn_client: Any, name_prefix: str) -> tuple[dict[str, list[str]], dict[str, int]]:
+def gather_workflow_task_definition_arns(
+    sfn_client: Any,
+    name_prefix: str,
+) -> tuple[dict[str, list[str]], list[str], dict[str, int]]:
     machines: list[dict] = []
     pages = 0
     paginator = sfn_client.get_paginator("list_state_machines")
@@ -206,23 +268,43 @@ def gather_workflow_task_definition_arns(sfn_client: Any, name_prefix: str) -> t
         machines.extend(m for m in page.get("stateMachines", []) if m.get("name", "").startswith(name_prefix))
 
     result: dict[str, list[str]] = {}
+    errors: list[str] = []
     for machine in machines:
         described = sfn_client.describe_state_machine(stateMachineArn=machine["stateMachineArn"])
         definition = json.loads(described["definition"])
         found: set[str] = set()
-        _walk_task_definition_arns(definition, found)
+        unresolved: set[str] = set()
+        _walk_task_definition_arns(definition, found, unresolved)
         result[machine["name"]] = sorted(found)
-    return result, {"sfn_list_state_machines_pages": pages, "state_machines_described": len(machines)}
+        errors.extend(
+            f"state machine {machine['name']!r} has unresolved TaskDefinition reference {json.dumps(value)}"
+            for value in sorted(unresolved)
+        )
+    return (
+        result,
+        errors,
+        {"sfn_list_state_machines_pages": pages, "state_machines_described": len(machines)},
+    )
 
 
 def gather_ecs_clusters_tasks(
-    ecs_client: Any, repository_hint: str
-) -> tuple[list[dict], list[dict], dict[str, int]]:
-    cluster_arns: list[str] = []
+    ecs_client: Any,
+    cluster_name: str,
+) -> tuple[list[dict], list[dict], list[str], dict[str, int]]:
+    discovered_cluster_arns: list[str] = []
     cluster_pages = 0
     for page in ecs_client.get_paginator("list_clusters").paginate():
         cluster_pages += 1
-        cluster_arns.extend(page.get("clusterArns", []))
+        discovered_cluster_arns.extend(page.get("clusterArns", []))
+
+    cluster_arns = [
+        arn for arn in discovered_cluster_arns if arn.rsplit("/", 1)[-1] == cluster_name
+    ]
+    errors: list[str] = []
+    if len(cluster_arns) != 1:
+        errors.append(
+            f"expected exactly one ECS cluster named {cluster_name!r}, found {len(cluster_arns)}"
+        )
 
     live_tasks: list[dict] = []
     services: list[dict] = []
@@ -237,10 +319,11 @@ def gather_ecs_clusters_tasks(
                 services.append({"cluster": cluster_arn, "service_arn": service_arn})
 
         task_arns: set[str] = set()
-        for status in ("RUNNING", "STOPPED"):
-            for task_page in ecs_client.get_paginator("list_tasks").paginate(cluster=cluster_arn, desiredStatus=status):
-                task_pages += 1
-                task_arns.update(task_page.get("taskArns", []))
+        for task_page in ecs_client.get_paginator("list_tasks").paginate(
+            cluster=cluster_arn, desiredStatus="RUNNING"
+        ):
+            task_pages += 1
+            task_arns.update(task_page.get("taskArns", []))
 
         task_arn_list = sorted(task_arns)
         for i in range(0, len(task_arn_list), 100):
@@ -261,15 +344,17 @@ def gather_ecs_clusters_tasks(
                     {
                         "task_arn": task.get("taskArn"),
                         "task_definition_arn": task.get("taskDefinitionArn"),
-                        "images": [c for c in containers if repository_hint in (c.get("repository") or "")],
+                        "images": containers,
                     }
                 )
 
     return (
         live_tasks,
         services,
+        errors,
         {
             "ecs_list_clusters_pages": cluster_pages,
+            "ecs_clusters_matched": len(cluster_arns),
             "ecs_list_tasks_pages": task_pages,
             "ecs_list_services_pages": service_pages,
             "ecs_describe_tasks_batches": described_batches,
@@ -294,16 +379,24 @@ def build_plan(
     name_prefix: str,
     registry: dict,
 ) -> Plan:
-    from edgar_warehouse.application.ecr_rollback_registry import expected_mirror_tags
-
     audit_started_at = _now_iso()
     errors = list(verify_identity(sts_client, expected_account_id=account_id))
 
     ecr_images, ecr_counts = gather_ecr_images(ecr_client, repository)
-    mirror_tag_digests = resolve_mirror_tags(ecr_client, repository, list(expected_mirror_tags(registry).keys()))
-    task_definitions, td_counts = gather_task_definitions(ecs_client, name_prefix, repository)
-    workflow_arns, sfn_counts = gather_workflow_task_definition_arns(sfn_client, name_prefix)
-    live_tasks, services, ecs_counts = gather_ecs_clusters_tasks(ecs_client, repository)
+    mirror_tag_digests = resolve_mirror_tags(
+        ecr_client,
+        repository,
+        list(expected_protected_tags(registry).keys()),
+    )
+    task_definitions, td_counts = gather_task_definitions(ecs_client, name_prefix)
+    workflow_arns, workflow_errors, sfn_counts = gather_workflow_task_definition_arns(
+        sfn_client, name_prefix
+    )
+    errors.extend(workflow_errors)
+    live_tasks, services, ecs_errors, ecs_counts = gather_ecs_clusters_tasks(
+        ecs_client, f"{name_prefix}-warehouse"
+    )
+    errors.extend(ecs_errors)
 
     pagination_counts = {**ecr_counts, **td_counts, **sfn_counts, **ecs_counts}
 
@@ -335,13 +428,13 @@ def _clients(region: str) -> tuple[Any, Any, Any, Any]:
     )
 
 
-def cmd_plan(args: argparse.Namespace) -> int:
+def _plan_from_args(args: argparse.Namespace) -> Plan:
     ecr_client, ecs_client, sfn_client, sts_client = _clients(args.region)
     storage = _storage(args.registry_bucket)
     registry, _etag = load_registry(
         storage, args.registry_path, account_id=args.account_id, region=args.region
     )
-    plan = build_plan(
+    return build_plan(
         ecr_client=ecr_client,
         ecs_client=ecs_client,
         sfn_client=sfn_client,
@@ -352,25 +445,39 @@ def cmd_plan(args: argparse.Namespace) -> int:
         name_prefix=args.name_prefix,
         registry=registry,
     )
+
+
+def _emit_plan(plan: Plan, *, output_file: str | None) -> None:
     output = json.dumps(plan.to_dict(), indent=2, sort_keys=True)
-    if args.output_file:
-        Path(args.output_file).write_text(output + "\n", encoding="utf-8")
+    if output_file:
+        Path(output_file).write_text(output + "\n", encoding="utf-8")
     print(output)
     print(f"\n==> plan_sha256={plan.plan_sha256}", file=sys.stderr)
     print(f"==> appliable={is_appliable(plan)}", file=sys.stderr)
     print(f"==> candidates={len(plan.candidate_digests)} estimated_reclaimed_bytes={plan.estimated_reclaimed_bytes}", file=sys.stderr)
+
+
+def cmd_plan(args: argparse.Namespace) -> int:
+    plan = _plan_from_args(args)
+    _emit_plan(plan, output_file=args.output_file)
     return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    plan = _plan_from_args(args)
+    _emit_plan(plan, output_file=args.output_file)
+    return 0 if is_appliable(plan) else 2
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
     ecr_client, ecs_client, sfn_client, sts_client = _clients(args.region)
     storage = _storage(args.registry_bucket)
-    registry, _etag = load_registry(
-        storage, args.registry_path, account_id=args.account_id, region=args.region
-    )
 
     lock_token = acquire_lock(storage, args.lock_path, operator=args.operator)
     try:
+        registry, _etag = load_registry(
+            storage, args.registry_path, account_id=args.account_id, region=args.region
+        )
         plan = build_plan(
             ecr_client=ecr_client,
             ecs_client=ecs_client,
@@ -398,12 +505,48 @@ def cmd_apply(args: argparse.Namespace) -> int:
             )
             return 2
 
-        for arn in plan.stale_task_definition_arns:
-            ecs_client.deregister_task_definition(taskDefinition=arn)
-        for arn in plan.stale_task_definition_arns:
-            described = ecs_client.describe_task_definition(taskDefinition=arn)["taskDefinition"]
-            if described.get("status") != "INACTIVE":
-                print(f"ABORT: task definition {arn!r} did not report INACTIVE after deregistration", file=sys.stderr)
+        stale_arns = list(plan.stale_task_definition_arns)
+        remaining_stale_arns = set(stale_arns)
+        batch_size = args.task_definition_batch_size
+        retirement_batches = [
+            stale_arns[offset : offset + batch_size]
+            for offset in range(0, len(stale_arns), batch_size)
+        ] or [[]]
+        for batch in retirement_batches:
+            for arn in batch:
+                ecs_client.deregister_task_definition(taskDefinition=arn)
+            for arn in batch:
+                described = ecs_client.describe_task_definition(taskDefinition=arn)["taskDefinition"]
+                if described.get("status") != "INACTIVE":
+                    print(
+                        f"ABORT: task definition {arn!r} did not report INACTIVE after deregistration",
+                        file=sys.stderr,
+                    )
+                    return 2
+            remaining_stale_arns.difference_update(batch)
+
+            post_deregistration_plan = build_plan(
+                ecr_client=ecr_client,
+                ecs_client=ecs_client,
+                sfn_client=sfn_client,
+                sts_client=sts_client,
+                account_id=args.account_id,
+                region=args.region,
+                repository=args.repository,
+                name_prefix=args.name_prefix,
+                registry=registry,
+            )
+            post_findings = post_deregistration_findings(
+                plan,
+                post_deregistration_plan,
+                expected_remaining_stale_task_definition_arns=tuple(remaining_stale_arns),
+            )
+            if post_findings:
+                print(
+                    "ABORT: repeated audit after task-definition retirement did not preserve "
+                    "the reviewed deletion contract:\n" + json.dumps(post_findings, indent=2),
+                    file=sys.stderr,
+                )
                 return 2
 
         deleted = 0
@@ -433,40 +576,58 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 def cmd_record_cohort(args: argparse.Namespace) -> int:
     storage = _storage(args.registry_bucket)
-    registry, etag = load_registry(
-        storage, args.registry_path, account_id=args.account_id, region=args.region
-    )
-    updated = advance_registry(
-        registry,
-        candidate_id=args.candidate_id,
-        verified_at=args.verified_at,
-        verification_evidence=args.verification_evidence,
-        warehouse={
-            "repository": args.repository,
-            "digest": args.warehouse_digest,
-            "immutable_tag": args.warehouse_tag,
-            "task_definition_arns": args.warehouse_task_definition_arns,
-        },
-        mdm={
-            "repository": args.repository,
-            "digest": args.mdm_digest,
-            "immutable_tag": args.mdm_tag,
-            "task_definition_arns": args.mdm_task_definition_arns,
-        },
-        updated_at=_now_iso(),
-    )
-    save_registry(storage, args.registry_path, updated, expected_etag=etag)
+    lock_token = acquire_lock(storage, args.lock_path, operator=args.operator)
+    try:
+        registry, etag = load_registry(
+            storage, args.registry_path, account_id=args.account_id, region=args.region
+        )
+        updated = advance_registry(
+            registry,
+            candidate_id=args.candidate_id,
+            verified_at=args.verified_at,
+            verification_evidence=args.verification_evidence,
+            warehouse={
+                "repository": args.repository,
+                "digest": args.warehouse_digest,
+                "immutable_tag": args.warehouse_tag,
+                "task_definition_arns": args.warehouse_task_definition_arns,
+            },
+            mdm={
+                "repository": args.repository,
+                "digest": args.mdm_digest,
+                "immutable_tag": args.mdm_tag,
+                "task_definition_arns": args.mdm_task_definition_arns,
+            },
+            updated_at=_now_iso(),
+        )
+        save_registry(storage, args.registry_path, updated, expected_etag=etag)
 
-    ecr_client, *_rest = _clients(args.region)
-    from edgar_warehouse.application.ecr_rollback_registry import expected_mirror_tags
+        ecr_client, *_rest = _clients(args.region)
+        from edgar_warehouse.application.ecr_rollback_registry import (
+            expected_mirror_tags,
+        )
 
-    for tag, digest in expected_mirror_tags(updated).items():
-        image_manifest = ecr_client.batch_get_image(
-            repositoryName=args.repository, imageIds=[{"imageDigest": digest}]
-        )["images"][0]["imageManifest"]
-        ecr_client.put_image(repositoryName=args.repository, imageTag=tag, imageManifest=image_manifest)
+        for tag, digest in expected_mirror_tags(updated).items():
+            image_manifest = ecr_client.batch_get_image(
+                repositoryName=args.repository, imageIds=[{"imageDigest": digest}]
+            )["images"][0]["imageManifest"]
+            ecr_client.put_image(
+                repositoryName=args.repository,
+                imageTag=tag,
+                imageManifest=image_manifest,
+            )
 
-    print(json.dumps(updated, indent=2, sort_keys=True))
+        print(json.dumps(updated, indent=2, sort_keys=True))
+        return 0
+    finally:
+        release_lock(storage, args.lock_path)
+        _ = lock_token
+
+
+def cmd_acquire_lock(args: argparse.Namespace) -> int:
+    storage = _storage(args.registry_bucket)
+    token = acquire_lock(storage, args.lock_path, operator=args.operator)
+    print(token)
     return 0
 
 
@@ -493,12 +654,26 @@ def build_parser() -> argparse.ArgumentParser:
     plan_parser.add_argument("--output-file")
     plan_parser.set_defaults(handler=cmd_plan)
 
+    check_parser = subparsers.add_parser(
+        "check",
+        help="Read-only drift gate; exits non-zero on any fail-closed condition",
+    )
+    check_parser.add_argument("--output-file")
+    check_parser.set_defaults(handler=cmd_check)
+
     apply_parser = subparsers.add_parser("apply", help="Re-audit and apply a previously reviewed plan")
     apply_parser.add_argument("--plan-hash", required=True)
     apply_parser.add_argument("--operator", required=True)
+    apply_parser.add_argument(
+        "--task-definition-batch-size",
+        type=_positive_int,
+        default=100,
+        help="Exact-ARN retirement batch size; a full audit runs after every batch (default: 100)",
+    )
     apply_parser.set_defaults(handler=cmd_apply)
 
     record_parser = subparsers.add_parser("record-cohort", help="Advance the registry with a newly verified deployment")
+    record_parser.add_argument("--operator", required=True)
     record_parser.add_argument("--candidate-id", required=True)
     record_parser.add_argument("--verified-at", required=True)
     record_parser.add_argument("--verification-evidence", required=True)
@@ -509,6 +684,13 @@ def build_parser() -> argparse.ArgumentParser:
     record_parser.add_argument("--mdm-tag", required=True)
     record_parser.add_argument("--mdm-task-definition-arns", required=True, nargs="+")
     record_parser.set_defaults(handler=cmd_record_cohort)
+
+    acquire_lock_parser = subparsers.add_parser(
+        "acquire-lock",
+        help="Acquire the durable deployment/cleanup coordination lock",
+    )
+    acquire_lock_parser.add_argument("--operator", required=True)
+    acquire_lock_parser.set_defaults(handler=cmd_acquire_lock)
 
     release_lock_parser = subparsers.add_parser("release-lock", help="Manually clear a stale lock from a crashed apply")
     release_lock_parser.set_defaults(handler=cmd_release_lock)

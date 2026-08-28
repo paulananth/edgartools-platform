@@ -329,3 +329,24 @@ def expected_mirror_tags(registry: dict) -> dict[str, str]:
             if isinstance(role_entry, dict) and isinstance(role_entry.get("digest"), str):
                 expected[mirror_tag_for(role, slot)] = role_entry["digest"]
     return expected
+
+
+def expected_protected_tags(registry: dict) -> dict[str, str]:
+    """Return every registry tag whose live ECR resolution must match its digest.
+
+    This includes both moveable ``retain-<role>-<slot>`` mirrors and the
+    immutable ``<role>-sha-<commit>`` source tag recorded in each cohort. The
+    audit resolves both forms so a cohort cannot appear healthy after either
+    of its concrete ECR references has disappeared or moved.
+    """
+    expected = expected_mirror_tags(registry)
+    for cohort in registry.get("cohorts", []):
+        for role in ROLE_NAMES:
+            role_entry = cohort.get(role)
+            if not isinstance(role_entry, dict):
+                continue
+            immutable_tag = role_entry.get("immutable_tag")
+            digest = role_entry.get("digest")
+            if isinstance(immutable_tag, str) and isinstance(digest, str):
+                expected[immutable_tag] = digest
+    return expected

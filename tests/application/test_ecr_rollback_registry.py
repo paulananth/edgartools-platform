@@ -218,6 +218,23 @@ def test_protected_digests_from_registry_merges_provenance_for_a_digest_shared_a
 
 def test_mirror_tag_for_produces_role_scoped_tag_names():
     assert registry.mirror_tag_for("warehouse", "current") == "retain-warehouse-current"
+
+
+def test_expected_protected_tags_includes_mirrors_and_recorded_immutable_tags():
+    reg = registry.empty_registry(account_id=ACCOUNT_ID, region=REGION)
+    reg = registry.advance_registry(
+        reg,
+        candidate_id="rc-20260811-aaaaaaaaaaaa",
+        verified_at="2026-08-11T00:00:00Z",
+        verification_evidence="evidence-1",
+        warehouse=_role_entry("warehouse", "a"),
+        mdm=_role_entry("mdm", "b"),
+        updated_at="2026-08-11T00:00:01Z",
+    )
+    expected = registry.expected_protected_tags(reg)
+    assert expected["retain-warehouse-current"] == _digest("a")
+    assert expected[_tag("warehouse", "a")] == _digest("a")
+    assert expected[_tag("mdm", "b")] == _digest("b")
     assert registry.mirror_tag_for("mdm", "rollback-2") == "retain-mdm-rollback-2"
 
 

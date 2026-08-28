@@ -1237,10 +1237,48 @@ if [[ "$BUILD_MDM_IMAGE" == "auto" ]]; then
 fi
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/edgartools-aws-application-XXXXXX")"
+ROLLBACK_CLEANUP_LOCK_HELD=false
+
+rollback_cleanup_lock_cli() {
+  local subcommand="$1"
+  shift
+  local command=(
+    uv run python -m edgar_warehouse.scripts.ecr_rollback_cli
+    --region "$AWS_REGION_NAME"
+    --account-id "$ACCOUNT_ID"
+    --repository "${ECR_REPOSITORY_URL##*/}"
+    --name-prefix "$NAME_PREFIX"
+    --registry-bucket "$WAREHOUSE_BUCKET_NAME"
+    "$subcommand"
+    "$@"
+  )
+  if [[ -n "$AWS_PROFILE_NAME" ]]; then
+    (cd "$REPO_ROOT" && AWS_PROFILE="$AWS_PROFILE_NAME" "${command[@]}")
+  else
+    (cd "$REPO_ROOT" && "${command[@]}")
+  fi
+}
+
 cleanup() {
+  local exit_status=$?
+  set +e
+  if [[ "$ROLLBACK_CLEANUP_LOCK_HELD" == "true" ]]; then
+    rollback_cleanup_lock_cli release-lock >/dev/null 2>&1 \
+      || log "WARN: failed to release rollback-cleanup deployment lock; use ecr_rollback_cli release-lock after confirming no deploy or cleanup is active"
+  fi
   rm -rf "$TMP_DIR"
+  return "$exit_status"
 }
 trap cleanup EXIT
+
+# Hold the same durable lock as ecr_rollback_cli apply/record-cohort before
+# registering any new task definition. During the sequential state-machine
+# update, those exact ARNs are a real release candidate but are not all live
+# references yet; without this lock, concurrent cleanup could misclassify and
+# deregister them as stale between registration and the final workflow update.
+rollback_cleanup_lock_cli acquire-lock --operator "deploy:${ENVIRONMENT}:$$" >/dev/null
+ROLLBACK_CLEANUP_LOCK_HELD=true
+log "Acquired rollback-cleanup deployment lock"
 
 json_file() {
   mktemp "${TMP_DIR}/$1-XXXXXX.json"
