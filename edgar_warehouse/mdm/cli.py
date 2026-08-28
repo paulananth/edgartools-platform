@@ -158,6 +158,17 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         default=False,
         help="Skip Native App smoke checks in the verify step; not valid for live acceptance.",
     )
+    pub_drain.add_argument(
+        "--skip-review-publish",
+        action="store_true",
+        default=False,
+        help=(
+            "GH-251: skip publishing each drained generation's payload to the "
+            "generation-scoped Snowflake graph-review contract (mirrors "
+            "verify-graph's own --skip-review-publish). Publish failures never "
+            "fail this command's own pass/fail exit code either way."
+        ),
+    )
     pub_drain.set_defaults(handler=_logged_handler("publication-drain", _handle_publication_drain))
 
     cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
@@ -996,6 +1007,17 @@ def _handle_publication_drain(args) -> int:
                     generation_id=generation_id,
                 )
             )
+            # GH-251: every other live verify path (mdm verify-graph) publishes
+            # its payload to the generation-scoped review contract
+            # (MDM_GRAPH_REVIEW schema, examples/mdm_graph_dashboard/) --
+            # publication-drain must too, or generations verified through this
+            # coordinator would silently never show up in that dashboard. A
+            # small args-shim carries this call's own generation_id, since
+            # _publish_graph_review reads args.generation_id and the real CLI
+            # args object has no such field (each drained request has its own).
+            if not args.skip_review_publish:
+                review_args = argparse.Namespace(generation_id=generation_id)
+                _publish_graph_review(connection, settings, review_args, result)
             return result.passed
         finally:
             connection.close()

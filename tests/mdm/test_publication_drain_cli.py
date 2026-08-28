@@ -43,6 +43,7 @@ def argparse_namespace_stub(**overrides):
     args.max_requests = 1
     args.lease_seconds = None
     args.skip_native_app = True
+    args.skip_review_publish = True
     for key, value in overrides.items():
         setattr(args, key, value)
     return args
@@ -128,6 +129,37 @@ def test_a_failed_verify_exits_nonzero(monkeypatch: pytest.MonkeyPatch, capsys) 
     assert exit_code == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["drained"][0]["status"] == "failed"
+
+
+def test_successful_drain_publishes_each_generation_to_the_review_contract(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """GH-251: publication-drain must not silently diverge from
+    verify-graph's own always-publish-unless-skipped behavior (Standards-
+    axis code-review finding on Ticket 36)."""
+    _patch_snowflake_layer(monkeypatch)
+    session = _session_with_one_pending_request()
+    monkeypatch.setattr(mdm_cli, "_session", lambda: session)
+
+    published_calls: list[tuple[str, dict]] = []
+
+    def _fake_publish_graph_review(connection, database, payload, generation_id):
+        published_calls.append((generation_id, payload))
+
+    monkeypatch.setattr(
+        "edgar_warehouse.mdm.graph_review_publish.publish_graph_review",
+        _fake_publish_graph_review,
+    )
+
+    exit_code = mdm_cli._handle_publication_drain(
+        argparse_namespace_stub(skip_review_publish=False)
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    drained_generation_id = payload["drained"][0]["generation_id"]
+    assert len(published_calls) == 1
+    assert published_calls[0][0] == drained_generation_id
 
 
 def test_empty_queue_exits_zero_with_no_drained_entries(

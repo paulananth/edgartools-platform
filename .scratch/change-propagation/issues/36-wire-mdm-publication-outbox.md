@@ -153,6 +153,20 @@ fix reaching a deployed image (see CLAUDE.md's image-rebuild table:
 required), and an operator explicitly enabling the new EventBridge
 schedule per the off-by-default design above.
 
+**`/code-review` finding, fixed:** the Standards-axis pass caught that
+`verify_fn`'s Snowflake verify call silently dropped the GH-251 review-
+publish step (`_publish_graph_review`) that `mdm verify-graph` always makes
+on a successful verify — exactly the "sibling path silently diverged"
+pattern this repo's own CLAUDE.md documents repeatedly (`ShardedSilverReader
+._TABLES`, the silver-loader OPERATE+SELECT gap, etc.). Fixed:
+`verify_fn` now calls `_publish_graph_review` (gated behind a new
+`--skip-review-publish` flag, mirroring `verify-graph`'s own flag/behavior
+exactly, publish failures never fail the drain's own pass/fail result) so
+every generation verified through `publication-drain` also lands in the
+`MDM_GRAPH_REVIEW` operator dashboard, not just ones verified through the
+manual `mdm verify-graph` path. New test:
+`test_successful_drain_publishes_each_generation_to_the_review_contract`.
+
 **Test coverage added:** 29 tests in `tests/mdm/test_graph_publication_queue.py`
 (7 new `TestDrainPublicationQueue` cases: empty queue, successful
 graph_active advancement, sync_fn exception → failed, verify_fn False →
@@ -161,13 +175,14 @@ across the three transitions — plus the 22 pre-existing queue-mechanics
 tests, unmodified); 9 tests in `tests/mdm/test_run_all_step_concurrency.py`
 (3 new `TestRunAllEnqueuesPublicationRequest` cases plus the end-to-end
 chain test above, alongside the 5 pre-existing run_all concurrency tests,
-unmodified); 3 new tests in `tests/mdm/test_publication_drain_cli.py`
+unmodified); 4 tests in `tests/mdm/test_publication_drain_cli.py`
 (handler wiring: successful drain exits 0 and calls the stubbed Snowflake
 classes, a failed verify exits 1, an empty queue exits 0 with nothing
-drained); 8 tests in `tests/architecture/test_mdm_utility_state_machine.py`
-(existing suite, extended: `mdm_publication_drain` added to
-`_EXPECTED_MODES` and to the no-override-workflows check). Full repo suite
-green: 2699 passed, 4 skipped.
+drained, and the review-publish fix above); 8 tests in
+`tests/architecture/test_mdm_utility_state_machine.py` (existing suite,
+extended: `mdm_publication_drain` added to `_EXPECTED_MODES` and to the
+no-override-workflows check). Full repo suite green (re-run after the
+review-publish fix): 2701 passed, 4 skipped.
 
 **Not yet specified (surfaced here, not resolved):** whether/how the
 Ticket 08 generation-builder pipeline (`generation.py`) should eventually
