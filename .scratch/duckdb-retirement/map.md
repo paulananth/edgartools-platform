@@ -115,15 +115,22 @@ charting; new fog may surface as tickets resolve)
 
 Published 2026-08-28 via `/to-tickets`, reviewed against live code before
 publishing (found and fixed a stale premise in `dbt-gold-silver-rewiring`'s
-Ticket 07 along the way — see that map's own history). 10 vertical-slice
+Ticket 07 along the way — see that map's own history). 12 vertical-slice
 tickets under
-[`.scratch/duckdb-retirement-cutover/issues/`](../duckdb-retirement-cutover/issues/):
-Tickets 01-06 are independent "expand" slices (each provable while DuckDB is
-still live); the gold-builder-retirement slice is fulfilled by the existing
-`dbt-gold-silver-rewiring` 7-ticket chain by reference, not duplicated;
-Tickets 07-10 are the wide-refactor "contract" tail — the atomic cutover
-itself (08, indivisible per Ticket 01's rollback-atomicity answer), its
-reconciliation/GO-NO-GO gate (09), and final cleanup (10).
+[`.scratch/duckdb-retirement-cutover/issues/`](../duckdb-retirement-cutover/issues/)
+after a mid-implementation split (2026-08-28): the original single "move
+bookkeeping tables" ticket turned out to be the largest change in the whole
+set once its real interface (30 `SilverDatabase` methods, 3 cross-store SQL
+joins with no existing plan, ~15 caller files, live prod DDL) was mapped —
+split into 02 (store layer), 03 (join rewrites + caller repointing), 04
+(live provisioning, deliberately last). Tickets 01-08 are independent
+"expand" slices (each provable while DuckDB is still live, with 02→03→04
+forming their own internal expand chain); the gold-builder-retirement slice
+is fulfilled by the existing `dbt-gold-silver-rewiring` 7-ticket chain by
+reference, not duplicated; Tickets 09-12 are the wide-refactor "contract"
+tail — the atomic cutover itself (10, indivisible per Ticket 01's
+rollback-atomicity answer), its reconciliation/GO-NO-GO gate (11), and
+final cleanup (12).
 
 ## Frontier
 

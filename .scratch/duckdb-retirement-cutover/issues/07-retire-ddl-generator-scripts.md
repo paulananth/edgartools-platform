@@ -1,4 +1,4 @@
-# 05 — Retire the DuckDB-Backed DDL Generator Scripts
+# 07 — Retire the DuckDB-Backed DDL Generator Scripts
 
 **What to build:** DuckDB Retirement's Ticket 06 corrected its own premise
 first: `infra/scripts/generate_silver_landing_ddl.py` never introspected a
@@ -13,7 +13,7 @@ already hand-maintained; these two generators were the one exception.
 Future schema changes to the bookkeeping/landing tables become a direct
 hand-edit, matching every other bootstrap SQL file in this repo.
 
-This is distinct from Ticket 08's bookkeeping-table SQLAlchemy models
+This is distinct from Ticket 02's bookkeeping-table SQLAlchemy models
 (different tables — the 11 tables moving to Snowflake Postgres — different
 platform, and a genuine ORM use case there, unlike this ticket's
 ephemeral-parser use case).
