@@ -65,13 +65,18 @@ implement it.
   scope now: `tests/unit/` DuckDB-backed fixtures (broad — grep
   `SilverDatabase(` and `duckdb.connect(` across `tests/` before scoping
   Ticket 05), and `edgar_warehouse/application/warehouse_orchestrator.py`'s
-  `bootstrap-batch` CIK-sharded hydrate/publish path. **Added 2026-08-28**:
-  `edgar_warehouse/acquisition/silver_acceptance.py`, a `SilverDatabase`
-  caller that postdates this map's own charting — see
-  [Ticket 09](issues/09-account-for-silver-acceptance-in-write-path-cutover.md).
-  Check the [change-propagation map](../change-propagation/map.md)'s Domain
-  list for any other post-2026-08-16 `SilverDatabase` callers before
-  treating this list as exhaustive again.
+  `bootstrap-batch` CIK-sharded hydrate/publish path. **Added 2026-08-28,
+  resolved via [Ticket 09](issues/09-account-for-silver-acceptance-in-write-path-cutover.md)**:
+  five `SilverDatabase` callers under `edgar_warehouse/acquisition/` that
+  postdate this map's own charting (2026-08-23 to 2026-08-25, all from
+  change-propagation's map) — `silver_acceptance.py` (filing_artifact, the
+  only one wired into a live scheduled command today) plus its four dormant
+  siblings `reference_catalog_`/`company_facts_`/`submissions_`/
+  `adv_bulk_dataset_silver_acceptance.py`. All five now join
+  [Ticket 01](issues/01-decide-write-path-cutover-sequence.md)'s atomic
+  cutover bundle. Swept the change-propagation map's Decisions-so-far for
+  other post-2026-08-16 `SilverDatabase` callers as part of resolving
+  Ticket 09 — these five are the complete set as of 2026-08-28.
 - This repo has documented incidents from getting cross-stage
   sequencing/coupling assumptions wrong (CLAUDE.md's
   "INSTITUTIONAL_HOLDS/EMPLOYED_BY" and "Manifest-pipeline ownership +
@@ -99,6 +104,7 @@ implement it.
 - [Decide the Production Write-Path Cutover Sequence](issues/01-decide-write-path-cutover-sequence.md) — atomic code change, no transition-window flag: register-task-definition bakes a specific-revision ARN into each deploy's Step Functions JSON, and executions already running keep using the old revision for their whole lifecycle (confirmed AWS behavior), so mid-flight executions are isolated for free. Rollback is all-or-nothing across write path + MDM's and gold's reader cutovers together — rolling back only the write path would silently starve already-cutover readers of fresh data, not error loudly. DuckDB file disposition extends the existing `expire-noncurrent-silver-canonical-versions` lifecycle-rule precedent: bounded retention on the final current version, then archive/delete.
 
 - [Decide the DDL Generator's Non-DuckDB Schema Source](issues/06-decide-ddl-generator-schema-source.md) — corrected the ticket's own premise first: the generator never introspected a live DuckDB instance, only an ephemeral `:memory:` one seeded from the `silver_store._DDL` string, used purely as a SQL-parsing engine. A second caller with the identical pattern was found (`generate_silver_dbt_models.py`). Both retire entirely rather than gaining a successor generator — 13 of 14 Snowflake bootstrap SQL files are already hand-maintained, this generator was the one exception, and future schema changes become a direct hand-edit like everywhere else in this repo. Distinct from Ticket 08's bookkeeping-table SQLAlchemy models (different tables, different platform, genuine ORM use case there).
+- [Account for `silver_acceptance.py`'s `SilverDatabase` coupling in the write-path cutover](issues/09-account-for-silver-acceptance-in-write-path-cutover.md) — surfaced by [change-propagation's Ticket 45](../change-propagation/issues/45-coordinate-with-duckdb-retirement-cutover.md): `silver_acceptance.py` and four dormant siblings (created 2026-08-23 to 2026-08-25, all postdating this map's 2026-08-16 charting) all join [Ticket 01](issues/01-decide-write-path-cutover-sequence.md)'s atomic cutover bundle rather than being sequenced separately against change-propagation's own Ticket 27. Only `silver_acceptance.py` (filing_artifact) is wired into a live scheduled command today; the other four carry the identical coupling but no live caller yet.
 
 ## Not yet specified
 
@@ -107,14 +113,8 @@ charting; new fog may surface as tickets resolve)
 
 ## Frontier
 
-- [Account for `silver_acceptance.py`'s `SilverDatabase` coupling in the
-  write-path cutover](issues/09-account-for-silver-acceptance-in-write-path-cutover.md) —
-  open, unblocked, unclaimed. Surfaced 2026-08-28 by
-  [change-propagation's Ticket 45](../change-propagation/issues/45-coordinate-with-duckdb-retirement-cutover.md):
-  this map's plan (decided 2026-08-16) predates and never accounts for a
-  real, hard `SilverDatabase` dependency introduced by that map's own
-  Ticket 46 on 2026-08-27. **This map is not actually ready to hand off for
-  implementation until this ticket resolves.**
+(none — every ticket on this map is resolved, including Ticket 09's
+2026-08-28 gap; the map is ready to hand off for implementation)
 
 ## Out of scope
 

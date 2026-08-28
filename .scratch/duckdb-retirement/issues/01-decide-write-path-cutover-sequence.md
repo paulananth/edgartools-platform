@@ -83,6 +83,18 @@ exists; nothing new has to be built for it.
   before this map's earlier deploys), but it must mean reverting the write
   path together with MDM's and gold's reader cutovers as one unit, not
   independently.
+- **Added 2026-08-28, per [Ticket 09](09-account-for-silver-acceptance-in-write-path-cutover.md):**
+  the atomic bundle above also includes the acquisition family's
+  `*_silver_acceptance.py` modules — `edgar_warehouse/acquisition/
+  silver_acceptance.py` (filing_artifact) plus its four siblings
+  (`reference_catalog_`, `company_facts_`, `submissions_`,
+  `adv_bulk_dataset_silver_acceptance.py`) — all of which take
+  `SilverDatabase` (DuckDB) as a direct, hard-coupled parameter and must be
+  ported to the Snowflake target in the same atomic change as the write path
+  itself, not sequenced separately. These postdate this ticket's original
+  2026-08-16 answer (created 2026-08-23 to 2026-08-25 by the
+  change-propagation map) and were never accounted for here until Ticket 09
+  closed the gap.
 - **DuckDB file disposition: bounded retention, then archive/delete** —
   extends this repo's existing precedent
   (`expire-noncurrent-silver-canonical-versions`,
