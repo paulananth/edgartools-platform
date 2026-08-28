@@ -46,6 +46,35 @@ def test_merge_daily_index_filings_upsert_updates_existing_row(tmp_path) -> None
         db.close()
 
 
+def test_merge_daily_index_filings_dedupes_same_key_rows_within_one_batch(tmp_path) -> None:
+    """Regression guard for the QUALIFY -> WHERE rn = 1 rewrite (DuckDB
+    Retirement Ticket 01): a single batch can carry more than one row for
+    the same (business_date, accession_number) key (e.g. a source file with
+    a corrected duplicate line). The merge must keep only the highest-`seq`
+    (last) occurrence within that batch, matching the original row-by-row
+    loop's last-write-wins semantics -- not first-write-wins, and not both
+    rows.
+    """
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        business_date = date(2026, 7, 28)
+        accession = "0000000001-26-000001"
+        first = _row(business_date=business_date, accession=accession, form="8-K")
+        second = _row(business_date=business_date, accession=accession, form="8-K/A")
+        second["record_hash"] = "hash-second"
+
+        # Both rows share (business_date, accession_number); `second` has
+        # the higher seq (its position in this one batch) and must win.
+        assert db.merge_daily_index_filings([first, second], "run-1") == 2
+
+        rows = db.get_daily_index_filings(business_date.isoformat())
+        assert len(rows) == 1
+        assert rows[0]["form"] == "8-K/A"
+        assert rows[0]["record_hash"] == "hash-second"
+    finally:
+        db.close()
+
+
 def test_merge_daily_index_filings_batches_thousands_of_rows_in_one_transaction(tmp_path) -> None:
     """Regression guard for the unbatched-per-row bug: a real SEC daily
     index file commonly holds ~6,000 rows. Before this fix, each row was a
