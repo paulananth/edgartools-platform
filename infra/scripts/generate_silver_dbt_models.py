@@ -113,40 +113,34 @@ _CIK_ENRICHED_TABLES = {
 # found while reading silver_store.py directly, not from an earlier
 # categorization (the same discipline that already caught the
 # pipeline_run_lease/sec_guidance_fact_reject gaps in the landing generator).
-# merge_accounting_flags (silver_store.py:4066-4098) uses
+# merge_accounting_flags (silver_store.py) uses
 # COALESCE(excluded.X, sec_accounting_flag.X) for these three forensic score
-# columns specifically, so an incoming NULL never clobbers an existing score
-# -- and update_accounting_flag_scores (silver_store.py:4100-4129), a
-# separate backfill call that arrives *after* the initial merge and only
-# ever carries these three columns (every other column NULL in that landing
-# row), depends on this exact semantic to not wipe out the rest of the row.
+# columns specifically, so an incoming NULL never clobbers an existing score.
 # A plain "value from the single latest parse_sequence row" collapse would
 # silently lose the backfilled scores whenever a later, unrelated parse
 # event for the same key doesn't happen to carry them -- expressed instead
 # via LAST_VALUE(col IGNORE NULLS) OVER (... ORDER BY parse_sequence),
 # evaluated at the same QUALIFY-selected latest row.
 #
-# NOTE (mdm-ahead-of-silver map, Ticket 06 follow-up): this mechanism does
-# NOT actually protect a table's *other* columns from a thin backfill row,
-# contrary to the claim in silver_landing_export.py's
-# track_landing_accounting_flag_scores docstring -- QUALIFY row_number()=1
-# still picks exactly one winning row for every column not itself wrapped in
-# LAST_VALUE(...IGNORE NULLS), so a thin row that becomes the newest
-# parse_sequence for its key nulls out every column it doesn't carry. Verified
-# empirically (DuckDB, same QUALIFY/LAST_VALUE semantics as Snowflake) -- see
-# .scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md
-# for the reproduction and impact. sec_accounting_flag below is a live,
-# pre-existing instance of this bug, not a template to extend -- the
-# mdm_entity_id backfill sweep uses full-row re-emission instead specifically
-# because of this finding, not this dict.
-#
-# Ticket 33's is_current/valid_to/valid_from columns inherit this exact,
-# already-known bug for sec_accounting_flag: update_accounting_flag_scores's
-# thin backfill row doesn't carry them either (silver_store.py's
-# track_landing_accounting_flag_scores), so a backfill that happens to be
-# the newest parse_sequence for a key nulls them out the same way it
-# already nulls out auditor_name etc. Not a new gap introduced here, and
-# not fixed here -- same pre-existing, separately-tracked issue.
+# RESOLVED (silver-retirement-integrity, Ticket 04, moved from the original
+# standalone silver-landing-coalesce-bug map): this mechanism never actually
+# protected a table's *other* columns from a thin backfill row -- QUALIFY
+# row_number()=1 still picks exactly one winning row for every column not
+# itself wrapped in LAST_VALUE(...IGNORE NULLS), so a thin row that became
+# the newest parse_sequence for its key nulled out every column it didn't
+# carry (including Ticket 33's is_current/valid_to/valid_from trio once
+# those columns existed). Verified empirically (DuckDB, same
+# QUALIFY/LAST_VALUE semantics as Snowflake) -- see
+# .scratch/silver-retirement-integrity/issues/04-thin-backfill-nulls-other-columns.md
+# for the reproduction and impact. Fixed at the source instead of by
+# widening this dict: update_accounting_flag_scores (silver_store.py) now
+# records the complete post-update row (via `RETURNING *`) to the landing
+# export, so it never writes a thin row in the first place -- the same
+# full-row-re-emission direction the mdm_entity_id backfill sweep already
+# uses, and schema-agnostic enough to have picked up the validity-interval
+# trio automatically with no extra code change. This dict stays scoped to
+# the three genuinely partial-write columns merge_accounting_flags itself
+# needs coalesced; it is not a general-purpose thin-row workaround.
 _COALESCE_PRESERVING_COLUMNS = {
     "sec_accounting_flag": {"beneish_m_score", "altman_z_score", "piotroski_f_score"},
 }

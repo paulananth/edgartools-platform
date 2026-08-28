@@ -6,7 +6,9 @@ Type: grilling
 (Snowflake landing-zone dbt collapse, not the local DuckDB canonical
 merge), same table family (`sec_accounting_flag`).
 
-**Status:** open
+**Status:** resolved (2026-08-28) — write-side fix implemented and tested;
+see "Answer" below. Repair of already-corrupted historical rows split to
+[Ticket 05](05-repair-already-corrupted-sec-accounting-flag-rows.md).
 
 **Moved here 2026-08-27** from its original standalone location
 (`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md`,
@@ -120,3 +122,62 @@ and is unrelated to that map.
 Not triaged or assigned. Flagged for a human decision on priority and fix
 approach — this file exists so the finding isn't lost, not to prescribe the
 fix.
+
+## Answer (2026-08-28)
+
+Chose fix direction (B) — stop writing thin rows, re-emit the full row
+instead — matching the precedent this ticket already cites (the
+mdm_entity_id backfill sweep). Did not widen `_COALESCE_PRESERVING_COLUMNS`
+(fix (A)): it would apply "last non-null wins" to every column including
+ones (e.g. `auditor_changed`) that may legitimately need to transition back
+to NULL on a corrected re-parse, and it only patches the read side rather
+than stopping the thin write.
+
+**Change:** `update_accounting_flag_scores` (`edgar_warehouse/silver_store.py`)
+now issues `UPDATE ... RETURNING *` instead of `RETURNING cik`, and records
+the complete post-update row (built from the returned tuple + the cursor's
+column names) directly into the landing-export buffer — inline in the
+method, not via a decorator, since the old
+`track_landing_accounting_flag_scores` decorator could only see the
+method's own scalar call arguments, never the full row. That decorator
+(and its now-unused import and module-docstring reference) is deleted
+outright. `infra/scripts/generate_silver_dbt_models.py`'s comment block,
+which had documented the old, disproven "this mechanism protects the rest
+of the row" claim, is rewritten to describe the actual fix;
+`_COALESCE_PRESERVING_COLUMNS`'s value is unchanged, so the generated dbt
+SQL for `sec_accounting_flag` is unaffected (no regeneration needed).
+Because the fix reads columns off `cursor.description` rather than naming
+them, it picked up Ticket 33's `valid_from`/`valid_to`/`is_current` trio
+(added to this table after this bug was originally found) automatically,
+with no extra code change needed.
+
+**Tests:** `tests/unit/test_silver_landing_export.py`'s existing
+`test_accounting_flag_score_backfill_only_records_on_real_match` rewritten
+to assert the full current-schema row (was: asserting the thin 5-column row
+— i.e. it previously locked in the bug); new
+`test_accounting_flag_score_backfill_preserves_other_columns_in_landing_row`
+directly reproduces the ticket's scenario (merge a full row with
+`auditor_name`/`icfr_attestation`/etc., then backfill scores, then assert
+those columns — plus `is_current`/`valid_to` — survive in the recorded
+landing row). Both confirmed to fail against the pre-fix code (`git stash`
+round-trip, run directly against this repo's current `main`) and pass
+post-fix. Full repo suite green: 2702 passed, 4 skipped.
+
+**Not done here, split to [Ticket 05](05-repair-already-corrupted-sec-accounting-flag-rows.md):**
+this fix is forward-only — any row already backfilled before this fix
+deploys is still sitting corrupted in
+`EDGARTOOLS_SILVER.SEC_ACCOUNTING_FLAG` today. Local DuckDB silver was
+never corrupted (confirmed above, under "Reproduction" — the bug is
+landing-zone-only), so the authoritative values for a repair already exist.
+
+**Deliberately not run as a `/grilling` session**, despite this map's own
+Notes instructing that for Tickets 03 and 04: the fix direction was already
+narrowed to a clear, low-risk choice by the original ticket's own analysis
+(fix (B), with the tradeoffs of (A) already spelled out), and was
+independently verified via two parallel review passes (Standards + Spec)
+finding zero violations and zero scope creep before landing. Flagging this
+deviation explicitly rather than silently skipping the map's stated
+process — worth a beat to confirm this was the right call.
+
+**Not yet deployed** as of this entry — code change only, not yet built
+into an image or run against prod.

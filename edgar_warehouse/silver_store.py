@@ -14,7 +14,6 @@ import pyarrow as pa
 
 from edgar_warehouse.serving.silver_landing_export import (
     LandingExportBuffer,
-    track_landing_accounting_flag_scores,
     track_landing_row,
     track_landing_rows,
 )
@@ -4528,7 +4527,6 @@ class SilverDatabase:
 
         return self._finalize_retirement("sec_accounting_flag", self._ACCOUNTING_FLAG_ROW_COLUMNS, retired)
 
-    @track_landing_accounting_flag_scores
     def update_accounting_flag_scores(
         self,
         cik: int,
@@ -4544,8 +4542,21 @@ class SilverDatabase:
         real row" from "matched nothing" -- the caller's success counter
         silently counted the latter as a win. RETURNING makes the distinction
         explicit rather than relying on "didn't raise" as a proxy for success.
+
+        Records the *complete* post-update row to the landing export, not
+        just the three backfilled score columns -- silver-retirement-integrity
+        Ticket 04 found that the dbt collapse for this table only
+        coalesce-preserves those three columns, so a thin row (only the
+        columns this call happens to touch) would win the per-key `QUALIFY`
+        once it had the highest `parse_sequence` and silently null out every
+        other column (`auditor_name`, `fiscal_year`, `period_end`,
+        `valid_from`, `valid_to`, `is_current`, etc.) in
+        `EDGARTOOLS_SILVER.SEC_ACCOUNTING_FLAG`. `RETURNING *` gets the full
+        row for free from the same UPDATE (including whatever columns exist
+        today, e.g. Ticket 33's validity-interval trio, with no separate
+        column list to keep in sync), so this costs no extra round trip.
         """
-        matched = self._conn.execute(
+        cursor = self._conn.execute(
             """
             UPDATE sec_accounting_flag
             SET beneish_m_score   = COALESCE(?, beneish_m_score),
@@ -4553,12 +4564,19 @@ class SilverDatabase:
                 piotroski_f_score = COALESCE(?, piotroski_f_score),
                 ingested_at       = now()
             WHERE cik = ? AND accession_number = ?
-            RETURNING cik
+            RETURNING *
             """,
             [beneish_m_score, altman_z_score, piotroski_f_score,
              int(cik), accession_number],
-        ).fetchall()
-        return len(matched) > 0
+        )
+        matched = cursor.fetchall()
+        if not matched:
+            return False
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None:
+            columns = [desc[0] for desc in cursor.description]
+            landing_export.record("sec_accounting_flag", [dict(zip(columns, matched[0]))])
+        return True
 
     @track_landing_rows("sec_executive_record")
     def merge_executive_records(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
