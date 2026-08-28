@@ -19,10 +19,53 @@ Keep agent work AWS-focused. Do not add or revive non-AWS deployment paths, regi
 
 Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
 
+- **HARD RULE: never commit directly to `main`, for any reason, including a
+  quick fix or a single-file doc change.** The moment you pick up a ticket or
+  issue — before writing any code, before the first edit — create your own
+  `<runtime>/<topic>` branch (in your own worktree per the rule below) and
+  commit there. Confirmed live 2026-08-28: a Codex session started and
+  finished real implementation work for ecs-cost-sizing Ticket 08 (rollback
+  registry, CLI, deploy script, tests) as a local, unpushed commit sitting
+  directly on `main` in the shared working directory — no branch at all, not
+  even a wrongly-prefixed one. It was only caught because a Claude session
+  happened to notice local `main` was one commit ahead of `origin/main`
+  before pushing anything; had that push happened first, it would have put
+  unreviewed work straight on `main` with no branch, no PR, and no review
+  gate. Recovered by branching off that commit
+  (`codex/ecs-cost-sizing-revision-retirement-gates`), pushing it, then
+  hard-resetting local `main` back to `origin/main`. If you ever find
+  yourself with uncommitted or committed changes on `main` for ticket/issue
+  work, stop, branch off `HEAD` immediately, and reset `main` back to
+  `origin/main` before doing anything else.
+- **HARD RULE: no two runtimes may ever commit to the same branch.** Each
+  runtime works on its own dedicated branch. If you find yourself about to
+  commit and `git log -1` shows a commit authored by another runtime's
+  current work that you did not expect, STOP — do not commit — and ask the
+  user how to proceed (e.g. branch off, rebase onto a new branch, or hand
+  off).
+- **HARD RULE: use a dedicated git worktree per active runtime session, not
+  a bare checkout in one shared working directory, whenever more than one
+  runtime (or more than one session of the same runtime) may be active at
+  the same time.** A bare shared checkout only has *one* branch checked out
+  at once — a second session switching that checkout disrupts a first
+  session's in-progress work even when nothing is actually lost (git
+  preserves the underlying commits/stashes either way). Create your own
+  worktree (`git worktree add ../<repo>-<topic> <branch>`) and work there
+  instead. If you notice your working directory's checked-out branch changed
+  unexpectedly mid-session, do not assume anything was lost — check
+  `git branch --show-current`, `git reflog`, and that your own
+  commits/stash still resolve by name before taking any recovery action, and
+  push your own branch to `origin` as soon as it's in a good state so it no
+  longer depends on the shared working directory's state.
+- Branch naming convention: prefix branches with the owning runtime, e.g.
+  `claude/<topic>` or `codex/<topic>`. Before starting work or committing,
+  run `git branch --show-current` — if the current branch is prefixed for a
+  *different* runtime (or is a shared branch like `main`/`codex/main-sync`
+  that another runtime is actively using), create/check out your own branch
+  (in your own worktree) before making any commits.
 - Treat the current Codex work as protected unless the user explicitly hands it off.
-- Prefer separate git worktrees or branches for concurrent Claude and Codex work.
 - Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
-- Before editing, run `git status --short` and inspect `.planning/active-workstream` when present.
+- Before editing, run `git status --short` and `git log -1` and inspect `.planning/active-workstream` when present.
 - Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
