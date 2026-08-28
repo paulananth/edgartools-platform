@@ -24,6 +24,18 @@ _Avoid_: Granting write/ownership privileges, treating "dashboard" and "report" 
 An immutable, random-token-scoped warehouse object written before ETag-guarded promotion to a canonical silver key; it is operational scratch data, not bronze evidence or a release input after successful promotion.
 _Avoid_: Canonical silver, bronze archive, release evidence
 
+**Canonical Silver**:
+The current objects at `warehouse/silver/sec/silver.duckdb` and `warehouse/silver/sec/shards/shard-{0-3}.duckdb` — the live typed Runtime System of Engagement. Current versions of these keys are not reclaim candidates.
+_Avoid_: Staged Warehouse Object, identity-refresh run snapshots, historical gold `run_id=` copies
+
+**Joined Live Key**:
+The S3 object key after `StorageLocation.join()` prefixes `WAREHOUSE_STORAGE_ROOT` (already ending in `/warehouse`) onto a relative write path. Lifecycle filters match this key string, not the relative path.
+_Avoid_: Using `silverstage/` as an S3 lifecycle prefix, treating the Python relative path as the object key
+
+**VersionId Reclaim**:
+Permanent removal of billed bytes on a versioned bucket by deleting specific `Key` + `VersionId` pairs. Key-only delete and `aws s3 rm` leave payloads billed behind delete markers.
+_Avoid_: Recursive `s3 rm`, Terraform one-shot deletes, unversioned DELETE
+
 **Runtime System of Engagement**:
 Silver warehouse state (typed tables after parse) is the authoritative published business state against which processors compute Lifecycle Diffs; the Change Ledger decides acquisition and processing eligibility and records completion.
 _Avoid_: Silver as processing ledger, Bronze as business state, edgartools local disk cache as shared state, agent queries against DuckDB silver
