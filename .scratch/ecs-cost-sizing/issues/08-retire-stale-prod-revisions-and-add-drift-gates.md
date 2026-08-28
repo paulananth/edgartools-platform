@@ -55,3 +55,14 @@ Python compilation, shell syntax, Ruff, and `git diff --check` pass. The broader
 unit and architecture suite passes with 1,457 tests, 4 skips, and 35 subtests;
 the final full repository suite passes with 2,731 tests, 4 skips, and 35
 subtests.
+
+Continuation after the 2026-08-28 rebase found and closed three fail-closed
+edge gaps. ECS enumeration once again queries both `RUNNING` and `STOPPED`
+desired states, retains tasks whose actual state is still transitional, and
+turns every `DescribeTasks.failures` entry into an audit error. Cohort recording
+now verifies STS account identity and both immutable source tags before
+mutation, publishes all mirror tags before committing the authoritative
+ETag-guarded registry, and leaves the prior registry recoverably authoritative
+if mirror publication fails. Focused coverage increased to 79 passing tests;
+the continuation's branch-wide verification and review are recorded in its
+follow-up commit.

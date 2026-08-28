@@ -214,6 +214,255 @@ def test_gather_live_tasks_fails_closed_when_the_scoped_cluster_is_missing():
     assert counts["ecs_clusters_matched"] == 0
 
 
+def test_gather_live_tasks_includes_transitioning_tasks_and_reports_describe_failures():
+    cluster_arn = "arn:aws:ecs:us-east-1:1:cluster/edgartools-prod-warehouse"
+    running_arn = f"{cluster_arn}/running"
+    transitioning_arn = f"{cluster_arn}/transitioning"
+    stopped_arn = f"{cluster_arn}/stopped"
+
+    class FakeEcs:
+        def get_paginator(self, name):
+            if name == "list_clusters":
+                return _Paginator([{"clusterArns": [cluster_arn]}])
+            if name == "list_services":
+                return _Paginator([{"serviceArns": []}])
+            if name == "list_tasks":
+                class TaskPaginator:
+                    def paginate(self, **kwargs):
+                        assert kwargs["cluster"] == cluster_arn
+                        if kwargs["desiredStatus"] == "RUNNING":
+                            return iter([{"taskArns": [running_arn]}])
+                        assert kwargs["desiredStatus"] == "STOPPED"
+                        return iter([{"taskArns": [transitioning_arn, stopped_arn]}])
+
+                return TaskPaginator()
+            raise AssertionError(name)
+
+        def describe_tasks(self, *, cluster, tasks):
+            assert cluster == cluster_arn
+            assert tasks == sorted([running_arn, transitioning_arn, stopped_arn])
+            return {
+                "tasks": [
+                    {
+                        "taskArn": running_arn,
+                        "taskDefinitionArn": "arn:aws:ecs:us-east-1:1:task-definition/prod:1",
+                        "lastStatus": "RUNNING",
+                        "containers": [
+                            {
+                                "image": "1.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:"
+                                + "a" * 64,
+                                "imageDigest": "sha256:" + "a" * 64,
+                            }
+                        ],
+                    },
+                    {
+                        "taskArn": transitioning_arn,
+                        "taskDefinitionArn": "arn:aws:ecs:us-east-1:1:task-definition/prod:2",
+                        "lastStatus": "DEPROVISIONING",
+                        "containers": [
+                            {
+                                "image": "1.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:"
+                                + "b" * 64,
+                                "imageDigest": "sha256:" + "b" * 64,
+                            }
+                        ],
+                    },
+                    {
+                        "taskArn": stopped_arn,
+                        "taskDefinitionArn": "arn:aws:ecs:us-east-1:1:task-definition/prod:3",
+                        "lastStatus": "STOPPED",
+                        "containers": [],
+                    },
+                ],
+                "failures": [{"arn": "missing-task", "reason": "MISSING"}],
+            }
+
+    live_tasks, services, errors, counts = cli.gather_ecs_clusters_tasks(
+        FakeEcs(), "edgartools-prod-warehouse"
+    )
+
+    assert [task["task_arn"] for task in live_tasks] == [
+        running_arn,
+        transitioning_arn,
+    ]
+    assert services == []
+    assert errors == ["ECS DescribeTasks failure for 'missing-task': MISSING"]
+    assert counts["ecs_list_tasks_pages"] == 2
+    assert counts["ecs_describe_tasks_failures"] == 1
+
+
+def _record_cohort_args():
+    return cli.build_parser().parse_args(
+        [
+            "--region", "us-east-1",
+            "--account-id", "690839588395",
+            "--repository", "edgartools-prod-images",
+            "--name-prefix", "edgartools-prod",
+            "--registry-bucket", "edgartools-prod-warehouse-690839588395",
+            "record-cohort",
+            "--operator", "paul",
+            "--candidate-id", "rc-20260811-abc123abc123",
+            "--verified-at", "2026-08-11T00:00:00Z",
+            "--verification-evidence", "evidence-ref",
+            "--warehouse-digest", "sha256:" + "a" * 64,
+            "--warehouse-tag", "warehouse-sha-abc123abc123",
+            "--warehouse-task-definition-arns",
+            "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-warehouse:1",
+            "--mdm-digest", "sha256:" + "b" * 64,
+            "--mdm-tag", "mdm-sha-abc123abc123",
+            "--mdm-task-definition-arns",
+            "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm:1",
+        ]
+    )
+
+
+def test_record_cohort_verifies_identity_and_publishes_mirrors_before_registry(monkeypatch):
+    events: list[str] = []
+
+    class MissingVersion:
+        exists = False
+        etag = None
+
+    class FakeStorage:
+        def read_object_version(self, _relative_path):
+            events.append("registry_read")
+            return MissingVersion()
+
+        def write_immutable_bytes(self, _relative_path, _payload):
+            events.append("lock_acquire")
+            return "lock"
+
+        def write_staged_bytes(self, _relative_path, _payload):
+            events.append("registry_stage")
+            return "staged-registry"
+
+        def promote_staged(self, _staged, _relative_path, *, expected_etag):
+            assert expected_etag is None
+            events.append("registry_promote")
+
+        def delete_object(self, _relative_path):
+            events.append("lock_release")
+
+    class FakeSts:
+        def get_caller_identity(self):
+            events.append("identity_check")
+            return {"Account": "690839588395"}
+
+    class FakeEcr:
+        class exceptions:
+            class ImageNotFoundException(Exception):
+                pass
+
+        def describe_images(self, *, repositoryName, imageIds):
+            assert repositoryName == "edgartools-prod-images"
+            tag = imageIds[0]["imageTag"]
+            events.append(f"source_tag:{tag}")
+            digest = "sha256:" + ("a" if tag.startswith("warehouse-") else "b") * 64
+            return {"imageDetails": [{"imageDigest": digest}]}
+
+        def batch_get_image(self, *, repositoryName, imageIds):
+            assert repositoryName == "edgartools-prod-images"
+            digest = imageIds[0]["imageDigest"]
+            events.append(f"manifest:{digest}")
+            return {"images": [{"imageManifest": f"manifest-for-{digest}"}]}
+
+        def put_image(self, *, repositoryName, imageTag, imageManifest):
+            assert repositoryName == "edgartools-prod-images"
+            assert imageManifest.startswith("manifest-for-sha256:")
+            events.append(f"mirror:{imageTag}")
+
+    storage = FakeStorage()
+    monkeypatch.setattr(cli, "_storage", lambda _bucket: storage)
+    monkeypatch.setattr(
+        cli,
+        "_clients",
+        lambda _region: (FakeEcr(), object(), object(), FakeSts()),
+    )
+
+    assert cli.cmd_record_cohort(_record_cohort_args()) == 0
+
+    assert events.index("identity_check") < events.index("lock_acquire")
+    mirror_indexes = [index for index, event in enumerate(events) if event.startswith("mirror:")]
+    assert mirror_indexes
+    assert max(mirror_indexes) < events.index("registry_stage")
+    assert events.index("registry_promote") < events.index("lock_release")
+
+
+def test_record_cohort_rejects_the_wrong_aws_account_before_locking(monkeypatch):
+    class FakeSts:
+        def get_caller_identity(self):
+            return {"Account": "111111111111"}
+
+    monkeypatch.setattr(
+        cli,
+        "_clients",
+        lambda _region: (object(), object(), object(), FakeSts()),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_storage",
+        lambda _bucket: (_ for _ in ()).throw(AssertionError("storage must not be touched")),
+    )
+
+    assert cli.cmd_record_cohort(_record_cohort_args()) == 2
+
+
+def test_record_cohort_rejects_a_mismatched_source_tag_before_registry_commit(monkeypatch):
+    events: list[str] = []
+
+    class MissingVersion:
+        exists = False
+        etag = None
+
+    class FakeStorage:
+        def read_object_version(self, _relative_path):
+            events.append("registry_read")
+            return MissingVersion()
+
+        def write_immutable_bytes(self, _relative_path, _payload):
+            events.append("lock_acquire")
+            return "lock"
+
+        def write_staged_bytes(self, _relative_path, _payload):
+            events.append("registry_stage")
+            return "staged-registry"
+
+        def promote_staged(self, _staged, _relative_path, *, expected_etag):
+            events.append("registry_promote")
+
+        def delete_object(self, _relative_path):
+            events.append("lock_release")
+
+    class FakeSts:
+        def get_caller_identity(self):
+            return {"Account": "690839588395"}
+
+    class FakeEcr:
+        class exceptions:
+            class ImageNotFoundException(Exception):
+                pass
+
+        def describe_images(self, *, repositoryName, imageIds):
+            return {"imageDetails": [{"imageDigest": "sha256:" + "f" * 64}]}
+
+        def batch_get_image(self, **_kwargs):
+            raise AssertionError("mirror publication must not start")
+
+        def put_image(self, **_kwargs):
+            raise AssertionError("mirror publication must not start")
+
+    storage = FakeStorage()
+    monkeypatch.setattr(cli, "_storage", lambda _bucket: storage)
+    monkeypatch.setattr(
+        cli,
+        "_clients",
+        lambda _region: (FakeEcr(), object(), object(), FakeSts()),
+    )
+
+    assert cli.cmd_record_cohort(_record_cohort_args()) == 2
+    assert events == ["lock_acquire", "registry_read", "lock_release"]
+
+
 def test_build_parser_wires_all_three_subcommands():
     parser = cli.build_parser()
     args = parser.parse_args(

@@ -503,6 +503,13 @@ its temporarily unreferenced candidate ARNs cannot be retired concurrently. A
 crashed operation leaves the lock in place deliberately; confirm that no deploy,
 cohort update, or cleanup remains active before using `release-lock`.
 
+`record-cohort` verifies the live AWS account and both immutable source tags
+before changing release state. It publishes every movable rollback mirror tag
+first and commits the ETag-guarded authoritative registry last. A partial mirror
+failure therefore leaves the prior registry authoritative and cleanup blocked;
+rerun the same command after correcting the ECR failure rather than editing the
+registry manually.
+
 Image publication may happen before deployment (including through the
 standalone publisher), so the current cohort's `verified_at` is also the release
 candidate watermark: any immutable runtime image pushed after it is retained
@@ -515,6 +522,9 @@ referenced task-definition ARN to be active and part of the registry's current
 release cohort, verifies that each current task definition resolves to its
 recorded role digest, and reconciles live ECS tasks, rollback mirror tags, each
 cohort's recorded immutable source tag, and its exact repository.
+Task enumeration queries both `RUNNING` and `STOPPED` desired states, retains
+every task whose actual state is still transitional, and fails closed on any
+`DescribeTasks` response-level failure.
 
 ```bash
 AWS_PROFILE=sec_platform_deployer \

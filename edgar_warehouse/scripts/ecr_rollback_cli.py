@@ -74,6 +74,7 @@ from edgar_warehouse.application.ecr_rollback_audit import (
 from edgar_warehouse.application.ecr_rollback_registry import (
     advance_registry,
     empty_registry,
+    expected_mirror_tags,
     expected_protected_tags,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
@@ -311,6 +312,7 @@ def gather_ecs_clusters_tasks(
     task_pages = 0
     service_pages = 0
     described_batches = 0
+    describe_failures = 0
 
     for cluster_arn in cluster_arns:
         for service_page in ecs_client.get_paginator("list_services").paginate(cluster=cluster_arn):
@@ -319,11 +321,12 @@ def gather_ecs_clusters_tasks(
                 services.append({"cluster": cluster_arn, "service_arn": service_arn})
 
         task_arns: set[str] = set()
-        for task_page in ecs_client.get_paginator("list_tasks").paginate(
-            cluster=cluster_arn, desiredStatus="RUNNING"
-        ):
-            task_pages += 1
-            task_arns.update(task_page.get("taskArns", []))
+        for desired_status in ("RUNNING", "STOPPED"):
+            for task_page in ecs_client.get_paginator("list_tasks").paginate(
+                cluster=cluster_arn, desiredStatus=desired_status
+            ):
+                task_pages += 1
+                task_arns.update(task_page.get("taskArns", []))
 
         task_arn_list = sorted(task_arns)
         for i in range(0, len(task_arn_list), 100):
@@ -332,6 +335,12 @@ def gather_ecs_clusters_tasks(
                 continue
             described_batches += 1
             described = ecs_client.describe_tasks(cluster=cluster_arn, tasks=batch)
+            for failure in described.get("failures") or []:
+                describe_failures += 1
+                errors.append(
+                    "ECS DescribeTasks failure for "
+                    f"{failure.get('arn')!r}: {failure.get('reason', 'unknown reason')}"
+                )
             for task in described.get("tasks", []):
                 if task.get("lastStatus") in ("STOPPED", "DELETED"):
                     continue
@@ -358,6 +367,7 @@ def gather_ecs_clusters_tasks(
             "ecs_list_tasks_pages": task_pages,
             "ecs_list_services_pages": service_pages,
             "ecs_describe_tasks_batches": described_batches,
+            "ecs_describe_tasks_failures": describe_failures,
         },
     )
 
@@ -575,6 +585,16 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 
 def cmd_record_cohort(args: argparse.Namespace) -> int:
+    ecr_client, _ecs_client, _sfn_client, sts_client = _clients(args.region)
+    identity_errors = verify_identity(sts_client, expected_account_id=args.account_id)
+    if identity_errors:
+        print(
+            "ABORT: AWS identity does not match the requested cohort registry:\n"
+            + json.dumps(identity_errors, indent=2),
+            file=sys.stderr,
+        )
+        return 2
+
     storage = _storage(args.registry_bucket)
     lock_token = acquire_lock(storage, args.lock_path, operator=args.operator)
     try:
@@ -600,22 +620,53 @@ def cmd_record_cohort(args: argparse.Namespace) -> int:
             },
             updated_at=_now_iso(),
         )
-        save_registry(storage, args.registry_path, updated, expected_etag=etag)
 
-        ecr_client, *_rest = _clients(args.region)
-        from edgar_warehouse.application.ecr_rollback_registry import (
-            expected_mirror_tags,
+        source_tags = {
+            args.warehouse_tag: args.warehouse_digest,
+            args.mdm_tag: args.mdm_digest,
+        }
+        resolved_source_tags = resolve_mirror_tags(
+            ecr_client,
+            args.repository,
+            list(source_tags),
         )
+        source_tag_mismatches = [
+            f"immutable source tag {tag!r} resolves to {resolved_source_tags.get(tag)!r}, "
+            f"expected {digest!r}"
+            for tag, digest in source_tags.items()
+            if resolved_source_tags.get(tag) != digest
+        ]
+        if source_tag_mismatches:
+            print(
+                "ABORT: cohort source tags are missing or resolve to the wrong digest:\n"
+                + json.dumps(source_tag_mismatches, indent=2),
+                file=sys.stderr,
+            )
+            return 2
 
         for tag, digest in expected_mirror_tags(updated).items():
-            image_manifest = ecr_client.batch_get_image(
+            response = ecr_client.batch_get_image(
                 repositoryName=args.repository, imageIds=[{"imageDigest": digest}]
-            )["images"][0]["imageManifest"]
+            )
+            failures = response.get("failures") or []
+            images = response.get("images") or []
+            if failures or len(images) != 1 or not images[0].get("imageManifest"):
+                raise RuntimeError(
+                    f"could not resolve exactly one manifest for mirror tag {tag!r} "
+                    f"and digest {digest!r}: failures={failures!r}, images={len(images)}"
+                )
+            image_manifest = images[0]["imageManifest"]
             ecr_client.put_image(
                 repositoryName=args.repository,
                 imageTag=tag,
                 imageManifest=image_manifest,
             )
+
+        # The registry is authoritative, so publish every fallible mirror tag
+        # first and commit the ETag-guarded registry last. If a mirror update or
+        # the final registry promotion fails, the next audit retains everything;
+        # rerunning this command can safely converge from the old registry.
+        save_registry(storage, args.registry_path, updated, expected_etag=etag)
 
         print(json.dumps(updated, indent=2, sort_keys=True))
         return 0
