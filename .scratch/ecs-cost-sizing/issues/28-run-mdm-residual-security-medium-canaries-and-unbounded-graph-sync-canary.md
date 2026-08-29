@@ -94,6 +94,9 @@ the current-image run can proceed before the application branch is deployed.
   `limit_per_type` were null, and `capped_below_available=false`.
 - Duration: 32.190 seconds command time, 87.209 seconds image-pull-to-stop
   billable time, 128.626 seconds Step Functions end to end.
+- On-demand Linux/x86 compute estimate: $0.002848384 using 88 rounded billed
+  seconds and the 2026-08-29 us-east-1 AWS Fargate rates captured in the
+  evidence file.
 - Task-bound Container Insights (two one-minute samples): CPU max/p95
   19.38%/18.41%; memory max/p95 1.50%/1.43%; zero time in the 70/80/90%
   bands.
@@ -117,7 +120,8 @@ failed after all three `MdmVerify` attempts returned the same correctness
 result: the unchanged production `MdmSync` command capped each relationship
 type at 200,000, while active `MANAGES_FUND` contained 563,638 rows. The
 candidate generation was therefore short by exactly 363,638 edges and
-`capped_below_available=true`.
+`capped_below_available=true`. Its failed/retried compute estimate was
+$0.148992521; it is not a successful-output cost sample.
 
 This preflight does not prove or reject the medium profile: the completeness
 failure is deterministic in the source orchestration and would be identical

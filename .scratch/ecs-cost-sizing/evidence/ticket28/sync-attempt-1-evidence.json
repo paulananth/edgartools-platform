@@ -1,5 +1,6 @@
 {
-  "captured_at": "2026-08-29T18:05:17.450774+00:00",
+  "captured_at": "2026-08-29T18:29:35.664523+00:00",
+  "estimated_compute_cost_usd": 0.002848384,
   "execution": {
     "arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-mdm-sync-graph-large:ticket28-sync-1-20260829T132646Z",
     "duration_seconds": 128.626,
@@ -13,6 +14,16 @@
     "failures": [],
     "passed": true,
     "warnings": []
+  },
+  "fargate_pricing": {
+    "additional_ephemeral_storage_gib": 0,
+    "captured_at": "2026-08-29",
+    "cpu_architecture": "x86_64",
+    "memory_gib_hour_usd": 0.004446,
+    "operating_system": "Linux",
+    "region": "us-east-1",
+    "source": "https://aws.amazon.com/fargate/pricing/",
+    "vcpu_hour_usd": 0.0404784
   },
   "launch_contract": {
     "attempt": 1,
@@ -114,15 +125,17 @@
         }
       ],
       "billable_duration_seconds": 87.209,
+      "billed_duration_seconds": 88,
       "cpu_reserved": 2048,
       "created_at": 1788010014232,
+      "estimated_compute_cost_usd": 0.002848384,
       "exit_code": 0,
       "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
       "memory_reserved_mib": 8192,
       "pull_started_at": 1788010051638,
       "reason": null,
-      "requested_memory_gib_hours": 0.1937977777777778,
-      "requested_vcpu_hours": 0.04844944444444445,
+      "requested_memory_gib_hours": 0.19555555555555557,
+      "requested_vcpu_hours": 0.04888888888888889,
       "retry_ordinal": 1,
       "started_at": 1788010068893,
       "state": "Ticket28RunUnboundedSync",
