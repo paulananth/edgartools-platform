@@ -7,11 +7,8 @@ This SM must populate those without re-running full company MDM.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
-
-import pytest
 
 DEPLOY = Path("infra/scripts/deploy-aws-application.sh")
 
@@ -68,7 +65,7 @@ def test_residual_holds_graph_full_sync_and_candidate_verify() -> None:
     assert "verify-graph', '--skip-native-app'" in src or (
         "verify-graph" in src and "--skip-native-app" in src
     )
-    assert "limit-per-type" in src
+    assert "limit-per-type" not in src
 
 
 def test_residual_holds_graph_uses_mdm_large_for_heavy_stages() -> None:

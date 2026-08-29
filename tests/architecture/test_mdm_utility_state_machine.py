@@ -83,7 +83,7 @@ def definition() -> dict:
         )
 
         result = subprocess.run(
-            ["bash", driver.as_posix()], capture_output=True, text=True, timeout=30
+            ["bash", driver.as_posix()], capture_output=True, text=True, timeout=30, check=False
         )
         if result.returncode != 0:
             raise AssertionError(
@@ -165,6 +165,44 @@ def test_limit_per_type_override_preserved_for_sync_graph_only(definition: dict)
     # No other workflow gets a limit-per-type wrap.
     for mode in _EXPECTED_MODES - {"mdm_sync_graph"}:
         assert f"{mode}_HasLimitPerTypeOverride" not in states
+
+
+def test_sync_graph_zero_limit_routes_to_unbounded_command(definition: dict) -> None:
+    """Ticket 28: the operator's limit=0 contract must omit --limit at the CLI."""
+    states = definition["States"]
+    choice = states["mdm_sync_graph_HasUnboundedLimitOverride"]
+    assert choice["Type"] == "Choice"
+    assert choice["Choices"][0]["Next"] == (
+        "mdm_sync_graph_RunMdmTaskUnboundedWithRelationshipType"
+    )
+    assert choice["Choices"][0]["And"] == [
+        {"Variable": "$.limit", "IsPresent": True},
+        {"Variable": "$.limit", "IsNumeric": True},
+        {"Variable": "$.limit", "NumericEquals": 0},
+        {"Variable": "$.relationship_type", "IsPresent": True},
+        {"Variable": "$.relationship_type", "IsString": True},
+    ]
+    assert choice["Choices"][1] == {
+        "And": [
+            {"Variable": "$.limit", "IsPresent": True},
+            {"Variable": "$.limit", "IsNumeric": True},
+            {"Variable": "$.limit", "NumericEquals": 0},
+        ],
+        "Next": "mdm_sync_graph_RunMdmTaskUnbounded",
+    }
+    task = states["mdm_sync_graph_RunMdmTaskUnbounded"]
+    command = task["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert command == "States.Array('mdm', 'sync-graph')"
+    filtered_task = states["mdm_sync_graph_RunMdmTaskUnboundedWithRelationshipType"]
+    filtered_command = filtered_task["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert filtered_command == (
+        "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)"
+    )
+
+    # limit_per_type remains the outermost, higher-specificity override.
+    assert states["mdm_sync_graph_HasLimitPerTypeOverride"]["Default"] == (
+        "mdm_sync_graph_HasUnboundedLimitOverride"
+    )
 
 
 def test_no_override_workflows_route_straight_to_a_single_task_state(definition: dict) -> None:
