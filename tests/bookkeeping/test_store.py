@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import update
+from sqlalchemy.orm import Session
+
+from edgar_warehouse.bookkeeping.models import PipelineRun
 from edgar_warehouse.bookkeeping.store import BookkeepingStore
 
 
@@ -685,3 +689,224 @@ class TestTableCounts:
         assert len(counts) == 11
         assert counts["sec_company_sync_state"] == 1
         assert counts["sec_reconcile_finding"] == 0
+
+
+# -- get_all_company_sync_states (Ticket 03) -----------------------------------
+
+
+class TestGetAllCompanySyncStates:
+    def test_returns_every_row_no_filter(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
+        store.upsert_company_sync_state({"cik": 2, "tracking_status": "paused"})
+        store.upsert_company_sync_state({"cik": 3, "tracking_status": "bootstrap_pending"})
+        rows = store.get_all_company_sync_states()
+        by_cik = {row["cik"]: row["tracking_status"] for row in rows}
+        assert by_cik == {1: "active", 2: "paused", 3: "bootstrap_pending"}
+
+    def test_returns_empty_list_when_no_rows(self, store: BookkeepingStore) -> None:
+        assert store.get_all_company_sync_states() == []
+
+    def test_ordered_by_cik(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_state({"cik": 3, "tracking_status": "active"})
+        store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
+        store.upsert_company_sync_state({"cik": 2, "tracking_status": "active"})
+        rows = store.get_all_company_sync_states()
+        assert [row["cik"] for row in rows] == [1, 2, 3]
+
+
+# -- get_recent_successful_pipeline_runs (Ticket 03) ---------------------------
+
+
+class TestGetRecentSuccessfulPipelineRuns:
+    def _start(self, store: BookkeepingStore, run_id: str, *, started_at: datetime, status: str = "running") -> None:
+        store.start_pipeline_run(
+            {
+                "pipeline_run_id": run_id,
+                "command_name": "daily_incremental",
+                "runtime_mode": "bronze_capture",
+                "started_at": started_at,
+                "status": status,
+            }
+        )
+
+    def test_filters_to_succeeded_and_ok_status_only(self, store: BookkeepingStore) -> None:
+        self._start(store, "pr-succeeded", started_at=_now())
+        store.complete_pipeline_run(
+            "pr-succeeded", status="succeeded", writes=[], raw_writes=[],
+            metrics={"silver_table_counts": {"sec_company": 5}},
+        )
+        self._start(store, "pr-ok", started_at=_now())
+        store.complete_pipeline_run(
+            "pr-ok", status="ok", writes=[], raw_writes=[],
+            metrics={"silver_table_counts": {"sec_company": 6}},
+        )
+        self._start(store, "pr-failed", started_at=_now())
+        store.complete_pipeline_run(
+            "pr-failed", status="failed", writes=[], raw_writes=[],
+            metrics={"silver_table_counts": {"sec_company": 7}},
+        )
+        rows = store.get_recent_successful_pipeline_runs()
+        run_ids = {row["pipeline_run_id"] for row in rows}
+        assert run_ids == {"pr-succeeded", "pr-ok"}
+
+    def test_excludes_null_metrics_json(self, store: BookkeepingStore) -> None:
+        self._start(store, "pr-no-metrics", started_at=_now())
+        store.complete_pipeline_run(
+            "pr-no-metrics", status="succeeded", writes=[], raw_writes=[], metrics=None
+        )
+        rows = store.get_recent_successful_pipeline_runs()
+        assert rows == []
+
+    def _force_completed_at(self, session: Session, run_id: str, completed_at: datetime | None) -> None:
+        # complete_pipeline_run always sets completed_at and metrics_json
+        # together, so "metrics_json set, completed_at NULL (or tied with
+        # another row)" can't arise through the store's own write API today
+        # -- but the raw SQL this method replaces defensively handles both
+        # (ORDER BY completed_at DESC NULLS LAST), so construct these states
+        # directly via the shared session fixture (same underlying Session
+        # as `store`, per conftest.py) to prove the read side still honors
+        # them, without reaching into BookkeepingStore's private _session.
+        session.execute(
+            update(PipelineRun).where(PipelineRun.pipeline_run_id == run_id).values(completed_at=completed_at)
+        )
+
+    def test_null_completed_at_sorts_last(self, store: BookkeepingStore, session: Session) -> None:
+        self._start(store, "pr-null-completed", started_at=_now())
+        store.complete_pipeline_run(
+            "pr-null-completed", status="succeeded", writes=[], raw_writes=[],
+            metrics={"silver_table_counts": {}},
+        )
+        self._force_completed_at(session, "pr-null-completed", None)
+
+        self._start(store, "pr-with-completed", started_at=_now())
+        store.complete_pipeline_run(
+            "pr-with-completed", status="succeeded", writes=[], raw_writes=[],
+            metrics={"silver_table_counts": {}},
+        )
+
+        rows = store.get_recent_successful_pipeline_runs()
+        assert [row["pipeline_run_id"] for row in rows] == ["pr-with-completed", "pr-null-completed"]
+
+    def test_started_at_desc_breaks_ties_when_completed_at_matches(
+        self, store: BookkeepingStore, session: Session
+    ) -> None:
+        tied_completed_at = _now() + timedelta(hours=1)
+        self._start(store, "pr-earlier", started_at=_now())
+        store.complete_pipeline_run(
+            "pr-earlier", status="succeeded", writes=[], raw_writes=[], metrics={"silver_table_counts": {}}
+        )
+        self._force_completed_at(session, "pr-earlier", tied_completed_at)
+
+        self._start(store, "pr-later", started_at=_now() + timedelta(minutes=5))
+        store.complete_pipeline_run(
+            "pr-later", status="succeeded", writes=[], raw_writes=[], metrics={"silver_table_counts": {}}
+        )
+        self._force_completed_at(session, "pr-later", tied_completed_at)
+
+        rows = store.get_recent_successful_pipeline_runs()
+        assert [row["pipeline_run_id"] for row in rows] == ["pr-later", "pr-earlier"]
+
+    def test_limit_is_respected(self, store: BookkeepingStore) -> None:
+        for i in range(15):
+            run_id = f"pr-{i}"
+            self._start(store, run_id, started_at=_now() + timedelta(minutes=i))
+            store.complete_pipeline_run(
+                run_id, status="succeeded", writes=[], raw_writes=[],
+                metrics={"silver_table_counts": {}},
+            )
+        rows = store.get_recent_successful_pipeline_runs(limit=5)
+        assert len(rows) == 5
+
+    def test_default_limit_is_10(self, store: BookkeepingStore) -> None:
+        for i in range(15):
+            run_id = f"pr-{i}"
+            self._start(store, run_id, started_at=_now() + timedelta(minutes=i))
+            store.complete_pipeline_run(
+                run_id, status="succeeded", writes=[], raw_writes=[],
+                metrics={"silver_table_counts": {}},
+            )
+        rows = store.get_recent_successful_pipeline_runs()
+        assert len(rows) == 10
+
+
+# -- has_successful_parse_run (Ticket 03) --------------------------------------
+
+
+class TestHasSuccessfulParseRun:
+    def _start_and_complete(
+        self,
+        store: BookkeepingStore,
+        *,
+        parse_run_id: str,
+        accession_number: str,
+        parser_name: str,
+        parser_version: str,
+        status: str,
+    ) -> None:
+        store.start_parse_run(
+            {
+                "parse_run_id": parse_run_id,
+                "accession_number": accession_number,
+                "parser_name": parser_name,
+                "parser_version": parser_version,
+                "target_form_family": "3-4-5",
+            }
+        )
+        store.complete_parse_run(parse_run_id, status=status)
+
+    def test_true_when_succeeded_row_matches_all_three_keys(self, store: BookkeepingStore) -> None:
+        self._start_and_complete(
+            store,
+            parse_run_id="p1",
+            accession_number="0001",
+            parser_name="ownership",
+            parser_version="1.0",
+            status="succeeded",
+        )
+        assert store.has_successful_parse_run(
+            accession_number="0001", parser_name="ownership", parser_version="1.0"
+        ) is True
+
+    def test_false_when_status_is_not_succeeded(self, store: BookkeepingStore) -> None:
+        self._start_and_complete(
+            store,
+            parse_run_id="p1",
+            accession_number="0001",
+            parser_name="ownership",
+            parser_version="1.0",
+            status="failed",
+        )
+        assert store.has_successful_parse_run(
+            accession_number="0001", parser_name="ownership", parser_version="1.0"
+        ) is False
+
+    def test_false_when_accession_number_differs(self, store: BookkeepingStore) -> None:
+        self._start_and_complete(
+            store,
+            parse_run_id="p1",
+            accession_number="0001",
+            parser_name="ownership",
+            parser_version="1.0",
+            status="succeeded",
+        )
+        assert store.has_successful_parse_run(
+            accession_number="0002", parser_name="ownership", parser_version="1.0"
+        ) is False
+
+    def test_false_when_parser_version_differs(self, store: BookkeepingStore) -> None:
+        self._start_and_complete(
+            store,
+            parse_run_id="p1",
+            accession_number="0001",
+            parser_name="ownership",
+            parser_version="1.0",
+            status="succeeded",
+        )
+        assert store.has_successful_parse_run(
+            accession_number="0001", parser_name="ownership", parser_version="2.0"
+        ) is False
+
+    def test_false_when_no_rows_at_all(self, store: BookkeepingStore) -> None:
+        assert store.has_successful_parse_run(
+            accession_number="0001", parser_name="ownership", parser_version="1.0"
+        ) is False

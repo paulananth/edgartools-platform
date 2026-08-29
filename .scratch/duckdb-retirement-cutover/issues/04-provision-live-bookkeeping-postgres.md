@@ -3,11 +3,23 @@
 **Split from the original Ticket 02 during implementation (2026-08-28)** —
 see [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)'s own
 split note. This is the live, hard-to-reverse infra step, deliberately last:
-run the provisioning tooling against real prod Snowflake, only after
-[Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)'s code is
-tested and reviewed — not before. This matches the order every "applied
-live to prod" entry in CLAUDE.md's history follows: script written and
-tested first, live execution as its own confirmed, later action.
+run the provisioning tooling against real prod Snowflake, only after the
+full caller-repointing chain's code is tested and reviewed — not before.
+This matches the order every "applied live to prod" entry in CLAUDE.md's
+history follows: script written and tested first, live execution as its
+own confirmed, later action.
+
+**Note (2026-08-29):** the caller-repointing ticket this depends on split
+further, same day, into [Ticket 03](
+03-rewrite-cross-store-joins-and-repoint-callers.md) (new store methods +
+instantiation convention), [Ticket 13](13-rewrite-cross-store-join-sites.md)
+(the join sites), [Ticket 14](
+14-repoint-warehouse-orchestrator-bookkeeping-callers.md)
+(`warehouse_orchestrator.py`), and [Ticket 15](
+15-repoint-remaining-bookkeeping-callers.md) (everything else) — this
+ticket's live-execution half is blocked on the whole chain, not just
+Ticket 03 alone. Left the rest of this file's prose referring to "Ticket
+03" as shorthand for that full chain rather than rewriting every mention.
 
 **Split again, same day, before the live-run half started:** while
 resuming this ticket, the tooling it assumed already existed (a single
@@ -96,9 +108,13 @@ touched the live account yet.
 
 **Blocked by (live-execution half only):**
 [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md),
-[Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)
+[Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md),
+[Ticket 13](13-rewrite-cross-store-join-sites.md),
+[Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md),
+[Ticket 15](15-repoint-remaining-bookkeeping-callers.md)
 
-**Status:** tooling built; live execution still blocked on Ticket 03
+**Status:** tooling built; live execution still blocked on the Ticket
+03/13/14/15 caller-repointing chain
 
 - [x] Provisioning tooling built: dedicated `bookkeeping_app` Postgres role
       (independent of MDM's `application` credential), `bootstrap-

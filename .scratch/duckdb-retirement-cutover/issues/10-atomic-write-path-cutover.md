@@ -15,7 +15,10 @@ switch over together:
 - The 11 operational bookkeeping tables (checkpoints, sync-state, leases,
   run audit trail) — repointed at the live Postgres store from
   [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)/
-  [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md), actually
+  [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)/
+  [Ticket 13](13-rewrite-cross-store-join-sites.md)/
+  [Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md)/
+  [Ticket 15](15-repoint-remaining-bookkeeping-callers.md), actually
   provisioned live by [Ticket 04](04-provision-live-bookkeeping-postgres.md)
 - MDM's reader ([Ticket 05](05-cutover-mdm-reader-to-snowflake.md))
 - Gold's Python builders retiring in favor of dbt `ref()`ing dbt silver
@@ -41,6 +44,9 @@ decided on.
 [Ticket 01](01-rewrite-daily-index-checkpoint-qualify-clause.md),
 [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md),
 [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md),
+[Ticket 13](13-rewrite-cross-store-join-sites.md),
+[Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md),
+[Ticket 15](15-repoint-remaining-bookkeeping-callers.md),
 [Ticket 04](04-provision-live-bookkeeping-postgres.md),
 [Ticket 05](05-cutover-mdm-reader-to-snowflake.md),
 [Ticket 06](06-retire-bootstrap-batch-sharding.md),

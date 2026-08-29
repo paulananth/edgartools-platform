@@ -3,6 +3,22 @@
 Mirrors edgar_warehouse.mdm.database's skeleton (Base, connection-settings-
 from-env, session factory) -- not its models. See that module for the
 precedent this deliberately follows.
+
+Instantiation convention for application code (DuckDB Retirement Cutover
+Ticket 03): this module deliberately exposes only the bare get_engine/
+get_session primitives, no shared factory -- matching edgar_warehouse.mdm.
+database's own convention, which also has none at this level. Every module
+consuming BookkeepingStore should define its own tiny, module-local
+one-liner, mirroring edgar_warehouse/mdm/cli.py's existing
+`def _session() -> Session: return get_session(get_engine())`:
+
+    def _bookkeeping_store() -> BookkeepingStore:
+        return BookkeepingStore(get_session(get_engine()))
+
+Not a new shared cross-module utility, not a DI container -- each
+consuming module gets its own minimal wrapper, the same way MDM's own CLI
+handlers each define their own `_session()` rather than importing a shared
+one.
 """
 from __future__ import annotations
 

@@ -11,9 +11,20 @@ methods across 11 tables, 3 cross-store SQL joins with no existing plan, and
   no live DDL.
 - [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md) — rewrite
   the 3 cross-store join sites and repoint every caller at the new store.
+  **Further split during Ticket 03's own implementation (2026-08-29)** into
+  Ticket 03 (new store methods + instantiation convention),
+  [Ticket 13](13-rewrite-cross-store-join-sites.md) (the join sites),
+  [Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md)
+  (`warehouse_orchestrator.py`'s 50+ call sites), and
+  [Ticket 15](15-repoint-remaining-bookkeeping-callers.md) (everything
+  else) — see Ticket 03's own current body for why. References below to
+  "Ticket 03" for the join sites / `get_table_counts` merge logic
+  specifically now mean Ticket 13 / Ticket 14 respectively; left as
+  originally written elsewhere in this file since the caller-repointing
+  scope as a whole still traces back to the original Ticket 03 split.
 - [Ticket 04](04-provision-live-bookkeeping-postgres.md) — actually run the
-  provisioning script against live prod Snowflake, last, once 02 and 03 are
-  both tested and reviewed.
+  provisioning script against live prod Snowflake, last, once 02 and the
+  full Ticket 03/13/14/15 caller-repointing chain are tested and reviewed.
 
 **What to build:** DuckDB Retirement's Ticket 08 (wayfinder decision)
 decided these 11 tables — checkpoints, sync-state, leases, and the run audit
@@ -92,8 +103,8 @@ JSON-serialization logic each one carries.
   original 3-join mapping: it joins `sec_company_sync_state` (in scope)
   against `sec_company`/`sec_company_ticker` (SEC-content tables staying in
   DuckDB) in one SQL statement. Same failure shape as the 3 joins
-  [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md) already
-  owns — added there, not built here.
+  [Ticket 13](13-rewrite-cross-store-join-sites.md) owns — added there, not
+  built here.
 
 **1 method needs a narrowed version, not a literal port:**
 - `get_table_counts` — the real method spans the *entire* DuckDB database
@@ -104,7 +115,8 @@ JSON-serialization logic each one carries.
   introspection needed). The original method's full multi-store contract —
   merging this store's counts with DuckDB's remaining content-table counts
   for the one real caller (`warehouse_orchestrator.py:665`) — is
-  [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)'s job.
+  [Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md)'s
+  job.
 
 Also port the trivial `_json_text` static helper (`json.dumps(value,
 default=str, sort_keys=True)`) if columns like `pipeline_run.arguments_json`
