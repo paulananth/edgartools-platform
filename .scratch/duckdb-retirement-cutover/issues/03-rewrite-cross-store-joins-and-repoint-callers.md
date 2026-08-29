@@ -1,130 +1,132 @@
-# 03 — Rewrite Cross-Store Joins and Repoint Every Caller
+# 03 — Add the BookkeepingStore Methods Callers Need, and an Instantiation Convention
 
-**Split from the original Ticket 02 during implementation (2026-08-28)** —
-see [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)'s own
-split note for the full context. This ticket is the part the original
-ticket's "repoint every reader/writer" line silently assumed would be
-mechanical. It isn't, for 3 of the ~15 call sites.
+**Renarrowed during implementation (2026-08-29).** Originally scoped as
+"rewrite cross-store joins and repoint every caller" — a full-repo recon
+pass (before any code was written; see the caller inventory in
+[Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md)'s own
+body for the detail) found that scope was itself under-scoped the same way
+the original Ticket 02 was: `warehouse_orchestrator.py` alone has 50+ call
+sites across many independently-scoped functions, one caller
+(`scripts/build_relationship_release_manifest.py`) needs a Postgres
+dependency it's never had before, and at least 3 callers need
+`BookkeepingStore` methods Ticket 02's 34-method surface doesn't provide.
+Split into four, in dependency order:
 
-**The real blocker, found while implementing: 4 call sites run a single
-SQL statement joining a real SEC-content table against
-`sec_company_sync_state` in one query.** (Originally found as 3; a 4th —
-`get_company_identity_ciks`, entirely inside `silver_store.py` itself, not
-a caller file — surfaced during [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)'s
-own method-surface extraction pass and is added here.) Once that table
-lives in a separate Postgres instance, none of these can execute as
-written — cross-database SQL joins don't work that way.
-
-1. `edgar_warehouse/mdm/coverage.py:51` —
-   `SELECT COUNT(DISTINCT c.cik) FROM sec_company c JOIN
-   sec_company_sync_state s ON s.cik = c.cik WHERE s.tracking_status =
-   'active'`, run through `silver_reader.fetch(sql)`.
-2. `edgar_warehouse/mdm/cli.py:1451` and `:1492` — two near-identical
-   fallback queries: `sec_company_ticker t LEFT JOIN sec_company_sync_state
-   s ON s.cik = t.cik`, run via `reader._conn.execute(query, params)`
-   directly against a `ShardedSilverReader`.
-3. `edgar_warehouse/mdm/pipeline.py:440` — `SELECT cik, tracking_status
-   FROM sec_company_sync_state`, currently fetched separately via
-   `self.silver.fetch(...)` and already joined against `sec_company` rows
-   in Python (mirrors the existing `ticker_by_cik = _first_per_key(...)`
-   pattern a few lines above it) — the closest thing to a template for how
-   the other two sites should be rewritten.
-4. `edgar_warehouse/silver_store.py`'s own `get_company_identity_ciks`
-   (currently ~line 3802) — `SELECT DISTINCT sync.cik FROM
-   sec_company_sync_state AS sync LEFT JOIN sec_company AS company ON
-   company.cik = sync.cik WHERE (LOWER(TRIM(COALESCE(company.entity_type,
-   ''))) = 'operating' OR EXISTS (SELECT 1 FROM sec_company_ticker AS
-   ticker WHERE ticker.cik = sync.cik AND ticker.source_name =
-   'company_tickers')) {status_clause} ORDER BY sync.cik`. Deliberately
-   **not** built in the new store at all (see Ticket 02's own exclusion
-   note) — its whole replacement shape (fetch `sync.cik`/`tracking_status`
-   from the new store, fetch `entity_type`/ticker-existence from DuckDB,
-   join in Python) is designed here, not there.
-
-**Important correction to how this was first read:** `pipeline.py`'s
-existing `try`/`except` around this fetch, with its comment about
-`MDM_SILVER_READ_TARGET=snowflake` degrading `tracking_by_cik` to empty, is
-**not** a working solution to copy — it's a documented silent
-correctness-loss path (every company resolves with `tracking = None`).
-Confirmed this degrade path is not live in prod today:
-`MDM_SILVER_READ_TARGET` defaults to `"duckdb"` (`mdm/cli.py:698`), and
-flipping it to `snowflake` is explicitly gated behind a not-yet-passed
-correctness gate elsewhere in that file. But this ticket's own change makes
-the *same* failure mode live under the **default** `duckdb` target too,
-not just the not-yet-flipped `snowflake` one — `sec_company_sync_state` is
-leaving DuckDB's connection entirely, regardless of which target MDM reads
-from. Do not preserve or extend the silent-`None`-degrade pattern for these
-3 sites; replace it with a real two-step fetch (query the new bookkeeping
-store separately, join in Python), which the existing `_first_per_key`
-usage in `pipeline.py` already shows is the intended shape here.
+- **This ticket (03)** — the two things every other sub-ticket needs before
+  it can start: the 3 missing `BookkeepingStore` methods, and a settled
+  instantiation convention for how application code (not tests) gets a
+  store instance. No caller repointing here.
+- [Ticket 13](13-rewrite-cross-store-join-sites.md) — rewrite the 4
+  cross-store join sites (the original ticket's actual stated focus) plus
+  `mdm/pipeline.py::run_companies`'s repoint (same file family, same
+  fetch-then-Python-join pattern, needs this ticket's new
+  `get_all_company_sync_states` method).
+- [Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md) —
+  repoint `warehouse_orchestrator.py`'s 50+ call sites, isolated on its own
+  given the file's size and review risk, plus the `get_table_counts`
+  merge-shape decision.
+- [Ticket 15](15-repoint-remaining-bookkeeping-callers.md) — repoint every
+  other caller: the genuinely-mechanical ones, the two that need new store
+  methods plus raw-SQL rewrites, `migrate_silver_shards.py`'s own review,
+  and `build_relationship_release_manifest.py`'s net-new Postgres
+  dependency. Ops scripts (`scripts/ops/check-neo4j-e2e.py` and siblings)
+  stay deferred to [Ticket 08](08-build-table-specific-reconciliation-tooling.md)
+  per an earlier operator decision — not this ticket's scope.
 
 **What to build:**
 
-- Rewrite all 3 sites as: fetch the content-table rows from silver as
-  today, separately fetch `tracking_status` (or whatever the join needs)
-  from [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)'s
-  new store, join the two result sets in Python (dict keyed by `cik`,
-  matching the `_first_per_key` pattern already in `pipeline.py`).
-- For `mdm/coverage.py`'s count query specifically: this needs a set
-  intersection (distinct CIKs present in both `sec_company` and an
-  "active" bookkeeping lookup) rather than a row-level join — implement as
-  two count/fetch calls plus a Python set operation, not a fabricated SQL
-  join string.
-- Every other caller of the 11 tables (`silver_protection.py`,
-  `mdm/silver_parity.py`, `silver_support/sharded_reader.py`,
-  `application/warehouse_orchestrator.py`, `application/commands/
-  verify_pipeline_run.py`, `application/commands/validate_data_quality.py`,
-  `application/commands/migrate_silver_shards.py`,
-  `infrastructure/dataset_path_catalog.py`, `infrastructure/silver_once.py`,
-  `acquisition/discovery.py`, `application/workflows/
-  drive_filing_discovery.py`, `scripts/build_relationship_release_manifest.py`
-  — confirmed via grep, re-verify this list is still complete before
-  starting) — repointed to call the new store's methods instead of
-  `SilverDatabase`'s. Most of these call `SilverDatabase`'s public methods
-  by name already (not raw SQL), so this should be close to mechanical
-  given Ticket 02 gave the new store class matching method signatures;
-  confirm each site actually is method-based before assuming it's
-  mechanical, the way the 3 join sites above turned out not to be.
-- `silver_protection.py`'s `PROTECTED_TABLE_REGISTRY`/
-  `EXCLUDED_OPERATIONAL_TABLES` handling for these 11 tables needs
-  re-checked: once they're not in `SilverDatabase`'s own DuckDB connection
-  at all, does the merge-conflict machinery in that file still reference
-  them meaningfully, or does their registry entry become dead code this
-  ticket should remove? Decide by reading `silver_protection.py`'s actual
-  usage, not by assumption.
-- `get_table_counts`: [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)
-  builds only a narrow, 11-table version. The real method's original
-  contract — one dict covering every silver table, bookkeeping and content
-  mixed — has exactly one external caller
-  (`application/warehouse_orchestrator.py:665`,
-  `silver_table_counts = db.get_table_counts()`, feeding the
-  `bronze_silver_completed` diagnostic event). Rewrite that one call site to
-  merge DuckDB's own (now content-table-only) counts with the new store's
-  11-table counts into a single combined dict, preserving the original
-  external contract for that one caller.
+1. **Three new `BookkeepingStore` methods**, each replacing a raw-SQL query
+   a real caller runs today that none of Ticket 02's 34 ported methods
+   cover:
+   - `get_all_company_sync_states(self) -> list[dict[str, Any]]` — every
+     `sec_company_sync_state` row (at least `cik`, `tracking_status`), no
+     filter. Mirrors `get_gold_manifest(run_id=None)`'s existing
+     "no filter → return everything" shape, the closest precedent already
+     in the store. Replaces: `mdm/pipeline.py::run_companies`'s
+     `SELECT cik, tracking_status FROM sec_company_sync_state` (no WHERE),
+     and both fallback branches in `mdm/cli.py::_seed_mdm_from_silver`
+     (needs `cik → tracking_status`, defaulting missing entries to
+     `'active'`, for potentially every CIK in `sec_company_ticker`) —
+     landed here since it's shared by 3 callers, but *used* by
+     [Ticket 13](13-rewrite-cross-store-join-sites.md), not this one.
+   - `get_recent_successful_pipeline_runs(self, limit: int = 10) ->
+     list[dict[str, Any]]` — `pipeline_run` rows with
+     `status IN ('succeeded', 'ok')` and non-null `metrics_json`, ordered
+     `completed_at DESC NULLS LAST, started_at DESC`, limited. Replaces
+     `application/commands/validate_data_quality.py`'s
+     `_latest_previous_table_counts` raw SQL — used by
+     [Ticket 15](15-repoint-remaining-bookkeeping-callers.md).
+   - `has_successful_parse_run(self, *, accession_number: str,
+     parser_name: str, parser_version: str) -> bool` — a succeeded
+     `sec_parse_run` row keyed by `(accession_number, parser_name,
+     parser_version)`, not by `parse_run_id` (the existing `get_parse_run`'s
+     only key). Replaces `infrastructure/silver_once.py`'s
+     `has_successful_ownership_parse` raw SQL — used by
+     [Ticket 15](15-repoint-remaining-bookkeeping-callers.md).
+
+   Before finalizing, re-verify no other caller needs a 4th/5th method —
+   the recon pass that found these three covered the original ticket's
+   explicit target list plus a fresh whole-repo grep, but did not
+   exhaustively trace every one of `warehouse_orchestrator.py`'s 50+ call
+   sites' exact query shapes; a name match against Ticket 02's existing 34
+   methods isn't a semantics guarantee.
+
+2. **An instantiation convention for application code.** `edgar_warehouse/
+   bookkeeping/database.py` (Ticket 02) exposes only `get_engine`/
+   `get_session` primitives, no shared factory — deliberately, matching
+   `edgar_warehouse/mdm/database.py`'s own convention. MDM's own precedent
+   for how *application* code (not tests) gets a session is a tiny,
+   module-local, one-line helper repeated per consuming module
+   (`edgar_warehouse/mdm/cli.py:582-584`: `def _session() -> Session: return
+   get_session(get_engine())`) — not a shared cross-module utility. Adopt
+   the identical pattern here: a `_bookkeeping_store()`-style one-liner
+   defined once per consuming module, not a new shared factory added to
+   `edgar_warehouse/bookkeeping/`. **Resolved as:** the convention is now
+   documented directly in `bookkeeping/database.py`'s own module docstring
+   (the durable, discoverable home for it — not just this ticket file), so
+   [Ticket 13](13-rewrite-cross-store-join-sites.md)/[14](
+   14-repoint-warehouse-orchestrator-bookkeeping-callers.md)/[15](
+   15-repoint-remaining-bookkeeping-callers.md) find it there rather than
+   each independently re-deciding it.
 
 **Blocked by:** [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)
 
-**Status:** blocked
+**Status:** resolved
 
-- [ ] All 4 cross-store join sites are rewritten to a two-step
-      fetch-then-Python-join, with a test proving each produces the same
-      result as the original single-SQL join against a fixture with real
-      overlapping and non-overlapping CIKs
-- [ ] The silent-`None`-degrade pattern in `mdm/pipeline.py` is removed for
-      `sec_company_sync_state` specifically, replaced by a real fetch from
-      the new store (confirm no other table's degrade path in this file is
-      accidentally touched)
-- [ ] Every remaining caller from the list above is repointed at the new
-      store; grep confirms zero references to any of the 11 table names
-      inside `edgar_warehouse/silver_store.py`'s own connection scope for
-      these tables (the table names may still appear in the new store's
-      own module, which is expected)
-- [ ] `silver_protection.py`'s registry entries for these 11 tables are
-      either confirmed still meaningful or removed as dead code, with the
-      reasoning stated in the commit, not left ambiguous
-- [ ] `warehouse_orchestrator.py:665`'s `get_table_counts()` call produces a
-      combined dict (DuckDB content-table counts + the new store's 11
-      bookkeeping-table counts) matching the original method's full
-      table coverage
-- [ ] Full test suite green
+- [x] `get_all_company_sync_states`, `get_recent_successful_pipeline_runs`,
+      and `has_successful_parse_run` exist on `BookkeepingStore`
+      (`edgar_warehouse/bookkeeping/store.py`), each with tests proving it
+      matches the exact raw-SQL query shape it replaces (ordering,
+      filtering, default-value behavior) — 14 new tests in
+      `tests/bookkeeping/test_store.py`, including two (`NULLS LAST`
+      ordering, `started_at DESC` tiebreak) that construct their fixture
+      state via direct session manipulation since `complete_pipeline_run`
+      always sets `completed_at`/`metrics_json` together and can't produce
+      those edge cases through the store's own write API
+- [x] Final re-check found no other caller needing a 4th/5th new method: a
+      repo-wide grep for `.fetch(...)` calls with raw SQL against all 11
+      bookkeeping table names, plus a targeted check of
+      `warehouse_orchestrator.py`'s 50+ call sites for any raw SQL
+
+**Known, accepted gap (three-axis code review, Standards axis):** the
+`NULLS LAST` ordering test (`test_null_completed_at_sorts_last`) runs only
+against SQLite (the whole `tests/bookkeeping/` suite's only backend today,
+per [Ticket 02](02-move-bookkeeping-tables-to-snowflake-postgres.md)'s own
+accepted testing scope) — SQLite emulates `NULLS LAST` via a `CASE`
+expression, while Postgres supports it natively, so this test proves the
+emulation path, not the real dialect's SQL. Consistent with every other
+`BookkeepingStore` method (none have Postgres integration coverage yet,
+unlike MDM's `tests/integration/test_source_registry_postgres.py`) — not a
+new gap this ticket introduces, and not fixed here since building
+Postgres integration testing for the whole store is out of this ticket's
+scope. Worth a follow-up before [Ticket 04](
+04-provision-live-bookkeeping-postgres.md)'s live cutover actually depends
+on this ordering behaving correctly against real Postgres.
+      (none found — confirmed all method-call-based, as the original recon
+      pass suspected but didn't verify), turned up only the 3 already-known
+      sites this ticket's 3 new methods cover
+- [x] The `_bookkeeping_store()` instantiation convention is documented in
+      `edgar_warehouse/bookkeeping/database.py`'s module docstring (the
+      durable home for it, not just this ticket file) so downstream
+      tickets apply it uniformly rather than each inventing their own shape
+- [x] Full test suite green

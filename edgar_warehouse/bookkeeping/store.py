@@ -418,6 +418,24 @@ class BookkeepingStore:
         row = self._session.get(SecParseRun, parse_run_id)
         return self._to_dict(row) if row else None
 
+    def has_successful_parse_run(
+        self, *, accession_number: str, parser_name: str, parser_version: str
+    ) -> bool:
+        """True when a succeeded sec_parse_run row matches this natural key.
+
+        Ticket 03: infrastructure/silver_once.py::has_successful_ownership_parse
+        looks up by (accession_number, parser_name, parser_version), not by
+        parse_run_id (get_parse_run's only key) -- no existing method covers
+        this lookup shape.
+        """
+        stmt = select(SecParseRun.parse_run_id).where(
+            SecParseRun.accession_number == accession_number,
+            SecParseRun.parser_name == parser_name,
+            SecParseRun.parser_version == parser_version,
+            SecParseRun.status == "succeeded",
+        ).limit(1)
+        return self._session.execute(stmt).first() is not None
+
     # -- sec_sync_run -----------------------------------------------------------
 
     def start_sync_run(self, row: dict[str, Any]) -> None:
@@ -531,7 +549,7 @@ class BookkeepingStore:
         status: str,
         writes: list[dict[str, Any]],
         raw_writes: list[dict[str, Any]],
-        metrics: dict[str, Any],
+        metrics: Optional[dict[str, Any]],
         error_message: Optional[str] = None,
     ) -> None:
         completed_at = datetime.now(timezone.utc)
@@ -567,6 +585,32 @@ class BookkeepingStore:
     def get_pipeline_run(self, pipeline_run_id: str) -> Optional[dict[str, Any]]:
         row = self._session.get(PipelineRun, pipeline_run_id)
         return self._to_dict(row) if row else None
+
+    def get_recent_successful_pipeline_runs(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Recent succeeded/ok pipeline_run rows with metrics, most-recent-first.
+
+        Ticket 03: replaces application/commands/validate_data_quality.py's
+        _latest_previous_table_counts raw SQL: `SELECT pipeline_run_id,
+        metrics_json FROM pipeline_run WHERE status IN ('succeeded', 'ok')
+        AND metrics_json IS NOT NULL ORDER BY completed_at DESC NULLS LAST,
+        started_at DESC LIMIT 10`. completed_at and metrics_json are always
+        set together by complete_pipeline_run, so a NULL completed_at with
+        non-NULL metrics_json can't arise through this store's own write
+        path today -- the NULLS LAST ordering (and the started_at DESC
+        tiebreak) is kept anyway to match the original query's defensive
+        handling of that state exactly.
+        """
+        stmt = (
+            select(PipelineRun)
+            .where(
+                PipelineRun.status.in_(("succeeded", "ok")),
+                PipelineRun.metrics_json.is_not(None),
+            )
+            .order_by(PipelineRun.completed_at.desc().nulls_last(), PipelineRun.started_at.desc())
+            .limit(limit)
+        )
+        rows = self._session.execute(stmt).scalars().all()
+        return [self._to_dict(r) for r in rows]
 
     # -- gold_manifest --------------------------------------------------------
 
@@ -778,6 +822,19 @@ class BookkeepingStore:
             stmt = stmt.where(SecCompanySyncState.tracking_status.in_(tokens))
         stmt = stmt.order_by(SecCompanySyncState.cik)
         return [row[0] for row in self._session.execute(stmt).all()]
+
+    def get_all_company_sync_states(self) -> list[dict[str, Any]]:
+        """Every sec_company_sync_state row, unfiltered.
+
+        Ticket 03: callers doing a bulk cik -> tracking_status lookup
+        (mdm/pipeline.py::run_companies, mdm/cli.py::_seed_mdm_from_silver's
+        fallback branches) previously ran an unfiltered
+        `SELECT cik, tracking_status FROM sec_company_sync_state` directly
+        against DuckDB -- no existing method returns every row.
+        """
+        stmt = select(SecCompanySyncState).order_by(SecCompanySyncState.cik)
+        rows = self._session.execute(stmt).scalars().all()
+        return [self._to_dict(r) for r in rows]
 
     def get_ciks_with_bronze(self, tracking_status_filter: str = "all") -> list[dict[str, Any]]:
         key_expr = literal("cik:").concat(cast(SecCompanySyncState.cik, String))
