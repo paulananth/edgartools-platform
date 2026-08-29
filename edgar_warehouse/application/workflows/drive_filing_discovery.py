@@ -303,6 +303,7 @@ def run_filing_artifact_gated_capture_for_business_date(
     db: Any,
     business_date: str,
     run_id: str,
+    cik_list: list[int] | tuple[int, ...] | None = None,
 ) -> GatedDiscoveryOutcome:
     """Ticket 46: filing_artifact's gated discovery/capture, run in-process
     against daily-incremental's own already-open Silver connection.
@@ -346,6 +347,7 @@ def run_filing_artifact_gated_capture_for_business_date(
         worker_id=f"daily-incremental-gated-capture-{run_id}",
         lease_seconds=DEFAULT_LEASE_SECONDS,
         registry_version=DEFAULT_REGISTRY_VERSION,
+        cik_list=cik_list,
     )
 
 

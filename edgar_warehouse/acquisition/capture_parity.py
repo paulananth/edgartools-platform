@@ -119,10 +119,13 @@ def artifact_from_source_fetch_decision(row: Mapping[str, Any]) -> CaptureArtifa
     key = str(row["logical_source_key"])
     cik_token = key.split("/", 1)[0]
     decision_id = row.get("decision_id")
+    evidence = row.get("verified_evidence_reference") or row.get(
+        "captured_artifact_reference"
+    )
     return CaptureArtifact(
         cik=int(row["cik"]) if row.get("cik") is not None else int(cik_token),
         logical_source_key=key,
-        verified_evidence_reference=row.get("verified_evidence_reference"),
+        verified_evidence_reference=str(evidence) if evidence else None,
         decision_id=str(decision_id) if decision_id else None,
     )
 
@@ -252,6 +255,138 @@ def load_capture_snapshot(path: Path) -> CaptureSnapshot:
         path=str(payload["path"]),
         cause_reference=str(payload["cause_reference"]),
         artifacts=artifacts,
+    )
+
+
+@dataclass(frozen=True)
+class DualPathParityResult:
+    """Ticket 53: both producers ran; ``verdict`` is Ticket 51's compare."""
+
+    verdict: ParityVerdict
+    legacy: CaptureSnapshot
+    gated: CaptureSnapshot
+
+
+def legacy_capture_cause_reference(business_date: str, cik_list: Sequence[int]) -> str:
+    ciks = ",".join(str(int(cik)) for cik in cik_list)
+    return f"legacy-capture:{business_date}:cik={ciks}"
+
+
+def run_dual_path_filing_artifact_parity(
+    *,
+    context: Any,
+    db: Any,
+    business_date: str,
+    sync_run_id: str,
+    download_bytes: Any,
+    get_filing: Any,
+    cik_list: Sequence[int] | None = None,
+    limit: int = 1,
+) -> DualPathParityResult:
+    """Run legacy ``fetch_filing_artifacts`` then gated discovery, and compare.
+
+    Snapshots the legacy silver ``sec_raw_object`` rows *before* gated capture
+    writes the same table. Gated artifacts come from Source Fetch Decision /
+    work rows. ``download_bytes`` / ``get_filing`` are the legacy SEC-edge
+    injectors; callers that also need to mute gated SEC I/O patch
+    ``source_family_registry.download_filing_content_bytes`` in the test.
+    """
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from edgar_warehouse.acquisition.models import (
+        SourceFetchDecisionRecord,
+        SourceFetchWorkRecord,
+    )
+    from edgar_warehouse.application.workflows.drive_filing_discovery import (
+        run_filing_artifact_gated_capture_for_business_date,
+    )
+    from edgar_warehouse.bronze_filing_artifacts import fetch_filing_artifacts
+    from edgar_warehouse.mdm.database import get_engine
+
+    scope = resolve_parity_scope(
+        business_date=business_date, cik_list=cik_list, limit=limit
+    )
+    index_rows = filter_discovery_rows_by_cik(
+        db.get_daily_index_filings(business_date), scope.cik_list
+    )
+    filing_rows = [
+        {
+            "accession_number": str(row["accession_number"]),
+            "cik": int(row["cik"]),
+            "form": str(row["form"]),
+            "filing_date": row["filing_date"],
+            "primary_document": "primary.xml",
+        }
+        for row in index_rows
+    ]
+    if filing_rows:
+        db.merge_filings(filing_rows, sync_run_id)
+
+    for row in index_rows:
+        fetch_filing_artifacts(
+            context=context,
+            db=db,
+            accession_number=str(row["accession_number"]),
+            sync_run_id=sync_run_id,
+            download_bytes=download_bytes,
+            get_filing=get_filing,
+            force=False,
+        )
+
+    legacy_rows = db.fetch("SELECT * FROM sec_raw_object")
+    legacy = CaptureSnapshot(
+        path="legacy",
+        cause_reference=legacy_capture_cause_reference(business_date, scope.cik_list),
+        artifacts=tuple(artifact_from_silver_raw_object(row) for row in legacy_rows),
+    )
+
+    run_filing_artifact_gated_capture_for_business_date(
+        context=context,
+        db=db,
+        business_date=business_date,
+        run_id=sync_run_id,
+        cik_list=scope.cik_list,
+    )
+
+    gated_artifacts: list[CaptureArtifact] = []
+    gated_cause = f"gated-capture:{business_date}"
+    with Session(get_engine()) as session:
+        works = {
+            work.decision_id: work
+            for work in session.execute(select(SourceFetchWorkRecord)).scalars().all()
+        }
+        for decision in session.execute(select(SourceFetchDecisionRecord)).scalars().all():
+            work = works.get(decision.decision_id)
+            evidence = decision.verified_evidence_reference
+            if work is not None and work.captured_artifact_reference:
+                evidence = evidence or work.captured_artifact_reference
+            captured = evidence is not None or (
+                work is not None and work.fetch_state == "CAPTURED"
+            )
+            if not captured:
+                continue
+            gated_artifacts.append(
+                artifact_from_source_fetch_decision(
+                    {
+                        "logical_source_key": decision.logical_source_key,
+                        "verified_evidence_reference": evidence,
+                        "decision_id": decision.decision_id,
+                    }
+                )
+            )
+            gated_cause = decision.cause_reference
+
+    gated = CaptureSnapshot(
+        path="gated",
+        cause_reference=gated_cause,
+        artifacts=tuple(gated_artifacts),
+    )
+    return DualPathParityResult(
+        verdict=compare_capture_snapshots(legacy=legacy, gated=gated, scope=scope),
+        legacy=legacy,
+        gated=gated,
     )
 
 
