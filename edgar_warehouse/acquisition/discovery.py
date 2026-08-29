@@ -20,7 +20,7 @@ discovery itself.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -212,6 +212,7 @@ def drive_discovery_manifest(
     worker_id: str,
     registry_version: str,
     lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> DiscoveryDriveResult:
     """Issue one Fetch Decision per candidate and drive in-scope ones through capture.
 
@@ -223,79 +224,88 @@ def drive_discovery_manifest(
     failure is caught and recorded per-candidate so it cannot abort the rest
     of the interval (Ticket 16's bullet 3: the interval itself simply stays
     incomplete until every candidate reaches a settled outcome).
+
+    ``on_progress``, when provided, is called after every candidate settles
+    with ``(processed, candidate_count)``. Callers own cadence and logging
+    (Ticket 48); this loop does not emit events itself.
     """
 
     facade = build_capture_facade(ledger, bronze_root, registry, worker_id=worker_id)
     cause_reference = f"discovery-manifest:{manifest.digest}:registry:{registry_version}"
     outcomes: list[DiscoveryCandidateOutcome] = []
+    candidate_count = manifest.candidate_count
     for candidate in manifest.candidates:
-        request = _build_fetch_decision_request(candidate, cause_reference, manifest)
         try:
-            status = ledger.create_fetch_decision(request)
-        except Exception as error:  # noqa: BLE001 -- one candidate must not abort the interval
-            # A conflicting replay (e.g. a different registry_version reused
-            # for an already-decided candidate) or another ledger-level
-            # rejection leaves no decision at all for this candidate -- it
-            # stays unsettled, blocking interval completion, rather than
-            # aborting every other candidate in this same drive call.
-            outcomes.append(
-                DiscoveryCandidateOutcome(
-                    candidate=candidate,
-                    decision_id=None,
-                    fetch_disposition=None,
-                    fetch_state=None,
-                    network_fetched=False,
-                    error=str(error),
+            request = _build_fetch_decision_request(candidate, cause_reference, manifest)
+            try:
+                status = ledger.create_fetch_decision(request)
+            except Exception as error:  # noqa: BLE001 -- one candidate must not abort the interval
+                # A conflicting replay (e.g. a different registry_version reused
+                # for an already-decided candidate) or another ledger-level
+                # rejection leaves no decision at all for this candidate -- it
+                # stays unsettled, blocking interval completion, rather than
+                # aborting every other candidate in this same drive call.
+                outcomes.append(
+                    DiscoveryCandidateOutcome(
+                        candidate=candidate,
+                        decision_id=None,
+                        fetch_disposition=None,
+                        fetch_state=None,
+                        network_fetched=False,
+                        error=str(error),
+                    )
                 )
-            )
-            continue
-        if not candidate.in_scope or status.fetch_state is FetchWorkState.CAPTURED:
-            outcomes.append(
-                DiscoveryCandidateOutcome(
-                    candidate=candidate,
-                    decision_id=status.decision_id,
-                    fetch_disposition=status.fetch_disposition,
-                    fetch_state=status.fetch_state,
-                    network_fetched=False,
-                    error=None,
+                continue
+            if not candidate.in_scope or status.fetch_state is FetchWorkState.CAPTURED:
+                outcomes.append(
+                    DiscoveryCandidateOutcome(
+                        candidate=candidate,
+                        decision_id=status.decision_id,
+                        fetch_disposition=status.fetch_disposition,
+                        fetch_state=status.fetch_state,
+                        network_fetched=False,
+                        error=None,
+                    )
                 )
-            )
-            continue
-        try:
-            result = execute_source_request(
-                ledger,
-                request,
-                facade,
-                worker_id=worker_id,
-                lease_seconds=lease_seconds,
-            )
-            # execute_source_request's own status snapshot is taken at LEASED
-            # time, before the facade runs (see tests/acquisition/test_facade.py's
-            # identical re-query) -- read the ledger back to get the true
-            # post-finalize fetch_state instead of trusting a stale value.
-            final_status = ledger.source_change_status(result.status.decision_id)
-            outcomes.append(
-                DiscoveryCandidateOutcome(
-                    candidate=candidate,
-                    decision_id=final_status.decision_id,
-                    fetch_disposition=final_status.fetch_disposition,
-                    fetch_state=final_status.fetch_state,
-                    network_fetched=True,
-                    error=None,
+                continue
+            try:
+                result = execute_source_request(
+                    ledger,
+                    request,
+                    facade,
+                    worker_id=worker_id,
+                    lease_seconds=lease_seconds,
                 )
-            )
-        except Exception as error:  # noqa: BLE001 -- one candidate must not abort the interval
-            failed_status = ledger.source_change_status(status.decision_id)
-            outcomes.append(
-                DiscoveryCandidateOutcome(
-                    candidate=candidate,
-                    decision_id=failed_status.decision_id,
-                    fetch_disposition=failed_status.fetch_disposition,
-                    fetch_state=failed_status.fetch_state,
-                    network_fetched=True,
-                    error=str(error),
+                # execute_source_request's own status snapshot is taken at LEASED
+                # time, before the facade runs (see tests/acquisition/test_facade.py's
+                # identical re-query) -- read the ledger back to get the true
+                # post-finalize fetch_state instead of trusting a stale value.
+                final_status = ledger.source_change_status(result.status.decision_id)
+                outcomes.append(
+                    DiscoveryCandidateOutcome(
+                        candidate=candidate,
+                        decision_id=final_status.decision_id,
+                        fetch_disposition=final_status.fetch_disposition,
+                        fetch_state=final_status.fetch_state,
+                        network_fetched=True,
+                        error=None,
+                    )
                 )
-            )
+            except Exception as error:  # noqa: BLE001 -- one candidate must not abort the interval
+                failed_status = ledger.source_change_status(status.decision_id)
+                outcomes.append(
+                    DiscoveryCandidateOutcome(
+                        candidate=candidate,
+                        decision_id=failed_status.decision_id,
+                        fetch_disposition=failed_status.fetch_disposition,
+                        fetch_state=failed_status.fetch_state,
+                        network_fetched=True,
+                        error=str(error),
+                    )
+                )
+        finally:
+            if on_progress is not None:
+                on_progress(len(outcomes), candidate_count)
     return DiscoveryDriveResult(manifest=manifest, outcomes=tuple(outcomes))
 
 
