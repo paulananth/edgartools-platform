@@ -5,8 +5,8 @@
 -- Deploy after gold FINANCIAL_FACTORS + MDM entity tracking exist.
 --
 -- Decision Subject Universe is MDM_COMPANY_ENTITY (tracking_status='active'),
--- not warehouse COMPANY. Ticket 41: the previous COMPANY self-join was a
--- placeholder that treated every gold company as MDM-active.
+-- not warehouse COMPANY. Ticket 41: the previous COMPANY self-join treated
+-- every gold company as MDM-active.
 --
 -- Pure-SEC features only — no price / PE / market cap columns.
 -- Coverage flags: present | empty | unavailable | not_applicable
