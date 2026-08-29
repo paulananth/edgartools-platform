@@ -80,3 +80,9 @@ Tests: `tests/acquisition/test_capture_parity.py` and
 `test_drive_filing_discovery_cik_list_skips_unrelated_cik_and_does_not_record_catchup`.
 This does not retire the legacy path (Ticket 27) and does not mix
 Identity Backstop Sweep or MDM Reconciliation Backstop.
+
+**Correction (Ticket 52):** this ticket does not exercise the legacy
+capture path. Tests feed the compare engine hand-built `"legacy"`
+snapshots. The only live driver added here is gated
+`drive-filing-discovery-for-date --cik-list`. Dual-path *execution* is
+[Ticket 53](53-drive-legacy-and-gated-capture-into-parity-diff.md).
