@@ -8,7 +8,7 @@ capture as distinct new evidence.
 
 **Blocked by:** 17 — Make Bronze capture retry-safe and recoverable
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Why this is its own ticket, not part of Ticket 17
 
@@ -41,22 +41,49 @@ content-addressed Bronze writes (identical bytes reuse one object regardless
 of how they were re-observed -- already tested). The `304` half is what this
 ticket adds.
 
-- [ ] `sec_client.py` gains conditional-GET support (an `If-None-Match`/
+- [x] `sec_client.py` gains conditional-GET support (an `If-None-Match`/
   `If-Modified-Since` request path) that distinguishes a `304` response from
   a `200` with bytes, without changing the existing `download_sec_bytes`
   call signature any existing caller relies on.
-- [ ] `AcquisitionLedger` exposes a read of the latest verified capture's
+- [x] `AcquisitionLedger` exposes a read of the latest verified capture's
   validators (ETag/Last-Modified) and artifact reference for a given
   `(source_family, logical_source_key)`, independent of any specific
   `decision_id`.
-- [ ] A due re-poll (via `DecisionCause.DUE_POLICY`, or whatever concrete
+- [x] A due re-poll (via `DecisionCause.DUE_POLICY`, or whatever concrete
   poll-scheduling mechanism this ticket's own grilling settles on) creates a
   new Fetch Decision for the same logical key, sends the stored validators,
   and on `304` finalizes CAPTURED referencing the *prior* artifact reference
   -- no new Bronze write, no new raw evidence hash.
-- [ ] A `200` response (content actually changed) proceeds through the
+- [x] A `200` response (content actually changed) proceeds through the
   normal Ticket 15 capture path with a new content-addressed write.
-- [ ] An end-to-end test proves a `304` re-poll performs zero Bronze writes
+- [x] An end-to-end test proves a `304` re-poll performs zero Bronze writes
   and that the new decision's `captured_artifact_reference` matches the
   prior decision's, while a changed-content re-poll produces a genuinely new
   artifact.
+
+## Answer
+
+`download_sec_conditionally` is the sibling of `download_sec_bytes` (signature
+unchanged; the bytes helper now wraps it). `AcquisitionLedger.latest_verified_capture`
+returns the newest CAPTURED row's artifact reference plus ETag/Last-Modified
+for a `(source_family, logical_source_key)`. `execute_due_repoll` is the live
+`DecisionCause.DUE_POLICY` caller: new Fetch Decision, conditional GET, `304`
+finalizes CAPTURED onto the prior Bronze reference with no write, `200` goes
+through Ticket 15's content-addressed capture.
+
+Validators persist in the same fenced CAPTURED write. An early sidecar UPDATE
+after 7-arg `finalize_source_fetch` would permission-deny on real Postgres
+(worker is SELECT-only on `source_fetch_work`). Migration `018` drops the
+7-arg function and replaces it with a 9-arg SECURITY DEFINER version that
+writes `captured_etag` / `captured_last_modified` in the same UPDATE.
+
+`SourceFamilyPolicy.fetch()` still returns bytes, so the original capture
+path does not store validators. The first DUE_POLICY poll is an unconditional
+GET that stores them; later polls are conditional. Widening the policy
+protocol is out of this ticket.
+
+Tests: `tests/unit/test_sec_client.py` (200/304/signature),
+`tests/acquisition/test_ledger.py` (latest verified capture),
+`tests/acquisition/test_conditional_fetch.py` (304 links prior artifact with
+zero Bronze writes; 200 writes a new artifact),
+`tests/acquisition/test_migration.py` (018 drops 7-arg / grants 9-arg).

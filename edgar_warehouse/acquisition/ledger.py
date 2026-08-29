@@ -397,6 +397,8 @@ class AcquisitionLedger:
         final_state: FetchWorkState,
         artifact_reference: str | None = None,
         failure_detail: str | None = None,
+        etag: str | None = None,
+        last_modified: str | None = None,
         now: datetime | None = None,
         actor_role: FetchTransitionRole = FetchTransitionRole.ACQUISITION_WORKER,
     ) -> SourceChangeStatus:
@@ -419,7 +421,8 @@ class AcquisitionLedger:
                         text(
                             "SELECT finalize_source_fetch(:decision_id, :worker_id, "
                             ":fencing_token, :final_state, :finalized_at, "
-                            ":artifact_reference, :failure_detail)"
+                            ":artifact_reference, :failure_detail, :etag, "
+                            ":last_modified)"
                         ),
                         {
                             "decision_id": decision_id,
@@ -429,6 +432,8 @@ class AcquisitionLedger:
                             "finalized_at": finalize_time,
                             "artifact_reference": artifact_reference,
                             "failure_detail": failure_detail,
+                            "etag": etag,
+                            "last_modified": last_modified,
                         },
                     )
                 except SQLAlchemyError as error:
@@ -463,6 +468,8 @@ class AcquisitionLedger:
                     lease_expires_at=None,
                     last_transition_role="ACQUISITION_WORKER",
                     captured_artifact_reference=artifact_reference,
+                    captured_etag=etag,
+                    captured_last_modified=last_modified,
                     updated_at=finalize_time,
                 )
                 .execution_options(synchronize_session=False)
@@ -514,6 +521,46 @@ class AcquisitionLedger:
             ).scalar_one_or_none()
             return row
 
+    def latest_verified_capture(
+        self, source_family: str, logical_source_key: str
+    ) -> VerifiedCapture | None:
+        """Return validators for the newest CAPTURED observation of this key.
+
+        Independent of any specific decision_id (Ticket 28). CAPTURED rows
+        are excluded from ``uq_source_fetch_work_active_key``, so many can
+        exist per logical key; this returns the highest observation_position.
+        """
+
+        with Session(self._engine) as session:
+            set_postgres_role(session, DecisionOwnerRole.ACQUISITION_COORDINATOR.value)
+            row = session.execute(
+                select(SourceFetchWorkRecord, SourceFetchDecisionRecord)
+                .join(
+                    SourceFetchDecisionRecord,
+                    SourceFetchDecisionRecord.decision_id
+                    == SourceFetchWorkRecord.decision_id,
+                )
+                .where(
+                    SourceFetchWorkRecord.source_family == source_family,
+                    SourceFetchWorkRecord.logical_source_key == logical_source_key,
+                    SourceFetchWorkRecord.fetch_state == FetchWorkState.CAPTURED.value,
+                )
+                .order_by(SourceFetchDecisionRecord.observation_position.desc())
+                .limit(1)
+            ).first()
+            if row is None:
+                return None
+            work, decision = row
+            reference = work.captured_artifact_reference
+            if not reference:
+                return None
+            return VerifiedCapture(
+                decision_id=decision.decision_id,
+                captured_artifact_reference=reference,
+                etag=work.captured_etag,
+                last_modified=work.captured_last_modified,
+            )
+
 
 AdapterResult = TypeVar("AdapterResult")
 
@@ -531,6 +578,16 @@ class FetchLease:
     worker_id: str
     fencing_token: int
     lease_expires_at: datetime
+
+
+@dataclass(frozen=True)
+class VerifiedCapture:
+    """Latest CAPTURED observation for one logical source key (Ticket 28)."""
+
+    decision_id: str
+    captured_artifact_reference: str
+    etag: str | None
+    last_modified: str | None
 
 
 def execute_source_request(

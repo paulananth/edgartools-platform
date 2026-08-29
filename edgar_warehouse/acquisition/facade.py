@@ -21,18 +21,24 @@ from __future__ import annotations
 import hashlib
 import os
 import time
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 from edgar_warehouse.acquisition.ledger import (
     AcquisitionLedger,
+    DecisionCause,
+    FetchDecisionRequest,
+    FetchDisposition,
     FetchLease,
     FetchTransitionRole,
     FetchWorkState,
     SourceChangeStatus,
     StaleFencingToken,
+    execute_source_request,
 )
+from edgar_warehouse.infrastructure.sec_client import download_sec_conditionally
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure.object_storage import (
     StorageLocation,
@@ -180,6 +186,117 @@ def build_capture_facade(
     return capture
 
 
+class NoVerifiedCapture(SourceCaptureFailed):
+    """A due re-poll was requested for a logical key that has never been CAPTURED."""
+
+
+def execute_due_repoll(
+    ledger: AcquisitionLedger,
+    bronze_root: StorageLocation,
+    registry: Mapping[str, SourceFamilyPolicy],
+    *,
+    source_family: str,
+    logical_source_key: str,
+    source_url: str,
+    identity: str,
+    worker_id: str,
+    lease_seconds: int = 300,
+) -> SourceChangeStatus:
+    """Create a DUE_POLICY decision and conditionally re-fetch one logical key.
+
+    Ticket 28: a new Fetch Decision (CAPTURED cannot be reclaimed), validators
+    from ``latest_verified_capture``, 304 links the prior Bronze reference
+    with no write, 200 goes through the existing content-addressed capture.
+    """
+
+    prior = ledger.latest_verified_capture(source_family, logical_source_key)
+    if prior is None:
+        raise NoVerifiedCapture(
+            f"no CAPTURED observation for {source_family}/{logical_source_key}"
+        )
+    policy = registry.get(source_family)
+    if policy is None:
+        raise SourceCaptureFailed(
+            f"no Source Family Registry entry for source_family={source_family!r}"
+        )
+
+    request = FetchDecisionRequest(
+        candidate_id=f"due-policy/{source_family}/{logical_source_key}/{uuid.uuid4().hex}",
+        source_family=source_family,
+        logical_source_key=logical_source_key,
+        source_url=source_url,
+        cause=DecisionCause.DUE_POLICY,
+        cause_reference=f"due-policy:{prior.decision_id}",
+        disposition=FetchDisposition.FETCH_AUTHORIZED,
+        blocker=None,
+        next_action="FETCH_SOURCE",
+    )
+
+    def _adapter(status: SourceChangeStatus, lease: FetchLease):
+        try:
+            response = download_sec_conditionally(
+                status.source_url,
+                identity,
+                etag=prior.etag,
+                last_modified=prior.last_modified,
+            )
+            if response.not_modified:
+                linked = CapturedArtifact(
+                    decision_id=status.decision_id,
+                    source_family=source_family,
+                    logical_source_key=logical_source_key,
+                    raw_evidence_hash="",
+                    bronze_relative_path=prior.captured_artifact_reference,
+                    bronze_destination=prior.captured_artifact_reference,
+                    byte_size=0,
+                )
+                _finalize_captured_with_retry(
+                    ledger,
+                    status,
+                    lease,
+                    linked,
+                    worker_id=worker_id,
+                    etag=response.etag or prior.etag,
+                    last_modified=response.last_modified or prior.last_modified,
+                )
+                return None
+            if not policy.is_complete(response.content):
+                raise SourceCaptureFailed(
+                    f"incomplete source payload for decision_id={status.decision_id} "
+                    f"source_family={source_family!r}"
+                )
+            artifact = _capture_bronze_evidence(bronze_root, status, response.content)
+        except Exception as error:
+            ledger.finalize_fetch(
+                status.decision_id,
+                worker_id=worker_id,
+                fencing_token=lease.fencing_token,
+                final_state=FetchWorkState.FAILED,
+                failure_detail=_failure_detail(error),
+                actor_role=FetchTransitionRole.ACQUISITION_WORKER,
+            )
+            raise
+        _finalize_captured_with_retry(
+            ledger,
+            status,
+            lease,
+            artifact,
+            worker_id=worker_id,
+            etag=response.etag,
+            last_modified=response.last_modified,
+        )
+        return artifact
+
+    result = execute_source_request(
+        ledger,
+        request,
+        _adapter,
+        worker_id=worker_id,
+        lease_seconds=lease_seconds,
+    )
+    return ledger.source_change_status(result.status.decision_id)
+
+
 def _finalize_captured_with_retry(
     ledger: AcquisitionLedger,
     status: SourceChangeStatus,
@@ -187,6 +304,8 @@ def _finalize_captured_with_retry(
     artifact: CapturedArtifact,
     *,
     worker_id: str,
+    etag: str | None = None,
+    last_modified: str | None = None,
 ) -> None:
     """Finalize CAPTURED with a bounded retry for transient ledger failures.
 
@@ -207,6 +326,8 @@ def _finalize_captured_with_retry(
                 fencing_token=lease.fencing_token,
                 final_state=FetchWorkState.CAPTURED,
                 artifact_reference=artifact.bronze_relative_path,
+                etag=etag,
+                last_modified=last_modified,
                 actor_role=FetchTransitionRole.ACQUISITION_WORKER,
             )
             return

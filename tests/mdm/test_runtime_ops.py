@@ -80,6 +80,14 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
             True,
         )[1],
     )
+    monkeypatch.setattr(
+        migrations,
+        "_apply_source_fetch_validators_migration",
+        lambda engine: (
+            _record_apply(engine, "018_source_fetch_validators.sql"),
+            True,
+        )[1],
+    )
     monkeypatch.setattr(migrations, "count_tables", lambda _engine: {})
     monkeypatch.setattr(migrations, "_seed_entity_types", lambda _session: None)
 
@@ -103,6 +111,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "015_source_evidence_conflict.sql",
         "016_serialize_graph_generation.sql",
         "017_source_exclusion_and_evidence_import.sql",
+        "018_source_fetch_validators.sql",
     ]
 
 

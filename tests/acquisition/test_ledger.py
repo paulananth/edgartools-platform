@@ -490,3 +490,57 @@ def test_postgres_unavailability_fails_closed_before_source_adapter() -> None:
         )
 
     source_adapter.assert_not_called()
+
+
+def test_latest_verified_capture_returns_none_when_nothing_is_captured() -> None:
+    ledger = _ledger()
+    assert ledger.latest_verified_capture("filing_artifact", "logical/key-1") is None
+
+
+def test_latest_verified_capture_returns_the_newest_captured_artifact_and_validators() -> None:
+    ledger = _ledger()
+    first = ledger.create_fetch_decision(_authorized_request("candidate-1"))
+    lease = ledger.claim_fetch(first.decision_id, worker_id="worker-1", lease_seconds=60)
+    ledger.finalize_fetch(
+        first.decision_id,
+        worker_id="worker-1",
+        fencing_token=lease.fencing_token,
+        final_state=FetchWorkState.CAPTURED,
+        artifact_reference="filing_artifact/hash-old",
+        etag="etag-old",
+        last_modified="Mon, 01 Jan 2024 00:00:00 GMT",
+    )
+
+    second = ledger.create_fetch_decision(
+        FetchDecisionRequest(
+            candidate_id="candidate-2",
+            source_family="filing_artifact",
+            logical_source_key="0000320193/0000320193-26-000001/primary-document",
+            source_url="https://www.sec.gov/Archives/candidate-2.txt",
+            cause=DecisionCause.DUE_POLICY,
+            cause_reference="due-policy:first",
+            disposition=FetchDisposition.FETCH_AUTHORIZED,
+            blocker=None,
+            next_action="FETCH_SOURCE",
+        )
+    )
+    lease = ledger.claim_fetch(second.decision_id, worker_id="worker-1", lease_seconds=60)
+    ledger.finalize_fetch(
+        second.decision_id,
+        worker_id="worker-1",
+        fencing_token=lease.fencing_token,
+        final_state=FetchWorkState.CAPTURED,
+        artifact_reference="filing_artifact/hash-new",
+        etag="etag-new",
+        last_modified="Tue, 02 Jan 2024 00:00:00 GMT",
+    )
+
+    latest = ledger.latest_verified_capture(
+        "filing_artifact",
+        "0000320193/0000320193-26-000001/primary-document",
+    )
+    assert latest is not None
+    assert latest.decision_id == second.decision_id
+    assert latest.captured_artifact_reference == "filing_artifact/hash-new"
+    assert latest.etag == "etag-new"
+    assert latest.last_modified == "Tue, 02 Jan 2024 00:00:00 GMT"

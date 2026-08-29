@@ -401,6 +401,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_source_evidence_conflict_migration(engine)
         _apply_sql_file(engine, "016_serialize_graph_generation.sql")
         _apply_exclusion_and_evidence_import_migration(engine)
+        _apply_source_fetch_validators_migration(engine)
 
     if seed:
         with Session(engine) as session:
@@ -572,6 +573,50 @@ def _apply_exclusion_and_evidence_import_migration(engine: Engine) -> bool:
             if not may_manage:
                 _log_privileged_rerun_skipped(
                     "017_source_exclusion_and_evidence_import",
+                    "edgartools_acquisition_owner",
+                )
+                return False
+
+        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
+        for statement in statements:
+            conn.execute(text(statement))
+    return True
+
+
+def _apply_source_fetch_validators_migration(engine: Engine) -> bool:
+    """Ticket 28: additive ETag/Last-Modified columns on source_fetch_work."""
+
+    if engine.dialect.name != "postgresql":
+        _apply_sql_file(engine, "018_source_fetch_validators.sql")
+        return True
+
+    statements = _sql_file_statements("018_source_fetch_validators.sql")
+    with engine.begin() as conn:
+        installed = bool(
+            conn.scalar(
+                text(
+                    "SELECT EXISTS ("
+                    "SELECT 1 FROM pg_attribute a "
+                    "JOIN pg_class c ON c.oid = a.attrelid "
+                    "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                    "WHERE c.relname = 'source_fetch_work' "
+                    "AND a.attname = 'captured_etag' "
+                    "AND NOT a.attisdropped)"
+                )
+            )
+        )
+        if installed:
+            may_manage = bool(
+                conn.scalar(
+                    text(
+                        "SELECT pg_has_role(current_user, "
+                        "'edgartools_acquisition_owner', 'MEMBER')"
+                    )
+                )
+            )
+            if not may_manage:
+                _log_privileged_rerun_skipped(
+                    "018_source_fetch_validators",
                     "edgartools_acquisition_owner",
                 )
                 return False
