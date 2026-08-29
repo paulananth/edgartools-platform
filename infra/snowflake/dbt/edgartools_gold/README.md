@@ -31,8 +31,9 @@ The project publishes these objects in `EDGARTOOLS_GOLD`:
 - `TICKER_REFERENCE`
 - `EDGARTOOLS_GOLD_STATUS`
 
-The nine business tables are dbt-managed Snowflake dynamic tables with
-`TARGET_LAG = DOWNSTREAM`.
+Gold models are dbt-managed Snowflake dynamic tables with
+`TARGET_LAG = 6 hours` (change-propagation Ticket 39: `DOWNSTREAM` did not
+refresh gold leaves in prod).
 
 The status model reads the source name `SERVING_REFRESH_STATUS`.
 `profiles.yml.example` defaults its physical identifier to

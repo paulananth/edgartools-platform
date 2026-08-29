@@ -40,7 +40,7 @@ partial unique index mirroring ``uq_source_fetch_work_active_key``.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -134,7 +134,24 @@ class ExpectedProducerAlreadySettled(RuntimeError):
 
 
 SNOWFLAKE_LANDING_PRODUCER_KIND = "snowflake_landing"
+GOLD_DYNAMIC_TABLE_PRODUCER_KIND = "gold_dynamic_table"
 DUCKDB_PRODUCER_KIND = "duckdb"
+
+
+@dataclass(frozen=True)
+class GoldRefreshIdentity:
+    """One gold dynamic table's Snowflake-native refresh identity (Ticket 39)."""
+
+    table_name: str
+    data_timestamp: datetime
+    refresh_trigger: str | None = None
+    refresh_end_time: datetime | None = None
+
+    @property
+    def completion_time(self) -> datetime:
+        """Refresh completion if known, else the table's data timestamp."""
+
+        return self.refresh_end_time or self.data_timestamp
 
 
 @dataclass(frozen=True)
@@ -489,6 +506,130 @@ def verify_snowflake_landing_producer(
         failure_detail=(
             f"expected {expected_row_count} landing rows in {target_table} "
             f"for cause_reference={cause_reference!r}; counted {actual}"
+        ),
+    )
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _iso_z(value: datetime) -> str:
+    return _as_utc(value).isoformat().replace("+00:00", "Z")
+
+
+def gold_watermark_contribution(
+    identities: Sequence[GoldRefreshIdentity],
+) -> dict[str, str]:
+    """Per-table ``data_timestamp`` map Ticket 41 reads for gold's watermark slice.
+
+    Ticket 07: reuse Snowflake's native refresh timestamp, do not invent a
+    gold run identity. Keys are gold dynamic-table names; values are UTC
+    ISO-8601 ``data_timestamp`` strings.
+    """
+
+    return {identity.table_name: _iso_z(identity.completion_time) for identity in identities}
+
+
+def gold_refresh_identities_from_show_rows(
+    rows: Sequence[Mapping[str, object]],
+) -> tuple[GoldRefreshIdentity, ...]:
+    """Parse ``SHOW DYNAMIC TABLES`` (or equivalent) rows for Ticket 41.
+
+    Accepts Snowflake's JSON column names (``name``, ``data_timestamp``)
+    or the uppercase INFORMATION_SCHEMA names.
+    """
+
+    identities: list[GoldRefreshIdentity] = []
+    for row in rows:
+        name = row.get("name") or row.get("NAME")
+        stamp = row.get("data_timestamp") or row.get("DATA_TIMESTAMP")
+        if not name or stamp is None:
+            continue
+        trigger = row.get("refresh_trigger") or row.get("REFRESH_TRIGGER")
+        ended = row.get("refresh_end_time") or row.get("REFRESH_END_TIME")
+        identities.append(
+            GoldRefreshIdentity(
+                table_name=str(name),
+                data_timestamp=_parse_refresh_datetime(stamp),
+                refresh_trigger=str(trigger) if trigger else None,
+                refresh_end_time=(
+                    _parse_refresh_datetime(ended) if ended else None
+                ),
+            )
+        )
+    return tuple(identities)
+
+
+def _parse_refresh_datetime(value: object) -> datetime:
+    if isinstance(value, datetime):
+        return _as_utc(value)
+    text = str(value).strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    return _as_utc(datetime.fromisoformat(text))
+
+
+def verify_gold_dynamic_table_producer(
+    finalizer: SilverFinalizer,
+    processing_decision_id: str,
+    producer_name: str,
+    *,
+    target_table: str,
+    sealed_at: datetime,
+    read_refresh: Callable[[str], GoldRefreshIdentity | None],
+) -> ProcessingDecision:
+    """Ticket 39: settle a gold dynamic-table producer from native refresh time.
+
+    ``read_refresh(target_table)`` is injected so production can read
+    ``SHOW DYNAMIC TABLES`` / refresh history and tests can return a
+    stand-in. Layered on top of gold's ``target_lag = '6 hours'``: a table
+    whose ``data_timestamp`` is missing or older than ``sealed_at`` fails
+    closed regardless of the lag clock.
+    """
+
+    identity = read_refresh(target_table)
+    seal = _as_utc(sealed_at)
+    if identity is None:
+        return finalizer.record_producer_outcome(
+            processing_decision_id,
+            producer_name,
+            outcome=ExpectedProducerOutcome.FAILED,
+            failure_detail=(
+                f"no gold refresh identity for {target_table} "
+                f"sealed_at={_iso_z(seal)}"
+            ),
+        )
+    if identity.table_name != target_table:
+        return finalizer.record_producer_outcome(
+            processing_decision_id,
+            producer_name,
+            outcome=ExpectedProducerOutcome.FAILED,
+            failure_detail=(
+                f"gold refresh identity table {identity.table_name!r} "
+                f"does not match target_table={target_table!r}"
+            ),
+        )
+    observed = _as_utc(identity.completion_time)
+    if observed < seal:
+        return finalizer.record_producer_outcome(
+            processing_decision_id,
+            producer_name,
+            outcome=ExpectedProducerOutcome.FAILED,
+            failure_detail=(
+                f"stale gold refresh for {target_table}: "
+                f"data_timestamp={_iso_z(observed)} is before "
+                f"sealed_at={_iso_z(seal)}"
+            ),
+        )
+    return finalizer.record_producer_outcome(
+        processing_decision_id,
+        producer_name,
+        outcome=ExpectedProducerOutcome.VERIFIED,
+        verified_reference=(
+            f"gold_dynamic_table:{target_table}:data_timestamp={_iso_z(observed)}"
         ),
     )
 

@@ -1898,12 +1898,15 @@ Stage 2 — MDM entity resolution (sequential Step Functions)
 
 Stage 3 — Gold refresh (single ECS task)
   gold-refresh
-  • Reads complete silver DuckDB, builds all gold tables, writes Snowflake export manifests
-  • SNOWFLAKE_RUN_MANIFEST_TASK picks up the manifest and refreshes EDGARTOOLS_GOLD within 6 hours
-    (widened from 1 min -> 15 min -> 6 hours, 2026-08-14, ecs-cost-sizing credit-consumption
-    finding -- a 1-minute poll never let the X-Small refresh warehouse fully suspend during an
-    active backfill, burning ~67 Snowflake credits/week; widened further per explicit operator
-    decision prioritizing credit economy over near-real-time freshness)
+  • Writes Snowflake export manifests for source-layer serving exports (not the gold layer)
+  • EDGARTOOLS_GOLD is 21 Snowflake dynamic tables. Live prod 2026-08-29: every
+    table had TARGET_LAG=DOWNSTREAM but DYNAMIC_TABLE_REFRESH_HISTORY showed
+    REFRESH_TRIGGER=MANUAL only (REFRESH_AFTER_LOAD after a run manifest).
+    DOWNSTREAM does not refresh gold leaves. gold_model_config() now uses
+    target_lag='6 hours' (same as silver). SNOWFLAKE_RUN_MANIFEST_TASK still
+    runs LOAD_EXPORTS_FOR_RUN then REFRESH_AFTER_LOAD as an extra explicit
+    trigger. The Ticket 39 completion barrier fail-closes on a stale
+    data_timestamp regardless of either clock.
 ```
 
 (Elsewhere in this repo, `bootstrap`/`daily_incremental`'s own Company Identity
