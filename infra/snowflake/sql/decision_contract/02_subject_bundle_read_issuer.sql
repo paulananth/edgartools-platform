@@ -25,14 +25,15 @@ WHERE h.issuer_cik IS NOT NULL;
 CREATE OR REPLACE VIEW EDGARTOOLS_DECISION.BUNDLE_AUDITOR AS
 SELECT
     a.registrant_cik AS bundle_subject_cik,
-    a.auditor_name,
-    a.pcaob_id,
+    a.principal_firm_name AS auditor_name,
+    a.pcaob_firm_id AS pcaob_id,
     'AUDITED_BY' AS relationship_type,
     'prefer_auditor_evidence_pcaob_id' AS identity_rule
-FROM EDGARTOOLS_GOLD.SEC_AUDITOR_REPORT_EVIDENCE a
+FROM EDGARTOOLS_SOURCE.SEC_AUDITOR_REPORT_EVIDENCE a
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY a.registrant_cik
-    ORDER BY CASE WHEN a.pcaob_id IS NOT NULL THEN 0 ELSE 1 END, a.auditor_name
+    ORDER BY CASE WHEN a.pcaob_firm_id IS NOT NULL THEN 0 ELSE 1 END,
+             a.principal_firm_name
 ) = 1;
 
 -- ADV is not_applicable for pure issuer bundles (no view required for ADV rows).

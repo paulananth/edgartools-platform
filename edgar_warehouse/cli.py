@@ -241,6 +241,69 @@ def _handle_backfill_silver_landing_company_metadata(args: argparse.Namespace) -
     return run_command("backfill-silver-landing-company-metadata", args)
 
 
+def _handle_reconcile_decision_watermark(args: argparse.Namespace) -> int:
+    import json
+
+    from pathlib import Path
+
+    from edgar_warehouse.serving.watermark_aggregator import (
+        JsonAlignmentStore,
+        MemoryAlignmentStore,
+        StageObservation,
+        compute_alignment_freshness,
+        reconcile_cause_reference,
+        rollup_business_date,
+    )
+
+    def _reader(complete: bool, identity: str) -> StageObservation:
+        return StageObservation(complete=complete, identity=identity or None)
+
+    store = (
+        JsonAlignmentStore(Path(args.state_file))
+        if getattr(args, "state_file", None)
+        else MemoryAlignmentStore()
+    )
+    causes = args.cause_reference if isinstance(args.cause_reference, list) else [args.cause_reference]
+    rows = []
+    for cause in causes:
+        row = reconcile_cause_reference(
+            cause,
+            business_date=args.business_date,
+            silver=lambda _c, c=args.silver_complete: _reader(c, ""),
+            mdm=lambda _c, c=args.mdm_complete: _reader(c, ""),
+            gold=lambda _c, c=args.gold_complete, i=args.gold_run_id: _reader(c, i),
+            graph=lambda _c, c=args.graph_parity_ok, i=args.graph_generation_id: _reader(c, i),
+            store=store,
+        )
+        rows.append(
+            {
+                "cause_reference": row.cause_reference,
+                "aligned": row.aligned,
+                "stuck_stage": row.stuck_stage,
+            }
+        )
+    grade = rollup_business_date(store, args.business_date)
+    freshness = compute_alignment_freshness(store)
+    print(
+        json.dumps(
+            {
+                "causes": rows,
+                "agent_grade": grade.agent_grade,
+                "reasons": list(grade.reasons),
+                "watermark": grade.watermark.to_dict() if grade.watermark else None,
+                "freshness": {
+                    "status": freshness.status,
+                    "stuck_stage": freshness.stuck_stage,
+                    "oldest_unaligned_cause_reference": freshness.oldest_unaligned_cause_reference,
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0 if grade.agent_grade else 1
+
+
 def _handle_gold_verify_live(args: argparse.Namespace) -> int:
     import json
     import sys
@@ -1364,6 +1427,44 @@ def build_parser() -> argparse.ArgumentParser:
     backfill_silver_landing_company_metadata.set_defaults(
         handler=_handle_backfill_silver_landing_company_metadata
     )
+
+    reconcile_decision_watermark = subparsers.add_parser(
+        "reconcile-decision-watermark",
+        help=(
+            "Ticket 41: observe-only cross-stage aggregator. Reconcile one or more "
+            "cause_reference values for a business_date, roll up evaluate_agent_grade, "
+            "and report the 5-minute/15-minute alignment SLO. Does not repair a stuck "
+            "stage. Pass stage completeness flags until production readers are wired "
+            "to each stage's own store."
+        ),
+    )
+    reconcile_decision_watermark.add_argument("--business-date", required=True)
+    reconcile_decision_watermark.add_argument(
+        "--cause-reference",
+        action="append",
+        required=True,
+        help="Repeatable cause_reference to reconcile on this pass.",
+    )
+    reconcile_decision_watermark.add_argument(
+        "--silver-complete", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument(
+        "--mdm-complete", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument(
+        "--gold-complete", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument(
+        "--graph-parity-ok", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument("--gold-run-id", default="")
+    reconcile_decision_watermark.add_argument("--graph-generation-id", default="")
+    reconcile_decision_watermark.add_argument(
+        "--state-file",
+        default=None,
+        help="JSON alignment ledger so a scheduled pass keeps first_seen_at.",
+    )
+    reconcile_decision_watermark.set_defaults(handler=_handle_reconcile_decision_watermark)
 
     gold_verify_live = subparsers.add_parser(
         "gold-verify-live",

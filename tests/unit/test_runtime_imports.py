@@ -79,6 +79,7 @@ class RuntimeImportTests(unittest.TestCase):
             "mdm",
             "gold-verify-live",
             "resolve-snowflake-env",
+            "reconcile-decision-watermark",
         }
         self.assertEqual(
             set(commands.COMMAND_REGISTRY),
@@ -107,6 +108,7 @@ class RuntimeImportTests(unittest.TestCase):
             "mdm",
             "gold-verify-live",
             "resolve-snowflake-env",
+            "reconcile-decision-watermark",
         }
 
         resolver = catalog.default_path_resolver()
@@ -154,7 +156,13 @@ class RuntimeImportTests(unittest.TestCase):
         #   (edgar_warehouse.serving.gold_verify) -- never touches the warehouse
         #   orchestrator, bronze/silver roots, or manifest machinery at all
         # - resolve-snowflake-env is a standalone credential resolver, same shape
-        skip = {"mdm", "migrate-silver-shards", "gold-verify-live", "resolve-snowflake-env"}
+        skip = {
+            "mdm",
+            "migrate-silver-shards",
+            "gold-verify-live",
+            "resolve-snowflake-env",
+            "reconcile-decision-watermark",
+        }
         all_commands = set(subparsers_action.choices) - skip
 
         missing = []
