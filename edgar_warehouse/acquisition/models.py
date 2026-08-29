@@ -157,6 +157,8 @@ class SourceFetchWorkRecord(AcquisitionBase):
     )
     last_transition_role: Mapped[str] = mapped_column(Text, nullable=False)
     captured_artifact_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    captured_etag: Mapped[str | None] = mapped_column(Text, nullable=True)
+    captured_last_modified: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

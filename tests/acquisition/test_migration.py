@@ -16,6 +16,7 @@ from edgar_warehouse.mdm.migrations import runtime as migrations
 MIGRATION_NAME = "013_acquisition_ledger.sql"
 CONFLICT_MIGRATION_NAME = "015_source_evidence_conflict.sql"
 EXCLUSION_IMPORT_MIGRATION_NAME = "017_source_exclusion_and_evidence_import.sql"
+VALIDATORS_MIGRATION_NAME = "018_source_fetch_validators.sql"
 REPO_ROOT = Path(__file__).parents[2]
 
 
@@ -355,4 +356,57 @@ def test_bootstrap_and_restore_cover_exclusion_and_evidence_import() -> None:
     assert (
         "ALTER TABLE source_evidence_import OWNER TO edgartools_acquisition_owner"
         in restore
+    )
+
+
+def _validators_migration_sql() -> str:
+    return (
+        Path(migrations.__file__)
+        .with_name(VALIDATORS_MIGRATION_NAME)
+        .read_text(encoding="utf-8")
+    )
+
+
+def test_validators_migration_is_registered() -> None:
+    assert VALIDATORS_MIGRATION_NAME in Path(migrations.__file__).read_text(
+        encoding="utf-8"
+    )
+
+
+def test_validators_migration_adds_columns_and_replaces_fenced_finalize() -> None:
+    """Ticket 28: additive ETag/Last-Modified columns, and the 7-arg
+    finalize_source_fetch is dropped so validators write in the same
+    SECURITY DEFINER UPDATE. A sidecar UPDATE as worker would permission-
+    deny (013 grants that role SELECT only on source_fetch_work)."""
+
+    normalized = " ".join(_validators_migration_sql().lower().split())
+
+    assert "add column if not exists captured_etag" in normalized
+    assert "add column if not exists captured_last_modified" in normalized
+    assert (
+        "drop function if exists finalize_source_fetch("
+        "uuid, text, bigint, text, timestamptz, text, text)"
+        in normalized
+    )
+    assert "captured_etag = requested_etag" in normalized
+    assert "captured_last_modified = requested_last_modified" in normalized
+    assert (
+        "grant execute on function finalize_source_fetch("
+        "uuid, text, bigint, text, timestamptz, text, text, text, text)"
+        in normalized
+    )
+    assert "create table" not in normalized
+    assert "create role" not in normalized
+
+
+def test_bootstrap_and_restore_cover_nine_arg_finalize() -> None:
+    restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
+    signature = (
+        "finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, "
+        "TEXT, TEXT, TEXT, TEXT)"
+    )
+    assert signature in restore
+    assert (
+        "finalize_source_fetch(UUID, TEXT, BIGINT, TEXT, TIMESTAMPTZ, TEXT, TEXT)"
+        not in restore.replace(signature, "")
     )

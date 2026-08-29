@@ -60,7 +60,27 @@ class SecEndpointConfig:
         return f"{self.base_url}/Archives/edgar"
 
 
+@dataclass(frozen=True)
+class ConditionalSecResponse:
+    """One SEC GET, including a 304 Not Modified (Ticket 28)."""
+
+    not_modified: bool
+    content: bytes
+    etag: str | None
+    last_modified: str | None
+
+
 def download_sec_bytes(url: str, identity: str) -> bytes:
+    return download_sec_conditionally(url, identity).content
+
+
+def download_sec_conditionally(
+    url: str,
+    identity: str,
+    *,
+    etag: str | None = None,
+    last_modified: str | None = None,
+) -> ConditionalSecResponse:
     import httpx
 
     _validate_sec_url(url)
@@ -69,13 +89,36 @@ def download_sec_bytes(url: str, identity: str) -> bytes:
     headers = {"Accept": "*/*", "User-Agent": identity}
     timeout = httpx.Timeout(30.0, connect=10.0)
     max_response_bytes = int(os.environ.get("WAREHOUSE_SEC_MAX_RESPONSE_BYTES", DEFAULT_MAX_RESPONSE_BYTES))
+    request_headers: dict[str, str] = {}
+    if etag:
+        request_headers["If-None-Match"] = etag if etag.startswith(("W/", '"')) else f'"{etag}"'
+    if last_modified:
+        request_headers["If-Modified-Since"] = last_modified
 
     for attempt in range(1, 4):
         started_at = time.monotonic()
         _emit_sec_pull_event("sec_pull_started", url=url, attempt=attempt, max_attempts=3)
         try:
             with httpx.Client(follow_redirects=True, headers=headers, timeout=timeout) as client:
-                response = client.get(url)
+                response = client.get(url, headers=request_headers or None)
+                if response.status_code == 304:
+                    _validate_sec_url(str(response.url))
+                    _emit_sec_pull_event(
+                        "sec_pull_completed",
+                        url=url,
+                        final_url=str(response.url),
+                        attempt=attempt,
+                        max_attempts=3,
+                        status_code=304,
+                        bytes=0,
+                        duration_ms=_elapsed_ms(started_at),
+                    )
+                    return ConditionalSecResponse(
+                        not_modified=True,
+                        content=b"",
+                        etag=_response_etag(response) or etag,
+                        last_modified=_response_last_modified(response) or last_modified,
+                    )
                 response.raise_for_status()
                 _validate_sec_url(str(response.url))
                 if len(response.content) > max_response_bytes:
@@ -92,7 +135,12 @@ def download_sec_bytes(url: str, identity: str) -> bytes:
                     bytes=len(response.content),
                     duration_ms=_elapsed_ms(started_at),
                 )
-                return response.content
+                return ConditionalSecResponse(
+                    not_modified=False,
+                    content=response.content,
+                    etag=_response_etag(response),
+                    last_modified=_response_last_modified(response),
+                )
         except httpx.HTTPStatusError as exc:
             last_error = exc
             status_code = exc.response.status_code
@@ -140,6 +188,22 @@ def download_sec_bytes(url: str, identity: str) -> bytes:
             raise WarehouseRuntimeError(f"SEC request failed for {url}: {exc}") from exc
 
     raise WarehouseRuntimeError(f"SEC request failed for {url}: {last_error}")
+
+
+def _response_etag(response: object) -> str | None:
+    headers = getattr(response, "headers", None) or {}
+    raw = headers.get("etag") or headers.get("ETag")
+    if not raw:
+        return None
+    return str(raw).strip().strip('"') or None
+
+
+def _response_last_modified(response: object) -> str | None:
+    headers = getattr(response, "headers", None) or {}
+    raw = headers.get("last-modified") or headers.get("Last-Modified")
+    if not raw:
+        return None
+    return str(raw).strip() or None
 
 
 def _elapsed_ms(started_at: float) -> int:

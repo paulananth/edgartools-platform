@@ -8,16 +8,33 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
-from edgar_warehouse.infrastructure.sec_client import SecEndpointConfig, _SEC_RATE_LIMITER, _validate_sec_url, download_sec_bytes
+from edgar_warehouse.infrastructure.sec_client import (
+    SecEndpointConfig,
+    _SEC_RATE_LIMITER,
+    _validate_sec_url,
+    download_sec_bytes,
+    download_sec_conditionally,
+)
 
 
 class _FakeResponse:
     status_code = 200
     url = "https://data.sec.gov/submissions/CIK0000000001.json"
     content = b'{"ok":true}'
+    headers = {"etag": '"etag-200"', "last-modified": "Wed, 21 Oct 2015 07:28:00 GMT"}
 
     def raise_for_status(self) -> None:
         return None
+
+
+class _NotModifiedResponse:
+    status_code = 304
+    url = "https://www.sec.gov/files/company_tickers.json"
+    content = b""
+    headers = {"etag": '"etag-304"', "last-modified": "Wed, 21 Oct 2015 07:28:00 GMT"}
+
+    def raise_for_status(self) -> None:
+        raise AssertionError("304 must not call raise_for_status")
 
 
 class _FakeClient:
@@ -30,7 +47,8 @@ class _FakeClient:
     def __exit__(self, exc_type, exc, tb) -> None:
         return None
 
-    def get(self, url: str) -> _FakeResponse:
+    def get(self, url: str, headers=None) -> _FakeResponse:
+        self.last_headers = headers
         return _FakeResponse()
 
 
@@ -64,6 +82,47 @@ class SecClientTests(unittest.TestCase):
         self.assertEqual([event["event"] for event in events], ["sec_pull_started", "sec_pull_completed"])
         self.assertEqual(events[1]["bytes"], 11)
         self.assertEqual(events[1]["status_code"], 200)
+
+    def test_download_sec_conditionally_returns_200_with_validators(self) -> None:
+        with patch("httpx.Client", _FakeClient), contextlib.redirect_stderr(io.StringIO()):
+            result = download_sec_conditionally(
+                "https://data.sec.gov/submissions/CIK0000000001.json",
+                "edgartools-platform test@example.com",
+            )
+        self.assertFalse(result.not_modified)
+        self.assertEqual(result.content, b'{"ok":true}')
+        self.assertEqual(result.etag, "etag-200")
+        self.assertEqual(result.last_modified, "Wed, 21 Oct 2015 07:28:00 GMT")
+
+    def test_download_sec_conditionally_sends_validators_and_returns_304(self) -> None:
+        captured: dict[str, object] = {}
+
+        class _ConditionalClient(_FakeClient):
+            def get(self, url: str, headers=None):
+                captured["headers"] = headers
+                return _NotModifiedResponse()
+
+        with patch("httpx.Client", _ConditionalClient), contextlib.redirect_stderr(io.StringIO()):
+            result = download_sec_conditionally(
+                "https://www.sec.gov/files/company_tickers.json",
+                "edgartools-platform test@example.com",
+                etag="etag-304",
+                last_modified="Wed, 21 Oct 2015 07:28:00 GMT",
+            )
+        self.assertTrue(result.not_modified)
+        self.assertEqual(result.content, b"")
+        self.assertEqual(result.etag, "etag-304")
+        request_headers = captured["headers"]
+        self.assertEqual(request_headers["If-None-Match"], '"etag-304"')
+        self.assertEqual(
+            request_headers["If-Modified-Since"], "Wed, 21 Oct 2015 07:28:00 GMT"
+        )
+
+    def test_download_sec_bytes_signature_is_unchanged(self) -> None:
+        import inspect
+
+        params = list(inspect.signature(download_sec_bytes).parameters)
+        self.assertEqual(params, ["url", "identity"])
 
     def test_rate_limiter_called_once_per_request(self) -> None:
         import httpx
