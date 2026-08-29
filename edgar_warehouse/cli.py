@@ -241,6 +241,23 @@ def _handle_backfill_silver_landing_company_metadata(args: argparse.Namespace) -
     return run_command("backfill-silver-landing-company-metadata", args)
 
 
+def _handle_compare_filing_artifact_capture(args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from edgar_warehouse.acquisition.capture_parity import evaluate_capture_parity_files
+
+    verdict = evaluate_capture_parity_files(
+        legacy_path=Path(args.legacy_snapshot),
+        gated_path=Path(args.gated_snapshot),
+        business_date=args.business_date,
+        cik_list=getattr(args, "cik_list", None),
+        limit=args.limit,
+    )
+    print(json.dumps(verdict.to_dict(), indent=2, sort_keys=True))
+    return 0 if verdict.passed else 1
+
+
 def _handle_reconcile_decision_watermark(args: argparse.Namespace) -> int:
     import json
 
@@ -666,6 +683,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Source Family Registry version tied to issued decisions "
         "(default: filing_artifact-v1)",
+    )
+    drive_filing_discovery_for_date.add_argument(
+        "--cik-list",
+        type=_parse_cik_list,
+        default=None,
+        help=(
+            "Ticket 51: restrict sealed daily-index candidates to these CIKs "
+            "(Decision 2 1-CIK / 100-CIK harness). A scoped run does not "
+            "record family catch-up for the date."
+        ),
     )
     _add_run_id_arg(drive_filing_discovery_for_date)
     drive_filing_discovery_for_date.set_defaults(
@@ -1426,6 +1453,42 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(backfill_silver_landing_company_metadata)
     backfill_silver_landing_company_metadata.set_defaults(
         handler=_handle_backfill_silver_landing_company_metadata
+    )
+
+    compare_filing_artifact_capture = subparsers.add_parser(
+        "compare-filing-artifact-capture",
+        help=(
+            "Ticket 51 / Ticket 10 Decision 2: compare a legacy capture snapshot "
+            "to a ledger-gated snapshot for one CIK scope. Pass is equal-or-superset "
+            "with zero silent gaps. Default scope is Apple CIK 320193 (stage 1); "
+            "pass --limit 100 for stage 2. Observe-only — does not capture or repair."
+        ),
+    )
+    compare_filing_artifact_capture.add_argument("--business-date", required=True)
+    compare_filing_artifact_capture.add_argument(
+        "--legacy-snapshot",
+        required=True,
+        help="JSON CaptureSnapshot from the legacy path.",
+    )
+    compare_filing_artifact_capture.add_argument(
+        "--gated-snapshot",
+        required=True,
+        help="JSON CaptureSnapshot from the ledger-gated path.",
+    )
+    compare_filing_artifact_capture.add_argument(
+        "--cik-list",
+        type=_parse_cik_list,
+        default=None,
+        help="Comma-separated CIKs. Default is Apple (320193) when omitted.",
+    )
+    compare_filing_artifact_capture.add_argument(
+        "--limit",
+        type=int,
+        default=1,
+        help="Keep the first N scoped CIKs. Default 1 (stage 1); use 100 for stage 2.",
+    )
+    compare_filing_artifact_capture.set_defaults(
+        handler=_handle_compare_filing_artifact_capture
     )
 
     reconcile_decision_watermark = subparsers.add_parser(

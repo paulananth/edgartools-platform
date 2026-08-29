@@ -33,7 +33,9 @@ work to have any real evidence to act on — is split out as its own ticket:
 This ticket (27) now additionally depends on 46's outcome for its own
 bullets to be actionable — its removal-evidence bullets cannot be attempted
 for any family until that family has been through a real Decision-2
-side-by-side window, and none has yet.
+side-by-side window, and none has yet. The compare harness itself is
+[Ticket 51](51-build-filing-artifact-capture-parity-harness.md); 27 still
+needs a live window that *passes* that harness, not merely the code.
 
 - [ ] Architecture tests prove every approved low-level source adapter is
   reachable only through the ledger-gated Facade.
