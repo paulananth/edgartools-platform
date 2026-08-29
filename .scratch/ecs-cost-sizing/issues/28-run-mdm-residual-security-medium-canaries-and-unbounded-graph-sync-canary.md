@@ -140,7 +140,19 @@ Qualifying run 1/3 (execution attempt 2) launched at 2026-08-29 14:08 EDT:
 
 `arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-2-20260829T180850Z`
 
-The next corrected execution launches only after its predecessor is terminal.
+It succeeded at 16:52 EDT with no retries or non-zero exits. The unbounded
+candidate contained 226,197 nodes and 654,286 edges,
+`capped_below_available=false`, and exact node/relationship identity parity.
+Worst medium memory peak/p95 was 9.86%/9.82%; worst CPU peak/p95 was
+57.68%/50.36%. End-to-end duration was 9,789.448 seconds and estimated
+on-demand compute cost was $0.155314788.
+
+Qualifying run 2/3 (execution attempt 3) launched at 2026-08-29 18:05 EDT:
+
+`arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-3-20260829T220530Z`
+
+Each corrected execution launches only after its predecessor is terminal and
+its evidence is collected.
 No existing production execution is a matched current-image control: the two
 source-machine runs are failed July executions on older definitions. A
 separate immutable corrected control therefore preserves all eight workload
