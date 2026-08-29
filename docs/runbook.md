@@ -847,6 +847,30 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
 - **SnowCLI connection** (`SNOW_CONNECTION`) must be configured in
   `~/.snowflake/config.toml` and have `PUT` privileges on the stage.
 
+### Bookkeeping Store Cutover (DuckDB Retirement, in progress)
+
+- **The 11 operational bookkeeping tables** (checkpoints, sync-state, leases,
+  the run audit trail, the gold publish manifest, and reconcile findings —
+  see `.scratch/duckdb-retirement-cutover/issues/02-move-bookkeeping-tables-to-snowflake-postgres.md`)
+  are moving off DuckDB onto a dedicated Snowflake-hosted Postgres store
+  (`edgar_warehouse/bookkeeping/`, `BOOKKEEPING_DATABASE_URL`).
+- **The new store starts empty at cutover — it is not migrated from
+  existing DuckDB state.** Every CIK that is currently paused or completed
+  in `sec_company_sync_state` reverts to pending the moment the write path
+  repoints at this store, and becomes eligible for a full re-bootstrap on
+  the next run. This is an explicit, accepted operator decision (DuckDB
+  Retirement wayfinder map, Ticket 08), not a bug — but it is a
+  platform-wide reactivation of the entire tracked-company universe, so
+  size the first post-cutover run's expected cost/duration accordingly
+  before triggering it, and don't schedule the cutover immediately before
+  a cost-sensitive window.
+- **Not yet live as of this note** — see
+  `.scratch/duckdb-retirement-cutover/issues/04-provision-live-bookkeeping-postgres.md`
+  for the live-provisioning ticket and
+  `.scratch/duckdb-retirement-cutover/issues/10-atomic-write-path-cutover.md`
+  for the ticket that actually repoints the write path (and triggers this
+  reactivation).
+
 ---
 
 ## Recovering from a partial load_history failure
