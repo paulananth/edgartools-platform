@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -77,6 +78,7 @@ from edgar_warehouse.application.acquisition_command_registry import (
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
+    _emit_pipeline_event,
     _hydrate_silver_database_from_storage,
     _publish_silver_database_with_retry,
 )
@@ -97,6 +99,34 @@ ADV_FILING_COMMAND_NAME = "drive-adv-filing-discovery-for-date"
 # a covered family's registry coverage declaring anything else is a real
 # configuration error, not inert metadata to read and ignore.
 DAILY_INDEX_DRIVEN_DISCOVERY_POLICY = "daily_index_driven"
+
+# Ticket 48: candidate-level progress for operators watching a live gated
+# discovery run. Count-based default matches silver_apply_progress's "every
+# N plus last" shape; the 100-candidate stride is coarser because a sealed
+# daily index is thousands of rows, not tens of CIKs. Time-based fallback
+# covers a slow stretch of real SEC fetches that would otherwise go silent
+# between count ticks.
+GATED_DISCOVERY_PROGRESS_EVERY_N = 100
+GATED_DISCOVERY_PROGRESS_EVERY_SECONDS = 30.0
+
+
+def gated_discovery_progress_due(
+    *,
+    processed: int,
+    candidate_count: int,
+    elapsed_seconds: float,
+    every_n: int = GATED_DISCOVERY_PROGRESS_EVERY_N,
+    every_seconds: float = GATED_DISCOVERY_PROGRESS_EVERY_SECONDS,
+) -> bool:
+    """Return whether a running progress event should fire for this tick."""
+
+    if candidate_count <= 0:
+        return False
+    if processed == candidate_count:
+        return True
+    if every_n > 0 and processed > 0 and processed % every_n == 0:
+        return True
+    return elapsed_seconds >= every_seconds
 
 
 class UnsupportedDiscoveryPolicy(WarehouseRuntimeError):
@@ -197,6 +227,33 @@ def run_gated_discovery_for_business_date(
         engine, identity=context.identity, as_of_date=business_date_value
     )
 
+    candidate_count = manifest.candidate_count
+    _emit_pipeline_event(
+        "gated_discovery_started",
+        business_date=business_date,
+        candidate_count=candidate_count,
+        source_family=source_family,
+    )
+    last_progress_at = time.monotonic()
+
+    def _emit_gated_discovery_progress(processed: int, total: int) -> None:
+        nonlocal last_progress_at
+        now = time.monotonic()
+        if not gated_discovery_progress_due(
+            processed=processed,
+            candidate_count=total,
+            elapsed_seconds=now - last_progress_at,
+        ):
+            return
+        last_progress_at = now
+        _emit_pipeline_event(
+            "gated_discovery_progress",
+            business_date=business_date,
+            candidate_count=total,
+            processed=processed,
+            source_family=source_family,
+        )
+
     result = drive_discovery_manifest(
         ledger,
         context.bronze_root,
@@ -205,6 +262,7 @@ def run_gated_discovery_for_business_date(
         worker_id=worker_id,
         registry_version=registry_version,
         lease_seconds=lease_seconds,
+        on_progress=_emit_gated_discovery_progress,
     )
     silver_result = drive_filing_artifact_silver_acceptance(
         ledger,

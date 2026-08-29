@@ -8,7 +8,7 @@ without reasoning about SQL-statement counts.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** open
+**Status:** resolved
 
 ## Question
 
@@ -40,11 +40,32 @@ and larger.
 
 ## Acceptance
 
-- [ ] `run_gated_discovery_for_business_date` logs the total candidate
+- [x] `run_gated_discovery_for_business_date` logs the total candidate
   count once at start.
-- [ ] `run_gated_discovery_for_business_date` logs a running
+- [x] `run_gated_discovery_for_business_date` logs a running
   processed-count at a reasonable cadence (time- or count-based, not one
   line per candidate — avoid multiplying log volume by the same factor
   this ticket is trying to make legible).
-- [ ] A unit test asserts both new log events fire with the right field
+- [x] A unit test asserts both new log events fire with the right field
   shape, mirroring the existing `silver_apply_progress` test coverage.
+
+## Answer
+
+`run_gated_discovery_for_business_date` now emits `gated_discovery_started`
+(`candidate_count`, `business_date`, `source_family`) once the sealed
+manifest is built, then `gated_discovery_progress` (`processed` /
+`candidate_count`, same identity fields) on a bounded cadence: every 100
+candidates, every 30 seconds, and always on the last candidate. Logging
+stays in the workflow; `drive_discovery_manifest` only gained an optional
+`on_progress(processed, candidate_count)` callback so the per-candidate
+loop can report without owning CloudWatch event shape.
+
+Events go through the existing `_emit_pipeline_event` stderr JSON path
+(`silver_apply_progress`'s shape). `business_date` / `source_family` are
+on both events because Ticket 46's in-process caller can run this once
+per date inside a larger daily-incremental task.
+
+Tests: `test_gated_discovery_emits_started_and_progress_events` (live
+command path, two sealed daily-index rows) and
+`test_gated_discovery_progress_is_not_emitted_per_candidate` (cadence
+helper: count tick, final tick, time tick, and the silent in-between).

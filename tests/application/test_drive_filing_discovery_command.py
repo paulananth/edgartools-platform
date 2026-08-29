@@ -368,6 +368,82 @@ def test_drive_filing_discovery_fails_closed_on_an_unsupported_discovery_policy(
         )
 
 
+def _pipeline_events(err: str) -> list[dict]:
+    events: list[dict] = []
+    for line in err.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and "event" in payload:
+            events.append(payload)
+    return events
+
+
+def test_gated_discovery_emits_started_and_progress_events(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], _acquisition_db: str
+) -> None:
+    """Ticket 48: operator-facing progress is candidate-count, not SQL-statement count."""
+
+    from edgar_warehouse.application.command_router import run_command
+
+    _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    payload = b"<ownershipDocument>real Form 4 bytes</ownershipDocument>"
+
+    with patch(
+        "edgar_warehouse.acquisition.source_family_registry.download_filing_content_bytes",
+        return_value=payload,
+    ):
+        exit_code = run_command(
+            "drive-filing-discovery-for-date",
+            Namespace(
+                business_date="2026-08-24",
+                worker_id="discovery-worker-1",
+                lease_seconds=None,
+                registry_version=None,
+                run_id="run-discovery-1",
+            ),
+        )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    events = _pipeline_events(captured.err)
+    by_name = [event["event"] for event in events]
+    assert "gated_discovery_started" in by_name
+    assert "gated_discovery_progress" in by_name
+
+    started = next(event for event in events if event["event"] == "gated_discovery_started")
+    assert started["candidate_count"] == 2
+    assert started["business_date"] == "2026-08-24"
+    assert started["source_family"] == "filing_artifact"
+
+    progress = [event for event in events if event["event"] == "gated_discovery_progress"]
+    assert progress[-1]["processed"] == 2
+    assert progress[-1]["candidate_count"] == 2
+    assert progress[-1]["business_date"] == "2026-08-24"
+    assert progress[-1]["source_family"] == "filing_artifact"
+
+
+def test_gated_discovery_progress_is_not_emitted_per_candidate() -> None:
+    """Ticket 48: cadence must stay bounded — one line per candidate would
+    recreate the log-volume problem this ticket is making legible.
+    """
+
+    from edgar_warehouse.application.workflows.drive_filing_discovery import (
+        gated_discovery_progress_due,
+    )
+
+    assert gated_discovery_progress_due(processed=1, candidate_count=12, elapsed_seconds=0.0, every_n=10, every_seconds=30.0) is False
+    assert gated_discovery_progress_due(processed=10, candidate_count=12, elapsed_seconds=0.0, every_n=10, every_seconds=30.0) is True
+    assert gated_discovery_progress_due(processed=12, candidate_count=12, elapsed_seconds=0.0, every_n=10, every_seconds=30.0) is True
+    assert gated_discovery_progress_due(processed=3, candidate_count=12, elapsed_seconds=30.0, every_n=10, every_seconds=30.0) is True
+    assert gated_discovery_progress_due(processed=3, candidate_count=12, elapsed_seconds=29.9, every_n=10, every_seconds=30.0) is False
+
+
 def test_drive_filing_discovery_evaluates_coverage_end_date_against_business_date_not_wall_clock(
     tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
