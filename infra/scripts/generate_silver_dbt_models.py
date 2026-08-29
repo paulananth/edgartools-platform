@@ -197,6 +197,15 @@ def _reflect_tables() -> dict[str, dict]:
     return tables
 
 
+def _not_retired_clause(table: str, pk: list[str]) -> str:
+    """Ticket 35: anti-join the latest Silver Landing Retirement Record."""
+
+    key_expr = "concat_ws('|', " + ", ".join(pk) + ")"
+    return (
+        f"{{{{ silver_not_retired('{table}', \"{key_expr}\") }}}}"
+    )
+
+
 def _model_body_simple(table: str, columns: list[str], pk: list[str]) -> str:
     coalesce_cols = _COALESCE_PRESERVING_COLUMNS.get(table, set())
     partition = ", ".join(pk)
@@ -224,6 +233,7 @@ qualify row_number() over (
     partition by {partition}
     order by parse_sequence desc
 ) = 1
+  and {_not_retired_clause(table, pk)}
 """
 
 
@@ -253,6 +263,7 @@ last_seen as (
     {last_select}
     from {{{{ source('{SOURCE_NAME}', '{table.upper()}') }}}}
     qualify row_number() over (partition by {partition} order by parse_sequence desc) = 1
+      and {_not_retired_clause(table, pk)}
 )
 select
     {final_select}

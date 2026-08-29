@@ -28,3 +28,4 @@ qualify row_number() over (
     partition by accession_number, evidence_fingerprint
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_auditor_report_evidence', "concat_ws('|', accession_number, evidence_fingerprint)") }}

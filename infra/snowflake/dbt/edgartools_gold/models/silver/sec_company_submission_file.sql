@@ -17,3 +17,4 @@ qualify row_number() over (
     partition by cik, file_name
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_company_submission_file', "concat_ws('|', cik, file_name)") }}

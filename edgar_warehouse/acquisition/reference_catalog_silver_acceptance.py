@@ -50,15 +50,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from edgar_warehouse.acquisition.ledger import AcquisitionLedger, FetchWorkState
 from edgar_warehouse.acquisition.processing import (
+    DUCKDB_PRODUCER_KIND,
+    SNOWFLAKE_LANDING_PRODUCER_KIND,
     ExpectedProducerOutcome,
     ExpectedProducerSpec,
     ProcessingDecision,
     ProcessingLedger,
     SilverFinalizer,
+    verify_snowflake_landing_producer,
 )
 from edgar_warehouse.acquisition.reference_catalog_discovery import ReferenceCatalogDriveResult
 from edgar_warehouse.acquisition.revisions import ContentImpact, SourceRevisionLedger
@@ -67,6 +72,8 @@ from edgar_warehouse.silver_store import SilverDatabase
 
 REFERENCE_CATALOG_PRODUCER_NAME = "sec_company_ticker"
 REFERENCE_CATALOG_TARGET_TABLE = "sec_company_ticker"
+REFERENCE_CATALOG_LANDING_PRODUCER_NAME = "sec_company_ticker_landing"
+REFERENCE_CATALOG_SOURCE_FAMILY = "reference_catalog"
 
 # Same honest bounded-first-slice stance as submissions'/company_facts's own
 # *_INTERPRETATION_VERSION: no real interpretation-vs-transport distinction
@@ -154,6 +161,7 @@ def _finalize_reference_catalog_candidate(
     decision_id: str,
     *,
     source_name: str,
+    landing_row_counter: Callable[[str, str], int] | None = None,
 ) -> ProcessingDecision:
     status = ledger.source_change_status(decision_id)
     if status.fetch_state is not FetchWorkState.CAPTURED:
@@ -223,19 +231,44 @@ def _finalize_reference_catalog_candidate(
         (ordinal, row["cik"], row["ticker"], row.get("exchange"))
         for ordinal, row in enumerate(rows, start=1)
     ]
+    cause_reference = status.cause_reference or decision_id
+    prior_pairs = {
+        (row["cik"], row["ticker"])
+        for row in silver.fetch(
+            "SELECT cik, ticker FROM sec_company_ticker WHERE source_name = ?",
+            [source_name],
+        )
+    }
+    new_pairs = {(row["cik"], row["ticker"]) for row in rows}
+    dropped_pairs = prior_pairs - new_pairs
+
+    duckdb_spec = ExpectedProducerSpec(
+        producer_name=REFERENCE_CATALOG_PRODUCER_NAME,
+        target_table=REFERENCE_CATALOG_TARGET_TABLE,
+        scope_reference=(
+            f"reference-catalog/{source_name}/sec_company_ticker/"
+            f"count={len(member_keys)}/digest={_member_digest(member_keys)}"
+        ),
+        producer_kind=DUCKDB_PRODUCER_KIND,
+    )
+    expected_producers = [duckdb_spec]
+    if landing_row_counter is not None:
+        expected_producers.append(
+            ExpectedProducerSpec(
+                producer_name=REFERENCE_CATALOG_LANDING_PRODUCER_NAME,
+                target_table=REFERENCE_CATALOG_TARGET_TABLE,
+                scope_reference=(
+                    f"snowflake_landing:{cause_reference}:count={len(new_pairs)}"
+                ),
+                producer_kind=SNOWFLAKE_LANDING_PRODUCER_KIND,
+                expected_row_count=len(new_pairs),
+                cause_reference=cause_reference,
+            )
+        )
 
     decision = processing.seal_expected_producers(
         revision.revision_id,
-        expected_producers=(
-            ExpectedProducerSpec(
-                producer_name=REFERENCE_CATALOG_PRODUCER_NAME,
-                target_table=REFERENCE_CATALOG_TARGET_TABLE,
-                scope_reference=(
-                    f"reference-catalog/{source_name}/sec_company_ticker/"
-                    f"count={len(member_keys)}/digest={_member_digest(member_keys)}"
-                ),
-            ),
-        ),
+        expected_producers=tuple(expected_producers),
     )
     pending_producer_names = {
         p.producer_name for p in decision.expected_producers if p.outcome is ExpectedProducerOutcome.PENDING
@@ -243,7 +276,18 @@ def _finalize_reference_catalog_candidate(
     if REFERENCE_CATALOG_PRODUCER_NAME not in pending_producer_names:
         return decision
 
-    silver.replace_company_tickers(rows, decision_id, source_name=source_name)
+    silver.replace_company_tickers(
+        rows,
+        decision_id,
+        source_name=source_name,
+        cause_reference=cause_reference,
+    )
+    _record_landing_retirements(
+        silver,
+        dropped_pairs=dropped_pairs,
+        source_name=source_name,
+        cause_reference=cause_reference,
+    )
     written_pairs = {(row["cik"], row["ticker"]) for row in rows}
     if written_pairs:
         present = silver.fetch(
@@ -261,7 +305,7 @@ def _finalize_reference_catalog_candidate(
         )
         verified = len(present) == 0
 
-    return finalizer.record_producer_outcome(
+    decision = finalizer.record_producer_outcome(
         decision.processing_decision_id,
         REFERENCE_CATALOG_PRODUCER_NAME,
         outcome=ExpectedProducerOutcome.VERIFIED if verified else ExpectedProducerOutcome.FAILED,
@@ -275,6 +319,47 @@ def _finalize_reference_catalog_candidate(
             )
         ),
     )
+    if landing_row_counter is not None and verified:
+        decision = verify_snowflake_landing_producer(
+            finalizer,
+            decision.processing_decision_id,
+            REFERENCE_CATALOG_LANDING_PRODUCER_NAME,
+            target_table=REFERENCE_CATALOG_TARGET_TABLE,
+            cause_reference=cause_reference,
+            expected_row_count=len(written_pairs),
+            count_rows=landing_row_counter,
+        )
+    return decision
+
+
+def _record_landing_retirements(
+    silver: SilverDatabase,
+    *,
+    dropped_pairs: set[tuple],
+    source_name: str,
+    cause_reference: str,
+) -> None:
+    """Ticket 35: write Silver Landing Retirement Records for a proved shrink."""
+
+    if not dropped_pairs:
+        return
+    landing_export = getattr(silver, "landing_export", None)
+    if landing_export is None:
+        return
+    now = datetime.now(UTC)
+    landing_export.record(
+        "silver_landing_retirement",
+        [
+            {
+                "source_family": REFERENCE_CATALOG_SOURCE_FAMILY,
+                "target_table": REFERENCE_CATALOG_TARGET_TABLE,
+                "business_key": f"{cik}|{ticker}|{source_name}",
+                "cause_reference": cause_reference,
+                "retired_at": now,
+            }
+            for cik, ticker in sorted(dropped_pairs)
+        ],
+    )
 
 
 def drive_reference_catalog_silver_acceptance(
@@ -287,6 +372,7 @@ def drive_reference_catalog_silver_acceptance(
     result: ReferenceCatalogDriveResult,
     *,
     required_producers: tuple[str, ...] = (REFERENCE_CATALOG_PRODUCER_NAME,),
+    landing_row_counter: Callable[[str, str], int] | None = None,
 ) -> ReferenceCatalogSilverAcceptanceResult:
     """Carry every CAPTURED candidate in a reference-catalog drive result to Silver.
 
@@ -320,6 +406,7 @@ def drive_reference_catalog_silver_acceptance(
                 silver,
                 candidate_outcome.decision_id,
                 source_name=source_name,
+                landing_row_counter=landing_row_counter,
             )
             outcomes.append(
                 ReferenceCatalogOutcome(

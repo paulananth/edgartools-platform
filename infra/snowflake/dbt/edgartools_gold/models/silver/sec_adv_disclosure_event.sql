@@ -18,3 +18,4 @@ qualify row_number() over (
     partition by accession_number, event_index
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_adv_disclosure_event', "concat_ws('|', accession_number, event_index)") }}

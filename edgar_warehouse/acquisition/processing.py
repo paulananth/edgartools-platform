@@ -40,6 +40,7 @@ partial unique index mirroring ``uq_source_fetch_work_active_key``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -132,6 +133,10 @@ class ExpectedProducerAlreadySettled(RuntimeError):
     """A producer outcome was already recorded with a conflicting result."""
 
 
+SNOWFLAKE_LANDING_PRODUCER_KIND = "snowflake_landing"
+DUCKDB_PRODUCER_KIND = "duckdb"
+
+
 @dataclass(frozen=True)
 class ExpectedProducerSpec:
     """One Silver producer/table/scope a processor declares at seal time."""
@@ -139,6 +144,9 @@ class ExpectedProducerSpec:
     producer_name: str
     target_table: str
     scope_reference: str
+    producer_kind: str = DUCKDB_PRODUCER_KIND
+    expected_row_count: int | None = None
+    cause_reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -441,6 +449,48 @@ class SilverFinalizer:
             )
         )
         return _decision_from_records(record, producer_records)
+
+
+def verify_snowflake_landing_producer(
+    finalizer: SilverFinalizer,
+    processing_decision_id: str,
+    producer_name: str,
+    *,
+    target_table: str,
+    cause_reference: str,
+    expected_row_count: int,
+    count_rows: Callable[[str, str], int],
+) -> ProcessingDecision:
+    """Ticket 35: settle a snowflake-landing producer from a real COUNT(*).
+
+    ``count_rows(target_table, cause_reference)`` is the read-back against
+    the authoritative landing table (or a test double of that table). This
+    function does not open Snowflake itself -- callers inject the counter so
+    production can COUNT EDGARTOOLS_SILVER_LANDING and tests can COUNT a
+    local stand-in. Layered on top of dbt's ``target_lag = '6 hours'``:
+    missing rows fail closed here regardless of the dynamic-table refresh
+    clock.
+    """
+
+    actual = count_rows(target_table, cause_reference)
+    if actual == expected_row_count:
+        return finalizer.record_producer_outcome(
+            processing_decision_id,
+            producer_name,
+            outcome=ExpectedProducerOutcome.VERIFIED,
+            verified_reference=(
+                f"snowflake_landing:{target_table}:{cause_reference}:count={actual}"
+            ),
+        )
+    return finalizer.record_producer_outcome(
+        processing_decision_id,
+        producer_name,
+        outcome=ExpectedProducerOutcome.FAILED,
+        failure_detail=(
+            f"expected {expected_row_count} landing rows in {target_table} "
+            f"for cause_reference={cause_reference!r}; counted {actual}"
+        ),
+    )
 
 
 @dataclass(frozen=True)

@@ -19,3 +19,4 @@ qualify row_number() over (
     partition by accession_number, office_index
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_adv_office', "concat_ws('|', accession_number, office_index)") }}

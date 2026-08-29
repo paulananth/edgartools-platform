@@ -35,6 +35,7 @@ last_seen as (
     last_synced_at
     from {{ source('edgartools_silver_landing', 'SEC_COMPANY_FILING') }}
     qualify row_number() over (partition by accession_number order by parse_sequence desc) = 1
+      and {{ silver_not_retired('sec_company_filing', "concat_ws('|', accession_number)") }}
 )
 select
     f.accession_number,

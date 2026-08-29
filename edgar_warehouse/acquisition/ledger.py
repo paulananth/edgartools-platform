@@ -154,6 +154,7 @@ class SourceChangeStatus:
     next_action: str
     is_terminal: bool
     exclusion_reason: str | None = None
+    cause_reference: str | None = None
 
     @property
     def may_fetch(self) -> bool:
@@ -591,6 +592,7 @@ def _status_from_record(
         next_action=next_action,
         is_terminal=disposition in TERMINAL_NO_DOWNLOAD_DISPOSITIONS,
         exclusion_reason=decision.exclusion_reason,
+        cause_reference=decision.cause_reference,
     )
 
 

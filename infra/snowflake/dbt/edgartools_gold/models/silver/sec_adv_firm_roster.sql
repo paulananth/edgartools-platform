@@ -23,3 +23,4 @@ qualify row_number() over (
     partition by adviser_crd_number, dataset_period
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_adv_firm_roster', "concat_ws('|', adviser_crd_number, dataset_period)") }}

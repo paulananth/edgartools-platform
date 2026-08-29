@@ -27,3 +27,4 @@ qualify row_number() over (
     partition by cik, accession_number, holding_index
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_thirteenf_holding', "concat_ws('|', cik, accession_number, holding_index)") }}

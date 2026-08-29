@@ -20,3 +20,4 @@ qualify row_number() over (
     partition by cik, address_type
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_company_address', "concat_ws('|', cik, address_type)") }}

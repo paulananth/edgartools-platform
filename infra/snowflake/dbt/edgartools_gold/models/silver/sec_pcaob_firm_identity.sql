@@ -19,3 +19,4 @@ qualify row_number() over (
     partition by pcaob_firm_id, snapshot_sha256
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_pcaob_firm_identity', "concat_ws('|', pcaob_firm_id, snapshot_sha256)") }}

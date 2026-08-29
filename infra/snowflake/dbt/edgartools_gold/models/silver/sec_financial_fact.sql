@@ -41,6 +41,7 @@ last_seen as (
     is_current
     from {{ source('edgartools_silver_landing', 'SEC_FINANCIAL_FACT') }}
     qualify row_number() over (partition by cik, accession_number, concept, fiscal_period, segment, period_end, period_start order by parse_sequence desc) = 1
+      and {{ silver_not_retired('sec_financial_fact', "concat_ws('|', cik, accession_number, concept, fiscal_period, segment, period_end, period_start)") }}
 )
 select
     f.cik,

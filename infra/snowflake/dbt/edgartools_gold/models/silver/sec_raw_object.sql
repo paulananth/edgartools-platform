@@ -25,3 +25,4 @@ qualify row_number() over (
     partition by raw_object_id
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_raw_object', "concat_ws('|', raw_object_id)") }}
