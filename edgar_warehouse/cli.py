@@ -243,10 +243,45 @@ def _handle_backfill_silver_landing_company_metadata(args: argparse.Namespace) -
 
 def _handle_compare_filing_artifact_capture(args: argparse.Namespace) -> int:
     import json
+    from datetime import UTC, datetime
     from pathlib import Path
 
-    from edgar_warehouse.acquisition.capture_parity import evaluate_capture_parity_files
+    from edgar_warehouse.acquisition.capture_parity import (
+        evaluate_capture_parity_files,
+        run_dual_path_filing_artifact_parity,
+    )
 
+    if getattr(args, "run_capture", False):
+        from edgar_warehouse.application.warehouse_orchestrator import (
+            _build_warehouse_context,
+        )
+        from edgar_warehouse.silver_support.session import open_silver_database
+
+        context = _build_warehouse_context("daily-incremental")
+        db = open_silver_database(context.silver_root)
+        try:
+            result = run_dual_path_filing_artifact_parity(
+                context=context,
+                db=db,
+                business_date=args.business_date,
+                cik_list=getattr(args, "cik_list", None),
+                limit=args.limit,
+                sync_run_id=getattr(args, "run_id", None)
+                or datetime.now(UTC).strftime("parity-%Y%m%dT%H%M%SZ"),
+            )
+        finally:
+            db.close()
+        payload = result.verdict.to_dict()
+        payload["legacy_cause_reference"] = result.legacy.cause_reference
+        payload["gated_cause_reference"] = result.gated.cause_reference
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0 if result.verdict.passed else 1
+
+    if not args.legacy_snapshot or not args.gated_snapshot:
+        raise SystemExit(
+            "compare-filing-artifact-capture requires --run-capture "
+            "or both --legacy-snapshot and --gated-snapshot"
+        )
     verdict = evaluate_capture_parity_files(
         legacy_path=Path(args.legacy_snapshot),
         gated_path=Path(args.gated_snapshot),
@@ -1458,22 +1493,34 @@ def build_parser() -> argparse.ArgumentParser:
     compare_filing_artifact_capture = subparsers.add_parser(
         "compare-filing-artifact-capture",
         help=(
-            "Ticket 51 / Ticket 10 Decision 2: compare a legacy capture snapshot "
-            "to a ledger-gated snapshot for one CIK scope. Pass is equal-or-superset "
-            "with zero silent gaps. Default scope is Apple CIK 320193 (stage 1); "
-            "pass --limit 100 for stage 2. Observe-only — does not capture or repair."
+            "Ticket 51 / Ticket 10 Decision 2: compare legacy filing-artifact "
+            "capture to ledger-gated capture for one CIK scope. Pass is "
+            "equal-or-superset with zero silent gaps. Default scope is Apple "
+            "CIK 320193 (stage 1); pass --limit 100 for stage 2. "
+            "--run-capture hits SEC on both paths; snapshot files compare "
+            "already-captured sets without fetching."
         ),
     )
     compare_filing_artifact_capture.add_argument("--business-date", required=True)
     compare_filing_artifact_capture.add_argument(
+        "--run-capture",
+        action="store_true",
+        default=False,
+        help=(
+            "Run real legacy fetch_filing_artifacts then gated discovery for "
+            "this date and CIK scope, then diff. Requires a sealed daily index "
+            "and EDGAR_IDENTITY. Hits SEC."
+        ),
+    )
+    compare_filing_artifact_capture.add_argument(
         "--legacy-snapshot",
-        required=True,
-        help="JSON CaptureSnapshot from the legacy path.",
+        default=None,
+        help="JSON CaptureSnapshot from the legacy path (not needed with --run-capture).",
     )
     compare_filing_artifact_capture.add_argument(
         "--gated-snapshot",
-        required=True,
-        help="JSON CaptureSnapshot from the ledger-gated path.",
+        default=None,
+        help="JSON CaptureSnapshot from the ledger-gated path (not needed with --run-capture).",
     )
     compare_filing_artifact_capture.add_argument(
         "--cik-list",

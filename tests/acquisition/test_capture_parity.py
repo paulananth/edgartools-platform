@@ -221,6 +221,22 @@ def test_artifact_from_source_fetch_decision_uses_ledger_fields() -> None:
     assert artifact.decision_id == "dec-1"
 
 
+def test_filter_keeps_issuer_when_daily_index_cik_is_reporting_owner() -> None:
+    rows = [
+        {
+            "cik": 1780525,
+            "accession_number": "0001140361-26-034741",
+            "file_name": "edgar/data/320193/0001140361-26-034741.txt",
+            "filing_txt_url": (
+                "https://www.sec.gov/Archives/edgar/data/320193/"
+                "0001140361-26-034741.txt"
+            ),
+        }
+    ]
+    filtered = filter_discovery_rows_by_cik(rows, (APPLE_CIK,))
+    assert [row["accession_number"] for row in filtered] == ["0001140361-26-034741"]
+
+
 def test_filter_discovery_rows_keeps_only_scoped_ciks() -> None:
     rows = [
         {"cik": 320193, "accession_number": "0001140361-26-000001"},

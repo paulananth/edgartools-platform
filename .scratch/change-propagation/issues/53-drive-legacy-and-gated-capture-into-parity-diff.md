@@ -54,12 +54,15 @@ come from Source Fetch Decision + CAPTURED work
 is still empty). Ticket 51's `compare_capture_snapshots` is unchanged.
 
 Tests (`tests/application/test_dual_path_capture_parity.py`):
-- Stage 1 Apple: shared Logical Source Key, distinct `cause_reference`,
-  legacy artifacts have no `decision_id`, gated artifacts do.
-- Stage 2: `limit=100` over a 101-CIK list; unrelated CIK 789019 is in
-  the sealed index but not in the first 100, so neither path fetches it.
-  CIK-scoped gated capture does not call `record_catchup_progress`.
-  Tests patch gated SEC download at the registry edge; the runner does
-  not import `unittest.mock`.
+- Live SEC 1-CIK Apple proof (`WAREHOUSE_LIVE_SEC=1` plus
+  `EDGAR_IDENTITY`). Loads the real daily index, re-applies issuer
+  Form 4 lines (silver PK last-write-wins otherwise keeps the reporting
+  owner CIK), runs both capture paths with no download mocks, requires a
+  non-empty shared key set. Skipped in CI so it does not hammer EDGAR on
+  every PR. Passed live 2026-08-29 against Apple's 2026-08-27 Form 4.
+- Operator CLI: `compare-filing-artifact-capture --run-capture`
+  (same runner, real SEC). Snapshot-file compare remains for offline
+  diffs. Stage 2 `--limit 100` is the live CLI, not a mocked 101-CIK
+  fixture.
 
 Does not retire the legacy path (Ticket 27).

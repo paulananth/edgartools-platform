@@ -134,12 +134,34 @@ def filter_discovery_rows_by_cik(
     rows: Iterable[dict],
     cik_list: Sequence[int] | None,
 ) -> list[dict]:
-    """Keep sealed daily-index rows whose CIK is in the Decision 2 scope."""
+    """Keep sealed daily-index rows in the Decision 2 CIK scope.
+
+    Form 3/4/5 daily-index files list the issuer and each reporting owner as
+    separate lines that share one accession. Silver's PK is
+    ``(business_date, accession_number)``, last-write-wins, so the surviving
+    ``cik`` is often the owner. Scope still matches when the issuer CIK is
+    in the file path (``edgar/data/<issuer_cik>/...``).
+    """
 
     if not cik_list:
         return list(rows)
+    return [row for row in rows if issuer_cik_from_daily_index_row(row, cik_list) is not None]
+
+
+def issuer_cik_from_daily_index_row(
+    row: Mapping[str, Any], cik_list: Sequence[int]
+) -> int | None:
+    """Issuer CIK for a daily-index row under a Decision 2 CIK scope."""
+
     allowed = {int(cik) for cik in cik_list}
-    return [row for row in rows if int(row["cik"]) in allowed]
+    cik_value = row.get("cik")
+    if cik_value is not None and int(cik_value) in allowed:
+        return int(cik_value)
+    haystack = f"{row.get('file_name') or ''} {row.get('filing_txt_url') or ''}"
+    for cik in allowed:
+        if f"/{cik}/" in haystack:
+            return int(cik)
+    return None
 
 
 def should_record_family_catchup(cik_list: Sequence[int] | None) -> bool:
@@ -278,18 +300,17 @@ def run_dual_path_filing_artifact_parity(
     db: Any,
     business_date: str,
     sync_run_id: str,
-    download_bytes: Any,
-    get_filing: Any,
     cik_list: Sequence[int] | None = None,
     limit: int = 1,
+    download_bytes: Any = None,
+    get_filing: Any = None,
 ) -> DualPathParityResult:
     """Run legacy ``fetch_filing_artifacts`` then gated discovery, and compare.
 
+    Both paths hit SEC by default (``download_bytes`` / ``get_filing`` omitted).
     Snapshots the legacy silver ``sec_raw_object`` rows *before* gated capture
     writes the same table. Gated artifacts come from Source Fetch Decision /
-    work rows. ``download_bytes`` / ``get_filing`` are the legacy SEC-edge
-    injectors; callers that also need to mute gated SEC I/O patch
-    ``source_family_registry.download_filing_content_bytes`` in the test.
+    work rows.
     """
 
     from sqlalchemy import select
@@ -311,29 +332,36 @@ def run_dual_path_filing_artifact_parity(
     index_rows = filter_discovery_rows_by_cik(
         db.get_daily_index_filings(business_date), scope.cik_list
     )
-    filing_rows = [
-        {
-            "accession_number": str(row["accession_number"]),
-            "cik": int(row["cik"]),
-            "form": str(row["form"]),
-            "filing_date": row["filing_date"],
-            "primary_document": "primary.xml",
-        }
-        for row in index_rows
-    ]
+    filing_rows = []
+    for row in index_rows:
+        issuer_cik = issuer_cik_from_daily_index_row(row, scope.cik_list)
+        if issuer_cik is None:
+            continue
+        filing_rows.append(
+            {
+                "accession_number": str(row["accession_number"]),
+                "cik": issuer_cik,
+                "form": str(row["form"]),
+                "filing_date": row["filing_date"],
+                "primary_document": "primary.xml",
+            }
+        )
     if filing_rows:
         db.merge_filings(filing_rows, sync_run_id)
 
     for row in index_rows:
-        fetch_filing_artifacts(
-            context=context,
-            db=db,
-            accession_number=str(row["accession_number"]),
-            sync_run_id=sync_run_id,
-            download_bytes=download_bytes,
-            get_filing=get_filing,
-            force=False,
-        )
+        fetch_kwargs: dict[str, Any] = {
+            "context": context,
+            "db": db,
+            "accession_number": str(row["accession_number"]),
+            "sync_run_id": sync_run_id,
+            "force": False,
+        }
+        if download_bytes is not None:
+            fetch_kwargs["download_bytes"] = download_bytes
+        if get_filing is not None:
+            fetch_kwargs["get_filing"] = get_filing
+        fetch_filing_artifacts(**fetch_kwargs)
 
     legacy_rows = db.fetch("SELECT * FROM sec_raw_object")
     legacy = CaptureSnapshot(
