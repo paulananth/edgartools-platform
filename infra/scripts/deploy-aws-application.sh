@@ -79,6 +79,10 @@ Options:
   --mdm-postgres-dsn-secret-arn <arn>
                                     Secrets Manager ARN injected as MDM_DATABASE_URL.
   --mdm-snowflake-secret-arn <arn>  Secrets Manager ARN injected as MDM_SNOWFLAKE_SECRET_JSON.
+  --bookkeeping-postgres-dsn-secret-arn <arn>
+                                    Secrets Manager ARN injected as BOOKKEEPING_DATABASE_URL on the
+                                    warehouse profile. Default: resolved by name
+                                    (<prefix>/bookkeeping/postgres_dsn), same as the MDM DSN.
   --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
   --mdm-run-limit <n>               Default limit for mdm run state machine. Default: 100; 0 means no default limit.
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
@@ -254,6 +258,7 @@ MDM_DATABASE_SOURCE=""
 MDM_ECR_REPOSITORY_URL=""
 MDM_POSTGRES_DSN_SECRET_ARN=""
 MDM_SNOWFLAKE_SECRET_ARN=""
+BOOKKEEPING_POSTGRES_DSN_SECRET_ARN=""
 MDM_SILVER_DUCKDB=""
 MDM_RUN_LIMIT=100
 MDM_GRAPH_LIMIT=200
@@ -318,6 +323,7 @@ while [[ $# -gt 0 ]]; do
     --mdm-ecr-repository-url) MDM_ECR_REPOSITORY_URL="${2:?}"; shift 2 ;;
     --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-snowflake-secret-arn) MDM_SNOWFLAKE_SECRET_ARN="${2:?}"; shift 2 ;;
+    --bookkeeping-postgres-dsn-secret-arn) BOOKKEEPING_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-silver-duckdb) MDM_SILVER_DUCKDB="${2:?}"; shift 2 ;;
     --mdm-run-limit) MDM_RUN_LIMIT="${2:?}"; shift 2 ;;
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
@@ -1049,6 +1055,12 @@ MDM_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$MDM_POSTGRES_DSN_SECRET_ARN" \
 MDM_SNOWFLAKE_SECRET_ARN="$(first_nonempty "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$(manifest_value mdm.secrets.snowflake)" \
   "$(secret_arn_by_name "${NAME_PREFIX}/mdm/snowflake")")"
+# Bookkeeping store (DuckDB Retirement Cutover, Ticket 04) -- a dedicated
+# bookkeeping_app Postgres credential, not MDM's application role, so it
+# resolves independently rather than falling back to any MDM ARN.
+BOOKKEEPING_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$BOOKKEEPING_POSTGRES_DSN_SECRET_ARN" \
+  "$(manifest_value bookkeeping.secrets.postgres_dsn)" \
+  "$(secret_arn_by_name "${NAME_PREFIX}/bookkeeping/postgres_dsn")")"
 
 # Subnets and security groups — discovered via EC2 tags (no Terraform needed)
 if is_empty "$PUBLIC_SUBNET_IDS_JSON"; then
@@ -1387,10 +1399,15 @@ write_container_definitions() {
   # profile -- it needs a direct Snowflake connection
   # (edgar_warehouse/mdm_entity_backfill.py's SnowflakeConnectionSettings.from_env())
   # the same way `mdm export`/`mdm sync-graph` do on the MDM profile.
+  # BOOKKEEPING_POSTGRES_DSN_SECRET_ARN may also be empty (deliberately not
+  # hard-required, unlike MDM_SNOWFLAKE_SECRET_ARN, until a caller-repointing
+  # ticket actually depends on it -- provisioning ahead of any consumer
+  # shouldn't break every deploy run before that secret exists).
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
-    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" "${MDM_SNOWFLAKE_SECRET_ARN:-}" <<'PY'
+    "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" "${MDM_SNOWFLAKE_SECRET_ARN:-}" \
+    "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1410,6 +1427,7 @@ import sys
     bronze_cik_limit,
     mdm_postgres_dsn_secret_arn,
     mdm_snowflake_secret_arn,
+    bookkeeping_postgres_dsn_secret_arn,
 ) = sys.argv[1:]
 
 snowflake_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/snowflake_exports"
@@ -1449,6 +1467,12 @@ if mdm_postgres_dsn_secret_arn:
 # `mdm sync-graph`.
 if mdm_snowflake_secret_arn:
     secrets.append({"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": mdm_snowflake_secret_arn})
+# BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover, Ticket 04): a dedicated
+# bookkeeping_app Postgres credential, injected alongside MDM_DATABASE_URL
+# since both point at operational stores on the same shared Snowflake
+# Postgres instance. Optional until a caller-repointing ticket depends on it.
+if bookkeeping_postgres_dsn_secret_arn:
+    secrets.append({"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn})
 
 container_definitions = [{
     "name": "edgar-warehouse",

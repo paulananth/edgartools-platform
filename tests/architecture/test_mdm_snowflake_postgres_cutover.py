@@ -157,6 +157,33 @@ def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tas
     assert '{"name": "MDM_DATABASE_URL", "valueFrom": mdm_database_secret_arn}' in text
 
 
+def test_deploy_script_conditionally_injects_bookkeeping_database_url_into_warehouse_task() -> None:
+    """BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover, Ticket 04) is
+    optional -- unlike MDM_SNOWFLAKE_SECRET_ARN, nothing depends on it
+    unconditionally yet, so it must not be hard-required the way that one
+    is, or deploys would break before any bookkeeping caller exists.
+    """
+    text = _read(DEPLOY_SCRIPT)
+
+    assert '{"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn}' in text
+    assert "if bookkeeping_postgres_dsn_secret_arn:" in text
+    assert 'is_empty "$BOOKKEEPING_POSTGRES_DSN_SECRET_ARN" && fail' not in text
+
+
+def test_bookkeeping_postgres_dsn_secret_resolves_by_name() -> None:
+    text = _read(DEPLOY_SCRIPT)
+
+    assert 'secret_arn_by_name "${NAME_PREFIX}/bookkeeping/postgres_dsn"' in text
+
+
+def test_runtime_module_owns_bookkeeping_secret_output() -> None:
+    main = _read(REPO_ROOT / "infra" / "terraform" / "modules" / "warehouse_runtime" / "main.tf")
+    outputs = _read(REPO_ROOT / "infra" / "terraform" / "modules" / "warehouse_runtime" / "outputs.tf")
+
+    assert 'resource "aws_secretsmanager_secret" "bookkeeping_postgres_dsn"' in main
+    assert 'output "bookkeeping_postgres_dsn_secret_arn"' in outputs
+
+
 def test_terraform_moves_mdm_secret_containers_to_runtime_module() -> None:
     for env in ("dev", "prod"):
         moves = _read(REPO_ROOT / "infra" / "terraform" / "accounts" / env / "mdm_secret_moves.tf")

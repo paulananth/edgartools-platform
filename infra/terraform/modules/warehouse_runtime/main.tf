@@ -121,6 +121,13 @@ resource "aws_secretsmanager_secret" "mdm_postgres_dsn" {
   tags = merge(local.tags, { Name = "${local.name_prefix}/mdm/postgres_dsn", RuntimeSecret = "mdm-postgres-dsn" })
 }
 
+resource "aws_secretsmanager_secret" "bookkeeping_postgres_dsn" {
+  name        = "${local.name_prefix}/bookkeeping/postgres_dsn"
+  description = "Empty PostgreSQL connection string container for the bookkeeping store (dedicated bookkeeping_app role, same Snowflake Postgres instance as MDM). Populate out-of-band via bootstrap-bookkeeping-postgres.sh."
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}/bookkeeping/postgres_dsn", RuntimeSecret = "bookkeeping-postgres-dsn" })
+}
+
 resource "aws_secretsmanager_secret" "mdm_neo4j" {
   name        = "${local.name_prefix}/mdm/neo4j"
   description = "Empty Neo4j connection details container for MDM graph sync. Populate the value out-of-band."
