@@ -272,3 +272,19 @@ def test_remote_delete_object_calls_s3_delete_object(monkeypatch):
     assert client.deletes == [
         {"Bucket": "bucket", "Key": "warehouse/silverstage/token/silver/sec/silver.duckdb"}
     ]
+
+
+def test_remote_delete_object_passes_an_etag_precondition(monkeypatch):
+    client = _DeletingS3Client()
+    monkeypatch.setattr("boto3.client", lambda service: client)
+    storage = StorageLocation("s3://bucket/warehouse")
+
+    storage.delete_object("release/cleanup.lock", expected_etag="owner-etag")
+
+    assert client.deletes == [
+        {
+            "Bucket": "bucket",
+            "Key": "warehouse/release/cleanup.lock",
+            "IfMatch": "owner-etag",
+        }
+    ]

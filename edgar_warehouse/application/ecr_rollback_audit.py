@@ -90,6 +90,7 @@ class Plan:
     account_id: str
     region: str
     repository: str
+    registry_sha256: str
     audit_started_at: str
     images: tuple[ImageDisposition, ...]
     stale_task_definition_arns: tuple[str, ...]
@@ -107,6 +108,7 @@ class Plan:
             "account_id": self.account_id,
             "region": self.region,
             "repository": self.repository,
+            "registry_sha256": self.registry_sha256,
             "audit_started_at": self.audit_started_at,
             "images": [image.to_dict() for image in self.images],
             "stale_task_definition_arns": list(self.stale_task_definition_arns),
@@ -145,7 +147,7 @@ def post_deregistration_findings(
     approved in the reviewed plan is still independently eligible for deletion.
     """
     findings: list[str] = []
-    for field_name in ("account_id", "region", "repository"):
+    for field_name in ("account_id", "region", "repository", "registry_sha256"):
         reviewed_value = getattr(reviewed_plan, field_name)
         current_value = getattr(current_plan, field_name)
         if current_value != reviewed_value:
@@ -189,7 +191,7 @@ def compute_plan(
     region: str,
     repository: str,
     ecr_images: list[dict],
-    mirror_tag_digests: dict[str, str | None],
+    protected_tag_digests: dict[str, str | None],
     task_definitions: list[dict],
     workflow_task_definition_arns: dict[str, list[str]],
     ecs_services: list[dict],
@@ -238,7 +240,7 @@ def compute_plan(
 
     expected_tags = expected_protected_tags(registry) if not registry_findings else {}
     for tag, expected_digest in expected_tags.items():
-        resolved = mirror_tag_digests.get(tag)
+        resolved = protected_tag_digests.get(tag)
         if resolved != expected_digest:
             tag_kind = "mirror" if tag.startswith("retain-") else "immutable cohort"
             fail_closed_reasons.append(
@@ -278,20 +280,36 @@ def compute_plan(
                         referenced_task_definition_arns.add(arn)
                         registry_task_definition_arns.add(arn)
 
+    registry_expected_task_definitions: list[tuple[str, str, str, str]] = []
     current_release_task_definitions: dict[str, tuple[str, str]] = {}
     current_cohort = next(
         (cohort for cohort in cohorts if isinstance(cohort, dict) and cohort.get("slot") == "current"),
         None,
     )
-    if current_cohort is not None and not registry_findings:
-        for role in ROLE_NAMES:
-            role_entry = current_cohort.get(role)
-            if not isinstance(role_entry, dict):
+    if not registry_findings:
+        for cohort in cohorts:
+            if not isinstance(cohort, dict):
                 continue
-            current_expected_digest = role_entry.get("digest")
-            for arn in role_entry.get("task_definition_arns") or []:
-                if isinstance(arn, str) and isinstance(current_expected_digest, str):
-                    current_release_task_definitions[arn] = (role, current_expected_digest)
+            slot = cohort.get("slot")
+            for role in ROLE_NAMES:
+                role_entry = cohort.get(role)
+                if not isinstance(role_entry, dict):
+                    continue
+                cohort_digest = role_entry.get("digest")
+                for arn in role_entry.get("task_definition_arns") or []:
+                    if (
+                        isinstance(slot, str)
+                        and isinstance(arn, str)
+                        and isinstance(cohort_digest, str)
+                    ):
+                        registry_expected_task_definitions.append(
+                            (arn, slot, role, cohort_digest)
+                        )
+                        if slot == "current":
+                            current_release_task_definitions[arn] = (
+                                role,
+                                cohort_digest,
+                            )
 
     task_definitions_by_arn: dict[str, dict] = {}
     for task_def in task_definitions:
@@ -304,23 +322,24 @@ def compute_plan(
             continue
         task_definitions_by_arn[arn] = task_def
 
-    for arn, (role, expected_digest) in current_release_task_definitions.items():
-        current_task_def = task_definitions_by_arn.get(arn)
-        if current_task_def is None:
+    for arn, slot, role, expected_digest in registry_expected_task_definitions:
+        registry_task_def = task_definitions_by_arn.get(arn)
+        if registry_task_def is None:
             reference_drift.append(
-                f"registry current release task definition {arn!r} for role {role!r} is not ACTIVE"
+                f"registry {slot} task definition {arn!r} for role {role!r} is not ACTIVE"
             )
             continue
         actual_digests = {
             match.group(1)
-            for image_ref in current_task_def.get("images", [])
+            for image_ref in registry_task_def.get("images", [])
             if _repository_from_digest_ref(image_ref) == repository
             and (match := _DIGEST_REF_RE.search(str(image_ref)))
         }
         if actual_digests != {expected_digest}:
+            digest_label = "release digest" if slot == "current" else "cohort digest"
             reference_drift.append(
-                f"registry current release task definition {arn!r} for role {role!r} resolves to "
-                f"{sorted(actual_digests)!r}, expected release digest {expected_digest!r}"
+                f"registry {slot} task definition {arn!r} for role {role!r} resolves to "
+                f"{sorted(actual_digests)!r}, expected {digest_label} {expected_digest!r}"
             )
 
     for state_machine, arns in workflow_task_definition_arns.items():
@@ -428,7 +447,7 @@ def compute_plan(
             continue
         digest = raw_digest
         raw_tags = image.get("tags") or []
-        tags = tuple(tag for tag in raw_tags if isinstance(tag, str))
+        tags = tuple(sorted(tag for tag in raw_tags if isinstance(tag, str)))
         if len(tags) != len(raw_tags):
             fail_closed_reasons.append(
                 f"ECR image {digest!r} contains a non-string tag"
@@ -439,7 +458,14 @@ def compute_plan(
 
         if digest in protected:
             dispositions.append(
-                ImageDisposition(digest, tags, pushed_at, size_bytes, "protected", tuple(protected[digest]))
+                ImageDisposition(
+                    digest,
+                    tags,
+                    pushed_at,
+                    size_bytes,
+                    "protected",
+                    tuple(sorted(set(protected[digest]))),
+                )
             )
             continue
         if any(_MOVING_POINTER_TAG_RE.fullmatch(tag) for tag in tags):
@@ -479,6 +505,17 @@ def compute_plan(
         candidate_digests.append(digest)
         estimated_reclaimed_bytes += size_bytes
 
+    dispositions.sort(
+        key=lambda disposition: (
+            disposition.digest,
+            disposition.tags,
+            disposition.disposition,
+            disposition.provenance,
+        )
+    )
+    errors = sorted(set(errors))
+    fail_closed_reasons = sorted(set(fail_closed_reasons))
+
     stale_task_definition_arns = tuple(
         sorted(
             arn
@@ -491,11 +528,13 @@ def compute_plan(
         candidate_digests = []
         estimated_reclaimed_bytes = 0
 
+    registry_sha256 = _canonical_hash(registry)
     body = {
         "schema_version": SCHEMA_VERSION,
         "account_id": account_id,
         "region": region,
         "repository": repository,
+        "registry_sha256": registry_sha256,
         "audit_started_at": audit_started_at,
         "images": [d.to_dict() for d in dispositions],
         "stale_task_definition_arns": list(stale_task_definition_arns),
@@ -518,6 +557,7 @@ def compute_plan(
         account_id=account_id,
         region=region,
         repository=repository,
+        registry_sha256=registry_sha256,
         audit_started_at=audit_started_at,
         images=tuple(dispositions),
         stale_task_definition_arns=stale_task_definition_arns,

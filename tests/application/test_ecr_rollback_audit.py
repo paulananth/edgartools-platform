@@ -87,7 +87,7 @@ def _base_kwargs(registry_obj: dict) -> dict:
         "region": REGION,
         "repository": REPOSITORY,
         "ecr_images": [],
-        "mirror_tag_digests": dict(mirrors),
+        "protected_tag_digests": dict(mirrors),
         "task_definitions": _registry_task_definitions(registry_obj),
         "workflow_task_definition_arns": {},
         "ecs_services": [],
@@ -323,7 +323,7 @@ def test_mismatched_mirror_tag_digest_fails_closed():
     reg = _full_registry()
     kwargs = _base_kwargs(reg)
     tag = registry.mirror_tag_for("warehouse", "current")
-    kwargs["mirror_tag_digests"][tag] = _digest("something-else-entirely")
+    kwargs["protected_tag_digests"][tag] = _digest("something-else-entirely")
     plan = audit.compute_plan(**kwargs)
     assert not audit.is_appliable(plan)
     assert any("mirror tag" in reason for reason in plan.fail_closed_reasons)
@@ -333,7 +333,7 @@ def test_missing_mirror_tag_fails_closed():
     reg = _full_registry()
     kwargs = _base_kwargs(reg)
     tag = registry.mirror_tag_for("warehouse", "current")
-    kwargs["mirror_tag_digests"][tag] = None
+    kwargs["protected_tag_digests"][tag] = None
     plan = audit.compute_plan(**kwargs)
     assert not audit.is_appliable(plan)
     assert any("mirror tag" in reason for reason in plan.fail_closed_reasons)
@@ -343,7 +343,7 @@ def test_missing_recorded_immutable_tag_fails_closed():
     reg = _full_registry()
     kwargs = _base_kwargs(reg)
     immutable_tag = reg["cohorts"][0]["warehouse"]["immutable_tag"]
-    kwargs["mirror_tag_digests"][immutable_tag] = None
+    kwargs["protected_tag_digests"][immutable_tag] = None
     plan = audit.compute_plan(**kwargs)
     assert not audit.is_appliable(plan)
     assert any(immutable_tag in reason for reason in plan.fail_closed_reasons)
@@ -534,6 +534,33 @@ def test_plan_hash_is_deterministic_for_identical_inputs():
     assert plan_a.plan_sha256 == plan_b.plan_sha256
 
 
+def test_plan_hash_is_canonical_over_unordered_aws_inventory():
+    reg = _full_registry()
+    first = _image(
+        "stale-a",
+        [_tag("warehouse", "stale-a"), _tag("mdm", "stale-a")],
+    )
+    second = _image("stale-b", [_tag("warehouse", "stale-b")])
+    kwargs = _base_kwargs(reg)
+    kwargs["ecr_images"] = [first, second]
+    plan_a = audit.compute_plan(**kwargs)
+
+    kwargs["ecr_images"] = [second, {**first, "tags": list(reversed(first["tags"]))}]
+    plan_b = audit.compute_plan(**kwargs)
+
+    assert plan_a.plan_sha256 == plan_b.plan_sha256
+
+
+def test_plan_hash_binds_the_exact_registry_content():
+    reg = _full_registry()
+    plan_a = audit.compute_plan(**_base_kwargs(reg))
+    changed = {**reg, "updated_at": "2026-08-11T00:00:01Z"}
+    plan_b = audit.compute_plan(**_base_kwargs(changed))
+
+    assert plan_a.registry_sha256 != plan_b.registry_sha256
+    assert plan_a.plan_sha256 != plan_b.plan_sha256
+
+
 def test_plan_hash_ignores_audit_timestamp_but_keeps_timestamp_in_output():
     reg = _full_registry()
     kwargs = _base_kwargs(reg)
@@ -552,6 +579,27 @@ def test_plan_hash_changes_when_ecr_inventory_changes():
     kwargs["ecr_images"] = [_image("stale", [_tag("warehouse", "stale")])]
     plan_b = audit.compute_plan(**kwargs)
     assert plan_a.plan_sha256 != plan_b.plan_sha256
+
+
+def test_rollback_cohort_task_definition_must_match_its_recorded_digest():
+    reg = _full_registry()
+    rollback = next(cohort for cohort in reg["cohorts"] if cohort["slot"] == "rollback-1")
+    rollback_arn = rollback["warehouse"]["task_definition_arns"][0]
+    kwargs = _base_kwargs(reg)
+    kwargs["task_definitions"] = [
+        _task_definition(td["arn"], _digest("wrong-rollback-digest"))
+        if td["arn"] == rollback_arn
+        else td
+        for td in kwargs["task_definitions"]
+    ]
+
+    plan = audit.compute_plan(**kwargs)
+
+    assert not audit.is_appliable(plan)
+    assert any(
+        "rollback-1" in finding and rollback_arn in finding
+        for finding in plan.reference_drift
+    )
 
 
 def test_to_dict_round_trips_every_field():

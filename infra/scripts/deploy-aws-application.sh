@@ -1238,6 +1238,7 @@ fi
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/edgartools-aws-application-XXXXXX")"
 ROLLBACK_CLEANUP_LOCK_HELD=false
+ROLLBACK_CLEANUP_LOCK_TOKEN=""
 
 rollback_cleanup_lock_cli() {
   local subcommand="$1"
@@ -1263,8 +1264,8 @@ cleanup() {
   local exit_status=$?
   set +e
   if [[ "$ROLLBACK_CLEANUP_LOCK_HELD" == "true" ]]; then
-    rollback_cleanup_lock_cli release-lock >/dev/null 2>&1 \
-      || log "WARN: failed to release rollback-cleanup deployment lock; use ecr_rollback_cli release-lock after confirming no deploy or cleanup is active"
+    rollback_cleanup_lock_cli release-lock --token "$ROLLBACK_CLEANUP_LOCK_TOKEN" >/dev/null 2>&1 \
+      || log "WARN: failed to release rollback-cleanup deployment lock; use ecr_rollback_cli release-lock --force only after confirming no deploy or cleanup is active"
   fi
   rm -rf "$TMP_DIR"
   return "$exit_status"
@@ -1276,7 +1277,7 @@ trap cleanup EXIT
 # update, those exact ARNs are a real release candidate but are not all live
 # references yet; without this lock, concurrent cleanup could misclassify and
 # deregister them as stale between registration and the final workflow update.
-rollback_cleanup_lock_cli acquire-lock --operator "deploy:${ENVIRONMENT}:$$" >/dev/null
+ROLLBACK_CLEANUP_LOCK_TOKEN="$(rollback_cleanup_lock_cli acquire-lock --operator "deploy:${ENVIRONMENT}:$$")"
 ROLLBACK_CLEANUP_LOCK_HELD=true
 log "Acquired rollback-cleanup deployment lock"
 
@@ -1311,13 +1312,10 @@ win_path() {
 ECR_REPOSITORY_NAME="${ECR_REPOSITORY_URL##*/}"
 MDM_ECR_REPOSITORY_NAME="${MDM_ECR_REPOSITORY_URL##*/}"
 
-# ── Clean up stale ECR images before every deploy ────────────────────────────
-log "Cleaning up stale ECR images (keeps every tagged image + active task digests)"
-bash "${SCRIPT_DIR}/cleanup-ecr-images.sh" \
-  --env "$ENVIRONMENT" \
-  --region "$AWS_REGION_NAME" \
-  ${AWS_PROFILE_NAME:+--profile "$AWS_PROFILE_NAME"} \
-  --apply || log "ECR cleanup encountered errors (non-fatal, continuing deploy)"
+# The legacy automatic ECR deletion is disabled. It cannot reconcile rollback
+# cohorts, workflow references, or transitional tasks. Operators must review a
+# hash-bound ecr_rollback_cli plan and invoke apply explicitly.
+log "legacy automatic ECR deletion is disabled; use ecr_rollback_cli plan/apply after rollout verification"
 
 if [[ "$BUILD_IMAGE" == "true" ]]; then
   image_output_file="$(json_file image-ref)"

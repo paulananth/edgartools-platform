@@ -8,7 +8,11 @@ which is genuinely CLI-module logic even though it needs no AWS I/O to test.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
+import pytest
 
 from edgar_warehouse.scripts import ecr_rollback_cli as cli
 
@@ -203,7 +207,7 @@ def test_gather_live_tasks_fails_closed_when_the_scoped_cluster_is_missing():
             )
 
     live_tasks, services, errors, counts = cli.gather_ecs_clusters_tasks(
-        FakeEcs(), "edgartools-prod-warehouse"
+        FakeEcs(), "edgartools-prod-warehouse", "edgartools-prod-images"
     )
 
     assert live_tasks == []
@@ -278,7 +282,7 @@ def test_gather_live_tasks_includes_transitioning_tasks_and_reports_describe_fai
             }
 
     live_tasks, services, errors, counts = cli.gather_ecs_clusters_tasks(
-        FakeEcs(), "edgartools-prod-warehouse"
+        FakeEcs(), "edgartools-prod-warehouse", "edgartools-prod-images"
     )
 
     assert [task["task_arn"] for task in live_tasks] == [
@@ -289,6 +293,413 @@ def test_gather_live_tasks_includes_transitioning_tasks_and_reports_describe_fai
     assert errors == ["ECS DescribeTasks failure for 'missing-task': MISSING"]
     assert counts["ecs_list_tasks_pages"] == 2
     assert counts["ecs_describe_tasks_failures"] == 1
+
+
+def test_gather_live_tasks_finds_prod_task_references_in_another_cluster():
+    expected_cluster = "arn:aws:ecs:us-east-1:1:cluster/edgartools-prod-warehouse"
+    other_cluster = "arn:aws:ecs:us-east-1:1:cluster/shared-operations"
+    prod_task_arn = f"{other_cluster}/prod-task"
+    tag_pinned_task_arn = f"{other_cluster}/tag-pinned-task"
+
+    class FakeEcs:
+        def get_paginator(self, name):
+            if name == "list_clusters":
+                return _Paginator([{"clusterArns": [expected_cluster, other_cluster]}])
+            if name == "list_services":
+                class ServicePaginator:
+                    def paginate(self, **kwargs):
+                        if kwargs["cluster"] == other_cluster:
+                            return iter(
+                                [
+                                    {
+                                        "serviceArns": [
+                                            f"{other_cluster}/generic-zero-scaled-service"
+                                        ]
+                                    }
+                                ]
+                            )
+                        return iter([{"serviceArns": []}])
+
+                return ServicePaginator()
+            if name == "list_tasks":
+                class TaskPaginator:
+                    def paginate(self, **kwargs):
+                        if (
+                            kwargs["cluster"] == other_cluster
+                            and kwargs["desiredStatus"] == "RUNNING"
+                        ):
+                            return iter(
+                                [{"taskArns": [prod_task_arn, tag_pinned_task_arn]}]
+                            )
+                        return iter([{"taskArns": []}])
+
+                return TaskPaginator()
+            raise AssertionError(name)
+
+        def describe_tasks(self, *, cluster, tasks):
+            assert cluster == other_cluster
+            assert tasks == [prod_task_arn, tag_pinned_task_arn]
+            return {
+                "tasks": [
+                    {
+                        "taskArn": prod_task_arn,
+                        "taskDefinitionArn": (
+                            "arn:aws:ecs:us-east-1:1:task-definition/"
+                            "edgartools-prod-medium:42"
+                        ),
+                        "lastStatus": "RUNNING",
+                        "containers": [
+                            {
+                                "image": (
+                                    "1.dkr.ecr.us-east-1.amazonaws.com/"
+                                    "edgartools-prod-images@sha256:" + "c" * 64
+                                ),
+                                "imageDigest": "sha256:" + "c" * 64,
+                            }
+                        ],
+                    },
+                    {
+                        "taskArn": tag_pinned_task_arn,
+                        "taskDefinitionArn": (
+                            "arn:aws:ecs:us-east-1:1:task-definition/"
+                            "generic-shared-worker:7"
+                        ),
+                        "lastStatus": "RUNNING",
+                        "containers": [
+                            {
+                                "image": (
+                                    "1.dkr.ecr.us-east-1.amazonaws.com/"
+                                    "edgartools-prod-images:warehouse-prod"
+                                ),
+                                "imageDigest": "sha256:" + "d" * 64,
+                            }
+                        ],
+                    },
+                ],
+                "failures": [],
+            }
+
+    live_tasks, services, errors, counts = cli.gather_ecs_clusters_tasks(
+        FakeEcs(), "edgartools-prod-warehouse", "edgartools-prod-images"
+    )
+
+    assert [task["task_arn"] for task in live_tasks] == [
+        prod_task_arn,
+        tag_pinned_task_arn,
+    ]
+    assert services == [
+        {
+            "cluster": other_cluster,
+            "service_arn": f"{other_cluster}/generic-zero-scaled-service",
+        }
+    ]
+    assert errors == []
+    assert counts["ecs_clusters_scanned"] == 2
+
+
+def test_release_lock_rejects_a_different_owners_token(tmp_path):
+    lock_path = tmp_path / "cleanup.lock"
+    lock_path.write_text(json.dumps({"token": "owner-token"}), encoding="utf-8")
+    deletes: list[tuple[str, str | None]] = []
+
+    class FakeStorage:
+        def read_object_version(self, relative_path):
+            assert relative_path == "cleanup.lock"
+            return SimpleNamespace(exists=True, etag="owner-etag")
+
+        def join(self, relative_path):
+            assert relative_path == "cleanup.lock"
+            return str(lock_path)
+
+        def delete_object(self, relative_path, *, expected_etag=None):
+            deletes.append((relative_path, expected_etag))
+
+    storage = FakeStorage()
+
+    with pytest.raises(RuntimeError, match="ownership changed"):
+        cli.release_lock(storage, "cleanup.lock", expected_token="other-token")
+    assert deletes == []
+
+    cli.release_lock(storage, "cleanup.lock", expected_token="owner-token")
+    assert deletes == [("cleanup.lock", "owner-etag")]
+
+
+@pytest.mark.parametrize(
+    ("handler", "extra_args"),
+    [
+        (cli.cmd_acquire_lock, {"operator": "deploy:123"}),
+        (cli.cmd_release_lock, {"token": None, "force": True}),
+        (
+            cli.cmd_apply,
+            {
+                "operator": "operator",
+                "plan_hash": "sha256:reviewed",
+                "task_definition_batch_size": 100,
+            },
+        ),
+    ],
+)
+def test_lock_mutations_reject_the_wrong_aws_account_before_storage(
+    monkeypatch, handler, extra_args
+):
+    class FakeSts:
+        def get_caller_identity(self):
+            return {"Account": "111111111111"}
+
+    monkeypatch.setattr(
+        cli,
+        "_clients",
+        lambda _region: (object(), object(), object(), FakeSts()),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_storage",
+        lambda _bucket: (_ for _ in ()).throw(
+            AssertionError("storage must not be touched for the wrong account")
+        ),
+    )
+    args = SimpleNamespace(
+        region="us-east-1",
+        account_id="690839588395",
+        repository="edgartools-prod-images",
+        name_prefix="edgartools-prod",
+        registry_bucket="edgartools-prod-warehouse-690839588395",
+        registry_path="warehouse/release/ecr_rollback_registry.json",
+        lock_path="warehouse/release/ecr_rollback_cleanup.lock",
+        **extra_args,
+    )
+
+    assert handler(args) == 2
+
+
+def test_apply_reaudits_between_retirement_and_deletion_and_releases_owned_lock(
+    monkeypatch,
+):
+    events: list[str] = []
+    stale_arn = (
+        "arn:aws:ecs:us-east-1:690839588395:task-definition/"
+        "edgartools-prod-medium:41"
+    )
+    digest = "sha256:" + "e" * 64
+
+    class FakeSts:
+        def get_caller_identity(self):
+            events.append("identity")
+            return {"Account": "690839588395"}
+
+    class FakeEcs:
+        def deregister_task_definition(self, *, taskDefinition):
+            assert taskDefinition == stale_arn
+            events.append("deregister")
+
+        def describe_task_definition(self, *, taskDefinition):
+            assert taskDefinition == stale_arn
+            events.append("confirm-inactive")
+            return {"taskDefinition": {"status": "INACTIVE"}}
+
+    class FakeEcr:
+        def batch_delete_image(self, *, repositoryName, imageIds):
+            assert repositoryName == "edgartools-prod-images"
+            assert imageIds == [{"imageDigest": digest}]
+            events.append("delete")
+            return {"imageIds": imageIds, "failures": []}
+
+    reviewed_plan = SimpleNamespace(
+        plan_sha256="sha256:reviewed",
+        account_id="690839588395",
+        region="us-east-1",
+        repository="edgartools-prod-images",
+        registry_sha256="sha256:registry",
+        errors=(),
+        fail_closed_reasons=(),
+        stale_task_definition_arns=(stale_arn,),
+        candidate_digests=(digest,),
+    )
+    post_retirement_plan = SimpleNamespace(
+        account_id="690839588395",
+        region="us-east-1",
+        repository="edgartools-prod-images",
+        registry_sha256="sha256:registry",
+        errors=(),
+        fail_closed_reasons=(),
+        stale_task_definition_arns=(),
+        candidate_digests=(digest,),
+    )
+    plans = iter([reviewed_plan, post_retirement_plan])
+
+    monkeypatch.setattr(
+        cli,
+        "_clients",
+        lambda _region: (FakeEcr(), FakeEcs(), object(), FakeSts()),
+    )
+    monkeypatch.setattr(cli, "_storage", lambda _bucket: object())
+    monkeypatch.setattr(
+        cli,
+        "acquire_lock",
+        lambda _storage, _path, *, operator: events.append("lock") or "owner-token",
+    )
+    monkeypatch.setattr(
+        cli,
+        "release_lock",
+        lambda _storage, _path, *, expected_token: events.append(
+            f"release:{expected_token}"
+        ),
+    )
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: ({}, None))
+    monkeypatch.setattr(
+        cli,
+        "build_plan",
+        lambda **_kwargs: events.append("audit") or next(plans),
+    )
+
+    args = SimpleNamespace(
+        region="us-east-1",
+        account_id="690839588395",
+        repository="edgartools-prod-images",
+        name_prefix="edgartools-prod",
+        registry_bucket="edgartools-prod-warehouse-690839588395",
+        registry_path="warehouse/release/ecr_rollback_registry.json",
+        lock_path="warehouse/release/ecr_rollback_cleanup.lock",
+        operator="operator",
+        plan_hash="sha256:reviewed",
+        task_definition_batch_size=100,
+    )
+
+    assert cli.cmd_apply(args) == 0
+    assert events == [
+        "identity",
+        "lock",
+        "audit",
+        "deregister",
+        "confirm-inactive",
+        "audit",
+        "delete",
+        "release:owner-token",
+    ]
+
+
+def test_apply_aborts_before_delete_when_the_repeated_audit_drifts(monkeypatch):
+    events: list[str] = []
+    stale_arn = "arn:aws:ecs:us-east-1:1:task-definition/edgartools-prod-medium:41"
+    digest = "sha256:" + "f" * 64
+    reviewed_plan = SimpleNamespace(
+        plan_sha256="sha256:reviewed",
+        account_id="690839588395",
+        region="us-east-1",
+        repository="edgartools-prod-images",
+        errors=(),
+        fail_closed_reasons=(),
+        stale_task_definition_arns=(stale_arn,),
+        candidate_digests=(digest,),
+    )
+
+    class FakeSts:
+        def get_caller_identity(self):
+            return {"Account": "690839588395"}
+
+    class FakeEcs:
+        def deregister_task_definition(self, **_kwargs):
+            events.append("deregister")
+
+        def describe_task_definition(self, **_kwargs):
+            return {"taskDefinition": {"status": "INACTIVE"}}
+
+    class FakeEcr:
+        def batch_delete_image(self, **_kwargs):
+            events.append("delete")
+            return {"failures": []}
+
+    monkeypatch.setattr(
+        cli,
+        "_clients",
+        lambda _region: (FakeEcr(), FakeEcs(), object(), FakeSts()),
+    )
+    monkeypatch.setattr(cli, "_storage", lambda _bucket: object())
+    monkeypatch.setattr(cli, "acquire_lock", lambda *_args, **_kwargs: "owner-token")
+    monkeypatch.setattr(
+        cli,
+        "release_lock",
+        lambda _storage, _path, *, expected_token: events.append("release"),
+    )
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: ({}, None))
+    monkeypatch.setattr(cli, "build_plan", lambda **_kwargs: reviewed_plan)
+    monkeypatch.setattr(
+        cli,
+        "post_deregistration_findings",
+        lambda *_args, **_kwargs: ["new live reference appeared"],
+    )
+
+    args = SimpleNamespace(
+        region="us-east-1",
+        account_id="690839588395",
+        repository="edgartools-prod-images",
+        name_prefix="edgartools-prod",
+        registry_bucket="edgartools-prod-warehouse-690839588395",
+        registry_path="warehouse/release/ecr_rollback_registry.json",
+        lock_path="warehouse/release/ecr_rollback_cleanup.lock",
+        operator="operator",
+        plan_hash="sha256:reviewed",
+        task_definition_batch_size=100,
+    )
+
+    assert cli.cmd_apply(args) == 2
+    assert events == ["deregister", "release"]
+
+
+def test_apply_reports_successful_deletes_from_a_partially_failed_batch(
+    monkeypatch, capsys
+):
+    first_digest = "sha256:" + "1" * 64
+    second_digest = "sha256:" + "2" * 64
+    plan = SimpleNamespace(
+        plan_sha256="sha256:reviewed",
+        account_id="690839588395",
+        region="us-east-1",
+        repository="edgartools-prod-images",
+        errors=(),
+        fail_closed_reasons=(),
+        stale_task_definition_arns=(),
+        candidate_digests=(first_digest, second_digest),
+    )
+
+    class FakeSts:
+        def get_caller_identity(self):
+            return {"Account": "690839588395"}
+
+    class FakeEcr:
+        def batch_delete_image(self, **_kwargs):
+            return {
+                "imageIds": [{"imageDigest": first_digest}],
+                "failures": [{"imageId": {"imageDigest": second_digest}}],
+            }
+
+    monkeypatch.setattr(
+        cli,
+        "_clients",
+        lambda _region: (FakeEcr(), object(), object(), FakeSts()),
+    )
+    monkeypatch.setattr(cli, "_storage", lambda _bucket: object())
+    monkeypatch.setattr(cli, "acquire_lock", lambda *_args, **_kwargs: "owner-token")
+    monkeypatch.setattr(cli, "release_lock", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "load_registry", lambda *_args, **_kwargs: ({}, None))
+    monkeypatch.setattr(cli, "build_plan", lambda **_kwargs: plan)
+    monkeypatch.setattr(cli, "post_deregistration_findings", lambda *_args, **_kwargs: [])
+
+    args = SimpleNamespace(
+        region="us-east-1",
+        account_id="690839588395",
+        repository="edgartools-prod-images",
+        name_prefix="edgartools-prod",
+        registry_bucket="edgartools-prod-warehouse-690839588395",
+        registry_path="warehouse/release/ecr_rollback_registry.json",
+        lock_path="warehouse/release/ecr_rollback_cleanup.lock",
+        operator="operator",
+        plan_hash="sha256:reviewed",
+        task_definition_batch_size=100,
+    )
+
+    assert cli.cmd_apply(args) == 2
+    assert "after 1 images deleted" in capsys.readouterr().err
 
 
 def _record_cohort_args():
@@ -378,6 +789,11 @@ def test_record_cohort_verifies_identity_and_publishes_mirrors_before_registry(m
         "_clients",
         lambda _region: (FakeEcr(), object(), object(), FakeSts()),
     )
+    monkeypatch.setattr(
+        cli,
+        "release_lock",
+        lambda _storage, _path, *, expected_token: events.append("lock_release"),
+    )
 
     assert cli.cmd_record_cohort(_record_cohort_args()) == 0
 
@@ -457,6 +873,11 @@ def test_record_cohort_rejects_a_mismatched_source_tag_before_registry_commit(mo
         cli,
         "_clients",
         lambda _region: (FakeEcr(), object(), object(), FakeSts()),
+    )
+    monkeypatch.setattr(
+        cli,
+        "release_lock",
+        lambda _storage, _path, *, expected_token: events.append("lock_release"),
     )
 
     assert cli.cmd_record_cohort(_record_cohort_args()) == 2
@@ -558,3 +979,46 @@ def test_build_parser_wires_explicit_cleanup_lock_acquisition():
     )
     assert args.command == "acquire-lock"
     assert args.handler is cli.cmd_acquire_lock
+
+
+@pytest.mark.parametrize(
+    ("release_args", "expected_token", "expected_force"),
+    [
+        (["--token", "owner-token"], "owner-token", False),
+        (["--force"], None, True),
+    ],
+)
+def test_build_parser_requires_an_explicit_lock_release_mode(
+    release_args, expected_token, expected_force
+):
+    parser = cli.build_parser()
+    args = parser.parse_args(
+        [
+            "--region", "us-east-1",
+            "--account-id", "690839588395",
+            "--repository", "edgartools-prod-images",
+            "--name-prefix", "edgartools-prod",
+            "--registry-bucket", "edgartools-prod-warehouse-690839588395",
+            "release-lock",
+            *release_args,
+        ]
+    )
+
+    assert args.token == expected_token
+    assert args.force is expected_force
+    assert args.handler is cli.cmd_release_lock
+
+
+def test_build_parser_rejects_lock_release_without_owner_token_or_force():
+    parser = cli.build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "--region", "us-east-1",
+                "--account-id", "690839588395",
+                "--repository", "edgartools-prod-images",
+                "--name-prefix", "edgartools-prod",
+                "--registry-bucket", "edgartools-prod-warehouse-690839588395",
+                "release-lock",
+            ]
+        )

@@ -581,7 +581,12 @@ class StorageLocation:
             staged_relative, canonical_relative_path, expected_etag=expected_etag, payload=payload
         )
 
-    def delete_object(self, relative_path: str) -> None:
+    def delete_object(
+        self,
+        relative_path: str,
+        *,
+        expected_etag: str | None = None,
+    ) -> None:
         """Delete one object. Best-effort: missing objects are not an error.
 
         `promote_staged` never deletes the staged object it just promoted
@@ -597,8 +602,18 @@ class StorageLocation:
             from urllib.parse import urlsplit
 
             parsed = urlsplit(destination)
-            self._s3().delete_object(Bucket=parsed.netloc, Key=parsed.path.lstrip("/"))
+            request = {"Bucket": parsed.netloc, "Key": parsed.path.lstrip("/")}
+            if expected_etag is not None:
+                request["IfMatch"] = expected_etag
+            self._s3().delete_object(**request)
             return
+        if expected_etag is not None:
+            version = self.read_object_version(relative)
+            if not version.exists or version.etag != expected_etag:
+                raise WarehouseRuntimeError(
+                    f"delete precondition failed for {relative!r}: expected ETag "
+                    f"{expected_etag!r}, found {version.etag!r}"
+                )
         Path(destination).unlink(missing_ok=True)
 
     def write_bytes(self, relative_path: str, payload: "bytes | Path") -> str:

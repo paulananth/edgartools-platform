@@ -53,8 +53,8 @@ reviewing a fresh plan; never apply the current blocked plan.
 Verification: focused audit, registry, CLI, and deploy-safety tests pass; mypy,
 Python compilation, shell syntax, Ruff, and `git diff --check` pass. The broader
 unit and architecture suite passes with 1,457 tests, 4 skips, and 35 subtests;
-the final full repository suite passes with 2,731 tests, 4 skips, and 35
-subtests.
+after the final review fixes and rebase, the full repository suite passes with
+2,819 tests, 4 skips, and 35 subtests.
 
 Continuation after the 2026-08-28 rebase found and closed three fail-closed
 edge gaps. ECS enumeration once again queries both `RUNNING` and `STOPPED`
@@ -66,3 +66,20 @@ ETag-guarded registry, and leaves the prior registry recoverably authoritative
 if mirror publication fails. Focused coverage increased to 79 passing tests;
 the continuation's branch-wide verification and review are recorded in its
 follow-up commit.
+
+The required independent review then closed the remaining destructive-path
+gaps. The audit now scans every ECS cluster, fails closed on every discovered
+service, and recognizes both tag- and digest-pinned references to the exact
+audited repository even when the task family has an unrelated name. Automatic
+invocation of the legacy ECR deletion script was removed from deployment;
+cleanup requires a reviewed hash-bound plan/apply cycle. Lock release now
+requires the acquiring token plus an ETag-conditional delete, while deliberate
+stale-lock recovery requires `--force`; every lock mutation verifies STS
+account identity before touching storage. Behavioral tests prove the apply
+order (identity, lock, audit, exact-ARN retirement, INACTIVE confirmation,
+repeat audit, digest deletion, owner-token release) and prove that drift in the
+repeat audit aborts before deletion. Canonical plan hashing now binds the exact
+registry content and remains stable across unordered AWS inventory responses;
+every rollback cohort ARN is verified against its recorded digest, and partial
+ECR delete responses report their successful deletions accurately. The final
+focused slice passes 105 tests.

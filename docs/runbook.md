@@ -500,8 +500,10 @@ all tagged runtime images. `deploy-aws-application.sh`, `record-cohort`, and
 `apply` coordinate through the same durable S3 lock. A deploy holds it from
 before task-definition registration through the final state-machine update, so
 its temporarily unreferenced candidate ARNs cannot be retired concurrently. A
-crashed operation leaves the lock in place deliberately; confirm that no deploy,
-cohort update, or cleanup remains active before using `release-lock`.
+crashed operation leaves the lock in place deliberately. Normal owners release
+it with the token returned by `acquire-lock`; confirm that no deploy, cohort
+update, or cleanup remains active before using `release-lock --force` for stale
+lock recovery.
 
 `record-cohort` verifies the live AWS account and both immutable source tags
 before changing release state. It publishes every movable rollback mirror tag
@@ -522,9 +524,11 @@ referenced task-definition ARN to be active and part of the registry's current
 release cohort, verifies that each current task definition resolves to its
 recorded role digest, and reconciles live ECS tasks, rollback mirror tags, each
 cohort's recorded immutable source tag, and its exact repository.
-Task enumeration queries both `RUNNING` and `STOPPED` desired states, retains
-every task whose actual state is still transitional, and fails closed on any
-`DescribeTasks` response-level failure.
+Task enumeration scans every ECS cluster in the account, queries both `RUNNING`
+and `STOPPED` desired states, retains every platform task whose actual state is
+still transitional, and fails closed on any `DescribeTasks` response-level
+failure. The deployment script does not run the legacy ECR cleanup script;
+deletion requires an explicit reviewed `ecr_rollback_cli plan`/`apply` cycle.
 
 ```bash
 AWS_PROFILE=sec_platform_deployer \

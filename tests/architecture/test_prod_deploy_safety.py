@@ -34,3 +34,10 @@ def test_deploy_holds_the_release_cleanup_lock_while_registering_candidates() ->
     assert acquire < register
     assert "ROLLBACK_CLEANUP_LOCK_HELD" in script
     assert release < register  # release command is defined in the EXIT trap before deployment begins
+
+
+def test_deploy_does_not_run_the_legacy_ecr_deletion_path() -> None:
+    script = DEPLOY.read_text(encoding="utf-8")
+
+    assert "cleanup-ecr-images.sh" not in script
+    assert "legacy automatic ECR deletion is disabled" in script

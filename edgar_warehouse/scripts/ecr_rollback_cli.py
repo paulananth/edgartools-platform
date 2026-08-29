@@ -77,7 +77,7 @@ from edgar_warehouse.application.ecr_rollback_registry import (
     expected_mirror_tags,
     expected_protected_tags,
 )
-from edgar_warehouse.infrastructure.object_storage import StorageLocation
+from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
 
 DEFAULT_REGISTRY_RELATIVE_PATH = "warehouse/release/ecr_rollback_registry.json"
 DEFAULT_LOCK_RELATIVE_PATH = "warehouse/release/ecr_rollback_cleanup.lock"
@@ -116,8 +116,6 @@ def load_registry(storage: StorageLocation, relative_path: str, *, account_id: s
     version = storage.read_object_version(relative_path)
     if not version.exists:
         return empty_registry(account_id=account_id, region=region), None
-    from edgar_warehouse.infrastructure.object_storage import read_bytes
-
     raw = read_bytes(storage.join(relative_path))
     return json.loads(raw), version.etag
 
@@ -148,8 +146,34 @@ def acquire_lock(storage: StorageLocation, relative_path: str, *, operator: str)
     return token
 
 
-def release_lock(storage: StorageLocation, relative_path: str) -> None:
-    storage.delete_object(relative_path)
+def release_lock(
+    storage: StorageLocation,
+    relative_path: str,
+    *,
+    expected_token: str | None = None,
+    force: bool = False,
+) -> None:
+    version = storage.read_object_version(relative_path)
+    if not version.exists:
+        if force:
+            return
+        raise RuntimeError(f"cleanup lock at {relative_path!r} no longer exists")
+    if not version.etag:
+        raise RuntimeError(f"cleanup lock at {relative_path!r} has no ETag; refusing to delete it")
+
+    if not force:
+        if not expected_token:
+            raise RuntimeError("lock owner token is required unless --force is used")
+        try:
+            lock = json.loads(read_bytes(storage.join(relative_path)))
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as exc:
+            raise RuntimeError(f"cleanup lock at {relative_path!r} is unreadable; refusing to delete it") from exc
+        if lock.get("token") != expected_token:
+            raise RuntimeError(
+                f"cleanup lock ownership changed at {relative_path!r}; refusing to release another owner's lock"
+            )
+
+    storage.delete_object(relative_path, expected_etag=version.etag)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +188,18 @@ def verify_identity(sts_client: Any, *, expected_account_id: str) -> list[str]:
     if actual_account != expected_account_id:
         errors.append(f"caller account {actual_account!r} does not match expected {expected_account_id!r}")
     return errors
+
+
+def verify_mutation_identity(sts_client: Any, *, expected_account_id: str) -> bool:
+    errors = verify_identity(sts_client, expected_account_id=expected_account_id)
+    if errors:
+        print(
+            "ABORT: AWS identity does not match the requested rollback-cleanup account:\n"
+            + json.dumps(errors, indent=2),
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def gather_ecr_images(ecr_client: Any, repository: str) -> tuple[list[dict], dict[str, int]]:
@@ -184,7 +220,7 @@ def gather_ecr_images(ecr_client: Any, repository: str) -> tuple[list[dict], dic
     return images, {"ecr_describe_images_pages": pages}
 
 
-def resolve_mirror_tags(ecr_client: Any, repository: str, tags: list[str]) -> dict[str, str | None]:
+def resolve_tag_digests(ecr_client: Any, repository: str, tags: list[str]) -> dict[str, str | None]:
     resolved: dict[str, str | None] = {}
     for tag in tags:
         try:
@@ -291,6 +327,7 @@ def gather_workflow_task_definition_arns(
 def gather_ecs_clusters_tasks(
     ecs_client: Any,
     cluster_name: str,
+    repository: str,
 ) -> tuple[list[dict], list[dict], list[str], dict[str, int]]:
     discovered_cluster_arns: list[str] = []
     cluster_pages = 0
@@ -298,14 +335,17 @@ def gather_ecs_clusters_tasks(
         cluster_pages += 1
         discovered_cluster_arns.extend(page.get("clusterArns", []))
 
-    cluster_arns = [
+    expected_cluster_arns = [
         arn for arn in discovered_cluster_arns if arn.rsplit("/", 1)[-1] == cluster_name
     ]
     errors: list[str] = []
-    if len(cluster_arns) != 1:
+    if len(expected_cluster_arns) != 1:
         errors.append(
-            f"expected exactly one ECS cluster named {cluster_name!r}, found {len(cluster_arns)}"
+            f"expected exactly one ECS cluster named {cluster_name!r}, found {len(expected_cluster_arns)}"
         )
+
+    cluster_arns = discovered_cluster_arns if len(expected_cluster_arns) == 1 else []
+    name_prefix = cluster_name.removesuffix("-warehouse")
 
     live_tasks: list[dict] = []
     services: list[dict] = []
@@ -347,8 +387,22 @@ def gather_ecs_clusters_tasks(
                 containers = []
                 for container in task.get("containers", []):
                     image = container.get("image", "")
-                    repository = image.split("@")[0].rsplit("/", 1)[-1] if "@" in image else None
-                    containers.append({"repository": repository, "image_digest": container.get("imageDigest")})
+                    image_name = image.split("@", 1)[0].rsplit("/", 1)[-1]
+                    image_repository = image_name.split(":", 1)[0] if image_name else None
+                    containers.append(
+                        {
+                            "repository": image_repository,
+                            "image_digest": container.get("imageDigest"),
+                        }
+                    )
+                task_definition_family = str(task.get("taskDefinitionArn", "")).rsplit("/", 1)[-1].rsplit(":", 1)[0]
+                is_platform_task = (
+                    task_definition_family == name_prefix
+                    or task_definition_family.startswith(f"{name_prefix}-")
+                    or any(image["repository"] == repository for image in containers)
+                )
+                if not is_platform_task:
+                    continue
                 live_tasks.append(
                     {
                         "task_arn": task.get("taskArn"),
@@ -363,7 +417,8 @@ def gather_ecs_clusters_tasks(
         errors,
         {
             "ecs_list_clusters_pages": cluster_pages,
-            "ecs_clusters_matched": len(cluster_arns),
+            "ecs_clusters_matched": len(expected_cluster_arns),
+            "ecs_clusters_scanned": len(cluster_arns),
             "ecs_list_tasks_pages": task_pages,
             "ecs_list_services_pages": service_pages,
             "ecs_describe_tasks_batches": described_batches,
@@ -393,7 +448,7 @@ def build_plan(
     errors = list(verify_identity(sts_client, expected_account_id=account_id))
 
     ecr_images, ecr_counts = gather_ecr_images(ecr_client, repository)
-    mirror_tag_digests = resolve_mirror_tags(
+    protected_tag_digests = resolve_tag_digests(
         ecr_client,
         repository,
         list(expected_protected_tags(registry).keys()),
@@ -404,7 +459,7 @@ def build_plan(
     )
     errors.extend(workflow_errors)
     live_tasks, services, ecs_errors, ecs_counts = gather_ecs_clusters_tasks(
-        ecs_client, f"{name_prefix}-warehouse"
+        ecs_client, f"{name_prefix}-warehouse", repository
     )
     errors.extend(ecs_errors)
 
@@ -416,7 +471,7 @@ def build_plan(
         region=region,
         repository=repository,
         ecr_images=ecr_images,
-        mirror_tag_digests=mirror_tag_digests,
+        protected_tag_digests=protected_tag_digests,
         task_definitions=task_definitions,
         workflow_task_definition_arns=workflow_arns,
         ecs_services=services,
@@ -481,6 +536,8 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 def cmd_apply(args: argparse.Namespace) -> int:
     ecr_client, ecs_client, sfn_client, sts_client = _clients(args.region)
+    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
+        return 2
     storage = _storage(args.registry_bucket)
 
     lock_token = acquire_lock(storage, args.lock_path, operator=args.operator)
@@ -567,6 +624,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 repositoryName=args.repository,
                 imageIds=[{"imageDigest": digest} for digest in batch],
             )
+            successful = response.get("imageIds") or []
+            deleted += len(successful)
             failures = response.get("failures") or []
             if failures:
                 print(
@@ -574,25 +633,24 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 return 2
-            deleted += len(batch)
+            if len(successful) != len(batch):
+                print(
+                    "ABORT: batch delete did not account for every requested image: "
+                    f"requested={len(batch)} deleted={len(successful)}",
+                    file=sys.stderr,
+                )
+                return 2
 
         print(f"==> Deregistered {len(plan.stale_task_definition_arns)} stale task definition(s)")
         print(f"==> Deleted {deleted} image(s)")
         return 0
     finally:
-        release_lock(storage, args.lock_path)
-        _ = lock_token
+        release_lock(storage, args.lock_path, expected_token=lock_token)
 
 
 def cmd_record_cohort(args: argparse.Namespace) -> int:
     ecr_client, _ecs_client, _sfn_client, sts_client = _clients(args.region)
-    identity_errors = verify_identity(sts_client, expected_account_id=args.account_id)
-    if identity_errors:
-        print(
-            "ABORT: AWS identity does not match the requested cohort registry:\n"
-            + json.dumps(identity_errors, indent=2),
-            file=sys.stderr,
-        )
+    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
         return 2
 
     storage = _storage(args.registry_bucket)
@@ -625,7 +683,7 @@ def cmd_record_cohort(args: argparse.Namespace) -> int:
             args.warehouse_tag: args.warehouse_digest,
             args.mdm_tag: args.mdm_digest,
         }
-        resolved_source_tags = resolve_mirror_tags(
+        resolved_source_tags = resolve_tag_digests(
             ecr_client,
             args.repository,
             list(source_tags),
@@ -671,11 +729,13 @@ def cmd_record_cohort(args: argparse.Namespace) -> int:
         print(json.dumps(updated, indent=2, sort_keys=True))
         return 0
     finally:
-        release_lock(storage, args.lock_path)
-        _ = lock_token
+        release_lock(storage, args.lock_path, expected_token=lock_token)
 
 
 def cmd_acquire_lock(args: argparse.Namespace) -> int:
+    _ecr_client, _ecs_client, _sfn_client, sts_client = _clients(args.region)
+    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
+        return 2
     storage = _storage(args.registry_bucket)
     token = acquire_lock(storage, args.lock_path, operator=args.operator)
     print(token)
@@ -683,8 +743,11 @@ def cmd_acquire_lock(args: argparse.Namespace) -> int:
 
 
 def cmd_release_lock(args: argparse.Namespace) -> int:
+    _ecr_client, _ecs_client, _sfn_client, sts_client = _clients(args.region)
+    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
+        return 2
     storage = _storage(args.registry_bucket)
-    release_lock(storage, args.lock_path)
+    release_lock(storage, args.lock_path, expected_token=args.token, force=args.force)
     print(f"==> Released lock at {args.lock_path}")
     return 0
 
@@ -743,7 +806,14 @@ def build_parser() -> argparse.ArgumentParser:
     acquire_lock_parser.add_argument("--operator", required=True)
     acquire_lock_parser.set_defaults(handler=cmd_acquire_lock)
 
-    release_lock_parser = subparsers.add_parser("release-lock", help="Manually clear a stale lock from a crashed apply")
+    release_lock_parser = subparsers.add_parser("release-lock", help="Release an owned lock, or manually clear a confirmed stale lock")
+    release_mode = release_lock_parser.add_mutually_exclusive_group(required=True)
+    release_mode.add_argument("--token", help="Owner token printed by acquire-lock")
+    release_mode.add_argument(
+        "--force",
+        action="store_true",
+        help="Clear a confirmed stale lock without its owner token",
+    )
     release_lock_parser.set_defaults(handler=cmd_release_lock)
 
     return parser
