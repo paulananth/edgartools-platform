@@ -37,6 +37,10 @@ EXPECTED_ACCOUNT = "690839588395"
 CLUSTER_BASENAME = "warehouse"
 PERFORMANCE_LOG_GROUP = "/aws/ecs/containerinsights/{cluster}/performance"
 TERMINAL_STATUSES = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
+FARGATE_VCPU_HOUR_USD = 0.0404784
+FARGATE_GIB_HOUR_USD = 0.004446
+FARGATE_PRICING_SOURCE = "https://aws.amazon.com/fargate/pricing/"
+FARGATE_PRICING_CAPTURED_AT = "2026-08-29"
 CANARIES = {
     "sync": {
         "source": "mdm-utility",
@@ -322,6 +326,24 @@ def summarize_utilization(
             [float(sample["memory"]) for sample in samples],
             memory_reserved,
             period_seconds,
+        ),
+    }
+
+
+def fargate_usage(
+    *, cpu_units: int, memory_mib: int, pull_to_stop_seconds: float
+) -> dict[str, float | int]:
+    """Calculate on-demand Linux/x86 usage with AWS's per-second rounding."""
+    billed_seconds = math.ceil(pull_to_stop_seconds)
+    vcpu_hours = cpu_units / 1024 * billed_seconds / 3600
+    memory_gib_hours = memory_mib / 1024 * billed_seconds / 3600
+    return {
+        "billed_duration_seconds": billed_seconds,
+        "requested_vcpu_hours": vcpu_hours,
+        "requested_memory_gib_hours": memory_gib_hours,
+        "estimated_compute_cost_usd": (
+            vcpu_hours * FARGATE_VCPU_HOUR_USD
+            + memory_gib_hours * FARGATE_GIB_HOUR_USD
         ),
     }
 
@@ -1195,6 +1217,20 @@ def _describe_attempt(
         if stopped_raw and task.get("pullStartedAt")
         else None
     )
+    usage = (
+        fargate_usage(
+            cpu_units=int(task_definition["cpu"]),
+            memory_mib=int(task_definition["memory"]),
+            pull_to_stop_seconds=billable_duration_seconds,
+        )
+        if billable_duration_seconds is not None
+        else {
+            "billed_duration_seconds": None,
+            "requested_vcpu_hours": None,
+            "requested_memory_gib_hours": None,
+            "estimated_compute_cost_usd": None,
+        }
+    )
     samples = _insights_rows(
         cli,
         cluster=cluster,
@@ -1237,16 +1273,7 @@ def _describe_attempt(
         "started_at": task.get("startedAt"),
         "stopped_at": stopped_raw,
         "billable_duration_seconds": billable_duration_seconds,
-        "requested_vcpu_hours": (
-            int(task_definition["cpu"]) / 1024 * billable_duration_seconds / 3600
-            if billable_duration_seconds is not None
-            else None
-        ),
-        "requested_memory_gib_hours": (
-            int(task_definition["memory"]) / 1024 * billable_duration_seconds / 3600
-            if billable_duration_seconds is not None
-            else None
-        ),
+        **usage,
         "exit_code": container.get("exitCode"),
         "reason": container.get("reason"),
         "stop_code": task.get("stopCode"),
@@ -1301,6 +1328,19 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
             "duration_seconds": (stop_date - start_date).total_seconds(),
         },
         "tasks": tasks,
+        "fargate_pricing": {
+            "operating_system": "Linux",
+            "cpu_architecture": "x86_64",
+            "region": cli.region,
+            "vcpu_hour_usd": FARGATE_VCPU_HOUR_USD,
+            "memory_gib_hour_usd": FARGATE_GIB_HOUR_USD,
+            "additional_ephemeral_storage_gib": 0,
+            "captured_at": FARGATE_PRICING_CAPTURED_AT,
+            "source": FARGATE_PRICING_SOURCE,
+        },
+        "estimated_compute_cost_usd": sum(
+            float(task.get("estimated_compute_cost_usd") or 0) for task in tasks
+        ),
         "execution_local_gates": gates,
         "promotion_gates_not_inferred": [
             "representative non-zero input/output record funnel",

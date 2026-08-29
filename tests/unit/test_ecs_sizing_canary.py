@@ -313,6 +313,22 @@ def test_summarize_utilization_calculates_bands_and_p95() -> None:
     assert summary["memory"]["seconds_at_or_above_80_percent"] == 60
 
 
+def test_fargate_usage_rounds_billable_time_up_to_the_next_second() -> None:
+    usage = ecs_sizing_canary.fargate_usage(
+        cpu_units=1024,
+        memory_mib=4096,
+        pull_to_stop_seconds=60.001,
+    )
+
+    assert usage["billed_duration_seconds"] == 61
+    assert usage["requested_vcpu_hours"] == pytest.approx(61 / 3600)
+    assert usage["requested_memory_gib_hours"] == pytest.approx(4 * 61 / 3600)
+    assert usage["estimated_compute_cost_usd"] == pytest.approx(
+        (61 / 3600 * ecs_sizing_canary.FARGATE_VCPU_HOUR_USD)
+        + (4 * 61 / 3600 * ecs_sizing_canary.FARGATE_GIB_HOUR_USD)
+    )
+
+
 def test_evaluate_candidate_fails_closed_for_retry_missing_metrics_and_memory() -> None:
     tasks = [
         {
