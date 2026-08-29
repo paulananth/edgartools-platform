@@ -23,6 +23,7 @@ DEFAULT_TEST_SNOW_CONNECTION = "snowconn"
 
 NEO4J_INSTALL_STAGE_TITLE = "Snowflake: Neo4j Native App install"
 GRANTS_STAGE_TITLE = "Snowflake Postgres / graph prerequisites"
+BOOKKEEPING_POSTGRES_STAGE_TITLE = "Snowflake Postgres: bookkeeping provisioning"
 
 # Wayfinder install-sh-provision-deploy-data map, Ticket 01/02: build_stages()
 # is being physically resequenced into four ordered phases -- provision,
@@ -38,6 +39,7 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Snowflake: native-pull foundation",
     "Snowflake: fundamentals load wrapper",
     GRANTS_STAGE_TITLE,
+    BOOKKEEPING_POSTGRES_STAGE_TITLE,
     "Snowflake: installer role",
     "Snowflake: MDM mirror + graph schema",
     "AWS: ECR image publish",
@@ -867,6 +869,32 @@ def test_neo4j_install_stage_delegates_to_the_script(tmp_path: Path) -> None:
         "bash infra/scripts/install-neo4j-graph-app.sh --snow-connection edgartools-prod"
         in combined
     )
+
+
+def test_bookkeeping_postgres_stage_delegates_to_the_script_and_reuses_mdm_instance(
+    tmp_path: Path,
+) -> None:
+    """DuckDB Retirement Cutover Ticket 04: the bookkeeping store reuses the
+    already-provisioned MDM Postgres instance (shared compute/storage, no new
+    network policy) rather than creating its own -- so this stage's
+    --instance-name must be the exact same mdm_instance_name value the
+    GRANTS_STAGE_TITLE stage above it already computed and used to create
+    that instance, not a second, independently-named one.
+    """
+    result = run_wizard(
+        "plan",
+        "--env-name",
+        "prod",
+        "--snow-connection",
+        "edgartools-prod",
+        "--workspace",
+        str(tmp_path / "workspace"),
+        explicit_flags=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "bash infra/scripts/bootstrap-bookkeeping-postgres.sh" in combined
+    assert "--instance-name 'EDGARTOOLS_PROD_MDM'" in combined
+    assert "--env-name prod" in combined
 
 
 def test_plan_is_preview_only_and_installs_nothing(tmp_path: Path) -> None:

@@ -6,14 +6,14 @@ Covers three layers:
 2. infra/scripts/lib/secrets-manifest.sh's secrets_manifest_name() -- the
    shared lookup function every populating script now calls instead of
    hardcoding a name string.
-3. The two populating scripts (bootstrap-aws-mdm-secrets.sh,
-   bootstrap-prod-mdm.sh) actually consume the manifest rather than a second
-   hardcoded literal. bootstrap-aws-mdm-secrets.sh is fully exercised via its
-   existing --dry-run mode (no AWS calls); bootstrap-prod-mdm.sh's --dry-run
-   still requires a live `snow sql` connection, so its wiring is covered by a
-   content assertion instead, matching this repo's existing
-   tests/architecture/test_runtime_shim.py convention for "this file no
-   longer does X" checks.
+3. The populating scripts (bootstrap-aws-mdm-secrets.sh, bootstrap-prod-mdm.sh,
+   bootstrap-bookkeeping-postgres.sh) actually consume the manifest rather
+   than a second hardcoded literal. bootstrap-aws-mdm-secrets.sh is fully
+   exercised via its existing --dry-run mode (no AWS calls); the other two
+   scripts' --dry-run still requires a live `snow sql` connection, so their
+   wiring is covered by content assertions instead, matching this repo's
+   existing tests/architecture/test_runtime_shim.py convention for "this
+   file no longer does X" checks.
 """
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ MANIFEST_PATH = REPO_ROOT / "infra" / "scripts" / "secrets-manifest.json"
 LIB_PATH = REPO_ROOT / "infra" / "scripts" / "lib" / "secrets-manifest.sh"
 BOOTSTRAP_AWS_MDM_SECRETS = REPO_ROOT / "infra" / "scripts" / "bootstrap-aws-mdm-secrets.sh"
 BOOTSTRAP_PROD_MDM = REPO_ROOT / "infra" / "scripts" / "bootstrap-prod-mdm.sh"
+BOOTSTRAP_BOOKKEEPING_POSTGRES = REPO_ROOT / "infra" / "scripts" / "bootstrap-bookkeeping-postgres.sh"
 
 EXPECTED_NAMES = {
     "mdm/postgres_dsn",
@@ -36,6 +37,7 @@ EXPECTED_NAMES = {
     "mdm/neo4j",
     "mdm/api_keys",
     "dbt/snowflake",
+    "bookkeeping/postgres_dsn",
 }
 
 
@@ -49,7 +51,7 @@ def test_manifest_is_valid_json_with_a_secrets_list():
     assert manifest["secrets"]
 
 
-def test_manifest_declares_exactly_the_five_known_secrets():
+def test_manifest_declares_exactly_the_six_known_secrets():
     manifest = _load_manifest()
     names = {entry["name"] for entry in manifest["secrets"]}
     assert names == EXPECTED_NAMES
@@ -97,6 +99,24 @@ def test_mdm_postgres_dsn_and_mdm_snowflake_have_real_populating_scripts():
     by_name = {e["name"]: e for e in manifest["secrets"]}
     assert by_name["mdm/postgres_dsn"]["populating_script"] == "infra/scripts/bootstrap-aws-mdm-secrets.sh"
     assert by_name["mdm/snowflake"]["populating_script"] == "infra/scripts/bootstrap-prod-mdm.sh"
+
+
+def test_bookkeeping_postgres_dsn_has_a_real_populating_script_and_terraform_resource():
+    """populated_in_prod is False, not True: the script is written and tested
+    (DuckDB Retirement Cutover Ticket 04's tooling-built half) but has not
+    actually run against live prod yet -- the live-execution half is still
+    blocked on Ticket 03. Flip this to True only once that run happens, not
+    when the tooling merely exists -- see CLAUDE.md's "MDM Postgres
+    migration-011" lesson on why a stale claim that looks verified is worse
+    than an honest gap.
+    """
+    manifest = _load_manifest()
+    entry = next(e for e in manifest["secrets"] if e["name"] == "bookkeeping/postgres_dsn")
+    assert entry["populating_script"] == "infra/scripts/bootstrap-bookkeeping-postgres.sh"
+    assert entry["terraform_resource"] == (
+        "infra/terraform/modules/warehouse_runtime/main.tf: aws_secretsmanager_secret.bookkeeping_postgres_dsn"
+    )
+    assert entry["populated_in_prod"] is False
 
 
 # --- infra/scripts/lib/secrets-manifest.sh -----------------------------------
@@ -233,3 +253,35 @@ def test_bootstrap_prod_mdm_no_longer_hardcodes_the_secret_ids_inline():
     assert '--secret-id "${NAME_PREFIX}/dbt/snowflake"' not in content
     assert '--secret-id "${NAME_PREFIX}/mdm/snowflake"' not in content
     assert '--secret-id "${NAME_PREFIX}/mdm/postgres_dsn"' not in content
+
+
+# --- bootstrap-bookkeeping-postgres.sh (content assertions) ------------------
+
+
+def test_bootstrap_bookkeeping_postgres_sources_the_shared_secrets_manifest_lib():
+    content = BOOTSTRAP_BOOKKEEPING_POSTGRES.read_text()
+    assert 'source "${SCRIPT_DIR}/lib/secrets-manifest.sh"' in content
+
+
+def test_bootstrap_bookkeeping_postgres_resolves_its_secret_id_via_the_manifest():
+    content = BOOTSTRAP_BOOKKEEPING_POSTGRES.read_text()
+    assert 'secret_id "bookkeeping/postgres_dsn"' in content
+
+
+def test_bootstrap_bookkeeping_postgres_no_longer_hardcodes_the_secret_id_inline():
+    content = BOOTSTRAP_BOOKKEEPING_POSTGRES.read_text()
+    assert '--secret-id "${NAME_PREFIX}/bookkeeping/postgres_dsn"' not in content
+
+
+def test_bootstrap_bookkeeping_postgres_rotates_snowflake_admin_exactly_once():
+    """Unlike bootstrap-prod-mdm.sh (two snowflake_admin rotations, because an
+    intervening `application` rotation reopens the acquisition-ledger fence a
+    second time), this script never touches `application` at all -- its
+    dedicated bookkeeping_app role is a plain, self-managed Postgres LOGIN
+    role, not one of Snowflake's two RESET ACCESS-managed principals. So it
+    should rotate snowflake_admin exactly once, closing the fence via the
+    same rotation's password rather than a second RESET ACCESS call.
+    """
+    content = BOOTSTRAP_BOOKKEEPING_POSTGRES.read_text()
+    assert content.count("RESET ACCESS FOR 'snowflake_admin'") == 1
+    assert "RESET ACCESS FOR 'application'" not in content

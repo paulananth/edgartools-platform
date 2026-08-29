@@ -93,6 +93,11 @@ output "mdm_postgres_dsn_secret_arn" {
   value       = module.runtime.mdm_postgres_dsn_secret_arn
 }
 
+output "bookkeeping_postgres_dsn_secret_arn" {
+  description = "Prod empty Secrets Manager container ARN for the operator-populated bookkeeping store Postgres DSN."
+  value       = module.runtime.bookkeeping_postgres_dsn_secret_arn
+}
+
 output "mdm_neo4j_secret_arn" {
   description = "Prod empty Secrets Manager container ARN for operator-populated Neo4j connection details."
   value       = module.runtime.mdm_neo4j_secret_arn
