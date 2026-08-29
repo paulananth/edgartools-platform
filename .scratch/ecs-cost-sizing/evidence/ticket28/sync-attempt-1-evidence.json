@@ -1,0 +1,165 @@
+{
+  "captured_at": "2026-08-29T18:05:17.450774+00:00",
+  "execution": {
+    "arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-mdm-sync-graph-large:ticket28-sync-1-20260829T132646Z",
+    "duration_seconds": 128.626,
+    "name": "ticket28-sync-1-20260829T132646Z",
+    "start_date": "2026-08-29T09:26:51.456000-04:00",
+    "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-mdm-sync-graph-large",
+    "status": "SUCCEEDED",
+    "stop_date": "2026-08-29T09:29:00.082000-04:00"
+  },
+  "execution_local_gates": {
+    "failures": [],
+    "passed": true,
+    "warnings": []
+  },
+  "launch_contract": {
+    "attempt": 1,
+    "canary_definition_hash": "c21316b290c81dbcbf6fa9e42c82e881cc4fdbbfa77d6b405b0d86f21f2e3ada",
+    "canary_name": "canary-ticket28-mdm-sync-graph-large",
+    "cohort": "sync",
+    "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-mdm-sync-graph-large:ticket28-sync-1-20260829T132646Z",
+    "expected_task_states": [
+      "Ticket28RunUnboundedSync"
+    ],
+    "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+    "source_definition_hash": "6242719d16b699fc19b983ae3391aadf6267e54b65ffd4d28870fe9c9cabeaeb",
+    "start_date": "2026-08-29T09:26:51.456000-04:00",
+    "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-mdm-sync-graph-large",
+    "task_definition_contract": {
+      "Ticket28RunUnboundedSync": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137"
+    }
+  },
+  "promotion_gates_not_inferred": [
+    "representative non-zero input/output record funnel",
+    "matched current-image large-profile duration baseline",
+    "cost per successful validated output improvement of at least 10%",
+    "cross-run cohort count"
+  ],
+  "schema_version": 1,
+  "tasks": [
+    {
+      "application_evidence": [
+        {
+          "arguments": {
+            "command": "mdm",
+            "entity_type": null,
+            "generation_id": null,
+            "limit": null,
+            "limit_per_type": null,
+            "mdm_command": "sync-graph",
+            "mdm_database": null,
+            "mdm_schema": null,
+            "relationship_type": null,
+            "target_database": null,
+            "target_schema": null
+          },
+          "command": "sync-graph",
+          "emitted_at": "2026-08-29T13:27:54.457149Z",
+          "event": "mdm_command_started"
+        },
+        {
+          "applied_filters": {
+            "entity_types": [],
+            "limit": null,
+            "limit_per_type": null,
+            "relationship_types": []
+          },
+          "available_edge_count": null,
+          "available_node_count": null,
+          "capped_below_available": false,
+          "edge_tables": [
+            "MDM_GRAPH_EDGES",
+            "GRAPH_APP_EDGES",
+            "GRAPH_EDGE_AUDITED_BY",
+            "GRAPH_EDGE_COMPANY_HOLDS",
+            "GRAPH_EDGE_EMPLOYED_BY",
+            "GRAPH_EDGE_HAS_PARENT_COMPANY",
+            "GRAPH_EDGE_HOLDS",
+            "GRAPH_EDGE_INSTITUTIONAL_HOLDS",
+            "GRAPH_EDGE_IS_ENTITY_OF",
+            "GRAPH_EDGE_IS_INSIDER",
+            "GRAPH_EDGE_IS_PERSON_OF",
+            "GRAPH_EDGE_ISSUED_BY",
+            "GRAPH_EDGE_MANAGES_FUND"
+          ],
+          "generation_id": "a6d929f0-e8ca-4848-b3a6-6257e319cfa2",
+          "graph_edges_materialized": 621201,
+          "graph_edges_synced": 621201,
+          "graph_nodes_materialized": 226197,
+          "graph_nodes_synced": 226197,
+          "node_tables": [
+            "MDM_GRAPH_NODES",
+            "GRAPH_APP_NODES",
+            "GRAPH_NODE_ADVISER",
+            "GRAPH_NODE_AUDITFIRM",
+            "GRAPH_NODE_COMPANY",
+            "GRAPH_NODE_FUND",
+            "GRAPH_NODE_PERSON",
+            "GRAPH_NODE_SECURITY"
+          ],
+          "status": "ok",
+          "target": {
+            "database": "EDGARTOOLS_PROD",
+            "schema": "NEO4J_GRAPH_MIGRATION"
+          }
+        },
+        {
+          "command": "sync-graph",
+          "duration_ms": 32190,
+          "emitted_at": "2026-08-29T13:28:26.647714Z",
+          "event": "mdm_command_completed",
+          "exit_code": 0
+        }
+      ],
+      "billable_duration_seconds": 87.209,
+      "cpu_reserved": 2048,
+      "created_at": 1788010014232,
+      "exit_code": 0,
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+      "memory_reserved_mib": 8192,
+      "pull_started_at": 1788010051638,
+      "reason": null,
+      "requested_memory_gib_hours": 0.1937977777777778,
+      "requested_vcpu_hours": 0.04844944444444445,
+      "retry_ordinal": 1,
+      "started_at": 1788010068893,
+      "state": "Ticket28RunUnboundedSync",
+      "stop_code": "EssentialContainerExited",
+      "stopped_at": 1788010138847,
+      "stopped_reason": "Essential container in task exited",
+      "task_arn": "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/61a940bb71bb4072a38c3f932791f207",
+      "task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+      "task_id": "61a940bb71bb4072a38c3f932791f207",
+      "telemetry": {
+        "cpu": {
+          "average": 198.4786917114258,
+          "average_percent": 9.691342368721962,
+          "maximum": 396.9573834228516,
+          "maximum_percent": 19.382684737443924,
+          "p95": 377.109514251709,
+          "p95_percent": 18.41355050057173,
+          "reserved": 2048.0,
+          "seconds_at_or_above_70_percent": 0,
+          "seconds_at_or_above_80_percent": 0,
+          "seconds_at_or_above_90_percent": 0
+        },
+        "memory": {
+          "average": 61.5,
+          "average_percent": 0.750732421875,
+          "maximum": 123.0,
+          "maximum_percent": 1.50146484375,
+          "p95": 116.85,
+          "p95_percent": 1.4263916015625,
+          "reserved": 8192.0,
+          "seconds_at_or_above_70_percent": 0,
+          "seconds_at_or_above_80_percent": 0,
+          "seconds_at_or_above_90_percent": 0
+        },
+        "period_seconds": 60,
+        "sample_count": 2
+      }
+    }
+  ]
+}

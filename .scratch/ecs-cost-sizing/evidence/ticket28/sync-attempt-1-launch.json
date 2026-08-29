@@ -1,0 +1,17 @@
+{
+  "attempt": 1,
+  "canary_definition_hash": "c21316b290c81dbcbf6fa9e42c82e881cc4fdbbfa77d6b405b0d86f21f2e3ada",
+  "canary_name": "canary-ticket28-mdm-sync-graph-large",
+  "cohort": "sync",
+  "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-mdm-sync-graph-large:ticket28-sync-1-20260829T132646Z",
+  "expected_task_states": [
+    "Ticket28RunUnboundedSync"
+  ],
+  "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+  "source_definition_hash": "6242719d16b699fc19b983ae3391aadf6267e54b65ffd4d28870fe9c9cabeaeb",
+  "start_date": "2026-08-29T09:26:51.456000-04:00",
+  "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-mdm-sync-graph-large",
+  "task_definition_contract": {
+    "Ticket28RunUnboundedSync": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137"
+  }
+}
