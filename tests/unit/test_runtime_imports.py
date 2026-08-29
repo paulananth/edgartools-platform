@@ -75,10 +75,14 @@ class RuntimeImportTests(unittest.TestCase):
         # it's a standalone direct-Snowflake row-count check (edgar_warehouse.serving.
         # gold_verify), never registered in COMMAND_REGISTRY. resolve-snowflake-env is
         # the same shape: a standalone credential resolver, never registered either.
+        # compare-filing-artifact-capture (Ticket 51) is observe-only Decision 2
+        # snapshot compare, same exclusion.
         warehouse_cli_commands = set(subparsers_action.choices) - {
             "mdm",
             "gold-verify-live",
             "resolve-snowflake-env",
+            "reconcile-decision-watermark",
+            "compare-filing-artifact-capture",
         }
         self.assertEqual(
             set(commands.COMMAND_REGISTRY),
@@ -102,11 +106,13 @@ class RuntimeImportTests(unittest.TestCase):
         )
         # gold-verify-live never calls _planned_writes -- it doesn't go through
         # _execute_warehouse_bronze_capture at all (see the skip comment below).
-        # resolve-snowflake-env is the same shape.
+        # resolve-snowflake-env and compare-filing-artifact-capture are the same shape.
         all_commands = set(subparsers_action.choices) - {
             "mdm",
             "gold-verify-live",
             "resolve-snowflake-env",
+            "reconcile-decision-watermark",
+            "compare-filing-artifact-capture",
         }
 
         resolver = catalog.default_path_resolver()
@@ -154,7 +160,16 @@ class RuntimeImportTests(unittest.TestCase):
         #   (edgar_warehouse.serving.gold_verify) -- never touches the warehouse
         #   orchestrator, bronze/silver roots, or manifest machinery at all
         # - resolve-snowflake-env is a standalone credential resolver, same shape
-        skip = {"mdm", "migrate-silver-shards", "gold-verify-live", "resolve-snowflake-env"}
+        # - compare-filing-artifact-capture is Ticket 51 observe-only snapshot
+        #   compare (Ticket 10 Decision 2), never goes through the orchestrator
+        skip = {
+            "mdm",
+            "migrate-silver-shards",
+            "gold-verify-live",
+            "resolve-snowflake-env",
+            "reconcile-decision-watermark",
+            "compare-filing-artifact-capture",
+        }
         all_commands = set(subparsers_action.choices) - skip
 
         missing = []

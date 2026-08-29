@@ -62,7 +62,11 @@ _Avoid_: Daily full-universe identity sweep, filing ingestion
 
 **Identity Backstop Sweep**:
 The periodic refresh of company identity across the complete active company-eligible universe (`entity_type = operating` or present in the captured canonical SEC ticker snapshot), covering administrative submissions changes that have no filing signal.
-_Avoid_: Daily identity refresh, historical filing backfill
+_Avoid_: Daily identity refresh, historical filing backfill, MDM Reconciliation Backstop
+
+**MDM Reconciliation Backstop**:
+The periodic full-universe MDM match, survivorship, and relationship re-derivation pass that catches drift a bounded 1-hop incremental pass cannot see: multi-hop ripple, below-threshold near-misses, and skip-if-unchanged hash staleness.
+_Avoid_: Identity Backstop Sweep, Daily Identity Refresh, Per-Type Exact Relationship Parity, mdm verify-graph, limited mdm run
 
 **Identity Refresh Slot**:
 One scheduled opportunity to run either a Daily Identity Refresh or an Identity Backstop Sweep; it may be completed or deferred but never overlaps another identity refresh.

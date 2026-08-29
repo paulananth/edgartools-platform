@@ -677,8 +677,9 @@ This creates 10 objects in `EDGARTOOLS_PROD.EDGARTOOLS_GOLD`:
   `PRIVATE_FUNDS`
 - 1 view: `EDGARTOOLS_GOLD_STATUS`
 
-> **Note**: Dynamic tables use `TARGET_LAG = DOWNSTREAM`, meaning they refresh on query.
-> The first query after a warehouse load may be slower than subsequent queries.
+> **Note**: Gold dynamic tables use `TARGET_LAG = 6 hours` (change-propagation
+> Ticket 39). `DOWNSTREAM` did not refresh gold leaves in prod — refresh
+> history was `MANUAL` only via `REFRESH_AFTER_LOAD`.
 
 ---
 
@@ -829,8 +830,9 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   fail with a privilege or feature error on Standard edition.
 - **Create `profiles.yml` from `profiles.yml.example`** before running dbt. dbt will not
   run without a `profiles.yml` in the project directory.
-- **`TARGET_LAG = DOWNSTREAM`** — dynamic tables refresh lazily on query. The first query
-  after loading new data may be slow; subsequent queries hit the refreshed table.
+- **`TARGET_LAG = 6 hours`** for gold and silver dynamic tables. `DOWNSTREAM`
+  does not refresh gold leaves (change-propagation Ticket 39: prod refresh
+  history was `MANUAL` only).
 - **`DBT_SNOWFLAKE_DATABASE` must be set** — the dbt project uses
   `{{ env_var('DBT_SNOWFLAKE_DATABASE') }}` and will fail at parse time if the variable is
   missing.

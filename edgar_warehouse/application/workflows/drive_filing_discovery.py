@@ -49,6 +49,10 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
+from edgar_warehouse.acquisition.capture_parity import (
+    filter_discovery_rows_by_cik,
+    should_record_family_catchup,
+)
 from edgar_warehouse.acquisition.discovery import (
     DiscoveryDriveResult,
     build_discovery_manifest,
@@ -179,6 +183,7 @@ def run_gated_discovery_for_business_date(
     worker_id: str,
     lease_seconds: int,
     registry_version: str,
+    cik_list: list[int] | tuple[int, ...] | None = None,
 ) -> GatedDiscoveryOutcome:
     """Ticket 16/19/29's ledger-gated discovery/capture/Silver-acceptance
     body for one already-sealed business date, extracted (Ticket 46) so both
@@ -214,7 +219,9 @@ def run_gated_discovery_for_business_date(
         else (default_required_producer,)
     )
 
-    rows = _load_sealed_discovery_rows(db, business_date)
+    rows = filter_discovery_rows_by_cik(
+        _load_sealed_discovery_rows(db, business_date), cik_list
+    )
     manifest = build_discovery_manifest(
         rows, business_date=business_date, source_family=source_family, in_scope_forms=in_scope_forms
     )
@@ -277,9 +284,11 @@ def run_gated_discovery_for_business_date(
     if result.interval_complete and silver_result.interval_complete:
         # Ticket 20's catch-up obligation, advanced by the exact same
         # completeness signal Ticket 29 already proved live end-to-end.
-        SourceRegistryLedger(engine).record_catchup_progress(
-            source_family, business_date_value
-        )
+        # Ticket 51: a CIK-scoped Decision 2 run must not claim the date.
+        if should_record_family_catchup(cik_list):
+            SourceRegistryLedger(engine).record_catchup_progress(
+                source_family, business_date_value
+            )
 
     return GatedDiscoveryOutcome(
         interval_complete=result.interval_complete and silver_result.interval_complete,
@@ -294,6 +303,7 @@ def run_filing_artifact_gated_capture_for_business_date(
     db: Any,
     business_date: str,
     run_id: str,
+    cik_list: list[int] | tuple[int, ...] | None = None,
 ) -> GatedDiscoveryOutcome:
     """Ticket 46: filing_artifact's gated discovery/capture, run in-process
     against daily-incremental's own already-open Silver connection.
@@ -337,6 +347,7 @@ def run_filing_artifact_gated_capture_for_business_date(
         worker_id=f"daily-incremental-gated-capture-{run_id}",
         lease_seconds=DEFAULT_LEASE_SECONDS,
         registry_version=DEFAULT_REGISTRY_VERSION,
+        cik_list=cik_list,
     )
 
 
@@ -393,6 +404,7 @@ def _run_daily_index_driven_discovery(
             worker_id=worker_id,
             lease_seconds=lease_seconds,
             registry_version=registry_version,
+            cik_list=getattr(args, "cik_list", None),
         )
     finally:
         db.close()

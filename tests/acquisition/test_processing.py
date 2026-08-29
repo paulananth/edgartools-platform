@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -24,13 +25,18 @@ from edgar_warehouse.acquisition.processing import (
     ExpectedProducerNotFound,
     ExpectedProducerOutcome,
     ExpectedProducerSpec,
+    GOLD_DYNAMIC_TABLE_PRODUCER_KIND,
+    GoldRefreshIdentity,
     PriorRevisionNotSettled,
     ProcessingDisposition,
     ProcessingLedger,
     RevisionNotFound,
     SilverFinalizer,
     SilverOutcome,
+    gold_refresh_identities_from_show_rows,
+    gold_watermark_contribution,
     read_source_change_status_detail,
+    verify_gold_dynamic_table_producer,
 )
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 
@@ -750,3 +756,186 @@ def test_verify_snowflake_landing_producer_fails_closed_on_missing_rows() -> Non
     assert producer.outcome is ExpectedProducerOutcome.FAILED
     assert "counted 0" in (producer.failure_detail or "")
     assert updated.silver_outcome is SilverOutcome.FAILED
+
+
+def test_verify_gold_dynamic_table_producer_verified_when_refresh_is_at_or_after_seal() -> None:
+    ledger, revisions, processing, finalizer, _engine = _ledgers()
+    revision = _changed_revision(
+        ledger, revisions, candidate_id="c1", logical_source_key="key-1"
+    )
+    spec = ExpectedProducerSpec(
+        producer_name="company_gold",
+        target_table="COMPANY",
+        scope_reference="gold_dynamic_table:COMPANY",
+        producer_kind=GOLD_DYNAMIC_TABLE_PRODUCER_KIND,
+        cause_reference="cause-1",
+    )
+    decision = processing.seal_expected_producers(
+        revision.revision_id, expected_producers=(spec,)
+    )
+    sealed_at = datetime(2026, 8, 28, 15, 0, tzinfo=UTC)
+    identity = GoldRefreshIdentity(
+        table_name="COMPANY",
+        data_timestamp=datetime(2026, 8, 28, 15, 23, 25, tzinfo=UTC),
+        refresh_trigger="MANUAL",
+    )
+
+    updated = verify_gold_dynamic_table_producer(
+        finalizer,
+        decision.processing_decision_id,
+        "company_gold",
+        target_table="COMPANY",
+        sealed_at=sealed_at,
+        read_refresh=lambda name: identity if name == "COMPANY" else None,
+    )
+
+    producer = updated.expected_producers[0]
+    assert producer.outcome is ExpectedProducerOutcome.VERIFIED
+    assert "COMPANY" in (producer.verified_reference or "")
+    assert updated.silver_outcome is SilverOutcome.PUBLISHED
+
+
+def test_verify_gold_dynamic_table_producer_fails_closed_on_stale_or_missing_refresh() -> None:
+    ledger, revisions, processing, finalizer, _engine = _ledgers()
+    revision = _changed_revision(
+        ledger, revisions, candidate_id="c1", logical_source_key="key-1"
+    )
+    spec = ExpectedProducerSpec(
+        producer_name="company_gold",
+        target_table="COMPANY",
+        scope_reference="gold_dynamic_table:COMPANY",
+        producer_kind=GOLD_DYNAMIC_TABLE_PRODUCER_KIND,
+        cause_reference="cause-1",
+    )
+    decision = processing.seal_expected_producers(
+        revision.revision_id, expected_producers=(spec,)
+    )
+    sealed_at = datetime(2026, 8, 28, 15, 0, tzinfo=UTC)
+    stale = GoldRefreshIdentity(
+        table_name="COMPANY",
+        data_timestamp=datetime(2026, 8, 22, 16, 54, tzinfo=UTC),
+        refresh_trigger="MANUAL",
+    )
+
+    stale_decision = verify_gold_dynamic_table_producer(
+        finalizer,
+        decision.processing_decision_id,
+        "company_gold",
+        target_table="COMPANY",
+        sealed_at=sealed_at,
+        read_refresh=lambda name: stale,
+    )
+    producer = stale_decision.expected_producers[0]
+    assert producer.outcome is ExpectedProducerOutcome.FAILED
+    assert "stale" in (producer.failure_detail or "").lower()
+    assert stale_decision.silver_outcome is SilverOutcome.FAILED
+
+
+def test_gold_watermark_contribution_exposes_per_table_data_timestamps() -> None:
+    identities = (
+        GoldRefreshIdentity(
+            table_name="COMPANY",
+            data_timestamp=datetime(2026, 8, 28, 15, 23, 25, tzinfo=UTC),
+            refresh_trigger="MANUAL",
+        ),
+        GoldRefreshIdentity(
+            table_name="TICKER_REFERENCE",
+            data_timestamp=datetime(2026, 8, 28, 15, 23, 55, tzinfo=UTC),
+            refresh_trigger="MANUAL",
+        ),
+    )
+
+    contribution = gold_watermark_contribution(identities)
+    assert contribution["COMPANY"].startswith("2026-08-28T15:23:25")
+    assert contribution["TICKER_REFERENCE"].startswith("2026-08-28T15:23:55")
+    assert contribution["COMPANY"].endswith("Z")
+
+
+def test_gold_model_config_uses_six_hour_target_lag() -> None:
+    """Ticket 39: DOWNSTREAM does not refresh gold leaves; match silver's 6h lag."""
+
+    text = Path(
+        "infra/snowflake/dbt/edgartools_gold/macros/gold_model_config.sql"
+    ).read_text()
+    assert "target_lag='6 hours'" in text
+    assert "target_lag='DOWNSTREAM'" not in text
+
+
+def test_verify_gold_dynamic_table_producer_fails_closed_when_refresh_is_missing() -> None:
+    ledger, revisions, processing, finalizer, _engine = _ledgers()
+    revision = _changed_revision(
+        ledger, revisions, candidate_id="c1", logical_source_key="key-1"
+    )
+    spec = ExpectedProducerSpec(
+        producer_name="company_gold",
+        target_table="COMPANY",
+        scope_reference="gold_dynamic_table:COMPANY",
+        producer_kind=GOLD_DYNAMIC_TABLE_PRODUCER_KIND,
+        cause_reference="cause-1",
+    )
+    decision = processing.seal_expected_producers(
+        revision.revision_id, expected_producers=(spec,)
+    )
+
+    updated = verify_gold_dynamic_table_producer(
+        finalizer,
+        decision.processing_decision_id,
+        "company_gold",
+        target_table="COMPANY",
+        sealed_at=datetime(2026, 8, 28, 15, 0, tzinfo=UTC),
+        read_refresh=lambda name: None,
+    )
+    producer = updated.expected_producers[0]
+    assert producer.outcome is ExpectedProducerOutcome.FAILED
+    assert "no gold refresh identity" in (producer.failure_detail or "")
+
+
+def test_verify_gold_dynamic_table_producer_fails_closed_on_table_name_mismatch() -> None:
+    ledger, revisions, processing, finalizer, _engine = _ledgers()
+    revision = _changed_revision(
+        ledger, revisions, candidate_id="c1", logical_source_key="key-1"
+    )
+    spec = ExpectedProducerSpec(
+        producer_name="company_gold",
+        target_table="COMPANY",
+        scope_reference="gold_dynamic_table:COMPANY",
+        producer_kind=GOLD_DYNAMIC_TABLE_PRODUCER_KIND,
+        cause_reference="cause-1",
+    )
+    decision = processing.seal_expected_producers(
+        revision.revision_id, expected_producers=(spec,)
+    )
+    wrong = GoldRefreshIdentity(
+        table_name="TICKER_REFERENCE",
+        data_timestamp=datetime(2026, 8, 28, 15, 23, tzinfo=UTC),
+    )
+
+    updated = verify_gold_dynamic_table_producer(
+        finalizer,
+        decision.processing_decision_id,
+        "company_gold",
+        target_table="COMPANY",
+        sealed_at=datetime(2026, 8, 28, 15, 0, tzinfo=UTC),
+        read_refresh=lambda name: wrong,
+    )
+    producer = updated.expected_producers[0]
+    assert producer.outcome is ExpectedProducerOutcome.FAILED
+    assert "does not match" in (producer.failure_detail or "")
+
+
+def test_gold_refresh_identities_from_show_rows_parses_snowflake_json() -> None:
+    rows = (
+        {
+            "name": "COMPANY",
+            "data_timestamp": "2026-08-28T08:23:25.215000-07:00",
+            "refresh_end_time": "2026-08-28T08:23:28.084000-07:00",
+            "refresh_trigger": "MANUAL",
+        },
+        {"name": "SKIP_ME"},
+    )
+    identities = gold_refresh_identities_from_show_rows(rows)
+    assert len(identities) == 1
+    assert identities[0].table_name == "COMPANY"
+    assert identities[0].refresh_trigger == "MANUAL"
+    contribution = gold_watermark_contribution(identities)
+    assert contribution["COMPANY"].startswith("2026-08-28T15:23:28")

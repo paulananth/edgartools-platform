@@ -534,3 +534,107 @@ def test_drive_filing_discovery_evaluates_coverage_end_date_against_business_dat
     assert captured["in_scope"] is True
     assert captured["network_fetched"] is True
     assert captured["fetch_state"] == "CAPTURED"
+
+
+def test_drive_filing_discovery_cik_list_skips_unrelated_cik_and_does_not_record_catchup(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], _acquisition_db: str
+) -> None:
+    """Ticket 51: a 1-CIK Decision 2 run must not process other CIKs or
+    claim the family's catch-up barrier for the whole date.
+    """
+    from edgar_warehouse.application.command_router import run_command
+    from edgar_warehouse.infrastructure.object_storage import StorageLocation
+    from edgar_warehouse.silver_support.session import open_silver_database
+
+    _set_warehouse_env(monkeypatch, tmp_path)
+    silver_root = StorageLocation(str(tmp_path / "silver"))
+    db = open_silver_database(silver_root)
+    try:
+        business_date_value = date(2026, 8, 24)
+        db.merge_daily_index_filings(
+            [
+                {
+                    "business_date": business_date_value,
+                    "source_year": 2026,
+                    "source_quarter": 3,
+                    "row_ordinal": 1,
+                    "form": "4",
+                    "company_name": "Apple Inc.",
+                    "cik": 320193,
+                    "filing_date": business_date_value,
+                    "file_name": "edgar/data/320193/0001140361-26-000001.txt",
+                    "accession_number": "0001140361-26-000001",
+                    "filing_txt_url": (
+                        "https://www.sec.gov/Archives/edgar/data/320193/"
+                        "0001140361-26-000001.txt"
+                    ),
+                    "record_hash": "hash-1",
+                },
+                {
+                    "business_date": business_date_value,
+                    "source_year": 2026,
+                    "source_quarter": 3,
+                    "row_ordinal": 2,
+                    "form": "4",
+                    "company_name": "Microsoft Corp.",
+                    "cik": 789019,
+                    "filing_date": business_date_value,
+                    "file_name": "edgar/data/789019/0001140361-26-000009.txt",
+                    "accession_number": "0001140361-26-000009",
+                    "filing_txt_url": (
+                        "https://www.sec.gov/Archives/edgar/data/789019/"
+                        "0001140361-26-000009.txt"
+                    ),
+                    "record_hash": "hash-9",
+                },
+            ],
+            sync_run_id="seed-run",
+        )
+        db.upsert_daily_index_checkpoint(
+            {
+                "business_date": business_date_value,
+                "source_key": "date:2026-08-24",
+                "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
+                "expected_available_at": datetime.now(UTC),
+                "first_attempt_at": datetime.now(UTC),
+                "last_attempt_at": datetime.now(UTC),
+                "status": "succeeded",
+                "row_count": 2,
+                "distinct_cik_count": 2,
+                "distinct_accession_count": 2,
+            }
+        )
+    finally:
+        db.close()
+
+    payload = b"<ownershipDocument>apple form 4</ownershipDocument>"
+    with (
+        patch(
+            "edgar_warehouse.acquisition.source_family_registry.download_filing_content_bytes",
+            return_value=payload,
+        ) as mocked_fetch,
+        patch(
+            "edgar_warehouse.application.workflows.drive_filing_discovery.SourceRegistryLedger.record_catchup_progress",
+        ) as catchup,
+    ):
+        exit_code = run_command(
+            "drive-filing-discovery-for-date",
+            Namespace(
+                business_date="2026-08-24",
+                worker_id="discovery-worker-scoped",
+                lease_seconds=None,
+                registry_version=None,
+                run_id="run-discovery-scoped",
+                cik_list=[320193],
+            ),
+        )
+
+    assert exit_code == 0
+    mocked_fetch.assert_called_once_with(
+        "https://www.sec.gov/Archives/edgar/data/320193/0001140361-26-000001.txt",
+        "EdgarTools Platform test@example.com",
+    )
+    catchup.assert_not_called()
+    result = json.loads(capsys.readouterr().out)
+    assert result["candidate_count"] == 1
+    assert result["outcomes"][0]["accession_number"] == "0001140361-26-000001"

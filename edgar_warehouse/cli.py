@@ -241,6 +241,121 @@ def _handle_backfill_silver_landing_company_metadata(args: argparse.Namespace) -
     return run_command("backfill-silver-landing-company-metadata", args)
 
 
+def _handle_compare_filing_artifact_capture(args: argparse.Namespace) -> int:
+    import json
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from edgar_warehouse.acquisition.capture_parity import (
+        evaluate_capture_parity_files,
+        run_dual_path_filing_artifact_parity,
+    )
+
+    if getattr(args, "run_capture", False):
+        from edgar_warehouse.application.warehouse_orchestrator import (
+            _build_warehouse_context,
+        )
+        from edgar_warehouse.silver_support.session import open_silver_database
+
+        context = _build_warehouse_context("daily-incremental")
+        db = open_silver_database(context.silver_root)
+        try:
+            result = run_dual_path_filing_artifact_parity(
+                context=context,
+                db=db,
+                business_date=args.business_date,
+                cik_list=getattr(args, "cik_list", None),
+                limit=args.limit,
+                sync_run_id=getattr(args, "run_id", None)
+                or datetime.now(UTC).strftime("parity-%Y%m%dT%H%M%SZ"),
+            )
+        finally:
+            db.close()
+        payload = result.verdict.to_dict()
+        payload["legacy_cause_reference"] = result.legacy.cause_reference
+        payload["gated_cause_reference"] = result.gated.cause_reference
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0 if result.verdict.passed else 1
+
+    if not args.legacy_snapshot or not args.gated_snapshot:
+        raise SystemExit(
+            "compare-filing-artifact-capture requires --run-capture "
+            "or both --legacy-snapshot and --gated-snapshot"
+        )
+    verdict = evaluate_capture_parity_files(
+        legacy_path=Path(args.legacy_snapshot),
+        gated_path=Path(args.gated_snapshot),
+        business_date=args.business_date,
+        cik_list=getattr(args, "cik_list", None),
+        limit=args.limit,
+    )
+    print(json.dumps(verdict.to_dict(), indent=2, sort_keys=True))
+    return 0 if verdict.passed else 1
+
+
+def _handle_reconcile_decision_watermark(args: argparse.Namespace) -> int:
+    import json
+
+    from pathlib import Path
+
+    from edgar_warehouse.serving.watermark_aggregator import (
+        JsonAlignmentStore,
+        MemoryAlignmentStore,
+        StageObservation,
+        compute_alignment_freshness,
+        reconcile_cause_reference,
+        rollup_business_date,
+    )
+
+    def _reader(complete: bool, identity: str) -> StageObservation:
+        return StageObservation(complete=complete, identity=identity or None)
+
+    store = (
+        JsonAlignmentStore(Path(args.state_file))
+        if getattr(args, "state_file", None)
+        else MemoryAlignmentStore()
+    )
+    causes = args.cause_reference if isinstance(args.cause_reference, list) else [args.cause_reference]
+    rows = []
+    for cause in causes:
+        row = reconcile_cause_reference(
+            cause,
+            business_date=args.business_date,
+            silver=lambda _c, c=args.silver_complete: _reader(c, ""),
+            mdm=lambda _c, c=args.mdm_complete: _reader(c, ""),
+            gold=lambda _c, c=args.gold_complete, i=args.gold_run_id: _reader(c, i),
+            graph=lambda _c, c=args.graph_parity_ok, i=args.graph_generation_id: _reader(c, i),
+            store=store,
+        )
+        rows.append(
+            {
+                "cause_reference": row.cause_reference,
+                "aligned": row.aligned,
+                "stuck_stage": row.stuck_stage,
+            }
+        )
+    grade = rollup_business_date(store, args.business_date)
+    freshness = compute_alignment_freshness(store)
+    print(
+        json.dumps(
+            {
+                "causes": rows,
+                "agent_grade": grade.agent_grade,
+                "reasons": list(grade.reasons),
+                "watermark": grade.watermark.to_dict() if grade.watermark else None,
+                "freshness": {
+                    "status": freshness.status,
+                    "stuck_stage": freshness.stuck_stage,
+                    "oldest_unaligned_cause_reference": freshness.oldest_unaligned_cause_reference,
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0 if grade.agent_grade else 1
+
+
 def _handle_gold_verify_live(args: argparse.Namespace) -> int:
     import json
     import sys
@@ -603,6 +718,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Source Family Registry version tied to issued decisions "
         "(default: filing_artifact-v1)",
+    )
+    drive_filing_discovery_for_date.add_argument(
+        "--cik-list",
+        type=_parse_cik_list,
+        default=None,
+        help=(
+            "Ticket 51: restrict sealed daily-index candidates to these CIKs "
+            "(Decision 2 1-CIK / 100-CIK harness). A scoped run does not "
+            "record family catch-up for the date."
+        ),
     )
     _add_run_id_arg(drive_filing_discovery_for_date)
     drive_filing_discovery_for_date.set_defaults(
@@ -1364,6 +1489,92 @@ def build_parser() -> argparse.ArgumentParser:
     backfill_silver_landing_company_metadata.set_defaults(
         handler=_handle_backfill_silver_landing_company_metadata
     )
+
+    compare_filing_artifact_capture = subparsers.add_parser(
+        "compare-filing-artifact-capture",
+        help=(
+            "Ticket 51 / Ticket 10 Decision 2: compare legacy filing-artifact "
+            "capture to ledger-gated capture for one CIK scope. Pass is "
+            "equal-or-superset with zero silent gaps. Default scope is Apple "
+            "CIK 320193 (stage 1); pass --limit 100 for stage 2. "
+            "--run-capture hits SEC on both paths; snapshot files compare "
+            "already-captured sets without fetching."
+        ),
+    )
+    compare_filing_artifact_capture.add_argument("--business-date", required=True)
+    compare_filing_artifact_capture.add_argument(
+        "--run-capture",
+        action="store_true",
+        default=False,
+        help=(
+            "Run real legacy fetch_filing_artifacts then gated discovery for "
+            "this date and CIK scope, then diff. Requires a sealed daily index "
+            "and EDGAR_IDENTITY. Hits SEC."
+        ),
+    )
+    compare_filing_artifact_capture.add_argument(
+        "--legacy-snapshot",
+        default=None,
+        help="JSON CaptureSnapshot from the legacy path (not needed with --run-capture).",
+    )
+    compare_filing_artifact_capture.add_argument(
+        "--gated-snapshot",
+        default=None,
+        help="JSON CaptureSnapshot from the ledger-gated path (not needed with --run-capture).",
+    )
+    compare_filing_artifact_capture.add_argument(
+        "--cik-list",
+        type=_parse_cik_list,
+        default=None,
+        help="Comma-separated CIKs. Default is Apple (320193) when omitted.",
+    )
+    compare_filing_artifact_capture.add_argument(
+        "--limit",
+        type=int,
+        default=1,
+        help="Keep the first N scoped CIKs. Default 1 (stage 1); use 100 for stage 2.",
+    )
+    compare_filing_artifact_capture.set_defaults(
+        handler=_handle_compare_filing_artifact_capture
+    )
+
+    reconcile_decision_watermark = subparsers.add_parser(
+        "reconcile-decision-watermark",
+        help=(
+            "Ticket 41: observe-only cross-stage aggregator. Reconcile one or more "
+            "cause_reference values for a business_date, roll up evaluate_agent_grade, "
+            "and report the 5-minute/15-minute alignment SLO. Does not repair a stuck "
+            "stage. Pass stage completeness flags until production readers are wired "
+            "to each stage's own store."
+        ),
+    )
+    reconcile_decision_watermark.add_argument("--business-date", required=True)
+    reconcile_decision_watermark.add_argument(
+        "--cause-reference",
+        action="append",
+        required=True,
+        help="Repeatable cause_reference to reconcile on this pass.",
+    )
+    reconcile_decision_watermark.add_argument(
+        "--silver-complete", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument(
+        "--mdm-complete", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument(
+        "--gold-complete", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument(
+        "--graph-parity-ok", action="store_true", default=False
+    )
+    reconcile_decision_watermark.add_argument("--gold-run-id", default="")
+    reconcile_decision_watermark.add_argument("--graph-generation-id", default="")
+    reconcile_decision_watermark.add_argument(
+        "--state-file",
+        default=None,
+        help="JSON alignment ledger so a scheduled pass keeps first_seen_at.",
+    )
+    reconcile_decision_watermark.set_defaults(handler=_handle_reconcile_decision_watermark)
 
     gold_verify_live = subparsers.add_parser(
         "gold-verify-live",

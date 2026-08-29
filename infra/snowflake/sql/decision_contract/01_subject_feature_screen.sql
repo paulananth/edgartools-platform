@@ -4,10 +4,9 @@
 -- Semantics (unit-tested): edgar_warehouse.serving.subject_feature_screen
 -- Deploy after gold FINANCIAL_FACTORS + MDM entity tracking exist.
 --
--- COMPANY is enriched by the MDM company export.  Decision Subject Universe
--- membership is therefore the explicit tracking_status='active' subset, not
--- every warehouse company.  The public bundle views add the active graph
--- generation and publication-alignment gates.
+-- Decision Subject Universe is MDM_COMPANY_ENTITY (tracking_status='active'),
+-- not warehouse COMPANY. Ticket 41: the previous COMPANY self-join treated
+-- every gold company as MDM-active.
 --
 -- Pure-SEC features only — no price / PE / market cap columns.
 -- Coverage flags: present | empty | unavailable | not_applicable
@@ -17,8 +16,9 @@ CREATE SCHEMA IF NOT EXISTS {{ database }}.EDGARTOOLS_DECISION;
 CREATE OR REPLACE VIEW {{ database }}.EDGARTOOLS_DECISION.SUBJECT_FEATURE_SCREEN AS
 WITH universe AS (
     SELECT DISTINCT cik::NUMBER AS cik
-    FROM {{ database }}.EDGARTOOLS_GOLD.COMPANY
-    WHERE LOWER(COALESCE(tracking_status, '')) = 'active'
+    FROM {{ database }}.EDGARTOOLS_GOLD.MDM_COMPANY_ENTITY
+    WHERE cik IS NOT NULL
+      AND LOWER(COALESCE(tracking_status, '')) = 'active'
 ),
 factors AS (
     SELECT *
