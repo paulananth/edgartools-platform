@@ -680,3 +680,73 @@ def test_ledger_source_change_status_shape_is_unchanged_by_ticket_19() -> None:
     assert not hasattr(status, "revision_id")
     assert not hasattr(status, "silver_outcome")
     assert status.captured_artifact_reference == "filing_artifact/deadbeef"
+    assert status.cause_reference == "discovery-manifest-1"
+
+
+def test_verify_snowflake_landing_producer_counts_then_records_verified() -> None:
+    ledger, revisions, processing, finalizer, _engine = _ledgers()
+    revision = _changed_revision(
+        ledger, revisions, candidate_id="c1", logical_source_key="key-1"
+    )
+    spec = ExpectedProducerSpec(
+        producer_name="sec_company_ticker_landing",
+        target_table="sec_company_ticker",
+        scope_reference="snowflake_landing:cause-1:count=2",
+        producer_kind="snowflake_landing",
+        expected_row_count=2,
+        cause_reference="cause-1",
+    )
+    decision = processing.seal_expected_producers(
+        revision.revision_id, expected_producers=(spec,)
+    )
+
+    from edgar_warehouse.acquisition.processing import verify_snowflake_landing_producer
+
+    updated = verify_snowflake_landing_producer(
+        finalizer,
+        decision.processing_decision_id,
+        "sec_company_ticker_landing",
+        target_table="sec_company_ticker",
+        cause_reference="cause-1",
+        expected_row_count=2,
+        count_rows=lambda table, cause: 2 if (table, cause) == ("sec_company_ticker", "cause-1") else 0,
+    )
+
+    producer = updated.expected_producers[0]
+    assert producer.outcome is ExpectedProducerOutcome.VERIFIED
+    assert updated.silver_outcome is SilverOutcome.PUBLISHED
+
+
+def test_verify_snowflake_landing_producer_fails_closed_on_missing_rows() -> None:
+    ledger, revisions, processing, finalizer, _engine = _ledgers()
+    revision = _changed_revision(
+        ledger, revisions, candidate_id="c1", logical_source_key="key-1"
+    )
+    spec = ExpectedProducerSpec(
+        producer_name="sec_company_ticker_landing",
+        target_table="sec_company_ticker",
+        scope_reference="snowflake_landing:cause-1:count=2",
+        producer_kind="snowflake_landing",
+        expected_row_count=2,
+        cause_reference="cause-1",
+    )
+    decision = processing.seal_expected_producers(
+        revision.revision_id, expected_producers=(spec,)
+    )
+
+    from edgar_warehouse.acquisition.processing import verify_snowflake_landing_producer
+
+    updated = verify_snowflake_landing_producer(
+        finalizer,
+        decision.processing_decision_id,
+        "sec_company_ticker_landing",
+        target_table="sec_company_ticker",
+        cause_reference="cause-1",
+        expected_row_count=2,
+        count_rows=lambda table, cause: 0,
+    )
+
+    producer = updated.expected_producers[0]
+    assert producer.outcome is ExpectedProducerOutcome.FAILED
+    assert "counted 0" in (producer.failure_detail or "")
+    assert updated.silver_outcome is SilverOutcome.FAILED

@@ -15,3 +15,4 @@ qualify row_number() over (
     partition by cik, ordinal
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_company_former_name', "concat_ws('|', cik, ordinal)") }}

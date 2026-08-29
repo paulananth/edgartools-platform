@@ -1523,6 +1523,7 @@ class SilverDatabase:
         sync_run_id: str,
         *,
         source_name: str = "company_tickers_exchange",
+        cause_reference: str | None = None,
     ) -> int:
         # Deliberately NOT @track_landing_rows("sec_company_ticker"): that
         # decorator records the caller's raw `rows` argument as-is, which is
@@ -1569,17 +1570,18 @@ class SilverDatabase:
                 ],
             )
             count += 1
-            landed_rows.append(
-                {
-                    "cik": cik,
-                    "ticker": ticker,
-                    "exchange": exchange,
-                    "source_name": source_name,
-                    "source_rank": ordinal,
-                    "last_sync_run_id": sync_run_id,
-                    "last_synced_at": now,
-                }
-            )
+            landed = {
+                "cik": cik,
+                "ticker": ticker,
+                "exchange": exchange,
+                "source_name": source_name,
+                "source_rank": ordinal,
+                "last_sync_run_id": sync_run_id,
+                "last_synced_at": now,
+            }
+            if cause_reference is not None:
+                landed["cause_reference"] = cause_reference
+            landed_rows.append(landed)
         landing_export = getattr(self, "landing_export", None)
         if landing_export is not None and landed_rows:
             landing_export.record("sec_company_ticker", landed_rows)

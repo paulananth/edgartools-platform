@@ -33,3 +33,4 @@ qualify row_number() over (
     partition by cik, metric, fiscal_year, fiscal_quarter, as_of, accession_number, is_non_gaap, source_system
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_guidance_fact', "concat_ws('|', cik, metric, fiscal_year, fiscal_quarter, as_of, accession_number, is_non_gaap, source_system)") }}

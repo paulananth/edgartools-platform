@@ -28,6 +28,7 @@ qualify row_number() over (
     partition by accession_number, owner_index
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_ownership_reporting_owner', "concat_ws('|', accession_number, owner_index)") }}
 )
 select
     collapsed.*,

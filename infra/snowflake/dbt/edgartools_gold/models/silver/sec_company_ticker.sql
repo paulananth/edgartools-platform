@@ -17,3 +17,4 @@ qualify row_number() over (
     partition by cik, ticker, source_name
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_company_ticker', "concat_ws('|', cik, ticker, source_name)") }}

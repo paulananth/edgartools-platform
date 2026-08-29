@@ -140,6 +140,11 @@ sources:
       - name: SEC_SUBSIDIARY_EVIDENCE
       - name: SEC_THIRTEENF_FILING
       - name: SEC_THIRTEENF_HOLDING
+      - name: SILVER_LANDING_RETIREMENT
+        description: >
+          Ticket 35 companion table. Append-only retirement events for a
+          business key that a Scope Completion proved dropped. Collapsed
+          silver models anti-join the latest event per key.
 
   # MDM's golden-record export lands directly in EDGARTOOLS_GOLD via
   # edgar_warehouse/mdm/export.py's MERGE path (Python/SQLAlchemy from MDM's

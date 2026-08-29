@@ -34,6 +34,7 @@ from edgar_warehouse.acquisition.reference_catalog_silver_acceptance import (
 )
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_store import SilverDatabase
 
 
@@ -378,3 +379,79 @@ def test_drive_rejects_a_required_producers_set_it_cannot_serve(tmp_path: Path) 
             ),
             required_producers=("some_other_table",),
         )
+
+
+def test_scope_shrink_writes_landing_retirement_records(tmp_path: Path) -> None:
+    ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
+    buffer = LandingExportBuffer()
+    silver.landing_export = buffer
+
+    first_payload = json.dumps(
+        _catalog_payload(entries=((320193, "AAPL"), (789019, "MSFT")))
+    ).encode("utf-8")
+    first_id = _captured_decision(
+        ledger, bronze_root,
+        candidate_id="reference-catalog-discovery/company_tickers/1",
+        logical_source_key="reference-catalog/company_tickers",
+        payload=first_payload,
+    )
+    drive_reference_catalog_silver_acceptance(
+        ledger, bronze_root, revisions, processing, finalizer, silver,
+        ReferenceCatalogDriveResult(
+            manifest=ReferenceCatalogManifest(universe_label="test", candidates=()),
+            outcomes=(_candidate_outcome(source_name="company_tickers", decision_id=first_id),),
+        ),
+    )
+
+    second_payload = json.dumps(
+        _catalog_payload(entries=((320193, "AAPL"),))
+    ).encode("utf-8")
+    second_id = _captured_decision(
+        ledger, bronze_root,
+        candidate_id="reference-catalog-discovery/company_tickers/2",
+        logical_source_key="reference-catalog/company_tickers",
+        payload=second_payload,
+    )
+    drive_reference_catalog_silver_acceptance(
+        ledger, bronze_root, revisions, processing, finalizer, silver,
+        ReferenceCatalogDriveResult(
+            manifest=ReferenceCatalogManifest(universe_label="test", candidates=()),
+            outcomes=(_candidate_outcome(source_name="company_tickers", decision_id=second_id),),
+        ),
+    )
+
+    retired = buffer.tables().get("silver_landing_retirement", [])
+    keys = {row["business_key"] for row in retired}
+    assert "789019|MSFT|company_tickers" in keys
+    assert "320193|AAPL|company_tickers" not in keys
+    assert all(row["target_table"] == "sec_company_ticker" for row in retired)
+    assert all(row["source_family"] == "reference_catalog" for row in retired)
+
+
+def test_snowflake_landing_producer_verifies_count_against_injected_counter(
+    tmp_path: Path,
+) -> None:
+    ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
+    payload = json.dumps(_catalog_payload()).encode("utf-8")
+    decision_id = _captured_decision(
+        ledger, bronze_root,
+        candidate_id="reference-catalog-discovery/company_tickers",
+        logical_source_key="reference-catalog/company_tickers",
+        payload=payload,
+    )
+    outcome = _candidate_outcome(source_name="company_tickers", decision_id=decision_id)
+
+    result = drive_reference_catalog_silver_acceptance(
+        ledger, bronze_root, revisions, processing, finalizer, silver,
+        ReferenceCatalogDriveResult(
+            manifest=ReferenceCatalogManifest(universe_label="test", candidates=()),
+            outcomes=(outcome,),
+        ),
+        landing_row_counter=lambda table, cause: 1,
+    )
+
+    decision = result.outcomes[0].processing_decision
+    assert decision.silver_outcome is SilverOutcome.PUBLISHED
+    by_name = {p.producer_name: p for p in decision.expected_producers}
+    assert "sec_company_ticker_landing" in by_name
+    assert by_name["sec_company_ticker_landing"].outcome.value == "VERIFIED"

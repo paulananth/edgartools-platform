@@ -30,3 +30,4 @@ qualify row_number() over (
     partition by cik, accession_number
     order by parse_sequence desc
 ) = 1
+  and {{ silver_not_retired('sec_accounting_flag', "concat_ws('|', cik, accession_number)") }}
