@@ -12,6 +12,7 @@ from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 _REGISTERED_HREF = (
     "/files/investment/data/other/information-about-registered-investment-"
@@ -64,6 +65,9 @@ def test_fetch_firm_roster_fetches_latest_period_and_writes_manifest(tmp_path, m
 
     monkeypatch.setattr(
         "edgar_warehouse.infrastructure.sec_client.download_sec_bytes", _fake_download
+    )
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
 
     result = warehouse_orchestrator._execute_warehouse(
@@ -122,6 +126,9 @@ def test_fetch_firm_roster_is_a_no_op_when_latest_period_already_ingested(tmp_pa
         "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
         _fail_if_archive_downloaded,
     )
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
+    )
 
     result = warehouse_orchestrator._execute_warehouse(
         context=context,
@@ -142,6 +149,9 @@ def test_fetch_firm_roster_force_without_dataset_period_rejected(tmp_path, monke
     monkeypatch.setattr(
         "edgar_warehouse.infrastructure.sec_client.download_sec_bytes",
         lambda url, identity: (_ for _ in ()).throw(AssertionError("no network call expected")),
+    )
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
 
     with pytest.raises(WarehouseRuntimeError, match="--force requires --dataset-period"):

@@ -96,6 +96,7 @@ class TestParseItem502Accession:
         )
         rows = orch._run_parse_pipeline(
             db=db,
+            bookkeeping=db,
             accession_number="0001",
             sync_run_id="run-1",
         )

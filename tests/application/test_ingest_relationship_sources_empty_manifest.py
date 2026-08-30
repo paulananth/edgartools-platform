@@ -14,6 +14,7 @@ from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 
 def _context(tmp_path) -> WarehouseCommandContext:
@@ -34,9 +35,12 @@ def _write_manifest(tmp_path, payload: dict) -> str:
     return str(manifest_path)
 
 
-def test_empty_sources_list_is_a_clean_no_op(tmp_path) -> None:
+def test_empty_sources_list_is_a_clean_no_op(tmp_path, monkeypatch) -> None:
     context = _context(tmp_path)
     manifest_path = _write_manifest(tmp_path, {"sources": []})
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
+    )
 
     result = warehouse_orchestrator._execute_warehouse(
         context=context,
@@ -47,9 +51,12 @@ def test_empty_sources_list_is_a_clean_no_op(tmp_path) -> None:
     assert result["status"] == "ok"
 
 
-def test_missing_sources_key_still_fails_closed(tmp_path) -> None:
+def test_missing_sources_key_still_fails_closed(tmp_path, monkeypatch) -> None:
     context = _context(tmp_path)
     manifest_path = _write_manifest(tmp_path, {})
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
+    )
 
     with pytest.raises(WarehouseRuntimeError, match="requires a sources list"):
         warehouse_orchestrator._execute_warehouse(
@@ -59,9 +66,12 @@ def test_missing_sources_key_still_fails_closed(tmp_path) -> None:
         )
 
 
-def test_non_list_sources_still_fails_closed(tmp_path) -> None:
+def test_non_list_sources_still_fails_closed(tmp_path, monkeypatch) -> None:
     context = _context(tmp_path)
     manifest_path = _write_manifest(tmp_path, {"sources": "not-a-list"})
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
+    )
 
     with pytest.raises(WarehouseRuntimeError, match="requires a sources list"):
         warehouse_orchestrator._execute_warehouse(

@@ -147,9 +147,9 @@ def test_filter_ciks_to_universe_filters_by_silver_tracking_state(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200]
-    result = _filter_ciks_to_universe([100, 200, 300], db=db)
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100, 200]
+    result = _filter_ciks_to_universe([100, 200, 300], bookkeeping=bookkeeping)
 
     assert result == [100, 200]
 
@@ -159,9 +159,9 @@ def test_filter_ciks_to_universe_passes_through_when_silver_empty(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = []
-    result = _filter_ciks_to_universe([100, 200, 300], db=db)
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = []
+    result = _filter_ciks_to_universe([100, 200, 300], bookkeeping=bookkeeping)
 
     assert result == [100, 200, 300]
 
@@ -170,10 +170,10 @@ def test_filter_ciks_to_universe_does_not_require_mdm_url(monkeypatch):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = [100]
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100]
 
-    assert _filter_ciks_to_universe([100, 200, 300], db=db) == [100]
+    assert _filter_ciks_to_universe([100, 200, 300], bookkeeping=bookkeeping) == [100]
 
 
 # ---------------------------------------------------------------------------
@@ -253,10 +253,10 @@ def test_resolve_bootstrap_target_ciks_applies_cik_offset_then_cik_limit(monkeyp
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://localhost/test")
     from edgar_warehouse.application.warehouse_orchestrator import _resolve_bootstrap_target_ciks
 
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200, 300, 400, 500]
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100, 200, 300, 400, 500]
     result = _resolve_bootstrap_target_ciks(
-        db=db,
+        bookkeeping=bookkeeping,
         raw_ciks=None,
         command_name="bootstrap-full",
         tracking_status_filter="active",
@@ -2119,7 +2119,10 @@ def test_bootstrap_fundamentals_skips_upload_without_storage_root(
     ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
         return_value=None,
-    ) as mock_upload:
+    ) as mock_upload, patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+        return_value=MagicMock(),
+    ):
         mock_db = MagicMock()
         mock_open.return_value = mock_db
 
@@ -2161,6 +2164,9 @@ def test_bootstrap_fundamentals_uses_unified_silver_database(
     ), patch(
         "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
         return_value=0,
+    ), patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+        return_value=MagicMock(),
     ):
         mock_db = MagicMock()
         mock_open_database.return_value = mock_db
@@ -2208,6 +2214,9 @@ def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(
     ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
         side_effect=WarehouseRuntimeError("S3 write failed"),
+    ), patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+        return_value=MagicMock(),
     ):
         mock_db = MagicMock()
         mock_open.return_value = mock_db
@@ -2259,6 +2268,9 @@ def test_bootstrap_fundamentals_upload_success_sets_metrics(
     ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
         return_value=upload_record,
+    ), patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+        return_value=MagicMock(),
     ):
         mock_db = MagicMock()
         mock_open.return_value = mock_db

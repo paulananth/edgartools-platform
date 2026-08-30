@@ -68,6 +68,7 @@ def test_immutable_object_conflict_on_one_accession_does_not_abort_the_cik_resyn
         raw_writes, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=_context(tmp_path),
             db=object(),  # never touched directly by this command's cik-scope branch
+            bookkeeping=object(),
             command_name="targeted-resync",
             arguments={
                 "scope_type": "cik",
@@ -115,6 +116,7 @@ def test_non_conflict_error_on_one_accession_still_aborts_the_whole_run(tmp_path
             warehouse_orchestrator._capture_bronze_raw(
                 context=_context(tmp_path),
                 db=object(),
+                bookkeeping=object(),
                 command_name="targeted-resync",
                 arguments={
                     "scope_type": "cik",

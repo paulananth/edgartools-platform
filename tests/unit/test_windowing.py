@@ -84,10 +84,12 @@ def test_compute_windows_output():
         from unittest.mock import MagicMock as MM
         fake_db = MM()
         fake_db.start_sync_run = MM()
-        fake_db.get_tracked_ciks.return_value = fake_ciks
+        fake_bookkeeping = MM()
+        fake_bookkeeping.get_tracked_ciks.return_value = fake_ciks
         raw_writes, metrics = _capture_bronze_raw(
             context=mock_context,
             db=fake_db,
+            bookkeeping=fake_bookkeeping,
             command_name="compute-windows",
             arguments=args_dict,
             scope={"window_size": 3, "run_id": "test-run-1"},
@@ -139,9 +141,9 @@ def test_daily_incremental_windowing():
     # We mock the filter to return the full list, then apply the same slice logic
     from unittest.mock import MagicMock
 
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = input_ciks
-    filtered = _filter_ciks_to_universe(input_ciks, db=db)
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = input_ciks
+    filtered = _filter_ciks_to_universe(input_ciks, bookkeeping=bookkeeping)
 
     cik_offset = 2
     cik_limit = 3
@@ -164,11 +166,11 @@ def test_cik_limit_rejects_negative():
 
     from unittest.mock import MagicMock
 
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200, 300]
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100, 200, 300]
     with pytest.raises((WarehouseRuntimeError, SystemExit, ValueError)) as exc_info:
         _resolve_bootstrap_target_ciks(
-            db=db,
+            bookkeeping=bookkeeping,
             raw_ciks=None,
             command_name="bootstrap-full",
             tracking_status_filter="active",
@@ -191,11 +193,11 @@ def test_cik_offset_rejects_negative():
 
     from unittest.mock import MagicMock
 
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200, 300]
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100, 200, 300]
     with pytest.raises((WarehouseRuntimeError, SystemExit, ValueError)) as exc_info:
         _resolve_bootstrap_target_ciks(
-            db=db,
+            bookkeeping=bookkeeping,
             raw_ciks=None,
             command_name="bootstrap-full",
             tracking_status_filter="active",
@@ -319,6 +321,7 @@ def test_write_run_summary_output():
         raw_writes, metrics = _capture_bronze_raw(
             context=mock_context,
             db=fake_db,
+            bookkeeping=MagicMock(),
             command_name="write-run-summary",
             arguments={
                 "run_id": "run-abc",
@@ -458,10 +461,12 @@ def test_compute_windows_total_cik_limit_bounds_universe():
 
         fake_db = MagicMock()
         fake_db.start_sync_run = MagicMock()
-        fake_db.get_tracked_ciks.return_value = fake_ciks
+        fake_bookkeeping = MagicMock()
+        fake_bookkeeping.get_tracked_ciks.return_value = fake_ciks
         raw_writes, metrics = _capture_bronze_raw(
             context=mock_context,
             db=fake_db,
+            bookkeeping=fake_bookkeeping,
             command_name="compute-windows",
             arguments={
                 "window_size": 3,
@@ -523,11 +528,13 @@ def test_compute_windows_orchestrator_rejects_non_positive_total_cik_limit():
         from edgar_warehouse.application.warehouse_orchestrator import _capture_bronze_raw
 
         fake_db = MagicMock()
-        fake_db.get_tracked_ciks.return_value = [100, 200]
+        fake_bookkeeping = MagicMock()
+        fake_bookkeeping.get_tracked_ciks.return_value = [100, 200]
         with pytest.raises(WarehouseRuntimeError, match="total-cik-limit"):
             _capture_bronze_raw(
                 context=mock_context,
                 db=fake_db,
+                bookkeeping=fake_bookkeeping,
                 command_name="compute-windows",
                 arguments={
                     "window_size": 3,
@@ -565,6 +572,7 @@ def test_write_run_summary_empty_windows_raises():
             _capture_bronze_raw(
                 context=mock_context,
                 db=fake_db,
+                bookkeeping=MagicMock(),
                 command_name="write-run-summary",
                 arguments={
                     "run_id": "run-empty",
@@ -622,14 +630,18 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
     )
 
     # open_silver_database() (called inside _execute_warehouse_bronze_capture)
-    # appends "silver/sec/silver.duckdb" to the silver_root, so seed at that
-    # same resolved path, not silver_root's own base directory.
+    # appends "silver/sec/silver.duckdb" to the silver_root -- this path is
+    # still seeded for the same schema-provisioning reason as before, though
+    # tracking state itself now lives in the bookkeeping store (DuckDB
+    # Retirement Cutover Ticket 14), stubbed via fake_bookkeeping below.
     db = SilverDatabase(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    try:
-        for cik in (100, 200, 300):
-            db.upsert_company_sync_state({"cik": cik, "tracking_status": "active"})
-    finally:
-        db.close()
+    db.close()
+
+    from unittest.mock import MagicMock
+
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_tracked_ciks.return_value = [100, 200, 300]
+    fake_bookkeeping.get_table_counts.return_value = {}
 
     company_tickers_payload = b'{"0":{"cik_str":100,"ticker":"AAA","title":"A Co"}}'
     exchange_payload = b'{"fields":["cik","name","ticker","exchange"],"data":[]}'
@@ -650,6 +662,7 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
     # tuple), independent of what a remote (S3) canonical would do with it.
     with (
         patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=fake_download),
+        patch.object(warehouse_orchestrator, "_bookkeeping_store", return_value=fake_bookkeeping),
         patch.object(
             warehouse_orchestrator,
             "_publish_silver_database_with_retry",

@@ -3936,7 +3936,19 @@ class SilverDatabase:
         return [dict(zip(cols, row)) for row in rows]
 
     def get_table_counts(self) -> dict[str, int]:
-        """Return current row count for every silver table, keyed by table name."""
+        """Return current row count for every silver table, keyed by table name.
+
+        DuckDB Retirement Cutover Ticket 14: the 11 ``BOOKKEEPING_TABLES``
+        names are excluded here on purpose, from both the baseline set and
+        the live ``duckdb_tables()`` result -- these tables moved to the
+        Postgres-backed ``BookkeepingStore`` and are no longer written via
+        this connection, so this method always reports DuckDB-side truth
+        going forward rather than stale/frozen zeros. Callers that want a
+        combined view merge this with ``BookkeepingStore.get_table_counts()``
+        (see ``warehouse_orchestrator.py``'s ``_execute_warehouse_bronze_capture``).
+        """
+        from edgar_warehouse.bookkeeping.models import BOOKKEEPING_TABLES
+
         baseline_tables = {
             "schema_migration",
             "sec_tracked_universe",
@@ -3947,13 +3959,9 @@ class SilverDatabase:
             "sec_company_submission_file",
             "sec_company_filing",
             "sec_current_filing_feed",
-            "stg_daily_index_filing",
-            "sec_daily_index_checkpoint",
-            "discovery_checkpoint",
             "sec_raw_object",
             "sec_filing_attachment",
             "sec_filing_text",
-            "sec_parse_run",
             "sec_ownership_reporting_owner",
             "sec_ownership_non_derivative_txn",
             "sec_ownership_derivative_txn",
@@ -3964,12 +3972,6 @@ class SilverDatabase:
             "sec_subsidiary_evidence",
             "sec_auditor_report_evidence",
             "sec_pcaob_firm_identity",
-            "sec_sync_run",
-            "pipeline_run",
-            "gold_manifest",
-            "sec_source_checkpoint",
-            "sec_company_sync_state",
-            "sec_reconcile_finding",
             "sec_financial_fact",
             "sec_financial_derived",
             "sec_earnings_release",
@@ -3986,7 +3988,9 @@ class SilverDatabase:
             """
         ).fetchall()
         counts: dict[str, int] = {}
-        tables = sorted(baseline_tables | {table for (table,) in rows})
+        tables = sorted(
+            (baseline_tables | {table for (table,) in rows}) - set(BOOKKEEPING_TABLES)
+        )
         for table in tables:
             exists = self._conn.execute(
                 "SELECT 1 FROM duckdb_tables() WHERE table_name = ? LIMIT 1",

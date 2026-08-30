@@ -68,6 +68,8 @@ def test_bronze_capture_records_pipeline_run(tmp_path) -> None:
     context = _context(tmp_path)
     fake_db = MagicMock()
     fake_db.get_table_counts.return_value = {}
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_table_counts.return_value = {}
     raw_path = context.bronze_root.write_bytes("raw/test.json", b'{"ok": true}')
     raw_writes = [
         {
@@ -87,6 +89,10 @@ def test_bronze_capture_records_pipeline_run(tmp_path) -> None:
             return_value=fake_db,
         ),
         patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=fake_bookkeeping,
+        ),
+        patch(
             "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
             return_value=(raw_writes, {"rows_inserted": 1, "rows_skipped": 0}),
         ),
@@ -97,9 +103,9 @@ def test_bronze_capture_records_pipeline_run(tmp_path) -> None:
             arguments={"run_id": "run-1"},
         )
 
-    fake_db.start_pipeline_run.assert_called_once()
-    fake_db.complete_pipeline_run.assert_called_once()
-    complete_kwargs = fake_db.complete_pipeline_run.call_args.kwargs
+    fake_bookkeeping.start_pipeline_run.assert_called_once()
+    fake_bookkeeping.complete_pipeline_run.assert_called_once()
+    complete_kwargs = fake_bookkeeping.complete_pipeline_run.call_args.kwargs
     assert complete_kwargs["status"] == "succeeded"
     assert complete_kwargs["raw_writes"] == raw_writes
     assert any(write["layer"] == "bronze" for write in complete_kwargs["writes"])
@@ -113,6 +119,8 @@ def test_bronze_capture_writes_consolidated_run_manifest(tmp_path) -> None:
     context = _context(tmp_path)
     fake_db = MagicMock()
     fake_db.get_table_counts.return_value = {"sec_company": 1}
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_table_counts.return_value = {}
     raw_writes = [
         {
             "layer": "bronze_raw",
@@ -129,6 +137,10 @@ def test_bronze_capture_writes_consolidated_run_manifest(tmp_path) -> None:
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=fake_bookkeeping,
         ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",

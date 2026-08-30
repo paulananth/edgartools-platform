@@ -10,6 +10,23 @@ Genuinely mixed in mechanical-ness — confirm each site actually is the
 shape described below before assuming; a prior recon pass verified this
 list but did not treat every claim as self-evidently correct.
 
+**Addendum (2026-08-30, found while implementing [Ticket 14](
+14-repoint-warehouse-orchestrator-bookkeeping-callers.md), not previously
+listed here):** `edgar_warehouse/acquisition/capture_parity.py:333` —
+`db.get_daily_index_filings(business_date)`. Surfaced via
+`tests/application/test_dual_path_capture_parity.py`'s live-SEC-gated test
+(`WAREHOUSE_LIVE_SEC=1`, skipped in normal CI), which calls both this
+function and `warehouse_orchestrator._load_daily_index_for_date` against
+the same business date — the latter is now fixed (Ticket 14, reads/writes
+the bookkeeping store), but this one still reads `stg_daily_index_filing`
+via its own `db: SilverDatabase` parameter. Once daily-index writes move
+fully to the bookkeeping store, this call reads increasingly stale/empty
+DuckDB data — a real latent gap, not a false positive, but left unfixed
+here since it's outside Ticket 14's explicit `warehouse_orchestrator.py`
+scope and this recon pass didn't originally catch it. Needs the same
+`bookkeeping: BookkeepingStore` param treatment as
+`drive_filing_discovery.py` below.
+
 **Genuinely mechanical (repoint the method call, no new store method or
 logic change):**
 

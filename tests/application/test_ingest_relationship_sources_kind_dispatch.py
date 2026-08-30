@@ -20,6 +20,7 @@ from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 _HEADER = (
     '"Organization CRD#","7B","Count of Private Funds - 7B(1)",'
@@ -61,13 +62,16 @@ def _firm_roster_archive() -> bytes:
     return payload.getvalue()
 
 
-def test_iapd_firm_roster_kind_dispatches_to_ingest_firm_roster_archive(tmp_path) -> None:
+def test_iapd_firm_roster_kind_dispatches_to_ingest_firm_roster_archive(tmp_path, monkeypatch) -> None:
     context = _context(tmp_path)
     archive = _firm_roster_archive()
     sha256 = hashlib.sha256(archive).hexdigest()
     staged_path = tmp_path / "staged" / "ia07012026.zip"
     staged_path.parent.mkdir(parents=True)
     staged_path.write_bytes(archive)
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
+    )
 
     manifest_path = _write_manifest(tmp_path, {
         "sources": [

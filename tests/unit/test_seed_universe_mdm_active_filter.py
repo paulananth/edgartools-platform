@@ -90,6 +90,7 @@ def test_seed_universe_active_filter_reads_mdm_not_silver(tmp_path):
         raw_writes, metrics = _capture_bronze_raw(
             context=context,
             db=db,
+            bookkeeping=object(),
             command_name="seed-universe",
             arguments={},
             scope={},

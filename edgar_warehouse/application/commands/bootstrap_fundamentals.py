@@ -137,6 +137,12 @@ def execute(args: Any) -> int:
         _err(f"Failed to open silver database: {exc}")
         return 2
 
+    # DuckDB Retirement Cutover Ticket 14: sec_company_sync_state (read by
+    # _resolve_fundamentals_ciks below) and the tables _sync_reference_data/
+    # _run_submissions_bronze_then_silver touch now live in the Postgres-backed
+    # BookkeepingStore, not this local DuckDB `db` connection.
+    bookkeeping = _bookkeeping_store()
+
     # Resolve the CIK batch. When no explicit --cik-list is given (the Step
     # Functions Map case), pull the ordered silver tracking universe — the SAME
     # source and ordering Branch A's bootstrap-next uses — and apply
@@ -144,7 +150,7 @@ def execute(args: Any) -> int:
     # identical CIK windows for the same {window_offset, window_limit} Map item.
     try:
         cik_list = _resolve_fundamentals_ciks(
-            db=db,
+            bookkeeping=bookkeeping,
             raw_cik_list=raw_cik_list,
             cik_offset=cik_offset,
             cik_limit=cik_limit,
@@ -254,6 +260,7 @@ def execute(args: Any) -> int:
                 reference_metrics = _sync_reference_data(
                     context=context,
                     db=db,
+                    bookkeeping=bookkeeping,
                     sync_run_id=run_id,
                     fetch_date=fetch_date,
                 )
@@ -266,6 +273,7 @@ def execute(args: Any) -> int:
             run_metrics = _run_submissions_bronze_then_silver(
                 context=context,
                 db=db,
+                bookkeeping=bookkeeping,
                 sync_run_id=run_id,
                 ciks=cik_list,
                 include_pagination=True,
@@ -416,7 +424,7 @@ def _resolve_silver_root_uri(
 
 def _resolve_fundamentals_ciks(
     *,
-    db: Any,
+    bookkeeping: Any,
     raw_cik_list: list[int],
     cik_offset: int,
     cik_limit: int | None,
@@ -444,11 +452,17 @@ def _resolve_fundamentals_ciks(
     if raw_cik_list:
         ciks = list(raw_cik_list)
     else:
-        ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
+        ciks = bookkeeping.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
     ciks = ciks[cik_offset:]
     if cik_limit is not None:
         ciks = ciks[:cik_limit]
     return ciks
+
+
+def _bookkeeping_store() -> Any:
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
 
 
 def _log(event: str, **kwargs: Any) -> None:

@@ -90,6 +90,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=object(),
+                bookkeeping=object(),
                 sync_run_id="run-1",
                 ciks=[1001, 1002, 1003],
                 include_pagination=False,
@@ -158,6 +159,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=object(),
+                bookkeeping=object(),
                 sync_run_id="run-1",
                 ciks=[1001],
                 include_pagination=True,
@@ -218,6 +220,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=object(),
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 ciks=[1001],
                 include_pagination=False,
@@ -291,6 +294,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=db,
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 ciks=[1001],
                 include_pagination=False,
@@ -339,7 +343,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             ) as artifact_pipeline,
         ):
             warehouse_orchestrator._run_submissions_bronze_then_silver(
-                context=object(), db=object(), sync_run_id="release", ciks=[1001],
+                context=object(), db=object(), bookkeeping=object(), sync_run_id="release", ciks=[1001],
                 include_pagination=True, fetch_date=date(2026, 4, 25), force=False,
                 load_mode="bootstrap_batch", artifact_policy="all_attachments",
                 parser_policy="configured_forms", release_mode=True,
@@ -393,6 +397,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=db,
+                bookkeeping=object(),
                 sync_run_id="release",
                 ciks=[1001],
                 include_pagination=True,
@@ -470,6 +475,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with patch.object(warehouse_orchestrator, "_sync_mdm_tracking_status"):
             result = warehouse_orchestrator._apply_submission_snapshot_to_silver(
                 db=db,
+                bookkeeping=db,
                 sync_run_id="run-1",
                 snapshot=snapshot,
                 force=False,
@@ -535,6 +541,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with patch.object(warehouse_orchestrator, "_sync_mdm_tracking_status"):
             warehouse_orchestrator._apply_submission_snapshot_to_silver(
                 db=db,
+                bookkeeping=db,
                 sync_run_id="run-1",
                 snapshot=snapshot,
                 force=False,
@@ -563,6 +570,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="run-1",
                 accession_numbers=["ownership-1", "generic-1", "adv-1", "proxy-1",
                                    "item-502", "ambiguous-8k", "earnings-8k", "13f-1",
@@ -599,6 +607,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 accession_numbers=["ownership-1", "proxy-1"],
                 accession_boundary={"ownership-1"},
@@ -632,6 +641,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=db,
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 accession_numbers=["ownership-1", "generic-1", "13f-1"],
                 accession_boundary={"ownership-1", "generic-1", "13f-1"},
@@ -679,6 +689,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=db,
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 accession_numbers=["daily-ownership"],
                 accession_boundary={"daily-ownership"},
@@ -699,7 +710,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "ownership-1"):
                 warehouse_orchestrator._run_configured_form_artifact_pipeline(
                     context=SimpleNamespace(identity="tester@example.com"),
-                    db=_ConfiguredFormDb(), sync_run_id="release",
+                    db=_ConfiguredFormDb(), bookkeeping=object(), sync_run_id="release",
                     accession_numbers=["ownership-1"],
                     artifact_policy="all_attachments", parser_policy="configured_forms",
                     force=False, release_mode=True,
@@ -721,6 +732,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -753,6 +765,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -792,6 +805,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 accession_numbers=["13f-1"],
                 accession_boundary={"13f-1"},
@@ -835,6 +849,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 accession_numbers=["13f-1"],
                 accession_boundary={"13f-1"},
@@ -870,6 +885,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="daily-run",
                 accession_numbers=["ownership-1", "proxy-1"],
                 accession_boundary={"ownership-1", "proxy-1"},
@@ -927,6 +943,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="batch-run",
                 accession_numbers=accessions,
                 accession_boundary=set(accessions),
@@ -982,6 +999,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -1022,6 +1040,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -1043,6 +1062,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 warehouse_orchestrator._run_configured_form_artifact_pipeline(
                     context=SimpleNamespace(identity="tester@example.com"),
                     db=_ConfiguredFormDb(),
+                    bookkeeping=object(),
                     sync_run_id="release",
                     accession_numbers=["13f-1"],
                     artifact_policy="all_attachments",
@@ -1065,6 +1085,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                     warehouse_orchestrator._run_configured_form_artifact_pipeline(
                         context=SimpleNamespace(identity="tester@example.com"),
                         db=_ConfiguredFormDb(),
+                        bookkeeping=object(),
                         sync_run_id="release",
                         accession_numbers=["ownership-1"],
                         artifact_policy=artifact_policy,
@@ -1088,6 +1109,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
+                bookkeeping=object(),
                 sync_run_id="release",
                 accession_numbers=["proxy-1"],
                 artifact_policy="all_attachments",
@@ -1110,6 +1132,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "no release parser"):
             warehouse_orchestrator._run_parse_pipeline(
                 db=db,
+                bookkeeping=db,
                 accession_number="proxy-1",
                 sync_run_id="release",
                 fail_closed=True,
@@ -1149,7 +1172,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "repair manifest"):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
-                db=_ConfiguredFormDb(), sync_run_id="release",
+                db=_ConfiguredFormDb(), bookkeeping=object(), sync_run_id="release",
                 accession_numbers=["ownership-1"],
                 artifact_policy="all_attachments", parser_policy="configured_forms",
                 force=True, release_mode=True,

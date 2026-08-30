@@ -363,12 +363,18 @@ def test_bootstrap_chunk_uses_shard_aware_hydrate() -> None:
         mock_db = MagicMock()
         mock_db.get_table_counts.return_value = {}
         mock_open_shard.return_value = mock_db
+        mock_bookkeeping = MagicMock()
+        mock_bookkeeping.get_table_counts.return_value = {}
 
-        _execute_warehouse_bronze_capture(
-            context=context,
-            command_name="bootstrap-batch",
-            arguments={"cik_list": chunk_ciks},
-        )
+        with patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=mock_bookkeeping,
+        ):
+            _execute_warehouse_bronze_capture(
+                context=context,
+                command_name="bootstrap-batch",
+                arguments={"cik_list": chunk_ciks},
+            )
 
     # Monolith hydrate must NOT have been called
     mock_monolith_hydrate.assert_not_called()
@@ -411,6 +417,8 @@ def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None
 
     mock_db = MagicMock()
     mock_db.get_table_counts.return_value = {}
+    mock_bookkeeping = MagicMock()
+    mock_bookkeeping.get_table_counts.return_value = {}
 
     with (
         patch(
@@ -424,6 +432,10 @@ def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=mock_db,
         ) as mock_open_monolith,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=mock_bookkeeping,
+        ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator.open_silver_shard",
         ) as mock_open_shard,

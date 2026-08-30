@@ -65,19 +65,87 @@ sites this ticket describes, remain this ticket's job.
 
 **Blocked by:** [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)
 
-**Status:** blocked
+**Status:** done except one explicitly-deferred item (2026-08-30)
 
-- [ ] Every `db.<method>()` call site in `warehouse_orchestrator.py`
+- [x] Every `db.<method>()` call site in `warehouse_orchestrator.py`
       touching one of the 11 bookkeeping tables is repointed at
       `BookkeepingStore`, confirmed via grep that zero such calls remain
       against the file's local `SilverDatabase`/DuckDB connection for these
-      11 tables
-- [ ] `get_table_counts()` at line 665 produces a combined dict (DuckDB
+      11 tables. Implementation shape: `bookkeeping` mirrors `db`'s existing
+      threading pattern exactly (added as a second parameter alongside `db`
+      everywhere both are needed; swapped in outright, replacing `db`,
+      wherever a function turned out to touch only bookkeeping tables --
+      `_filter_ciks_to_universe`, `_seed_silver_tracking_status`,
+      `_demote_deregistered_ciks`, `_read_bronze_if_cached`,
+      `_resolve_submissions_main_checkpoint_only`/`_pagination_checkpoint_only`,
+      `_capture_submission_bronze_snapshots`,
+      `_resolve_submissions_main_cached_snapshot`/`_pagination_cached_snapshot`,
+      `_capture_submissions_main`/`_capture_submissions_pagination`,
+      `_capture_reconcile_snapshot`, `_load_daily_index_for_date`,
+      `_capture_catch_up_daily_form_index`, `_resolve_bootstrap_target_ciks`,
+      `_resolve_reconcile_ciks`). A `/gof-refactor-reviewer` consult before
+      writing confirmed this mirrored-parameter approach over bundling
+      `db`+`bookkeeping` into one context object -- real churn evidence
+      exists for the threading pattern (13 historical commits touched
+      `db: SilverDatabase` params), but bundling now would add migration
+      risk to an already-fragile function for a ticket whose job is a
+      mechanical repoint, not a restructure.
+- [x] `get_table_counts()` at line 665 produces a combined dict (DuckDB
       content-table counts + the bookkeeping store's 11 counts) with no
       silently-colliding same-named entries, and the
       `SilverDatabase.get_table_counts`-trimming decision above is made
-      and stated, not left ambiguous
-- [ ] `sharded_reader.py`'s `_TABLES` no longer lists the 7 bookkeeping
-      table names it currently does, once confirmed nothing reads them via
-      that path anymore
-- [ ] Full test suite green
+      and stated, not left ambiguous. Decision: `SilverDatabase.get_table_counts()`
+      now explicitly excludes all `BOOKKEEPING_TABLES` names from both its
+      `baseline_tables` set and the live `duckdb_tables()` result (not just
+      the baseline set -- the physical tables still exist in DuckDB's own
+      `_DDL`, so excluding only the baseline wouldn't have removed them from
+      the live-table union). `_execute_warehouse_bronze_capture` merges
+      `{**db.get_table_counts(), **bookkeeping.get_table_counts()}`. New
+      regression test: `test_get_table_counts_excludes_bookkeeping_tables`
+      (`tests/unit/test_silver_store_counts.py`), which inserts a row into
+      `sec_company_sync_state` first to prove the exclusion is enforced
+      explicitly, not just an artifact of the table being empty/absent.
+- [ ] **Deferred, not done:** `sharded_reader.py`'s `_TABLES` still lists
+      all 7 bookkeeping table names. Investigated: `edgar_warehouse/mdm/cli.py`
+      still constructs `ShardedSilverReader` instances for reasons unrelated
+      to this ticket (its own `_seed_mdm_from_silver` fallback, already fixed
+      correctly in Ticket 13 to route `sec_company_sync_state` reads through
+      `bookkeeping.get_all_company_sync_states()` instead of this class's
+      UNION view) -- but a full audit of every `ShardedSilverReader` call
+      path (including [Ticket 15](15-repoint-remaining-bookkeeping-callers.md)'s
+      still-unfixed callers, which may route through this same class) is
+      needed before it's safe to remove these 7 names, and that audit is
+      outside this ticket's `warehouse_orchestrator.py` scope. Left as-is;
+      whoever closes Ticket 15 should re-check this item once its callers
+      are repointed too.
+- [x] Full test suite green (confirmed via the full `uv run pytest` run this
+      session; see commit for the exact pass count)
+
+**Addendum (undisclosed-scope finding from the mandated Spec-axis code review,
+2026-08-30):** repointing `_sync_reference_data`/`_run_submissions_bronze_then_silver`
+in `warehouse_orchestrator.py` forced two files outside this ticket's stated
+`warehouse_orchestrator.py` scope to change too, since both call those functions
+directly: `edgar_warehouse/application/commands/bootstrap_fundamentals.py` (its
+`execute()` now constructs its own `bookkeeping = _bookkeeping_store()` -- a
+module-local copy, per the repo's established one-liner-per-module convention
+also used by `mdm/cli.py`, not a cross-module import of
+`warehouse_orchestrator`'s private one, which an earlier pass of this fix got
+wrong and the GoF-axis review caught -- and threads it into both calls plus its
+own `_resolve_fundamentals_ciks` helper, whose `db.get_tracked_ciks(...)` call
+was an independent, not-forced bookkeeping-table read on the same file that
+would have silently kept returning stale/frozen DuckDB data if left alone) and
+`edgar_warehouse/application/workflows/silver_parse_pipeline.py` (a thin
+`run_parse_pipeline` wrapper around `_run_parse_pipeline`, updated the same
+way, though it currently has zero callers anywhere in the codebase). Neither
+file was listed in this ticket's original scope statement or in
+[Ticket 15](15-repoint-remaining-bookkeeping-callers.md)'s inventory -- noted
+here after the fact so the record is accurate, not because the fix itself was
+wrong.
+
+**Also from code review:** three test files added their own local
+`_bookkeeping_fixture()` copy instead of importing the new shared
+`tests/support/bookkeeping_fixtures.py::bookkeeping_fixture()` this same
+session built for exactly this purpose (`test_pipeline_tracking_state.py`,
+`test_identity_refresh_window.py`, `test_sec_fetch_lease.py`), plus one inline
+copy in `test_dual_path_capture_parity.py` -- all four collapsed to import the
+shared helper instead, confirmed via re-running the affected files (117 passed).

@@ -11,6 +11,7 @@ from edgar_warehouse.application.adv_bulk_fetch import rolling_window_periods
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 _METADATA_JSON = json.dumps({
     "advFilingData": {
@@ -66,6 +67,9 @@ def test_fetch_adv_bulk_fetches_missing_period_and_writes_manifest(tmp_path, mon
         type("_FixedDatetime", (datetime,), {
             "now": classmethod(lambda cls, tz=None: datetime(2026, 6, 15, tzinfo=UTC)),
         }),
+    )
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
 
     result = warehouse_orchestrator._execute_warehouse(
@@ -125,6 +129,9 @@ def test_fetch_adv_bulk_is_a_no_op_when_window_fully_ingested(tmp_path, monkeypa
         type("_FixedDatetime", (datetime,), {
             "now": classmethod(lambda cls, tz=None: datetime(2026, 6, 15, tzinfo=UTC)),
         }),
+    )
+    monkeypatch.setattr(
+        warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
 
     result = warehouse_orchestrator._execute_warehouse(

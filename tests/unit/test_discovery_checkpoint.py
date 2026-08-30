@@ -59,10 +59,10 @@ def test_discovery_checkpoint_claims_prevent_active_overlap(tmp_path) -> None:
 
 
 def test_daily_incremental_claims_discovery_ciks_before_submissions(tmp_path) -> None:
-    db = MagicMock()
-    db.get_company_sync_state.return_value = {"tracking_status": "active"}
-    db.get_tracked_ciks.return_value = [100, 200]
-    db.claim_discovery_ciks.return_value = [100]
+    bookkeeping = MagicMock()
+    bookkeeping.get_company_sync_state.return_value = {"tracking_status": "active"}
+    bookkeeping.get_tracked_ciks.return_value = [100, 200]
+    bookkeeping.claim_discovery_ciks.return_value = [100]
     context = _context(tmp_path)
     now = datetime(2026, 7, 6, tzinfo=UTC)
 
@@ -86,7 +86,8 @@ def test_daily_incremental_claims_discovery_ciks_before_submissions(tmp_path) ->
     ):
         warehouse_orchestrator._capture_bronze_raw(
             context=context,
-            db=db,
+            db=MagicMock(),
+            bookkeeping=bookkeeping,
             command_name="daily-incremental",
             arguments={},
             scope={"business_date_start": "2026-07-06", "business_date_end": "2026-07-06"},
@@ -94,7 +95,7 @@ def test_daily_incremental_claims_discovery_ciks_before_submissions(tmp_path) ->
             sync_run_id="daily-run",
         )
 
-    db.claim_discovery_ciks.assert_called_once_with(
+    bookkeeping.claim_discovery_ciks.assert_called_once_with(
         [100, 200],
         discovery_source="daily_incremental",
         run_id="daily-run",
@@ -102,7 +103,7 @@ def test_daily_incremental_claims_discovery_ciks_before_submissions(tmp_path) ->
     )
     run_submissions.assert_called_once()
     assert run_submissions.call_args.kwargs["ciks"] == [100]
-    db.finish_discovery_ciks.assert_called_once_with(
+    bookkeeping.finish_discovery_ciks.assert_called_once_with(
         [100],
         discovery_source="daily_incremental",
         run_id="daily-run",
@@ -112,10 +113,10 @@ def test_daily_incremental_claims_discovery_ciks_before_submissions(tmp_path) ->
 
 
 def test_scheduled_daily_incremental_carries_forced_index_accession_union(tmp_path) -> None:
-    db = MagicMock()
-    db.get_company_sync_state.return_value = {"tracking_status": "active"}
-    db.get_tracked_ciks.return_value = [100, 200]
-    db.claim_discovery_ciks.return_value = [100, 200]
+    bookkeeping = MagicMock()
+    bookkeeping.get_company_sync_state.return_value = {"tracking_status": "active"}
+    bookkeeping.get_tracked_ciks.return_value = [100, 200]
+    bookkeeping.claim_discovery_ciks.return_value = [100, 200]
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
 
@@ -151,7 +152,8 @@ def test_scheduled_daily_incremental_carries_forced_index_accession_union(tmp_pa
     ):
         warehouse_orchestrator._capture_bronze_raw(
             context=context,
-            db=db,
+            db=MagicMock(),
+            bookkeeping=bookkeeping,
             command_name="daily-incremental",
             arguments={"recurring_index_lookback_days": 7},
             scope={
@@ -176,9 +178,9 @@ def test_scheduled_daily_incremental_carries_forced_index_accession_union(tmp_pa
 
 
 def test_scheduled_daily_processes_index_union_when_no_cik_claim_is_available(tmp_path) -> None:
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = [100]
-    db.claim_discovery_ciks.return_value = []
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100]
+    bookkeeping.claim_discovery_ciks.return_value = []
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
     index_result = {
@@ -212,7 +214,8 @@ def test_scheduled_daily_processes_index_union_when_no_cik_claim_is_available(tm
     ):
         warehouse_orchestrator._capture_bronze_raw(
             context=context,
-            db=db,
+            db=MagicMock(),
+            bookkeeping=bookkeeping,
             command_name="daily-incremental",
             arguments={"recurring_index_lookback_days": 1},
             scope={
@@ -229,9 +232,9 @@ def test_scheduled_daily_processes_index_union_when_no_cik_claim_is_available(tm
 
 
 def test_forced_daily_index_result_exposes_exact_accessions_and_candidate_rows() -> None:
-    db = MagicMock()
-    db.get_daily_index_checkpoint.return_value = None
-    db.merge_daily_index_filings.side_effect = lambda rows, _run_id: len(rows)
+    bookkeeping = MagicMock()
+    bookkeeping.get_daily_index_checkpoint.return_value = None
+    bookkeeping.merge_daily_index_filings.side_effect = lambda rows, _run_id: len(rows)
     payload = (
         b"4  TEST COMPANY  1001  20260729  "
         b"edgar/data/1001/0000001001-26-000001-index.html\n"
@@ -249,7 +252,7 @@ def test_forced_daily_index_result_exposes_exact_accessions_and_candidate_rows()
     ):
         result = warehouse_orchestrator._load_daily_index_for_date(
             context=SimpleNamespace(identity="tester@example.com"),
-            db=db,
+            bookkeeping=bookkeeping,
             target_date=date(2026, 7, 29),
             sync_run_id="daily-run",
             now=datetime(2026, 7, 30, 12, tzinfo=UTC),
@@ -313,9 +316,9 @@ def test_daily_incremental_cli_gated_capture_flag_can_be_enabled() -> None:
 
 
 def test_bootstrap_next_claims_discovery_ciks_before_submissions(tmp_path) -> None:
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200]
-    db.claim_discovery_ciks.return_value = [200]
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100, 200]
+    bookkeeping.claim_discovery_ciks.return_value = [200]
     context = _context(tmp_path)
     now = datetime(2026, 7, 6, tzinfo=UTC)
 
@@ -326,7 +329,8 @@ def test_bootstrap_next_claims_discovery_ciks_before_submissions(tmp_path) -> No
     ) as run_submissions:
         warehouse_orchestrator._capture_bronze_raw(
             context=context,
-            db=db,
+            db=MagicMock(),
+            bookkeeping=bookkeeping,
             command_name="bootstrap-next",
             arguments={},
             scope={"cik_limit": 100, "tracking_status_filter": "bootstrap_pending"},
@@ -334,7 +338,7 @@ def test_bootstrap_next_claims_discovery_ciks_before_submissions(tmp_path) -> No
             sync_run_id="bootstrap-run",
         )
 
-    db.claim_discovery_ciks.assert_called_once_with(
+    bookkeeping.claim_discovery_ciks.assert_called_once_with(
         [100, 200],
         discovery_source="bootstrap_next",
         run_id="bootstrap-run",
@@ -342,7 +346,7 @@ def test_bootstrap_next_claims_discovery_ciks_before_submissions(tmp_path) -> No
     )
     run_submissions.assert_called_once()
     assert run_submissions.call_args.kwargs["ciks"] == [200]
-    db.finish_discovery_ciks.assert_called_once_with(
+    bookkeeping.finish_discovery_ciks.assert_called_once_with(
         [200],
         discovery_source="bootstrap_next",
         run_id="bootstrap-run",
