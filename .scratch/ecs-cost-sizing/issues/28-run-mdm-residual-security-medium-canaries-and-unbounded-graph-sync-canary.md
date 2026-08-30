@@ -1,7 +1,7 @@
 # Run `mdm.residual_security` Medium Canaries and the Unbounded `sync-graph` Canary
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -198,7 +198,52 @@ was terminal and the ECS cluster had zero running or pending tasks:
 
 The launch manifest confirms zero task-reference changes, the same image and
 unbounded completeness overlay as the candidate cohort, all eight workload
-states on `mdm-large:137`, and `MdmVerify` on `mdm-small:203`. Ticket 28
-remains open until the matched control is terminal and the full correctness,
-parity, completeness, recovery, idempotency, retry, duration, baseline, and
-cost gates are recorded.
+states on `mdm-large:137`, and `MdmVerify` on `mdm-small:203`.
+
+## Resolution (2026-08-30) -- sync accepted, downgrade rejected
+
+The matched-control execution succeeded at 16:29 EDT with no retries or
+non-zero exits. It produced 226,197 nodes and 679,755 edges, remained
+uncapped, and passed exact node/relationship identity parity with zero missing
+or extra nodes, edges, or edge endpoints. Its end-to-end duration was
+5,068.384 seconds and its estimated on-demand compute cost was $0.157943453.
+Worst large-workload memory peak/p95 was 4.44%/4.44%; worst large-workload CPU
+peak/p95 was 37.11%/35.25%. The execution-local gates passed.
+
+The cohort-level downgrade decision nevertheless **fails closed**:
+
+- **Idempotency failed.** The same sequential reruns added 65 active
+  `IS_INSIDER` and 1,349 active `HOLDS` relationships on every execution.
+  Total graph edges increased 654,286 -> 670,825 -> 678,341 -> 679,755. The
+  last increase of 1,414 is exactly 65 + 1,349 even though no new workload
+  identity was introduced between the third candidate and the control.
+- **The control was not a matched record funnel for `COMPANY_HOLDS`.** The
+  medium runs inserted 15,125, 15,125, and 6,102 relationships while filling
+  the shared 100,000-row target. The later large control found all 100,000
+  already present and inserted zero. Corresponding billable stage durations
+  were 4,474.672, 4,636.978, 1,612.680, and 76.364 seconds. Identical image and
+  orchestration identities cannot make this mutable input envelope comparable.
+- **End-to-end duration is not comparable.** The raw candidate p95 was
+  9,776.746 seconds versus 5,068.384 seconds for the control, but the 92.90%
+  difference is not a valid 5% gate result after the record-funnel mismatch.
+  As a separate diagnostic, the independently equal-work `MdmSecurities`
+  stage had a candidate p95 of 3,307.583 seconds versus 2,825.220 seconds on
+  large, 17.07% slower.
+- **Cost cannot rescue the candidate.** Mean candidate cost was 10.92% below
+  the control, but median and p95 improvements were only 2.86% and 1.78%.
+  More importantly, cost per validated output is not comparable after the
+  idempotency and record-funnel failures.
+- **Recovery remains unproven.** No execution failed or retried, and this
+  cohort did not inject a recoverable fault. The required recovery-parity gate
+  is therefore not demonstrated rather than silently counted as passing.
+
+Therefore the current-image unbounded `sync-graph` large canary is accepted,
+but the `mdm.residual_security` medium downgrade is rejected. Keep
+`mdm-large` as the operational profile. Do not change production references,
+retire the large definition, or start a sizing bake window from this cohort.
+Any future reconsideration needs isolated or restorable input state plus a
+run-bound relationship ledger so candidate and control process the same
+record funnel; Ticket 30 supplies the latter prerequisite.
+
+Durable evidence, including source-file hashes and the gate calculation, is
+under `.scratch/ecs-cost-sizing/evidence/ticket28/`.

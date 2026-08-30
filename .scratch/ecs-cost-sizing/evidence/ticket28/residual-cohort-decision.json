@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-08-30T20:33:06Z",
+  "decision": "reject_medium_downgrade",
+  "operational_profile": "mdm-large",
+  "production_references_changed": false,
+  "bake_window_started": false,
+  "unbounded_sync_canary": {
+    "decision": "accepted",
+    "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-mdm-sync-graph-large:ticket28-sync-1-20260829T132646Z"
+  },
+  "candidate": {
+    "profile": "mdm-medium:203",
+    "execution_arns": [
+      "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-2-20260829T180850Z",
+      "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-3-20260829T220530Z",
+      "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-4-20260830T094253Z"
+    ],
+    "duration_seconds": {
+      "mean": 8877.256,
+      "median": 9662.426,
+      "p95": 9776.746
+    },
+    "estimated_compute_cost_usd": {
+      "mean": 0.140689208,
+      "median": 0.153421260,
+      "p95": 0.155125435
+    }
+  },
+  "control": {
+    "profile": "mdm-large:137",
+    "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-large-control-29134f504bbe:ticket28-residual-control-1-20260830T190452Z",
+    "status": "SUCCEEDED",
+    "duration_seconds": 5068.384,
+    "estimated_compute_cost_usd": 0.157943453,
+    "nodes": 226197,
+    "edges": 679755,
+    "exact_parity": true,
+    "capped_below_available": false,
+    "retry_count": 0,
+    "nonzero_exit_count": 0,
+    "worst_large_cpu_max_percent": 37.109466552734375,
+    "worst_large_cpu_p95_percent": 35.25399322509766,
+    "worst_large_memory_max_percent": 4.443359375,
+    "worst_large_memory_p95_percent": 4.443359375
+  },
+  "gate_results": {
+    "execution_local_control": "pass",
+    "correctness_and_exact_graph_parity": "pass_per_execution",
+    "unbounded_completeness": "pass_per_execution",
+    "zero_retry_and_nonzero_exit": "pass",
+    "recovery_parity": "not_demonstrated",
+    "cross_run_idempotency": "fail",
+    "matched_record_funnel": "fail",
+    "candidate_p95_duration_within_5_percent": "not_comparable",
+    "cost_improvement_at_least_10_percent": "not_comparable"
+  },
+  "calculations": {
+    "candidate_p95_duration_regression_percent_vs_control": 92.89671027293907,
+    "candidate_mean_cost_improvement_percent_vs_control": 10.924317958275865,
+    "candidate_median_cost_improvement_percent_vs_control": 2.8631721759305845,
+    "candidate_p95_cost_improvement_percent_vs_control": 1.7841942457722512,
+    "mdm_securities_candidate_p95_seconds": 3307.5827,
+    "mdm_securities_control_seconds": 2825.220,
+    "mdm_securities_p95_regression_percent": 17.073456226417766,
+    "graph_edge_deltas": [16539, 7516, 1414],
+    "repeated_insert_counts": {
+      "IS_INSIDER_per_execution": 65,
+      "HOLDS_per_execution": 1349
+    },
+    "company_holds_inserted_by_execution": [15125, 15125, 6102, 0],
+    "company_holds_billable_seconds_by_execution": [
+      4474.672,
+      4636.978,
+      1612.680,
+      76.364
+    ]
+  },
+  "evidence_sha256": {
+    "residual-attempt-2-evidence.json": "ce0e7ba99d16e39aa9a6164261bff1c04c16404cd3671454be97c8159f230205",
+    "residual-attempt-3-evidence.json": "762f5a0a89b6ce8aad9b615c815cdeeeaa6ea29d073b495c17e8a42c255a5784",
+    "residual-attempt-4-evidence.json": "893c6cc356dcf45882ee251a517119abc3cbeb1a0dd6ba693916a78ccd702bb0",
+    "residual-control-attempt-1-launch.json": "a6082cacf7cd20f5909797da424e47da014ef451d7656463c9927c59044517e4",
+    "residual-control-attempt-1-evidence.json": "8c1951c661f4a0b1b65d1c0bc26693d4434e5c015a46674a7dca04d282d4fbbe"
+  }
+}
