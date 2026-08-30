@@ -191,8 +191,14 @@ unbounded graph-completeness prerequisite:
 
 `canary-ticket28-residual-holds-large-control-29134f504bbe`
 
-The control launches only when no candidate execution is active so its
-duration is not confounded by same-cluster canary contention. Ticket 28
-remains open until three corrected current-image candidate executions, the
-matched control, and the full correctness, parity, completeness, recovery,
-idempotency, retry, duration, baseline, and cost gates are recorded.
+Matched control attempt 1 launched at 2026-08-30 15:04 EDT after the candidate
+was terminal and the ECS cluster had zero running or pending tasks:
+
+`arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-large-control-29134f504bbe:ticket28-residual-control-1-20260830T190452Z`
+
+The launch manifest confirms zero task-reference changes, the same image and
+unbounded completeness overlay as the candidate cohort, all eight workload
+states on `mdm-large:137`, and `MdmVerify` on `mdm-small:203`. Ticket 28
+remains open until the matched control is terminal and the full correctness,
+parity, completeness, recovery, idempotency, retry, duration, baseline, and
+cost gates are recorded.
