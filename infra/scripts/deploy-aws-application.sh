@@ -1808,6 +1808,24 @@ mdm_workflow_limit_command_expression() {
   esac
 }
 
+# ECS cost-sizing Ticket 28: the operator-facing deployment convention uses
+# graph limit 0 to mean unbounded, while the Python CLI correctly rejects
+# `--limit 0` as an invalid positive limit. The state machine must therefore
+# translate the sentinel to an invocation with no --limit flag at all.
+mdm_workflow_unbounded_command_expression() {
+  case "$1" in
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph')" ;;
+    *) return 0 ;;
+  esac
+}
+
+mdm_workflow_unbounded_relationship_command_expression() {
+  case "$1" in
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)" ;;
+    *) return 0 ;;
+  esac
+}
+
 mdm_workflow_relationship_command_expression() {
   case "$1" in
     mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type)" ;;
@@ -2278,21 +2296,25 @@ PY
 # "Graph Generation Build Machine" / "MDM Utility Machine" entries.
 write_mdm_utility_definition() {
   local output_file="$1"
-  local workflows_json="[" first="true" workflow task_arn default_cmd limit_cmd relationship_cmd relationship_limit_cmd limit_per_type_cmd entry
+  local workflows_json="[" first="true" workflow task_arn default_cmd limit_cmd unbounded_cmd unbounded_relationship_cmd relationship_cmd relationship_limit_cmd limit_per_type_cmd entry
 
   for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence mdm_publication_drain; do
     task_arn="$(task_definition_for_mdm_workflow "$workflow")"
     default_cmd="$(mdm_workflow_command_expression "$workflow")"
     limit_cmd="$(mdm_workflow_limit_command_expression "$workflow")"
+    unbounded_cmd="$(mdm_workflow_unbounded_command_expression "$workflow")"
+    unbounded_relationship_cmd="$(mdm_workflow_unbounded_relationship_command_expression "$workflow")"
     relationship_cmd="$(mdm_workflow_relationship_command_expression "$workflow")"
     relationship_limit_cmd="$(mdm_workflow_relationship_limit_command_expression "$workflow")"
     limit_per_type_cmd="$(mdm_workflow_limit_per_type_command_expression "$workflow")"
-    entry="$(python3 - "$workflow" "$task_arn" "$default_cmd" "$limit_cmd" "$relationship_cmd" "$relationship_limit_cmd" "$limit_per_type_cmd" <<'PY'
+    entry="$(python3 - "$workflow" "$task_arn" "$default_cmd" "$limit_cmd" "$unbounded_cmd" "$unbounded_relationship_cmd" "$relationship_cmd" "$relationship_limit_cmd" "$limit_per_type_cmd" <<'PY'
 import json, sys
-(name, task_arn, default_cmd, limit_cmd, relationship_cmd, relationship_limit_cmd, limit_per_type_cmd) = sys.argv[1:]
+(name, task_arn, default_cmd, limit_cmd, unbounded_cmd, unbounded_relationship_cmd, relationship_cmd, relationship_limit_cmd, limit_per_type_cmd) = sys.argv[1:]
 print(json.dumps({
     "name": name, "task_arn": task_arn, "default_cmd": default_cmd,
-    "limit_cmd": limit_cmd, "relationship_cmd": relationship_cmd,
+    "limit_cmd": limit_cmd, "unbounded_cmd": unbounded_cmd,
+    "unbounded_relationship_cmd": unbounded_relationship_cmd,
+    "relationship_cmd": relationship_cmd,
     "relationship_limit_cmd": relationship_limit_cmd, "limit_per_type_cmd": limit_per_type_cmd,
 }))
 PY
@@ -2356,6 +2378,8 @@ def build_workflow_states(w):
     prefix = lambda s: f"{name}_{s}"
     task_arn = w["task_arn"]
     default_cmd, limit_cmd = w["default_cmd"], w["limit_cmd"]
+    unbounded_cmd = w["unbounded_cmd"]
+    unbounded_relationship_cmd = w["unbounded_relationship_cmd"]
     relationship_cmd, relationship_limit_cmd = w["relationship_cmd"], w["relationship_limit_cmd"]
     limit_per_type_cmd = w["limit_per_type_cmd"]
 
@@ -2422,6 +2446,37 @@ def build_workflow_states(w):
     else:
         states = {prefix("RunMdmTask"): run_task_state(task_arn, default_cmd)}
         start_at = prefix("RunMdmTask")
+
+    if unbounded_cmd:
+        states[prefix("HasUnboundedLimitOverride")] = {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "And": [
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                        {"Variable": "$.limit", "NumericEquals": 0},
+                        {"Variable": "$.relationship_type", "IsPresent": True},
+                        {"Variable": "$.relationship_type", "IsString": True},
+                    ],
+                    "Next": prefix("RunMdmTaskUnboundedWithRelationshipType"),
+                },
+                {
+                    "And": [
+                        {"Variable": "$.limit", "IsPresent": True},
+                        {"Variable": "$.limit", "IsNumeric": True},
+                        {"Variable": "$.limit", "NumericEquals": 0},
+                    ],
+                    "Next": prefix("RunMdmTaskUnbounded"),
+                },
+            ],
+            "Default": start_at,
+        }
+        states[prefix("RunMdmTaskUnbounded")] = run_task_state(task_arn, unbounded_cmd)
+        states[prefix("RunMdmTaskUnboundedWithRelationshipType")] = run_task_state(
+            task_arn, unbounded_relationship_cmd
+        )
+        start_at = prefix("HasUnboundedLimitOverride")
 
     if limit_per_type_cmd:
         states[prefix("HasLimitPerTypeOverride")] = {
@@ -5524,8 +5579,7 @@ definition = {
                 (
                     "States.Array("
                     "'mdm', 'sync-graph', "
-                    "'--generation-id', $$.Execution.Name, "
-                    "'--limit-per-type', '200000'"
+                    "'--generation-id', $$.Execution.Name"
                     ")"
                 ),
                 is_end=True,

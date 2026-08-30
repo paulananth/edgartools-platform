@@ -1,0 +1,54 @@
+{
+  "account": "690839588395",
+  "mode": "apply",
+  "plans": [
+    {
+      "canary_definition_hash": "6269b663cb2c20053641d52a0db7e2179d00e16ad3e299ab888b63a829931ac0",
+      "canary_name": "canary-ticket28-residual-holds-medium",
+      "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+      "changed_reference_count": 8,
+      "cohort": "residual",
+      "compatibility_overlays": [],
+      "covered_states": [
+        "MdmCompanyHolds",
+        "MdmExport",
+        "MdmHolds",
+        "MdmInstitutionalHolds",
+        "MdmIsInsider",
+        "MdmPersons",
+        "MdmSecurities",
+        "MdmSync"
+      ],
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+      "source_definition_hash": "301062c7a4481aaa02abd87532b05506e23d8228c3d2feb0fa382fa8bb2dc923",
+      "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-residual-holds-graph",
+      "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137"
+    },
+    {
+      "canary_definition_hash": "c21316b290c81dbcbf6fa9e42c82e881cc4fdbbfa77d6b405b0d86f21f2e3ada",
+      "canary_name": "canary-ticket28-mdm-sync-graph-large",
+      "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+      "changed_reference_count": 5,
+      "cohort": "sync",
+      "compatibility_overlays": [
+        "limit=0 routes to sync-graph with no --limit flag"
+      ],
+      "covered_states": [
+        "mdm_sync_graph_RunMdmTaskDefault",
+        "mdm_sync_graph_RunMdmTaskWithLimit",
+        "mdm_sync_graph_RunMdmTaskWithLimitPerType",
+        "mdm_sync_graph_RunMdmTaskWithRelationshipType",
+        "mdm_sync_graph_RunMdmTaskWithRelationshipTypeAndLimit"
+      ],
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+      "source_definition_hash": "6242719d16b699fc19b983ae3391aadf6267e54b65ffd4d28870fe9c9cabeaeb",
+      "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-utility",
+      "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203"
+    }
+  ],
+  "region": "us-east-1",
+  "state_machine_arns": {
+    "residual": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-residual-holds-medium",
+    "sync": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-mdm-sync-graph-large"
+  }
+}

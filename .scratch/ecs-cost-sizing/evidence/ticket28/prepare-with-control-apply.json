@@ -1,0 +1,148 @@
+{
+  "account": "690839588395",
+  "mode": "apply",
+  "plans": [
+    {
+      "canary_definition_hash": "14dc90b8d0dea26579c7abc58952ef71c8028fb6656fdcc07e87fbc740ce4a58",
+      "canary_name": "canary-ticket28-residual-holds-medium-14dc90b8d0de",
+      "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+      "changed_reference_count": 8,
+      "cohort": "residual",
+      "compatibility_overlays": [
+        "legacy 200000 per-type graph cap removed before candidate verify"
+      ],
+      "covered_states": [
+        "MdmCompanyHolds",
+        "MdmExport",
+        "MdmHolds",
+        "MdmInstitutionalHolds",
+        "MdmIsInsider",
+        "MdmPersons",
+        "MdmSecurities",
+        "MdmSync"
+      ],
+      "expected_task_states": [
+        "MdmCompanyHolds",
+        "MdmExport",
+        "MdmHolds",
+        "MdmInstitutionalHolds",
+        "MdmIsInsider",
+        "MdmPersons",
+        "MdmSecurities",
+        "MdmSync",
+        "MdmVerify"
+      ],
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+      "source_definition_hash": "301062c7a4481aaa02abd87532b05506e23d8228c3d2feb0fa382fa8bb2dc923",
+      "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-residual-holds-graph",
+      "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+      "task_definition_contract": {
+        "MdmCompanyHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmExport": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmInstitutionalHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmIsInsider": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmPersons": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmSecurities": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmSync": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "MdmVerify": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203"
+      }
+    },
+    {
+      "canary_definition_hash": "29134f504bbef910e5ce891bd428f9c7cff6a4d16ba04050706f6d28a5b87c4c",
+      "canary_name": "canary-ticket28-residual-holds-large-control-29134f504bbe",
+      "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+      "changed_reference_count": 0,
+      "cohort": "residual-control",
+      "compatibility_overlays": [
+        "legacy 200000 per-type graph cap removed before candidate verify"
+      ],
+      "covered_states": [
+        "MdmCompanyHolds",
+        "MdmExport",
+        "MdmHolds",
+        "MdmInstitutionalHolds",
+        "MdmIsInsider",
+        "MdmPersons",
+        "MdmSecurities",
+        "MdmSync"
+      ],
+      "expected_task_states": [
+        "MdmCompanyHolds",
+        "MdmExport",
+        "MdmHolds",
+        "MdmInstitutionalHolds",
+        "MdmIsInsider",
+        "MdmPersons",
+        "MdmSecurities",
+        "MdmSync",
+        "MdmVerify"
+      ],
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+      "source_definition_hash": "301062c7a4481aaa02abd87532b05506e23d8228c3d2feb0fa382fa8bb2dc923",
+      "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-residual-holds-graph",
+      "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+      "task_definition_contract": {
+        "MdmCompanyHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmExport": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmInstitutionalHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmIsInsider": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmPersons": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmSecurities": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmSync": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "MdmVerify": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203"
+      }
+    },
+    {
+      "canary_definition_hash": "c27e35fd5f6737106d6b03fcf4ea353512eb06aec566b66fb552d5498584471c",
+      "canary_name": "canary-ticket28-mdm-sync-graph-large-c27e35fd5f67",
+      "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+      "changed_reference_count": 5,
+      "cohort": "sync",
+      "compatibility_overlays": [
+        "limit=0 routes to sync-graph with no --limit flag"
+      ],
+      "covered_states": [
+        "mdm_sync_graph_RunMdmTaskDefault",
+        "mdm_sync_graph_RunMdmTaskWithLimit",
+        "mdm_sync_graph_RunMdmTaskWithLimitPerType",
+        "mdm_sync_graph_RunMdmTaskWithRelationshipType",
+        "mdm_sync_graph_RunMdmTaskWithRelationshipTypeAndLimit"
+      ],
+      "expected_task_states": [
+        "Ticket28RunUnboundedSync"
+      ],
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+      "source_definition_hash": "6242719d16b699fc19b983ae3391aadf6267e54b65ffd4d28870fe9c9cabeaeb",
+      "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-mdm-utility",
+      "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+      "task_definition_contract": {
+        "Ticket28RunUnboundedSync": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "mdm_backfill_relationships_RunMdmTaskDefault": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "mdm_backfill_relationships_RunMdmTaskWithLimit": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "mdm_backfill_relationships_RunMdmTaskWithRelationshipType": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "mdm_backfill_relationships_RunMdmTaskWithRelationshipTypeAndLimit": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "mdm_check_connectivity_RunMdmTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203",
+        "mdm_check_fence_RunMdmTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203",
+        "mdm_counts_RunMdmTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203",
+        "mdm_migrate_RunMdmTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203",
+        "mdm_publication_drain_RunMdmTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "mdm_run_RunMdmTaskDefault": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "mdm_run_RunMdmTaskWithLimit": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-medium:203",
+        "mdm_sync_graph_RunMdmTaskDefault": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "mdm_sync_graph_RunMdmTaskWithLimit": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "mdm_sync_graph_RunMdmTaskWithLimitPerType": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "mdm_sync_graph_RunMdmTaskWithRelationshipType": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "mdm_sync_graph_RunMdmTaskWithRelationshipTypeAndLimit": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+        "mdm_verify_graph_RunMdmTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203"
+      }
+    }
+  ],
+  "region": "us-east-1",
+  "state_machine_arns": {
+    "residual": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-residual-holds-medium-14dc90b8d0de",
+    "residual-control": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-residual-holds-large-control-29134f504bbe",
+    "sync": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-mdm-sync-graph-large-c27e35fd5f67"
+  }
+}

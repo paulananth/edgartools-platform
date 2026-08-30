@@ -1,0 +1,50 @@
+{
+  "attempt": 1,
+  "canary_definition_hash": "29134f504bbef910e5ce891bd428f9c7cff6a4d16ba04050706f6d28a5b87c4c",
+  "canary_name": "canary-ticket28-residual-holds-large-control-29134f504bbe",
+  "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+  "changed_reference_count": 0,
+  "cohort": "residual-control",
+  "compatibility_overlays": [
+    "legacy 200000 per-type graph cap removed before candidate verify"
+  ],
+  "covered_states": [
+    "MdmCompanyHolds",
+    "MdmExport",
+    "MdmHolds",
+    "MdmInstitutionalHolds",
+    "MdmIsInsider",
+    "MdmPersons",
+    "MdmSecurities",
+    "MdmSync"
+  ],
+  "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-large-control-29134f504bbe:ticket28-residual-control-1-20260830T190452Z",
+  "expected_task_states": [
+    "MdmCompanyHolds",
+    "MdmExport",
+    "MdmHolds",
+    "MdmInstitutionalHolds",
+    "MdmIsInsider",
+    "MdmPersons",
+    "MdmSecurities",
+    "MdmSync",
+    "MdmVerify"
+  ],
+  "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d",
+  "source_definition_hash": "301062c7a4481aaa02abd87532b05506e23d8228c3d2feb0fa382fa8bb2dc923",
+  "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-residual-holds-graph",
+  "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+  "start_date": "2026-08-30T15:04:54.285000-04:00",
+  "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket28-residual-holds-large-control-29134f504bbe",
+  "task_definition_contract": {
+    "MdmCompanyHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmExport": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmInstitutionalHolds": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmIsInsider": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmPersons": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmSecurities": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmSync": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-large:137",
+    "MdmVerify": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-mdm-small:203"
+  }
+}

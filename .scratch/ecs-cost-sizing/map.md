@@ -108,6 +108,7 @@ end-to-end completion speed, cost, canary, and rollback gates.
 - [WriteRunSummary Hand-Built S3 Path: Root Cause, Fix, and Portfolio-Wide Check](issues/25-write-run-summary-hand-built-path-decoupling.md) — Root-caused `load_history` retry5's terminal-state failure (real work completed, bookkeeping step died on a hand-built S3 key) and checked the retained portfolio for the same shape.
 - [Confirm `ownership_mdm_gold`'s Intended Scope](issues/26-confirm-ownership-mdm-gold-intended-scope.md) — Deliberate, not abandoned: the machine's own source comments and its introducing commit (`02173c80`, "Ticket 21 insider load is person + IS_INSIDER only") confirm it's a purpose-built skip of full company MDM re-resolution for insider-only ownership updates. Keep, with a distinct documented scope alongside `bronze_seed_silver_gold` — closes the one item Ticket 14 left open.
 - [Confirm `generation_build` Was Not Abandoned](issues/27-confirm-generation-build-was-not-abandoned.md) — Not abandoned, genuinely rare-by-design: the module's own content-addressed-reuse docstring, its `rule_version`/`schema_version` defaults unchanged from `"v1"` since introduction (the one trigger for a rebuild has simply never fired), and a separate consolidation effort deliberately preserving it as structurally distinct just 3 days before this ticket all converge on the same answer. Keep, fully settled. Unblocks Ticket 15's deferred `BuildPartitions` sizing work whenever warranted.
+- [Run `mdm.residual_security` Medium Canaries and the Unbounded `sync-graph` Canary](issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md) — Accepted the current-image unbounded large sync canary, but rejected the residual-security medium downgrade: repeated executions grew active relationship counts, the shared `COMPANY_HOLDS` target made the later large control process a materially different funnel, and recovery remained unproven. Retain `mdm-large`; no production reference or bake-window change.
 
 Tickets 01-27 above were recovered 2026-08-28 from an orphaned worktree
 branch (`claude/backup-ecs-cost-sizing-worktree-2026-08-12`), renumbered
@@ -117,11 +118,12 @@ this map's independently-resolved reactive fixes 20-22 already on `main`
 unrelated to the branch's rollback-cohort/ownership-scope chain; neither
 side depends on the other). See each renumbered ticket for its original
 branch-ticket identity if cross-referencing old notes. Tickets 28-32
-(branch's own 25-29) were **not** resolved on the branch — they carry over
-as real, already-sharp open/claimed child tickets (MDM downgrade canaries,
-gold-standalone canaries, per-run binding columns, staged-transaction
-deploy support, and a rehearsed Code Rollback cohort), not fog — pick them
-up directly from `issues/`, same as any other frontier ticket.
+(branch's own 25-29) were **not** resolved on the recovered branch. Ticket 28
+has since been resolved by rejecting the MDM downgrade after live canaries;
+Tickets 29-32 remain real, already-sharp open/claimed child tickets
+(gold-standalone canaries, per-run binding columns, staged-transaction deploy
+support, and a rehearsed Code Rollback cohort), not fog — pick them up directly
+from `issues/`, same as any other frontier ticket.
 
 ## Not yet specified
 

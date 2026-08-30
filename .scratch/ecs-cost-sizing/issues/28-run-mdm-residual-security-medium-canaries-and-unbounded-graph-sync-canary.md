@@ -1,7 +1,7 @@
 # Run `mdm.residual_security` Medium Canaries and the Unbounded `sync-graph` Canary
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -57,3 +57,193 @@ swapped, nothing else:
 Both monitored to completion; results and pass/fail against each cohort's
 gate criteria recorded below once terminal. Attempts 2/3 of the
 residual-security cohort launch after attempt 1 completes.
+
+## Current-image rerun (2026-08-29)
+
+The 2026-08-13 executions above are historical attempts, not qualifying
+Ticket 28 evidence. Both used image digest `sha256:ac245d...` and stale task
+definitions; the sync execution failed, and the residual execution failed in
+`MdmVerify` after the medium workload stages succeeded. Current-image evidence
+was restarted from today's production definitions.
+
+The dry-run-first canary builder in `scripts/ops/ecs_sizing_canary.py` pinned:
+
+- image digest
+  `sha256:5603ac3d1e787d77bc82b53517bf9213a1b2603aa25347eb176b94577b13bd6d`;
+- residual workload states: `mdm-large:137` -> `mdm-medium:203` for exactly
+  eight states, preserving `MdmVerify` on `mdm-small:203`;
+- unbounded sync route: current MDM Utility Machine definition with exactly
+  its five sync task references moved from `mdm-medium:203` to
+  `mdm-large:137`; and
+- no schedules, aliases, or production state-machine reference changes.
+
+The live utility definition exposed a deterministic pre-launch gap: execution
+input `{"limit":0}` routed to the Python CLI as `--limit 0`, but the current
+CLI accepts only positive explicit limits. Ticket 28 now adds the canonical
+state-machine translation from the zero sentinel to `mdm sync-graph` with no
+limit flag. The temporary canary has the same explicit compatibility route so
+the current-image run can proceed before the application branch is deployed.
+
+### Unbounded sync canary -- passed execution-local gates
+
+- Execution:
+  `arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-mdm-sync-graph-large:ticket28-sync-1-20260829T132646Z`
+- ECS task: `61a940bb71bb4072a38c3f932791f207`, `mdm-large:137`, exit 0,
+  no retry.
+- Output: 226,197 nodes and 621,201 edges; both `limit` and
+  `limit_per_type` were null, and `capped_below_available=false`.
+- Duration: 32.190 seconds command time, 87.209 seconds image-pull-to-stop
+  billable time, 128.626 seconds Step Functions end to end.
+- On-demand Linux/x86 compute estimate: $0.002848384 using 88 rounded billed
+  seconds and the 2026-08-29 us-east-1 AWS Fargate rates captured in the
+  evidence file.
+- Task-bound Container Insights (two one-minute samples): CPU max/p95
+  19.38%/18.41%; memory max/p95 1.50%/1.43%; zero time in the 70/80/90%
+  bands.
+- Context: the task overlapped an unrelated `daily-incremental` warehouse
+  task that was still in SEC bronze capture. The two exact task identities
+  keep utilization task-bound, but the overlap remains recorded rather than
+  silently treated as an idle-cluster duration sample.
+
+Evidence: `.scratch/ecs-cost-sizing/evidence/ticket28/`.
+
+### Residual-security cohort -- invalid preflight preserved; corrected series running
+
+The first current-image execution is retained as a **non-counting preflight**:
+
+`arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium:ticket28-residual-1-20260829T133301Z`
+
+All eight candidate workload stages ran once on exact `mdm-medium:203` and
+exited 0. The worst medium memory peak was 10.13% (`MdmCompanyHolds`); the
+worst medium CPU peak was 70.26% (`MdmInstitutionalHolds`). The execution then
+failed after all three `MdmVerify` attempts returned the same correctness
+result: the unchanged production `MdmSync` command capped each relationship
+type at 200,000, while active `MANAGES_FUND` contained 563,638 rows. The
+candidate generation was therefore short by exactly 363,638 edges and
+`capped_below_available=true`. Its failed/retried compute estimate was
+$0.148992521; it is not a successful-output cost sample.
+
+This preflight does not prove or reject the medium profile: the completeness
+failure is deterministic in the source orchestration and would be identical
+on the large-profile control. It does prove that the old residual definition
+cannot produce qualifying Ticket 28 evidence. Ticket 15 already decided that
+production-scale graph sync is unbounded, so the deploy generator now keeps
+the execution-scoped generation ID while omitting the legacy
+`--limit-per-type 200000` cap. The canary builder applies that exact,
+fail-closed compatibility overlay to today's live source.
+
+The corrected definition is immutable and hash-qualified:
+
+`canary-ticket28-residual-holds-medium-14dc90b8d0de`
+
+Qualifying run 1/3 (execution attempt 2) launched at 2026-08-29 14:08 EDT:
+
+`arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-2-20260829T180850Z`
+
+It succeeded at 16:52 EDT with no retries or non-zero exits. The unbounded
+candidate contained 226,197 nodes and 654,286 edges,
+`capped_below_available=false`, and exact node/relationship identity parity.
+Worst medium memory peak/p95 was 9.86%/9.82%; worst CPU peak/p95 was
+57.68%/50.36%. End-to-end duration was 9,789.448 seconds and estimated
+on-demand compute cost was $0.155314788.
+
+Qualifying run 2/3 (execution attempt 3) launched at 2026-08-29 18:05 EDT:
+
+`arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-3-20260829T220530Z`
+
+It succeeded at 20:46 EDT with no retries or non-zero exits. The unbounded
+candidate contained 226,197 nodes and 670,825 edges,
+`capped_below_available=false`, and exact node/relationship identity parity;
+the evidence contains zero missing or extra nodes, edges, or edge endpoints.
+Worst medium memory peak/p95 was 10.11%/9.84%; worst CPU peak/p95 was
+61.33%/56.24%. End-to-end duration was 9,662.426 seconds and estimated
+on-demand compute cost was $0.153421260.
+
+Qualifying run 3/3 (execution attempt 4) launched at 2026-08-30 05:42 EDT,
+after attempt 3 was terminal and its evidence passed the execution-local
+gates:
+
+`arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-4-20260830T094253Z`
+
+It succeeded at 07:42 EDT with no retries or non-zero exits. The unbounded
+candidate contained 226,197 nodes and 678,341 edges,
+`capped_below_available=false`, and exact node/relationship identity parity;
+the evidence contains zero missing or extra nodes, edges, or edge endpoints.
+Worst medium memory peak/p95 was 9.38%/9.34%; worst CPU peak/p95 was
+70.71%/67.18%. End-to-end duration was 7,179.893 seconds and estimated
+on-demand compute cost was $0.113331575.
+
+All three corrected candidate executions passed their execution-local gates.
+Their mean/median end-to-end durations were 8,877.256/9,662.426 seconds; the
+linear-interpolated p95 was 9,776.746 seconds. Their mean/median estimated
+compute costs were $0.140689208/$0.153421260 per successful validated output;
+the linear-interpolated p95 was $0.155125435. These candidate-only aggregates
+do not decide promotion without the matched control and the remaining cohort
+gates.
+
+Each corrected execution launched only after its predecessor was terminal and
+its evidence was collected.
+No existing production execution is a matched current-image control: the two
+source-machine runs are failed July executions on older definitions. A
+separate immutable corrected control therefore preserves all eight workload
+states on `mdm-large:137` (zero task-reference changes) and applies the same
+unbounded graph-completeness prerequisite:
+
+`canary-ticket28-residual-holds-large-control-29134f504bbe`
+
+Matched control attempt 1 launched at 2026-08-30 15:04 EDT after the candidate
+was terminal and the ECS cluster had zero running or pending tasks:
+
+`arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-large-control-29134f504bbe:ticket28-residual-control-1-20260830T190452Z`
+
+The launch manifest confirms zero task-reference changes, the same image and
+unbounded completeness overlay as the candidate cohort, all eight workload
+states on `mdm-large:137`, and `MdmVerify` on `mdm-small:203`.
+
+## Resolution (2026-08-30) -- sync accepted, downgrade rejected
+
+The matched-control execution succeeded at 16:29 EDT with no retries or
+non-zero exits. It produced 226,197 nodes and 679,755 edges, remained
+uncapped, and passed exact node/relationship identity parity with zero missing
+or extra nodes, edges, or edge endpoints. Its end-to-end duration was
+5,068.384 seconds and its estimated on-demand compute cost was $0.157943453.
+Worst large-workload memory peak/p95 was 4.44%/4.44%; worst large-workload CPU
+peak/p95 was 37.11%/35.25%. The execution-local gates passed.
+
+The cohort-level downgrade decision nevertheless **fails closed**:
+
+- **Idempotency failed.** The same sequential reruns added 65 active
+  `IS_INSIDER` and 1,349 active `HOLDS` relationships on every execution.
+  Total graph edges increased 654,286 -> 670,825 -> 678,341 -> 679,755. The
+  last increase of 1,414 is exactly 65 + 1,349 even though no new workload
+  identity was introduced between the third candidate and the control.
+- **The control was not a matched record funnel for `COMPANY_HOLDS`.** The
+  medium runs inserted 15,125, 15,125, and 6,102 relationships while filling
+  the shared 100,000-row target. The later large control found all 100,000
+  already present and inserted zero. Corresponding billable stage durations
+  were 4,474.672, 4,636.978, 1,612.680, and 76.364 seconds. Identical image and
+  orchestration identities cannot make this mutable input envelope comparable.
+- **End-to-end duration is not comparable.** The raw candidate p95 was
+  9,776.746 seconds versus 5,068.384 seconds for the control, but the 92.90%
+  difference is not a valid 5% gate result after the record-funnel mismatch.
+  As a separate diagnostic, the independently equal-work `MdmSecurities`
+  stage had a candidate p95 of 3,307.583 seconds versus 2,825.220 seconds on
+  large, 17.07% slower.
+- **Cost cannot rescue the candidate.** Mean candidate cost was 10.92% below
+  the control, but median and p95 improvements were only 2.86% and 1.78%.
+  More importantly, cost per validated output is not comparable after the
+  idempotency and record-funnel failures.
+- **Recovery remains unproven.** No execution failed or retried, and this
+  cohort did not inject a recoverable fault. The required recovery-parity gate
+  is therefore not demonstrated rather than silently counted as passing.
+
+Therefore the current-image unbounded `sync-graph` large canary is accepted,
+but the `mdm.residual_security` medium downgrade is rejected. Keep
+`mdm-large` as the operational profile. Do not change production references,
+retire the large definition, or start a sizing bake window from this cohort.
+Any future reconsideration needs isolated or restorable input state plus a
+run-bound relationship ledger so candidate and control process the same
+record funnel; Ticket 30 supplies the latter prerequisite.
+
+Durable evidence, including source-file hashes and the gate calculation, is
+under `.scratch/ecs-cost-sizing/evidence/ticket28/`.

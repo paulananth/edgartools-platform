@@ -3,7 +3,7 @@
 state-machine-consolidation wayfinder map, ticket 02: residual_holds_graph
 is the one MDM Pipeline Machine with no GoldRefresh at all (it does not
 claim Ticket 20 GO) and its own generation-scoped MdmSync/MdmVerify flags
-(--generation-id, --limit-per-type, --skip-native-app). This is the
+(--generation-id, --skip-native-app). This is the
 highest-risk of the three inline (non-function) MDM Pipeline Machine
 blocks for wire_mdm_tail's gold_state=None path.
 
@@ -64,7 +64,7 @@ def definition() -> dict:
                 script_dir.as_posix(),
             ],
             input=py_source,
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, check=False,
         )
         if result.returncode != 0:
             raise AssertionError(
@@ -84,12 +84,11 @@ def test_tail_ordering_with_no_gold_refresh(definition: dict) -> None:
     assert "GoldRefresh" not in s
 
 
-def test_sync_carries_generation_id_and_limit_per_type(definition: dict) -> None:
+def test_sync_carries_generation_id_without_a_completeness_cap(definition: dict) -> None:
     command = definition["States"]["MdmSync"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "--generation-id" in command
     assert "$$.Execution.Name" in command
-    assert "--limit-per-type" in command
-    assert "'200000'" in command
+    assert "--limit-per-type" not in command
 
 
 def test_verify_carries_skip_native_app_and_generation_id(definition: dict) -> None:
