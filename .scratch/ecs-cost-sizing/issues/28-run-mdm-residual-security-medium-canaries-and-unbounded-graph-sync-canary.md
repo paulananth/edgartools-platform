@@ -165,8 +165,24 @@ gates:
 
 `arn:aws:states:us-east-1:690839588395:execution:canary-ticket28-residual-holds-medium-14dc90b8d0de:ticket28-residual-4-20260830T094253Z`
 
-Each corrected execution launches only after its predecessor is terminal and
-its evidence is collected.
+It succeeded at 07:42 EDT with no retries or non-zero exits. The unbounded
+candidate contained 226,197 nodes and 678,341 edges,
+`capped_below_available=false`, and exact node/relationship identity parity;
+the evidence contains zero missing or extra nodes, edges, or edge endpoints.
+Worst medium memory peak/p95 was 9.38%/9.34%; worst CPU peak/p95 was
+70.71%/67.18%. End-to-end duration was 7,179.893 seconds and estimated
+on-demand compute cost was $0.113331575.
+
+All three corrected candidate executions passed their execution-local gates.
+Their mean/median end-to-end durations were 8,877.256/9,662.426 seconds; the
+linear-interpolated p95 was 9,776.746 seconds. Their mean/median estimated
+compute costs were $0.140689208/$0.153421260 per successful validated output;
+the linear-interpolated p95 was $0.155125435. These candidate-only aggregates
+do not decide promotion without the matched control and the remaining cohort
+gates.
+
+Each corrected execution launched only after its predecessor was terminal and
+its evidence was collected.
 No existing production execution is a matched current-image control: the two
 source-machine runs are failed July executions on older definitions. A
 separate immutable corrected control therefore preserves all eight workload
