@@ -35,6 +35,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from edgar_warehouse.bookkeeping.database import Base as BookkeepingBase
+from edgar_warehouse.bookkeeping.store import BookkeepingStore
 from edgar_warehouse.mdm.database import (
     Base,
     MdmAdviser,
@@ -348,6 +350,27 @@ def mdm_session() -> Session:
         yield session
 
 
+@pytest.fixture()
+def bookkeeping_store() -> BookkeepingStore:
+    """In-memory SQLite bookkeeping store, seeded to match _create_silver_fixture's
+    own sec_company_sync_state insert (cik=910001, tracking_status='active') --
+    DuckDB Retirement Cutover Ticket 13 moved that table off DuckDB silver onto
+    this store, so this fixture's data must mirror what silver_duckdb used to
+    hold directly for this file's end-to-end fidelity to still hold.
+    """
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    BookkeepingBase.metadata.create_all(engine)
+    with Session(engine) as session:
+        store = BookkeepingStore(session)
+        store.upsert_company_sync_state({"cik": 910001, "tracking_status": "active"})
+        session.commit()
+        yield store
+
+
 class _DuckReader:
     """Minimal DuckDB reader matching the interface _silver_reader() produces."""
 
@@ -447,12 +470,15 @@ class TestMissingSilverSourceFailsBeforeSession:
             MagicMock(return_value=(object(), 0)),
         )
         monkeypatch.setattr(mdm_cli, "_session", MagicMock(return_value=fake_session))
+        monkeypatch.setattr(mdm_cli, "_bookkeeping_store", MagicMock(return_value=MagicMock()))
 
         class FakePipeline:
             def __init__(self, *, session, silver):
                 assert session is fake_session
 
-            def run_all(self, limit=None, *, resume_ledger_run_id=None, run_id=None):
+            def run_all(
+                self, limit=None, *, resume_ledger_run_id=None, run_id=None, bookkeeping=None
+            ):
                 assert limit == 10
                 return SimpleNamespace(
                     companies_processed=0,
@@ -844,7 +870,7 @@ class TestMDMPipelineUsesCurrentSilverSchema:
     """
 
     def test_run_companies_does_not_query_sec_tracked_universe(
-        self, silver_duckdb, mdm_session
+        self, silver_duckdb, mdm_session, bookkeeping_store
     ):
         """run_companies() must not reference sec_tracked_universe; use sec_company_sync_state."""
         reader = _DuckReader(str(silver_duckdb))
@@ -852,7 +878,7 @@ class TestMDMPipelineUsesCurrentSilverSchema:
 
         # Will raise DuckDB BinderException if sec_tracked_universe is queried
         try:
-            pipeline.run_companies()
+            pipeline.run_companies(bookkeeping=bookkeeping_store)
         except Exception as exc:
             err_str = str(exc).lower()
             if "sec_tracked_universe" in err_str or "table.*not found" in err_str.lower() or "binder" in err_str.lower():
@@ -864,7 +890,7 @@ class TestMDMPipelineUsesCurrentSilverSchema:
             raise
 
     def test_run_companies_returns_nonzero_count_from_silver_fixture(
-        self, silver_duckdb, mdm_session
+        self, silver_duckdb, mdm_session, bookkeeping_store
     ):
         """run_companies() must successfully load companies from the silver fixture.
 
@@ -873,20 +899,22 @@ class TestMDMPipelineUsesCurrentSilverSchema:
         reader = _DuckReader(str(silver_duckdb))
         pipeline = MDMPipeline(session=mdm_session, silver=reader)
 
-        n = pipeline.run_companies()
+        n = pipeline.run_companies(bookkeeping=bookkeeping_store)
         assert n >= 1, (
             f"Expected at least 1 company loaded from silver fixture, got {n}. "
             f"This may indicate a sec_tracked_universe schema mismatch."
         )
 
-    def test_run_persons_uses_sec_ownership_reporting_owner(self, silver_duckdb, mdm_session):
+    def test_run_persons_uses_sec_ownership_reporting_owner(
+        self, silver_duckdb, mdm_session, bookkeeping_store
+    ):
         """run_persons() must query sec_ownership_reporting_owner for person rows."""
         reader = _DuckReader(str(silver_duckdb))
         pipeline = MDMPipeline(session=mdm_session, silver=reader)
 
         # This will fail if run_companies has schema errors — run it first to seed companies
         try:
-            pipeline.run_companies()
+            pipeline.run_companies(bookkeeping=bookkeeping_store)
             mdm_session.commit()
         except Exception:
             pass  # Allow test to continue to person loader even if companies fail
@@ -894,7 +922,9 @@ class TestMDMPipelineUsesCurrentSilverSchema:
         n = pipeline.run_persons()
         assert n >= 0  # Just ensure it doesn't raise a schema error
 
-    def test_run_persons_resolves_owner_with_no_filing_match(self, silver_duckdb, mdm_session):
+    def test_run_persons_resolves_owner_with_no_filing_match(
+        self, silver_duckdb, mdm_session, bookkeeping_store
+    ):
         """mdm-ownership-resolver-filing-join-gap ticket 01: an ownership row whose
         accession has no sec_company_filing row (an untracked issuer) must still be
         resolved -- not silently and permanently dropped by the INNER JOIN.
@@ -904,7 +934,7 @@ class TestMDMPipelineUsesCurrentSilverSchema:
         reader = _DuckReader(str(silver_duckdb))
         pipeline = MDMPipeline(session=mdm_session, silver=reader)
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=bookkeeping_store)
         mdm_session.commit()
         pipeline.run_persons()
         mdm_session.commit()
@@ -921,14 +951,16 @@ class TestMDMPipelineUsesCurrentSilverSchema:
             "whose issuer was never bootstrapped as a tracked company."
         )
 
-    def test_run_securities_resolves_txn_with_no_filing_match(self, silver_duckdb, mdm_session):
+    def test_run_securities_resolves_txn_with_no_filing_match(
+        self, silver_duckdb, mdm_session, bookkeeping_store
+    ):
         """mdm-ownership-resolver-filing-join-gap ticket 01: same gap, run_securities()."""
         from edgar_warehouse.mdm.database import MdmSourceRef
 
         reader = _DuckReader(str(silver_duckdb))
         pipeline = MDMPipeline(session=mdm_session, silver=reader)
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=bookkeeping_store)
         mdm_session.commit()
         pipeline.run_securities()
         mdm_session.commit()
@@ -975,7 +1007,9 @@ class TestEntityLoadIdempotentForDomainCounts:
             counts[key] = n
         return counts
 
-    def test_entity_load_is_idempotent_for_domain_counts(self, silver_duckdb, mdm_session):
+    def test_entity_load_is_idempotent_for_domain_counts(
+        self, silver_duckdb, mdm_session, bookkeeping_store
+    ):
         """Running entity loaders twice on the same silver fixture keeps domain counts stable.
 
         Fails because run_companies() raises on sec_tracked_universe in current code.
@@ -984,7 +1018,7 @@ class TestEntityLoadIdempotentForDomainCounts:
 
         # First run
         pipeline1 = MDMPipeline(session=mdm_session, silver=reader)
-        pipeline1.run_companies()
+        pipeline1.run_companies(bookkeeping=bookkeeping_store)
         pipeline1.run_advisers()
         pipeline1.run_persons()
         pipeline1.run_securities()
@@ -994,7 +1028,7 @@ class TestEntityLoadIdempotentForDomainCounts:
 
         # Second run against the same data
         pipeline2 = MDMPipeline(session=mdm_session, silver=reader)
-        pipeline2.run_companies()
+        pipeline2.run_companies(bookkeeping=bookkeeping_store)
         pipeline2.run_advisers()
         pipeline2.run_persons()
         pipeline2.run_securities()
@@ -1010,7 +1044,9 @@ class TestEntityLoadIdempotentForDomainCounts:
                 f"{first} -> {second}. Entity loading must be idempotent."
             )
 
-    def test_domain_counts_include_all_five_entity_types(self, silver_duckdb, mdm_session):
+    def test_domain_counts_include_all_five_entity_types(
+        self, silver_duckdb, mdm_session, bookkeeping_store
+    ):
         """After loading all entity types, all five domain tables must have ≥1 rows.
 
         Fails because run_companies() raises on sec_tracked_universe — no entities
@@ -1018,7 +1054,7 @@ class TestEntityLoadIdempotentForDomainCounts:
         """
         reader = _DuckReader(str(silver_duckdb))
         pipeline = MDMPipeline(session=mdm_session, silver=reader)
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=bookkeeping_store)
         pipeline.run_advisers()
         pipeline.run_persons()
         pipeline.run_securities()
@@ -1046,11 +1082,11 @@ class TestCoverageReport:
     documents XBRL/Phase 6 deferral in the securities reason string.
     """
 
-    def _load_all(self, silver_duckdb, mdm_session):
+    def _load_all(self, silver_duckdb, mdm_session, bookkeeping_store):
         """Run all five entity loaders and return the loaded session."""
         reader = _DuckReader(str(silver_duckdb))
         pipeline = MDMPipeline(session=mdm_session, silver=reader)
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=bookkeeping_store)
         pipeline.run_advisers()
         pipeline.run_persons()
         pipeline.run_securities()
@@ -1058,12 +1094,12 @@ class TestCoverageReport:
         mdm_session.commit()
         return reader
 
-    def test_zero_gap_against_complete_fixture(self, silver_duckdb, mdm_session):
+    def test_zero_gap_against_complete_fixture(self, silver_duckdb, mdm_session, bookkeeping_store):
         """compute_coverage returns 5 domains all with gap == 0 after all loaders run."""
         from edgar_warehouse.mdm.coverage import compute_coverage
 
-        reader = self._load_all(silver_duckdb, mdm_session)
-        rows = compute_coverage(reader, mdm_session)
+        reader = self._load_all(silver_duckdb, mdm_session, bookkeeping_store)
+        rows = compute_coverage(reader, mdm_session, bookkeeping_store)
 
         assert len(rows) == 5, f"Expected 5 domain rows, got {len(rows)}"
         domains = {r["domain"] for r in rows}
@@ -1076,7 +1112,9 @@ class TestCoverageReport:
                 "Expected 0 gap against the complete 1-per-domain fixture."
             )
 
-    def test_handler_exits_0_with_nonzero_gap(self, silver_duckdb, mdm_session, monkeypatch, capsys):
+    def test_handler_exits_0_with_nonzero_gap(
+        self, silver_duckdb, mdm_session, bookkeeping_store, monkeypatch, capsys
+    ):
         """CLI handler returns 0 even when a synthetic gap exists (D-19 reporting semantics)."""
         import edgar_warehouse.mdm.cli as mdm_cli
         from edgar_warehouse.mdm.coverage import compute_coverage
@@ -1087,6 +1125,7 @@ class TestCoverageReport:
         monkeypatch.setenv("MDM_SILVER_DUCKDB", str(silver_duckdb))
         monkeypatch.setattr(mdm_cli, "_silver_reader", lambda: reader)
         monkeypatch.setattr(mdm_cli, "_session", lambda: mdm_session)
+        monkeypatch.setattr(mdm_cli, "_bookkeeping_store", lambda: bookkeeping_store)
 
         import argparse
         args = argparse.Namespace()
@@ -1111,12 +1150,14 @@ class TestCoverageReport:
             parser.parse_args(["mdm", "coverage-report", "--help"])
         assert exc_info.value.code == 0
 
-    def test_securities_reason_mentions_xbrl_and_phase_6(self, silver_duckdb, mdm_session):
+    def test_securities_reason_mentions_xbrl_and_phase_6(
+        self, silver_duckdb, mdm_session, bookkeeping_store
+    ):
         """Securities domain reason string explicitly references XBRL and Phase 6 deferral (D-24/D-28)."""
         from edgar_warehouse.mdm.coverage import compute_coverage
 
         reader = _DuckReader(str(silver_duckdb))
-        rows = compute_coverage(reader, mdm_session)
+        rows = compute_coverage(reader, mdm_session, bookkeeping_store)
 
         sec_row = next(r for r in rows if r["domain"] == "securities")
         reason_lower = sec_row["reason"].lower()

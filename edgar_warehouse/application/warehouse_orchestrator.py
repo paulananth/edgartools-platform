@@ -83,6 +83,7 @@ from edgar_warehouse.silver_protection import compute_silver_fingerprint, merge_
 from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
 
 if TYPE_CHECKING:
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
     from edgar_warehouse.silver_store import SilverDatabase
 
 SOURCE_EXPORT_COMMANDS = {
@@ -3088,7 +3089,9 @@ def _capture_bronze_raw(
         metrics["rows_inserted"] += reference_result["rows_written"]
         metrics["rows_skipped"] += reference_result["rows_skipped"]
         tracked_active_ciks = db.get_tracked_ciks("active")
-        company_eligible_ciks = db.get_company_identity_ciks("active")
+        company_eligible_ciks = db.get_company_identity_ciks(
+            "active", bookkeeping=_bookkeeping_store()
+        )
         if refresh_mode == "backstop":
             input_cik_count = len(tracked_active_ciks)
             selected_ciks = company_eligible_ciks
@@ -6659,6 +6662,12 @@ def _dedupe_ints(values: list[int]) -> list[int]:
 
 def _dedupe_strings(values: list[str]) -> list[str]:
     return dedupe_strings(values)
+
+
+def _bookkeeping_store() -> "BookkeepingStore":
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
 
 
 def _latest_filing_date(rows: list[dict[str, Any]]) -> date | None:

@@ -31,6 +31,7 @@ from tests.mdm.test_run_companies_concurrency import (
     _companies_fixture,
     _seeded_sqlite_session,
     StubSilver,
+    _StubBookkeeping,
 )
 
 
@@ -48,7 +49,7 @@ class TestFreshRunWritesSnapshotAndFlushesOutcomes:
         silver = StubSilver(_companies_fixture(5))
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        processed = pipeline.run_companies(run_id="fresh-run-1")
+        processed = pipeline.run_companies(run_id="fresh-run-1", bookkeeping=_StubBookkeeping())
 
         assert processed == 5
         assert _snapshot_ciks(tmp_path, "fresh-run-1") == [900000 + i for i in range(5)]
@@ -65,7 +66,7 @@ class TestFreshRunWritesSnapshotAndFlushesOutcomes:
         silver = StubSilver(_companies_fixture(3))
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        processed = pipeline.run_companies()
+        processed = pipeline.run_companies(bookkeeping=_StubBookkeeping())
 
         assert processed == 3
         assert not (tmp_path / "reference" / "mdm_company_resume").exists()
@@ -79,7 +80,7 @@ class TestExplicitResumeSkipsAlreadySucceeded:
         pipeline = MDMPipeline(session=session, silver=silver)
 
         # First attempt: freeze the snapshot, resolve everything.
-        pipeline.run_companies(run_id="original-run")
+        pipeline.run_companies(run_id="original-run", bookkeeping=_StubBookkeeping())
         first_entity_ids = {
             row.cik: row.entity_id for row in session.execute(select(MdmCompany)).scalars().all()
         }
@@ -118,7 +119,7 @@ class TestExplicitResumeSkipsAlreadySucceeded:
             return real_fetch(sql, params)
 
         with patch.object(silver, "fetch", side_effect=_tracking_fetch):
-            processed = pipeline.run_companies(resume_ledger_run_id="original-run")
+            processed = pipeline.run_companies(resume_ledger_run_id="original-run", bookkeeping=_StubBookkeeping())
 
         assert processed == 2
         assert fetched_ciks == [[900003, 900004]]
@@ -138,8 +139,8 @@ class TestExplicitResumeSkipsAlreadySucceeded:
         silver = StubSilver(_companies_fixture(3))
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        pipeline.run_companies(run_id="original-run")
-        processed = pipeline.run_companies(resume_ledger_run_id="original-run")
+        pipeline.run_companies(run_id="original-run", bookkeeping=_StubBookkeeping())
+        processed = pipeline.run_companies(resume_ledger_run_id="original-run", bookkeeping=_StubBookkeeping())
 
         assert processed == 0
 
@@ -152,7 +153,7 @@ class TestResumeFailsClosed:
         pipeline = MDMPipeline(session=session, silver=silver)
 
         with pytest.raises(ResumeRunNotFoundError):
-            pipeline.run_companies(resume_ledger_run_id="never-existed")
+            pipeline.run_companies(resume_ledger_run_id="never-existed", bookkeeping=_StubBookkeeping())
 
     def test_resume_without_bronze_root_env_var_raises(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.delenv("WAREHOUSE_BRONZE_ROOT", raising=False)
@@ -161,7 +162,7 @@ class TestResumeFailsClosed:
         pipeline = MDMPipeline(session=session, silver=silver)
 
         with pytest.raises(WarehouseRuntimeError, match="WAREHOUSE_BRONZE_ROOT"):
-            pipeline.run_companies(resume_ledger_run_id="some-run")
+            pipeline.run_companies(resume_ledger_run_id="some-run", bookkeeping=_StubBookkeeping())
 
 
 class TestResumeMutualExclusion:
@@ -172,7 +173,7 @@ class TestResumeMutualExclusion:
         pipeline = MDMPipeline(session=session, silver=silver)
 
         with pytest.raises(WarehouseRuntimeError, match="full-universe"):
-            pipeline.run_companies(limit=1, resume_ledger_run_id="some-run")
+            pipeline.run_companies(limit=1, resume_ledger_run_id="some-run", bookkeeping=_StubBookkeeping())
 
     def test_resume_with_issuer_ciks_raises(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setenv("WAREHOUSE_BRONZE_ROOT", str(tmp_path))
@@ -181,7 +182,7 @@ class TestResumeMutualExclusion:
         pipeline = MDMPipeline(session=session, silver=silver)
 
         with pytest.raises(WarehouseRuntimeError, match="full-universe"):
-            pipeline.run_companies(issuer_ciks=[900000], resume_ledger_run_id="some-run")
+            pipeline.run_companies(issuer_ciks=[900000], resume_ledger_run_id="some-run", bookkeeping=_StubBookkeeping())
 
 
 class TestBatchedOutcomeFlushCadence:
@@ -196,7 +197,7 @@ class TestBatchedOutcomeFlushCadence:
         pipeline = MDMPipeline(session=session, silver=silver)
 
         with patch("edgar_warehouse.mdm.pipeline._progress_log_interval", return_value=1):
-            processed = pipeline.run_companies(run_id="flush-cadence-run")
+            processed = pipeline.run_companies(run_id="flush-cadence-run", bookkeeping=_StubBookkeeping())
 
         assert processed == 4
         outcome_dir = tmp_path / outcomes_prefix("flush-cadence-run")
@@ -235,7 +236,7 @@ class TestResumePartialFailureStillFlushesSucceededWork:
             new=_flaky_resolve_one,
         ):
             with pytest.raises(RuntimeError, match="boom"):
-                pipeline.run_companies(run_id="partial-failure-run")
+                pipeline.run_companies(run_id="partial-failure-run", bookkeeping=_StubBookkeeping())
 
         succeeded = read_succeeded_ciks(bronze_root=str(tmp_path), run_id="partial-failure-run")
         assert len(succeeded) == 2

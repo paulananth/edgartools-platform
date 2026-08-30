@@ -34,6 +34,7 @@ from tests.mdm.test_run_companies_concurrency import (
     StubSilver,
     _companies_fixture,
     _seeded_sqlite_session,
+    _StubBookkeeping,
 )
 
 
@@ -60,13 +61,13 @@ class TestSkipIfUnchanged:
         silver = StubSilver(_companies_fixture(5))
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=_StubBookkeeping())
         change_log_count_after_first_run = len(
             session.execute(select(MdmChangeLog)).scalars().all()
         )
         assert change_log_count_after_first_run == 5, "first run should stage a change per row"
 
-        second_processed = pipeline.run_companies()
+        second_processed = pipeline.run_companies(bookkeeping=_StubBookkeeping())
 
         assert second_processed == 5
         change_log_count_after_second_run = len(
@@ -82,12 +83,12 @@ class TestSkipIfUnchanged:
         silver = StubSilver(_companies_fixture(3))
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=_StubBookkeeping())
         first_ids = {
             r.cik: r.entity_id for r in session.execute(select(MdmCompany)).scalars().all()
         }
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=_StubBookkeeping())
         second_ids = {
             r.cik: r.entity_id for r in session.execute(select(MdmCompany)).scalars().all()
         }
@@ -103,7 +104,7 @@ class TestSkipIfUnchanged:
         silver = StubSilver(fixtures)
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=_StubBookkeeping())
         change_log_count_after_first_run = len(
             session.execute(select(MdmChangeLog)).scalars().all()
         )
@@ -115,7 +116,7 @@ class TestSkipIfUnchanged:
             "entity_name": "Renamed Company",
         }
 
-        second_processed = pipeline.run_companies()
+        second_processed = pipeline.run_companies(bookkeeping=_StubBookkeeping())
 
         assert second_processed == 3
         change_log_count_after_second_run = len(
@@ -143,7 +144,7 @@ class TestSkipIfUnchanged:
         session = _seeded_sqlite_session(static_pool=True)
         silver = StubSilver(_companies_fixture(1))
         pipeline = MDMPipeline(session=session, silver=silver)
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=_StubBookkeeping())
 
         cik = _companies_fixture(1)["FROM sec_company"][0]["cik"]
         ref = session.execute(

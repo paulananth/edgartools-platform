@@ -12,11 +12,14 @@ from datetime import date
 from pathlib import Path
 import sys
 import time
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
+
+if TYPE_CHECKING:
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
 
 
 def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -584,6 +587,12 @@ def _session() -> Session:
     return get_session(get_engine())
 
 
+def _bookkeeping_store() -> "BookkeepingStore":
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
+
+
 def _company_tickers_payload() -> dict[str, Any]:
     """Build the SEC company_tickers_exchange.json {fields, data} shape from
     edgartools instead of a direct SEC HTTP call, so seed_universe_loader's
@@ -918,6 +927,7 @@ def _handle_run(args) -> int:
         if args.entity_type == "all":
             stats = pipeline.run_all(
                 limit=args.limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id,
+                bookkeeping=_bookkeeping_store(),
             )
             print(json.dumps(stats.__dict__, indent=2, sort_keys=True))
             return 0
@@ -925,6 +935,7 @@ def _handle_run(args) -> int:
             n = pipeline.run_companies(
                 limit=args.limit, issuer_ciks=args.cik,
                 resume_ledger_run_id=resume_ledger_run_id, run_id=run_id,
+                bookkeeping=_bookkeeping_store(),
             )
             print(f"companies: {n}")
         if args.entity_type == "adviser":
@@ -1058,7 +1069,7 @@ def _handle_coverage_report(args) -> int:
 
     session = _session()
     try:
-        rows = compute_coverage(reader, session)
+        rows = compute_coverage(reader, session, _bookkeeping_store())
     finally:
         session.close()
 
@@ -1361,6 +1372,7 @@ def _handle_seed_universe(args) -> int:
             tracking_status_filter=None,
             dry_run=False,
             limit=getattr(args, "limit", None),
+            bookkeeping=_bookkeeping_store(),
         )
         result["source"] = "silver"
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -1409,12 +1421,42 @@ def _handle_seed_universe(args) -> int:
     return 0
 
 
+def _seed_mdm_from_silver_ticker_fallback(
+    reader: Any, tracking_status_filter: str | None, bookkeeping: "BookkeepingStore"
+) -> list[tuple]:
+    """Fallback rows when sec_tracked_universe is unavailable.
+
+    DuckDB Retirement Cutover Ticket 13: sec_company_sync_state moved off
+    DuckDB silver onto Postgres, so tracking status can no longer be joined
+    against sec_company_ticker in one query -- fetched from the bookkeeping
+    store and joined here in Python instead. Returns
+    (cik, current_ticker, exchange, tracking_status) 4-tuples, positionally
+    matching the primary query's shape (see _group_by_status/upsert_rows
+    below, which index this tuple by position).
+    """
+    ticker_rows = reader._conn.execute(
+        "SELECT cik, ticker, exchange FROM sec_company_ticker"
+    ).fetchall()
+    tracking_by_cik = {
+        int(row["cik"]): row["tracking_status"]
+        for row in bookkeeping.get_all_company_sync_states()
+    }
+    rows = [
+        (cik, ticker, exchange, tracking_by_cik.get(int(cik), "active"))
+        for cik, ticker, exchange in ticker_rows
+    ]
+    if tracking_status_filter:
+        rows = [r for r in rows if r[3] == tracking_status_filter]
+    return rows
+
+
 def _seed_mdm_from_silver(
     *,
     silver_path: str | None,
     tracking_status_filter: str | None,
     dry_run: bool,
     limit: int | None = None,
+    bookkeeping: "BookkeepingStore",
 ) -> dict[str, Any]:
     """Shared silver→MDM universe import used by seed-universe and seed-from-silver."""
     import os
@@ -1443,18 +1485,9 @@ def _seed_mdm_from_silver(
             try:
                 silver_rows = reader._conn.execute(query, params).fetchall()
             except Exception:
-                # Fallback: tickers + sync state
-                query = """
-                    SELECT t.cik, t.ticker AS current_ticker, t.exchange,
-                           COALESCE(s.tracking_status, 'active') AS tracking_status
-                    FROM sec_company_ticker t
-                    LEFT JOIN sec_company_sync_state s ON s.cik = t.cik
-                """
-                if tracking_status_filter:
-                    query += " WHERE COALESCE(s.tracking_status, 'active') = ?"
-                    silver_rows = reader._conn.execute(query, [tracking_status_filter]).fetchall()
-                else:
-                    silver_rows = reader._conn.execute(query).fetchall()
+                silver_rows = _seed_mdm_from_silver_ticker_fallback(
+                    reader, tracking_status_filter, bookkeeping
+                )
         finally:
             reader.close()
     else:
@@ -1485,17 +1518,9 @@ def _seed_mdm_from_silver(
             try:
                 silver_rows = reader._conn.execute(query, params).fetchall()
             except Exception:
-                query = """
-                    SELECT t.cik, t.ticker AS current_ticker, t.exchange,
-                           COALESCE(s.tracking_status, 'active') AS tracking_status
-                    FROM sec_company_ticker t
-                    LEFT JOIN sec_company_sync_state s ON s.cik = t.cik
-                """
-                if tracking_status_filter:
-                    query += " WHERE COALESCE(s.tracking_status, 'active') = ?"
-                    silver_rows = reader._conn.execute(query, [tracking_status_filter]).fetchall()
-                else:
-                    silver_rows = reader._conn.execute(query).fetchall()
+                silver_rows = _seed_mdm_from_silver_ticker_fallback(
+                    reader, tracking_status_filter, bookkeeping
+                )
         finally:
             reader.close()
 
@@ -1561,6 +1586,7 @@ def _handle_seed_from_silver(args) -> int:
         tracking_status_filter=getattr(args, "tracking_status", None),
         dry_run=bool(getattr(args, "dry_run", False)),
         limit=None,
+        bookkeeping=_bookkeeping_store(),
     )
     result["source"] = "silver"
     print(json.dumps(result, indent=2, sort_keys=True))
@@ -1920,7 +1946,9 @@ def _handle_load_relationships(args) -> int:
                     )
             else:
                 entity_counts = {
-                    "companies_processed": pipeline.run_companies(limit=args.entity_limit),
+                    "companies_processed": pipeline.run_companies(
+                        limit=args.entity_limit, bookkeeping=_bookkeeping_store(),
+                    ),
                     "advisers_processed": pipeline.run_advisers(limit=args.entity_limit),
                     "securities_processed": pipeline.run_securities(limit=args.entity_limit),
                     "persons_processed": pipeline.run_persons(

@@ -44,7 +44,7 @@ from edgar_warehouse.mdm.database import (
 from edgar_warehouse.mdm.pipeline import MDMPipeline
 from edgar_warehouse.silver_store import SilverDatabase
 
-from tests.mdm.test_run_companies_concurrency import _seeded_sqlite_session
+from tests.mdm.test_run_companies_concurrency import _seeded_sqlite_session, _StubBookkeeping
 
 
 def _seed_fundamentals_relationship_types(session) -> None:
@@ -117,7 +117,7 @@ class TestRunAllUsesIsolatedSessionsPerStep:
             return worker_session
 
         with patch.object(pipeline_module, "get_session", side_effect=_tracking_get_session):
-            outer_pipeline.run_all(limit=1)
+            outer_pipeline.run_all(limit=1, bookkeeping=_StubBookkeeping())
 
         # get_session() is called for the 5 entity-resolution steps AND
         # (separately, unaffected by this ticket) once per relationship
@@ -158,7 +158,7 @@ class TestRunAllSqliteDialectGuard:
                 super().__init__(*args, **kwargs)
 
         with patch.object(pipeline_module, "ThreadPoolExecutor", _CapturingExecutor):
-            outer_pipeline.run_all(limit=1)
+            outer_pipeline.run_all(limit=1, bookkeeping=_StubBookkeeping())
 
         # run_all()'s own 5-step executor is the first ThreadPoolExecutor
         # constructed; company/security/person's internal per-row pools
@@ -175,7 +175,7 @@ class TestRunAllCorrectness:
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
-        stats = outer_pipeline.run_all()
+        stats = outer_pipeline.run_all(bookkeeping=_StubBookkeeping())
 
         assert stats.companies_processed == 3
         assert stats.advisers_processed == 0
@@ -203,7 +203,7 @@ class TestRunAllEnqueuesPublicationRequest:
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver, run_id="test-run-abc")
 
-        stats = outer_pipeline.run_all()
+        stats = outer_pipeline.run_all(bookkeeping=_StubBookkeeping())
         assert stats.companies_processed == 3
 
         requests = list(session.execute(select(MdmPublicationRequest)).scalars().all())
@@ -218,7 +218,7 @@ class TestRunAllEnqueuesPublicationRequest:
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
-        stats = outer_pipeline.run_all()
+        stats = outer_pipeline.run_all(bookkeeping=_StubBookkeeping())
         assert stats.companies_processed == 0
         assert stats.relationships_written == 0
 
@@ -246,7 +246,7 @@ class TestRunAllEnqueuesPublicationRequest:
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver, run_id="e2e-run")
 
-        stats = outer_pipeline.run_all()
+        stats = outer_pipeline.run_all(bookkeeping=_StubBookkeeping())
         assert stats.companies_processed == 2
 
         pre_drain_status = compute_publication_freshness(session)
@@ -273,7 +273,7 @@ class TestRunAllEnqueuesPublicationRequest:
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
-        outer_pipeline.run_all()
+        outer_pipeline.run_all(bookkeeping=_StubBookkeeping())
 
         requests = list(session.execute(select(MdmPublicationRequest)).scalars().all())
         assert len(requests) == 1
@@ -305,7 +305,7 @@ class TestRunAllFailsFast:
         monkeypatch.setattr(pipeline_module, "get_session", _raise_on_second_call)
 
         with pytest.raises(RuntimeError, match="boom"):
-            outer_pipeline.run_all()
+            outer_pipeline.run_all(bookkeeping=_StubBookkeeping())
         assert call_count["n"] >= 2
 
     def test_shutdown_does_not_wait_for_still_running_steps(self, monkeypatch) -> None:
@@ -348,7 +348,7 @@ class TestRunAllFailsFast:
         monkeypatch.setattr(pipeline_module, "ThreadPoolExecutor", _RecordingExecutor)
 
         with pytest.raises(RuntimeError, match="boom"):
-            outer_pipeline.run_all()
+            outer_pipeline.run_all(bookkeeping=_StubBookkeeping())
 
         assert shutdown_calls, "expected shutdown() to be called on the exception path"
         assert shutdown_calls[-1] == {"wait": False, "cancel_futures": True}

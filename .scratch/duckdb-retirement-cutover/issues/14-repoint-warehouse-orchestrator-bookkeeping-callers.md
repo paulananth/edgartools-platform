@@ -52,6 +52,17 @@ more individual call sites than that.
   `ShardedSilverReader` anymore (confirm this is true after this ticket's
   repointing, not before), remove those 7 names from `_TABLES`.
 
+**Note (2026-08-30, added while closing [Ticket 13](13-rewrite-cross-store-join-sites.md)):**
+the `db.get_company_identity_ciks(...)` call site at
+`warehouse_orchestrator.py`'s `"compute-identity-refresh-window"` branch
+(~line 3091) is already fully repointed — Ticket 13 threaded a
+`bookkeeping: BookkeepingStore` param through `get_company_identity_ciks`
+itself and updated this call site to construct one via `_bookkeeping_store()`
+and pass it in. Do not duplicate that work here. The sibling call one line
+above it, `db.get_tracked_ciks("active")`, is untouched and still targets
+`SilverDatabase`'s own DuckDB-backed method — that one, plus the other 50+
+sites this ticket describes, remain this ticket's job.
+
 **Blocked by:** [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)
 
 **Status:** blocked

@@ -52,6 +52,8 @@ from edgar_warehouse.mdm.database import (
 from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.pipeline import MDMPipeline, _derive_role
 
+from tests.mdm.test_run_companies_concurrency import _StubBookkeeping
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1734,14 +1736,14 @@ class TestRunRelationships:
             ).all()
             return {entity_type: count for entity_type, count in rows}
 
-        pipe.run_companies()
+        pipe.run_companies(bookkeeping=_StubBookkeeping())
         pipe.run_advisers()
         pipe.run_securities()
         pipe.run_persons()
         pipe.run_funds()
         first_counts = _snapshot()
 
-        pipe.run_companies()
+        pipe.run_companies(bookkeeping=_StubBookkeeping())
         pipe.run_advisers()
         pipe.run_securities()
         pipe.run_persons()

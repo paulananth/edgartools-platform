@@ -70,8 +70,19 @@ def _companies_fixture(n: int) -> dict[str, list[dict]]:
     return {
         "FROM sec_company": companies,
         "FROM sec_company_ticker": [],
-        "FROM sec_company_sync_state": [],
     }
+
+
+class _StubBookkeeping:
+    """Duck-typed BookkeepingStore stand-in -- run_companies() only ever calls
+    get_all_company_sync_states() on it (DuckDB Retirement Cutover Ticket 13).
+    """
+
+    def __init__(self, sync_states: Optional[list[dict]] = None):
+        self._sync_states = sync_states or []
+
+    def get_all_company_sync_states(self) -> list[dict]:
+        return self._sync_states
 
 
 def _seeded_sqlite_session(*, static_pool: bool) -> Session:
@@ -130,7 +141,7 @@ class TestRunCompaniesSequentialFallback:
         silver = StubSilver(_companies_fixture(12))
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        processed = pipeline.run_companies()
+        processed = pipeline.run_companies(bookkeeping=_StubBookkeeping())
 
         assert processed == 12
         rows = session.execute(select(MdmCompany)).scalars().all()
@@ -139,18 +150,21 @@ class TestRunCompaniesSequentialFallback:
 
 
 # ---------------------------------------------------------------------------
-# 2b. sec_company_sync_state degrades gracefully when the table is absent
-#     (silver-snowflake-migration map, Ticket 12: no EDGARTOOLS_SILVER
-#     analog under MDM_SILVER_READ_TARGET=snowflake) -- and logs the same
-#     structured mdm_relationship_skip event every other graceful-degrade
-#     path in pipeline.py already emits.
+# 2b. Tracking-status data comes from the bookkeeping store, not DuckDB silver
+#     (DuckDB Retirement Cutover Ticket 13: sec_company_sync_state moved off
+#     DuckDB silver onto Postgres). A bookkeeping failure is a real failure
+#     and propagates -- it is never silently degraded to empty the way the
+#     old sec_company_sync_state-missing-table path used to.
 # ---------------------------------------------------------------------------
 
-class TestRunCompaniesMissingSyncState:
-    def test_missing_sync_state_table_is_skipped_and_logged(self, capsys):
+class TestRunCompaniesRequiresBookkeeping:
+    def test_tracking_status_is_read_from_bookkeeping_not_silver(self):
+        """silver.fetch() for sec_company_sync_state must never be called again --
+        run_companies() must succeed using only the bookkeeping store, even
+        when the silver-side query for that table would raise.
+        """
         session = _seeded_sqlite_session(static_pool=True)
-        fixtures = _companies_fixture(3)
-        del fixtures["FROM sec_company_sync_state"]
+        fixtures = _companies_fixture(1)
 
         class _RaisingSilver(StubSilver):
             def fetch(self, sql, params=None):
@@ -162,38 +176,23 @@ class TestRunCompaniesMissingSyncState:
 
         silver = _RaisingSilver(fixtures)
         pipeline = MDMPipeline(session=session, silver=silver)
+        bookkeeping = _StubBookkeeping([{"cik": 900000, "tracking_status": "paused"}])
 
-        processed = pipeline.run_companies()
+        processed = pipeline.run_companies(bookkeeping=bookkeeping)
 
-        assert processed == 3  # tracking data missing, resolution still proceeds
-        stderr_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
-        # single-path-per-layer map, Ticket 03: run_companies now always
-        # emits a completion summary event alongside whatever else it logged.
-        assert len(stderr_lines) == 2
-        import json as _json
-        events = [_json.loads(line) for line in stderr_lines]
-        skip_event = next(e for e in events if e["event"] == "mdm_relationship_skip")
-        assert skip_event["reason"] == "missing_source_table"
-        assert skip_event["source_table"] == "sec_company_sync_state"
-        completed_event = next(e for e in events if e["event"] == "mdm_company_resolution_completed")
-        assert completed_event["processed"] == 3
-        assert completed_event["skipped_unchanged"] == 0
+        assert processed == 1
 
-    def test_a_genuine_non_missing_table_error_still_raises(self):
+    def test_a_bookkeeping_failure_propagates_not_swallowed(self):
         session = _seeded_sqlite_session(static_pool=True)
-        fixtures = _companies_fixture(1)
-
-        class _RaisingSilver(StubSilver):
-            def fetch(self, sql, params=None):
-                if "sec_company_sync_state" in sql:
-                    raise Exception("connection reset by peer")
-                return super().fetch(sql, params)
-
-        silver = _RaisingSilver(fixtures)
+        silver = StubSilver(_companies_fixture(1))
         pipeline = MDMPipeline(session=session, silver=silver)
 
+        class _RaisingBookkeeping:
+            def get_all_company_sync_states(self):
+                raise Exception("connection reset by peer")
+
         with pytest.raises(Exception, match="connection reset by peer"):
-            pipeline.run_companies()
+            pipeline.run_companies(bookkeeping=_RaisingBookkeeping())
 
 
 # ---------------------------------------------------------------------------
@@ -250,12 +249,12 @@ class TestRunCompaniesIdempotency:
         silver = StubSilver(_companies_fixture(5))
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=_StubBookkeeping())
         first_ids = {
             r.cik: r.entity_id for r in session.execute(select(MdmCompany)).scalars().all()
         }
 
-        pipeline.run_companies()
+        pipeline.run_companies(bookkeeping=_StubBookkeeping())
         second_ids = {
             r.cik: r.entity_id for r in session.execute(select(MdmCompany)).scalars().all()
         }
@@ -280,4 +279,4 @@ class TestRunCompaniesPartialFailure:
             side_effect=RuntimeError("boom"),
         ):
             with pytest.raises(RuntimeError, match="boom"):
-                pipeline.run_companies()
+                pipeline.run_companies(bookkeeping=_StubBookkeeping())

@@ -8,7 +8,7 @@ import logging
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 
 import pyarrow as pa
 
@@ -17,6 +17,9 @@ from edgar_warehouse.serving.silver_landing_export import (
     track_landing_row,
     track_landing_rows,
 )
+
+if TYPE_CHECKING:
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
 
 try:
     import duckdb
@@ -3804,44 +3807,43 @@ class SilverDatabase:
     def get_company_identity_ciks(
         self,
         tracking_status_filter: str = "active",
+        *,
+        bookkeeping: "BookkeepingStore",
     ) -> list[int]:
         """Return tracked CIKs eligible for scheduled company identity refresh.
 
         Eligibility is deliberately narrower than the filing/relationship
         universe: an entity must be operating or present in the canonical
         SEC ``company_tickers`` snapshot.
+
+        DuckDB Retirement Cutover Ticket 13: the tracked-CIK set now comes
+        from the bookkeeping store (``sec_company_sync_state`` moved off
+        DuckDB silver onto Postgres) -- eligibility is still checked against
+        DuckDB silver's own ``sec_company``/``sec_company_ticker`` tables,
+        and the two sets are intersected here in Python since they can no
+        longer be joined in one query across two databases.
         """
-        statuses = [
-            status.strip()
-            for status in str(tracking_status_filter or "active").split(",")
-            if status.strip()
-        ]
-        status_clause = ""
-        parameters: list[Any] = []
-        if statuses and "all" not in statuses:
-            placeholders = ", ".join("?" for _ in statuses)
-            status_clause = f"AND sync.tracking_status IN ({placeholders})"
-            parameters.extend(statuses)
+        tracked_ciks = set(bookkeeping.get_tracked_ciks(tracking_status_filter))
+        if not tracked_ciks:
+            return []
+        cik_list = list(tracked_ciks)
+        placeholders = ", ".join("?" for _ in cik_list)
         rows = self._conn.execute(
             f"""
-            SELECT DISTINCT sync.cik
-            FROM sec_company_sync_state AS sync
-            LEFT JOIN sec_company AS company ON company.cik = sync.cik
-            WHERE (
-                LOWER(TRIM(COALESCE(company.entity_type, ''))) = 'operating'
-                OR EXISTS (
-                    SELECT 1
-                    FROM sec_company_ticker AS ticker
-                    WHERE ticker.cik = sync.cik
-                      AND ticker.source_name = 'company_tickers'
-                )
-            )
-            {status_clause}
-            ORDER BY sync.cik
+            SELECT DISTINCT company.cik AS cik
+            FROM sec_company AS company
+            WHERE LOWER(TRIM(COALESCE(company.entity_type, ''))) = 'operating'
+              AND company.cik IN ({placeholders})
+            UNION
+            SELECT DISTINCT ticker.cik AS cik
+            FROM sec_company_ticker AS ticker
+            WHERE ticker.source_name = 'company_tickers'
+              AND ticker.cik IN ({placeholders})
             """,
-            parameters,
+            cik_list + cik_list,
         ).fetchall()
-        return [int(row[0]) for row in rows]
+        eligible_ciks = {int(row[0]) for row in rows}
+        return sorted(tracked_ciks & eligible_ciks)
 
     def get_ciks_with_bronze(self, tracking_status_filter: str = "all") -> list[dict[str, Any]]:
         """Return CIKs that have bronze submissions loaded (have a submissions_main checkpoint).
