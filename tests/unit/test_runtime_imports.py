@@ -76,13 +76,16 @@ class RuntimeImportTests(unittest.TestCase):
         # gold_verify), never registered in COMMAND_REGISTRY. resolve-snowflake-env is
         # the same shape: a standalone credential resolver, never registered either.
         # compare-filing-artifact-capture (Ticket 51) is observe-only Decision 2
-        # snapshot compare, same exclusion.
+        # snapshot compare, same exclusion. table-reconcile (DuckDB Retirement
+        # Cutover Ticket 08) is the same shape: standalone direct DuckDB +
+        # Snowflake connections, own report, never registered.
         warehouse_cli_commands = set(subparsers_action.choices) - {
             "mdm",
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",
             "compare-filing-artifact-capture",
+            "table-reconcile",
         }
         self.assertEqual(
             set(commands.COMMAND_REGISTRY),
@@ -107,12 +110,14 @@ class RuntimeImportTests(unittest.TestCase):
         # gold-verify-live never calls _planned_writes -- it doesn't go through
         # _execute_warehouse_bronze_capture at all (see the skip comment below).
         # resolve-snowflake-env and compare-filing-artifact-capture are the same shape.
+        # table-reconcile (Ticket 08) never calls _planned_writes either -- same reason.
         all_commands = set(subparsers_action.choices) - {
             "mdm",
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",
             "compare-filing-artifact-capture",
+            "table-reconcile",
         }
 
         resolver = catalog.default_path_resolver()
@@ -162,6 +167,9 @@ class RuntimeImportTests(unittest.TestCase):
         # - resolve-snowflake-env is a standalone credential resolver, same shape
         # - compare-filing-artifact-capture is Ticket 51 observe-only snapshot
         #   compare (Ticket 10 Decision 2), never goes through the orchestrator
+        # - table-reconcile (DuckDB Retirement Cutover Ticket 08) is a standalone
+        #   read-only report command with its own direct DuckDB canonical +
+        #   Snowflake EDGARTOOLS_SILVER connections -- same shape as gold-verify-live
         skip = {
             "mdm",
             "migrate-silver-shards",
@@ -169,6 +177,7 @@ class RuntimeImportTests(unittest.TestCase):
             "resolve-snowflake-env",
             "reconcile-decision-watermark",
             "compare-filing-artifact-capture",
+            "table-reconcile",
         }
         all_commands = set(subparsers_action.choices) - skip
 

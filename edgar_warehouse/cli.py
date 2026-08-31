@@ -1592,6 +1592,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gold_verify_live.set_defaults(handler=_handle_gold_verify_live)
 
+    from edgar_warehouse.table_reconciliation.cli import register_subparser as _register_table_reconcile
+
+    _register_table_reconcile(subparsers)
+
     compute_windows = subparsers.add_parser(
         "compute-windows",
         help=(
