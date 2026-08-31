@@ -2068,12 +2068,56 @@ at all.
   purpose of this pipeline is to reprocess already-loaded bronze with zero SEC calls.
   5-why root cause: the artifact pipeline is a separate SEC fetch pass; "no SEC calls" must
   be encoded as a flag, not assumed from the pipeline name.
-- `BOOTSTRAP_BATCH_CONCURRENCY` recommended range: **2–5** concurrent ECS tasks. Current
-  default is 3 (already within the recommended range). Values below 2 are not recommended
-  for production — throughput is too low. Values above 5 risk triggering SEC rate limiting:
-  at 5 tasks × ~9 req/sec theoretical max = ~45 req/sec, well above SEC's 10 req/sec per-IP
-  limit without stagger mitigation. The in-process rate limiter in `sec_client.py` (9 req/sec
-  per task) enforces per-task throttling but does not coordinate across ECS tasks.
+- `BOOTSTRAP_BATCH_CONCURRENCY` — verified via `deploy-aws-application.sh` that this env var
+  is unpacked into, and its `MaxConcurrency` actually read by, only ONE of `bootstrap-batch`'s
+  three ECS/Step-Functions callers: `write_silver_mdm_gold_definition`'s `BatchSilver` Map
+  (`silver_mdm_gold`, `--artifact-policy skip`, confirmed live `MaxConcurrency=3`). The other
+  two — both inside `write_bronze_seed_silver_gold_definition` — receive the same
+  `$BOOTSTRAP_BATCH_CONCURRENCY` positional argument but never reference it; their
+  `MaxConcurrency` is hardcoded in the JSON template instead: the "first-load recovery from
+  cached bronze" Map (`--artifact-policy skip` too) at 20, and the Ticket 20 strict
+  candidate-manifest Map (`--artifact-policy all_attachments`, real SEC fetches) at 2. Do not
+  assume changing this env var affects either of those.
+
+  **Recommended range for the one caller it does govern: keep it at or below the current
+  default of 3** — do not raise it toward the old **2–5** guidance's upper end, and do not
+  raise it toward Fargate's vCPU ceiling either (see below). DuckDB Retirement Cutover
+  Ticket 06 retired `bootstrap-batch`'s CIK-sharded hydrate/publish mechanism
+  (`open_silver_shard`/`_hydrate_shard_for_window`/`_publish_shard_if_remote_with_retry` —
+  every writer now hydrates/opens/publishes the same monolith silver database, like every
+  other command). The old **2–5** range's own documented rationale (SEC rate limiting) never
+  actually applied to this specific caller — it always runs `--artifact-policy skip`, zero
+  SEC calls — so retiring the shard mechanism doesn't free up that headroom because that
+  headroom was never real for this caller in the first place. What retiring the shard
+  mechanism *does* change, and makes strictly worse: every `BatchSilver` batch that finishes
+  concurrently now merges into and publishes the exact same canonical `silver.duckdb` object
+  via one ETag-guarded promote, instead of being spread across 4 separate shard files (each
+  batch previously had roughly a 1-in-4 chance of colliding with another concurrent batch;
+  now every batch collides with every other concurrent batch on the same object). This isn't
+  theoretical — `write_bronze_seed_silver_gold_definition`'s own `strict_batch_map` (a
+  *different* `bootstrap-batch` caller, but writing the identical monolith object via the
+  identical `_publish_silver_database_with_retry`/ETag-promote mechanism) documents exactly
+  this failure mode in production: "production hit this repeatedly at MaxConcurrency=4
+  (PromotionConflictError aborting an otherwise-complete batch)," which is why it was lowered
+  4→2 on 2026-07-22, still below `silver_mdm_gold`'s current default of 3. The retry wrapper
+  (`_publish_silver_database_with_retry`) makes a lost race retryable rather than fatal, but
+  each retry re-runs the full merge — not free, and evidence from a comparable monolith-write
+  caller suggests conflicts start becoming *frequent*, not rare, right around where this
+  caller's current default already sits.
+
+  Separately, and only as an upper theoretical bound, **not** the actual binding constraint:
+  this Map's task profile is `medium` (`register_task_definition medium 1024 4096` — 1024 CPU
+  units = 1 vCPU/task), and the account's Fargate On-Demand vCPU quota is confirmed live
+  (`aws service-quotas get-service-quota --service-code fargate --quota-code L-3032A538`,
+  2026-08-31) at 30 vCPU, giving a hard ceiling of 30 concurrent `medium` tasks if this one Map
+  had the entire account's Fargate quota to itself (it doesn't; other pipelines share it, and
+  the "first-load recovery" Map above already runs at MaxConcurrency=20 on this same profile).
+  Snowflake landing-zone ingestion throughput under many concurrent small Parquet writes has
+  also not been measured. Neither number is the reason to hold the line at 3, though — the
+  monolith promotion-conflict evidence above is. Raising this value is deferred
+  implementation-time work for an operator, and should not be attempted without first either
+  re-measuring monolith-object promotion-conflict frequency at higher concurrency directly, or
+  reintroducing some form of writer partitioning for this specific Map.
 
 Key import pattern (do not change without checking the edgartools changelog):
 

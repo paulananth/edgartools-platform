@@ -282,120 +282,31 @@ def test_migration_row_counts_match_monolith(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Plan 03: Wire bootstrap chunk path to shard-aware hydrate (STORE-02)
+# DuckDB Retirement Cutover Ticket 06: bootstrap-batch's shard-aware
+# hydrate/publish path is retired -- it now always hydrates/opens/publishes
+# the monolith silver database, the same as every other command. Formerly
+# "Plan 03: Wire bootstrap chunk path to shard-aware hydrate (STORE-02)",
+# which these tests replace.
 # ---------------------------------------------------------------------------
 
 
-def test_bootstrap_chunk_uses_shard_aware_hydrate() -> None:
-    """STORE-02: _execute_warehouse_bronze_capture picks the shard-aware hydrate path
-    (not _hydrate_silver_database_from_storage) for bootstrap-batch with remote storage."""
-    import json
-    from unittest.mock import MagicMock, call, patch
-
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _execute_warehouse_bronze_capture,
-    )
-
-    # CIKs for this chunk: both fall in shard-1 (1053918–1523562 per DEV_MANIFEST)
-    chunk_ciks = [1_100_000, 1_200_000]
-
-    # Remote storage root
-    storage_root = MagicMock()
-    storage_root.is_remote = True
-    storage_root.root = "s3://bucket"
-    storage_root.join.side_effect = lambda *parts: "s3://bucket/" + "/".join(parts)
-
-    # Local silver root
-    silver_root = MagicMock()
-    silver_root.is_remote = False
-    silver_root.join.side_effect = lambda *parts: "/tmp/silver/" + "/".join(parts)
-
-    context = MagicMock()
-    context.storage_root = storage_root
-    context.silver_root = silver_root
-    context.snowflake_export_root = None  # no gold build for bootstrap-batch
-    context.runtime_mode = "bronze_capture"
-    context.environment_name = "test"
-
-    from pathlib import Path
-
-    manifest_bytes = json.dumps(DEV_MANIFEST).encode()
-    local_shard_path = "/tmp/silver/sec/shards/shard-1.duckdb"
-
-    def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
-        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(local_path).write_bytes(b"shard-content")
-        return str(local_path)
-
-    storage_root.download_file.side_effect = fake_download_file
-
-    # Patch everything that touches external I/O
-    with (
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator.read_bytes",
-            side_effect=[manifest_bytes],
-        ) as mock_read_bytes,
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
-        ) as mock_monolith_hydrate,
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator.open_silver_shard",
-        ) as mock_open_shard,
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_shard_if_remote",
-            return_value=None,
-        ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
-        ) as mock_monolith_publish,
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
-            return_value=([], {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}),
-        ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._planned_writes",
-            return_value={},
-        ),
-        patch("edgar_warehouse.application.warehouse_orchestrator._emit_pipeline_event"),
-        patch("edgar_warehouse.application.warehouse_orchestrator._resolve_run_id", return_value="run-1"),
-    ):
-        # open_silver_shard must return a mock DB with all SilverDatabase methods
-        mock_db = MagicMock()
-        mock_db.get_table_counts.return_value = {}
-        mock_open_shard.return_value = mock_db
-        mock_bookkeeping = MagicMock()
-        mock_bookkeeping.get_table_counts.return_value = {}
-
-        with patch(
-            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
-            return_value=mock_bookkeeping,
-        ):
-            _execute_warehouse_bronze_capture(
-                context=context,
-                command_name="bootstrap-batch",
-                arguments={"cik_list": chunk_ciks},
-            )
-
-    # Monolith hydrate must NOT have been called
-    mock_monolith_hydrate.assert_not_called()
-    # Monolith publish must NOT have been called
-    mock_monolith_publish.assert_not_called()
-    # open_silver_shard was called (shard path, not monolith)
-    mock_open_shard.assert_called_once()
-    called_path: str = mock_open_shard.call_args[0][0]
-    assert "shard-" in called_path, f"Expected shard path, got: {called_path}"
-    assert "silver.duckdb" not in called_path, (
-        f"Expected shard path (not monolith), got: {called_path}"
-    )
-
-
-def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None:
-    """First-load recovery can run before shard-manifest.json exists."""
+def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
+    """bootstrap-batch no longer branches into the shard-aware hydrate/open/
+    publish path, even with remote storage and a populated cik_list -- the
+    exact conditions that used to route it onto shard-{N}.duckdb. It now
+    takes the same monolith path _hydrate_silver_database_from_storage /
+    _open_silver_database / _publish_silver_database_with_retry as every
+    other command."""
     from unittest.mock import MagicMock, patch
 
     from edgar_warehouse.application.warehouse_orchestrator import (
         _execute_warehouse_bronze_capture,
     )
+
+    # CIKs that, under the old mechanism, would have routed to shard-1
+    # (1053918-1523562 per DEV_MANIFEST) -- kept to prove the shard-routing
+    # inputs no longer matter at all.
+    chunk_ciks = [1_100_000, 1_200_000]
 
     storage_root = MagicMock()
     storage_root.is_remote = True
@@ -411,7 +322,7 @@ def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None
     context.bronze_root = storage_root
     context.storage_root = storage_root
     context.silver_root = silver_root
-    context.snowflake_export_root = None
+    context.snowflake_export_root = None  # no gold build for bootstrap-batch
     context.runtime_mode = "bronze_capture"
     context.environment_name = "test"
 
@@ -423,7 +334,6 @@ def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None
     with (
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._read_shard_manifest",
-            side_effect=FileNotFoundError("shard-manifest.json"),
         ) as mock_read_manifest,
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
@@ -437,10 +347,13 @@ def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None
             return_value=mock_bookkeeping,
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator.open_silver_shard",
-        ) as mock_open_shard,
+            "edgar_warehouse.application.warehouse_orchestrator._hydrate_shard_for_window",
+        ) as mock_hydrate_shard,
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
+            "edgar_warehouse.application.warehouse_orchestrator._publish_shard_if_remote_with_retry",
+        ) as mock_publish_shard,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
             return_value=None,
         ) as mock_monolith_publish,
         patch(
@@ -457,13 +370,17 @@ def test_bootstrap_chunk_missing_shard_manifest_falls_back_to_monolith() -> None
         _execute_warehouse_bronze_capture(
             context=context,
             command_name="bootstrap-batch",
-            arguments={"cik_list": [1_100_000, 1_200_000]},
+            arguments={"cik_list": chunk_ciks},
         )
 
-    mock_read_manifest.assert_called_once()
+    # The shard manifest is never consulted, no shard is ever hydrated or
+    # published, and no shard-open code path runs at all.
+    mock_read_manifest.assert_not_called()
+    mock_hydrate_shard.assert_not_called()
+    mock_publish_shard.assert_not_called()
+    # The monolith hydrate/open/publish path runs unconditionally instead.
     mock_monolith_hydrate.assert_called_once()
     assert mock_open_monolith.called
-    mock_open_shard.assert_not_called()
     mock_monolith_publish.assert_called_once()
 
 

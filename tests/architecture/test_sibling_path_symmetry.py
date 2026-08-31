@@ -73,6 +73,15 @@ class EnvVarExtractionTests(unittest.TestCase):
 
 
 class PublishRetrySiblingSymmetryTests(unittest.TestCase):
+    @unittest.skip(
+        "DuckDB Retirement Cutover Ticket 06 removed bootstrap-batch's only production "
+        "call site for _publish_shard_if_remote_with_retry, leaving it dead pending "
+        "Ticket 12's final sweep (deliberate -- other shard-file consumers still need "
+        "the surrounding module). This test would otherwise force an edit to that dead "
+        "function every time the still-live _publish_silver_database_with_retry's retry "
+        "env vars change, with no live sibling left to actually protect. Delete this "
+        "test alongside the dead function in Ticket 12, not before."
+    )
     def test_monolith_and_shard_retry_wrappers_reference_the_same_env_vars(self) -> None:
         from edgar_warehouse.application.warehouse_orchestrator import (
             _publish_shard_if_remote_with_retry,
