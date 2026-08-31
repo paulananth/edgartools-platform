@@ -1,6 +1,13 @@
-"""Regression test: mdm run must read a monolith silver.duckdb when no shard
-manifest exists yet (first-load recovery via bronze_seed_silver_gold), instead
-of failing with "cannot open MDM_SILVER_DUCKDB -- shard-manifest.json"."""
+"""Regression test: the DuckDB silver reader must fall back to a monolith
+silver.duckdb when no shard manifest exists yet (first-load recovery via
+bronze_seed_silver_gold), instead of failing with "cannot open
+MDM_SILVER_DUCKDB -- shard-manifest.json".
+
+DuckDB Retirement Cutover Ticket 05: this mechanic lives in
+_duckdb_silver_reader() now, not _silver_reader() (which always connects to
+EDGARTOOLS_SILVER post-cutover) -- still exercised because
+verify-silver-parity/verify-resolver-input-parity need a live DuckDB
+reader."""
 
 from __future__ import annotations
 
@@ -39,7 +46,7 @@ def test_silver_reader_falls_back_to_monolith_when_shard_manifest_missing(tmp_pa
             "edgar_warehouse.silver_support.sharded_reader.ShardedSilverReader",
         ) as mock_reader_cls,
     ):
-        mdm_cli._silver_reader()
+        mdm_cli._duckdb_silver_reader()
 
     mock_hydrate.assert_called_once_with(context)
     mock_reader_cls.assert_called_once_with([str(monolith_path)])
@@ -66,6 +73,6 @@ def test_silver_reader_returns_none_when_monolith_also_missing(tmp_path, monkeyp
             "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
         ),
     ):
-        result = mdm_cli._silver_reader()
+        result = mdm_cli._duckdb_silver_reader()
 
     assert result is None

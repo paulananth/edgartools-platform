@@ -106,20 +106,24 @@ class TestComputeCoverageCompanyDomain:
 
 
 class TestSeedMdmFromSilverTickerFallback:
+    """DuckDB Retirement Cutover Ticket 05: _seed_mdm_from_silver_ticker_fallback
+    reads via reader.fetch() now, not reader._conn.execute() -- SnowflakeSilverReader
+    deliberately doesn't expose ._conn at all (see its own module docstring)."""
+
+    class _FakeTickerReader:
+        def __init__(self, rows: list[tuple]) -> None:
+            self._rows = rows
+
+        def fetch(self, sql, params=None):
+            assert "sec_company_ticker" in sql
+            return [{"cik": cik, "ticker": ticker, "exchange": exchange} for cik, ticker, exchange in self._rows]
+
     def test_defaults_missing_tracking_status_to_active(self, bookkeeping) -> None:
         import edgar_warehouse.mdm.cli as mdm_cli
 
-        class _FakeConn:
-            def execute(self, sql, params=None):
-                return self
+        reader = self._FakeTickerReader([(100, "ABC", "NASDAQ")])
 
-            def fetchall(self):
-                return [(100, "ABC", "NASDAQ")]
-
-        class _FakeReader:
-            _conn = _FakeConn()
-
-        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(_FakeReader(), None, bookkeeping)
+        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(reader, None, bookkeeping)
 
         assert rows == [(100, "ABC", "NASDAQ", "active")]
 
@@ -131,17 +135,9 @@ class TestSeedMdmFromSilverTickerFallback:
 
         bookkeeping.upsert_company_sync_state({"cik": 100, "tracking_status": ""})
 
-        class _FakeConn:
-            def execute(self, sql, params=None):
-                return self
+        reader = self._FakeTickerReader([(100, "ABC", "NASDAQ")])
 
-            def fetchall(self):
-                return [(100, "ABC", "NASDAQ")]
-
-        class _FakeReader:
-            _conn = _FakeConn()
-
-        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(_FakeReader(), None, bookkeeping)
+        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(reader, None, bookkeeping)
 
         assert rows == [(100, "ABC", "NASDAQ", "")]
 
@@ -150,17 +146,9 @@ class TestSeedMdmFromSilverTickerFallback:
 
         bookkeeping.upsert_company_sync_state({"cik": 100, "tracking_status": "paused"})
 
-        class _FakeConn:
-            def execute(self, sql, params=None):
-                return self
+        reader = self._FakeTickerReader([(100, "ABC", "NASDAQ")])
 
-            def fetchall(self):
-                return [(100, "ABC", "NASDAQ")]
-
-        class _FakeReader:
-            _conn = _FakeConn()
-
-        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(_FakeReader(), None, bookkeeping)
+        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(reader, None, bookkeeping)
 
         assert rows == [(100, "ABC", "NASDAQ", "paused")]
 
@@ -170,16 +158,8 @@ class TestSeedMdmFromSilverTickerFallback:
         bookkeeping.upsert_company_sync_state({"cik": 100, "tracking_status": "active"})
         bookkeeping.upsert_company_sync_state({"cik": 200, "tracking_status": "paused"})
 
-        class _FakeConn:
-            def execute(self, sql, params=None):
-                return self
+        reader = self._FakeTickerReader([(100, "ABC", "NASDAQ"), (200, "XYZ", "NYSE")])
 
-            def fetchall(self):
-                return [(100, "ABC", "NASDAQ"), (200, "XYZ", "NYSE")]
-
-        class _FakeReader:
-            _conn = _FakeConn()
-
-        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(_FakeReader(), "active", bookkeeping)
+        rows = mdm_cli._seed_mdm_from_silver_ticker_fallback(reader, "active", bookkeeping)
 
         assert rows == [(100, "ABC", "NASDAQ", "active")]
