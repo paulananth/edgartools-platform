@@ -193,7 +193,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
         )
 
         raw_writes, metrics = wo._capture_bronze_raw(
-            context=context, db=None, command_name="compute-remaining-batches",
+            context=context, db=None, bookkeeping=None, command_name="compute-remaining-batches",
             arguments={"resume_ledger_run_id": "original-run", "run_id": "resume-run-2"},
             scope={}, now=datetime.now(UTC), sync_run_id="resume-run-2",
         )
@@ -221,7 +221,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
 
         with pytest.raises(ResumeRunNotFoundError):
             wo._capture_bronze_raw(
-                context=context, db=None, command_name="compute-remaining-batches",
+                context=context, db=None, bookkeeping=None, command_name="compute-remaining-batches",
                 arguments={"resume_ledger_run_id": "typo-d-run-id", "run_id": "resume-run-2"},
                 scope={}, now=datetime.now(UTC), sync_run_id="resume-run-2",
             )
@@ -239,7 +239,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
 
         with pytest.raises(WarehouseRuntimeError, match="--resume-ledger-run-id"):
             wo._capture_bronze_raw(
-                context=context, db=None, command_name="compute-remaining-batches",
+                context=context, db=None, bookkeeping=None, command_name="compute-remaining-batches",
                 arguments={"run_id": "resume-run-2"},
                 scope={}, now=datetime.now(UTC), sync_run_id="resume-run-2",
             )
@@ -278,7 +278,7 @@ class TestBootstrapBatchWritesDefaultDoneMarker:
             return_value={"raw_writes": [], "rows_written": 1, "rows_skipped": 0},
         ):
             raw_writes, metrics = wo._capture_bronze_raw(
-                context=context, db=None, command_name="bootstrap-batch",
+                context=context, db=None, bookkeeping=None, command_name="bootstrap-batch",
                 arguments={
                     "cik_list": [1, 2], "resume_ledger_run_id": "original-run",
                 },
@@ -312,7 +312,7 @@ class TestBootstrapBatchWritesDefaultDoneMarker:
             return_value={"raw_writes": [], "rows_written": 1, "rows_skipped": 0},
         ):
             _, metrics = wo._capture_bronze_raw(
-                context=context, db=None, command_name="bootstrap-batch",
+                context=context, db=None, bookkeeping=None, command_name="bootstrap-batch",
                 arguments={"cik_list": [7]},
                 scope={}, now=datetime.now(UTC), sync_run_id="fresh-execution-name",
             )

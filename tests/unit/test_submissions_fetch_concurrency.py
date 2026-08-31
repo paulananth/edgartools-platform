@@ -25,7 +25,7 @@ from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
-class _SubmissionsDb:
+class _SubmissionsBookkeeping:
     """Records the thread every db.get_source_checkpoint call ran on, for
     the DB-access-serialization test. Checkpoints are keyed exactly as
     _read_bronze_if_cached expects: (source_name, source_key)."""
@@ -90,13 +90,13 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
             ), patch.object(
                 warehouse_orchestrator, "_download_sec_bytes", side_effect=_downloader(payloads)
             ):
-                db = _SubmissionsDb()
+                bookkeeping = _SubmissionsBookkeeping()
                 context = SimpleNamespace(
                     bronze_root=StorageLocation(tmp), identity="tester@example.com"
                 )
                 snapshots = warehouse_orchestrator._capture_submission_bronze_snapshots(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     ciks=ciks,
                     include_pagination=True,
                     fetch_date=date(2026, 8, 3),
@@ -150,14 +150,14 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             os.environ, {"WAREHOUSE_SUBMISSIONS_FETCH_CONCURRENCY": "5"}
         ), patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=download):
-            db = _SubmissionsDb()
+            bookkeeping = _SubmissionsBookkeeping()
             context = SimpleNamespace(
                 bronze_root=StorageLocation(tmp), identity="tester@example.com"
             )
             started = time.monotonic()
             warehouse_orchestrator._capture_submission_bronze_snapshots(
                 context=context,
-                db=db,
+                bookkeeping=bookkeeping,
                 ciks=ciks,
                 include_pagination=False,
                 fetch_date=date(2026, 8, 3),
@@ -194,23 +194,23 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
         ), patch.object(
             warehouse_orchestrator, "_download_sec_bytes", side_effect=_downloader(payloads, delay=0.03)
         ):
-            db = _SubmissionsDb()
+            bookkeeping = _SubmissionsBookkeeping()
             context = SimpleNamespace(
                 bronze_root=StorageLocation(tmp), identity="tester@example.com"
             )
             warehouse_orchestrator._capture_submission_bronze_snapshots(
                 context=context,
-                db=db,
+                bookkeeping=bookkeeping,
                 ciks=ciks,
                 include_pagination=True,
                 fetch_date=date(2026, 8, 3),
                 force=False,
             )
 
-        self.assertTrue(db.call_thread_ids, "expected db.get_source_checkpoint calls to have been recorded")
+        self.assertTrue(bookkeeping.call_thread_ids, "expected db.get_source_checkpoint calls to have been recorded")
         self.assertTrue(
-            all(thread_id == main_thread_id for thread_id in db.call_thread_ids),
-            f"db.get_source_checkpoint calls occurred off the main thread: {db.call_thread_ids}",
+            all(thread_id == main_thread_id for thread_id in bookkeeping.call_thread_ids),
+            f"db.get_source_checkpoint calls occurred off the main thread: {bookkeeping.call_thread_ids}",
         )
 
     def test_partial_failure_no_snapshots_returned(self) -> None:
@@ -236,14 +236,14 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             os.environ, {"WAREHOUSE_SUBMISSIONS_FETCH_CONCURRENCY": "5"}
         ), patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=download):
-            db = _SubmissionsDb()
+            bookkeeping = _SubmissionsBookkeeping()
             context = SimpleNamespace(
                 bronze_root=StorageLocation(tmp), identity="tester@example.com"
             )
             with self.assertRaises(ConnectionError):
                 warehouse_orchestrator._capture_submission_bronze_snapshots(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     ciks=ciks,
                     include_pagination=False,
                     fetch_date=date(2026, 8, 3),
@@ -262,7 +262,7 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
             bronze_path.parent.mkdir(parents=True, exist_ok=True)
             bronze_path.write_bytes(payload)
 
-            db = _SubmissionsDb(
+            bookkeeping = _SubmissionsBookkeeping(
                 checkpoints={
                     ("submissions_main", f"cik:{cik}"): {
                         "bronze_path": str(bronze_path),
@@ -282,7 +282,7 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
             ):
                 snapshots = warehouse_orchestrator._capture_submission_bronze_snapshots(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     ciks=[cik],
                     include_pagination=False,
                     fetch_date=date(2026, 8, 3),
@@ -314,7 +314,7 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
                     "last_sha256": hashlib.sha256(payloads[cik]).hexdigest(),
                 }
 
-            db = _SubmissionsDb(checkpoints=checkpoints)
+            bookkeeping = _SubmissionsBookkeeping(checkpoints=checkpoints)
             context = SimpleNamespace(
                 bronze_root=StorageLocation(tmp), identity="tester@example.com"
             )
@@ -338,7 +338,7 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
                 started = time.monotonic()
                 snapshots = warehouse_orchestrator._capture_submission_bronze_snapshots(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     ciks=ciks,
                     include_pagination=False,
                     fetch_date=date(2026, 8, 3),

@@ -6,12 +6,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Optional
 
 from sqlalchemy.orm import Session
 
+if TYPE_CHECKING:
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
 
-def compute_coverage(silver_reader: Any, session: Session) -> list[dict]:
+
+def compute_coverage(
+    silver_reader: Any, session: Session, bookkeeping: "BookkeepingStore"
+) -> list[dict]:
     """Return per-domain silver_count vs mdm_count comparison.
 
     Predicates mirror pipeline.py loader queries exactly so gaps reflect real
@@ -19,6 +24,11 @@ def compute_coverage(silver_reader: Any, session: Session) -> list[dict]:
 
     Each returned dict has: domain, silver_count, mdm_count, gap, reason.
     gap = silver_count - mdm_count.  Positive gap = loader missed records.
+
+    DuckDB Retirement Cutover Ticket 13: ``sec_company_sync_state`` moved off
+    DuckDB silver onto Postgres, so the company-domain count can no longer
+    join it against ``sec_company`` in one query -- fetched from each store
+    separately and intersected in Python instead.
     """
     from sqlalchemy import func, select
 
@@ -41,16 +51,13 @@ def compute_coverage(silver_reader: Any, session: Session) -> list[dict]:
         return session.scalar(select(func.count()).select_from(model)) or 0
 
     # ------------------------------------------------------------------
-    # Companies — active tracking_status via sec_company_sync_state join.
-    # Mirrors: run_companies iterates sec_company and checks sync_state per row.
-    # Inactive/dropped companies (no active sync_state) are excluded.
+    # Companies — active tracking_status via the bookkeeping store.
+    # Mirrors: run_companies iterates sec_company and checks tracking status
+    # per row. Inactive/dropped companies (no active tracking) are excluded.
     # ------------------------------------------------------------------
-    company_silver = _silver(
-        "SELECT COUNT(DISTINCT c.cik) AS n "
-        "FROM sec_company c "
-        "JOIN sec_company_sync_state s ON s.cik = c.cik "
-        "WHERE s.tracking_status = 'active'"
-    )
+    company_ciks = {int(row["cik"]) for row in silver_reader.fetch("SELECT cik FROM sec_company")}
+    active_tracked_ciks = set(bookkeeping.get_tracked_ciks("active"))
+    company_silver = len(company_ciks & active_tracked_ciks)
     company_mdm = _mdm_count(MdmCompany)
 
     # ------------------------------------------------------------------

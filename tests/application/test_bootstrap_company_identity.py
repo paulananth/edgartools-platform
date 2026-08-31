@@ -15,6 +15,7 @@ import pytest
 
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.application.commands import bootstrap_fundamentals
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 CIK = 320193
 
@@ -52,6 +53,9 @@ def _fake_download_sec_bytes(*, url: str, identity: str) -> bytes:
 def _stub_sec_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         warehouse_orchestrator, "_download_sec_bytes", _fake_download_sec_bytes
+    )
+    monkeypatch.setattr(
+        bootstrap_fundamentals, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
 
 

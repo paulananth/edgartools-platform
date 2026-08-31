@@ -114,12 +114,12 @@ class LoaderIdempotencyTests(unittest.TestCase):
             bronze_path = Path(tmp) / "submissions.json"
             bronze_path.write_bytes(payload)
             context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
-            db = _CheckpointDb(str(bronze_path), digest)
+            bookkeeping = _CheckpointDb(str(bronze_path), digest)
 
             with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError("SEC download")):
                 result = warehouse_orchestrator._capture_submissions_main(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     cik=320193,
                     fetch_date=date(2026, 5, 8),
                     force=False,
@@ -135,13 +135,13 @@ class LoaderIdempotencyTests(unittest.TestCase):
             bronze_path = Path(tmp) / "submissions.json"
             bronze_path.write_bytes(payload)
             context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
-            db = _CheckpointDb(str(bronze_path), digest)
+            bookkeeping = _CheckpointDb(str(bronze_path), digest)
 
             downloader = Mock(return_value=payload)
             with patch.object(warehouse_orchestrator, "_download_sec_bytes", downloader):
                 result = warehouse_orchestrator._capture_submissions_main(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     cik=320193,
                     fetch_date=date(2026, 5, 8),
                     force=True,
@@ -165,12 +165,12 @@ class LoaderIdempotencyTests(unittest.TestCase):
             relative_path = default_path_resolver().submissions_main_path(cik, date(2026, 1, 1))
             bronze_root.write_bytes(relative_path, payload)
             context = SimpleNamespace(bronze_root=bronze_root, identity="tester@example.com")
-            db = _NoCheckpointDb()
+            bookkeeping = _NoCheckpointDb()
 
             with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError("SEC download")):
                 result = warehouse_orchestrator._capture_submissions_main(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     cik=cik,
                     fetch_date=date(2026, 5, 8),
                     force=False,
@@ -183,14 +183,14 @@ class LoaderIdempotencyTests(unittest.TestCase):
         """No checkpoint and no existing bronze anywhere -> must still hit SEC."""
         with tempfile.TemporaryDirectory() as tmp:
             context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
-            db = _NoCheckpointDb()
+            bookkeeping = _NoCheckpointDb()
             payload = b'{"cik": "0000320193", "filings": {"recent": {}}}'
             downloader = Mock(return_value=payload)
 
             with patch.object(warehouse_orchestrator, "_download_sec_bytes", downloader):
                 result = warehouse_orchestrator._capture_submissions_main(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     cik=320193,
                     fetch_date=date(2026, 5, 8),
                     force=False,
@@ -209,12 +209,12 @@ class LoaderIdempotencyTests(unittest.TestCase):
             bronze_path = Path(tmp) / "CIK0000320193-submissions-001.json"
             bronze_path.write_bytes(payload)
             context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
-            db = _CheckpointDb(str(bronze_path), digest)
+            bookkeeping = _CheckpointDb(str(bronze_path), digest)
 
             with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError("SEC download")):
                 result = warehouse_orchestrator._capture_submissions_pagination(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     cik=320193,
                     file_name="CIK0000320193-submissions-001.json",
                     fetch_date=date(2026, 5, 8),
@@ -238,12 +238,12 @@ class LoaderIdempotencyTests(unittest.TestCase):
             )
             bronze_root.write_bytes(relative_path, payload)
             context = SimpleNamespace(bronze_root=bronze_root, identity="tester@example.com")
-            db = _NoCheckpointDb()
+            bookkeeping = _NoCheckpointDb()
 
             with patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=AssertionError("SEC download")):
                 result = warehouse_orchestrator._capture_submissions_pagination(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     cik=cik,
                     file_name=file_name,
                     fetch_date=date(2026, 5, 8),
@@ -260,13 +260,13 @@ class LoaderIdempotencyTests(unittest.TestCase):
             bronze_path = Path(tmp) / "CIK0000320193-submissions-001.json"
             bronze_path.write_bytes(payload)
             context = SimpleNamespace(bronze_root=StorageLocation(tmp), identity="tester@example.com")
-            db = _CheckpointDb(str(bronze_path), digest)
+            bookkeeping = _CheckpointDb(str(bronze_path), digest)
 
             downloader = Mock(return_value=payload)
             with patch.object(warehouse_orchestrator, "_download_sec_bytes", downloader):
                 result = warehouse_orchestrator._capture_submissions_pagination(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     cik=320193,
                     file_name="CIK0000320193-submissions-001.json",
                     fetch_date=date(2026, 5, 8),

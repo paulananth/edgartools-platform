@@ -101,6 +101,8 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
     context = _context(tmp_path)
     fake_db = MagicMock()
     fake_db.get_table_counts.return_value = {}
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_table_counts.return_value = {}
     manifest_entries = [
         {
             "table_name": "dim_company",
@@ -120,6 +122,10 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=fake_bookkeeping,
         ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
@@ -144,12 +150,12 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
             arguments={"run_id": "run-2"},
         )
 
-    fake_db.record_gold_manifest.assert_called_once_with(
+    fake_bookkeeping.record_gold_manifest.assert_called_once_with(
         run_id="run-2",
         command_name="gold-refresh",
         entries=manifest_entries,
     )
-    complete_metrics = fake_db.complete_pipeline_run.call_args.kwargs["metrics"]
+    complete_metrics = fake_bookkeeping.complete_pipeline_run.call_args.kwargs["metrics"]
     assert complete_metrics["gold_manifest"] == manifest_entries
 
 
@@ -161,6 +167,8 @@ def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> No
     context = _context(tmp_path)
     fake_db = MagicMock()
     fake_db.get_table_counts.return_value = {"sec_company": 1}
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_table_counts.return_value = {}
 
     with (
         patch(
@@ -169,6 +177,10 @@ def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> No
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=fake_bookkeeping,
         ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._resolve_scope",
@@ -201,7 +213,7 @@ def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> No
 
     iter_gold.assert_not_called()
     export_gold.assert_not_called()
-    fake_db.record_gold_manifest.assert_not_called()
+    fake_bookkeeping.record_gold_manifest.assert_not_called()
     assert result["gold_row_counts"] is None
     assert result["snowflake_export_manifest"] is None
     assert not {"gold", "snowflake_export_manifest"} & {
@@ -217,6 +229,8 @@ def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path)
     context = _context(tmp_path)
     fake_db = MagicMock()
     fake_db.get_table_counts.return_value = {"sec_company": 1}
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_table_counts.return_value = {}
 
     with (
         patch(
@@ -225,6 +239,10 @@ def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path)
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=fake_bookkeeping,
         ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._resolve_scope",

@@ -7,7 +7,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import duckdb
 
@@ -42,6 +42,7 @@ class MdmSeedUniverseSourceTests(unittest.TestCase):
                             silver_path=str(db_path),
                             tracking_status_filter=None,
                             dry_run=False,
+                            bookkeeping=MagicMock(),
                         )
             self.assertEqual(result["rows_found"], 2)
             # bulk_upsert_universe mocked to return 2 per status group (active + bootstrap_pending)
@@ -61,8 +62,9 @@ class MdmSeedUniverseSourceTests(unittest.TestCase):
             "_seed_mdm_from_silver",
             return_value={"status": "ok", "rows_found": 1, "rows_migrated": 1},
         ) as seed:
-            with patch("builtins.print") as pr:
-                code = mdm_cli._handle_seed_universe(args)
+            with patch.object(mdm_cli, "_bookkeeping_store", return_value=MagicMock()):
+                with patch("builtins.print") as pr:
+                    code = mdm_cli._handle_seed_universe(args)
             self.assertEqual(code, 0)
             seed.assert_called_once()
             printed = " ".join(str(c) for c in pr.call_args_list)

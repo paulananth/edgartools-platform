@@ -48,9 +48,9 @@ def _run_daily_incremental(
     now: datetime,
     load_daily_index_side_effect=None,
 ):
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = []
-    db.claim_discovery_ciks.return_value = []
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = []
+    bookkeeping.claim_discovery_ciks.return_value = []
     context = _context(tmp_path)
 
     with (
@@ -72,7 +72,8 @@ def _run_daily_incremental(
     ):
         raw_writes, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
-            db=db,
+            db=MagicMock(),
+            bookkeeping=bookkeeping,
             command_name="daily-incremental",
             arguments=arguments,
             scope={
@@ -143,9 +144,9 @@ def test_gated_capture_scoped_to_business_date_end_not_every_recurring_day(tmp_p
 
 def test_gated_capture_failure_is_isolated_and_does_not_fail_daily_incremental(tmp_path) -> None:
     now = datetime(2026, 8, 27, tzinfo=UTC)
-    db = MagicMock()
-    db.get_tracked_ciks.return_value = []
-    db.claim_discovery_ciks.return_value = []
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = []
+    bookkeeping.claim_discovery_ciks.return_value = []
     context = _context(tmp_path)
 
     with (
@@ -171,7 +172,8 @@ def test_gated_capture_failure_is_isolated_and_does_not_fail_daily_incremental(t
         # earned trust yet).
         raw_writes, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
-            db=db,
+            db=MagicMock(),
+            bookkeeping=bookkeeping,
             command_name="daily-incremental",
             arguments={
                 "recurring_index_lookback_days": 0,

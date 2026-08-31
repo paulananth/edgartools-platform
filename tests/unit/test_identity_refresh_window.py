@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture as _bookkeeping_fixture
 
 
 def _context(tmp_path: Path) -> WarehouseCommandContext:
@@ -48,18 +49,38 @@ def test_company_identity_universe_is_active_operating_or_current_sec_ticker(
 ) -> None:
     """The reusable scheduled-identity boundary includes active operating
     entities and active tracked CIKs in the canonical company_tickers snapshot,
-    while excluding other and non-active entities."""
+    while excluding other and non-active entities.
+
+    DuckDB Retirement Cutover Ticket 13: tracking status now comes from the
+    bookkeeping store, not DuckDB silver -- seeded here via a real
+    BookkeepingStore instead of SilverDatabase.upsert_company_sync_state.
+    """
+    from edgar_warehouse.bookkeeping.database import Base as BookkeepingBase
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
     from edgar_warehouse.silver_store import SilverDatabase
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session as SqlaSession
+    from sqlalchemy.pool import StaticPool
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    BookkeepingBase.metadata.create_all(engine)
+    bookkeeping_session = SqlaSession(engine)
+    bookkeeping = BookkeepingStore(bookkeeping_session)
+    for cik, status in (
+        (100, "active"),
+        (200, "active"),
+        (300, "active"),
+        (400, "paused"),
+    ):
+        bookkeeping.upsert_company_sync_state({"cik": cik, "tracking_status": status})
+    bookkeeping_session.commit()
 
     db = SilverDatabase(str(tmp_path / "silver.duckdb"))
     try:
-        for cik, status in (
-            (100, "active"),
-            (200, "active"),
-            (300, "active"),
-            (400, "paused"),
-        ):
-            db.upsert_company_sync_state({"cik": cik, "tracking_status": status})
         db.merge_company(
             [
                 {"cik": 100, "entity_name": "Operating Co", "entity_type": "operating"},
@@ -78,9 +99,10 @@ def test_company_identity_universe_is_active_operating_or_current_sec_ticker(
             source_name="company_tickers",
         )
 
-        assert db.get_company_identity_ciks("active") == [100, 200]
+        assert db.get_company_identity_ciks("active", bookkeeping=bookkeeping) == [100, 200]
     finally:
         db.close()
+        bookkeeping_session.close()
 
 
 def test_reference_sync_returns_canonical_ticker_snapshot_identity(tmp_path) -> None:
@@ -103,6 +125,20 @@ def test_reference_sync_returns_canonical_ticker_snapshot_identity(tmp_path) -> 
             return exchange_payload
         raise AssertionError(f"unexpected reference URL: {url}")
 
+    from edgar_warehouse.bookkeeping.database import Base as BookkeepingBase
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session as SqlaSession
+    from sqlalchemy.pool import StaticPool
+
+    bookkeeping_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    BookkeepingBase.metadata.create_all(bookkeeping_engine)
+    bookkeeping = BookkeepingStore(SqlaSession(bookkeeping_engine))
+
     db = SilverDatabase(str(tmp_path / "silver.duckdb"))
     try:
         with patch.object(
@@ -113,6 +149,7 @@ def test_reference_sync_returns_canonical_ticker_snapshot_identity(tmp_path) -> 
             result = warehouse_orchestrator._sync_reference_data(
                 context=_context(tmp_path),
                 db=db,
+                bookkeeping=bookkeeping,
                 sync_run_id="reference-run",
                 fetch_date=date(2026, 7, 30),
             )
@@ -137,8 +174,9 @@ def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks
     daily-index republish is still caught, per ticket 45's second accepted gap), and
     the impacted CIKs across all of them are unioned/deduped."""
     db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200, 300, 400, 500]
     db.get_company_identity_ciks.return_value = [100, 300, 400, 500]
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100, 200, 300, 400, 500]
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
 
@@ -153,7 +191,7 @@ def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks
     }
     calls: list[tuple[date, bool]] = []
 
-    def fake_load(*, context, db, target_date, sync_run_id, now, force):
+    def fake_load(*, context, bookkeeping, target_date, sync_run_id, now, force):
         calls.append((target_date, force))
         return _fake_index_result(per_date_ciks[target_date])
 
@@ -177,6 +215,7 @@ def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks
         _, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             command_name="compute-identity-refresh-window",
             arguments={"lookback_days": 7, "batch_size": 500, "run_id": "identity-refresh-1"},
             scope={"lookback_days": 7, "batch_size": 500},
@@ -224,8 +263,9 @@ def test_compute_identity_refresh_window_fails_closed_when_eligible_universe_emp
     """Scheduled identity must never fall back to all impacted filers when the
     company-eligibility inputs are empty."""
     db = MagicMock()
-    db.get_tracked_ciks.return_value = []
     db.get_company_identity_ciks.return_value = []
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = []
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
 
@@ -244,6 +284,7 @@ def test_compute_identity_refresh_window_fails_closed_when_eligible_universe_emp
         _, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             command_name="compute-identity-refresh-window",
             arguments={"lookback_days": 2, "batch_size": 500, "run_id": "identity-refresh-2"},
             scope={"lookback_days": 2, "batch_size": 500},
@@ -263,8 +304,9 @@ def test_compute_identity_refresh_window_backstop_uses_complete_company_universe
     """Backstop mode skips daily-index discovery and writes the complete
     company-eligible active universe through the explicit-CIK batch path."""
     db = MagicMock()
-    db.get_tracked_ciks.return_value = [100, 200, 300]
     db.get_company_identity_ciks.return_value = [100, 300]
+    bookkeeping = MagicMock()
+    bookkeeping.get_tracked_ciks.return_value = [100, 200, 300]
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
 
@@ -288,6 +330,7 @@ def test_compute_identity_refresh_window_backstop_uses_complete_company_universe
         _, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             command_name="compute-identity-refresh-window",
             arguments={
                 "mode": "backstop",
@@ -417,73 +460,66 @@ def test_pipeline_run_lease_reclaims_a_stale_hold(tmp_path) -> None:
 def test_acquire_identity_refresh_lease_command_records_deferred_on_conflict(tmp_path) -> None:
     """The orchestrator command surfaces a deferred disposition (not an exception)
     when the lease is already held -- ticket 45's 'deferred, not an invisible skip'."""
-    from edgar_warehouse.silver_store import SilverDatabase
-
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="already-running", mode="daily", acquired_at=now
-        )
+    bookkeeping = _bookkeeping_fixture()
+    bookkeeping.acquire_pipeline_run_lease(
+        lease_name="daily_identity_refresh", run_id="already-running", mode="daily", acquired_at=now
+    )
 
-        _, metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-identity-refresh-lease",
-            arguments={"mode": "backstop", "run_id": "backstop-run"},
-            scope={"mode": "backstop"},
-            now=now,
-            sync_run_id="backstop-run",
-        )
-        assert metrics["lease_acquired"] is False
+    _, metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "backstop", "run_id": "backstop-run"},
+        scope={"mode": "backstop"},
+        now=now,
+        sync_run_id="backstop-run",
+    )
+    assert metrics["lease_acquired"] is False
 
-        # The S3 side-channel -- not the metric -- is the source of truth the
-        # state machine actually reads (ecs:runTask.sync can't surface the
-        # metric to a Choice state).
-        from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
+    # The S3 side-channel -- not the metric -- is the source of truth the
+    # state machine actually reads (ecs:runTask.sync can't surface the
+    # metric to a Choice state).
+    from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
 
-        lease_result_rel = default_path_resolver().identity_refresh_lease_path("backstop-run")
-        written_path = Path(context.bronze_root.join(lease_result_rel))
-        assert written_path.exists()
-        payload = json.loads(written_path.read_text())
-        assert payload["lease_acquired"] is False
-        assert payload["backstop_overdue"] is True
-        assert payload["held_by_run_id"] == "already-running"
-    finally:
-        db.close()
+    lease_result_rel = default_path_resolver().identity_refresh_lease_path("backstop-run")
+    written_path = Path(context.bronze_root.join(lease_result_rel))
+    assert written_path.exists()
+    payload = json.loads(written_path.read_text())
+    assert payload["lease_acquired"] is False
+    assert payload["backstop_overdue"] is True
+    assert payload["held_by_run_id"] == "already-running"
 
 
 def test_acquire_identity_refresh_lease_command_writes_success_to_s3(tmp_path) -> None:
-    from edgar_warehouse.silver_store import SilverDatabase
     from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
 
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        _, metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-identity-refresh-lease",
-            arguments={"mode": "daily", "run_id": "daily-run"},
-            scope={"mode": "daily"},
-            now=now,
-            sync_run_id="daily-run",
-        )
-        assert metrics["lease_acquired"] is True
+    bookkeeping = _bookkeeping_fixture()
+    _, metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "daily", "run_id": "daily-run"},
+        scope={"mode": "daily"},
+        now=now,
+        sync_run_id="daily-run",
+    )
+    assert metrics["lease_acquired"] is True
 
-        lease_result_rel = default_path_resolver().identity_refresh_lease_path("daily-run")
-        written_path = Path(context.bronze_root.join(lease_result_rel))
-        payload = json.loads(written_path.read_text())
-        assert payload == {
-            "lease_acquired": True,
-            "mode": "daily",
-            "backstop_overdue": False,
-            "held_by_run_id": "daily-run",
-        }
-    finally:
-        db.close()
+    lease_result_rel = default_path_resolver().identity_refresh_lease_path("daily-run")
+    written_path = Path(context.bronze_root.join(lease_result_rel))
+    payload = json.loads(written_path.read_text())
+    assert payload == {
+        "lease_acquired": True,
+        "mode": "daily",
+        "backstop_overdue": False,
+        "held_by_run_id": "daily-run",
+    }
 
 
 def test_acquire_identity_refresh_lease_end_to_end_never_touches_main_silver_database(tmp_path) -> None:
@@ -501,24 +537,31 @@ def test_acquire_identity_refresh_lease_end_to_end_never_touches_main_silver_dat
     assert "acquire-identity-refresh-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
     assert "release-identity-refresh-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
 
-    payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
-        context=context,
-        command_name="acquire-identity-refresh-lease",
-        arguments={"mode": "daily", "run_id": "e2e-run"},
-    )
-    assert payload["status"] == "ok"
-    assert not main_db_path.exists()
-    assert lease_db_path.exists()
+    # DuckDB Retirement Cutover Ticket 14: _execute_warehouse_bronze_capture
+    # constructs its own bookkeeping store via _bookkeeping_store() (needs
+    # BOOKKEEPING_DATABASE_URL, not set in this test env) -- pinned to one
+    # in-memory fixture instance across both calls below so the acquired
+    # lease from the first call is visible to the second (release) call.
+    bookkeeping = _bookkeeping_fixture()
+    with patch.object(warehouse_orchestrator, "_bookkeeping_store", return_value=bookkeeping):
+        payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
+            context=context,
+            command_name="acquire-identity-refresh-lease",
+            arguments={"mode": "daily", "run_id": "e2e-run"},
+        )
+        assert payload["status"] == "ok"
+        assert not main_db_path.exists()
+        assert lease_db_path.exists()
 
-    lease_result_rel = default_path_resolver().identity_refresh_lease_path("e2e-run")
-    result = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
-    assert result["lease_acquired"] is True
+        lease_result_rel = default_path_resolver().identity_refresh_lease_path("e2e-run")
+        result = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
+        assert result["lease_acquired"] is True
 
-    warehouse_orchestrator._execute_warehouse_bronze_capture(
-        context=context,
-        command_name="release-identity-refresh-lease",
-        arguments={"run_id": "e2e-run"},
-    )
+        warehouse_orchestrator._execute_warehouse_bronze_capture(
+            context=context,
+            command_name="release-identity-refresh-lease",
+            arguments={"run_id": "e2e-run"},
+        )
     assert not main_db_path.exists()
 
 
@@ -567,45 +610,43 @@ def test_acquire_identity_refresh_lease_resolves_overdue_backstop_over_requested
     persisted flag overrides the caller's own --mode, and lease_result.json (the state
     machine's source of truth) carries the resolved value, not the raw request."""
     from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
-    from edgar_warehouse.silver_store import SilverDatabase
 
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="prior-holder", mode="daily", acquired_at=now
-        )
-        # A backstop attempt is deferred and marks the flag overdue.
-        warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-identity-refresh-lease",
-            arguments={"mode": "backstop", "run_id": "sun-backstop"},
-            scope={"mode": "backstop"},
-            now=now,
-            sync_run_id="sun-backstop",
-        )
-        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="prior-holder", released_at=now)
+    bookkeeping = _bookkeeping_fixture()
+    bookkeeping.acquire_pipeline_run_lease(
+        lease_name="daily_identity_refresh", run_id="prior-holder", mode="daily", acquired_at=now
+    )
+    # A backstop attempt is deferred and marks the flag overdue.
+    warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "backstop", "run_id": "sun-backstop"},
+        scope={"mode": "backstop"},
+        now=now,
+        sync_run_id="sun-backstop",
+    )
+    bookkeeping.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="prior-holder", released_at=now)
 
-        # Monday's trigger requests 'daily' as usual -- but the overdue flag must win.
-        _, metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-identity-refresh-lease",
-            arguments={"mode": "daily", "run_id": "mon-run"},
-            scope={"mode": "daily"},
-            now=now,
-            sync_run_id="mon-run",
-        )
-        assert metrics["lease_acquired"] is True
-        assert metrics["effective_refresh_mode"] == "backstop"
+    # Monday's trigger requests 'daily' as usual -- but the overdue flag must win.
+    _, metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "daily", "run_id": "mon-run"},
+        scope={"mode": "daily"},
+        now=now,
+        sync_run_id="mon-run",
+    )
+    assert metrics["lease_acquired"] is True
+    assert metrics["effective_refresh_mode"] == "backstop"
 
-        lease_result_rel = default_path_resolver().identity_refresh_lease_path("mon-run")
-        payload = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
-        assert payload["mode"] == "backstop"
-    finally:
-        db.close()
+    lease_result_rel = default_path_resolver().identity_refresh_lease_path("mon-run")
+    payload = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
+    assert payload["mode"] == "backstop"
 
 
 def test_acquire_identity_refresh_lease_resolves_overdue_backstop_across_two_consecutive_deferrals(
@@ -619,66 +660,65 @@ def test_acquire_identity_refresh_lease_resolves_overdue_backstop_across_two_con
     mode clears the flag (code-review finding: the original coverage only
     exercised a single defer-then-succeed cycle)."""
     from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
-    from edgar_warehouse.silver_store import SilverDatabase
 
     context = _context(tmp_path)
     now = datetime(2026, 7, 30, 12, tzinfo=UTC)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="sat-daily", mode="daily", acquired_at=now
-        )
-        # Sunday's backstop is deferred -- marks overdue.
-        warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-identity-refresh-lease",
-            arguments={"mode": "backstop", "run_id": "sun-backstop"},
-            scope={"mode": "backstop"},
-            now=now,
-            sync_run_id="sun-backstop",
-        )
-        # Saturday's holder is still running -- Monday's trigger (requesting
-        # 'daily') resolves to 'backstop' per the overdue flag, but is ALSO
-        # deferred, since the lease is still held.
-        _, mon_metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-identity-refresh-lease",
-            arguments={"mode": "daily", "run_id": "mon-run"},
-            scope={"mode": "daily"},
-            now=now,
-            sync_run_id="mon-run",
-        )
-        assert mon_metrics["lease_acquired"] is False
-        assert mon_metrics["effective_refresh_mode"] == "backstop"
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
+    bookkeeping = _bookkeeping_fixture()
+    bookkeeping.acquire_pipeline_run_lease(
+        lease_name="daily_identity_refresh", run_id="sat-daily", mode="daily", acquired_at=now
+    )
+    # Sunday's backstop is deferred -- marks overdue.
+    warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "backstop", "run_id": "sun-backstop"},
+        scope={"mode": "backstop"},
+        now=now,
+        sync_run_id="sun-backstop",
+    )
+    # Saturday's holder is still running -- Monday's trigger (requesting
+    # 'daily') resolves to 'backstop' per the overdue flag, but is ALSO
+    # deferred, since the lease is still held.
+    _, mon_metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "daily", "run_id": "mon-run"},
+        scope={"mode": "daily"},
+        now=now,
+        sync_run_id="mon-run",
+    )
+    assert mon_metrics["lease_acquired"] is False
+    assert mon_metrics["effective_refresh_mode"] == "backstop"
+    assert bookkeeping.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
 
-        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="sat-daily", released_at=now)
+    bookkeeping.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="sat-daily", released_at=now)
 
-        # Tuesday's trigger (requesting 'daily' again) must STILL resolve to
-        # 'backstop' -- one prior deferral does not exhaust the carry-forward.
-        _, tue_metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-identity-refresh-lease",
-            arguments={"mode": "daily", "run_id": "tue-run"},
-            scope={"mode": "daily"},
-            now=now,
-            sync_run_id="tue-run",
-        )
-        assert tue_metrics["lease_acquired"] is True
-        assert tue_metrics["effective_refresh_mode"] == "backstop"
+    # Tuesday's trigger (requesting 'daily' again) must STILL resolve to
+    # 'backstop' -- one prior deferral does not exhaust the carry-forward.
+    _, tue_metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-identity-refresh-lease",
+        arguments={"mode": "daily", "run_id": "tue-run"},
+        scope={"mode": "daily"},
+        now=now,
+        sync_run_id="tue-run",
+    )
+    assert tue_metrics["lease_acquired"] is True
+    assert tue_metrics["effective_refresh_mode"] == "backstop"
 
-        lease_result_rel = default_path_resolver().identity_refresh_lease_path("tue-run")
-        payload = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
-        assert payload["mode"] == "backstop"
+    lease_result_rel = default_path_resolver().identity_refresh_lease_path("tue-run")
+    payload = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
+    assert payload["mode"] == "backstop"
 
-        # Only Tuesday's successful 'backstop'-mode release finally clears it.
-        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="tue-run", released_at=now)
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is False
-    finally:
-        db.close()
+    # Only Tuesday's successful 'backstop'-mode release finally clears it.
+    bookkeeping.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="tue-run", released_at=now)
+    assert bookkeeping.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is False
 
 
 def test_acquire_identity_refresh_lease_command_rejects_unknown_mode(tmp_path) -> None:
@@ -691,6 +731,7 @@ def test_acquire_identity_refresh_lease_command_rejects_unknown_mode(tmp_path) -
         warehouse_orchestrator._capture_bronze_raw(
             context=context,
             db=db,
+            bookkeeping=MagicMock(),
             command_name="acquire-identity-refresh-lease",
             arguments={"mode": "weekly", "run_id": "r"},
             scope={"mode": "weekly"},

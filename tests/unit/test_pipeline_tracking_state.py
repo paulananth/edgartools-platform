@@ -10,6 +10,7 @@ import pytest
 from edgar_warehouse.application.command_context_factory import build_warehouse_context
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application import warehouse_orchestrator
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture as _bookkeeping_fixture
 
 
 class TrackingStateDb:
@@ -37,11 +38,11 @@ class PipelineTrackingStateTests(unittest.TestCase):
             self.assertIsNotNone(context.serving_export_root)
 
     def test_bootstrap_target_resolution_reads_silver_tracking_state(self) -> None:
-        db = TrackingStateDb([100, 200, 300])
+        bookkeeping = TrackingStateDb([100, 200, 300])
 
         with patch.object(warehouse_orchestrator, "_get_mdm_tracked_ciks") as mdm:
             result = warehouse_orchestrator._resolve_bootstrap_target_ciks(
-                db=db,
+                bookkeeping=bookkeeping,
                 raw_ciks=None,
                 command_name="bootstrap-next",
                 tracking_status_filter="bootstrap_pending",
@@ -51,32 +52,32 @@ class PipelineTrackingStateTests(unittest.TestCase):
 
         mdm.assert_not_called()
         self.assertEqual(result, [200, 300])
-        self.assertEqual(db.tracking_status_filter, "bootstrap_pending")
+        self.assertEqual(bookkeeping.tracking_status_filter, "bootstrap_pending")
 
     def test_bootstrap_target_resolution_mentions_silver_when_empty(self) -> None:
-        db = TrackingStateDb([])
+        bookkeeping = TrackingStateDb([])
 
         with pytest.raises(WarehouseRuntimeError, match="silver tracking state"):
             warehouse_orchestrator._resolve_bootstrap_target_ciks(
-                db=db,
+                bookkeeping=bookkeeping,
                 raw_ciks=None,
                 command_name="bootstrap-next",
                 tracking_status_filter="bootstrap_pending",
             )
 
     def test_daily_incremental_filter_reads_silver_active_state(self) -> None:
-        db = TrackingStateDb([100, 300])
+        bookkeeping = TrackingStateDb([100, 300])
 
         with patch.object(warehouse_orchestrator, "_get_mdm_tracked_ciks") as mdm:
-            result = warehouse_orchestrator._filter_ciks_to_universe([100, 200, 300], db=db)
+            result = warehouse_orchestrator._filter_ciks_to_universe([100, 200, 300], bookkeeping=bookkeeping)
 
         mdm.assert_not_called()
         self.assertEqual(result, [100, 300])
 
     def test_daily_incremental_filter_cold_start_passes_all_impacted_ciks(self) -> None:
-        db = TrackingStateDb([])
+        bookkeeping = TrackingStateDb([])
 
-        result = warehouse_orchestrator._filter_ciks_to_universe([100, 200, 300], db=db)
+        result = warehouse_orchestrator._filter_ciks_to_universe([100, 200, 300], bookkeeping=bookkeeping)
 
         self.assertEqual(result, [100, 200, 300])
 
@@ -117,20 +118,21 @@ class PipelineTrackingStateTests(unittest.TestCase):
     def test_demote_deregistered_ciks_always_overwrites_active_status(self) -> None:
         """Unlike _seed_silver_tracking_status, demotion must overwrite an
         existing 'active' row -- a company filing Form 15 today was, by
-        definition, already tracked."""
+        definition, already tracked.
+
+        DuckDB Retirement Cutover Ticket 14: tracking state now lives in the
+        bookkeeping store, not DuckDB silver -- these two tests were
+        rewritten onto a real in-memory BookkeepingStore rather than
+        SilverDatabase.
+        """
         from datetime import UTC, datetime
-        from edgar_warehouse.silver_store import SilverDatabase
 
-        with tempfile.TemporaryDirectory() as tmp:
-            db = SilverDatabase(os.path.join(tmp, "silver.duckdb"))
-            try:
-                db.upsert_company_sync_state({"cik": 500, "tracking_status": "active"})
+        bookkeeping = _bookkeeping_fixture()
+        bookkeeping.upsert_company_sync_state({"cik": 500, "tracking_status": "active"})
 
-                warehouse_orchestrator._demote_deregistered_ciks(db, [500], datetime.now(UTC))
+        warehouse_orchestrator._demote_deregistered_ciks(bookkeeping, [500], datetime.now(UTC))
 
-                self.assertEqual(db.get_company_sync_state(500)["tracking_status"], "deregistered")
-            finally:
-                db.close()
+        self.assertEqual(bookkeeping.get_company_sync_state(500)["tracking_status"], "deregistered")
 
     def test_daily_incremental_demotes_form15_ciks_and_excludes_from_universe(self) -> None:
         """End-to-end: a Form 15 filing seen in a daily-index batch demotes
@@ -138,22 +140,17 @@ class PipelineTrackingStateTests(unittest.TestCase):
         _capture_bronze_raw flow) then excludes it from this run's selected
         CIKs -- no wasted bootstrap call on a company that just deregistered."""
         from datetime import UTC, datetime
-        from edgar_warehouse.silver_store import SilverDatabase
 
-        with tempfile.TemporaryDirectory() as tmp:
-            db = SilverDatabase(os.path.join(tmp, "silver.duckdb"))
-            try:
-                db.upsert_company_sync_state({"cik": 700, "tracking_status": "active"})
-                db.upsert_company_sync_state({"cik": 800, "tracking_status": "active"})
-                impacted_ciks = [700, 800]
-                form_15_ciks = warehouse_orchestrator._ciks_filing_form15(
-                    [{"cik": 700, "form": "15-12G"}, {"cik": 800, "form": "10-K"}]
-                )
+        bookkeeping = _bookkeeping_fixture()
+        bookkeeping.upsert_company_sync_state({"cik": 700, "tracking_status": "active"})
+        bookkeeping.upsert_company_sync_state({"cik": 800, "tracking_status": "active"})
+        impacted_ciks = [700, 800]
+        form_15_ciks = warehouse_orchestrator._ciks_filing_form15(
+            [{"cik": 700, "form": "15-12G"}, {"cik": 800, "form": "10-K"}]
+        )
 
-                warehouse_orchestrator._seed_silver_tracking_status(db, impacted_ciks, tracking_status="active")
-                warehouse_orchestrator._demote_deregistered_ciks(db, form_15_ciks, datetime.now(UTC))
-                selected = warehouse_orchestrator._filter_ciks_to_universe(impacted_ciks, db=db)
+        warehouse_orchestrator._seed_silver_tracking_status(bookkeeping, impacted_ciks, tracking_status="active")
+        warehouse_orchestrator._demote_deregistered_ciks(bookkeeping, form_15_ciks, datetime.now(UTC))
+        selected = warehouse_orchestrator._filter_ciks_to_universe(impacted_ciks, bookkeeping=bookkeeping)
 
-                self.assertEqual(selected, [800])
-            finally:
-                db.close()
+        self.assertEqual(selected, [800])

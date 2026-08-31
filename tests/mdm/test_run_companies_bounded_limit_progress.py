@@ -26,7 +26,7 @@ from edgar_warehouse.mdm.database import MdmCompany
 from edgar_warehouse.mdm.pipeline import MDMPipeline
 from edgar_warehouse.silver_store import SilverDatabase
 
-from tests.mdm.test_run_companies_concurrency import _seeded_sqlite_session
+from tests.mdm.test_run_companies_concurrency import _seeded_sqlite_session, _StubBookkeeping
 
 
 def _real_silver_with_companies(n: int) -> SilverDatabase:
@@ -54,9 +54,9 @@ class TestBoundedLimitMakesCumulativeProgress:
         silver = _real_silver_with_companies(5)
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        processed_1 = pipeline.run_companies(limit=2)
-        processed_2 = pipeline.run_companies(limit=2)
-        processed_3 = pipeline.run_companies(limit=2)
+        processed_1 = pipeline.run_companies(limit=2, bookkeeping=_StubBookkeeping())
+        processed_2 = pipeline.run_companies(limit=2, bookkeeping=_StubBookkeeping())
+        processed_3 = pipeline.run_companies(limit=2, bookkeeping=_StubBookkeeping())
 
         assert processed_1 == 2
         assert processed_2 == 2
@@ -76,7 +76,7 @@ class TestBoundedLimitMakesCumulativeProgress:
         silver = _real_silver_with_companies(10)
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        processed = pipeline.run_companies(limit=3)
+        processed = pipeline.run_companies(limit=3, bookkeeping=_StubBookkeeping())
 
         assert processed == 3
         resolved_ciks = {
@@ -93,7 +93,7 @@ class TestBoundedLimitMakesCumulativeProgress:
         silver = _real_silver_with_companies(3)
         pipeline = MDMPipeline(session=session, silver=silver)
 
-        pipeline.run_companies(limit=10)  # resolves all 3 in one call
-        processed_after = pipeline.run_companies(limit=10)
+        pipeline.run_companies(limit=10, bookkeeping=_StubBookkeeping())  # resolves all 3 in one call
+        processed_after = pipeline.run_companies(limit=10, bookkeeping=_StubBookkeeping())
 
         assert processed_after == 0

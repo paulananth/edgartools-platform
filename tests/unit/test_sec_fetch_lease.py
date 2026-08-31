@@ -10,10 +10,12 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
+from tests.support.bookkeeping_fixtures import bookkeeping_fixture as _bookkeeping_fixture
 
 _LEASE_NAME = warehouse_orchestrator.SEC_FETCH_LEASE_NAME
 
@@ -126,88 +128,78 @@ def test_sec_fetch_lease_crashed_holder_does_not_wedge_it_permanently(tmp_path) 
 
 def test_acquire_sec_fetch_lease_command_records_deferred_on_conflict(tmp_path) -> None:
     from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
-    from edgar_warehouse.silver_store import SilverDatabase
 
     context = _context(tmp_path)
     now = datetime(2026, 8, 4, 12, tzinfo=UTC)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        db.acquire_pipeline_run_lease(
-            lease_name=_LEASE_NAME, run_id="already-running", mode="fetch", acquired_at=now
-        )
+    bookkeeping = _bookkeeping_fixture()
+    bookkeeping.acquire_pipeline_run_lease(
+        lease_name=_LEASE_NAME, run_id="already-running", mode="fetch", acquired_at=now
+    )
 
-        _, metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-sec-fetch-lease",
-            arguments={"run_id": "new-run"},
-            scope={},
-            now=now,
-            sync_run_id="new-run",
-        )
-        assert metrics["lease_acquired"] is False
+    _, metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-sec-fetch-lease",
+        arguments={"run_id": "new-run"},
+        scope={},
+        now=now,
+        sync_run_id="new-run",
+    )
+    assert metrics["lease_acquired"] is False
 
-        lease_result_rel = default_path_resolver().sec_fetch_lease_path("new-run")
-        written_path = Path(context.bronze_root.join(lease_result_rel))
-        assert written_path.exists()
-        payload = json.loads(written_path.read_text())
-        assert payload == {"lease_acquired": False, "held_by_run_id": "already-running"}
-    finally:
-        db.close()
+    lease_result_rel = default_path_resolver().sec_fetch_lease_path("new-run")
+    written_path = Path(context.bronze_root.join(lease_result_rel))
+    assert written_path.exists()
+    payload = json.loads(written_path.read_text())
+    assert payload == {"lease_acquired": False, "held_by_run_id": "already-running"}
 
 
 def test_acquire_sec_fetch_lease_command_writes_success_to_s3(tmp_path) -> None:
     from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
-    from edgar_warehouse.silver_store import SilverDatabase
 
     context = _context(tmp_path)
     now = datetime(2026, 8, 4, 12, tzinfo=UTC)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        _, metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-sec-fetch-lease",
-            arguments={"run_id": "bootstrap-run"},
-            scope={},
-            now=now,
-            sync_run_id="bootstrap-run",
-        )
-        assert metrics["lease_acquired"] is True
+    bookkeeping = _bookkeeping_fixture()
+    _, metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-sec-fetch-lease",
+        arguments={"run_id": "bootstrap-run"},
+        scope={},
+        now=now,
+        sync_run_id="bootstrap-run",
+    )
+    assert metrics["lease_acquired"] is True
 
-        lease_result_rel = default_path_resolver().sec_fetch_lease_path("bootstrap-run")
-        written_path = Path(context.bronze_root.join(lease_result_rel))
-        payload = json.loads(written_path.read_text())
-        assert payload == {"lease_acquired": True, "held_by_run_id": "bootstrap-run"}
-    finally:
-        db.close()
+    lease_result_rel = default_path_resolver().sec_fetch_lease_path("bootstrap-run")
+    written_path = Path(context.bronze_root.join(lease_result_rel))
+    payload = json.loads(written_path.read_text())
+    assert payload == {"lease_acquired": True, "held_by_run_id": "bootstrap-run"}
 
 
 def test_release_sec_fetch_lease_command_frees_it(tmp_path) -> None:
-    from edgar_warehouse.silver_store import SilverDatabase
-
     context = _context(tmp_path)
     now = datetime(2026, 8, 4, 12, tzinfo=UTC)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        db.acquire_pipeline_run_lease(
-            lease_name=_LEASE_NAME, run_id="bootstrap-run", mode="fetch", acquired_at=now
-        )
+    bookkeeping = _bookkeeping_fixture()
+    bookkeeping.acquire_pipeline_run_lease(
+        lease_name=_LEASE_NAME, run_id="bootstrap-run", mode="fetch", acquired_at=now
+    )
 
-        warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="release-sec-fetch-lease",
-            arguments={"run_id": "bootstrap-run"},
-            scope={},
-            now=now,
-            sync_run_id="bootstrap-run",
-        )
+    warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="release-sec-fetch-lease",
+        arguments={"run_id": "bootstrap-run"},
+        scope={},
+        now=now,
+        sync_run_id="bootstrap-run",
+    )
 
-        held = db.get_pipeline_run_lease(_LEASE_NAME)
-        assert held["status"] == "idle"
-    finally:
-        db.close()
+    held = bookkeeping.get_pipeline_run_lease(_LEASE_NAME)
+    assert held["status"] == "idle"
 
 
 def test_acquire_sec_fetch_lease_command_uses_16h_staleness_not_the_20h_default(tmp_path) -> None:
@@ -216,45 +208,42 @@ def test_acquire_sec_fetch_lease_command_uses_16h_staleness_not_the_20h_default(
     16h ceiling, deliberately shorter than IDENTITY_REFRESH_LEASE_NAME's
     20h default. The orchestrator command must pass stale_after_seconds
     explicitly, not fall through to acquire_pipeline_run_lease's default."""
-    from edgar_warehouse.silver_store import SilverDatabase
-
     context = _context(tmp_path)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        held_at = datetime(2026, 8, 4, 0, 0, tzinfo=UTC)
-        db.acquire_pipeline_run_lease(
-            lease_name=_LEASE_NAME, run_id="stuck-bootstrap-run", mode="fetch", acquired_at=held_at
-        )
+    bookkeeping = _bookkeeping_fixture()
+    held_at = datetime(2026, 8, 4, 0, 0, tzinfo=UTC)
+    bookkeeping.acquire_pipeline_run_lease(
+        lease_name=_LEASE_NAME, run_id="stuck-bootstrap-run", mode="fetch", acquired_at=held_at
+    )
 
-        # Still within 16h -- must stay deferred (would already be
-        # reclaimable here under the 20h default, so this proves 16h is
-        # actually the value in effect, not just documentation).
-        still_within_16h = held_at + timedelta(hours=15, minutes=59)
-        _, metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-sec-fetch-lease",
-            arguments={"run_id": "waiting-run"},
-            scope={},
-            now=still_within_16h,
-            sync_run_id="waiting-run",
-        )
-        assert metrics["lease_acquired"] is False
+    # Still within 16h -- must stay deferred (would already be
+    # reclaimable here under the 20h default, so this proves 16h is
+    # actually the value in effect, not just documentation).
+    still_within_16h = held_at + timedelta(hours=15, minutes=59)
+    _, metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-sec-fetch-lease",
+        arguments={"run_id": "waiting-run"},
+        scope={},
+        now=still_within_16h,
+        sync_run_id="waiting-run",
+    )
+    assert metrics["lease_acquired"] is False
 
-        # Just past 16h -- reclaimable.
-        past_16h = held_at + timedelta(hours=16, minutes=1)
-        _, metrics = warehouse_orchestrator._capture_bronze_raw(
-            context=context,
-            db=db,
-            command_name="acquire-sec-fetch-lease",
-            arguments={"run_id": "waiting-run"},
-            scope={},
-            now=past_16h,
-            sync_run_id="waiting-run",
-        )
-        assert metrics["lease_acquired"] is True
-    finally:
-        db.close()
+    # Just past 16h -- reclaimable.
+    past_16h = held_at + timedelta(hours=16, minutes=1)
+    _, metrics = warehouse_orchestrator._capture_bronze_raw(
+        context=context,
+        db=MagicMock(),
+        bookkeeping=bookkeeping,
+        command_name="acquire-sec-fetch-lease",
+        arguments={"run_id": "waiting-run"},
+        scope={},
+        now=past_16h,
+        sync_run_id="waiting-run",
+    )
+    assert metrics["lease_acquired"] is True
 
 
 def test_lease_command_context_repoints_storage_and_silver_root_to_leases_subpath(tmp_path) -> None:
@@ -289,11 +278,16 @@ def test_acquire_sec_fetch_lease_end_to_end_never_touches_main_silver_database(t
     lease_db_path = Path(f"{context.silver_root.root}/leases").joinpath("silver", "sec", "silver.duckdb")
 
     assert "acquire-sec-fetch-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
-    payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
-        context=context,
-        command_name="acquire-sec-fetch-lease",
-        arguments={"run_id": "e2e-run"},
-    )
+    # DuckDB Retirement Cutover Ticket 14: _execute_warehouse_bronze_capture
+    # constructs its own bookkeeping store via _bookkeeping_store() (needs
+    # BOOKKEEPING_DATABASE_URL, not set in this test env) -- pinned to one
+    # in-memory fixture instance here since there's only one call.
+    with patch.object(warehouse_orchestrator, "_bookkeeping_store", return_value=_bookkeeping_fixture()):
+        payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
+            context=context,
+            command_name="acquire-sec-fetch-lease",
+            arguments={"run_id": "e2e-run"},
+        )
 
     assert payload["status"] == "ok"
     assert not main_db_path.exists()
@@ -308,31 +302,26 @@ def test_release_sec_fetch_lease_end_to_end_uses_leases_subpath_too(tmp_path) ->
     context = _context(tmp_path)
     main_db_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
 
-    warehouse_orchestrator._execute_warehouse_bronze_capture(
-        context=context,
-        command_name="acquire-sec-fetch-lease",
-        arguments={"run_id": "e2e-run"},
-    )
-    payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
-        context=context,
-        command_name="release-sec-fetch-lease",
-        arguments={"run_id": "e2e-run"},
-    )
+    # Same fixture instance pinned across both calls so the acquired lease
+    # from the first call is visible to the second (release) call.
+    bookkeeping = _bookkeeping_fixture()
+    with patch.object(warehouse_orchestrator, "_bookkeeping_store", return_value=bookkeeping):
+        warehouse_orchestrator._execute_warehouse_bronze_capture(
+            context=context,
+            command_name="acquire-sec-fetch-lease",
+            arguments={"run_id": "e2e-run"},
+        )
+        payload = warehouse_orchestrator._execute_warehouse_bronze_capture(
+            context=context,
+            command_name="release-sec-fetch-lease",
+            arguments={"run_id": "e2e-run"},
+        )
 
     assert not main_db_path.exists()
     assert payload["status"] == "ok"
 
-    # The lease must actually be free afterward -- re-open the isolated
-    # lease store (not the main silver.duckdb) and check directly.
-    from edgar_warehouse.silver_store import SilverDatabase
-
-    lease_db_path = Path(f"{context.silver_root.root}/leases").joinpath("silver", "sec", "silver.duckdb")
-    db = SilverDatabase(str(lease_db_path))
-    try:
-        held = db.get_pipeline_run_lease(_LEASE_NAME)
-        assert held["status"] == "idle"
-    finally:
-        db.close()
+    held = bookkeeping.get_pipeline_run_lease(_LEASE_NAME)
+    assert held["status"] == "idle"
 
 
 def test_non_lease_command_does_not_get_repointed(tmp_path, monkeypatch) -> None:

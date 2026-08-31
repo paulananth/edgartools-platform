@@ -98,19 +98,30 @@ fallback.
 **Blocked by:** [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)
 (needs `get_all_company_sync_states`)
 
-**Status:** blocked
+**Status:** done (2026-08-30)
 
-- [ ] All 4 cross-store join sites plus `mdm/pipeline.py::run_companies`
+- [x] All 4 cross-store join sites plus `mdm/pipeline.py::run_companies`
       are rewritten to a two-step fetch-then-Python-join, each with a test
       proving it produces the same result as the original single-SQL join
       (or, for `run_companies`, the same result as the original DuckDB
       fetch) against a fixture with real overlapping and non-overlapping
-      CIKs
-- [ ] The silent-`None`-degrade pattern in `mdm/pipeline.py` is removed for
+      CIKs. `get_company_identity_ciks` additionally scopes its DuckDB
+      eligibility query to `WHERE cik IN (...)` over the tracked-CIK set
+      (not an unscoped full-table UNION), per this ticket's step 3.
+- [x] The silent-`None`-degrade pattern in `mdm/pipeline.py` is removed for
       `sec_company_sync_state` specifically (confirm no other table's
-      degrade path in this file is accidentally touched)
-- [ ] Every caller of `get_company_identity_ciks` and `compute_coverage` is
+      degrade path in this file is accidentally touched) — verified via
+      `TestRunCompaniesRequiresBookkeeping::test_a_bookkeeping_failure_propagates_not_swallowed`
+- [x] Every caller of `get_company_identity_ciks` and `compute_coverage` is
       updated to pass a `BookkeepingStore` instance, using the
       `_bookkeeping_store()` convention [Ticket 03](
-      03-rewrite-cross-store-joins-and-repoint-callers.md) settled
-- [ ] Full test suite green
+      03-rewrite-cross-store-joins-and-repoint-callers.md) settled.
+      `_seed_mdm_from_silver` also gained the `bookkeeping` param this
+      ticket's own text called for, threaded from both its callers
+      (`_handle_seed_universe`, `_handle_seed_from_silver`) rather than the
+      fallback helper constructing its own store.
+- [x] Full test suite green — 2846 passed, 5 skipped (8 pre-existing,
+      unrelated failures in `tests/integration/test_acquisition_ledger_postgres.py`/
+      `test_conflict_postgres.py` against real Postgres: `source_fetch_work.captured_etag`
+      column missing locally — migration 018 never applied to the local
+      test Postgres instance, unrelated to any file this ticket touched)

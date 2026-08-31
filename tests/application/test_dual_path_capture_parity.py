@@ -84,10 +84,18 @@ def test_dual_path_live_sec_apple(
     business_date = os.environ.get("WAREHOUSE_LIVE_SEC_DATE", "2026-08-27")
     context = _build_warehouse_context("daily-incremental")
     db = open_silver_database(StorageLocation(str(tmp_path / "silver")))
+
+    # DuckDB Retirement Cutover Ticket 14: _load_daily_index_for_date now
+    # reads/writes the bookkeeping store, not this SilverDatabase -- an
+    # in-memory SQLite stand-in, same pattern as the _acquisition_db fixture
+    # above (this test has no live Postgres bookkeeping instance available).
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
+
+    bookkeeping = bookkeeping_fixture()
     try:
         index_result = _load_daily_index_for_date(
             context=context,
-            db=db,
+            bookkeeping=bookkeeping,
             target_date=date.fromisoformat(business_date),
             sync_run_id="parity-live-index",
             now=datetime.now(UTC),

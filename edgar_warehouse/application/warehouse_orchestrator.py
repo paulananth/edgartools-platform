@@ -83,6 +83,7 @@ from edgar_warehouse.silver_protection import compute_silver_fingerprint, merge_
 from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
 
 if TYPE_CHECKING:
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
     from edgar_warehouse.silver_store import SilverDatabase
 
 SOURCE_EXPORT_COMMANDS = {
@@ -585,9 +586,10 @@ def _execute_warehouse_bronze_capture(
         scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
         db = _open_silver_database(context.silver_root, landing_export=landing_export)
     db_closed = False
+    bookkeeping = _bookkeeping_store()
     sync_mode = _sync_mode_for_command(command_name)
     sync_scope_type = _sync_scope_type_for_command(command_name, scope)
-    db.start_sync_run(
+    bookkeeping.start_sync_run(
         {
             "sync_run_id": run_id,
             "sync_mode": sync_mode,
@@ -610,7 +612,7 @@ def _execute_warehouse_bronze_capture(
         include_gold_manifest=publish_gold,
         shard_index=_active_shard_index if _using_shard_path else None,
     )
-    db.start_pipeline_run(
+    bookkeeping.start_pipeline_run(
         {
             "pipeline_run_id": run_id,
             "command_name": command_name,
@@ -649,6 +651,7 @@ def _execute_warehouse_bronze_capture(
         raw_writes, metrics = _capture_bronze_raw(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             command_name=command_name,
             arguments=arguments,
             scope=scope,
@@ -662,7 +665,12 @@ def _execute_warehouse_bronze_capture(
             rows_inserted=metrics.get("rows_inserted", 0),
             rows_skipped=metrics.get("rows_skipped", 0),
         )
-        silver_table_counts = db.get_table_counts()
+        # DuckDB Retirement Cutover Ticket 14: db.get_table_counts() now
+        # excludes the 11 bookkeeping tables entirely (they moved to
+        # Postgres) -- merge in bookkeeping's own counts for those so this
+        # diagnostic dict keeps covering every silver table, content and
+        # bookkeeping alike, with no colliding/stale-zero keys.
+        silver_table_counts = {**db.get_table_counts(), **bookkeeping.get_table_counts()}
         if context.snowflake_export_root is not None and publish_gold:
             from edgar_warehouse.serving.source_dimensional_export import (
                 iter_source_export_tables,
@@ -700,7 +708,7 @@ def _execute_warehouse_bronze_capture(
                 # a later table's export failure can't erase an earlier table's
                 # already-durable manifest row the way a single end-of-loop call
                 # would (that table's write already succeeded on disk).
-                db.record_gold_manifest(
+                bookkeeping.record_gold_manifest(
                     run_id=run_id,
                     command_name=command_name,
                     entries=[manifest_entry],
@@ -738,13 +746,13 @@ def _execute_warehouse_bronze_capture(
                 run_id=run_id,
                 snowflake_export_counts=snowflake_export_counts,
             )
-        db.complete_sync_run(
+        bookkeeping.complete_sync_run(
             run_id,
             status=str(metrics.get("sync_status", "succeeded")),
             rows_inserted=int(metrics.get("rows_inserted", 0) or 0),
             rows_skipped=int(metrics.get("rows_skipped", 0) or 0),
         )
-        db.complete_pipeline_run(
+        bookkeeping.complete_pipeline_run(
             run_id,
             status=str(metrics.get("sync_status", "succeeded")),
             writes=pipeline_writes,
@@ -826,8 +834,8 @@ def _execute_warehouse_bronze_capture(
             )
     except Exception as exc:
         if not db_closed:
-            db.complete_sync_run(run_id, status="failed", error_message=str(exc))
-            db.complete_pipeline_run(
+            bookkeeping.complete_sync_run(run_id, status="failed", error_message=str(exc))
+            bookkeeping.complete_pipeline_run(
                 run_id,
                 status="failed",
                 writes=pipeline_writes,
@@ -1601,6 +1609,7 @@ def _run_filing_artifact_gated_capture(
 def _capture_bronze_raw(
     context: WarehouseCommandContext,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     command_name: str,
     arguments: dict[str, Any],
     scope: dict[str, Any],
@@ -1615,6 +1624,7 @@ def _capture_bronze_raw(
         reference_result = _sync_reference_data(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             fetch_date=now.date(),
         )
@@ -1650,7 +1660,7 @@ def _capture_bronze_raw(
         ):
             result = _load_daily_index_for_date(
                 context=context,
-                db=db,
+                bookkeeping=bookkeeping,
                 target_date=target_date,
                 sync_run_id=sync_run_id,
                 now=now,
@@ -1681,16 +1691,16 @@ def _capture_bronze_raw(
                 metrics["sync_status"] = "partial"
                 break
         impacted_ciks = _dedupe_ints(impacted_ciks)
-        _seed_silver_tracking_status(db, impacted_ciks, tracking_status="active")
-        _demote_deregistered_ciks(db, form_15_ciks, now)
-        impacted_ciks = _filter_ciks_to_universe(impacted_ciks, db=db)
+        _seed_silver_tracking_status(bookkeeping, impacted_ciks, tracking_status="active")
+        _demote_deregistered_ciks(bookkeeping, form_15_ciks, now)
+        impacted_ciks = _filter_ciks_to_universe(impacted_ciks, bookkeeping=bookkeeping)
         cik_limit = arguments.get("cik_limit")
         cik_offset = int(arguments.get("cik_offset") or 0)
         _validate_window_args(cik_limit, cik_offset)
         selected_ciks = impacted_ciks[cik_offset:]
         if cik_limit is not None:
             selected_ciks = selected_ciks[:cik_limit]
-        selected_ciks = db.claim_discovery_ciks(
+        selected_ciks = bookkeeping.claim_discovery_ciks(
             selected_ciks,
             discovery_source="daily_incremental",
             run_id=sync_run_id,
@@ -1704,6 +1714,7 @@ def _capture_bronze_raw(
                 result = _run_submissions_bronze_then_silver(
                     context=context,
                     db=db,
+                    bookkeeping=bookkeeping,
                     sync_run_id=sync_run_id,
                     ciks=selected_ciks,
                     include_pagination=False,
@@ -1720,7 +1731,7 @@ def _capture_bronze_raw(
                 )
             except Exception:
                 if selected_ciks:
-                    db.finish_discovery_ciks(
+                    bookkeeping.finish_discovery_ciks(
                         selected_ciks,
                         discovery_source="daily_incremental",
                         run_id=sync_run_id,
@@ -1729,7 +1740,7 @@ def _capture_bronze_raw(
                     )
                 raise
             if selected_ciks:
-                db.finish_discovery_ciks(
+                bookkeeping.finish_discovery_ciks(
                     selected_ciks,
                     discovery_source="daily_incremental",
                     run_id=sync_run_id,
@@ -1775,7 +1786,7 @@ def _capture_bronze_raw(
     if command_name == "load-daily-form-index-for-date":
         result = _load_daily_index_for_date(
             context=context,
-            db=db,
+            bookkeeping=bookkeeping,
             target_date=date.fromisoformat(scope["target_date"]),
             sync_run_id=sync_run_id,
             now=now,
@@ -1791,7 +1802,7 @@ def _capture_bronze_raw(
 
     if command_name == "bootstrap":
         ciks = _resolve_bootstrap_target_ciks(
-            db=db,
+            bookkeeping=bookkeeping,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
@@ -1801,6 +1812,7 @@ def _capture_bronze_raw(
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             ciks=ciks,
             include_pagination=False,
@@ -1821,7 +1833,7 @@ def _capture_bronze_raw(
 
     if command_name == "bootstrap-full":
         ciks = _resolve_bootstrap_target_ciks(
-            db=db,
+            bookkeeping=bookkeeping,
             raw_ciks=scope.get("cik_list"),
             command_name=command_name,
             tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
@@ -1831,6 +1843,7 @@ def _capture_bronze_raw(
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             ciks=ciks,
             include_pagination=True,
@@ -1852,7 +1865,7 @@ def _capture_bronze_raw(
         pending_pool_limit = int(scope.get("cik_limit") or 100)
         tracking_status_filter = str(scope.get("tracking_status_filter", "bootstrap_pending"))
         ciks = _resolve_bootstrap_target_ciks(
-            db=db,
+            bookkeeping=bookkeeping,
             raw_ciks=None,
             command_name=command_name,
             tracking_status_filter=tracking_status_filter,
@@ -1860,7 +1873,7 @@ def _capture_bronze_raw(
             cik_offset=int(arguments.get("cik_offset") or 0),
         )
         ciks = ciks[:pending_pool_limit]
-        ciks = db.claim_discovery_ciks(
+        ciks = bookkeeping.claim_discovery_ciks(
             ciks,
             discovery_source="bootstrap_next",
             run_id=sync_run_id,
@@ -1871,6 +1884,7 @@ def _capture_bronze_raw(
                 result = _run_submissions_bronze_then_silver(
                     context=context,
                     db=db,
+                    bookkeeping=bookkeeping,
                     sync_run_id=sync_run_id,
                     ciks=ciks,
                     include_pagination=True,
@@ -1884,7 +1898,7 @@ def _capture_bronze_raw(
                     filing_lookback_years=arguments.get("filing_lookback_years"),
                 )
             except Exception:
-                db.finish_discovery_ciks(
+                bookkeeping.finish_discovery_ciks(
                     ciks,
                     discovery_source="bootstrap_next",
                     run_id=sync_run_id,
@@ -1892,7 +1906,7 @@ def _capture_bronze_raw(
                     finished_at=now,
                 )
                 raise
-            db.finish_discovery_ciks(
+            bookkeeping.finish_discovery_ciks(
                 ciks,
                 discovery_source="bootstrap_next",
                 run_id=sync_run_id,
@@ -1912,6 +1926,7 @@ def _capture_bronze_raw(
             reference_result = _sync_reference_data(
                 context=context,
                 db=db,
+                bookkeeping=bookkeeping,
                 sync_run_id=sync_run_id,
                 fetch_date=now.date(),
                 source_names=_reference_sources_for_scope(scope_key),
@@ -1924,6 +1939,7 @@ def _capture_bronze_raw(
             result = submissions_orchestrator(
                 context=context,
                 db=db,
+                bookkeeping=bookkeeping,
                 sync_run_id=sync_run_id,
                 cik=_parse_cik(scope_key),
                 include_pagination=True,
@@ -1958,6 +1974,7 @@ def _capture_bronze_raw(
                         pipeline_result = _run_accession_resync(
                             context=context,
                             db=db,
+                            bookkeeping=bookkeeping,
                             sync_run_id=sync_run_id,
                             accession_number=accession_number,
                             include_artifacts=bool(arguments.get("include_artifacts", True)),
@@ -2003,6 +2020,7 @@ def _capture_bronze_raw(
             pipeline_result = _run_accession_resync(
                 context=context,
                 db=db,
+                bookkeeping=bookkeeping,
                 sync_run_id=sync_run_id,
                 accession_number=scope_key,
                 include_artifacts=bool(arguments.get("include_artifacts", True)),
@@ -2017,7 +2035,7 @@ def _capture_bronze_raw(
 
     if command_name == "full-reconcile":
         ciks = _resolve_reconcile_ciks(
-            db=db,
+            bookkeeping=bookkeeping,
             raw_ciks=scope.get("cik_list"),
             sample_limit=scope.get("sample_limit"),
         )
@@ -2025,7 +2043,7 @@ def _capture_bronze_raw(
         for cik in ciks:
             snapshot = _capture_reconcile_snapshot(
                 context=context,
-                db=db,
+                bookkeeping=bookkeeping,
                 cik=cik,
                 fetch_date=now.date(),
                 force=bool(arguments.get("force", True)),
@@ -2039,18 +2057,19 @@ def _capture_bronze_raw(
             )
             all_findings.extend(findings)
         if all_findings:
-            db.insert_reconcile_findings(all_findings)
+            bookkeeping.insert_reconcile_findings(all_findings)
             metrics["rows_inserted"] += len(all_findings)
         if scope.get("auto_heal"):
             healed_rows = mark_findings_for_resync(all_findings, resync_run_id=sync_run_id)
             if healed_rows:
-                db.insert_reconcile_findings(healed_rows)
+                bookkeeping.insert_reconcile_findings(healed_rows)
             resolved_rows: list[dict[str, Any]] = []
             for row in healed_rows:
                 if row["recommended_action"] == "accession_resync":
                     _run_accession_resync(
                         context=context,
                         db=db,
+                        bookkeeping=bookkeeping,
                         sync_run_id=sync_run_id,
                         accession_number=row["object_key"],
                         include_artifacts=True,
@@ -2062,6 +2081,7 @@ def _capture_bronze_raw(
                     submissions_orchestrator(
                         context=context,
                         db=db,
+                        bookkeeping=bookkeeping,
                         sync_run_id=sync_run_id,
                         cik=int(row["cik"]),
                         include_pagination=True,
@@ -2071,14 +2091,14 @@ def _capture_bronze_raw(
                     )
                 resolved_rows.append(row)
             if resolved_rows:
-                db.insert_reconcile_findings(mark_findings_resolved(resolved_rows, resync_run_id=sync_run_id))
+                bookkeeping.insert_reconcile_findings(mark_findings_resolved(resolved_rows, resync_run_id=sync_run_id))
         return raw_writes, metrics
 
     if command_name == "catch-up-daily-form-index":
         end_date = date.fromisoformat(scope["end_date"])
         result = _capture_catch_up_daily_form_index(
             context=context,
-            db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             end_date=end_date,
             now=now,
@@ -2096,6 +2116,7 @@ def _capture_bronze_raw(
         reference_result = _sync_reference_data(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             fetch_date=now.date(),
         )
@@ -2145,7 +2166,7 @@ def _capture_bronze_raw(
         if arguments.get("limit") is not None:
             universe_rows = universe_rows[: int(arguments["limit"])]
         _seed_silver_tracking_status(
-            db,
+            bookkeeping,
             [int(row["cik"]) for row in universe_rows],
             tracking_status="bootstrap_pending",
         )
@@ -2186,7 +2207,7 @@ def _capture_bronze_raw(
     if command_name == "seed-silver-batches":
         tracking_status_filter = str(arguments.get("tracking_status_filter") or "all").strip()
         batch_size = int(arguments.get("batch_size") or 100)
-        rows = db.get_ciks_with_bronze(tracking_status_filter=tracking_status_filter)
+        rows = bookkeeping.get_ciks_with_bronze(tracking_status_filter=tracking_status_filter)
         _emit_pipeline_event(
             "seed_silver_batches_started",
             tracking_status_filter=tracking_status_filter,
@@ -2398,6 +2419,7 @@ def _capture_bronze_raw(
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             ciks=cik_list,
             include_pagination=include_pagination,
@@ -2988,7 +3010,7 @@ def _capture_bronze_raw(
             raise WarehouseRuntimeError(
                 f"--total-cik-limit must be a positive integer, got {total_cik_limit}"
             )
-        ciks = db.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
+        ciks = bookkeeping.get_tracked_ciks(LOAD_HISTORY_TRACKING_STATUS_FILTER)
         if total_cik_limit is not None:
             # Bound the CIK universe BEFORE window slicing so every downstream stage
             # (WindowedBootstrap, FetchEntityFacts/FetchPerFilingFundamentals/
@@ -3026,6 +3048,7 @@ def _capture_bronze_raw(
         reference_result = _sync_reference_data(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             fetch_date=now.date(),
         )
@@ -3066,7 +3089,7 @@ def _capture_bronze_raw(
             for target_date in _date_range(start=start_date, end=end_date):
                 result = _load_daily_index_for_date(
                     context=context,
-                    db=db,
+                    bookkeeping=bookkeeping,
                     target_date=target_date,
                     sync_run_id=sync_run_id,
                     now=now,
@@ -3081,14 +3104,17 @@ def _capture_bronze_raw(
         reference_result = _sync_reference_data(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             fetch_date=now.date(),
         )
         raw_writes.extend(reference_result["raw_writes"])
         metrics["rows_inserted"] += reference_result["rows_written"]
         metrics["rows_skipped"] += reference_result["rows_skipped"]
-        tracked_active_ciks = db.get_tracked_ciks("active")
-        company_eligible_ciks = db.get_company_identity_ciks("active")
+        tracked_active_ciks = bookkeeping.get_tracked_ciks("active")
+        company_eligible_ciks = db.get_company_identity_ciks(
+            "active", bookkeeping=bookkeeping
+        )
         if refresh_mode == "backstop":
             input_cik_count = len(tracked_active_ciks)
             selected_ciks = company_eligible_ciks
@@ -3162,16 +3188,16 @@ def _capture_bronze_raw(
         # not the caller's --mode; lease_result.json (below) carries that
         # resolved value, and the state machine's ApplyEffectiveRefreshMode
         # step overwrites $.refresh_mode with it before RefreshMode dispatches.
-        lease_before = db.get_pipeline_run_lease(IDENTITY_REFRESH_LEASE_NAME)
+        lease_before = bookkeeping.get_pipeline_run_lease(IDENTITY_REFRESH_LEASE_NAME)
         overdue_before = bool(lease_before and lease_before.get("backstop_overdue"))
         effective_mode = "backstop" if overdue_before else requested_mode
-        acquired = db.acquire_pipeline_run_lease(
+        acquired = bookkeeping.acquire_pipeline_run_lease(
             lease_name=IDENTITY_REFRESH_LEASE_NAME,
             run_id=sync_run_id,
             mode=effective_mode,
             acquired_at=now,
         )
-        held = db.get_pipeline_run_lease(IDENTITY_REFRESH_LEASE_NAME)
+        held = bookkeeping.get_pipeline_run_lease(IDENTITY_REFRESH_LEASE_NAME)
         if acquired:
             _emit_pipeline_event(
                 "identity_refresh_lease_acquired",
@@ -3181,7 +3207,7 @@ def _capture_bronze_raw(
             )
         else:
             if effective_mode == "backstop":
-                db.mark_pipeline_run_lease_backstop_overdue(lease_name=IDENTITY_REFRESH_LEASE_NAME)
+                bookkeeping.mark_pipeline_run_lease_backstop_overdue(lease_name=IDENTITY_REFRESH_LEASE_NAME)
             _emit_pipeline_event(
                 "identity_refresh_lease_deferred",
                 run_id=sync_run_id,
@@ -3206,7 +3232,7 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "release-identity-refresh-lease":
-        db.release_pipeline_run_lease(
+        bookkeeping.release_pipeline_run_lease(
             lease_name=IDENTITY_REFRESH_LEASE_NAME,
             run_id=sync_run_id,
             released_at=now,
@@ -3233,14 +3259,14 @@ def _capture_bronze_raw(
         # acquired_at is never renewed during a hold (no heartbeat), so this
         # value is a hard cap on how long a protected run may take before a
         # waiting command can reclaim the lease out from under it.
-        acquired = db.acquire_pipeline_run_lease(
+        acquired = bookkeeping.acquire_pipeline_run_lease(
             lease_name=SEC_FETCH_LEASE_NAME,
             run_id=sync_run_id,
             mode="fetch",
             acquired_at=now,
             stale_after_seconds=SEC_FETCH_LEASE_STALE_AFTER_SECONDS,
         )
-        held = db.get_pipeline_run_lease(SEC_FETCH_LEASE_NAME)
+        held = bookkeeping.get_pipeline_run_lease(SEC_FETCH_LEASE_NAME)
         if acquired:
             _emit_pipeline_event("sec_fetch_lease_acquired", run_id=sync_run_id)
         else:
@@ -3262,7 +3288,7 @@ def _capture_bronze_raw(
         return raw_writes, metrics
 
     if command_name == "release-sec-fetch-lease":
-        db.release_pipeline_run_lease(
+        bookkeeping.release_pipeline_run_lease(
             lease_name=SEC_FETCH_LEASE_NAME,
             run_id=sync_run_id,
             released_at=now,
@@ -3335,6 +3361,7 @@ def submissions_orchestrator(
     *,
     context: WarehouseCommandContext,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     cik: int,
     include_pagination: bool,
@@ -3347,6 +3374,7 @@ def submissions_orchestrator(
     result = _run_submissions_bronze_then_silver(
         context=context,
         db=db,
+        bookkeeping=bookkeeping,
         sync_run_id=sync_run_id,
         ciks=[cik],
         include_pagination=include_pagination,
@@ -3372,6 +3400,7 @@ def _run_submissions_bronze_then_silver(
     *,
     context: WarehouseCommandContext,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     ciks: list[int],
     include_pagination: bool,
@@ -3417,7 +3446,7 @@ def _run_submissions_bronze_then_silver(
 
     bronze_snapshots = _capture_submission_bronze_snapshots(
         context=context,
-        db=db,
+        bookkeeping=bookkeeping,
         ciks=ciks,
         include_pagination=include_pagination,
         fetch_date=fetch_date,
@@ -3463,6 +3492,7 @@ def _run_submissions_bronze_then_silver(
     for index, snapshot in enumerate(bronze_snapshots, start=1):
         result = _apply_submission_snapshot_to_silver(
             db=db,
+            bookkeeping=bookkeeping,
             sync_run_id=sync_run_id,
             snapshot=snapshot,
             force=force,
@@ -3565,6 +3595,7 @@ def _run_submissions_bronze_then_silver(
     artifact_result = _run_configured_form_artifact_pipeline(
         context=context,
         db=db,
+        bookkeeping=bookkeeping,
         sync_run_id=sync_run_id,
         accession_numbers=artifact_accessions,
         artifact_policy=artifact_policy,
@@ -3776,6 +3807,7 @@ def _run_configured_form_artifact_pipeline(
     *,
     context: WarehouseCommandContext,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     accession_numbers: list[str],
     artifact_policy: str,
@@ -4100,6 +4132,7 @@ def _run_configured_form_artifact_pipeline(
             if run_parsers:
                 rows_written += _run_parse_pipeline(
                     db=db,
+                    bookkeeping=bookkeeping,
                     accession_number=accession_number,
                     sync_run_id=sync_run_id,
                     fail_closed=release_mode,
@@ -4943,7 +4976,7 @@ def _dispatch_to_worker_pool(
 def _capture_submission_bronze_snapshots(
     *,
     context: WarehouseCommandContext,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     ciks: list[int],
     include_pagination: bool,
     fetch_date: date,
@@ -5003,7 +5036,7 @@ def _capture_submission_bronze_snapshots(
         # to serialize it, and bootstrap-batch's --artifact-policy skip guarantees
         # every CIK is a cache hit in exactly the pipeline this cost the most in.
         main_checkpoint_by_cik = {
-            cik: _resolve_submissions_main_checkpoint_only(db=db, cik=cik, fetch_date=fetch_date)
+            cik: _resolve_submissions_main_checkpoint_only(bookkeeping=bookkeeping, cik=cik, fetch_date=fetch_date)
             for cik in ciks
         }
         main_cache_results, main_cache_errors = _dispatch_to_worker_pool(
@@ -5056,7 +5089,7 @@ def _capture_submission_bronze_snapshots(
         # 11 follow-up).
         pagination_checkpoint_by_key = {
             key: _resolve_submissions_pagination_checkpoint_only(
-                db=db, cik=key[0], file_name=key[1], fetch_date=fetch_date,
+                bookkeeping=bookkeeping, cik=key[0], file_name=key[1], fetch_date=fetch_date,
             )
             for key in all_pagination_keys
         }
@@ -5130,6 +5163,7 @@ def _capture_submission_bronze_snapshots(
 def _apply_submission_snapshot_to_silver(
     *,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     snapshot: dict[str, Any],
     force: bool,
@@ -5142,7 +5176,7 @@ def _apply_submission_snapshot_to_silver(
     rows_written = 0
     rows_skipped = 0
     cik = int(snapshot["cik"])
-    existing_state = db.get_company_sync_state(cik) or {"tracking_status": "bootstrap_pending"}
+    existing_state = bookkeeping.get_company_sync_state(cik) or {"tracking_status": "bootstrap_pending"}
     main_write_record = snapshot["main_write_record"]
     main_payload = snapshot["main_payload"]
     raw_writes.append(main_write_record)
@@ -5159,11 +5193,11 @@ def _apply_submission_snapshot_to_silver(
 
     for file_name, write_record in zip(snapshot["manifest_file_names"], pagination_write_records):
         raw_writes.append(write_record)
-        checkpoint = db.get_source_checkpoint("submissions_pagination", f"file:{file_name}")
+        checkpoint = bookkeeping.get_source_checkpoint("submissions_pagination", f"file:{file_name}")
         if force or checkpoint is None or checkpoint.get("last_sha256") != write_record["sha256"]:
             pagination_same = False
 
-    main_checkpoint = db.get_source_checkpoint("submissions_main", f"cik:{cik}")
+    main_checkpoint = bookkeeping.get_source_checkpoint("submissions_main", f"cik:{cik}")
     main_same = (
         (not force)
         and main_checkpoint is not None
@@ -5174,7 +5208,7 @@ def _apply_submission_snapshot_to_silver(
     for write_record in [main_write_record, *pagination_write_records]:
         source_name = write_record["source_name"]
         source_key = f"cik:{cik}" if source_name == "submissions_main" else f"file:{Path(write_record['relative_path']).name}"
-        db.upsert_source_checkpoint(
+        bookkeeping.upsert_source_checkpoint(
             {
                 "source_name": source_name,
                 "source_key": source_key,
@@ -5270,7 +5304,7 @@ def _apply_submission_snapshot_to_silver(
     elif tracking_status not in {"active", "paused", "historical_complete", "error", "deregistered"}:
         tracking_status = "active"
 
-    db.upsert_company_sync_state(
+    bookkeeping.upsert_company_sync_state(
         {
             "cik": cik,
             "tracking_status": tracking_status,
@@ -5315,6 +5349,7 @@ def _sync_reference_data(
     *,
     context: WarehouseCommandContext,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     fetch_date: date,
     source_names: list[str] | None = None,
@@ -5337,7 +5372,7 @@ def _sync_reference_data(
         # on every bootstrap run is unnecessary and wastes API quota.
         cached_ref = _read_bronze_if_cached(
             bronze_root=context.bronze_root,
-            db=db,
+            bookkeeping=bookkeeping,
             source_name=spec.source_name,
             source_key="global",
             source_url=spec.source_url or "",
@@ -5366,10 +5401,10 @@ def _sync_reference_data(
                 "path": str(write_record["path"]),
             }
         rows = _parse_company_ticker_rows(document)
-        checkpoint = db.get_source_checkpoint(spec.source_name, "global")
+        checkpoint = bookkeeping.get_source_checkpoint(spec.source_name, "global")
         if cached_ref is None and (not checkpoint or checkpoint.get("last_sha256") != write_record["sha256"]):
             rows_written += db.replace_company_tickers(rows, sync_run_id, source_name=spec.source_name)
-        db.upsert_source_checkpoint(
+        bookkeeping.upsert_source_checkpoint(
             {
                 "source_name": spec.source_name,
                 "source_key": "global",
@@ -5382,7 +5417,7 @@ def _sync_reference_data(
         if rows and (spec.source_name == "company_tickers_exchange" or seed_document is None):
             seed_document = document
         if seed_company_sync_state:
-            db.seed_company_sync_state_bulk([int(row["cik"]) for row in rows])
+            bookkeeping.seed_company_sync_state_bulk([int(row["cik"]) for row in rows])
 
     return {
         "raw_writes": raw_writes,
@@ -5517,7 +5552,7 @@ def _reference_sources_for_scope(scope_key: str) -> list[str]:
 def _resolve_submissions_main_cached_snapshot(
     *,
     context: WarehouseCommandContext,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     cik: int,
     fetch_date: date,
 ) -> "dict[str, Any] | None":
@@ -5536,7 +5571,7 @@ def _resolve_submissions_main_cached_snapshot(
     # and eliminates redundant SEC API calls for data that hasn't changed.
     cached = _read_bronze_if_cached(
         bronze_root=context.bronze_root,
-        db=db,
+        bookkeeping=bookkeeping,
         source_name=capture_spec.source_name,
         source_key=f"cik:{cik}",
         source_url=capture_spec.source_url or "",
@@ -5559,19 +5594,23 @@ def _resolve_submissions_main_cached_snapshot(
 
 def _resolve_submissions_main_checkpoint_only(
     *,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     cik: int,
     fetch_date: date,
 ) -> "tuple[str, str] | None":
     """DB-only half of the main-submissions cache check (ticket 11 follow-up,
     pipeline-throughput-architecture): a single checkpoint SELECT. Must stay on
-    the main thread -- ``SilverDatabase`` wraps one shared duckdb connection that
-    is not safe for concurrent use (ticket 03). Returns (bronze_path, last_sha256)
+    the main thread -- the bookkeeping store's session is not safe for
+    concurrent use (ticket 03's SilverDatabase precedent, now the bookkeeping
+    store's own equivalent constraint). Returns (bronze_path, last_sha256)
     or None; the actual file read/verify is done separately in
     ``_read_submissions_main_cached_payload`` so it can run in the worker pool.
+
+    DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
+    bookkeeping store -- this function never touched a DuckDB content table.
     """
     capture_spec = default_capture_spec_factory().submissions_main(cik, fetch_date)
-    checkpoint = db.get_source_checkpoint(capture_spec.source_name, f"cik:{cik}")
+    checkpoint = bookkeeping.get_source_checkpoint(capture_spec.source_name, f"cik:{cik}")
     if checkpoint is None:
         return None
     bronze_path: str | None = checkpoint.get("bronze_path")
@@ -5644,14 +5683,14 @@ def _fetch_submissions_main_snapshot(
 def _capture_submissions_main(
     *,
     context: WarehouseCommandContext,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     cik: int,
     fetch_date: date,
     force: bool,
 ) -> dict[str, Any]:
     if not force:
         cached = _resolve_submissions_main_cached_snapshot(
-            context=context, db=db, cik=cik, fetch_date=fetch_date
+            context=context, bookkeeping=bookkeeping, cik=cik, fetch_date=fetch_date
         )
         if cached is not None:
             return cached
@@ -5661,7 +5700,7 @@ def _capture_submissions_main(
 def _resolve_submissions_pagination_cached_snapshot(
     *,
     context: WarehouseCommandContext,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     cik: int,
     file_name: str,
     fetch_date: date,
@@ -5671,7 +5710,7 @@ def _resolve_submissions_pagination_cached_snapshot(
     capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
     cached = _read_bronze_if_cached(
         bronze_root=context.bronze_root,
-        db=db,
+        bookkeeping=bookkeeping,
         source_name=capture_spec.source_name,
         source_key=f"file:{file_name}",
         source_url=capture_spec.source_url or "",
@@ -5691,15 +5730,19 @@ def _resolve_submissions_pagination_cached_snapshot(
 
 def _resolve_submissions_pagination_checkpoint_only(
     *,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     cik: int,
     file_name: str,
     fetch_date: date,
 ) -> "tuple[str, str] | None":
     """DB-only half of the pagination cache check. See
-    ``_resolve_submissions_main_checkpoint_only`` (ticket 11 follow-up)."""
+    ``_resolve_submissions_main_checkpoint_only`` (ticket 11 follow-up).
+
+    DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
+    bookkeeping store -- this function never touched a DuckDB content table.
+    """
     capture_spec = default_capture_spec_factory().submissions_pagination(cik, file_name, fetch_date)
-    checkpoint = db.get_source_checkpoint(capture_spec.source_name, f"file:{file_name}")
+    checkpoint = bookkeeping.get_source_checkpoint(capture_spec.source_name, f"file:{file_name}")
     if checkpoint is None:
         return None
     bronze_path: str | None = checkpoint.get("bronze_path")
@@ -5769,7 +5812,7 @@ def _fetch_submissions_pagination_snapshot(
 def _capture_submissions_pagination(
     *,
     context: WarehouseCommandContext,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     cik: int,
     file_name: str,
     fetch_date: date,
@@ -5777,7 +5820,7 @@ def _capture_submissions_pagination(
 ) -> dict[str, Any]:
     if not force:
         cached = _resolve_submissions_pagination_cached_snapshot(
-            context=context, db=db, cik=cik, file_name=file_name, fetch_date=fetch_date
+            context=context, bookkeeping=bookkeeping, cik=cik, file_name=file_name, fetch_date=fetch_date
         )
         if cached is not None:
             return cached
@@ -5873,7 +5916,7 @@ def _read_bronze_by_checkpoint(
 def _read_bronze_if_cached(
     *,
     bronze_root: "StorageLocation",
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     source_name: str,
     source_key: str,
     source_url: str,
@@ -5888,8 +5931,11 @@ def _read_bronze_if_cached(
     source_url and relative_path come from the caller's capture_spec (they are
     not stored in the checkpoint table).
     Returns None when no valid cache entry exists (first run, force=True, or corrupt file).
+
+    DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
+    bookkeeping store -- this function never touched a DuckDB content table.
     """
-    checkpoint = db.get_source_checkpoint(source_name, source_key)
+    checkpoint = bookkeeping.get_source_checkpoint(source_name, source_key)
     if checkpoint is None:
         return None
     bronze_path: str | None = checkpoint.get("bronze_path")
@@ -5909,13 +5955,13 @@ def _read_bronze_if_cached(
 def _capture_reconcile_snapshot(
     *,
     context: WarehouseCommandContext,
-    db: "SilverDatabase",
+    bookkeeping: "BookkeepingStore",
     cik: int,
     fetch_date: date,
     force: bool = True,
 ) -> dict[str, Any]:
     snapshot = _capture_submissions_main(
-        context=context, db=db, cik=cik, fetch_date=fetch_date, force=force,
+        context=context, bookkeeping=bookkeeping, cik=cik, fetch_date=fetch_date, force=force,
     )
     snapshot["write_record"]["source_name"] = "submissions_main"
     return snapshot
@@ -5924,7 +5970,7 @@ def _capture_reconcile_snapshot(
 def _load_daily_index_for_date(
     *,
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     target_date: date,
     sync_run_id: str,
     now: datetime,
@@ -5933,11 +5979,11 @@ def _load_daily_index_for_date(
     daily_index_spec = default_capture_spec_factory().daily_index(target_date)
     source_url = daily_index_spec.source_url or ""
     expected_available_at = _expected_available_at(target_date)
-    existing = db.get_daily_index_checkpoint(target_date.isoformat())
+    existing = bookkeeping.get_daily_index_checkpoint(target_date.isoformat())
     first_attempt_at = existing.get("first_attempt_at") if existing else now
 
     if not _is_business_day(target_date):
-        db.upsert_daily_index_checkpoint(
+        bookkeeping.upsert_daily_index_checkpoint(
             {
                 "business_date": target_date.isoformat(),
                 "source_key": f"date:{target_date.isoformat()}",
@@ -5960,7 +6006,7 @@ def _load_daily_index_for_date(
         }
 
     if not force and existing and existing.get("status") == "succeeded":
-        rows = db.get_daily_index_filings(target_date.isoformat())
+        rows = bookkeeping.get_daily_index_filings(target_date.isoformat())
         return {
             "raw_writes": [],
             "rows_written": 0,
@@ -5980,7 +6026,7 @@ def _load_daily_index_for_date(
         }
 
     if now < expected_available_at:
-        db.upsert_daily_index_checkpoint(
+        bookkeeping.upsert_daily_index_checkpoint(
             {
                 "business_date": target_date.isoformat(),
                 "source_key": f"date:{target_date.isoformat()}",
@@ -6001,7 +6047,7 @@ def _load_daily_index_for_date(
             "status": "waiting_for_publish",
         }
 
-    db.upsert_daily_index_checkpoint(
+    bookkeeping.upsert_daily_index_checkpoint(
         {
             "business_date": target_date.isoformat(),
             "source_key": f"date:{target_date.isoformat()}",
@@ -6029,10 +6075,10 @@ def _load_daily_index_for_date(
             raw_object_id=write_record["sha256"],
             source_url=source_url,
         )
-        row_count = db.merge_daily_index_filings(rows, sync_run_id)
+        row_count = bookkeeping.merge_daily_index_filings(rows, sync_run_id)
         distinct_cik_count = len({int(row["cik"]) for row in rows if row.get("cik") is not None})
         distinct_accession_count = len({row["accession_number"] for row in rows if row.get("accession_number")})
-        db.upsert_daily_index_checkpoint(
+        bookkeeping.upsert_daily_index_checkpoint(
             {
                 "business_date": target_date.isoformat(),
                 "source_key": f"date:{target_date.isoformat()}",
@@ -6067,7 +6113,7 @@ def _load_daily_index_for_date(
             "catalog_silver_skips": 0,
         }
     except WarehouseRuntimeError as exc:
-        db.upsert_daily_index_checkpoint(
+        bookkeeping.upsert_daily_index_checkpoint(
             {
                 "business_date": target_date.isoformat(),
                 "source_key": f"date:{target_date.isoformat()}",
@@ -6116,6 +6162,7 @@ def _run_accession_resync(
     *,
     context: WarehouseCommandContext,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     accession_number: str,
     include_artifacts: bool,
@@ -6150,13 +6197,16 @@ def _run_accession_resync(
         )
         rows_written += 1 if text_row else 0
     if include_parsers:
-        rows_written += _run_parse_pipeline(db=db, accession_number=accession_number, sync_run_id=sync_run_id)
+        rows_written += _run_parse_pipeline(
+            db=db, bookkeeping=bookkeeping, accession_number=accession_number, sync_run_id=sync_run_id
+        )
     return {"raw_writes": raw_writes, "rows_written": rows_written}
 
 
 def _run_parse_pipeline(
     *,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     accession_number: str,
     sync_run_id: str,
     fail_closed: bool = False,
@@ -6169,7 +6219,7 @@ def _run_parse_pipeline(
         form_type, items=filing.get("items")
     )
     parse_run_id = str(uuid.uuid4())
-    db.start_parse_run(
+    bookkeeping.start_parse_run(
         {
             "parse_run_id": parse_run_id,
             "accession_number": accession_number,
@@ -6189,10 +6239,10 @@ def _run_parse_pipeline(
                 accession_number=accession_number,
                 sync_run_id=sync_run_id,
             )
-            db.complete_parse_run(parse_run_id, status="succeeded", rows_written=rows_written)
+            bookkeeping.complete_parse_run(parse_run_id, status="succeeded", rows_written=rows_written)
             return rows_written
         if form_family == "generic":
-            db.complete_parse_run(parse_run_id, status="skipped", rows_written=0)
+            bookkeeping.complete_parse_run(parse_run_id, status="skipped", rows_written=0)
             if fail_closed:
                 raise WarehouseRuntimeError(
                     f"no release parser registered for required accession {accession_number} "
@@ -6216,10 +6266,10 @@ def _run_parse_pipeline(
         rows_written += db.merge_adv_offices(parsed.get("sec_adv_office", []), sync_run_id)
         rows_written += db.merge_adv_disclosure_events(parsed.get("sec_adv_disclosure_event", []), sync_run_id)
         rows_written += db.merge_adv_private_funds(parsed.get("sec_adv_private_fund", []), sync_run_id)
-        db.complete_parse_run(parse_run_id, status="succeeded", rows_written=rows_written)
+        bookkeeping.complete_parse_run(parse_run_id, status="succeeded", rows_written=rows_written)
         return rows_written
     except Exception as exc:
-        db.complete_parse_run(
+        bookkeeping.complete_parse_run(
             parse_run_id,
             status="failed",
             error_code="parse_failed",
@@ -6308,14 +6358,14 @@ def _parser_metadata(form_type: str, items: Any = None) -> tuple[str, str, str]:
 
 def _capture_catch_up_daily_form_index(
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     end_date: date,
     now: datetime,
     force: bool,
 ) -> dict[str, Any]:
     """Fetch missing daily indexes in ascending order up to end_date."""
-    last_success = db.get_last_successful_checkpoint_date()
+    last_success = bookkeeping.get_last_successful_checkpoint_date()
 
     if last_success is not None:
         start_date = _next_business_day(date.fromisoformat(last_success))
@@ -6330,7 +6380,7 @@ def _capture_catch_up_daily_form_index(
     for target_date in _date_range(start_date, end_date):
         result = _load_daily_index_for_date(
             context=context,
-            db=db,
+            bookkeeping=bookkeeping,
             target_date=target_date,
             sync_run_id=sync_run_id,
             now=now,
@@ -6488,7 +6538,7 @@ def _validate_window_args(cik_limit: int | None, cik_offset: int) -> None:
 
 def _resolve_bootstrap_target_ciks(
     *,
-    db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     raw_ciks: Any,
     command_name: str,
     tracking_status_filter: str,
@@ -6503,7 +6553,7 @@ def _resolve_bootstrap_target_ciks(
     if raw_ciks:
         ciks = [_parse_cik(value) for value in raw_ciks]
     else:
-        ciks = db.get_tracked_ciks(tracking_status_filter)
+        ciks = bookkeeping.get_tracked_ciks(tracking_status_filter)
         if not ciks:
             raise WarehouseRuntimeError(
                 f"{command_name} found no companies with tracking_status='{tracking_status_filter}' "
@@ -6518,11 +6568,11 @@ def _resolve_bootstrap_target_ciks(
 
 def _resolve_reconcile_ciks(
     *,
-    db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     raw_ciks: Any,
     sample_limit: int | None,
 ) -> list[int]:
-    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else db.get_tracked_ciks("active")
+    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else bookkeeping.get_tracked_ciks("active")
     if sample_limit is not None:
         return ciks[: int(sample_limit)]
     return ciks
@@ -6553,13 +6603,16 @@ def _pagination_file_names(submissions_document: dict[str, Any]) -> list[str]:
     return names
 
 
-def _filter_ciks_to_universe(impacted_ciks: list[int], *, db: SilverDatabase) -> list[int]:
+def _filter_ciks_to_universe(impacted_ciks: list[int], *, bookkeeping: "BookkeepingStore") -> list[int]:
     """Return only CIKs that are active in silver tracking state.
 
     Falls through to all impacted_ciks if silver returns an empty active universe
     (cold-start guard so daily-incremental can run before the first seed).
+
+    DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
+    bookkeeping store -- this function never touched a DuckDB content table.
     """
-    tracked = db.get_tracked_ciks("active")
+    tracked = bookkeeping.get_tracked_ciks("active")
     if not tracked:
         return impacted_ciks
     tracked_set = set(tracked)
@@ -6579,7 +6632,7 @@ def _accession_set_digest(accessions: Iterable[str]) -> str:
 
 
 def _seed_silver_tracking_status(
-    db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     ciks: list[int],
     *,
     tracking_status: str,
@@ -6588,12 +6641,15 @@ def _seed_silver_tracking_status(
 
     Existing rows keep their current status so paused or completed companies are
     not accidentally reactivated by discovery.
+
+    DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
+    bookkeeping store -- this function never touched a DuckDB content table.
     """
     now = datetime.now(UTC)
     for cik in _dedupe_ints(ciks):
-        if db.get_company_sync_state(cik) is not None:
+        if bookkeeping.get_company_sync_state(cik) is not None:
             continue
-        db.upsert_company_sync_state(
+        bookkeeping.upsert_company_sync_state(
             {
                 "cik": cik,
                 "tracking_status": tracking_status,
@@ -6622,14 +6678,18 @@ def _ciks_filing_form15(rows: list[dict[str, Any]]) -> list[int]:
     return _dedupe_ints(ciks)
 
 
-def _demote_deregistered_ciks(db: SilverDatabase, ciks: list[int], now: datetime) -> None:
+def _demote_deregistered_ciks(bookkeeping: "BookkeepingStore", ciks: list[int], now: datetime) -> None:
     """Demote CIKs with a Form 15 deregistration filing (seed-universe ticket
     03). Unlike _seed_silver_tracking_status, this always overwrites --
     upsert_company_sync_state's ON CONFLICT unconditionally sets
     tracking_status, so a company re-registering later would need an explicit
-    reactivation path (not built here; out of scope for this ticket)."""
+    reactivation path (not built here; out of scope for this ticket).
+
+    DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
+    bookkeeping store -- this function never touched a DuckDB content table.
+    """
     for cik in _dedupe_ints(ciks):
-        db.upsert_company_sync_state(
+        bookkeeping.upsert_company_sync_state(
             {
                 "cik": cik,
                 "tracking_status": "deregistered",
@@ -6659,6 +6719,12 @@ def _dedupe_ints(values: list[int]) -> list[int]:
 
 def _dedupe_strings(values: list[str]) -> list[str]:
     return dedupe_strings(values)
+
+
+def _bookkeeping_store() -> "BookkeepingStore":
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
 
 
 def _latest_filing_date(rows: list[dict[str, Any]]) -> date | None:
@@ -6723,7 +6789,15 @@ def _resolve_scope(
     now: datetime,
     silver_root: StorageLocation | None = None,
 ) -> dict[str, Any]:
-    db = _open_silver_database(silver_root) if silver_root is not None else None
+    # DuckDB Retirement Cutover Ticket 14: this function's only use of a
+    # database handle is the bookkeeping checkpoint lookup below -- no
+    # DuckDB content table is ever touched here, so there is no need to
+    # open a real SilverDatabase connection (whose only observable effect
+    # was that single read; it also documented no matching db.close(), a
+    # leak this change incidentally removes). Gated on silver_root, same
+    # as the connection it replaces, so _execute_warehouse_infrastructure_validation's
+    # silver_root=None call site still opts out of any DB access entirely.
+    bookkeeping = _bookkeeping_store() if silver_root is not None else None
     registration = acquisition_command_registration(command_name)
     if registration is not None:
         return registration.resolve_scope(
@@ -6756,7 +6830,7 @@ def _resolve_scope(
         if end_date is None:
             end_date = _latest_eligible_business_date(now)
         if start_date is None:
-            last_success = db.get_last_successful_checkpoint_date() if db is not None else None
+            last_success = bookkeeping.get_last_successful_checkpoint_date() if bookkeeping is not None else None
             if last_success:
                 start_date = _next_business_day(date.fromisoformat(last_success))
             else:
