@@ -312,6 +312,34 @@ Image tags (role-prefixed: `warehouse-*` / `mdm-*`):
 - `warehouse-sha-<hash>` / `mdm-sha-<hash>`: immutable rollback/audit tag, per role.
 - `warehouse-prod` / `mdm-prod`: manually promoted production tag, per role.
 
+## ECS Cost-Sizing Evidence Rules
+
+- Size for cost per **successful validated output**, not for low CPU/memory or
+  a Step Functions `SUCCEEDED` status alone. A profile change needs repeated
+  current-image candidate runs and a matched control with the same immutable
+  orchestration, input envelope, and record funnel.
+- Promotion is fail-closed unless correctness, completeness, identity parity,
+  recovery, and cross-run idempotency pass; candidate p95 duration is no more
+  than 5% slower; and validated-output cost is at least 10% lower.
+- Ticket 28 rejected the `mdm.residual_security` medium downgrade despite low
+  memory use and three execution-local successes: cross-run idempotency failed,
+  shared mutable input broke control-funnel comparability, equal-work
+  `MdmSecurities` was 17.07% slower, and comparable p95 cost improvement was
+  not demonstrated.
+  Keep `mdm-large` operational for this workload; do not infer that
+  `mdm-small` is safe or change production references from this cohort.
+- The current-image unbounded `sync-graph` canary on `mdm-large` passed its
+  execution-local gates. This does not approve the residual-security profile
+  downgrade.
+- Do not run candidate and control concurrently against the same mutable MDM
+  state. Any residual-pipeline parallelization must first pass the disposable
+  two-wave canary in `.scratch/ecs-parallel-runs/`, including failure,
+  retry/recovery, parity, quota, p95, and validated-output cost gates; only then
+  may its implementation ticket proceed.
+- Canonical Ticket 28 analysis and durable evidence live in
+  `.scratch/ecs-cost-sizing/issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md`
+  and `.scratch/ecs-cost-sizing/evidence/ticket28/`.
+
 ## Warehouse Commands
 
 Core CLI commands live in `edgar_warehouse/cli.py`:

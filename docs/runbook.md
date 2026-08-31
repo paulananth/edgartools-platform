@@ -485,6 +485,110 @@ Do not copy this image reference into Terraform. Image rollout, workflow
 deployment, and workload execution are explicit operator actions outside the AWS
 infrastructure root.
 
+### Audit and retire stale ECS task-definition revisions
+
+The durable rollback registry is the release manifest for task-definition
+cleanup. Each verified cohort records the immutable warehouse and MDM image
+digests, immutable source tags, exact task-definition ARNs, verification
+evidence, and verification time. Do not infer a release from revision age,
+revision ranges, image equality, or a `latest-N` rule.
+
+After a deploy has completed its full verification contract, advance the
+registry with `record-cohort`. Until the registry contains the current release
+and two verified rollback cohorts, every cleanup remains fail-closed and retains
+all tagged runtime images. `deploy-aws-application.sh`, `record-cohort`, and
+`apply` coordinate through the same durable S3 lock. A deploy holds it from
+before task-definition registration through the final state-machine update, so
+its temporarily unreferenced candidate ARNs cannot be retired concurrently. A
+crashed operation leaves the lock in place deliberately. Normal owners release
+it with the token returned by `acquire-lock`; confirm that no deploy, cohort
+update, or cleanup remains active before using `release-lock --force` for stale
+lock recovery.
+
+`record-cohort` verifies the live AWS account and both immutable source tags
+before changing release state. It publishes every movable rollback mirror tag
+first and commits the ETag-guarded authoritative registry last. A partial mirror
+failure therefore leaves the prior registry authoritative and cleanup blocked;
+rerun the same command after correcting the ECR failure rather than editing the
+registry manually.
+
+Image publication may happen before deployment (including through the
+standalone publisher), so the current cohort's `verified_at` is also the release
+candidate watermark: any immutable runtime image pushed after it is retained
+until a later verified cohort advances the watermark. This closes the
+publish-to-deploy window without guessing from image age.
+
+Run the read-only drift gate before relying on the deployment. It recursively
+checks every `edgartools-prod-*` Step Functions definition, requires each
+referenced task-definition ARN to be active and part of the registry's current
+release cohort, verifies that each current task definition resolves to its
+recorded role digest, and reconciles live ECS tasks, rollback mirror tags, each
+cohort's recorded immutable source tag, and its exact repository.
+Repository identity includes the AWS account and region as well as the final
+repository name; an identically named repository in another registry fails
+closed. The fallback `create-deployer.sh` policy grants the deployer only the
+shared runtime repository, rollback registry/lock object prefixes, inventory
+reads, exact task-definition retirement, and image deletion needed by this
+workflow.
+Task enumeration scans every ECS cluster in the account, queries both `RUNNING`
+and `STOPPED` desired states, retains every platform task whose actual state is
+still transitional, and fails closed on any `DescribeTasks` response-level
+failure. The deployment script does not run the legacy ECR cleanup script;
+deletion requires an explicit reviewed `ecr_rollback_cli plan`/`apply` cycle.
+
+```bash
+AWS_PROFILE=sec_platform_deployer \
+uv run python -m edgar_warehouse.scripts.ecr_rollback_cli \
+  --region us-east-1 \
+  --account-id 690839588395 \
+  --repository edgartools-prod-images \
+  --name-prefix edgartools-prod \
+  --registry-bucket edgartools-prod-warehouse-690839588395 \
+  check \
+  --output-file /tmp/edgartools-prod-task-definition-check.json
+```
+
+`check` never changes AWS. It exits nonzero on reference drift, unresolved or
+dynamic task-definition references, incomplete rollback evidence, identity
+mismatch, or any other fail-closed condition. Inspect `reference_drift`,
+`fail_closed_reasons`, and the exact `stale_task_definition_arns`; the historical
+458-candidate count is only a counting check.
+
+For retirement, generate a reviewed plan first, then pass its exact hash to
+`apply`:
+
+```bash
+AWS_PROFILE=sec_platform_deployer \
+uv run python -m edgar_warehouse.scripts.ecr_rollback_cli \
+  --region us-east-1 \
+  --account-id 690839588395 \
+  --repository edgartools-prod-images \
+  --name-prefix edgartools-prod \
+  --registry-bucket edgartools-prod-warehouse-690839588395 \
+  plan \
+  --output-file /tmp/edgartools-prod-ecr-retirement-plan.json
+
+# Destructive: use only after reviewing the exact ARNs and digests above.
+AWS_PROFILE=sec_platform_deployer \
+uv run python -m edgar_warehouse.scripts.ecr_rollback_cli \
+  --region us-east-1 \
+  --account-id 690839588395 \
+  --repository edgartools-prod-images \
+  --name-prefix edgartools-prod \
+  --registry-bucket edgartools-prod-warehouse-690839588395 \
+  apply \
+  --plan-hash '<plan_sha256>' \
+  --operator '<operator-id>'
+```
+
+`apply` acquires the durable cleanup lock, reloads the registry, and repeats the
+full audit before changing anything. It deregisters only the reviewed exact
+ARNs in bounded batches of 100, verifies each is `INACTIVE`, and repeats the
+full read-only reconciliation after every batch. It deletes only digests that
+remain eligible in both the reviewed and repeated plans. Any changed or
+unresolved reference aborts before image deletion. Use
+`--task-definition-batch-size` to choose a smaller reviewed batch when needed.
+
 ### Bounded ECS warehouse tasks
 
 Use the standard launcher for CIK-scoped operational work instead of composing
