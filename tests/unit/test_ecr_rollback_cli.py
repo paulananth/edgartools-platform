@@ -207,7 +207,9 @@ def test_gather_live_tasks_fails_closed_when_the_scoped_cluster_is_missing():
             )
 
     live_tasks, services, errors, counts = cli.gather_ecs_clusters_tasks(
-        FakeEcs(), "edgartools-prod-warehouse", "edgartools-prod-images"
+        FakeEcs(),
+        "edgartools-prod-warehouse",
+        "1.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images",
     )
 
     assert live_tasks == []
@@ -282,13 +284,18 @@ def test_gather_live_tasks_includes_transitioning_tasks_and_reports_describe_fai
             }
 
     live_tasks, services, errors, counts = cli.gather_ecs_clusters_tasks(
-        FakeEcs(), "edgartools-prod-warehouse", "edgartools-prod-images"
+        FakeEcs(),
+        "edgartools-prod-warehouse",
+        "1.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images",
     )
 
     assert [task["task_arn"] for task in live_tasks] == [
         running_arn,
         transitioning_arn,
     ]
+    assert live_tasks[0]["images"][0]["repository"] == (
+        "1.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images"
+    )
     assert services == []
     assert errors == ["ECS DescribeTasks failure for 'missing-task': MISSING"]
     assert counts["ecs_list_tasks_pages"] == 2
@@ -380,13 +387,18 @@ def test_gather_live_tasks_finds_prod_task_references_in_another_cluster():
             }
 
     live_tasks, services, errors, counts = cli.gather_ecs_clusters_tasks(
-        FakeEcs(), "edgartools-prod-warehouse", "edgartools-prod-images"
+        FakeEcs(),
+        "edgartools-prod-warehouse",
+        "1.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images",
     )
 
     assert [task["task_arn"] for task in live_tasks] == [
         prod_task_arn,
         tag_pinned_task_arn,
     ]
+    assert live_tasks[1]["images"][0]["repository"] == (
+        "1.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images"
+    )
     assert services == [
         {
             "cluster": other_cluster,

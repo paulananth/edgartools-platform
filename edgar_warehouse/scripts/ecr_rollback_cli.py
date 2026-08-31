@@ -202,6 +202,25 @@ def verify_mutation_identity(sts_client: Any, *, expected_account_id: str) -> bo
     return True
 
 
+def _verified_mutation_context(
+    args: argparse.Namespace,
+) -> tuple[Any, Any, Any, Any, StorageLocation] | None:
+    """Resolve AWS clients and storage only after the mutation account matches."""
+    ecr_client, ecs_client, sfn_client, sts_client = _clients(args.region)
+    if not verify_mutation_identity(
+        sts_client,
+        expected_account_id=args.account_id,
+    ):
+        return None
+    return (
+        ecr_client,
+        ecs_client,
+        sfn_client,
+        sts_client,
+        _storage(args.registry_bucket),
+    )
+
+
 def gather_ecr_images(ecr_client: Any, repository: str) -> tuple[list[dict], dict[str, int]]:
     images: list[dict] = []
     pages = 0
@@ -327,7 +346,7 @@ def gather_workflow_task_definition_arns(
 def gather_ecs_clusters_tasks(
     ecs_client: Any,
     cluster_name: str,
-    repository: str,
+    repository_uri: str,
 ) -> tuple[list[dict], list[dict], list[str], dict[str, int]]:
     discovered_cluster_arns: list[str] = []
     cluster_pages = 0
@@ -387,8 +406,16 @@ def gather_ecs_clusters_tasks(
                 containers = []
                 for container in task.get("containers", []):
                     image = container.get("image", "")
-                    image_name = image.split("@", 1)[0].rsplit("/", 1)[-1]
-                    image_repository = image_name.split(":", 1)[0] if image_name else None
+                    if "@" in image:
+                        image_repository = image.rsplit("@", 1)[0]
+                    else:
+                        final_slash = image.rfind("/")
+                        final_colon = image.rfind(":")
+                        image_repository = (
+                            image[:final_colon]
+                            if final_colon > final_slash
+                            else image or None
+                        )
                     containers.append(
                         {
                             "repository": image_repository,
@@ -399,7 +426,7 @@ def gather_ecs_clusters_tasks(
                 is_platform_task = (
                     task_definition_family == name_prefix
                     or task_definition_family.startswith(f"{name_prefix}-")
-                    or any(image["repository"] == repository for image in containers)
+                    or any(image["repository"] == repository_uri for image in containers)
                 )
                 if not is_platform_task:
                     continue
@@ -459,7 +486,9 @@ def build_plan(
     )
     errors.extend(workflow_errors)
     live_tasks, services, ecs_errors, ecs_counts = gather_ecs_clusters_tasks(
-        ecs_client, f"{name_prefix}-warehouse", repository
+        ecs_client,
+        f"{name_prefix}-warehouse",
+        f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository}",
     )
     errors.extend(ecs_errors)
 
@@ -535,10 +564,10 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
-    ecr_client, ecs_client, sfn_client, sts_client = _clients(args.region)
-    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
+    context = _verified_mutation_context(args)
+    if context is None:
         return 2
-    storage = _storage(args.registry_bucket)
+    ecr_client, ecs_client, sfn_client, sts_client, storage = context
 
     lock_token = acquire_lock(storage, args.lock_path, operator=args.operator)
     try:
@@ -649,11 +678,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 
 def cmd_record_cohort(args: argparse.Namespace) -> int:
-    ecr_client, _ecs_client, _sfn_client, sts_client = _clients(args.region)
-    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
+    context = _verified_mutation_context(args)
+    if context is None:
         return 2
-
-    storage = _storage(args.registry_bucket)
+    ecr_client, _ecs_client, _sfn_client, _sts_client, storage = context
     lock_token = acquire_lock(storage, args.lock_path, operator=args.operator)
     try:
         registry, etag = load_registry(
@@ -733,20 +761,20 @@ def cmd_record_cohort(args: argparse.Namespace) -> int:
 
 
 def cmd_acquire_lock(args: argparse.Namespace) -> int:
-    _ecr_client, _ecs_client, _sfn_client, sts_client = _clients(args.region)
-    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
+    context = _verified_mutation_context(args)
+    if context is None:
         return 2
-    storage = _storage(args.registry_bucket)
+    _ecr_client, _ecs_client, _sfn_client, _sts_client, storage = context
     token = acquire_lock(storage, args.lock_path, operator=args.operator)
     print(token)
     return 0
 
 
 def cmd_release_lock(args: argparse.Namespace) -> int:
-    _ecr_client, _ecs_client, _sfn_client, sts_client = _clients(args.region)
-    if not verify_mutation_identity(sts_client, expected_account_id=args.account_id):
+    context = _verified_mutation_context(args)
+    if context is None:
         return 2
-    storage = _storage(args.registry_bucket)
+    _ecr_client, _ecs_client, _sfn_client, _sts_client, storage = context
     release_lock(storage, args.lock_path, expected_token=args.token, force=args.force)
     print(f"==> Released lock at {args.lock_path}")
     return 0

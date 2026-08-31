@@ -61,7 +61,7 @@ def _repository_from_digest_ref(image_ref: object) -> str | None:
     value = str(image_ref)
     if "@" not in value:
         return None
-    return value.rsplit("@", 1)[0].rsplit("/", 1)[-1]
+    return value.rsplit("@", 1)[0]
 
 
 @dataclass(frozen=True)
@@ -210,6 +210,9 @@ def compute_plan(
     errors = list(errors)
     fail_closed_reasons: list[str] = list(errors)
     reference_drift: list[str] = []
+    expected_repository_uri = (
+        f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository}"
+    )
 
     registry_findings = validate_registry(registry)
     fail_closed_reasons.extend(f"registry: {finding.message}" for finding in registry_findings)
@@ -270,7 +273,6 @@ def compute_plan(
     # protection -- every active task definition would trivially "reference
     # itself" otherwise, and staleness detection would never fire.
     referenced_task_definition_arns: set[str] = set()
-    registry_task_definition_arns: set[str] = set()
     for cohort in registry.get("cohorts", []) if isinstance(registry.get("cohorts"), list) else []:
         for role in ROLE_NAMES:
             role_entry = cohort.get(role)
@@ -278,7 +280,6 @@ def compute_plan(
                 for arn in role_entry.get("task_definition_arns") or []:
                     if isinstance(arn, str):
                         referenced_task_definition_arns.add(arn)
-                        registry_task_definition_arns.add(arn)
 
     registry_expected_task_definitions: list[tuple[str, str, str, str]] = []
     current_release_task_definitions: dict[str, tuple[str, str]] = {}
@@ -332,7 +333,7 @@ def compute_plan(
         actual_digests = {
             match.group(1)
             for image_ref in registry_task_def.get("images", [])
-            if _repository_from_digest_ref(image_ref) == repository
+            if _repository_from_digest_ref(image_ref) == expected_repository_uri
             and (match := _DIGEST_REF_RE.search(str(image_ref)))
         }
         if actual_digests != {expected_digest}:
@@ -366,10 +367,10 @@ def compute_plan(
                     f"live task {task_arn!r} has a container with no resolvable imageDigest"
                 )
                 continue
-            if repo != repository:
+            if repo != expected_repository_uri:
                 fail_closed_reasons.append(
                     f"live task {task_arn!r} references digest {digest!r} outside the "
-                    f"expected repository {repository!r} (found in {repo!r})"
+                    f"expected repository {expected_repository_uri!r} (found in {repo!r})"
                 )
                 continue
             _protect(digest, f"live_task:{task_arn}")
@@ -384,12 +385,6 @@ def compute_plan(
         else:
             reference_drift.append(
                 f"live task {task_arn!r} has no resolvable task-definition ARN"
-            )
-
-    for arn in sorted(registry_task_definition_arns):
-        if arn not in task_definitions_by_arn:
-            reference_drift.append(
-                f"rollback registry references task definition {arn!r}, which is not ACTIVE"
             )
 
     # Only protected references must resolve to the audited runtime repository.
@@ -414,10 +409,10 @@ def compute_plan(
                     f"image {image_ref!r} — cannot resolve unambiguously"
                 )
                 continue
-            if _repository_from_digest_ref(image_ref) != repository:
+            if _repository_from_digest_ref(image_ref) != expected_repository_uri:
                 fail_closed_reasons.append(
                     f"task definition {arn!r} references an image outside the expected "
-                    f"repository {repository!r}: {image_ref!r}"
+                    f"repository {expected_repository_uri!r}: {image_ref!r}"
                 )
                 continue
             _protect(match.group(1), f"protected_task_definition:{arn}")

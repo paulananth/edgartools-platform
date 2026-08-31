@@ -83,3 +83,17 @@ registry content and remains stable across unordered AWS inventory responses;
 every rollback cohort ARN is verified against its recorded digest, and partial
 ECR delete responses report their successful deletions accurately. The final
 focused slice passes 105 tests.
+
+The 2026-08-30 completion review closed two final integration gaps. Exact ECR
+identity now binds account, region, and repository name, so a same-named
+repository in another registry cannot satisfy cohort or live-task checks. The
+repository-managed `sec_platform_deployer` fallback policy now authorizes the
+narrow S3 registry/lock prefixes, account-wide inventory reads, exact
+task-definition deregistration, and shared-repository image operations used by
+the documented plan/apply path. Duplicate missing-ARN diagnostics were removed,
+and all mutating CLI handlers now enter through one account-verifying context.
+Focused coverage passes with 107 tests; targeted mypy, Ruff, Python and shell
+syntax, generated-policy JSON validation, and `git diff --check` pass. The full
+repository suite reached 2,902 passed and 5 skipped; its eight failures are
+confined to unrelated acquisition-ledger Postgres integration tests whose
+current test schema lacks `source_fetch_work.captured_etag`.

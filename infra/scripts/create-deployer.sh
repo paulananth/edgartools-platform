@@ -181,9 +181,9 @@ create_and_attach_policy() {
 }
 
 policy_rollout() {
-  local repo_arn task_definition_arn state_machine_arn execution_arn ecs_log_group_arn ecs_log_group_wildcard_arn states_log_group_arn states_log_group_wildcard_arn
+  local repo_arn task_definition_arn state_machine_arn execution_arn ecs_log_group_arn ecs_log_group_wildcard_arn states_log_group_arn states_log_group_wildcard_arn warehouse_bucket_arn warehouse_legacy_bucket_arn
 
-  repo_arn="arn:aws:ecr:${REGION}:${ACCOUNT_ID}:repository/${NAME_PREFIX}-warehouse"
+  repo_arn="arn:aws:ecr:${REGION}:${ACCOUNT_ID}:repository/${NAME_PREFIX}-images"
   task_definition_arn="arn:aws:ecs:${REGION}:${ACCOUNT_ID}:task-definition/${NAME_PREFIX}-*:*"
   state_machine_arn="arn:aws:states:${REGION}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-*"
   execution_arn="arn:aws:states:${REGION}:${ACCOUNT_ID}:execution:${NAME_PREFIX}-*:*"
@@ -191,6 +191,8 @@ policy_rollout() {
   ecs_log_group_wildcard_arn="${ecs_log_group_arn}:*"
   states_log_group_arn="arn:aws:logs:${REGION}:${ACCOUNT_ID}:log-group:/aws/states/${NAME_PREFIX}-warehouse"
   states_log_group_wildcard_arn="${states_log_group_arn}:*"
+  warehouse_bucket_arn="arn:aws:s3:::${NAME_PREFIX}-warehouse-${ACCOUNT_ID}"
+  warehouse_legacy_bucket_arn="arn:aws:s3:::${NAME_PREFIX}-warehouse"
 
   jq -n \
     --arg repo_arn "$repo_arn" \
@@ -201,6 +203,8 @@ policy_rollout() {
     --arg ecs_log_group_wildcard_arn "$ecs_log_group_wildcard_arn" \
     --arg states_log_group_arn "$states_log_group_arn" \
     --arg states_log_group_wildcard_arn "$states_log_group_wildcard_arn" \
+    --arg warehouse_bucket_arn "$warehouse_bucket_arn" \
+    --arg warehouse_legacy_bucket_arn "$warehouse_legacy_bucket_arn" \
     '{
       Version: "2012-10-17",
       Statement: [
@@ -221,6 +225,8 @@ policy_rollout() {
           Effect: "Allow",
           Action: [
             "ecr:BatchCheckLayerAvailability",
+            "ecr:BatchDeleteImage",
+            "ecr:BatchGetImage",
             "ecr:CompleteLayerUpload",
             "ecr:DescribeImages",
             "ecr:DescribeRepositories",
@@ -238,7 +244,14 @@ policy_rollout() {
           Action: [
             "ec2:DescribeSecurityGroups",
             "ec2:DescribeSubnets",
-            "ecs:DescribeClusters"
+            "ecs:DescribeClusters",
+            "ecs:DescribeTasks",
+            "ecs:ListClusters",
+            "ecs:ListServices",
+            "ecs:ListTaskDefinitionFamilies",
+            "ecs:ListTaskDefinitions",
+            "ecs:ListTasks",
+            "states:ListStateMachines"
           ],
           Resource: "*"
         },
@@ -253,11 +266,26 @@ policy_rollout() {
           Resource: "*"
         },
         {
-          Sid: "ReadWarehouseTaskDefinitions",
+          Sid: "ManageRollbackRegistryAndLock",
           Effect: "Allow",
           Action: [
-            "ecs:ListTaskDefinitions",
-            "ecs:DescribeTaskDefinition"
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:DeleteObject"
+          ],
+          Resource: [
+            ($warehouse_bucket_arn + "/warehouse/release/*"),
+            ($warehouse_bucket_arn + "/silverstage/*/warehouse/release/*"),
+            ($warehouse_legacy_bucket_arn + "/warehouse/release/*"),
+            ($warehouse_legacy_bucket_arn + "/silverstage/*/warehouse/release/*")
+          ]
+        },
+        {
+          Sid: "ManageWarehouseTaskDefinitions",
+          Effect: "Allow",
+          Action: [
+            "ecs:DescribeTaskDefinition",
+            "ecs:DeregisterTaskDefinition"
           ],
           Resource: $task_definition_arn
         },

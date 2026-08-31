@@ -14,6 +14,7 @@ from edgar_warehouse.application import ecr_rollback_registry as registry
 ACCOUNT_ID = "690839588395"
 REGION = "us-east-1"
 REPOSITORY = "edgartools-prod-images"
+REPOSITORY_URI = f"{ACCOUNT_ID}.dkr.ecr.{REGION}.amazonaws.com/{REPOSITORY}"
 AUDIT_STARTED_AT = "2026-08-11T12:00:00Z"
 
 
@@ -172,7 +173,7 @@ def test_an_image_referenced_by_a_live_task_is_protected_even_if_absent_from_the
         {
             "task_arn": "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/abc",
             "task_definition_arn": _arn("warehouse", 99),
-            "images": [{"repository": REPOSITORY, "image_digest": _digest("live-only")}],
+            "images": [{"repository": REPOSITORY_URI, "image_digest": _digest("live-only")}],
         }
     ]
     kwargs["task_definitions"].append(_task_definition(_arn("warehouse", 99), _digest("live-only")))
@@ -191,7 +192,7 @@ def test_an_image_referenced_by_an_active_task_definition_via_digest_pin_is_prot
             "task_arn": "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/td-only",
             "task_definition_arn": _arn("warehouse", 42),
             "images": [
-                {"repository": REPOSITORY, "image_digest": _digest("td-only")}
+                {"repository": REPOSITORY_URI, "image_digest": _digest("td-only")}
             ],
         }
     ]
@@ -211,7 +212,7 @@ def test_a_tag_pinned_task_definition_image_reference_fails_closed():
             "task_arn": "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/tag-only",
             "task_definition_arn": _arn("warehouse", 42),
             "images": [
-                {"repository": REPOSITORY, "image_digest": _digest("some-image")}
+                {"repository": REPOSITORY_URI, "image_digest": _digest("some-image")}
             ],
         }
     ]
@@ -238,7 +239,7 @@ def test_a_similarly_named_external_repository_fails_closed():
             "task_definition_arn": external_arn,
             "images": [
                 {
-                    "repository": f"{REPOSITORY}-copy",
+                    "repository": f"{REPOSITORY_URI}-copy",
                     "image_digest": _digest("external"),
                 }
             ],
@@ -250,6 +251,31 @@ def test_a_similarly_named_external_repository_fails_closed():
     assert not audit.is_appliable(plan)
     assert any(
         external_arn in reason and "outside the expected repository" in reason
+        for reason in plan.fail_closed_reasons
+    )
+
+
+def test_same_named_repository_in_another_account_fails_closed():
+    reg = _full_registry()
+    kwargs = _base_kwargs(reg)
+    current_arn = _arn("warehouse", 3)
+    current_digest = reg["cohorts"][0]["warehouse"]["digest"]
+    external_ref = (
+        f"999999999999.dkr.ecr.{REGION}.amazonaws.com/"
+        f"{REPOSITORY}@{current_digest}"
+    )
+    kwargs["task_definitions"] = [
+        {"arn": current_arn, "images": [external_ref]}
+        if task_definition["arn"] == current_arn
+        else task_definition
+        for task_definition in kwargs["task_definitions"]
+    ]
+
+    plan = audit.compute_plan(**kwargs)
+
+    assert not audit.is_appliable(plan)
+    assert any(
+        current_arn in reason and "outside the expected repository" in reason
         for reason in plan.fail_closed_reasons
     )
 
@@ -279,7 +305,7 @@ def test_a_live_task_container_missing_image_digest_fails_closed():
         {
             "task_arn": "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/abc",
             "task_definition_arn": _arn("warehouse", 99),
-            "images": [{"repository": REPOSITORY, "image_digest": None}],
+            "images": [{"repository": REPOSITORY_URI, "image_digest": None}],
         }
     ]
     plan = audit.compute_plan(**kwargs)
@@ -296,7 +322,7 @@ def test_a_live_task_with_an_unresolved_task_definition_fails_closed():
             "task_arn": "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/abc",
             "task_definition_arn": unresolved_arn,
             "images": [
-                {"repository": REPOSITORY, "image_digest": _digest("live-only")}
+                {"repository": REPOSITORY_URI, "image_digest": _digest("live-only")}
             ],
         }
     ]
@@ -484,7 +510,12 @@ def test_current_release_task_definition_missing_from_active_inventory_fails_clo
     plan = audit.compute_plan(**kwargs)
 
     assert not audit.is_appliable(plan)
-    assert any(missing_arn in finding and "not ACTIVE" in finding for finding in plan.reference_drift)
+    missing_findings = [
+        finding for finding in plan.reference_drift if missing_arn in finding
+    ]
+    assert missing_findings == [
+        f"registry current task definition {missing_arn!r} for role 'warehouse' is not ACTIVE"
+    ]
 
 
 def test_current_release_task_definition_digest_mismatch_fails_closed():

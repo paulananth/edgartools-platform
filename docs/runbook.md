@@ -524,6 +524,12 @@ referenced task-definition ARN to be active and part of the registry's current
 release cohort, verifies that each current task definition resolves to its
 recorded role digest, and reconciles live ECS tasks, rollback mirror tags, each
 cohort's recorded immutable source tag, and its exact repository.
+Repository identity includes the AWS account and region as well as the final
+repository name; an identically named repository in another registry fails
+closed. The fallback `create-deployer.sh` policy grants the deployer only the
+shared runtime repository, rollback registry/lock object prefixes, inventory
+reads, exact task-definition retirement, and image deletion needed by this
+workflow.
 Task enumeration scans every ECS cluster in the account, queries both `RUNNING`
 and `STOPPED` desired states, retains every platform task whose actual state is
 still transitional, and fails closed on any `DescribeTasks` response-level
