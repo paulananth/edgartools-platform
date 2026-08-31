@@ -80,7 +80,7 @@ from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.serving.silver_landing_writer import write_landing_export
 from edgar_warehouse.silver_protection import compute_silver_fingerprint, merge_candidate_into_canonical
-from edgar_warehouse.silver_support.session import open_silver_database, open_silver_shard
+from edgar_warehouse.silver_support.session import open_silver_database
 
 if TYPE_CHECKING:
     from edgar_warehouse.bookkeeping.store import BookkeepingStore
@@ -514,77 +514,21 @@ def _execute_warehouse_bronze_capture(
 
         return run_silver_landing_company_backfill(context, run_id)
 
-    # --- Shard-aware hydrate/open (Phase 9, STORE-02) ---
-    # bootstrap-batch is the ECS chunk task that receives a pre-resolved CIK list
-    # (from seed-silver-batches / Step Functions Distributed Map).  For remote
-    # storage we download only the overlapping shard rather than the full monolith.
-    #
-    # NOTE: --cik-offset is a positional index into the MDM CIK list, NOT a CIK
-    # value.  Here we already have the final resolved CIK integers in cik_list,
-    # so cik_min/cik_max are extracted directly from those values.
-    _active_shard_index: int | None = None
-    _using_shard_path: bool = (
-        command_name == "bootstrap-batch"
-        and context.storage_root.is_remote
-        and bool(arguments.get("cik_list"))
-    )
-
-    if _using_shard_path:
-        chunk_ciks = [int(c) for c in arguments["cik_list"]]
-        cik_min = min(chunk_ciks)
-        cik_max = max(chunk_ciks)
-        from edgar_warehouse.application.sharding.shard_manifest import shards_for_window
-
-        try:
-            manifest = _read_shard_manifest(context)
-        except (FileNotFoundError, OSError):
-            # First-load recovery can start from copied bronze before a shard
-            # manifest exists. Fall back to the monolith path; the recovery
-            # state machine runs BatchSilver sequentially to avoid write races.
-            _emit_pipeline_event(
-                "shard_manifest_missing_monolith_fallback",
-                command=command_name,
-                run_id=run_id,
-            )
-            _using_shard_path = False
-        else:
-            overlapping = shards_for_window(manifest, cik_min, cik_max)
-            if not overlapping:
-                # No shard covers this window — fall back to monolith path.
-                _using_shard_path = False
-            else:
-                if len(overlapping) > 1:
-                    # A 500-CIK window spanning two shard bands is unusual but possible near
-                    # band boundaries.  Only the first overlapping shard is the write target
-                    # (operational invariant: configure cik_limit so windows don't straddle
-                    # boundaries).  Log a warning but do not error out.
-                    _emit_pipeline_event(
-                        "shard_window_crosses_band_boundary",
-                        command=command_name,
-                        run_id=run_id,
-                        cik_min=cik_min,
-                        cik_max=cik_max,
-                        overlapping_shards=overlapping,
-                        write_shard=overlapping[0],
-                    )
-                _active_shard_index = overlapping[0]
-                local_shard_path = _hydrate_shard_for_window(context, _active_shard_index)
-                if local_shard_path is None:
-                    # Shard doesn't exist in remote storage yet — fall back to monolith.
-                    _using_shard_path = False
-                else:
-                    scope = _resolve_scope(
-                        command_name=command_name,
-                        arguments=arguments,
-                        now=now,
-                        silver_root=None,
-                    )
-                    db = open_silver_shard(local_shard_path, landing_export=landing_export)
-
-    if not _using_shard_path:
-        _hydrate_silver_database_from_storage(context)
-        scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
-        db = _open_silver_database(context.silver_root, landing_export=landing_export)
+    # DuckDB Retirement Cutover Ticket 06: bootstrap-batch used to hydrate/open
+    # a CIK-sharded shard-{0-3}.duckdb file here instead of the monolith, to
+    # avoid concurrent writers (MaxConcurrency up to 20) racing an ETag-guarded
+    # promote of one shared silver.duckdb. That contention no longer applies --
+    # bootstrap-batch's real write target is the Snowflake landing zone
+    # (append-only, one Parquet file per run, no shared mutable object), so
+    # every command now hydrates/opens the same monolith silver database. The
+    # shared shard-file infrastructure itself (_read_shard_manifest,
+    # _hydrate_shard_for_window, open_silver_shard, _publish_shard_if_remote)
+    # is left in place -- load_history's read path and the mdm-ahead-of-silver
+    # backfill sweep still call it directly; see
+    # .scratch/duckdb-retirement/issues/04-decide-bootstrap-batch-sharding-fate.md.
+    _hydrate_silver_database_from_storage(context)
+    scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
+    db = _open_silver_database(context.silver_root, landing_export=landing_export)
     db_closed = False
     bookkeeping = _bookkeeping_store()
     sync_mode = _sync_mode_for_command(command_name)
@@ -610,7 +554,6 @@ def _execute_warehouse_bronze_capture(
             context.snowflake_export_root is not None and publish_snowflake
         ),
         include_gold_manifest=publish_gold,
-        shard_index=_active_shard_index if _using_shard_path else None,
     )
     bookkeeping.start_pipeline_run(
         {
@@ -806,8 +749,6 @@ def _execute_warehouse_bronze_capture(
                 "run_manifest_path": context.storage_root.join("identity_refresh/runs", run_id, "run_manifest.json"),
                 "size_bytes": Path(context.silver_root.join("silver", "sec", "silver.duckdb")).stat().st_size,
             }
-        elif _using_shard_path and _active_shard_index is not None:
-            silver_database_write = _publish_shard_if_remote_with_retry(context, _active_shard_index)
         else:
             silver_database_write = _publish_silver_database_with_retry(context)
         _emit_pipeline_event(
@@ -7014,7 +6955,6 @@ def _planned_pipeline_writes(
     now: datetime,
     include_snowflake_export_manifest: bool,
     include_gold_manifest: bool,
-    shard_index: int | None,
 ) -> list[dict[str, Any]]:
     writes: list[dict[str, Any]] = []
     for layer, relative_path in _planned_writes_for_publication(
@@ -7065,15 +7005,10 @@ def _planned_pipeline_writes(
         )
 
     if context.storage_root.is_remote:
-        if shard_index is None:
-            layer = "silver_database"
-            relative_path = "silver/sec/silver.duckdb"
-        else:
-            layer = "silver_shard"
-            relative_path = f"silver/sec/shards/shard-{shard_index}.duckdb"
+        relative_path = "silver/sec/silver.duckdb"
         writes.append(
             {
-                "layer": layer,
+                "layer": "silver_database",
                 "path": context.storage_root.join(relative_path),
                 "relative_path": relative_path,
                 "planned": True,
