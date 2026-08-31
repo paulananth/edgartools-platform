@@ -75,7 +75,7 @@ def _activate_adv_filing_registry(engine) -> None:
     assert activated.status == "active"
 
 
-def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Platform test@example.com")
     monkeypatch.setenv("WAREHOUSE_ENVIRONMENT", "test")
     monkeypatch.setenv("WAREHOUSE_RUNTIME_MODE", "infrastructure_validation")
@@ -84,73 +84,82 @@ def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("WAREHOUSE_SILVER_ROOT", str(tmp_path / "silver"))
     for variable in ("SERVING_EXPORT_ROOT", "SNOWFLAKE_EXPORT_ROOT", "SILVER_LANDING_EXPORT_ROOT"):
         monkeypatch.delenv(variable, raising=False)
+    # DuckDB Retirement Cutover Ticket 15: stg_daily_index_filing/
+    # sec_daily_index_checkpoint now live in the Postgres-backed
+    # BookkeepingStore, not this test's DuckDB fixture. Pin ONE in-memory
+    # SQLite-backed store for the whole test -- _seed_daily_index seeds it
+    # directly, and the code under test must read back the same instance,
+    # not a fresh one constructed per call.
+    from edgar_warehouse.application.workflows import drive_filing_discovery
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
+
+    bookkeeping = bookkeeping_fixture()
+    monkeypatch.setattr(
+        drive_filing_discovery, "_bookkeeping_store", lambda: bookkeeping
+    )
+    return bookkeeping
 
 
-def _seed_daily_index(tmp_path, *, business_date: str, sealed: bool) -> None:
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    db = open_silver_database(silver_root)
-    try:
-        business_date_value = date.fromisoformat(business_date)
-        rows = [
-            {
-                "business_date": business_date_value,
-                "source_year": business_date_value.year,
-                "source_quarter": ((business_date_value.month - 1) // 3) + 1,
-                "row_ordinal": 1,
-                "form": "ADV",
-                "company_name": "Example Advisers LLC",
-                "cik": 1234567,
-                "filing_date": business_date_value,
-                "file_name": "edgar/data/1234567/0001140361-26-000003.txt",
-                "accession_number": "0001140361-26-000003",
-                "filing_txt_url": (
-                    "https://www.sec.gov/Archives/edgar/data/1234567/"
-                    "0001140361-26-000003.txt"
-                ),
-                "record_hash": "hash-adv",
-            },
-            {
-                # A same-day Form 4: must stay out of scope for adv_filing
-                # even though it comes from the exact same sealed daily-index
-                # observation -- proves the two families' in_scope_forms
-                # partition the same rows without any cross-family leakage.
-                "business_date": business_date_value,
-                "source_year": business_date_value.year,
-                "source_quarter": ((business_date_value.month - 1) // 3) + 1,
-                "row_ordinal": 2,
-                "form": "4",
-                "company_name": "Widget Corp.",
-                "cik": 999999,
-                "filing_date": business_date_value,
-                "file_name": "edgar/data/999999/0001140361-26-000002.txt",
-                "accession_number": "0001140361-26-000002",
-                "filing_txt_url": (
-                    "https://www.sec.gov/Archives/edgar/data/999999/"
-                    "0001140361-26-000002.txt"
-                ),
-                "record_hash": "hash-2",
-            },
-        ]
-        db.merge_daily_index_filings(rows, sync_run_id="seed-run")
-        db.upsert_daily_index_checkpoint(
-            {
-                "business_date": business_date_value,
-                "source_key": f"date:{business_date}",
-                "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
-                "expected_available_at": datetime.now(UTC),
-                "first_attempt_at": datetime.now(UTC),
-                "last_attempt_at": datetime.now(UTC),
-                "status": "succeeded" if sealed else "waiting_for_publish",
-                "row_count": 2,
-                "distinct_cik_count": 2,
-                "distinct_accession_count": 2,
-            }
-        )
-    finally:
-        db.close()
+def _seed_daily_index(bookkeeping, *, business_date: str, sealed: bool) -> None:
+    # DuckDB Retirement Cutover Ticket 15: stg_daily_index_filing/
+    # sec_daily_index_checkpoint now live in the bookkeeping store, not
+    # SilverDatabase -- seed there, matching what the code under test reads.
+    business_date_value = date.fromisoformat(business_date)
+    rows = [
+        {
+            "business_date": business_date_value,
+            "source_year": business_date_value.year,
+            "source_quarter": ((business_date_value.month - 1) // 3) + 1,
+            "row_ordinal": 1,
+            "form": "ADV",
+            "company_name": "Example Advisers LLC",
+            "cik": 1234567,
+            "filing_date": business_date_value,
+            "file_name": "edgar/data/1234567/0001140361-26-000003.txt",
+            "accession_number": "0001140361-26-000003",
+            "filing_txt_url": (
+                "https://www.sec.gov/Archives/edgar/data/1234567/"
+                "0001140361-26-000003.txt"
+            ),
+            "record_hash": "hash-adv",
+        },
+        {
+            # A same-day Form 4: must stay out of scope for adv_filing
+            # even though it comes from the exact same sealed daily-index
+            # observation -- proves the two families' in_scope_forms
+            # partition the same rows without any cross-family leakage.
+            "business_date": business_date_value,
+            "source_year": business_date_value.year,
+            "source_quarter": ((business_date_value.month - 1) // 3) + 1,
+            "row_ordinal": 2,
+            "form": "4",
+            "company_name": "Widget Corp.",
+            "cik": 999999,
+            "filing_date": business_date_value,
+            "file_name": "edgar/data/999999/0001140361-26-000002.txt",
+            "accession_number": "0001140361-26-000002",
+            "filing_txt_url": (
+                "https://www.sec.gov/Archives/edgar/data/999999/"
+                "0001140361-26-000002.txt"
+            ),
+            "record_hash": "hash-2",
+        },
+    ]
+    bookkeeping.merge_daily_index_filings(rows, sync_run_id="seed-run")
+    bookkeeping.upsert_daily_index_checkpoint(
+        {
+            "business_date": business_date_value,
+            "source_key": f"date:{business_date}",
+            "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
+            "expected_available_at": datetime.now(UTC),
+            "first_attempt_at": datetime.now(UTC),
+            "last_attempt_at": datetime.now(UTC),
+            "status": "succeeded" if sealed else "waiting_for_publish",
+            "row_count": 2,
+            "distinct_cik_count": 2,
+            "distinct_accession_count": 2,
+        }
+    )
 
 
 def test_drive_adv_filing_discovery_captures_adv_form_and_excludes_ownership_form(
@@ -158,8 +167,8 @@ def test_drive_adv_filing_discovery_captures_adv_form_and_excludes_ownership_for
 ) -> None:
     from edgar_warehouse.application.command_router import run_command
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=True)
     payload = b"<adv>real Form ADV bytes</adv>"
 
     with patch(
@@ -229,8 +238,8 @@ def test_drive_adv_filing_discovery_replay_performs_no_second_network_fetch(
 ) -> None:
     from edgar_warehouse.application.command_router import run_command
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=True)
     payload = b"<adv>real Form ADV bytes</adv>"
 
     revision_ids: list[str] = []
@@ -268,8 +277,8 @@ def test_drive_adv_filing_discovery_fails_closed_when_discovery_is_not_sealed(
     from edgar_warehouse.application.command_router import run_command
     from edgar_warehouse.application.errors import WarehouseRuntimeError
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=False)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=False)
 
     with pytest.raises(WarehouseRuntimeError, match="No sealed discovery observation"):
         run_command(
@@ -319,8 +328,8 @@ def test_filing_and_adv_discovery_partition_the_same_sealed_daily_index_independ
     ledger.record_catchup_progress("filing_artifact", date(2026, 1, 1))
     ledger.activate(version.version_id)
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=True)
 
     with patch(
         "edgar_warehouse.acquisition.source_family_registry.download_filing_content_bytes",

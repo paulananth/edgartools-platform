@@ -9,13 +9,10 @@ import duckdb
 
 def test_cli_writes_manifest_and_distributed_map_batches(tmp_path: Path, monkeypatch) -> None:
     from edgar_warehouse.scripts import build_relationship_release_manifest as command
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
     silver_path = tmp_path / "silver.duckdb"
     conn = duckdb.connect(str(silver_path))
-    conn.execute(
-        "CREATE TABLE sec_company_sync_state (cik BIGINT, tracking_status TEXT, last_main_sha256 TEXT)"
-    )
-    conn.execute("INSERT INTO sec_company_sync_state VALUES (1, 'active', 'submission-sha')")
     conn.execute(
         "CREATE TABLE sec_company_filing ("
         "accession_number TEXT, cik BIGINT, form TEXT, filing_date DATE, "
@@ -26,6 +23,14 @@ def test_cli_writes_manifest_and_distributed_map_batches(tmp_path: Path, monkeyp
         "('proxy', 1, 'DEF 14A', DATE '2024-02-01', NULL, NULL)"
     )
     conn.close()
+
+    # DuckDB Retirement Cutover Ticket 15: sec_company_sync_state now lives
+    # in the bookkeeping store, not SilverDatabase.
+    bookkeeping = bookkeeping_fixture()
+    bookkeeping.upsert_company_sync_state(
+        {"cik": 1, "tracking_status": "active", "last_main_sha256": "submission-sha"}
+    )
+    monkeypatch.setattr(command, "_bookkeeping_store", lambda: bookkeeping)
 
     monkeypatch.setattr(
         command,
@@ -106,13 +111,10 @@ def test_cli_subcommand_dispatches_to_build_relationship_release_manifest(
 ) -> None:
     from edgar_warehouse.cli import build_parser
     from edgar_warehouse.scripts import build_relationship_release_manifest as command
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
     silver_path = tmp_path / "silver.duckdb"
     conn = duckdb.connect(str(silver_path))
-    conn.execute(
-        "CREATE TABLE sec_company_sync_state (cik BIGINT, tracking_status TEXT, last_main_sha256 TEXT)"
-    )
-    conn.execute("INSERT INTO sec_company_sync_state VALUES (1, 'active', 'submission-sha')")
     conn.execute(
         "CREATE TABLE sec_company_filing ("
         "accession_number TEXT, cik BIGINT, form TEXT, filing_date DATE, "
@@ -123,6 +125,14 @@ def test_cli_subcommand_dispatches_to_build_relationship_release_manifest(
         "('proxy', 1, 'DEF 14A', DATE '2024-02-01', NULL, NULL)"
     )
     conn.close()
+
+    # DuckDB Retirement Cutover Ticket 15: sec_company_sync_state now lives
+    # in the bookkeeping store, not SilverDatabase.
+    bookkeeping = bookkeeping_fixture()
+    bookkeeping.upsert_company_sync_state(
+        {"cik": 1, "tracking_status": "active", "last_main_sha256": "submission-sha"}
+    )
+    monkeypatch.setattr(command, "_bookkeeping_store", lambda: bookkeeping)
 
     monkeypatch.setattr(
         command,

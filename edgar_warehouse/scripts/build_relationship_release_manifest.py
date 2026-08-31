@@ -30,6 +30,12 @@ from edgar_warehouse.application.relationship_bulk_load import (
 )
 
 
+def _bookkeeping_store() -> object:
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
+
+
 @contextmanager
 def _local_silver_db(path: str) -> Iterator[str]:
     """Yield a local filesystem path for ``path``, streaming from S3 if needed.
@@ -87,28 +93,26 @@ def _fetch_dicts(conn: duckdb.DuckDBPyConnection, sql: str, parameters: list[obj
 
 def _load_silver_inputs(
     silver_db: str,
+    bookkeeping: object,
     *,
     coverage_start: date,
     watermark: date,
     tracking_status_filter: str,
 ) -> tuple[set[int], dict[int, str], list[dict[str, object]]]:
+    # DuckDB Retirement Cutover Ticket 15: sec_company_sync_state moved to
+    # the Postgres-backed BookkeepingStore -- read the full set once and
+    # filter in Python, matching the original SQL's status-list semantics
+    # (no existing store method offers this exact filter).
+    statuses = [value.strip() for value in tracking_status_filter.split(",") if value.strip()]
+    all_states = bookkeeping.get_all_company_sync_states()  # type: ignore[attr-defined]
+    if not statuses or "all" in statuses:
+        cik_rows = all_states
+    else:
+        cik_rows = [row for row in all_states if row.get("tracking_status") in statuses]
+    cik_rows = sorted(cik_rows, key=lambda row: int(row["cik"]))
+
     conn = duckdb.connect(silver_db, read_only=True)
     try:
-        statuses = [value.strip() for value in tracking_status_filter.split(",") if value.strip()]
-        if not statuses or "all" in statuses:
-            cik_rows = _fetch_dicts(
-                conn,
-                "SELECT cik, last_main_sha256 FROM sec_company_sync_state ORDER BY cik",
-                [],
-            )
-        else:
-            placeholders = ",".join("?" for _ in statuses)
-            cik_rows = _fetch_dicts(
-                conn,
-                f"SELECT cik, last_main_sha256 FROM sec_company_sync_state "
-                f"WHERE tracking_status IN ({placeholders}) ORDER BY cik",
-                statuses,
-            )
         release_ciks = {int(row["cik"]) for row in cik_rows}
         source_manifest_fingerprints = {
             int(row["cik"]): str(row["last_main_sha256"])
@@ -210,9 +214,11 @@ def _run(args: argparse.Namespace) -> int:
                 args.watermark
             )
 
+        bookkeeping = _bookkeeping_store()
         with _local_silver_db(args.silver_db) as local_silver_db:
             release_ciks, source_manifest_fingerprints, silver_filings = _load_silver_inputs(
                 local_silver_db,
+                bookkeeping,
                 coverage_start=coverage_start,
                 watermark=args.watermark,
                 tracking_status_filter=args.tracking_status_filter,

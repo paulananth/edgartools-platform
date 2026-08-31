@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
@@ -20,6 +20,15 @@ _patch_silver_connection = patch(
     "edgar_warehouse.mdm.export.silver_connection_settings",
     return_value=FakeSnowflakeConnectionSettings(EMPTY_ORPHAN_EVIDENCE_TABLE_DATA),
 )
+
+
+def _patch_bookkeeping_store(bookkeeping):
+    # DuckDB Retirement Cutover Ticket 15: pipeline_run now lives in the
+    # bookkeeping store, not SilverDatabase.
+    return patch(
+        "edgar_warehouse.application.commands.validate_data_quality._bookkeeping_store",
+        return_value=bookkeeping,
+    )
 
 
 def _context(tmp_path) -> WarehouseCommandContext:
@@ -65,37 +74,40 @@ def test_validate_data_quality_flags_row_count_regressions(tmp_path) -> None:
     from edgar_warehouse.application.commands.validate_data_quality import (
         validate_data_quality,
     )
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
     context = _context(tmp_path)
     db = SilverDatabase(_db_path(context))
     try:
         _insert_company_and_filing(db)
-        db.start_pipeline_run(
-            {
-                "pipeline_run_id": "previous-run",
-                "command_name": "bootstrap",
-                "runtime_mode": "bronze_capture",
-                "environment_name": "test",
-                "started_at": datetime(2026, 1, 1, tzinfo=UTC),
-                "status": "running",
-                "arguments": {},
-                "scope": {},
-                "bronze_root": context.bronze_root.root,
-                "storage_root": context.storage_root.root,
-                "silver_root": context.silver_root.root,
-            }
-        )
-        db.complete_pipeline_run(
-            "previous-run",
-            status="succeeded",
-            writes=[],
-            raw_writes=[],
-            metrics={"silver_table_counts": {"sec_company": 2}},
-        )
     finally:
         db.close()
 
-    with _patch_silver_connection:
+    bookkeeping = bookkeeping_fixture()
+    bookkeeping.start_pipeline_run(
+        {
+            "pipeline_run_id": "previous-run",
+            "command_name": "bootstrap",
+            "runtime_mode": "bronze_capture",
+            "environment_name": "test",
+            "started_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "status": "running",
+            "arguments": {},
+            "scope": {},
+            "bronze_root": context.bronze_root.root,
+            "storage_root": context.storage_root.root,
+            "silver_root": context.silver_root.root,
+        }
+    )
+    bookkeeping.complete_pipeline_run(
+        "previous-run",
+        status="succeeded",
+        writes=[],
+        raw_writes=[],
+        metrics={"silver_table_counts": {"sec_company": 2}},
+    )
+
+    with _patch_silver_connection, _patch_bookkeeping_store(bookkeeping):
         report = validate_data_quality(context=context)
 
     assert report["checks"]["row_count_monotonic"]["status"] == "failed"
@@ -125,7 +137,9 @@ def test_validate_data_quality_flags_foreign_key_orphans(tmp_path) -> None:
     finally:
         db.close()
 
-    with _patch_silver_connection:
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_recent_successful_pipeline_runs.return_value = []
+    with _patch_silver_connection, _patch_bookkeeping_store(fake_bookkeeping):
         report = validate_data_quality(context=context)
 
     assert report["status"] == "failed"
@@ -162,7 +176,9 @@ def test_validate_data_quality_compares_direct_gold_and_silver_counts(tmp_path) 
     finally:
         db.close()
 
-    with _patch_silver_connection:
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_recent_successful_pipeline_runs.return_value = []
+    with _patch_silver_connection, _patch_bookkeeping_store(fake_bookkeeping):
         report = validate_data_quality(context=context)
 
     comparison = report["checks"]["gold_vs_silver"]["tables"]["sec_financial_fact"]
@@ -192,7 +208,9 @@ def test_validate_data_quality_reports_null_ratios(tmp_path) -> None:
     finally:
         db.close()
 
-    with _patch_silver_connection:
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_recent_successful_pipeline_runs.return_value = []
+    with _patch_silver_connection, _patch_bookkeeping_store(fake_bookkeeping):
         report = validate_data_quality(context=context)
 
     entity_type_ratio = report["checks"]["null_ratios"]["tables"]["sec_company"]["columns"][

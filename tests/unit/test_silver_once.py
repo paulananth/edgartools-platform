@@ -29,12 +29,29 @@ class _FakeDb:
         return self.daily
 
 
+class _FakeBookkeeping:
+    """DuckDB Retirement Cutover Ticket 15: sec_parse_run/
+    sec_daily_index_checkpoint now live in the bookkeeping store."""
+
+    def __init__(self, *, has_parse_run: bool = False, daily=None):
+        self._has_parse_run = has_parse_run
+        self.daily = daily
+
+    def has_successful_parse_run(self, *, accession_number, parser_name, parser_version):
+        return self._has_parse_run
+
+    def get_daily_index_checkpoint(self, business_date: str):
+        return self.daily
+
+
 class SilverOnceTests(unittest.TestCase):
     def test_ownership_parse_run_hit(self) -> None:
         db = _FakeDb({"parse_run": [{"ok": 1}]})
+        bookkeeping = _FakeBookkeeping(has_parse_run=True)
         self.assertTrue(
             has_successful_ownership_parse(
                 db,
+                bookkeeping,
                 accession_number="0001",
                 parser_name=PARSER_NAME,
                 parser_version=PARSER_VERSION,
@@ -43,9 +60,11 @@ class SilverOnceTests(unittest.TestCase):
 
     def test_ownership_fallback_to_owner_rows(self) -> None:
         db = _FakeDb({"parse_run": [], "owners": [{"ok": 1}]})
+        bookkeeping = _FakeBookkeeping(has_parse_run=False)
         self.assertTrue(
             has_successful_ownership_parse(
                 db,
+                bookkeeping,
                 accession_number="0001",
                 parser_name=PARSER_NAME,
                 parser_version=PARSER_VERSION,
@@ -54,9 +73,11 @@ class SilverOnceTests(unittest.TestCase):
 
     def test_ownership_miss(self) -> None:
         db = _FakeDb({})
+        bookkeeping = _FakeBookkeeping(has_parse_run=False)
         self.assertFalse(
             has_successful_ownership_parse(
                 db,
+                bookkeeping,
                 accession_number="0001",
                 parser_name=PARSER_NAME,
                 parser_version=PARSER_VERSION,
@@ -76,10 +97,10 @@ class SilverOnceTests(unittest.TestCase):
         )
 
     def test_daily_index_finalized(self) -> None:
-        db = _FakeDb(daily={"status": "succeeded"})
-        self.assertTrue(daily_index_is_finalized(db, business_date="2024-01-02"))
-        db2 = _FakeDb(daily={"status": "running"})
-        self.assertFalse(daily_index_is_finalized(db2, business_date="2024-01-02"))
+        bookkeeping = _FakeBookkeeping(daily={"status": "succeeded"})
+        self.assertTrue(daily_index_is_finalized(bookkeeping, business_date="2024-01-02"))
+        bookkeeping2 = _FakeBookkeeping(daily={"status": "running"})
+        self.assertFalse(daily_index_is_finalized(bookkeeping2, business_date="2024-01-02"))
 
 
 class EntityFactsSkipTests(unittest.TestCase):

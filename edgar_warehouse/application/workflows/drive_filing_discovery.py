@@ -157,6 +157,12 @@ def run_drive_adv_filing_discovery_for_date(args: Any) -> int:
     )
 
 
+def _bookkeeping_store() -> Any:
+    from edgar_warehouse.bookkeeping.database import get_engine as get_bookkeeping_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_bookkeeping_engine()))
+
+
 @dataclass
 class GatedDiscoveryOutcome:
     """Ticket 46: the shared core's result, extracted so a second caller
@@ -170,20 +176,40 @@ class GatedDiscoveryOutcome:
     silver_result: FilingArtifactSilverAcceptanceResult
 
 
-def run_gated_discovery_for_business_date(
-    *,
-    context: Any,
-    db: Any,
-    engine: Any,
-    business_date: str,
-    business_date_value: date,
-    source_family: str,
-    default_registry_version: str,
-    default_required_producer: str,
-    worker_id: str,
-    lease_seconds: int,
-    registry_version: str,
-    cik_list: list[int] | tuple[int, ...] | None = None,
+@dataclass
+class GatedDiscoveryResources:
+    """Open handles this call reads/writes through -- the CALLER owns the
+    lifecycle (open/close/hydrate/publish) of every member here; this bundle
+    only carries references for the duration of one gated-discovery call, it
+    never opens or closes any of them itself. (Parameter-object cleanup
+    ahead of DuckDB Retirement Cutover Ticket 15's own bookkeeping-caller
+    repoint -- see that ticket set for context on `db`/`bookkeeping`'s split.)
+    """
+
+    context: Any
+    db: Any
+    bookkeeping: Any
+    engine: Any
+
+
+@dataclass
+class GatedDiscoveryScope:
+    """Per-call scalars describing which business date/source family/worker
+    one gated-discovery run covers."""
+
+    business_date: str
+    business_date_value: date
+    source_family: str
+    default_registry_version: str
+    default_required_producer: str
+    worker_id: str
+    lease_seconds: int
+    registry_version: str
+    cik_list: list[int] | tuple[int, ...] | None = None
+
+
+def run_gated_discovery(
+    *, resources: GatedDiscoveryResources, scope: GatedDiscoveryScope
 ) -> GatedDiscoveryOutcome:
     """Ticket 16/19/29's ledger-gated discovery/capture/Silver-acceptance
     body for one already-sealed business date, extracted (Ticket 46) so both
@@ -191,9 +217,22 @@ def run_gated_discovery_for_business_date(
     and write run manifests around this) and daily-incremental's in-process
     gated capture (which reuses its own already-open Silver connection and
     does its own manifest/publish bookkeeping) can share one implementation.
-    Caller owns hydrate/publish/db lifecycle -- this function assumes `db`
-    is already open and does not close or publish it.
+    Caller owns hydrate/publish/db/bookkeeping lifecycle -- this function
+    assumes both are already open and does not close or publish either.
+
+    Takes ``resources``/``scope`` (DuckDB Retirement Cutover Ticket 15's
+    parameter-object cleanup) rather than a flat 12-parameter signature --
+    see that ticket's own 5-whys for why the flat shape grew that way and
+    why this split (open resources vs. per-call scalars) was chosen.
     """
+    context, db, bookkeeping, engine = (
+        resources.context, resources.db, resources.bookkeeping, resources.engine
+    )
+    business_date = scope.business_date
+    business_date_value = scope.business_date_value
+    source_family = scope.source_family
+    cik_list = scope.cik_list
+
     # Ticket 20: which forms are in scope now comes from the active Source
     # Family Registry version, not discovery.py's own hardcoded default --
     # a covered-but-not-yet-activated family, or one 'remove'd, must not
@@ -216,11 +255,11 @@ def run_gated_discovery_for_business_date(
     required_producers = (
         coverage.required_producers
         if coverage is not None
-        else (default_required_producer,)
+        else (scope.default_required_producer,)
     )
 
     rows = filter_discovery_rows_by_cik(
-        _load_sealed_discovery_rows(db, business_date), cik_list
+        _load_sealed_discovery_rows(bookkeeping, business_date), cik_list
     )
     manifest = build_discovery_manifest(
         rows, business_date=business_date, source_family=source_family, in_scope_forms=in_scope_forms
@@ -266,9 +305,9 @@ def run_gated_discovery_for_business_date(
         context.bronze_root,
         registry,
         manifest,
-        worker_id=worker_id,
-        registry_version=registry_version,
-        lease_seconds=lease_seconds,
+        worker_id=scope.worker_id,
+        registry_version=scope.registry_version,
+        lease_seconds=scope.lease_seconds,
         on_progress=_emit_gated_discovery_progress,
     )
     silver_result = drive_filing_artifact_silver_acceptance(
@@ -301,6 +340,7 @@ def run_filing_artifact_gated_capture_for_business_date(
     *,
     context: Any,
     db: Any,
+    bookkeeping: Any,
     business_date: str,
     run_id: str,
     cik_list: list[int] | tuple[int, ...] | None = None,
@@ -335,19 +375,21 @@ def run_filing_artifact_gated_capture_for_business_date(
     """
     engine = get_engine()
     business_date_value = date.fromisoformat(business_date)
-    return run_gated_discovery_for_business_date(
-        context=context,
-        db=db,
-        engine=engine,
-        business_date=business_date,
-        business_date_value=business_date_value,
-        source_family=FILING_ARTIFACT_SOURCE_FAMILY,
-        default_registry_version=DEFAULT_REGISTRY_VERSION,
-        default_required_producer=FILING_ARTIFACT_PRODUCER_NAME,
-        worker_id=f"daily-incremental-gated-capture-{run_id}",
-        lease_seconds=DEFAULT_LEASE_SECONDS,
-        registry_version=DEFAULT_REGISTRY_VERSION,
-        cik_list=cik_list,
+    return run_gated_discovery(
+        resources=GatedDiscoveryResources(
+            context=context, db=db, bookkeeping=bookkeeping, engine=engine
+        ),
+        scope=GatedDiscoveryScope(
+            business_date=business_date,
+            business_date_value=business_date_value,
+            source_family=FILING_ARTIFACT_SOURCE_FAMILY,
+            default_registry_version=DEFAULT_REGISTRY_VERSION,
+            default_required_producer=FILING_ARTIFACT_PRODUCER_NAME,
+            worker_id=f"daily-incremental-gated-capture-{run_id}",
+            lease_seconds=DEFAULT_LEASE_SECONDS,
+            registry_version=DEFAULT_REGISTRY_VERSION,
+            cik_list=cik_list,
+        ),
     )
 
 
@@ -387,24 +429,27 @@ def _run_daily_index_driven_discovery(
 
     _hydrate_silver_database_from_storage(context)
     db = open_silver_database(context.silver_root)
+    bookkeeping = _bookkeeping_store()
     try:
         # Ticket 46 extracted the discovery/capture/Silver-acceptance body
-        # below into run_gated_discovery_for_business_date, shared with
-        # daily-incremental's own in-process gated capture -- this call is
-        # behavior-identical to the inline body it replaced.
-        outcome = run_gated_discovery_for_business_date(
-            context=context,
-            db=db,
-            engine=engine,
-            business_date=business_date,
-            business_date_value=business_date_value,
-            source_family=source_family,
-            default_registry_version=default_registry_version,
-            default_required_producer=default_required_producer,
-            worker_id=worker_id,
-            lease_seconds=lease_seconds,
-            registry_version=registry_version,
-            cik_list=getattr(args, "cik_list", None),
+        # below into run_gated_discovery, shared with daily-incremental's
+        # own in-process gated capture -- this call is behavior-identical
+        # to the inline body it replaced.
+        outcome = run_gated_discovery(
+            resources=GatedDiscoveryResources(
+                context=context, db=db, bookkeeping=bookkeeping, engine=engine
+            ),
+            scope=GatedDiscoveryScope(
+                business_date=business_date,
+                business_date_value=business_date_value,
+                source_family=source_family,
+                default_registry_version=default_registry_version,
+                default_required_producer=default_required_producer,
+                worker_id=worker_id,
+                lease_seconds=lease_seconds,
+                registry_version=registry_version,
+                cik_list=getattr(args, "cik_list", None),
+            ),
         )
     finally:
         db.close()
@@ -432,18 +477,20 @@ def _run_daily_index_driven_discovery(
     return 0 if (result.interval_complete and silver_result.interval_complete) else 1
 
 
-def _load_sealed_discovery_rows(db: Any, business_date: str) -> list[dict[str, Any]]:
+def _load_sealed_discovery_rows(bookkeeping: Any, business_date: str) -> list[dict[str, Any]]:
     """Read the already-captured, already-checkpointed discovery observation.
 
     Fails closed if the daily index for this business date has not yet been
     fetched and sealed by ``load-daily-form-index-for-date`` -- this command
     never triggers that fetch itself (out of scope; see module docstring).
-    Takes an already-open ``SilverDatabase`` (Ticket 29) rather than opening
-    and closing its own, since the caller keeps the connection open across
-    the whole workflow now.
+    Takes an already-open ``BookkeepingStore`` (DuckDB Retirement Cutover
+    Ticket 15) rather than opening and closing its own, matching the
+    already-open ``SilverDatabase`` shape this had before that table pair
+    moved off DuckDB (Ticket 29's original reasoning still applies: the
+    caller owns the connection lifecycle across the whole workflow).
     """
 
-    checkpoint = db.get_daily_index_checkpoint(business_date)
+    checkpoint = bookkeeping.get_daily_index_checkpoint(business_date)
     status = checkpoint.get("status") if checkpoint else "missing"
     if status != "succeeded":
         raise WarehouseRuntimeError(
@@ -451,7 +498,7 @@ def _load_sealed_discovery_rows(db: Any, business_date: str) -> list[dict[str, A
             f"(checkpoint status={status!r}); run load-daily-form-index-for-date "
             "for this date first"
         )
-    return db.get_daily_index_filings(business_date)
+    return bookkeeping.get_daily_index_filings(business_date)
 
 
 def _interval_row_counts(

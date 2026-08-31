@@ -12,6 +12,12 @@ from edgar_warehouse.domain.models.command_context import WarehouseCommandContex
 from edgar_warehouse.infrastructure.object_storage import read_bytes
 
 
+def _bookkeeping_store() -> Any:
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
+
+
 def execute(args: Any) -> int:
     from edgar_warehouse.application import warehouse_orchestrator
 
@@ -49,31 +55,23 @@ def verify_pipeline_run(
     if not run_id:
         raise WarehouseRuntimeError("run_id is required")
 
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _hydrate_silver_database_from_storage,
-        _publish_silver_database_if_remote,
+    # DuckDB Retirement Cutover Ticket 15: pipeline_run lives in the
+    # bookkeeping store, not SilverDatabase -- this command never touches
+    # any DuckDB content table, so it no longer needs to hydrate/open/
+    # close/publish a local Silver database at all.
+    bookkeeping = _bookkeeping_store()
+    row = bookkeeping.get_pipeline_run(run_id)
+    if row is None:
+        raise WarehouseRuntimeError(f"pipeline_run not found for run_id={run_id}")
+
+    raw_writes = _json_list(row.get("raw_writes_json"))
+    writes = _json_list(row.get("writes_json"))
+    report = _verify_records(run_id=run_id, raw_writes=raw_writes, writes=writes)
+    bookkeeping.record_pipeline_verification(
+        run_id,
+        verification_status=report["status"],
+        report=report,
     )
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    _hydrate_silver_database_from_storage(context)
-    db = open_silver_database(context.silver_root)
-    try:
-        row = db.get_pipeline_run(run_id)
-        if row is None:
-            raise WarehouseRuntimeError(f"pipeline_run not found for run_id={run_id}")
-
-        raw_writes = _json_list(row.get("raw_writes_json"))
-        writes = _json_list(row.get("writes_json"))
-        report = _verify_records(run_id=run_id, raw_writes=raw_writes, writes=writes)
-        db.record_pipeline_verification(
-            run_id,
-            verification_status=report["status"],
-            report=report,
-        )
-    finally:
-        db.close()
-
-    _publish_silver_database_if_remote(context)
     return report
 
 

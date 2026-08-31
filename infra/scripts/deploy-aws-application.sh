@@ -1522,7 +1522,7 @@ write_mdm_container_definitions() {
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$MDM_IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
     "$MDM_SNOWFLAKE_SECRET_ARN" \
-    "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" <<'PY'
+    "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1540,6 +1540,7 @@ import sys
     snowflake_secret_arn,
     edgar_secret_arn,
     log_group_name,
+    bookkeeping_postgres_dsn_secret_arn,
 ) = sys.argv[1:]
 
 environment_values = [
@@ -1552,17 +1553,30 @@ environment_values = [
     {"name": "MDM_SILVER_DUCKDB", "value": mdm_silver_duckdb},
 ]
 
+mdm_secrets = [
+    {"name": "MDM_DATABASE_URL", "valueFrom": mdm_database_secret_arn},
+    {"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": snowflake_secret_arn},
+    {"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn},
+]
+# BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover Ticket 15): needed by
+# `mdm build-relationship-release-manifest`
+# (edgar_warehouse/scripts/build_relationship_release_manifest.py), which
+# runs on this MDM task profile and reads sec_company_sync_state from the
+# bookkeeping store, not a raw DuckDB connection. Optional/omitted (same
+# as the warehouse profile's own injection above) until the ARN is
+# provisioned for this environment.
+if bookkeeping_postgres_dsn_secret_arn:
+    mdm_secrets.append(
+        {"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn}
+    )
+
 container_definitions = [{
     "name": "edgar-warehouse",
     "image": image_ref,
     "essential": True,
     "command": ["mdm", "--help"],
     "environment": environment_values,
-    "secrets": [
-        {"name": "MDM_DATABASE_URL", "valueFrom": mdm_database_secret_arn},
-        {"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": snowflake_secret_arn},
-        {"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn},
-    ],
+    "secrets": mdm_secrets,
     "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
