@@ -473,8 +473,8 @@ A Step Functions state machine chaining a distinct head (bronze/silver capture, 
 _Avoid_: Treating these as duplicated in shape beyond the tail's ordering — the flags, Catch clauses, retry counts, and (for `bronze_seed_silver_gold`) an entire second "strict" branch are genuinely different per machine, not copy-paste variance (state-machine-consolidation wayfinder map, ticket 02 addendum)
 
 **MDM Run Identity**:
-The opaque correlation identity shared by every MDM stage and retry in one MDM Pipeline Machine execution; a direct operator invocation or manual mutation request creates its own identity.
-_Avoid_: ECS task-attempt identity, Relationship Generation Snapshot, wall-clock window
+The opaque correlation identity shared by every commit-evidence-producing MDM stage and retry in one MDM Pipeline Machine execution; a direct operator invocation or manual mutation request creates its own identity. Export, sync, and verification stages retain their existing execution correlation but do not accept this identity because they do not originate MDM Commit Evidence.
+_Avoid_: ECS task-attempt identity, Relationship Generation Snapshot, wall-clock window, adding an unused identity argument to non-producing stages
 
 **MDM Commit Evidence**:
 The durable entity-change and relationship-version facts originated by one MDM Run Identity, used to count committed MDM outputs by type for that run; later mutation or export does not replace the originating identity.
