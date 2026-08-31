@@ -472,6 +472,14 @@ _Avoid_: `generation_build` (a bespoke multi-stage pipeline, not a single-comman
 A Step Functions state machine chaining a distinct head (bronze/silver capture, ownership parsing, or nothing) into the shared MdmExport→MdmSync→MdmVerify tail, usually ending in gold-refresh. Exactly 5 today: `mdm_gold`, `ownership_mdm_gold`, `silver_mdm_gold`, `bronze_seed_silver_gold`, `residual_holds_graph`.
 _Avoid_: Treating these as duplicated in shape beyond the tail's ordering — the flags, Catch clauses, retry counts, and (for `bronze_seed_silver_gold`) an entire second "strict" branch are genuinely different per machine, not copy-paste variance (state-machine-consolidation wayfinder map, ticket 02 addendum)
 
+**MDM Run Identity**:
+The opaque correlation identity shared by every MDM stage and retry in one MDM Pipeline Machine execution; a direct operator invocation or manual mutation request creates its own identity.
+_Avoid_: ECS task-attempt identity, Relationship Generation Snapshot, wall-clock window
+
+**MDM Commit Evidence**:
+The durable entity-change and relationship-version facts originated by one MDM Run Identity, used to count committed MDM outputs by type for that run; later mutation or export does not replace the originating identity.
+_Avoid_: Full processing funnel, current-row last modifier, CloudWatch log window
+
 **Graph Generation Build Machine**:
 `generation_build` specifically — a bespoke partition-plan/fan-out-build/fan-in-verify/activate pipeline for a Neo4j-Snowflake graph generation. Has no sibling machine sharing its shape; not a duplication problem, and not an MDM Utility Machine despite being single-purpose.
 _Avoid_: Grouping with the 7 MDM Utility Machines as "standalone" or "single-stage" (an earlier ticket draft did this and was corrected)

@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS mdm_change_log (
 	entity_id VARCHAR(36) NOT NULL,
 	entity_type TEXT NOT NULL,
 	changed_fields VARIANT,
+	run_id TEXT,
 	changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP() NOT NULL,
 	exported_at TIMESTAMP WITH TIME ZONE,
 	PRIMARY KEY (change_id),
@@ -299,6 +300,7 @@ CREATE TABLE IF NOT EXISTS mdm_relationship_instance (
 	relationship_kind TEXT DEFAULT 'direct' NOT NULL,
 	source_system TEXT,
 	source_accession TEXT,
+	run_id TEXT,
 	source_evidence VARIANT,
 	superseded_by_version_id VARCHAR(36),
 	quarantined BOOLEAN DEFAULT FALSE NOT NULL,
@@ -352,6 +354,9 @@ CREATE TABLE IF NOT EXISTS mdm_relationship_source_mapping (
 	FOREIGN KEY(source_entity_type) REFERENCES mdm_entity_type_definition (entity_type),
 	FOREIGN KEY(target_entity_type) REFERENCES mdm_entity_type_definition (entity_type)
 );
+
+ALTER TABLE mdm_change_log ADD COLUMN IF NOT EXISTS run_id TEXT;
+ALTER TABLE mdm_relationship_instance ADD COLUMN IF NOT EXISTS run_id TEXT;
 
 -- Grant the loader role (the role edgar_warehouse.mdm.export.py's
 -- mirror_writer actually authenticates as) DML + future-table access.

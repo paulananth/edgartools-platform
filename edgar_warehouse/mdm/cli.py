@@ -222,6 +222,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     derive.add_argument("--target-per-type", type=int, default=100, help="Active relationships to target per type")
     derive.add_argument("--relationship-type", action="append", default=None, help="Relationship type to derive; repeat for multiple types")
+    derive.add_argument("--run-id", default=None, help="Opaque identity for this MDM operation")
     derive.add_argument(
         "--cik",
         action="append",
@@ -251,6 +252,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     load_rels.add_argument("--graph-sync", action="store_true", default=False, help="After derivation, materialize Snowflake graph-ready tables")
     load_rels.add_argument("--skip-graph-sync", action="store_true", default=False, help="Derive relationships but do not materialize graph tables")
+    load_rels.add_argument("--run-id", default=None, help="Opaque identity for this MDM operation")
     load_rels.set_defaults(handler=_logged_handler("load-relationships", _handle_load_relationships))
 
     api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
@@ -375,6 +377,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     ra = rev_sub.add_parser("accept")
     ra.add_argument("review_id")
     ra.add_argument("--reviewer", default=os.environ.get("USER", "cli"))
+    ra.add_argument("--run-id", default=None, help="Opaque identity for this manual mutation")
     ra.set_defaults(handler=_logged_handler("review-accept", _handle_review_accept))
 
     rr = rev_sub.add_parser("reject")
@@ -385,10 +388,12 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     # quarantine / unquarantine
     q = mdm_sub.add_parser("quarantine")
     q.add_argument("entity_id")
+    q.add_argument("--run-id", default=None, help="Opaque identity for this manual mutation")
     q.set_defaults(handler=_logged_handler("quarantine", _handle_quarantine))
 
     uq = mdm_sub.add_parser("unquarantine")
     uq.add_argument("entity_id")
+    uq.add_argument("--run-id", default=None, help="Opaque identity for this manual mutation")
     uq.set_defaults(handler=_logged_handler("unquarantine", _handle_unquarantine))
 
     # merge
@@ -396,6 +401,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     mg.add_argument("entity_id_keep")
     mg.add_argument("entity_id_discard")
     mg.add_argument("--reason", default="")
+    mg.add_argument("--run-id", default=None, help="Opaque identity for this manual mutation")
     mg.set_defaults(handler=_logged_handler("merge", _handle_merge))
 
     # verify-graph
@@ -489,6 +495,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         default=100,
         help="Maximum number of relationship instances to backfill and sync (default: 100)",
     )
+    br.add_argument("--run-id", default=None, help="Opaque identity for this MDM operation")
     br.set_defaults(handler=_logged_handler("backfill-relationships", _handle_backfill_relationships))
 
     # export
@@ -913,17 +920,18 @@ def _require_silver_reader(
 
 def _handle_run(args) -> int:
     from edgar_warehouse.mdm.pipeline import MDMPipeline
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
 
     required = _required_tables_for_run(args.entity_type)
     silver, rc = _require_silver_reader(required, "mdm run")
     if rc != 0:
         return rc
 
+    run_id = bind_mdm_run_identity(getattr(args, "run_id", None))
     session = _session()
     try:
-        pipeline = MDMPipeline(session=session, silver=silver)
+        pipeline = MDMPipeline(session=session, silver=silver, run_id=run_id)
         resume_ledger_run_id = getattr(args, "resume_ledger_run_id", None)
-        run_id = getattr(args, "run_id", None)
         if args.entity_type == "all":
             stats = pipeline.run_all(
                 limit=args.limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id,
@@ -1885,14 +1893,16 @@ def _snowflake_graph_sync_payload(result) -> dict[str, object]:
 
 def _handle_derive_relationships(args) -> int:
     from edgar_warehouse.mdm.pipeline import MDMPipeline
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
 
     silver, rc = _require_silver_reader(_REQUIRED_TABLES_RELATIONSHIPS, "mdm derive-relationships")
     if rc != 0:
         return rc
 
+    run_id = bind_mdm_run_identity(getattr(args, "run_id", None))
     session = _session()
     try:
-        pipeline = MDMPipeline(session=session, silver=silver)
+        pipeline = MDMPipeline(session=session, silver=silver, run_id=run_id)
         summary = pipeline.derive_relationships(
             target_per_type=args.target_per_type,
             relationship_types=args.relationship_type,
@@ -1916,16 +1926,18 @@ def _ownership_insider_only_types(relationship_types: list[str] | None) -> bool:
 
 def _handle_load_relationships(args) -> int:
     from edgar_warehouse.mdm.pipeline import MDMPipeline
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
     from edgar_warehouse.mdm.snowflake_graph import SnowflakeGraphSyncExecutor
 
     silver, rc = _require_silver_reader(_REQUIRED_TABLES_RELATIONSHIPS, "mdm load-relationships")
     if rc != 0:
         return rc
 
+    run_id = bind_mdm_run_identity(getattr(args, "run_id", None))
     graph_sync_enabled = bool(getattr(args, "graph_sync", False)) and not args.skip_graph_sync
     session = _session()
     try:
-        pipeline = MDMPipeline(session=session, silver=silver)
+        pipeline = MDMPipeline(session=session, silver=silver, run_id=run_id)
         entity_counts: dict[str, int] = {}
         if not args.skip_entity_resolution:
             # Ticket 21: IS_INSIDER-only loads must NOT re-resolve companies —
@@ -2202,8 +2214,9 @@ def _snowflake_scalar(cursor, sql: str) -> int:
 def _handle_backfill_relationships(args) -> int:
     from edgar_warehouse.mdm.graph import backfill_relationship_instances
     from edgar_warehouse.mdm.pipeline import MDMPipeline
-    from edgar_warehouse.mdm.rules import MDMRuleEngine
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
 
+    run_id = bind_mdm_run_identity(getattr(args, "run_id", None))
     session = _session()
     silver = _silver_reader()
     try:
@@ -2212,11 +2225,11 @@ def _handle_backfill_relationships(args) -> int:
         # run it was first created, leaving issuer_entity_id NULL permanently.
         issuers_repaired = 0
         if silver is not None:
-            pipeline = MDMPipeline(session=session, silver=silver)
+            pipeline = MDMPipeline(session=session, silver=silver, run_id=run_id)
             issuers_repaired = pipeline.backfill_security_issuers()
 
         # Phase 2: derive MANAGES_FUND and ISSUED_BY instances.
-        result = backfill_relationship_instances(session, limit=args.limit)
+        result = backfill_relationship_instances(session, limit=args.limit, run_id=run_id)
         result["issuers_repaired"] = issuers_repaired
     finally:
         session.close()
@@ -2280,7 +2293,9 @@ def _handle_review_list(args) -> int:
 
 def _handle_review_accept(args) -> int:
     from edgar_warehouse.mdm.stewardship import accept_review
-    kept = accept_review(_session(), args.review_id, args.reviewer)
+    kept, _run_id = accept_review(
+        _session(), args.review_id, args.reviewer, run_id=getattr(args, "run_id", None)
+    )
     print(f"accepted; kept entity={kept}")
     return 0
 
@@ -2294,14 +2309,14 @@ def _handle_review_reject(args) -> int:
 
 def _handle_quarantine(args) -> int:
     from edgar_warehouse.mdm.stewardship import quarantine
-    quarantine(_session(), args.entity_id)
+    quarantine(_session(), args.entity_id, run_id=getattr(args, "run_id", None))
     print(f"quarantined {args.entity_id}")
     return 0
 
 
 def _handle_unquarantine(args) -> int:
     from edgar_warehouse.mdm.stewardship import unquarantine
-    unquarantine(_session(), args.entity_id)
+    unquarantine(_session(), args.entity_id, run_id=getattr(args, "run_id", None))
     print(f"unquarantined {args.entity_id}")
     return 0
 
@@ -2309,7 +2324,7 @@ def _handle_unquarantine(args) -> int:
 def _handle_merge(args) -> int:
     from edgar_warehouse.mdm.stewardship import merge_entities
     merge_entities(_session(), keep=args.entity_id_keep, discard=args.entity_id_discard,
-                   reason=args.reason)
+                   reason=args.reason, run_id=getattr(args, "run_id", None))
     print(f"merged {args.entity_id_discard} -> {args.entity_id_keep}")
     return 0
 

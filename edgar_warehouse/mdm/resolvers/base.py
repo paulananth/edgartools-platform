@@ -156,11 +156,15 @@ class BaseResolver:
         entity_id: str,
         changed_fields: Optional[dict] = None,
     ) -> None:
+        from edgar_warehouse.mdm.run_identity import normalize_or_create_run_id
+
+        ctx.run_id = normalize_or_create_run_id(ctx.run_id)[0]
         ctx.session.add(
             MdmChangeLog(
                 entity_id=entity_id,
                 entity_type=self.entity_type,
                 changed_fields=changed_fields or {},
+                run_id=ctx.run_id,
             )
         )
 

@@ -39,8 +39,8 @@ def list_reviews(
 def accept_review(
     review_id: str, reviewer: str = "api", session: Session = Depends(get_db)
 ):
-    kept = sw.accept_review(session, review_id, reviewer)
-    return {"kept_entity_id": kept}
+    kept, run_id = sw.accept_review(session, review_id, reviewer)
+    return {"kept_entity_id": kept, "run_id": run_id}
 
 
 @router.post("/reviews/{review_id}/reject")
@@ -53,25 +53,25 @@ def reject_review(
 
 @router.post("/entities/{entity_id}/quarantine")
 def quarantine_entity(entity_id: str, session: Session = Depends(get_db)):
-    sw.quarantine(session, entity_id)
-    return {"status": "quarantined"}
+    run_id = sw.quarantine(session, entity_id)
+    return {"status": "quarantined", "run_id": run_id}
 
 
 @router.post("/entities/{entity_id}/unquarantine")
 def unquarantine_entity(entity_id: str, session: Session = Depends(get_db)):
-    sw.unquarantine(session, entity_id)
-    return {"status": "active"}
+    run_id = sw.unquarantine(session, entity_id)
+    return {"status": "active", "run_id": run_id}
 
 
 @router.post("/entities/merge")
 def merge_entities(payload: MergeRequest, session: Session = Depends(get_db)):
-    sw.merge_entities(
+    run_id = sw.merge_entities(
         session,
         keep=payload.entity_id_keep,
         discard=payload.entity_id_discard,
         reason=payload.reason,
     )
-    return {"status": "merged", "kept": payload.entity_id_keep}
+    return {"status": "merged", "kept": payload.entity_id_keep, "run_id": run_id}
 
 
 @router.patch("/entities/{entity_id}")
@@ -80,6 +80,9 @@ def patch_entity(
 ):
     """Manual field override on a domain golden record. Looks up the domain
     table from the entity's type, sets the field, and writes a change log row."""
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
+
+    run_id = bind_mdm_run_identity(None)
     e = session.get(db.MdmEntity, entity_id)
     if e is None:
         raise HTTPException(404, "entity not found")
@@ -104,10 +107,11 @@ def patch_entity(
             entity_id=entity_id,
             entity_type=e.entity_type,
             changed_fields={payload.field: payload.value, "reason": payload.reason},
+            run_id=run_id,
         )
     )
     session.commit()
-    return {"status": "patched"}
+    return {"status": "patched", "run_id": run_id}
 
 
 @router.get(

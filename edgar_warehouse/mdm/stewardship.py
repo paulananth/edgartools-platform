@@ -51,8 +51,16 @@ def list_pending_reviews(
     return out
 
 
-def accept_review(session: Session, review_id: str, reviewer: str) -> str:
-    """Accept a pending review -> merge entity_b into entity_a; return kept entity_id."""
+def accept_review(
+    session: Session,
+    review_id: str,
+    reviewer: str,
+    run_id: str | None = None,
+) -> tuple[str, str]:
+    """Accept a review and return the kept entity plus its mutation identity."""
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
+
+    bound_run_id = bind_mdm_run_identity(run_id)
     review = session.get(MdmMatchReview, review_id)
     if review is None:
         raise KeyError(f"Review {review_id} not found")
@@ -61,12 +69,18 @@ def accept_review(session: Session, review_id: str, reviewer: str) -> str:
 
     kept = review.entity_id_a
     merged = review.entity_id_b
-    merge_entities(session, keep=kept, discard=merged, reason=f"review={review_id}")
+    _merge_entities(
+        session,
+        keep=kept,
+        discard=merged,
+        reason=f"review={review_id}",
+        run_id=bound_run_id,
+    )
     review.status = "accepted"
     review.reviewed_by = reviewer
     review.reviewed_at = datetime.now(timezone.utc)
     session.commit()
-    return kept
+    return kept, bound_run_id
 
 
 def reject_review(session: Session, review_id: str, reviewer: str) -> None:
@@ -79,7 +93,10 @@ def reject_review(session: Session, review_id: str, reviewer: str) -> None:
     session.commit()
 
 
-def quarantine(session: Session, entity_id: str) -> None:
+def quarantine(session: Session, entity_id: str, run_id: str | None = None) -> str:
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
+
+    bound_run_id = bind_mdm_run_identity(run_id)
     session.execute(
         update(MdmEntity).where(MdmEntity.entity_id == entity_id).values(is_quarantined=True)
     )
@@ -87,11 +104,16 @@ def quarantine(session: Session, entity_id: str) -> None:
         entity_id=entity_id,
         entity_type=_lookup_entity_type(session, entity_id),
         changed_fields={"is_quarantined": True},
+        run_id=bound_run_id,
     ))
     session.commit()
+    return bound_run_id
 
 
-def unquarantine(session: Session, entity_id: str) -> None:
+def unquarantine(session: Session, entity_id: str, run_id: str | None = None) -> str:
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
+
+    bound_run_id = bind_mdm_run_identity(run_id)
     session.execute(
         update(MdmEntity).where(MdmEntity.entity_id == entity_id).values(is_quarantined=False)
     )
@@ -99,12 +121,42 @@ def unquarantine(session: Session, entity_id: str) -> None:
         entity_id=entity_id,
         entity_type=_lookup_entity_type(session, entity_id),
         changed_fields={"is_quarantined": False},
+        run_id=bound_run_id,
     ))
     session.commit()
+    return bound_run_id
 
 
-def merge_entities(session: Session, keep: str, discard: str, reason: str = "") -> None:
+def merge_entities(
+    session: Session,
+    keep: str,
+    discard: str,
+    reason: str = "",
+    run_id: str | None = None,
+) -> str:
     """Re-point every source_ref from discard -> keep, tombstone discard."""
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
+
+    bound_run_id = bind_mdm_run_identity(run_id)
+    _merge_entities(
+        session,
+        keep=keep,
+        discard=discard,
+        reason=reason,
+        run_id=bound_run_id,
+    )
+    session.commit()
+    return bound_run_id
+
+
+def _merge_entities(
+    session: Session,
+    *,
+    keep: str,
+    discard: str,
+    reason: str,
+    run_id: str,
+) -> None:
     session.execute(
         update(MdmSourceRef).where(MdmSourceRef.entity_id == discard).values(entity_id=keep)
     )
@@ -118,8 +170,8 @@ def merge_entities(session: Session, keep: str, discard: str, reason: str = "") 
         entity_id=keep,
         entity_type=_lookup_entity_type(session, keep),
         changed_fields={"merged_from": discard, "reason": reason},
+        run_id=run_id,
     ))
-    session.commit()
 
 
 def _lookup_entity_type(session: Session, entity_id: str) -> str:
