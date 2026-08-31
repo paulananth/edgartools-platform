@@ -224,6 +224,60 @@ not in sequence. See "Graph storage" and "MDM database" notes further below
 for what each Snowflake-hosted piece actually is, since both names ("Neo4j",
 "Postgres mirror") suggest external services that don't exist here.
 
+## ECS cost-sizing conclusions (Ticket 28, resolved 2026-08-30)
+
+Treat ECS sizing as validated-output economics, not a utilization-only
+exercise. Low memory, an exit code of zero, or a Step Functions `SUCCEEDED`
+status does not prove that a cheaper profile produced the same complete,
+recoverable, idempotent result.
+
+Ticket 28 ran three current-image `mdm.residual_security` candidates on
+`mdm-medium:203` and a current-image control on `mdm-large:137`. The candidate
+runs each passed their execution-local correctness and identity-parity checks,
+with worst memory p95 ranging from 9.34% to 9.84%. That apparent headroom did
+**not** justify promotion:
+
+- Every sequential rerun added the same 65 active `IS_INSIDER` and 1,349
+  active `HOLDS` relationships. Cross-run idempotency therefore failed.
+- The candidate runs progressively filled the shared 100,000-row
+  `COMPANY_HOLDS` target, while the later control found it full and inserted
+  zero rows. Candidate and control did not process the same record funnel, so
+  their end-to-end duration and cost were not comparable.
+- On the independently equal-work `MdmSecurities` stage, candidate p95 was
+  3,307.583 seconds versus 2,825.220 seconds on large: 17.07% slower.
+- Mean candidate cost looked 10.92% lower, but median and p95 improvements were
+  only 2.86% and 1.78%; none can approve a downgrade after the idempotency and
+  funnel failures. Recovery parity also remained unproven because no
+  qualifying run failed or retried.
+
+The fail-closed decision is to keep `mdm-large` as the residual-security
+operational profile. Do not change production references, retire the large
+definition, start a sizing bake window, or infer that `mdm-small` is safe from
+this cohort. A future reconsideration needs isolated or restorable input plus
+the Ticket 30 run-bound relationship ledger so the candidate and control see
+the same input envelope.
+
+Separately, the current-image unbounded `sync-graph` canary on `mdm-large`
+passed its execution-local gates: 226,197 nodes, 621,201 edges, 32.190 seconds
+of command time, and about $0.00285 of estimated on-demand compute. That result
+accepts the unbounded large-profile sync route; it does not approve the
+residual-security downgrade.
+
+Required promotion gates remain: repeated current-image candidates, a matched
+control, exact correctness/completeness/identity parity, recovery and cross-run
+idempotency, candidate p95 no more than 5% slower, and at least 10% lower cost
+per successful validated output. Candidate and control must not execute in
+parallel against the same mutable MDM state. The separate
+`.scratch/ecs-parallel-runs/` map permits residual-pipeline parallelism only in
+two bounded dependency-safe waves, with a disposable success/failure canary
+before implementation or production rollout.
+
+Canonical analysis and immutable evidence:
+
+- `.scratch/ecs-cost-sizing/issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md`
+- `.scratch/ecs-cost-sizing/evidence/ticket28/`
+- `.scratch/ecs-parallel-runs/map.md`
+
 ## Data Layer Definitions
 
 | Layer | Location | Description |
