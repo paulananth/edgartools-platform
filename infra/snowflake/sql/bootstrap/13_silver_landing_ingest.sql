@@ -103,8 +103,9 @@ CREATE STAGE IF NOT EXISTS LANDING_STAGE
 -- incident" documents; there is no query here to iterate, so it doesn't
 -- apply, but a hardcoded JS array is simpler and safer regardless). The
 -- table list matches 11_silver_landing_schema.sql's 31 tables exactly --
--- regenerate both together if silver_store.py's schema changes
--- (generate_silver_landing_ddl.py is the source of truth for the list).
+-- hand-edit both together if silver_store.py's schema changes (both files
+-- are hand-maintained since DuckDB Retirement Cutover Ticket 07 deleted
+-- the generator that originally produced 11_silver_landing_schema.sql).
 --
 -- MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE: the Parquet files
 -- silver_landing_writer.py produces carry only the domain columns a given

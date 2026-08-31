@@ -8,10 +8,10 @@ from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
 def _landing_scoped_tables() -> set[str]:
-    """Mirrors generate_silver_landing_ddl.py's scope: PROTECTED_TABLE_REGISTRY
-    minus pipeline_run_lease (operational), plus sec_guidance_fact_reject
-    (real domain data the registry doesn't cover for an unrelated reason).
-    See that generator's module docstring for the full explanation."""
+    """Mirrors infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql's
+    scope: PROTECTED_TABLE_REGISTRY minus pipeline_run_lease (operational),
+    plus sec_guidance_fact_reject (real domain data the registry doesn't
+    cover for an unrelated reason)."""
     return (set(PROTECTED_TABLE_REGISTRY.keys()) | {"sec_guidance_fact_reject"}) - {"pipeline_run_lease"}
 
 
