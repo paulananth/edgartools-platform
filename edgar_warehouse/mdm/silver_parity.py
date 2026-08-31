@@ -1,6 +1,10 @@
 """DuckDB-vs-Snowflake silver parity check (silver-snowflake-migration map,
 Ticket 10/12's correctness gate before flipping MDM_SILVER_READ_TARGET to
-"snowflake" in prod).
+"snowflake" in prod; that toggle is retired by DuckDB Retirement Cutover
+Ticket 05's hard cutover, but the digest comparator this module now also
+provides -- verify_resolver_input_parity -- is that ticket's own required
+correctness evidence, so this module stays the DuckDB-vs-Snowflake home
+for both).
 
 Scope decision (Ticket 10 asked for a parity check comparing "resolved
 entity_id assignments," not just row counts, "since two runs could match on
@@ -182,3 +186,193 @@ def verify_silver_parity(duckdb_reader: Any, snowflake_reader: Any) -> SilverPar
         cik_only_in_snowflake=sorted(snowflake_ciks - duckdb_ciks),
         cik_fetch_error=cik_error,
     )
+
+
+# -- resolver-input row-digest parity (DuckDB Retirement Cutover Ticket 05) --
+#
+# Ticket 05's checklist requires proving the Snowflake-backed reader
+# "produces the same match decision + confidence score per input row" as
+# the old DuckDB reader, on a real (not synthetic) sample of company/
+# adviser/person/fund/security records. Actually re-running MDM's resolvers
+# twice against live MDM Postgres would be side-effecting (no read-only/
+# dry-run resolution mode exists) and would double the real cost of this
+# check. Per this map's own decision ("Decide MDM's ShardedSilverReader
+# Replacement Mechanics"): MDM's matching engine (MatchPipeline.resolve) is
+# a deterministic function of its input rows and the fixed MDM Postgres
+# candidate state at query time -- proving row-level read equivalence for
+# the exact rows each entity type's resolver reads therefore implies
+# resolution-outcome equivalence (same match decision, same confidence
+# score) by construction, without needing to invoke the resolvers twice.
+#
+# This intentionally compares whole-row content (every column, keyed by
+# primary key), not one resolver's specific SELECT projection -- a stronger
+# and more general proof than matching a single query's column list, and
+# one that stays valid if a resolver's projection changes later.
+RESOLVER_INPUT_TABLES: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
+    "company": (("sec_company", ("cik",)),),
+    "adviser": (("sec_adv_filing", ("accession_number",)),),
+    "fund": (("sec_adv_private_fund", ("accession_number", "fund_index")),),
+    "person": (("sec_ownership_reporting_owner", ("accession_number", "owner_index")),),
+    "security": (
+        ("sec_ownership_non_derivative_txn", ("accession_number", "owner_index", "txn_index")),
+        ("sec_ownership_derivative_txn", ("accession_number", "owner_index", "txn_index")),
+    ),
+}
+
+# Ticket 07's cutover validation standard requires "at least one genuinely
+# large table, not only toy fixtures" per swap. The ownership transaction
+# tables are, by a wide margin, the largest tables any entity-type resolver
+# reads (one row per Form 3/4/5 transaction line, across the whole tracked
+# universe) -- sampled at a larger bound than the rest for that reason.
+_LARGE_RESOLVER_INPUT_TABLES: frozenset[str] = frozenset(
+    {"sec_ownership_non_derivative_txn", "sec_ownership_derivative_txn"}
+)
+
+_DEFAULT_SAMPLE_SIZE = 25
+_DEFAULT_LARGE_TABLE_SAMPLE_SIZE = 200
+
+
+@dataclass
+class RowParityResult:
+    table: str
+    keys_compared: int
+    mismatched_keys: list[tuple]
+    error: str | None = None
+
+    @property
+    def matches(self) -> bool:
+        return self.error is None and not self.mismatched_keys
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "table": self.table,
+            "keys_compared": self.keys_compared,
+            "matches": self.matches,
+            "mismatched_keys_total": len(self.mismatched_keys),
+            "mismatched_keys_sample": [list(k) for k in self.mismatched_keys[:_MAX_REPORTED_CIK_SAMPLE]],
+            "error": self.error,
+        }
+
+
+@dataclass
+class ResolverInputParityResult:
+    entity_type: str
+    tables: list[RowParityResult] = field(default_factory=list)
+
+    @property
+    def passed(self) -> bool:
+        return bool(self.tables) and all(table.matches for table in self.tables)
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        return {
+            "entity_type": self.entity_type,
+            "passed": self.passed,
+            "tables": [table.to_payload() for table in self.tables],
+        }
+
+
+def _sample_keys(
+    reader: Any, table: str, key_columns: tuple[str, ...], *, limit: int
+) -> list[tuple]:
+    """Bounded case-selected key sample (Ticket 07's cutover validation
+    standard): the lowest- and highest-keyed ``limit`` rows by the table's
+    own primary key, deduplicated. Deterministic and re-runnable, and (for
+    accession_number-keyed tables, which sort newest-last) the "highest"
+    half also biases toward the most-recently-loaded filings -- a real
+    boundary case, not just an arbitrary second sample.
+    """
+    cols = ", ".join(key_columns)
+    order_by = ", ".join(key_columns)
+    ascending = reader.fetch(
+        f"SELECT {cols} FROM {table} ORDER BY {order_by} ASC LIMIT {int(limit)}"  # noqa: S608 -- table/key_columns are from RESOLVER_INPUT_TABLES, never user input
+    )
+    descending = reader.fetch(
+        f"SELECT {cols} FROM {table} ORDER BY {order_by} DESC LIMIT {int(limit)}"  # noqa: S608
+    )
+    seen: set[tuple] = set()
+    keys: list[tuple] = []
+    for row in ascending + descending:
+        key = tuple(row[col] for col in key_columns)
+        if key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
+def _fetch_row_by_key(
+    reader: Any, table: str, key_columns: tuple[str, ...], key_values: tuple
+) -> dict | None:
+    where = " AND ".join(f"{col} = ?" for col in key_columns)
+    rows = reader.fetch(
+        f"SELECT * FROM {table} WHERE {where}",  # noqa: S608
+        list(key_values),
+    )
+    return rows[0] if rows else None
+
+
+def verify_resolver_input_parity(
+    duckdb_reader: Any,
+    snowflake_reader: Any,
+    *,
+    entity_types: list[str] | None = None,
+    sample_size: int = _DEFAULT_SAMPLE_SIZE,
+    large_table_sample_size: int = _DEFAULT_LARGE_TABLE_SAMPLE_SIZE,
+) -> dict[str, ResolverInputParityResult]:
+    """Digest-based row parity, per entity type, over each type's real
+    resolver input table(s) -- the correctness gate this map's "Decide the
+    Cutover Validation Standard" and "Decide MDM's ShardedSilverReader
+    Replacement Mechanics" answers require before MDM's Snowflake-backed
+    reader replaces the DuckDB one for real.
+
+    Reuses ``resolvers.base.content_hash`` verbatim rather than a bespoke
+    digest that normalizes type differences away: Snowflake's connector
+    returns ``Decimal`` where DuckDB returns ``int`` for numeric columns, and
+    ``content_hash``'s ``json.dumps(..., default=str)`` serializes those
+    differently -- exactly the failure mode this check exists to catch (the
+    same hash function MDM's own ``_skip_if_unchanged`` already depends on
+    for stability, so a type-coercion drift here would be a real, not a
+    cosmetic, cross-backend difference).
+    """
+    from edgar_warehouse.mdm.resolvers.base import content_hash
+
+    types = entity_types if entity_types is not None else list(RESOLVER_INPUT_TABLES)
+    out: dict[str, ResolverInputParityResult] = {}
+    for entity_type in types:
+        table_results: list[RowParityResult] = []
+        for table, key_columns in RESOLVER_INPUT_TABLES[entity_type]:
+            limit = large_table_sample_size if table in _LARGE_RESOLVER_INPUT_TABLES else sample_size
+            try:
+                keys = _sample_keys(duckdb_reader, table, key_columns, limit=limit)
+            except Exception as exc:
+                table_results.append(
+                    RowParityResult(table=table, keys_compared=0, mismatched_keys=[], error=str(exc))
+                )
+                continue
+
+            mismatched: list[tuple] = []
+            fetch_error: str | None = None
+            for key in keys:
+                try:
+                    duckdb_row = _fetch_row_by_key(duckdb_reader, table, key_columns, key)
+                    snowflake_row = _fetch_row_by_key(snowflake_reader, table, key_columns, key)
+                except Exception as exc:
+                    fetch_error = str(exc)
+                    mismatched.append(key)
+                    continue
+                if duckdb_row is None or snowflake_row is None:
+                    mismatched.append(key)
+                    continue
+                if content_hash(duckdb_row) != content_hash(snowflake_row):
+                    mismatched.append(key)
+
+            table_results.append(
+                RowParityResult(
+                    table=table,
+                    keys_compared=len(keys),
+                    mismatched_keys=mismatched,
+                    error=fetch_error,
+                )
+            )
+        out[entity_type] = ResolverInputParityResult(entity_type=entity_type, tables=table_results)
+    return out

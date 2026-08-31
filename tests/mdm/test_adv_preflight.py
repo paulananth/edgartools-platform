@@ -4,6 +4,15 @@ Proves the _require_silver_reader gate transitions from FAIL (empty sec_adv_fili
 sec_adv_private_fund) to PASS (populated table) for adviser and fund entity types.
 
 MDM-ADV-02 automated proof — no network, no S3, no live Postgres required.
+
+DuckDB Retirement Cutover Ticket 05: _require_silver_reader's own reader is
+always EDGARTOOLS_SILVER via SnowflakeSilverReader now, so MDM_SILVER_DUCKDB
+alone no longer selects what these tests read. SnowflakeSilverReader.connect
+is monkeypatched to a real ShardedSilverReader over the local DuckDB fixture
+below instead, preserving genuine fail->pass fixture coverage rather than an
+accidental pass driven by "no live Snowflake in the test environment"
+(the same class of false-confirmed-by-the-wrong-mechanism gap CLAUDE.md's
+MDM Postgres migration-011 entry documents).
 """
 
 from __future__ import annotations
@@ -12,6 +21,14 @@ import duckdb
 import pytest
 
 import edgar_warehouse.mdm.cli as mdm_cli
+from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+
+def _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path: str) -> None:
+    monkeypatch.setattr(
+        SnowflakeSilverReader, "connect", staticmethod(lambda: ShardedSilverReader([db_path]))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +84,7 @@ class TestAdviserPreflight:
         _make_adv_fixture_db(db_path)
 
         monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
+        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
         monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
@@ -92,6 +110,7 @@ class TestAdviserPreflight:
         con.close()
 
         monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
+        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
         monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
@@ -106,6 +125,7 @@ class TestAdviserPreflight:
         _make_adv_fixture_db(db_path)
 
         monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
+        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
         monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
 
         required = mdm_cli._required_tables_for_run("adviser")
@@ -135,6 +155,7 @@ class TestFundPreflight:
         _make_adv_fixture_db(db_path)
 
         monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
+        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
         monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
@@ -158,6 +179,7 @@ class TestFundPreflight:
         con.close()
 
         monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
+        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
         monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 

@@ -388,12 +388,12 @@ class _DuckReader:
 # ---------------------------------------------------------------------------
 
 class TestMissingSilverSourceFailsBeforeSession:
-    """D-11 / PIPE-03: Missing MDM_SILVER_DUCKDB must error before _session() is created.
-
-    Current defect: _handle_run/_handle_derive_relationships/_handle_load_relationships
-    all call _session() BEFORE _silver_reader(), so the error message names
-    MDM_DATABASE_URL instead of MDM_SILVER_DUCKDB.
-    These tests FAIL against the current implementation.
+    """D-11 / PIPE-03: an unreachable silver source must error before
+    _session() is created. _handle_run/_handle_derive_relationships/
+    _handle_load_relationships all call _silver_reader() before _session(),
+    so a preflight failure (DuckDB Retirement Cutover Ticket 05: now always
+    a Snowflake-connect failure, not a missing MDM_SILVER_DUCKDB) surfaces
+    before a DB session is ever opened.
     """
 
     def _make_session_spy(self):
@@ -434,8 +434,11 @@ class TestMissingSilverSourceFailsBeforeSession:
             "Current code calls _session() first, causing MDM_DATABASE_URL error instead."
         )
 
-    def test_missing_silver_source_error_names_mdm_silver_duckdb(self, monkeypatch, capsys):
-        """Error output when MDM_SILVER_DUCKDB is absent must name 'MDM_SILVER_DUCKDB'."""
+    def test_missing_silver_source_error_names_snowflake(self, monkeypatch, capsys):
+        """Error output when the silver source can't be reached must name
+        the actual backend (Snowflake, DuckDB Retirement Cutover Ticket 05
+        -- MDM_SILVER_DUCKDB is no longer what _silver_reader() depends on,
+        so the error message was updated to stop naming it)."""
         import edgar_warehouse.mdm.cli as mdm_cli
 
         monkeypatch.delenv("MDM_SILVER_DUCKDB", raising=False)
@@ -452,8 +455,8 @@ class TestMissingSilverSourceFailsBeforeSession:
 
         assert rc != 0
         stderr_text = captured.err
-        assert "MDM_SILVER_DUCKDB" in stderr_text, (
-            f"Expected 'MDM_SILVER_DUCKDB' in stderr error message. Got:\n{stderr_text!r}"
+        assert "Snowflake silver reader" in stderr_text, (
+            f"Expected 'Snowflake silver reader' in stderr error message. Got:\n{stderr_text!r}"
         )
 
     def test_handle_run_all_succeeds(self, monkeypatch):
@@ -619,7 +622,11 @@ class TestS3BackedSilverSourceUsesObjectStorageReadBytes:
     def test_s3_backed_silver_source_uses_object_storage_read_bytes(
         self, monkeypatch, silver_duckdb, tmp_path
     ):
-        """_silver_reader() must call object_storage.read_bytes(s3_uri) for s3:// URIs."""
+        """_duckdb_silver_reader() must call object_storage.read_bytes(s3_uri)
+        for s3:// URIs -- still exercised (DuckDB Retirement Cutover Ticket
+        05) because verify-silver-parity/verify-resolver-input-parity need
+        this DuckDB path; mdm run itself no longer reaches it (see
+        test_s3_env_vars_do_not_affect_handle_run below)."""
         import edgar_warehouse.infrastructure.object_storage as obj_store
         import edgar_warehouse.mdm.cli as mdm_cli
 
@@ -637,83 +644,76 @@ class TestS3BackedSilverSourceUsesObjectStorageReadBytes:
         monkeypatch.setenv("MDM_LOCAL_SILVER_DUCKDB", str(local_path))
         monkeypatch.setattr(obj_store, "read_bytes", spy_read_bytes)
 
-        reader = mdm_cli._silver_reader()
+        reader = mdm_cli._duckdb_silver_reader()
 
         assert s3_uri in read_bytes_calls, (
-            f"Expected _silver_reader() to call object_storage.read_bytes({s3_uri!r}). "
+            f"Expected _duckdb_silver_reader() to call object_storage.read_bytes({s3_uri!r}). "
             f"Got: {read_bytes_calls}"
         )
         assert reader is not None, (
-            "Expected _silver_reader() to return a DuckDB reader after localization"
+            "Expected _duckdb_silver_reader() to return a DuckDB reader after localization"
         )
 
-    def test_s3_backed_silver_validates_required_tables(
-        self, monkeypatch, silver_duckdb, tmp_path
-    ):
-        """After s3:// download, silver table validation must run before _session() is opened.
-
-        The fixture has all required tables populated.  After preflight passes,
-        _session() IS called — but only AFTER validation.  We verify this by
-        recording the order of events (preflight → session) rather than asserting
-        _session is never called.  A correct implementation calls _session() only
-        after the silver reader and table checks succeed.
+    def test_s3_env_vars_do_not_affect_handle_run(self, monkeypatch, tmp_path):
+        """DuckDB Retirement Cutover Ticket 05: mdm run's silver preflight
+        must run before _session() is opened (unchanged intent from the
+        original D-11/PIPE-03 decision this test used to encode) -- but the
+        silver source is now Snowflake unconditionally. A legacy
+        MDM_SILVER_DUCKDB=s3://... value must be completely ignored: no
+        object_storage.read_bytes call, no S3 localization, no DuckDB at
+        all. This replaces the pre-cutover version of this test, which
+        asserted the opposite (that read_bytes WAS called) -- that
+        assertion described the retired code path, not the new one.
         """
         import edgar_warehouse.infrastructure.object_storage as obj_store
         import edgar_warehouse.mdm.cli as mdm_cli
+        from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 
-        s3_uri = "s3://my-bucket/warehouse/silver/silver.duckdb"
-        silver_bytes = silver_duckdb.read_bytes()
-        local_path = tmp_path / "localized_silver2.duckdb"
+        monkeypatch.setenv("MDM_SILVER_DUCKDB", "s3://my-bucket/warehouse/silver/silver.duckdb")
+        monkeypatch.setenv("MDM_LOCAL_SILVER_DUCKDB", str(tmp_path / "localized_silver2.duckdb"))
 
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", s3_uri)
-        monkeypatch.setenv("MDM_LOCAL_SILVER_DUCKDB", str(local_path))
-        monkeypatch.setattr(obj_store, "read_bytes", lambda _: silver_bytes)
-
-        # Track what happened: preflight must succeed before session is opened.
-        # We assert session was NOT called before read_bytes (preflight) completed.
         events: list[str] = []
-
-        original_read_bytes = lambda _: silver_bytes  # noqa: E731
 
         def spy_read_bytes(path: str) -> bytes:
             events.append("read_bytes")
-            return silver_bytes
+            raise AssertionError("object_storage.read_bytes must not be called post-cutover")
 
         monkeypatch.setattr(obj_store, "read_bytes", spy_read_bytes)
 
-        # Session spy: records when session is opened but does not raise,
-        # because after a valid silver source preflight passes, _session() IS
-        # expected to be called.  We assert it is called only AFTER read_bytes.
+        class _FakeSnowflakeReader:
+            def fetch(self, sql, params=None):
+                return [{"n": 1}]
+
+            def close(self):
+                pass
+
         session_opened_at: list[int] = []
 
         def _spy_session():
-            session_opened_at.append(len(events))  # how many events before session open
-            # Return a no-op mock that satisfies the pipeline close() calls
+            session_opened_at.append(len(events))
             m = MagicMock()
             m.__enter__ = lambda s: s
             m.__exit__ = MagicMock(return_value=False)
             return m
 
         monkeypatch.setattr(mdm_cli, "_session", _spy_session)
+        monkeypatch.setattr(SnowflakeSilverReader, "connect", lambda: _FakeSnowflakeReader())
 
         import argparse
         args = argparse.Namespace(entity_type="company", limit=None)
 
         # Run; may succeed or fail (e.g. pipeline raises on mock session).
-        # What matters is the ORDER: read_bytes must precede session open.
+        # What matters is that read_bytes/S3 were never touched.
         try:
             mdm_cli._handle_run(args)
         except Exception:
-            pass  # pipeline failure is expected with mock session; order is what we test
+            pass  # pipeline failure is expected with mock session; S3-avoidance is what we test
 
-        assert "read_bytes" in events, (
-            "Expected object_storage.read_bytes to be called for s3:// silver localization"
+        assert events == [], (
+            "Expected object_storage.read_bytes to never be called -- "
+            "_silver_reader() must ignore MDM_SILVER_DUCKDB entirely post-cutover"
         )
-        if session_opened_at:
-            assert session_opened_at[0] >= 1, (
-                "_session() was opened before object_storage.read_bytes was called. "
-                "Silver source validation (including read_bytes) must precede session open."
-            )
+        assert session_opened_at, "_session() should still have been reached after preflight passed"
 
 
 # ---------------------------------------------------------------------------
@@ -736,44 +736,45 @@ class TestRequiredTableValidation:
                 raise RuntimeError(f"Catalog Error: Table with name {table_name} does not exist")
             return [{"n": self._counts[table_name]}]
 
-    def test_empty_duckdb_fails_required_table_check(self, tmp_path, monkeypatch):
-        """An empty DuckDB (no tables) must fail preflight with a missing-table message."""
+    def test_empty_duckdb_fails_required_table_check(self, monkeypatch):
+        """An empty silver source (no tables) must fail preflight with a
+        missing-table message.
+
+        DuckDB Retirement Cutover Ticket 05: the silver reader is
+        EDGARTOOLS_SILVER via SnowflakeSilverReader now, not a real local
+        DuckDB file -- _silver_reader() itself is monkeypatched with a
+        reader that raises "does not exist" for every table, the same
+        shape a real empty/unreachable EDGARTOOLS_SILVER would produce.
+        """
         import edgar_warehouse.mdm.cli as mdm_cli
 
-        empty_db = tmp_path / "empty.duckdb"
-        con = duckdb.connect(str(empty_db))
-        con.close()
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", str(empty_db))
+        monkeypatch.setattr(mdm_cli, "_silver_reader", lambda: self._CountReader({}))
         monkeypatch.setattr(mdm_cli, "_session", MagicMock(
-            side_effect=AssertionError("_session must not be called for empty silver DB")
+            side_effect=AssertionError("_session must not be called for empty silver source")
         ))
 
         import argparse
         args = argparse.Namespace(entity_type="all", limit=None)
         rc = mdm_cli._handle_run(args)
 
-        assert rc != 0, "Expected nonzero exit for silver DB with no required tables"
+        assert rc != 0, "Expected nonzero exit for silver source with no required tables"
 
     def test_silver_missing_ownership_table_fails_person_entity_run(
-        self, tmp_path, monkeypatch, mdm_session
+        self, monkeypatch, mdm_session
     ):
-        """A silver DB missing sec_ownership_reporting_owner must fail person entity load preflight.
+        """A silver source missing sec_ownership_reporting_owner must fail
+        person entity load preflight.
 
-        This test is RED because no preflight table check exists.
-        The test asserts the REQUIRED content: sec_ownership_reporting_owner must
-        be listed in any required-tables check for 'person' entity type.
+        DuckDB Retirement Cutover Ticket 05: same _silver_reader()
+        monkeypatch approach as the test above, seeded with only
+        sec_company -- exercises the exact required-tables-for-'person'
+        content this test was written to assert.
         """
         import edgar_warehouse.mdm.cli as mdm_cli
 
-        no_ownership_db = tmp_path / "no_ownership.duckdb"
-        con = duckdb.connect(str(no_ownership_db))
-        # Only company tables, no ownership tables
-        con.execute("CREATE TABLE IF NOT EXISTS sec_company (cik BIGINT PRIMARY KEY, entity_name TEXT)")
-        con.execute("INSERT INTO sec_company VALUES (910001, 'Test Co')")
-        con.close()
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", str(no_ownership_db))
+        monkeypatch.setattr(
+            mdm_cli, "_silver_reader", lambda: self._CountReader({"sec_company": 1})
+        )
         monkeypatch.setattr(mdm_cli, "_session", MagicMock(
             side_effect=AssertionError("_session must not be called without preflight")
         ))
@@ -783,7 +784,7 @@ class TestRequiredTableValidation:
         rc = mdm_cli._handle_run(args)
 
         assert rc != 0, (
-            "Expected nonzero exit when silver DB is missing sec_ownership_reporting_owner "
+            "Expected nonzero exit when silver source is missing sec_ownership_reporting_owner "
             "for 'person' entity type run"
         )
 
