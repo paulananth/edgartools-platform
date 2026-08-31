@@ -121,16 +121,26 @@ def test_run_handler_normalizes_reports_and_propagates_identity(monkeypatch, cap
     import edgar_warehouse.mdm.pipeline as mdm_pipeline
 
     fake_session = MagicMock()
+    fake_bookkeeping = MagicMock()
     observed: dict[str, str] = {}
     monkeypatch.setattr(mdm_cli, "_require_silver_reader", lambda *_args: (object(), 0))
     monkeypatch.setattr(mdm_cli, "_session", lambda: fake_session)
+    monkeypatch.setattr(mdm_cli, "_bookkeeping_store", lambda: fake_bookkeeping)
 
     class FakePipeline:
         def __init__(self, *, session, silver, run_id):
             assert session is fake_session
             observed["constructor"] = run_id
 
-        def run_all(self, limit=None, *, resume_ledger_run_id=None, run_id=None):
+        def run_all(
+            self,
+            limit=None,
+            *,
+            resume_ledger_run_id=None,
+            run_id=None,
+            bookkeeping=None,
+        ):
+            assert bookkeeping is fake_bookkeeping
             observed["run_all"] = run_id
             return SimpleNamespace(
                 companies_processed=0,
@@ -169,15 +179,25 @@ def test_run_handler_generates_uuid_for_blank_identity(monkeypatch, capsys) -> N
     import edgar_warehouse.mdm.pipeline as mdm_pipeline
 
     fake_session = MagicMock()
+    fake_bookkeeping = MagicMock()
     observed: dict[str, str] = {}
     monkeypatch.setattr(mdm_cli, "_require_silver_reader", lambda *_args: (object(), 0))
     monkeypatch.setattr(mdm_cli, "_session", lambda: fake_session)
+    monkeypatch.setattr(mdm_cli, "_bookkeeping_store", lambda: fake_bookkeeping)
 
     class FakePipeline:
         def __init__(self, *, session, silver, run_id):
             observed["run_id"] = run_id
 
-        def run_all(self, limit=None, *, resume_ledger_run_id=None, run_id=None):
+        def run_all(
+            self,
+            limit=None,
+            *,
+            resume_ledger_run_id=None,
+            run_id=None,
+            bookkeeping=None,
+        ):
+            assert bookkeeping is fake_bookkeeping
             assert run_id == observed["run_id"]
             return SimpleNamespace()
 
