@@ -1820,16 +1820,16 @@ mdm_workflow_command_expression() {
     mdm_check_connectivity) printf '%s\n' "States.Array('mdm', 'check-connectivity')" ;;
     mdm_run)
       if [[ "$MDM_RUN_LIMIT" -gt 0 ]]; then
-        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '${MDM_RUN_LIMIT}')"
+        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '${MDM_RUN_LIMIT}', '--run-id', \$\$.Execution.Name)"
       else
-        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all')"
+        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', \$\$.Execution.Name)"
       fi
       ;;
     mdm_backfill_relationships)
       if [[ "$MDM_GRAPH_LIMIT" -gt 0 ]]; then
-        printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', '${MDM_GRAPH_LIMIT}')"
+        printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', '${MDM_GRAPH_LIMIT}', '--run-id', \$\$.Execution.Name)"
       else
-        printf '%s\n' "States.Array('mdm', 'backfill-relationships')"
+        printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--run-id', \$\$.Execution.Name)"
       fi
       ;;
     mdm_sync_graph)
@@ -1850,8 +1850,8 @@ mdm_workflow_command_expression() {
 
 mdm_workflow_limit_command_expression() {
   case "$1" in
-    mdm_run) printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', States.Format('{}', $.limit))" ;;
-    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', States.Format('{}', $.limit))" ;;
+    mdm_run) printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', States.Format('{}', $.limit), '--run-id', \$\$.Execution.Name)" ;;
+    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', States.Format('{}', $.limit), '--run-id', \$\$.Execution.Name)" ;;
     mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit', States.Format('{}', $.limit))" ;;
     mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}', '--limit', States.Format('{}', $.limit))" ;;
     *) return 0 ;;
@@ -1878,7 +1878,7 @@ mdm_workflow_unbounded_relationship_command_expression() {
 
 mdm_workflow_relationship_command_expression() {
   case "$1" in
-    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type)" ;;
+    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type, '--run-id', \$\$.Execution.Name)" ;;
     mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)" ;;
     *) return 0 ;;
   esac
@@ -1886,7 +1886,7 @@ mdm_workflow_relationship_command_expression() {
 
 mdm_workflow_relationship_limit_command_expression() {
   case "$1" in
-    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type, '--target-per-type', States.Format('{}', $.limit))" ;;
+    mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type, '--target-per-type', States.Format('{}', $.limit), '--run-id', \$\$.Execution.Name)" ;;
     mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type, '--limit', States.Format('{}', $.limit))" ;;
     *) return 0 ;;
   esac
@@ -3500,10 +3500,10 @@ sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "MdmRun")
 # export between backfill-relationships and sync-graph, sync-graph can read a stale or missing
 # mirror — graph output wouldn't reflect the MDM run this same execution just did.
 mdm_run = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
+    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
     next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
+    f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)",
     next_state="MdmExport")
 mdm_export = ecs_state(mdm_medium_arn,
     "States.Array('mdm', 'export')",
@@ -3740,10 +3740,10 @@ if workflow_name == "daily_incremental":
         "'--run-id', $$.Execution.Name)"
     )
 mdm_run = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')",
+    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
     next_state="BackfillMdmEntityIds")
 mdm_backfill = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')",
+    f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)",
     next_state="MdmExport")
 # MdmExport precedes MdmSync (data-architecture Issue 3): sync-graph materializes Snowflake
 # graph tables from the Snowflake MDM mirror, not the runtime MDM database directly — without
@@ -4559,8 +4559,8 @@ batch_map = {
 # re-run (all companies in silver), not an incremental daily update. A hard limit would
 # silently leave the majority of companies unprocessed in MDM and Neo4j.
 # MDM_RUN_LIMIT (incremental default 100) is intentionally NOT used here.
-mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="MdmExport")
 mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True)
 mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True)
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True)
@@ -4920,7 +4920,7 @@ strict_batch_map = {
 # either flag today; other --entity-type all sub-steps ignore them until
 # mdm-run-throughput's own concurrency work makes them resumable too.
 mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name, '--resume-ledger-run-id', $.resume_from_run_id)", next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="MdmExport")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="MdmExport")
 mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True)
 mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True)
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True)
@@ -4948,11 +4948,11 @@ insider_coverage_uri = (
     + warehouse_bucket_name
     + "/warehouse/release-evidence/{}/insider_coverage.json', $$.Execution.Name)"
 )
-strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all')", next_state="StrictMdmBackfill")
-strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships')", next_state="StrictMdmIdempotency")
+strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="StrictMdmBackfill")
+strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="StrictMdmIdempotency")
 strict_mdm_idempotency = ecs_state(
     mdm_medium_arn,
-    "States.Array('mdm', 'backfill-relationships')",
+    "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)",
     next_state="StrictInsiderCoverage",
 )
 strict_insider_coverage = ecs_state(
@@ -5419,8 +5419,8 @@ definition = {
     "Comment": "MDM entity resolution + Neo4j sync + gold-refresh. No silver batch step — run after bronze+silver are complete.",
     "StartAt": "MdmRun",
     "States": {
-        "MdmRun":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}')", next_state="MdmBackfill"),
-        "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}')", next_state="MdmExport"),
+        "MdmRun":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)", next_state="MdmBackfill"),
+        "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)", next_state="MdmExport"),
         # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
         # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
         # map, ticket 02) — see infra/scripts/mdm_tail_helper.py.
@@ -5499,12 +5499,12 @@ definition = {
         # Companies are assumed already in MDM; only Form 3/4/5 persons.
         "MdmPersons": ecs_state(
             mdm_medium_arn,
-            "States.Array('mdm', 'run', '--entity-type', 'person')",
+            "States.Array('mdm', 'run', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
             next_state="MdmIsInsider",
         ),
         "MdmIsInsider": ecs_state(
             mdm_medium_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000')",
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
             next_state="MdmExport",
         ),
         # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
@@ -5582,33 +5582,33 @@ definition = {
     "States": {
         "MdmSecurities": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'run', '--entity-type', 'security')",
+            "States.Array('mdm', 'run', '--entity-type', 'security', '--run-id', $$.Execution.Name)",
             next_state="MdmPersons",
         ),
         "MdmPersons": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'run', '--entity-type', 'person')",
+            "States.Array('mdm', 'run', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
             next_state="MdmIsInsider",
         ),
         "MdmIsInsider": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000')",
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
             next_state="MdmHolds",
         ),
         "MdmHolds": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'HOLDS', '--target-per-type', '100000')",
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'HOLDS', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
             next_state="MdmCompanyHolds",
         ),
         "MdmCompanyHolds": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'COMPANY_HOLDS', '--target-per-type', '100000')",
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'COMPANY_HOLDS', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
             next_state="MdmInstitutionalHolds",
         ),
         # Separate step + lower default target for OOM safety (13F holding table).
         "MdmInstitutionalHolds": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'INSTITUTIONAL_HOLDS', '--target-per-type', '50000')",
+            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'INSTITUTIONAL_HOLDS', '--target-per-type', '50000', '--run-id', $$.Execution.Name)",
             next_state="MdmExport",
             retry_secs=180,
         ),

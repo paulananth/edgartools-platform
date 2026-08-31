@@ -476,8 +476,9 @@ class TestMissingSilverSourceFailsBeforeSession:
         monkeypatch.setattr(mdm_cli, "_bookkeeping_store", MagicMock(return_value=MagicMock()))
 
         class FakePipeline:
-            def __init__(self, *, session, silver):
+            def __init__(self, *, session, silver, run_id):
                 assert session is fake_session
+                assert run_id
 
             def run_all(
                 self, limit=None, *, resume_ledger_run_id=None, run_id=None, bookkeeping=None

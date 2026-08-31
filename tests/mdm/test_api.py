@@ -663,16 +663,20 @@ class TestStewardshipEndpoints:
     """
 
     def test_quarantine_entity(self, api_client, db_session):
-        from edgar_warehouse.mdm.database import MdmEntity
+        from edgar_warehouse.mdm.database import MdmChangeLog, MdmEntity
         eid = _entity(db_session, "company")
         db_session.commit()
 
         r = api_client.post(f"/api/v1/mdm/stewardship/entities/{eid}/quarantine")
         assert r.status_code == 200
+        run_id = r.json()["run_id"]
+        uuid.UUID(run_id)
 
         db_session.expire_all()
         e = db_session.get(MdmEntity, eid)
         assert e.is_quarantined is True
+        change = db_session.query(MdmChangeLog).filter_by(entity_id=eid).one()
+        assert change.run_id == run_id
 
     def test_unquarantine_entity(self, api_client, db_session):
         from edgar_warehouse.mdm.database import MdmEntity
@@ -682,6 +686,7 @@ class TestStewardshipEndpoints:
 
         r = api_client.post(f"/api/v1/mdm/stewardship/entities/{eid}/unquarantine")
         assert r.status_code == 200
+        uuid.UUID(r.json()["run_id"])
 
         db_session.expire_all()
         e = db_session.get(MdmEntity, eid)
@@ -701,10 +706,33 @@ class TestStewardshipEndpoints:
         })
         assert r.status_code == 200
         assert r.json()["kept"] == keep_eid
+        uuid.UUID(r.json()["run_id"])
 
         db_session.expire_all()
         discard = db_session.get(MdmEntity, discard_eid)
         assert discard.valid_to is not None, "discard entity should be tombstoned via valid_to"
+
+    def test_patch_entity_returns_and_persists_run_identity(self, api_client, db_session):
+        from edgar_warehouse.mdm.database import MdmChangeLog, MdmCompany
+
+        entity_id = _entity(db_session, "company")
+        db_session.add(MdmCompany(
+            entity_id=entity_id,
+            cik=123456,
+            canonical_name="Before",
+        ))
+        db_session.commit()
+
+        response = api_client.patch(
+            f"/api/v1/mdm/stewardship/entities/{entity_id}",
+            json={"field": "canonical_name", "value": "After", "reason": "test"},
+        )
+
+        assert response.status_code == 200
+        run_id = response.json()["run_id"]
+        uuid.UUID(run_id)
+        change = db_session.query(MdmChangeLog).filter_by(entity_id=entity_id).one()
+        assert change.run_id == run_id
 
     def test_list_reviews_empty(self, api_client):
         r = api_client.get("/api/v1/mdm/stewardship/reviews")

@@ -76,6 +76,7 @@ class GraphRegistry:
 class GraphSyncEngine:
     session: Session
     registry: GraphRegistry
+    run_id: str = ""
     _primed_rel_type_ids: set[str] = field(default_factory=set)
     _current_by_relationship_id: dict[str, list[MdmRelationshipInstance]] = field(
         default_factory=dict
@@ -84,9 +85,18 @@ class GraphSyncEngine:
     _pending_since_flush: int = 0
     _flush_batch_size: int = 1_000
 
+    def __post_init__(self) -> None:
+        from edgar_warehouse.mdm.run_identity import normalize_or_create_run_id
+
+        self.run_id = normalize_or_create_run_id(self.run_id)[0]
+
     @classmethod
-    def build(cls, session: Session) -> "GraphSyncEngine":
-        return cls(session=session, registry=GraphRegistry.load(session))
+    def build(cls, session: Session, run_id: str | None = None) -> "GraphSyncEngine":
+        return cls(
+            session=session,
+            registry=GraphRegistry.load(session),
+            run_id=run_id or "",
+        )
 
     def prime_relationship_type(
         self,
@@ -314,6 +324,7 @@ class GraphSyncEngine:
             relationship_kind=relationship_kind,
             source_system=source_system,
             source_accession=source_accession,
+            run_id=self.run_id,
             source_evidence=[_evidence_entry(source_system, source_accession)],
         )
         self.session.add(row)
@@ -430,6 +441,7 @@ class GraphSyncEngine:
 def backfill_relationship_instances(
     session: Session,
     limit: Optional[int] = None,
+    run_id: str | None = None,
 ) -> dict:
     """Derive mdm_relationship_instance rows from existing mdm_fund and mdm_security data.
 
@@ -449,6 +461,7 @@ def backfill_relationship_instances(
         (r.rel_type_id, r.source_entity_id, r.target_entity_id)
         for r in session.scalars(select(MdmRelationshipInstance))
     }
+    sync_engine = GraphSyncEngine.build(session, run_id=run_id)
 
     backfilled = 0
 
@@ -465,7 +478,7 @@ def backfill_relationship_instances(
             key = (manages_fund["rel_type_id"], fund.adviser_entity_id, fund.entity_id)
             if key in existing:
                 continue
-            _row, created = GraphSyncEngine(session, registry).ensure_relationship(
+            _row, created = sync_engine.ensure_relationship(
                 "MANAGES_FUND",
                 fund.adviser_entity_id,
                 fund.entity_id,
@@ -485,7 +498,7 @@ def backfill_relationship_instances(
             key = (issued_by["rel_type_id"], sec.entity_id, sec.issuer_entity_id)
             if key in existing:
                 continue
-            _row, created = GraphSyncEngine(session, registry).ensure_relationship(
+            _row, created = sync_engine.ensure_relationship(
                 "ISSUED_BY",
                 sec.entity_id,
                 sec.issuer_entity_id,

@@ -223,6 +223,9 @@ class MDMPipeline:
     run_id: str = ""
 
     def __post_init__(self) -> None:
+        from edgar_warehouse.mdm.run_identity import normalize_or_create_run_id
+
+        self.run_id = normalize_or_create_run_id(self.run_id)[0]
         self.engine = MDMRuleEngine.load(self.session)
 
     def _ctx(self) -> ResolverContext:
@@ -917,7 +920,9 @@ class MDMPipeline:
                 worker_pipeline = MDMPipeline(
                     session=worker_session, silver=silver, run_id=pipeline_run_id
                 )
-                worker_sync_engine = GraphSyncEngine.build(worker_session)
+                worker_sync_engine = GraphSyncEngine.build(
+                    worker_session, run_id=pipeline_run_id
+                )
                 result = worker_pipeline._derive_relationship_type(
                     worker_sync_engine, rel_type_name, remaining, issuer_ciks=ciks
                 )
@@ -2421,6 +2426,7 @@ class MDMPipeline:
                 entity_id=entity_id,
                 entity_type=entity_type,
                 changed_fields=changed_fields or {"created": True},
+                run_id=self.run_id,
             )
         )
 

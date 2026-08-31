@@ -618,6 +618,7 @@ class MdmChangeLog(Base):
     )
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     changed_fields: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
+    run_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     changed_at: Mapped[Optional[object]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()")
     )
@@ -630,6 +631,11 @@ class MdmChangeLog(Base):
             "idx_change_log_pending",
             "exported_at",
             postgresql_where=text("exported_at IS NULL"),
+        ),
+        Index(
+            "idx_change_log_run_id",
+            "run_id",
+            postgresql_where=text("run_id IS NOT NULL"),
         ),
     )
 
@@ -838,6 +844,7 @@ class MdmRelationshipInstance(Base):
     )
     source_system: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_accession: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    run_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_evidence: Mapped[Optional[object]] = mapped_column(type_=JSON, nullable=True)
     superseded_by_version_id: Mapped[Optional[str]] = mapped_column(
         GUID(),
@@ -874,6 +881,11 @@ class MdmRelationshipInstance(Base):
             postgresql_where=text("graph_synced_at IS NULL"),
         ),
         Index("idx_rel_instance_relationship_id", "relationship_id"),
+        Index(
+            "idx_rel_instance_run_id",
+            "run_id",
+            postgresql_where=text("run_id IS NOT NULL"),
+        ),
         CheckConstraint(
             "valid_from_date IS NULL OR valid_to_date IS NULL OR valid_to_date > valid_from_date",
             name="ck_rel_instance_valid_interval",

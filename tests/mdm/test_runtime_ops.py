@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import runpy
 from pathlib import Path
 
 from sqlalchemy import text
@@ -112,7 +113,37 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "016_serialize_graph_generation.sql",
         "017_source_exclusion_and_evidence_import.sql",
         "018_source_fetch_validators.sql",
+        "019_mdm_run_identity.sql",
     ]
+
+
+def test_mdm_run_identity_migration_is_additive_nullable_and_indexed() -> None:
+    path = Path(migrations.__file__).with_name("019_mdm_run_identity.sql")
+    normalized = " ".join(path.read_text(encoding="utf-8").lower().split())
+
+    assert "alter table mdm_change_log add column if not exists run_id text" in normalized
+    assert "alter table mdm_relationship_instance add column if not exists run_id text" in normalized
+    assert "run_id text not null" not in normalized
+    assert "where run_id is not null" in normalized
+
+
+def test_generated_and_checked_in_mirror_ddl_preserve_run_identity_upgrade() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    generator_path = repo_root / "infra/scripts/generate_mdm_mirror_ddl.py"
+    generated = runpy.run_path(str(generator_path))["generate"]().lower()
+    checked_in = (
+        repo_root / "infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql"
+    ).read_text(encoding="utf-8").lower()
+
+    for ddl in (generated, checked_in):
+        assert "alter table mdm_change_log add column if not exists run_id text;" in ddl
+        assert (
+            "alter table mdm_relationship_instance "
+            "add column if not exists run_id text;"
+        ) in ddl
+        for table in ("mdm_change_log", "mdm_relationship_instance"):
+            table_body = ddl.split(f"create table if not exists {table} (", 1)[1].split(");", 1)[0]
+            assert "run_id text" in table_body
 
 
 def test_mdm_cli_exposes_e2e_operations() -> None:

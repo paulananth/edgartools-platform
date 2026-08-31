@@ -262,7 +262,12 @@ def test_export_pending_mirrors_entity_and_change_log_when_mirror_writer_provide
     session.add(db.MdmEntity(entity_id=entity_id, entity_type="company"))
     session.add(db.MdmCompany(entity_id=entity_id, cik=1, canonical_name="Issuer Corp"))
     session.commit()
-    session.add(db.MdmChangeLog(entity_id=entity_id, entity_type="company", changed_fields={"cik": 1}))
+    session.add(db.MdmChangeLog(
+        entity_id=entity_id,
+        entity_type="company",
+        changed_fields={"cik": 1},
+        run_id="entity-export-run",
+    ))
     session.commit()
 
     domain_writer = FakeWriter()
@@ -281,6 +286,7 @@ def test_export_pending_mirrors_entity_and_change_log_when_mirror_writer_provide
     assert entity_call[1][0]["entity_id"] == entity_id
     change_log_call = next(call for call in mirror_writer.calls if call[0] == "MDM_CHANGE_LOG")
     assert change_log_call[2] == "change_id"
+    assert change_log_call[1][0]["run_id"] == "entity-export-run"
 
 
 def test_export_pending_skips_mirror_when_mirror_writer_is_none(session):
@@ -344,7 +350,7 @@ def test_export_pending_relationships_mirrors_and_stamps_graph_synced_at(session
     session.add(db.MdmRelationshipInstance(
         instance_id=instance_id, rel_type_id=rel_type_id,
         source_entity_id=adviser_id, target_entity_id=fund_id,
-        source_system="test", is_active=True,
+        source_system="test", is_active=True, run_id="relationship-export-run",
     ))
     session.commit()
 
@@ -360,6 +366,7 @@ def test_export_pending_relationships_mirrors_and_stamps_graph_synced_at(session
     assert "MDM_RELATIONSHIP_INSTANCE" in tables
     rel_call = next(call for call in mirror_writer.calls if call[0] == "MDM_RELATIONSHIP_INSTANCE")
     assert rel_call[2] == "instance_id"
+    assert rel_call[1][0]["run_id"] == "relationship-export-run"
     entity_call = next(call for call in mirror_writer.calls if call[0] == "MDM_ENTITY")
     mirrored_ids = {row["entity_id"] for row in entity_call[1]}
     assert mirrored_ids == {adviser_id, fund_id}

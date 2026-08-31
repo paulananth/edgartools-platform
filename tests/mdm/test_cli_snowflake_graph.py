@@ -49,10 +49,11 @@ class FakeSession:
 class FakePipeline:
     instances: list["FakePipeline"] = []
 
-    def __init__(self, *, session, silver, neo4j=None) -> None:
+    def __init__(self, *, session, silver, neo4j=None, run_id="") -> None:
         self.session = session
         self.silver = silver
         self.neo4j = neo4j
+        self.run_id = run_id
         self.derive_calls = []
         self.entity_calls = []
         FakePipeline.instances.append(self)
