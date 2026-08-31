@@ -66,52 +66,48 @@ def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.delenv("SILVER_LANDING_EXPORT_ROOT", raising=False)
 
 
-def _seed_daily_index(tmp_path, *, business_date: str) -> None:
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    db = open_silver_database(silver_root)
-    try:
-        business_date_value = date.fromisoformat(business_date)
-        db.merge_daily_index_filings(
-            [
-                {
-                    "business_date": business_date_value,
-                    "source_year": business_date_value.year,
-                    "source_quarter": ((business_date_value.month - 1) // 3) + 1,
-                    "row_ordinal": 1,
-                    "form": "4",
-                    "company_name": "Widget Corp.",
-                    "cik": 999999,
-                    "filing_date": business_date_value,
-                    "file_name": "edgar/data/999999/0001140361-26-000002.txt",
-                    "accession_number": "0001140361-26-000002",
-                    "filing_txt_url": (
-                        "https://www.sec.gov/Archives/edgar/data/999999/"
-                        "0001140361-26-000002.txt"
-                    ),
-                    "record_hash": "hash-2",
-                }
-            ],
-            sync_run_id="seed-run",
-        )
-        db.upsert_daily_index_checkpoint(
+def _seed_daily_index(bookkeeping, *, business_date: str) -> None:
+    # DuckDB Retirement Cutover Ticket 15: stg_daily_index_filing/
+    # sec_daily_index_checkpoint now live in the bookkeeping store, not
+    # SilverDatabase -- seed there, matching what
+    # run_filing_artifact_gated_capture_for_business_date now reads from.
+    business_date_value = date.fromisoformat(business_date)
+    bookkeeping.merge_daily_index_filings(
+        [
             {
                 "business_date": business_date_value,
-                "source_key": f"date:{business_date}",
-                "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
-                "expected_available_at": datetime.now(UTC),
-                "first_attempt_at": datetime.now(UTC),
-                "last_attempt_at": datetime.now(UTC),
-                "status": "succeeded",
-                "row_count": 1,
-                "distinct_cik_count": 1,
-                "distinct_accession_count": 1,
+                "source_year": business_date_value.year,
+                "source_quarter": ((business_date_value.month - 1) // 3) + 1,
+                "row_ordinal": 1,
+                "form": "4",
+                "company_name": "Widget Corp.",
+                "cik": 999999,
+                "filing_date": business_date_value,
+                "file_name": "edgar/data/999999/0001140361-26-000002.txt",
+                "accession_number": "0001140361-26-000002",
+                "filing_txt_url": (
+                    "https://www.sec.gov/Archives/edgar/data/999999/"
+                    "0001140361-26-000002.txt"
+                ),
+                "record_hash": "hash-2",
             }
-        )
-    finally:
-        db.close()
+        ],
+        sync_run_id="seed-run",
+    )
+    bookkeeping.upsert_daily_index_checkpoint(
+        {
+            "business_date": business_date_value,
+            "source_key": f"date:{business_date}",
+            "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
+            "expected_available_at": datetime.now(UTC),
+            "first_attempt_at": datetime.now(UTC),
+            "last_attempt_at": datetime.now(UTC),
+            "status": "succeeded",
+            "row_count": 1,
+            "distinct_cik_count": 1,
+            "distinct_accession_count": 1,
+        }
+    )
 
 
 def test_gated_capture_reuses_already_open_db_and_captures_real_filing(
@@ -123,9 +119,11 @@ def test_gated_capture_reuses_already_open_db_and_captures_real_filing(
     )
     from edgar_warehouse.infrastructure.object_storage import StorageLocation
     from edgar_warehouse.silver_support.session import open_silver_database
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
     _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-27")
+    bookkeeping = bookkeeping_fixture()
+    _seed_daily_index(bookkeeping, business_date="2026-08-27")
 
     context = _build_warehouse_context("daily-incremental")
     silver_root = StorageLocation(str(tmp_path / "silver"))
@@ -141,7 +139,7 @@ def test_gated_capture_reuses_already_open_db_and_captures_real_filing(
             # through) -- it is a bare capture call against a db the caller
             # opened and will close/publish on its own.
             outcome = run_filing_artifact_gated_capture_for_business_date(
-                context=context, db=db, business_date="2026-08-27", run_id="daily-run-1",
+                context=context, db=db, bookkeeping=bookkeeping, business_date="2026-08-27", run_id="daily-run-1",
             )
     finally:
         db.close()

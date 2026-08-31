@@ -171,48 +171,49 @@ def test_bronze_capture_writes_consolidated_run_manifest(tmp_path) -> None:
 
 
 def test_verify_pipeline_run_rechecks_raw_write_hashes(tmp_path) -> None:
+    from edgar_warehouse.application.commands import verify_pipeline_run as vpr_module
     from edgar_warehouse.application.commands.verify_pipeline_run import verify_pipeline_run
-    from edgar_warehouse.silver_store import SilverDatabase
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
     context = _context(tmp_path)
     raw_payload = b'{"ok": true}'
     raw_path = context.bronze_root.write_bytes("raw/test.json", raw_payload)
 
-    db = SilverDatabase(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    try:
-        db.start_pipeline_run(
+    # DuckDB Retirement Cutover Ticket 15: pipeline_run now lives in the
+    # bookkeeping store, not SilverDatabase.
+    bookkeeping = bookkeeping_fixture()
+    bookkeeping.start_pipeline_run(
+        {
+            "pipeline_run_id": "run-1",
+            "command_name": "seed-universe",
+            "runtime_mode": "bronze_capture",
+            "environment_name": "test",
+            "started_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "status": "running",
+            "arguments": {},
+            "scope": {},
+            "bronze_root": context.bronze_root.root,
+            "storage_root": context.storage_root.root,
+            "silver_root": context.silver_root.root,
+        }
+    )
+    bookkeeping.complete_pipeline_run(
+        "run-1",
+        status="succeeded",
+        writes=[],
+        raw_writes=[
             {
-                "pipeline_run_id": "run-1",
-                "command_name": "seed-universe",
-                "runtime_mode": "bronze_capture",
-                "environment_name": "test",
-                "started_at": datetime(2026, 1, 1, tzinfo=UTC),
-                "status": "running",
-                "arguments": {},
-                "scope": {},
-                "bronze_root": context.bronze_root.root,
-                "storage_root": context.storage_root.root,
-                "silver_root": context.silver_root.root,
+                "layer": "bronze_raw",
+                "path": raw_path,
+                "relative_path": "raw/test.json",
+                "sha256": "6bc0da1f42f96fc37b8bd7ed20ba57606d2a0da5cda2b135c7854fbdc985b8a3",
             }
-        )
-        db.complete_pipeline_run(
-            "run-1",
-            status="succeeded",
-            writes=[],
-            raw_writes=[
-                {
-                    "layer": "bronze_raw",
-                    "path": raw_path,
-                    "relative_path": "raw/test.json",
-                    "sha256": "6bc0da1f42f96fc37b8bd7ed20ba57606d2a0da5cda2b135c7854fbdc985b8a3",
-                }
-            ],
-            metrics={},
-        )
-    finally:
-        db.close()
+        ],
+        metrics={},
+    )
 
-    report = verify_pipeline_run(context=context, run_id="run-1")
+    with patch.object(vpr_module, "_bookkeeping_store", return_value=bookkeeping):
+        report = verify_pipeline_run(context=context, run_id="run-1")
 
     assert report["status"] == "ok"
     assert report["hashes_checked"] == 1

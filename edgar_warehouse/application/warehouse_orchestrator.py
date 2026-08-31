@@ -1578,6 +1578,7 @@ def _publish_shard_if_remote_with_retry(
 def _run_filing_artifact_gated_capture(
     context: WarehouseCommandContext,
     db: SilverDatabase,
+    bookkeeping: "BookkeepingStore",
     business_date: str,
     run_id: str,
 ) -> dict[str, Any]:
@@ -1601,7 +1602,7 @@ def _run_filing_artifact_gated_capture(
     )
 
     outcome = run_filing_artifact_gated_capture_for_business_date(
-        context=context, db=db, business_date=business_date, run_id=run_id,
+        context=context, db=db, bookkeeping=bookkeeping, business_date=business_date, run_id=run_id,
     )
     return {"interval_complete": outcome.interval_complete}
 
@@ -1772,6 +1773,7 @@ def _capture_bronze_raw(
                 gated_outcome = _run_filing_artifact_gated_capture(
                     context=context,
                     db=db,
+                    bookkeeping=bookkeeping,
                     business_date=business_date_end.isoformat(),
                     run_id=sync_run_id,
                 )
@@ -3997,6 +3999,7 @@ def _run_configured_form_artifact_pipeline(
 
                     if has_successful_ownership_parse(
                         db,
+                        bookkeeping,
                         accession_number=accession_number,
                         parser_name=parser_name,
                         parser_version=parser_version,

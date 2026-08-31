@@ -107,19 +107,91 @@ per the operator's own answer during this ticket set's split discussion.
 
 **Blocked by:** [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)
 
-**Status:** blocked
+**Status:** done (2026-08-31)
 
-- [ ] `verify_pipeline_run.py` and `drive_filing_discovery.py` repointed at
-      `BookkeepingStore`, confirmed mechanical (no logic change needed)
-- [ ] `validate_data_quality.py` and `silver_once.py` repointed using
+- [x] `verify_pipeline_run.py` and `drive_filing_discovery.py` repointed at
+      `BookkeepingStore`. `verify_pipeline_run.py` turned out fully mechanical
+      -- `db` became entirely unused once repointed, so its hydrate/open/
+      close/publish DuckDB lifecycle was removed as a direct consequence (not
+      touched-content, just now-dead code). `drive_filing_discovery.py` was
+      NOT purely mechanical: `_load_sealed_discovery_rows`'s two bookkeeping
+      calls are reached via a shared core (`run_gated_discovery_for_business_date`,
+      12 flat params) with 3 real callers spanning 4 files
+      (`drive_filing_discovery.py` itself, `warehouse_orchestrator.py`'s
+      `_run_filing_artifact_gated_capture`, `acquisition/capture_parity.py`'s
+      `run_dual_path_filing_artifact_parity` -- called in turn from `cli.py`'s
+      `compare-filing-artifact-capture` handler). All 3 needed `bookkeeping`
+      threaded through. A `/gof-refactor-reviewer` consult (this session, git-log
+      evidence: 8 historical commits growing that function's param list across
+      Tickets 16/29/20/24b4/46/48/38-51-53) confirmed adding `bookkeeping` as a
+      13th flat param was the wrong move -- instead split the signature into
+      `GatedDiscoveryResources` (open handles: context/db/bookkeeping/engine,
+      caller-owned lifecycle) and `GatedDiscoveryScope` (9 per-call scalars),
+      done as a 5-step behavior-preserving migration (add both types + a
+      `run_gated_discovery(resources, scope)` wrapper delegating to the
+      unchanged flat function -> migrate each of the 3 callers one at a time,
+      running that caller's tests after each -> collapse the flat function and
+      wrapper into one `run_gated_discovery` once no caller used the flat
+      signature). `capture_parity.py`'s own `db.get_daily_index_filings` call
+      (this ticket's own 2026-08-30 addendum item) fixed the same pass.
+- [x] `validate_data_quality.py` and `silver_once.py` repointed using
       [Ticket 03](03-rewrite-cross-store-joins-and-repoint-callers.md)'s
-      two new methods, raw SQL removed, existing test stubs updated or
-      confirmed still valid against the real store shape
-- [ ] `migrate_silver_shards.py`'s handling of these 11 table names is
-      reviewed and a decision made (removed / changed / left as-is with
-      reasoning stated), not left ambiguous
-- [ ] `build_relationship_release_manifest.py` gets a working
-      `BookkeepingStore` connection (env var wiring confirmed for however
-      this script is actually invoked in prod), raw `duckdb.connect(...)`
-      call removed
-- [ ] Full test suite green
+      `get_recent_successful_pipeline_runs`/`has_successful_parse_run`, raw
+      SQL removed, test stubs updated (`_FakeBookkeeping` added to
+      `test_silver_once.py`; `_patch_bookkeeping_store` helper added to
+      `test_validate_data_quality.py`). Found and fixed a THIRD bookkeeping
+      call in `silver_once.py` not listed in this ticket's original text:
+      `daily_index_is_finalized` reads `sec_daily_index_checkpoint` via
+      `db.get_daily_index_checkpoint` -- confirmed to have zero production
+      callers (only its own unit test), so no live bug, but fixed anyway
+      since it's a trivial one-line swap in a file already being edited.
+      `has_successful_ownership_parse` stayed genuinely dual-parameter (`db`
+      for its `sec_ownership_reporting_owner` content-table fallback,
+      `bookkeeping` for the primary `sec_parse_run` check) -- not collapsible
+      to one store.
+- [x] `migrate_silver_shards.py`'s handling of the 11 table names reviewed;
+      decision: **left as-is**, documented inline with a comment block above
+      `CIK_DIRECT_TABLES`. Reasoning: this migration tool's whole job is
+      faithfully copying whatever rows physically exist in a *source*
+      silver.duckdb into 4 shards; removing the 7 bookkeeping-table entries
+      from its routing config would silently DROP real historical data if an
+      operator ever re-runs it against an older, pre-cutover monolith that
+      still has genuine (not just frozen-stale) rows in these tables. Cost of
+      leaving the entries as-is is zero -- nothing reads shards for these
+      tables anymore post-repoint (a separate, already-tracked cleanup item
+      covers `ShardedSilverReader._TABLES`'s own stale entries, per Ticket 14's
+      deferred note).
+- [x] `build_relationship_release_manifest.py` gets a working `BookkeepingStore`
+      connection: `_load_silver_inputs` now takes a `bookkeeping` param, reads
+      `bookkeeping.get_all_company_sync_states()` and filters by
+      `tracking_status` in Python (no existing store method offered the exact
+      status-list filter the raw SQL had), raw `sec_company_sync_state` query
+      on the bare `duckdb.connect(...)` removed (the `sec_company_filing`
+      query stays on that connection -- genuine DuckDB content table,
+      unaffected). **Found and fixed via the mandated Spec-axis code review**
+      (not caught before that pass): the script's real prod invocation path
+      -- `mdm build-relationship-release-manifest`, an ad-hoc ECS task on the
+      MDM task profile (`infra/scripts/deploy-aws-application.sh`'s
+      `write_mdm_container_definitions`) -- never injected
+      `BOOKKEEPING_DATABASE_URL` into that task's secrets at all (only the
+      warehouse profile's `register_task_definition` had that wiring). Fixed
+      by threading `BOOKKEEPING_POSTGRES_DSN_SECRET_ARN` (an existing,
+      already-resolved shell variable) into `write_mdm_container_definitions`
+      and appending the same optional `BOOKKEEPING_DATABASE_URL` secret entry
+      the warehouse profile already uses. Without this fix the script would
+      have raised `KeyError: 'BOOKKEEPING_DATABASE_URL'` on its actual prod
+      path despite passing every test (tests monkeypatch `_bookkeeping_store()`
+      entirely, so none of them exercised the real env-var lookup).
+- [x] Full test suite green: 2861 passed, 5 skipped, 152 warnings, 35 subtests
+      passed -- only the 8 pre-existing, unrelated Postgres-integration
+      failures remain (`test_acquisition_ledger_postgres.py`/
+      `test_conflict_postgres.py`, missing local migration column, not
+      introduced by this ticket).
+
+**Three-axis code review (Standards/Spec/GoF, mandated by CLAUDE.md) run before
+commit.** GoF: clean, no findings. Standards: two minor, non-blocking notes
+(missing return-type annotation on `cli.py`'s new `_bookkeeping_store()`;
+`verify_pipeline_run()`'s `context` parameter is now unused inside the
+function body, kept only to preserve the call signature) -- left as-is, judged
+not worth the churn. Spec: the `BOOKKEEPING_DATABASE_URL` ECS-secret gap above
+was this axis's one real finding, fixed prior to commit.

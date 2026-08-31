@@ -241,6 +241,12 @@ def _handle_backfill_silver_landing_company_metadata(args: argparse.Namespace) -
     return run_command("backfill-silver-landing-company-metadata", args)
 
 
+def _bookkeeping_store():
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
+
+
 def _handle_compare_filing_artifact_capture(args: argparse.Namespace) -> int:
     import json
     from datetime import UTC, datetime
@@ -263,6 +269,7 @@ def _handle_compare_filing_artifact_capture(args: argparse.Namespace) -> int:
             result = run_dual_path_filing_artifact_parity(
                 context=context,
                 db=db,
+                bookkeeping=_bookkeeping_store(),
                 business_date=args.business_date,
                 cik_list=getattr(args, "cik_list", None),
                 limit=args.limit,

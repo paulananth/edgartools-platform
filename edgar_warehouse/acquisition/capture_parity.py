@@ -298,6 +298,7 @@ def run_dual_path_filing_artifact_parity(
     *,
     context: Any,
     db: Any,
+    bookkeeping: Any,
     business_date: str,
     sync_run_id: str,
     cik_list: Sequence[int] | None = None,
@@ -330,7 +331,7 @@ def run_dual_path_filing_artifact_parity(
         business_date=business_date, cik_list=cik_list, limit=limit
     )
     index_rows = filter_discovery_rows_by_cik(
-        db.get_daily_index_filings(business_date), scope.cik_list
+        bookkeeping.get_daily_index_filings(business_date), scope.cik_list
     )
     filing_rows = []
     for row in index_rows:
@@ -373,6 +374,7 @@ def run_dual_path_filing_artifact_parity(
     run_filing_artifact_gated_capture_for_business_date(
         context=context,
         db=db,
+        bookkeeping=bookkeeping,
         business_date=business_date,
         run_id=sync_run_id,
         cik_list=scope.cik_list,

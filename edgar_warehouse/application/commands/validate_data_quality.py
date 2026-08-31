@@ -56,6 +56,12 @@ _DIRECT_GOLD_SILVER_TABLES = {
 }
 
 
+def _bookkeeping_store() -> Any:
+    from edgar_warehouse.bookkeeping.database import get_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+    return BookkeepingStore(get_session(get_engine()))
+
+
 def execute(args: Any) -> int:
     from edgar_warehouse.application import warehouse_orchestrator
 
@@ -90,11 +96,12 @@ def validate_data_quality(*, context: WarehouseCommandContext) -> dict[str, Any]
 
     _hydrate_silver_database_from_storage(context)
     db = open_silver_database(context.silver_root)
+    bookkeeping = _bookkeeping_store()
     try:
         table_counts = _current_table_counts(db)
         findings: list[dict[str, Any]] = []
         checks = {
-            "row_count_monotonic": _check_row_count_monotonic(db, table_counts, findings),
+            "row_count_monotonic": _check_row_count_monotonic(bookkeeping, table_counts, findings),
             "foreign_keys": _check_foreign_keys(db, findings),
             "gold_vs_silver": _check_gold_vs_silver(db, table_counts, findings),
             "null_ratios": _build_null_ratio_report(db, table_counts),
@@ -112,11 +119,11 @@ def validate_data_quality(*, context: WarehouseCommandContext) -> dict[str, Any]
 
 
 def _check_row_count_monotonic(
-    db: Any,
+    bookkeeping: Any,
     table_counts: dict[str, int],
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    previous = _latest_previous_table_counts(db)
+    previous = _latest_previous_table_counts(bookkeeping)
     if previous is None:
         return {
             "status": "skipped",
@@ -150,17 +157,10 @@ def _check_row_count_monotonic(
     }
 
 
-def _latest_previous_table_counts(db: Any) -> dict[str, Any] | None:
-    rows = db.fetch(
-        """
-        SELECT pipeline_run_id, metrics_json
-        FROM pipeline_run
-        WHERE status IN ('succeeded', 'ok')
-          AND metrics_json IS NOT NULL
-        ORDER BY completed_at DESC NULLS LAST, started_at DESC
-        LIMIT 10
-        """
-    )
+def _latest_previous_table_counts(bookkeeping: Any) -> dict[str, Any] | None:
+    # DuckDB Retirement Cutover Ticket 15: pipeline_run lives in the
+    # bookkeeping store, not SilverDatabase.
+    rows = bookkeeping.get_recent_successful_pipeline_runs(limit=10)
     for row in rows:
         metrics = _json_object(row.get("metrics_json"))
         table_counts = metrics.get("silver_table_counts")

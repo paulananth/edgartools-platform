@@ -53,7 +53,7 @@ def _activate_filing_artifact_registry(engine) -> None:
     assert activated.status == "active"
 
 
-def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Platform test@example.com")
     monkeypatch.setenv("WAREHOUSE_ENVIRONMENT", "test")
     monkeypatch.setenv("WAREHOUSE_RUNTIME_MODE", "infrastructure_validation")
@@ -62,69 +62,78 @@ def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("WAREHOUSE_SILVER_ROOT", str(tmp_path / "silver"))
     for variable in ("SERVING_EXPORT_ROOT", "SNOWFLAKE_EXPORT_ROOT", "SILVER_LANDING_EXPORT_ROOT"):
         monkeypatch.delenv(variable, raising=False)
+    # DuckDB Retirement Cutover Ticket 15: stg_daily_index_filing/
+    # sec_daily_index_checkpoint now live in the Postgres-backed
+    # BookkeepingStore, not this test's DuckDB fixture. Pin ONE in-memory
+    # SQLite-backed store for the whole test -- _seed_daily_index seeds it
+    # directly, and the code under test must read back the same instance,
+    # not a fresh one constructed per call.
+    from edgar_warehouse.application.workflows import drive_filing_discovery
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
+
+    bookkeeping = bookkeeping_fixture()
+    monkeypatch.setattr(
+        drive_filing_discovery, "_bookkeeping_store", lambda: bookkeeping
+    )
+    return bookkeeping
 
 
-def _seed_daily_index(tmp_path, *, business_date: str, sealed: bool) -> None:
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    db = open_silver_database(silver_root)
-    try:
-        business_date_value = date.fromisoformat(business_date)
-        rows = [
-            {
-                "business_date": business_date_value,
-                "source_year": business_date_value.year,
-                "source_quarter": ((business_date_value.month - 1) // 3) + 1,
-                "row_ordinal": 1,
-                "form": "4",
-                "company_name": "Apple Inc.",
-                "cik": 320193,
-                "filing_date": business_date_value,
-                "file_name": "edgar/data/320193/0001140361-26-000001.txt",
-                "accession_number": "0001140361-26-000001",
-                "filing_txt_url": (
-                    "https://www.sec.gov/Archives/edgar/data/320193/"
-                    "0001140361-26-000001.txt"
-                ),
-                "record_hash": "hash-1",
-            },
-            {
-                "business_date": business_date_value,
-                "source_year": business_date_value.year,
-                "source_quarter": ((business_date_value.month - 1) // 3) + 1,
-                "row_ordinal": 2,
-                "form": "10-K",
-                "company_name": "Widget Corp.",
-                "cik": 999999,
-                "filing_date": business_date_value,
-                "file_name": "edgar/data/999999/0001140361-26-000002.txt",
-                "accession_number": "0001140361-26-000002",
-                "filing_txt_url": (
-                    "https://www.sec.gov/Archives/edgar/data/999999/"
-                    "0001140361-26-000002.txt"
-                ),
-                "record_hash": "hash-2",
-            },
-        ]
-        db.merge_daily_index_filings(rows, sync_run_id="seed-run")
-        db.upsert_daily_index_checkpoint(
-            {
-                "business_date": business_date_value,
-                "source_key": f"date:{business_date}",
-                "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
-                "expected_available_at": datetime.now(UTC),
-                "first_attempt_at": datetime.now(UTC),
-                "last_attempt_at": datetime.now(UTC),
-                "status": "succeeded" if sealed else "waiting_for_publish",
-                "row_count": 2,
-                "distinct_cik_count": 2,
-                "distinct_accession_count": 2,
-            }
-        )
-    finally:
-        db.close()
+def _seed_daily_index(bookkeeping, *, business_date: str, sealed: bool) -> None:
+    # DuckDB Retirement Cutover Ticket 15: stg_daily_index_filing/
+    # sec_daily_index_checkpoint now live in the bookkeeping store, not
+    # SilverDatabase -- seed there, matching what the code under test reads.
+    business_date_value = date.fromisoformat(business_date)
+    rows = [
+        {
+            "business_date": business_date_value,
+            "source_year": business_date_value.year,
+            "source_quarter": ((business_date_value.month - 1) // 3) + 1,
+            "row_ordinal": 1,
+            "form": "4",
+            "company_name": "Apple Inc.",
+            "cik": 320193,
+            "filing_date": business_date_value,
+            "file_name": "edgar/data/320193/0001140361-26-000001.txt",
+            "accession_number": "0001140361-26-000001",
+            "filing_txt_url": (
+                "https://www.sec.gov/Archives/edgar/data/320193/"
+                "0001140361-26-000001.txt"
+            ),
+            "record_hash": "hash-1",
+        },
+        {
+            "business_date": business_date_value,
+            "source_year": business_date_value.year,
+            "source_quarter": ((business_date_value.month - 1) // 3) + 1,
+            "row_ordinal": 2,
+            "form": "10-K",
+            "company_name": "Widget Corp.",
+            "cik": 999999,
+            "filing_date": business_date_value,
+            "file_name": "edgar/data/999999/0001140361-26-000002.txt",
+            "accession_number": "0001140361-26-000002",
+            "filing_txt_url": (
+                "https://www.sec.gov/Archives/edgar/data/999999/"
+                "0001140361-26-000002.txt"
+            ),
+            "record_hash": "hash-2",
+        },
+    ]
+    bookkeeping.merge_daily_index_filings(rows, sync_run_id="seed-run")
+    bookkeeping.upsert_daily_index_checkpoint(
+        {
+            "business_date": business_date_value,
+            "source_key": f"date:{business_date}",
+            "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
+            "expected_available_at": datetime.now(UTC),
+            "first_attempt_at": datetime.now(UTC),
+            "last_attempt_at": datetime.now(UTC),
+            "status": "succeeded" if sealed else "waiting_for_publish",
+            "row_count": 2,
+            "distinct_cik_count": 2,
+            "distinct_accession_count": 2,
+        }
+    )
 
 
 def test_drive_filing_discovery_captures_new_filing_and_excludes_out_of_scope_form(
@@ -132,8 +141,8 @@ def test_drive_filing_discovery_captures_new_filing_and_excludes_out_of_scope_fo
 ) -> None:
     from edgar_warehouse.application.command_router import run_command
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=True)
     payload = b"<ownershipDocument>real Form 4 bytes</ownershipDocument>"
 
     with patch(
@@ -228,8 +237,8 @@ def test_drive_filing_discovery_replay_performs_no_second_network_fetch(
 ) -> None:
     from edgar_warehouse.application.command_router import run_command
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=True)
     payload = b"<ownershipDocument>real Form 4 bytes</ownershipDocument>"
 
     revision_ids: list[str] = []
@@ -271,8 +280,8 @@ def test_drive_filing_discovery_fails_closed_when_discovery_is_not_sealed(
     from edgar_warehouse.application.command_router import run_command
     from edgar_warehouse.application.errors import WarehouseRuntimeError
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=False)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=False)
 
     with pytest.raises(WarehouseRuntimeError, match="No sealed discovery observation"):
         run_command(
@@ -352,8 +361,8 @@ def test_drive_filing_discovery_fails_closed_on_an_unsupported_discovery_policy(
     ledger.record_catchup_progress("filing_artifact", date(2026, 1, 1))
     ledger.activate(version.version_id)
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=True)
 
     with pytest.raises(UnsupportedDiscoveryPolicy, match="polling"):
         run_command(
@@ -390,8 +399,8 @@ def test_gated_discovery_emits_started_and_progress_events(
 
     from edgar_warehouse.application.command_router import run_command
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2026-08-24", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2026-08-24", sealed=True)
     payload = b"<ownershipDocument>real Form 4 bytes</ownershipDocument>"
 
     with patch(
@@ -503,8 +512,8 @@ def test_drive_filing_discovery_evaluates_coverage_end_date_against_business_dat
     )
     ledger.activate(second.version_id)
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    _seed_daily_index(tmp_path, business_date="2019-06-01", sealed=True)
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    _seed_daily_index(bookkeeping, business_date="2019-06-01", sealed=True)
     payload = b"<ownershipDocument>historical Form 4 bytes</ownershipDocument>"
 
     with patch(
@@ -543,69 +552,62 @@ def test_drive_filing_discovery_cik_list_skips_unrelated_cik_and_does_not_record
     claim the family's catch-up barrier for the whole date.
     """
     from edgar_warehouse.application.command_router import run_command
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
 
-    _set_warehouse_env(monkeypatch, tmp_path)
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    db = open_silver_database(silver_root)
-    try:
-        business_date_value = date(2026, 8, 24)
-        db.merge_daily_index_filings(
-            [
-                {
-                    "business_date": business_date_value,
-                    "source_year": 2026,
-                    "source_quarter": 3,
-                    "row_ordinal": 1,
-                    "form": "4",
-                    "company_name": "Apple Inc.",
-                    "cik": 320193,
-                    "filing_date": business_date_value,
-                    "file_name": "edgar/data/320193/0001140361-26-000001.txt",
-                    "accession_number": "0001140361-26-000001",
-                    "filing_txt_url": (
-                        "https://www.sec.gov/Archives/edgar/data/320193/"
-                        "0001140361-26-000001.txt"
-                    ),
-                    "record_hash": "hash-1",
-                },
-                {
-                    "business_date": business_date_value,
-                    "source_year": 2026,
-                    "source_quarter": 3,
-                    "row_ordinal": 2,
-                    "form": "4",
-                    "company_name": "Microsoft Corp.",
-                    "cik": 789019,
-                    "filing_date": business_date_value,
-                    "file_name": "edgar/data/789019/0001140361-26-000009.txt",
-                    "accession_number": "0001140361-26-000009",
-                    "filing_txt_url": (
-                        "https://www.sec.gov/Archives/edgar/data/789019/"
-                        "0001140361-26-000009.txt"
-                    ),
-                    "record_hash": "hash-9",
-                },
-            ],
-            sync_run_id="seed-run",
-        )
-        db.upsert_daily_index_checkpoint(
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    business_date_value = date(2026, 8, 24)
+    bookkeeping.merge_daily_index_filings(
+        [
             {
                 "business_date": business_date_value,
-                "source_key": "date:2026-08-24",
-                "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
-                "expected_available_at": datetime.now(UTC),
-                "first_attempt_at": datetime.now(UTC),
-                "last_attempt_at": datetime.now(UTC),
-                "status": "succeeded",
-                "row_count": 2,
-                "distinct_cik_count": 2,
-                "distinct_accession_count": 2,
-            }
-        )
-    finally:
-        db.close()
+                "source_year": 2026,
+                "source_quarter": 3,
+                "row_ordinal": 1,
+                "form": "4",
+                "company_name": "Apple Inc.",
+                "cik": 320193,
+                "filing_date": business_date_value,
+                "file_name": "edgar/data/320193/0001140361-26-000001.txt",
+                "accession_number": "0001140361-26-000001",
+                "filing_txt_url": (
+                    "https://www.sec.gov/Archives/edgar/data/320193/"
+                    "0001140361-26-000001.txt"
+                ),
+                "record_hash": "hash-1",
+            },
+            {
+                "business_date": business_date_value,
+                "source_year": 2026,
+                "source_quarter": 3,
+                "row_ordinal": 2,
+                "form": "4",
+                "company_name": "Microsoft Corp.",
+                "cik": 789019,
+                "filing_date": business_date_value,
+                "file_name": "edgar/data/789019/0001140361-26-000009.txt",
+                "accession_number": "0001140361-26-000009",
+                "filing_txt_url": (
+                    "https://www.sec.gov/Archives/edgar/data/789019/"
+                    "0001140361-26-000009.txt"
+                ),
+                "record_hash": "hash-9",
+            },
+        ],
+        sync_run_id="seed-run",
+    )
+    bookkeeping.upsert_daily_index_checkpoint(
+        {
+            "business_date": business_date_value,
+            "source_key": "date:2026-08-24",
+            "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
+            "expected_available_at": datetime.now(UTC),
+            "first_attempt_at": datetime.now(UTC),
+            "last_attempt_at": datetime.now(UTC),
+            "status": "succeeded",
+            "row_count": 2,
+            "distinct_cik_count": 2,
+            "distinct_accession_count": 2,
+        }
+    )
 
     payload = b"<ownershipDocument>apple form 4</ownershipDocument>"
     with (

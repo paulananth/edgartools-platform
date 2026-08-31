@@ -129,10 +129,14 @@ def test_dual_path_live_sec_apple(
         )
         issuer_rows = [row for row in parsed if int(row["cik"]) == APPLE_CIK]
         assert issuer_rows, f"Apple CIK {APPLE_CIK} missing from raw SEC daily index {business_date}"
-        db.merge_daily_index_filings(issuer_rows, "issuer-restore")
+        # DuckDB Retirement Cutover Ticket 15: stg_daily_index_filing now
+        # lives in the bookkeeping store -- re-seed there, matching what
+        # run_dual_path_filing_artifact_parity now reads from.
+        bookkeeping.merge_daily_index_filings(issuer_rows, "issuer-restore")
         result = run_dual_path_filing_artifact_parity(
             context=context,
             db=db,
+            bookkeeping=bookkeeping,
             business_date=business_date,
             cik_list=(APPLE_CIK,),
             limit=1,
