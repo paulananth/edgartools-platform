@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import itertools
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 import pyarrow as pa
 
-from edgar_warehouse.serving.source_dimensional_export import build_source_export, iter_source_export_tables
+from edgar_warehouse.serving.source_dimensional_export import (
+    _release_source_export_memory,
+    build_source_export,
+    iter_source_export_tables,
+)
 from edgar_warehouse.silver_store import SilverDatabase
 from tests.unit._fake_snowflake import (
     EMPTY_ORPHAN_EVIDENCE_TABLE_DATA,
@@ -113,3 +117,50 @@ def test_iter_source_export_tables_is_lazy(tmp_path) -> None:
             mock_thirteenf.assert_called_once()
     finally:
         db.close()
+
+
+def test_iter_source_export_tables_releases_memory_between_loads() -> None:
+    first = pa.table({"value": [1]})
+    second = pa.table({"value": [2]})
+    cleanup = MagicMock()
+
+    with (
+        patch(
+            "edgar_warehouse.serving.source_dimensional_export._source_export_table_builders",
+            return_value=[("first", lambda: first), ("second", lambda: second)],
+        ),
+        patch(
+            "edgar_warehouse.serving.source_dimensional_export._release_source_export_memory",
+            cleanup,
+        ),
+        patch(
+            "edgar_warehouse.serving.source_dimensional_export.get_connection",
+            return_value=object(),
+        ),
+    ):
+        tables = iter_source_export_tables(object())
+        cleanup.assert_not_called()
+
+        assert next(tables) == ("first", first)
+        assert cleanup.call_args_list == [call()]
+
+        assert next(tables) == ("second", second)
+        assert cleanup.call_args_list == [call(), call()]
+
+        tables.close()
+        assert cleanup.call_args_list == [call(), call(), call()]
+
+
+def test_release_source_export_memory_collects_python_and_arrow_allocations() -> None:
+    pool = MagicMock()
+    with (
+        patch("edgar_warehouse.serving.source_dimensional_export.gc.collect") as collect,
+        patch(
+            "edgar_warehouse.serving.source_dimensional_export.pa.default_memory_pool",
+            return_value=pool,
+        ),
+    ):
+        _release_source_export_memory()
+
+    collect.assert_called_once_with()
+    pool.release_unused.assert_called_once_with()
