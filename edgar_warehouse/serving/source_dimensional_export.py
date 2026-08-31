@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import gc
 import hashlib
-import math
 import json
+import math
 import sys
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Iterator
+from collections.abc import Callable, Iterator
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 try:
     import pyarrow as pa
@@ -18,9 +20,10 @@ except ImportError as exc:  # pragma: no cover
         "Install with: pip install 'edgartools[warehouse]'"
     ) from exc
 
-from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
+from edgar_warehouse.infrastructure.dataset_path_catalog import (
+    default_capture_spec_factory,
+)
 from edgar_warehouse.serving.gold_schema_registry import GOLD_SCHEMAS
-from edgar_warehouse.silver_store import SilverDatabase
 from edgar_warehouse.silver_support.access import get_connection
 
 _TXN_CODE_DESCRIPTIONS = {
@@ -54,7 +57,7 @@ def _form_family(form: str | None) -> str:
         return "ownership"
     if form.startswith("ADV"):
         return "adv"
-    if form.startswith("DEF 14") or form.startswith("PRE 14"):
+    if form.startswith(("DEF 14", "PRE 14")):
         return "proxy"
     return "other"
 
@@ -103,6 +106,17 @@ def _arrow(result: Any) -> pa.Table:
     if hasattr(table, "read_all"):
         return table.read_all()
     return table
+
+
+def _release_source_export_memory() -> None:
+    """Return unused Python and Arrow allocations between export loads.
+
+    This is intentionally independent of the source reader implementation.
+    The caller owns the reader/connection lifetime; this hook only releases
+    objects that the completed export load no longer references.
+    """
+    gc.collect()
+    pa.default_memory_pool().release_unused()
 
 
 def _fetch_rows(conn: Any, query: str) -> list[dict[str, Any]]:
@@ -1339,15 +1353,15 @@ def _build_fact_accounting_flag(conn: Any) -> pa.Table:
 
 
 def _timed(name: str, fn: Callable[[], pa.Table]) -> pa.Table:
-    t0 = datetime.now(timezone.utc)
+    t0 = datetime.now(UTC)
     print(json.dumps({"event": "gold_table_started", "table": name,
                       "emitted_at": t0.isoformat().replace("+00:00", "Z")}),
           file=sys.stderr, flush=True)
     result = fn()
-    duration = (datetime.now(timezone.utc) - t0).total_seconds()
+    duration = (datetime.now(UTC) - t0).total_seconds()
     print(json.dumps({"event": "gold_table_completed", "table": name,
                       "rows": len(result), "duration_seconds": round(duration, 2),
-                      "emitted_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}),
+                      "emitted_at": datetime.now(UTC).isoformat().replace("+00:00", "Z")}),
           file=sys.stderr, flush=True)
     return result
 
@@ -1410,10 +1424,20 @@ def iter_source_export_tables(db: Any) -> Iterator[tuple[str, pa.Table]]:
     sec_thirteenf_holding table on top of ~7M rows of already-built
     predecessor tables still held in the dict.
     """
-    # Accepts SilverDatabase or ShardedSilverReader via duck typing (._conn attribute).
+    # Drop unreachable allocations left by the preceding ingestion phase before
+    # the first export load. The source reader itself remains caller-owned.
+    _release_source_export_memory()
     conn = get_connection(db)
     for name, fn in _source_export_table_builders(conn):
-        yield name, _timed(name, fn)
+        table = _timed(name, fn)
+        try:
+            yield name, table
+        finally:
+            # The consumer has finished writing/exporting this table. Remove
+            # the generator's own reference before asking the Python and Arrow
+            # allocators to release unused memory ahead of the next load.
+            del table
+            _release_source_export_memory()
 
 
 def build_source_export(db: Any) -> dict[str, pa.Table]:
@@ -1529,7 +1553,9 @@ def build_consensus_estimates_table_from_rows(
     alongside other builders.  Implementation lives in
     ``edgar_warehouse.explore.consensus_estimates``.
     """
-    from edgar_warehouse.explore.consensus_estimates import build_consensus_estimates_table
+    from edgar_warehouse.explore.consensus_estimates import (
+        build_consensus_estimates_table,
+    )
 
     table = build_consensus_estimates_table(rows)
     if table.schema.equals(_FACT_CONSENSUS_ESTIMATE_SCHEMA):
