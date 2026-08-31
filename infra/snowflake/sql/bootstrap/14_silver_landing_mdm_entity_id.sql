@@ -3,10 +3,10 @@
 -- (commit 6980f0f0) added the column to that generator's output.
 --
 -- Not covered by re-running 11_silver_landing_schema.sql: that file is a
--- CREATE TABLE IF NOT EXISTS snapshot generated from silver_store.py's
--- fully-migrated DuckDB schema (infra/scripts/generate_silver_landing_ddl.py)
--- -- re-applying it against tables that already exist (as prod's do, created
--- 2026-08-13 per Ticket 07) is a silent no-op; it does not evolve existing
+-- hand-maintained CREATE TABLE IF NOT EXISTS snapshot reflecting
+-- silver_store.py's DuckDB schema -- re-applying it against tables that
+-- already exist (as prod's do, created 2026-08-13 per Ticket 07) is a
+-- silent no-op; it does not evolve existing
 -- tables the way silver_store.py's own DuckDB-side
 -- `_ensure_mdm_entity_id_columns` migration does locally. This file is the
 -- Snowflake-side equivalent of that local migration, following the existing

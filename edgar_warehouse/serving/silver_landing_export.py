@@ -31,9 +31,9 @@ from typing import Any, Callable
 class LandingExportBuffer:
     """Accumulates the rows a single command run wrote to silver, per landing table.
 
-    Keyed by lowercase landing table name (matching
-    `generate_silver_landing_ddl.py`'s table-name convention). Flushed to
-    Parquet + a run manifest at the end of a command by
+    Keyed by lowercase landing table name (matching the table names in
+    `infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql`, lowercased).
+    Flushed to Parquet + a run manifest at the end of a command by
     `edgar_warehouse.serving.silver_landing_writer.flush_landing_export`.
     """
 

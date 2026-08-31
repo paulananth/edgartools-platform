@@ -11,8 +11,8 @@
 -- own silver model (models/silver/sec_accounting_flag.sql) carries the
 -- separately-tracked forensic-score "last non-null wins" fix
 -- (LAST_VALUE(...IGNORE NULLS) over beneish_m_score/altman_z_score/
--- piotroski_f_score, generate_silver_dbt_models.py's
--- _COALESCE_PRESERVING_COLUMNS) -- this rewire picks up that already-fixed
+-- piotroski_f_score, matching silver_store.py's merge_accounting_flags
+-- COALESCE(excluded.X, sec_accounting_flag.X) mechanism) -- this rewire picks up that already-fixed
 -- output automatically, not a stale pre-fix baseline. The with_tenure/
 -- with_risk derivation below is unchanged dbt SQL, not part of the Python
 -- builder being replaced -- it already ran downstream of `base`, whatever

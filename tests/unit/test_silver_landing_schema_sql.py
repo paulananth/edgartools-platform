@@ -1,44 +1,46 @@
-"""Regression test for infra/scripts/generate_silver_landing_ddl.py.
+"""Regression test for infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql.
+
+DuckDB Retirement Cutover Ticket 07 deleted the generator
+(infra/scripts/generate_silver_landing_ddl.py) that used to produce this
+file and its own dedicated regression test
+(tests/unit/test_generate_silver_landing_ddl.py). This file is now
+hand-maintained -- there is no regeneration step. That's a meaningful change
+in risk, not just a housekeeping detail: the invariant the deleted test
+locked in doesn't disappear along with the generator, since it lives on in
+this now-hand-editable SQL file.
 
 silver-snowflake-migration map, Ticket 11 (2026-08-18): live on the
-PRJEDJU-QJB05385 account, `LOAD_SILVER_LANDING_TASK`'s first real run failed
-with "NULL result in a non-nullable column" on `parse_sequence`, even though
-the generated `CREATE TABLE` text never declares `parse_sequence NOT NULL`.
-Root cause: Snowflake implicitly forces `NOT NULL` on any column named in a
-`PRIMARY KEY` clause, regardless of that column's own declaration -- verified
-live via `GET_DDL` showing `parse_sequence NUMBER(38,0) NOT NULL` on a table
-whose source text has no `NOT NULL` on that column. Ticket 07's original fix
-(dropping the explicit `NOT NULL` from the column declaration) only ever
-achieved real nullability via a live, undocumented `ALTER TABLE ... DROP NOT
-NULL` run once by hand -- it never survived the account's later rebuild.
+PRJEDJU-QJB05385 account, LOAD_SILVER_LANDING_TASK's first real run failed
+with "NULL result in a non-nullable column" on parse_sequence, even though
+the generated CREATE TABLE text never declared parse_sequence NOT NULL.
+Root cause: Snowflake implicitly forces NOT NULL on any column named in a
+PRIMARY KEY clause, regardless of that column's own declaration. The fix:
+every table's CREATE TABLE is immediately followed by an explicit
+ALTER TABLE ... ALTER COLUMN parse_sequence DROP NOT NULL statement.
 
-This test locks in the fix: the generator must emit an explicit `ALTER TABLE
-... ALTER COLUMN parse_sequence DROP NOT NULL` statement for every table it
-generates, immediately after that table's `CREATE TABLE`. Confirmed to fail
-against the pre-fix generator (no such statement existed at all).
+This test protects that fix against silent regression from a future hand
+edit -- e.g. a new table added to this file without its own ALTER, or an
+existing ALTER accidentally dropped -- since nothing generates or
+regenerates this file anymore to re-derive it correctly.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GENERATOR_PATH = REPO_ROOT / "infra" / "scripts" / "generate_silver_landing_ddl.py"
+SCHEMA_SQL_PATH = (
+    REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap" / "11_silver_landing_schema.sql"
+)
 
 
-def _load_generator():
-    spec = importlib.util.spec_from_file_location("generate_silver_landing_ddl", GENERATOR_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+def _read_schema_sql() -> str:
+    return SCHEMA_SQL_PATH.read_text()
 
 
 def test_every_created_table_drops_parse_sequence_not_null():
-    module = _load_generator()
-    sql = module.generate()
+    sql = _read_schema_sql()
 
     create_table_names = re.findall(r"CREATE TABLE IF NOT EXISTS (\w+) \(", sql)
     assert len(create_table_names) >= 30, "sanity check: expected ~30 landing tables"
@@ -54,9 +56,8 @@ def test_every_created_table_drops_parse_sequence_not_null():
 
 def test_alter_statement_immediately_follows_its_table_create():
     """Not just present anywhere -- must directly follow its own CREATE TABLE,
-    so a future edit can't accidentally attach the ALTER to the wrong table."""
-    module = _load_generator()
-    sql = module.generate()
+    so a future hand edit can't accidentally attach the ALTER to the wrong table."""
+    sql = _read_schema_sql()
 
     blocks = re.split(r"(?=CREATE TABLE IF NOT EXISTS )", sql)
     table_blocks = [b for b in blocks if b.startswith("CREATE TABLE IF NOT EXISTS ")]
@@ -75,8 +76,7 @@ def test_alter_statement_is_idempotent_syntax_not_a_conditional_guard():
     already-nullable column, not from guard syntax. Assert the statement is the
     plain form (no accidental guard clause that would break on a fresh table
     that never had a NOT NULL constraint to drop)."""
-    module = _load_generator()
-    sql = module.generate()
+    sql = _read_schema_sql()
 
     alter_statements = re.findall(
         r"ALTER TABLE \w+ ALTER COLUMN parse_sequence DROP NOT NULL;", sql
@@ -85,3 +85,15 @@ def test_alter_statement_is_idempotent_syntax_not_a_conditional_guard():
     for statement in alter_statements:
         assert "IF EXISTS" not in statement
         assert "IF NOT EXISTS" not in statement
+
+
+def test_every_create_table_has_a_matching_alter_and_vice_versa():
+    """Counts must match exactly -- catches a table gaining a CREATE without
+    its ALTER, or an orphaned ALTER left behind after a table is removed."""
+    sql = _read_schema_sql()
+
+    create_table_names = set(re.findall(r"CREATE TABLE IF NOT EXISTS (\w+) \(", sql))
+    altered_table_names = set(
+        re.findall(r"ALTER TABLE (\w+) ALTER COLUMN parse_sequence DROP NOT NULL;", sql)
+    )
+    assert create_table_names == altered_table_names
