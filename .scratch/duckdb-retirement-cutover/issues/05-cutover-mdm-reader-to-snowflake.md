@@ -57,24 +57,26 @@ independently per resolver run and aren't expected to be byte-identical).
       whole command) rather than silently turning a pre-existing tolerance
       into a new failure mode.
 - [ ] MDM reads authenticate via `EDGARTOOLS_PROD_LOADER`'s secondary role
-      (no new dedicated role provisioned) — **not literally true yet, and
-      deliberately not silently marked done.** Live in
-      `infra/snowflake/sql/bootstrap/12_silver_schema_and_mdm_reader.sql`:
-      the mechanism this bullet describes already exists and already works
-      (`EDGARTOOLS_PROD_MDM_SILVER_READER` granted as a secondary role, live-
-      verified 2026-08-18), but the live grant target is `ACCOUNTADMIN`, not
-      `EDGARTOOLS_PROD_LOADER` — the file's own comment records that the
-      connecting credential's role drifted to `ACCOUNTADMIN` at some point,
-      and the `GRANT ROLE EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE
-      EDGARTOOLS_PROD_LOADER` line (105) needed to match this ticket's
-      literal wording is present but commented out. Applying it is a live,
-      additive, idempotent Snowflake mutation — left for an operator to run
-      deliberately rather than applied unilaterally in this pass:
+      (no new dedicated role provisioned) — **still not literally true, and
+      still deliberately not marked done, even after this session's change.**
+      **2026-09-01:** ran the additive GRANT this bullet already specified —
       `snow sql --connection edgartools-prod -q "GRANT ROLE
-      EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE EDGARTOOLS_PROD_LOADER;"`
-      (and, separately, deciding whether to also point
-      `MDM_SNOWFLAKE_SECRET_JSON`'s `ROLE` field at `EDGARTOOLS_PROD_LOADER`
-      to match — out of scope here, a credential-rotation decision).
+      EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE EDGARTOOLS_PROD_LOADER;"` —
+      confirmed live via `SHOW GRANTS OF ROLE EDGARTOOLS_PROD_MDM_SILVER_READER`
+      (now 3 grantees: `ACCOUNTADMIN`, user `ANANP11`, and
+      `EDGARTOOLS_PROD_LOADER`). **This does not close the bullet**: the
+      live `MDM_SNOWFLAKE_SECRET_JSON` secret's `MDM_SNOWFLAKE_ROLE` field is
+      still `ACCOUNTADMIN` (confirmed live, field-name only, value never
+      printed), so the actual connecting credential MDM uses still
+      authenticates as `ACCOUNTADMIN`, not `EDGARTOOLS_PROD_LOADER` —
+      granting the reader role to `EDGARTOOLS_PROD_LOADER` is now a
+      harmless prerequisite in place, but doesn't change what MDM
+      authenticates as until the secret's `ROLE` field itself is rotated.
+      That rotation remains the explicitly out-of-scope credential decision
+      this bullet already named — carrying real failure risk (`EDGARTOOLS_
+      PROD_LOADER` may not hold everything `ACCOUNTADMIN` implicitly grants;
+      a wrong flip could break live MDM reads) — and is the user's call to
+      make, not something to resolve inside this ticket.
 - [x] Digest-based parity tooling built and unit-tested:
       `edgar_warehouse.mdm.silver_parity.verify_resolver_input_parity`
       compares whole-row `content_hash()` digests (reusing
@@ -93,8 +95,10 @@ independently per resolver run and aren't expected to be byte-identical).
       pass; content/missing-row mismatches are caught and the key reported;
       the Decimal-vs-int type-drift case explicitly proven NOT to be
       normalized away; large-table sample sizing; missing-table error
-      degrades to a payload field, not a crash) — **not yet run against
-      real prod data.** Per this map's own "Decide the Cutover Validation
+      degrades to a payload field, not a crash) — **run against real prod
+      data 2026-09-01 (below); still `[ ]`, does not pass, and the gate
+      itself has a scope-confusion defect on top of a real, larger finding.**
+      Per this map's own "Decide the Cutover Validation
       Standard" sign-off shape ("automated fail-closed assertion gates a
       required human approval, neither alone"): this command is that
       assertion, but running it against prod and having an operator approve
@@ -123,3 +127,108 @@ independently per resolver run and aren't expected to be byte-identical).
       local test DB, documented elsewhere in this repo's history) remain.
       mypy: zero new errors (5 pre-existing, unrelated, confirmed via a
       `git stash` diff against the same baseline).
+
+**2026-09-01: `verify-resolver-input-parity` and `verify-silver-parity` run
+live against real prod data — both fail, and the underlying finding is
+serious enough to flag prominently rather than bury in a checklist.**
+
+Setup: downloaded the current canonical `warehouse/silver/sec/silver.duckdb`
+(1.7 GiB, read-only `aws s3 cp`, no staging/promotion) to local scratch,
+pointed `MDM_SILVER_DUCKDB` at it directly (deliberately did **not** set
+`WAREHOUSE_STORAGE_ROOT`, to avoid `_duckdb_silver_reader()`'s remote-mode
+branch picking up the stale, Ticket-06-orphaned `shard-manifest.json`/
+`shard-*.duckdb` objects still sitting in S3, last written 2026-08-20 —
+using those instead of the current monolith would have silently compared
+against 11-day-stale data). Connected to Snowflake as `ANANP11` (who
+already independently holds `EDGARTOOLS_PROD_MDM_SILVER_READER`, so this
+predates and doesn't depend on the GRANT above).
+
+`mdm verify-resolver-input-parity`: exit 1, every entity type
+(company/adviser/fund/person/security) reported 100% mismatch on every
+sampled key. **That 100% figure is partly a defect in the gate itself, not
+purely a data finding**: `_sample_keys` draws its lowest/highest-N sample
+from *each reader independently*, then `_fetch_row_by_key` looks the other
+side's keys up on the opposite reader — under any universe-scope
+divergence (see below), a DuckDB-sampled key that doesn't exist at all in
+Snowflake returns `None`, and `None != real row` is counted as a content
+mismatch. The gate conflates "row absent" with "row differs" and cannot
+report a clean pass under scope divergence even if every truly-overlapping
+row is byte-identical. Confirmed directly: DuckDB's lowest `sec_company`
+CIKs (1750, 1800, 1961...) don't exist in Snowflake at all (Snowflake's
+lowest is 2488) — so most of the sample never had a chance to compare
+content in the first place.
+
+Isolating genuinely overlapping rows (same key present on both sides) tells
+a clearer story:
+- `sec_company` CIK 2488 and CIK 2152204 (both present on both sides): the
+  **only** field-level differences are `first_sync_run_id`,
+  `last_sync_run_id`, `last_synced_at` — populated in DuckDB, `NULL` on
+  every Snowflake row checked. These are bookkeeping/provenance columns,
+  not core business content (name/address/etc. matched) — a real, but
+  narrow, systematic gap in what the landing export carries for this
+  table, not evidence of resolution-relevant business-data corruption.
+- `sec_ownership_non_derivative_txn` (the `security` entity type's large
+  table): **no overlapping key found at all** in a 2000-row sample from
+  each side's tail. Row counts explain why: DuckDB has 78,096 rows,
+  Snowflake has **36**.
+
+`mdm verify-silver-parity` (the sibling row-count-only check, all 31
+`PARITY_TABLES`) makes the scope of the gap unambiguous — it is not
+confined to one table:
+
+| table | duckdb | snowflake | coverage |
+|---|---:|---:|---:|
+| sec_company_ticker | 21,360 | 20,846 | 97.6% |
+| sec_company_submission_file | 3,950 | 927 | 23.5% |
+| sec_company_filing | 6,398,260 | 1,121,332 | 17.5% |
+| sec_employment_event | 7,379 | 1,529 | 20.7% |
+| sec_company | 52,778 | 7,625 | 14.4% |
+| sec_company_address | 105,556 | 15,250 | 14.4% |
+| sec_company_former_name | 12,689 | 1,749 | 13.8% |
+| sec_filing_attachment | 420,010 | 5,068 | 1.2% |
+| sec_ownership_reporting_owner | 58,715 | 44 | 0.1% |
+| sec_adv_filing | 58,599 | 0 | 0.0% |
+| sec_adv_firm_roster | 23,622 | 0 | 0.0% |
+| sec_adv_private_fund | 394,969 | 0 | 0.0% |
+| sec_earnings_release | 918 | 0 | 0.0% |
+| sec_executive_record | 14,755 | 0 | 0.0% |
+| sec_financial_derived | 5,056 | 0 | 0.0% |
+| sec_financial_fact | 434,805 | 0 | 0.0% |
+| sec_ownership_derivative_txn | 2,969 | 1 | 0.0% |
+| sec_ownership_non_derivative_txn | 78,096 | 36 | 0.0% |
+| sec_raw_object | 355,792 | 107 | 0.0% |
+| sec_thirteenf_filing | 14,364 | 0 | 0.0% |
+| sec_thirteenf_holding | 6,799,919 | 0 | 0.0% |
+| (11 more tables) | 0 | 0 | n/a (both empty) |
+
+Only company/ticker-family tables have meaningful coverage. Every ADV,
+13F, ownership-transaction, financial-fact, and executive-record table is
+at or near 0%. Not checked in this pass (deliberately, per the "don't fix
+anything" boundary below): whether this is legitimate tracked-universe
+export scoping (`edgar_warehouse/serving/silver_landing_export.py` has no
+CIK-filtering logic itself — it's a row-recording hook for whatever the
+write path already writes — so this looks less like deliberate scoping and
+more like the landing/dbt-collapse pipeline genuinely not having caught up
+for most tables) versus a real ingestion gap.
+
+**Why this matters beyond this ticket's own checklist**: this ticket's own
+"hard cutover, no transition window" already made MDM's production
+resolvers read *exclusively* from `EDGARTOOLS_SILVER` (Snowflake) as of
+commit `4c5de1aa`, merged and live. If ADV/13F/ownership-transaction tables
+are genuinely near-empty in the table MDM now reads exclusively, then
+production MDM entity/relationship resolution for everything besides basic
+company identity has likely been resolving against a near-empty source
+since that cutover shipped — not a hypothetical, a live state.
+
+**Deliberately not investigated or fixed in this pass** (per explicit
+scope discipline, not an oversight): whether 0% is a genuine ingestion gap
+versus intentional scoping; the `_sample_keys`/`_fetch_row_by_key`
+absent-vs-differs conflation in the parity gate itself; and any actual
+data/pipeline remediation. All three are real, but none belongs inside
+"cut over the reader class" — they're a data-completeness/architecture
+question the user needs to weigh in on, most likely as its own ticket. The
+checklist bullet above stays `[ ]`: the gate ran, it failed, and — even
+setting the gate's own absent-vs-differs defect aside — the underlying
+`verify-silver-parity` row-count comparison independently confirms real,
+severe non-parity that no interpretation of "expected type drift" can
+explain away.
