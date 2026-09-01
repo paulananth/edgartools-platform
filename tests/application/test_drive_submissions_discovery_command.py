@@ -54,7 +54,7 @@ def _activate_submissions_registry(engine) -> None:
     assert activated.status == "active"
 
 
-def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Platform test@example.com")
     monkeypatch.setenv("WAREHOUSE_ENVIRONMENT", "test")
     monkeypatch.setenv("WAREHOUSE_RUNTIME_MODE", "infrastructure_validation")
@@ -63,6 +63,17 @@ def _set_warehouse_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("WAREHOUSE_SILVER_ROOT", str(tmp_path / "silver"))
     for variable in ("SERVING_EXPORT_ROOT", "SNOWFLAKE_EXPORT_ROOT", "SILVER_LANDING_EXPORT_ROOT"):
         monkeypatch.delenv(variable, raising=False)
+    # DuckDB Retirement Cutover: sec_company_sync_state (read by
+    # _resolve_ciks when cik_list is omitted) now lives in the Postgres-
+    # backed BookkeepingStore, not this test's DuckDB fixture. Pin ONE
+    # in-memory SQLite-backed store for the whole test, mirroring
+    # test_drive_filing_discovery_command.py's identical pattern.
+    from edgar_warehouse.application.workflows import drive_submissions_discovery
+    from tests.support.bookkeeping_fixtures import bookkeeping_fixture
+
+    bookkeeping = bookkeeping_fixture()
+    monkeypatch.setattr(drive_submissions_discovery, "_bookkeeping_store", lambda: bookkeeping)
+    return bookkeeping
 
 
 def _main_payload(*, files: list[str] | None = None) -> dict[str, object]:
@@ -246,6 +257,53 @@ def test_drive_submissions_discovery_replay_performs_no_second_network_fetch(
     # Two total network calls (main + pagination) across BOTH runs -- the
     # second run performs zero additional network fetches.
     assert mocked_fetch.call_count == 2
+
+
+def test_drive_submissions_discovery_resolves_tracked_ciks_from_bookkeeping_store(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], _acquisition_db: str
+) -> None:
+    """DuckDB Retirement Cutover: sec_company_sync_state lives in the
+    Postgres-backed BookkeepingStore, not SilverDatabase/DuckDB. When
+    cik_list is omitted, the tracked-CIK universe must resolve from there --
+    every other test in this file passes an explicit cik_list, which skips
+    this code path entirely and would not catch a regression here.
+    """
+    from edgar_warehouse.application.command_router import run_command
+
+    bookkeeping = _set_warehouse_env(monkeypatch, tmp_path)
+    bookkeeping.upsert_company_sync_state({"cik": 320193, "tracking_status": "active"})
+
+    main_payload = _main_payload(files=[])
+    main_bytes = json.dumps(main_payload).encode("utf-8")
+    main_url = "https://data.sec.gov/submissions/CIK0000320193.json"
+
+    def _fake_download(url: str, identity: str) -> bytes:
+        if url == main_url:
+            return main_bytes
+        raise AssertionError(f"unexpected URL: {url}")
+
+    with patch(
+        "edgar_warehouse.acquisition.source_family_registry.download_sec_catalog_bytes",
+        side_effect=_fake_download,
+    ) as mocked_fetch:
+        exit_code = run_command(
+            "drive-submissions-discovery",
+            Namespace(
+                cik_list=None,
+                tracking_status_filter="active",
+                limit=None,
+                worker_id="submissions-worker-1",
+                lease_seconds=None,
+                registry_version=None,
+                run_id="run-submissions-1",
+            ),
+        )
+
+    assert exit_code == 0
+    assert mocked_fetch.call_count == 1
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["cik_count"] == 1
 
 
 def test_drive_submissions_discovery_fails_closed_on_an_unsupported_required_producers_set(
