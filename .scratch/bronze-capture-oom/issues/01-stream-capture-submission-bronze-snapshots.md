@@ -141,6 +141,22 @@ task failure, not just OOM, since a completed window could survive a
 crash — is a genuine, separate architectural investment; **not in scope
 here**, worth its own ticket if wanted later.
 
+## Resumability considered and rejected for this fix
+
+Investigated whether Bookkeeping's per-CIK sync state could let a retry
+skip CIKs already captured in a prior crashed attempt, avoiding a full
+restart on top of this fix. **Confirmed unsafe as currently wired** —
+see [Ticket 02](02-checkpoint-outruns-silver-publish-on-crash.md): a CIK's
+checkpoint commits durably to Postgres immediately, but its Silver content
+only becomes durable once, at the very end of the whole run. A crash
+between the two leaves the checkpoint claiming content that was never
+published — and worse, causes the *next* run's skip-if-unchanged
+optimization to permanently skip re-staging it, since the checkpoint looks
+current. This is a real, standing data-integrity bug (already live-exposed
+by today's two OOMs, independent of this ticket), not something to build
+resumability on top of. Do not attempt Bookkeeping-based skip-on-retry
+until Ticket 02's structural fix lands.
+
 ## Not yet decided
 
 - **Chunk size default.** Needs to be large enough to preserve worker-pool
