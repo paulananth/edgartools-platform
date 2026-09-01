@@ -97,7 +97,38 @@ independently per resolver run and aren't expected to be byte-identical).
       normalized away; large-table sample sizing; missing-table error
       degrades to a payload field, not a crash) — **run against real prod
       data 2026-09-01 (below); still `[ ]`, does not pass, and the gate
-      itself has a scope-confusion defect on top of a real, larger finding.**
+      itself had a scope-confusion defect on top of a real, larger
+      finding.** **2026-09-01, second pass: fixed the gate's own defect.**
+      `RowParityResult` gained a `missing_keys` field, distinct from
+      `mismatched_keys` — the loop in `verify_resolver_input_parity` now
+      routes "row absent on the other side" into `missing_keys` and
+      reserves `mismatched_keys` for "row present on both sides but content
+      genuinely differs" (previously both were folded into one list, which
+      is why the live prod run below reported a misleading 100% mismatch
+      rate). `matches`/`passed` still fail on either category — a coverage
+      gap is not silently waved through, only correctly labeled — so this
+      fix does not, by itself, flip the gate to passing against current
+      prod data; it only makes the failure it reports honest. Two new tests
+      lock in the fix: a payload-shape test asserting
+      `missing_keys_total`/`missing_keys_sample` are separate JSON fields
+      from `mismatched_keys_total`/`mismatched_keys_sample`, and a
+      dedicated "scope divergence alone does not masquerade as content
+      corruption" test proving a sample where every genuinely-overlapping
+      row is byte-identical reports zero content mismatches (only
+      missingness) rather than the old blanket conflation. The pre-existing
+      `test_row_missing_on_one_side_is_a_mismatch` test was updated in
+      place (renamed, same coverage) to assert the row lands in
+      `missing_keys`, not `mismatched_keys` — preserving its original
+      intent (a missing row still fails the check) while fixing what it
+      actually verified. 11/11 parity tests pass; full `tests/mdm/` suite
+      (609 tests) and this file's test still pass unchanged. Not re-run
+      against live prod in this pass — the fix changes only how the
+      failure is labeled, and this session's earlier live run already
+      recorded the real, correctly-interpreted picture by hand (isolating
+      genuinely-overlapping rows directly); a fresh live run would just
+      reproduce the same failure with better labels, not new information,
+      so it's deferred to the natural re-run this ticket already has
+      pending (after Ticket 15's backfill closes the coverage gap).
       Per this map's own "Decide the Cutover Validation
       Standard" sign-off shape ("automated fail-closed assertion gates a
       required human approval, neither alone"): this command is that
