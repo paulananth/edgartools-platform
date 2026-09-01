@@ -124,14 +124,28 @@ independently per resolver run and aren't expected to be byte-identical).
       `missing_keys`, not `mismatched_keys` — preserving its original
       intent (a missing row still fails the check) while fixing what it
       actually verified. 11/11 parity tests pass; full `tests/mdm/` suite
-      (609 tests) and this file's test still pass unchanged. Not re-run
-      against live prod in this pass — the fix changes only how the
-      failure is labeled, and this session's earlier live run already
-      recorded the real, correctly-interpreted picture by hand (isolating
-      genuinely-overlapping rows directly); a fresh live run would just
-      reproduce the same failure with better labels, not new information,
-      so it's deferred to the natural re-run this ticket already has
-      pending (after Ticket 15's backfill closes the coverage gap).
+      (609 tests) and this file's test still pass unchanged.
+
+      **Re-run against live prod 2026-09-01, after Ticket 15's backfill
+      closed the coverage gap:** `adviser`/`fund` entity types now pass
+      cleanly (0 mismatched, 0 missing). `company`/`person`/`security`
+      still fail — but with **`missing_keys_total: 0` on every table**,
+      confirming the actual coverage catastrophe this ticket originally
+      found is genuinely closed; what remains is 100% `mismatched_keys`
+      (content differs on rows present on both sides) for those three
+      entity types' tables. Spot-checked by hand: the lowest-keyed
+      `sec_ownership_reporting_owner` row (a real row from that table, not
+      necessarily one of the gate's own 25 sampled keys) came back
+      byte-identical between DuckDB and Snowflake — contradicting the
+      gate's 100%-mismatched verdict for that table. Not resolved further
+      in this pass (context budget) — likely either real-time snapshot
+      skew (SEC filings landing between the DuckDB download and the live
+      Snowflake query, same benign class `verify-silver-parity` already
+      showed for the company-metadata family) or an edge case in the
+      gate's own sampling/comparison logic for these three tables
+      specifically. **Left as a genuine open item** — do not treat this
+      bullet as fully closed; the coverage-gap half is proven closed, the
+      content-parity half on these three tables is not yet explained.
       Per this map's own "Decide the Cutover Validation
       Standard" sign-off shape ("automated fail-closed assertion gates a
       required human approval, neither alone"): this command is that
