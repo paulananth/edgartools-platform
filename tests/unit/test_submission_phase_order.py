@@ -58,20 +58,34 @@ class _ConfiguredFormDb:
 
 
 class SubmissionPhaseOrderTests(unittest.TestCase):
-    def test_bulk_submission_flow_captures_all_bronze_before_silver(self) -> None:
+    def test_multi_chunk_submission_flow_interleaves_bronze_and_silver_per_chunk(self) -> None:
+        """bronze-capture-oom Ticket 01: capture and apply now interleave per
+        chunk instead of capturing every CIK's bronze snapshot before
+        applying any of them -- the old "capture everything, then apply
+        everything" shape was the actual root cause of two confirmed
+        production OOMs on a full-universe-scale run, since it held every
+        CIK's fetched payload in memory until the very last one was
+        captured. Proven here by forcing a chunk size smaller than the CIK
+        batch (mirroring iter_gold_tables' own laziness-proof pattern) and
+        asserting the event order alternates by chunk, not globally.
+        """
         events: list[str] = []
 
         def capture(**kwargs):
-            snapshots = []
-            for cik in kwargs["ciks"]:
-                events.append(f"bronze:{cik}")
-                snapshots.append(
-                    {
-                        "cik": cik,
-                        "raw_writes": [{"source_name": "submissions_main", "cik": cik}],
-                    }
-                )
-            return snapshots
+            chunk_size = 2
+            all_ciks = kwargs["ciks"]
+            for start in range(0, len(all_ciks), chunk_size):
+                chunk_ciks = all_ciks[start : start + chunk_size]
+                snapshots = []
+                for cik in chunk_ciks:
+                    events.append(f"bronze:{cik}")
+                    snapshots.append(
+                        {
+                            "cik": cik,
+                            "raw_writes": [{"source_name": "submissions_main", "cik": cik}],
+                        }
+                    )
+                yield snapshots
 
         def apply(**kwargs):
             cik = kwargs["snapshot"]["cik"]
@@ -99,19 +113,75 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 load_mode="bootstrap",
             )
 
+        # Chunk 1 (1001, 1002): both captured, then both applied. Chunk 2
+        # (1003): captured, then applied. NOT "all bronze then all silver"
+        # globally -- that would mean holding chunk 2's payload in memory
+        # while chunk 1 is still being applied, exactly what this fix
+        # eliminates.
         self.assertEqual(
             events,
-            [
-                "bronze:1001",
-                "bronze:1002",
-                "bronze:1003",
-                "silver:1001",
-                "silver:1002",
-                "silver:1003",
-            ],
+            ["bronze:1001", "bronze:1002", "silver:1001", "silver:1002", "bronze:1003", "silver:1003"],
         )
         self.assertEqual(result["rows_written"], 3)
         self.assertEqual(len(result["raw_writes"]), 3)
+
+    def test_bronze_capture_completed_fires_after_the_whole_interleaved_loop(self) -> None:
+        """bronze-capture-oom Ticket 01: bronze_capture_completed used to
+        fire once, right after ALL capture finished and strictly before ANY
+        apply began -- its duration_seconds measured pure capture time.
+        Capture and apply now interleave per chunk, so this event can only
+        fire once, at the very end, after every chunk's apply has also
+        finished -- proven structurally here (event ordering), since the
+        real duration_seconds value depends on wall-clock timing this test
+        does not control.
+        """
+        events: list[str] = []
+
+        def capture(**kwargs):
+            for cik in kwargs["ciks"]:
+                yield [{"cik": cik, "raw_writes": [{"source_name": "submissions_main", "cik": cik}]}]
+
+        def apply(**kwargs):
+            cik = kwargs["snapshot"]["cik"]
+            return {
+                "rows_written": 1,
+                "rows_skipped": 0,
+                "recent_accessions": [],
+                "pagination_accessions": [],
+            }
+
+        def emit(name, **_fields):
+            events.append(name)
+
+        with (
+            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshots", side_effect=capture),
+            patch.object(warehouse_orchestrator, "_apply_submission_snapshot_to_silver", side_effect=apply),
+            patch.object(warehouse_orchestrator, "_emit_pipeline_event", side_effect=emit),
+        ):
+            warehouse_orchestrator._run_submissions_bronze_then_silver(
+                context=object(),
+                db=object(),
+                bookkeeping=object(),
+                sync_run_id="run-1",
+                ciks=[1001, 1002],
+                include_pagination=False,
+                fetch_date=date(2026, 4, 25),
+                force=False,
+                load_mode="bootstrap",
+            )
+
+        # silver_apply_started fires before the loop (unchanged); the final
+        # silver_apply_progress event (this batch is under the "every 10"
+        # throttle, so only the last-CIK marker fires) fires before
+        # bronze_capture_completed, not after it, proving the event now
+        # waits for the whole interleaved loop rather than firing once
+        # capture alone is done.
+        started_index = events.index("silver_apply_started")
+        completed_index = events.index("bronze_capture_completed")
+        progress_indices = [i for i, name in enumerate(events) if name == "silver_apply_progress"]
+        self.assertEqual(len(progress_indices), 1)
+        self.assertLess(started_index, progress_indices[0])
+        self.assertLess(progress_indices[0], completed_index)
 
     def test_bootstrap_artifact_policy_runs_after_silver_for_selected_accessions(self) -> None:
         events: list[str] = []
@@ -126,7 +196,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                         "raw_writes": [{"source_name": "submissions_main", "cik": cik}],
                     }
                 )
-            return snapshots
+            return [snapshots]
 
         def apply(**kwargs):
             cik = kwargs["snapshot"]["cik"]
@@ -185,7 +255,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         pipeline_events: list[tuple[str, dict]] = []
 
         def capture(**kwargs):
-            return [{"cik": cik, "raw_writes": []} for cik in kwargs["ciks"]]
+            return [[{"cik": cik, "raw_writes": []} for cik in kwargs["ciks"]]]
 
         def apply(**kwargs):
             return {
@@ -273,7 +343,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             patch.object(
                 warehouse_orchestrator,
                 "_capture_submission_bronze_snapshots",
-                return_value=[{"cik": 1001, "raw_writes": []}],
+                return_value=[[{"cik": 1001, "raw_writes": []}]],
             ),
             patch.object(
                 warehouse_orchestrator,
@@ -323,7 +393,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
 
     def test_release_submission_flow_sends_only_manifest_required_accessions(self) -> None:
         def capture(**kwargs):
-            return [{"cik": cik, "raw_writes": []} for cik in kwargs["ciks"]]
+            return [[{"cik": cik, "raw_writes": []} for cik in kwargs["ciks"]]]
 
         def apply(**kwargs):
             return {
@@ -376,7 +446,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             patch.object(
                 warehouse_orchestrator,
                 "_capture_submission_bronze_snapshots",
-                return_value=[{"cik": 1001, "raw_writes": []}],
+                return_value=[[{"cik": 1001, "raw_writes": []}]],
             ),
             patch.object(
                 warehouse_orchestrator,

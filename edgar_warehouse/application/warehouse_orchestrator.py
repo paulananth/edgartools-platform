@@ -14,7 +14,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Iterator, Mapping
 
 from edgar_warehouse.application.acquisition_command_registry import (
     acquisition_command_registration,
@@ -3389,7 +3389,53 @@ def _run_submissions_bronze_then_silver(
                 run_id=sync_run_id,
             )
 
-    bronze_snapshots = _capture_submission_bronze_snapshots(
+    # bronze-capture-oom Ticket 01: bronze capture and silver apply now
+    # interleave per chunk (_capture_submission_bronze_snapshots yields
+    # bounded chunks instead of one fully-materialized list), so each
+    # chunk's snapshots -- specifically the large parsed-JSON payloads
+    # (main_payload/pagination payloads) -- go out of scope once that
+    # chunk is applied, instead of every CIK's payload staying alive in
+    # memory for the whole run. raw_writes itself stays a real accumulated
+    # list across the whole run (unchanged from before this fix) -- each
+    # entry is small write-record metadata (sha256/path/source_name/cached),
+    # not a payload, and this function's own return contract plus the
+    # artifact-pipeline extend() below both depend on the full list, not
+    # just counts.
+    #
+    # Two real, undocumented-until-now event-schema consequences, found by
+    # code review after the initial implementation:
+    #   1. bronze_capture_completed now fires once at the end with totals
+    #      accumulated across the whole interleaved loop, so its
+    #      duration_seconds measures total capture+apply wall time, not
+    #      pure capture time as it did before this change.
+    #   2. silver_started_at is now set at essentially the same moment as
+    #      bronze_started_at (both before the interleaved loop begins,
+    #      since capture and apply are no longer separate phases) -- so
+    #      silver_apply_completed's duration_seconds is now near-identical
+    #      to bronze_capture_completed's, not a distinct apply-only
+    #      measurement. There is no longer a clean way to measure "apply
+    #      time alone" without timing each _apply_submission_snapshot_to_
+    #      silver call individually and summing -- not done here, out of
+    #      this ticket's scope.
+    #   3. silver_apply_started no longer reports raw_object_count: it now
+    #      fires before capture begins (raw_writes is still empty at that
+    #      point), so the field would always have been wrongly 0 -- dropped
+    #      rather than reported incorrectly.
+    raw_writes: list[dict[str, Any]] = []
+    rows_written = 0
+    rows_skipped = 0
+    recent_accessions: list[str] = []
+    pagination_accessions: list[str] = []
+    filtered_by_lookback_count = 0
+    now = datetime.now(UTC)
+    silver_started_at = datetime.now(UTC)
+    _emit_pipeline_event(
+        "silver_apply_started",
+        cik_count=total_ciks,
+        run_id=sync_run_id,
+    )
+    index = 0
+    for bronze_chunk in _capture_submission_bronze_snapshots(
         context=context,
         bookkeeping=bookkeeping,
         ciks=ciks,
@@ -3397,13 +3443,36 @@ def _run_submissions_bronze_then_silver(
         fetch_date=fetch_date,
         force=force,
         on_progress=_emit_bronze_progress,
-    )
-    raw_writes = [
-        write_record
-        for snapshot in bronze_snapshots
-        for write_record in snapshot["raw_writes"]
-    ]
-    # Ticket 05: count catalog network vs cache hits from write_record.cached
+    ):
+        for snapshot in bronze_chunk:
+            raw_writes.extend(snapshot["raw_writes"])
+            result = _apply_submission_snapshot_to_silver(
+                db=db,
+                bookkeeping=bookkeeping,
+                sync_run_id=sync_run_id,
+                snapshot=snapshot,
+                force=force,
+                load_mode=load_mode,
+                recent_limit=recent_limit,
+                now=now,
+                filing_min_date=filing_min_date,
+            )
+            rows_written += int(result["rows_written"])
+            rows_skipped += int(result["rows_skipped"])
+            recent_accessions.extend(result["recent_accessions"])
+            pagination_accessions.extend(result["pagination_accessions"])
+            filtered_by_lookback_count += int(result.get("filtered_by_lookback_count", 0) or 0)
+            index += 1
+            if index == total_ciks or index % 10 == 0:
+                _emit_pipeline_event(
+                    "silver_apply_progress",
+                    applied=index,
+                    cik_count=total_ciks,
+                    rows_skipped=rows_skipped,
+                    rows_written=rows_written,
+                    run_id=sync_run_id,
+                )
+    # Ticket 05: count catalog network vs cache hits from write_record.cached.
     catalog_network = 0
     catalog_skips = 0
     for write_record in raw_writes:
@@ -3420,46 +3489,6 @@ def _run_submissions_bronze_then_silver(
         catalog_silver_skips=catalog_skips,
         run_id=sync_run_id,
     )
-
-    rows_written = 0
-    rows_skipped = 0
-    recent_accessions: list[str] = []
-    pagination_accessions: list[str] = []
-    filtered_by_lookback_count = 0
-    now = datetime.now(UTC)
-    silver_started_at = datetime.now(UTC)
-    _emit_pipeline_event(
-        "silver_apply_started",
-        cik_count=total_ciks,
-        raw_object_count=len(raw_writes),
-        run_id=sync_run_id,
-    )
-    for index, snapshot in enumerate(bronze_snapshots, start=1):
-        result = _apply_submission_snapshot_to_silver(
-            db=db,
-            bookkeeping=bookkeeping,
-            sync_run_id=sync_run_id,
-            snapshot=snapshot,
-            force=force,
-            load_mode=load_mode,
-            recent_limit=recent_limit,
-            now=now,
-            filing_min_date=filing_min_date,
-        )
-        rows_written += int(result["rows_written"])
-        rows_skipped += int(result["rows_skipped"])
-        recent_accessions.extend(result["recent_accessions"])
-        pagination_accessions.extend(result["pagination_accessions"])
-        filtered_by_lookback_count += int(result.get("filtered_by_lookback_count", 0) or 0)
-        if index == total_ciks or index % 10 == 0:
-            _emit_pipeline_event(
-                "silver_apply_progress",
-                applied=index,
-                cik_count=total_ciks,
-                rows_skipped=rows_skipped,
-                rows_written=rows_written,
-                run_id=sync_run_id,
-            )
     _emit_pipeline_event(
         "silver_apply_completed",
         cik_count=total_ciks,
@@ -4886,6 +4915,23 @@ def _submissions_fetch_concurrency() -> int:
     return max(1, int(raw))
 
 
+# bronze-capture-oom Ticket 01: bounds how many CIKs' full submissions
+# payloads _capture_submission_bronze_snapshots holds in memory at once.
+# Not yet measured against a real per-CIK payload-size budget -- see that
+# ticket's "Not yet decided" section. Large enough that ordinary daily
+# batches (a few dozen CIKs) always fit in one chunk, small enough to bound
+# a full-universe reactivation-scale run (12,068 CIKs) to a fraction of the
+# whole-universe materialization that caused two confirmed prod OOMs.
+_DEFAULT_SUBMISSION_SNAPSHOT_CHUNK_SIZE: Final = 500
+
+
+def _submission_snapshot_chunk_size() -> int:
+    raw = os.environ.get(
+        "WAREHOUSE_SUBMISSION_SNAPSHOT_CHUNK_SIZE", str(_DEFAULT_SUBMISSION_SNAPSHOT_CHUNK_SIZE)
+    )
+    return max(1, int(raw))
+
+
 def _dispatch_to_worker_pool(
     items: list[Any],
     worker_count_hint: int,
@@ -4928,9 +4974,66 @@ def _capture_submission_bronze_snapshots(
     fetch_date: date,
     force: bool,
     on_progress: "Callable[[int], None] | None" = None,
+) -> "Iterator[list[dict[str, Any]]]":
+    """Capture bronze submissions snapshots for every CIK, yielded in bounded
+    chunks so no caller ever holds every CIK's full submissions payload in
+    memory at once.
+
+    bronze-capture-oom Ticket 01: this used to return one fully-materialized
+    ``list[dict]`` for the whole ``ciks`` batch -- for a full-universe
+    reactivation-scale run (12,068 CIKs), that meant holding essentially the
+    whole tracked universe's raw submissions.json content in memory
+    simultaneously, confirmed as the root cause of two live prod OOMs on
+    ``daily_incremental``, and independently confirmed earlier (2026-08-10,
+    ``load_history``'s ``WindowedBootstrap``, see
+    ``tests/architecture/test_load_history_state_machine.py``'s
+    ``test_windowed_bootstrap_uses_large_task_definition``) as the same
+    "still-unfixed" accumulation that OOM'd a *different* pipeline reading
+    this same function. Chunking bounds peak memory to one chunk's worth
+    (``WAREHOUSE_SUBMISSION_SNAPSHOT_CHUNK_SIZE``, default 500) regardless of
+    total CIK count. The wave-based dispatch logic itself is unchanged --
+    delegated per chunk to ``_capture_submission_bronze_snapshots_for_chunk``,
+    whose own docstring covers that shape.
+
+    ``on_progress`` still reports a single cumulative count across every
+    chunk, matching the old single-batch contract exactly -- callers do not
+    need to know chunking happens at all.
+    """
+    chunk_size = _submission_snapshot_chunk_size()
+    main_progress = 0
+
+    def _bump_main_progress() -> None:
+        nonlocal main_progress
+        main_progress += 1
+        if on_progress is not None:
+            on_progress(main_progress)
+
+    for chunk_start in range(0, len(ciks), chunk_size):
+        chunk_ciks = ciks[chunk_start : chunk_start + chunk_size]
+        yield _capture_submission_bronze_snapshots_for_chunk(
+            context=context,
+            bookkeeping=bookkeeping,
+            ciks=chunk_ciks,
+            include_pagination=include_pagination,
+            fetch_date=fetch_date,
+            force=force,
+            on_cik_progress=_bump_main_progress,
+        )
+
+
+def _capture_submission_bronze_snapshots_for_chunk(
+    *,
+    context: WarehouseCommandContext,
+    bookkeeping: "BookkeepingStore",
+    ciks: list[int],
+    include_pagination: bool,
+    fetch_date: date,
+    force: bool,
+    on_cik_progress: "Callable[[], None] | None" = None,
 ) -> list[dict[str, Any]]:
-    """Capture bronze submissions snapshots for every CIK, running real SEC
-    fetches through a bounded worker pool instead of one CIK at a time.
+    """Capture bronze submissions snapshots for one bounded chunk of CIKs,
+    running real SEC fetches through a bounded worker pool instead of one
+    CIK at a time.
 
     Ticket 78 (pipeline-throughput-architecture ticket 06): this is the
     shared function behind all 5 SEC-fetching commands
@@ -4951,21 +5054,21 @@ def _capture_submission_bronze_snapshots(
     order, so callers see an identical shape/order to the old sequential
     implementation.
 
-    Progress (``on_progress``) is driven by wave 0+1 completions, which
-    reach ``len(ciks)`` before wave 2 (pagination) begins -- for
-    include_pagination=True runs, the terminal 100% marker fires once mains
-    are resolved, before pagination fetches finish. Accepted tradeoff:
-    daily-incremental (the measured bottleneck this ticket targets) always
-    runs with include_pagination=False, so this never applies to it.
+    ``on_cik_progress`` fires once per completed CIK within this chunk (no
+    count passed -- the caller, ``_capture_submission_bronze_snapshots``,
+    owns the cumulative count across chunks). Driven by wave 0+1 completions,
+    which reach ``len(ciks)`` before wave 2 (pagination) begins -- for
+    include_pagination=True runs, the terminal marker for this chunk fires
+    once mains are resolved, before pagination fetches finish. Accepted
+    tradeoff: daily-incremental (the measured bottleneck this ticket
+    targets) always runs with include_pagination=False, so this never
+    applies to it.
     """
     worker_count_hint = _submissions_fetch_concurrency()
-    main_progress = 0
 
-    def _bump_main_progress() -> None:
-        nonlocal main_progress
-        main_progress += 1
-        if on_progress is not None:
-            on_progress(main_progress)
+    def _bump_progress() -> None:
+        if on_cik_progress is not None:
+            on_cik_progress()
 
     main_cache_by_cik: dict[int, dict[str, Any]] = {}
     pending_main_ciks: list[int] = []
@@ -5002,7 +5105,7 @@ def _capture_submission_bronze_snapshots(
             cached = main_cache_results.get(cik)
             if cached is not None:
                 main_cache_by_cik[cik] = cached
-                _bump_main_progress()
+                _bump_progress()
             else:
                 pending_main_ciks.append(cik)
 
@@ -5010,7 +5113,7 @@ def _capture_submission_bronze_snapshots(
         pending_main_ciks,
         worker_count_hint,
         lambda cik: _fetch_submissions_main_snapshot(context=context, cik=cik, fetch_date=fetch_date),
-        on_complete=_bump_main_progress,
+        on_complete=_bump_progress,
     )
     if main_fetch_errors:
         first_failed_cik = min(main_fetch_errors, key=ciks.index)

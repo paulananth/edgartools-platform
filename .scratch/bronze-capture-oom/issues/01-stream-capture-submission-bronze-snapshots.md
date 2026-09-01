@@ -176,20 +176,50 @@ until Ticket 02's structural fix lands.
 
 ## Deliverable
 
-- [ ] `_capture_submission_bronze_snapshots` converted to a chunked
-      generator; `_dispatch_to_worker_pool` left unchanged
-- [ ] Caller interleaves capture/apply per chunk; peak memory bounded to
-      O(chunk_size) rather than O(total CIK count) — proven via a test
-      analogous to `iter_gold_tables()`'s own laziness test (a later
-      chunk's snapshots are provably not held once its own apply step
-      completes)
-- [ ] `bronze_capture_completed`'s new timing semantics covered by an
-      explicit test and documented in the fix's commit/comments
-- [ ] Full test suite green
-- [ ] 3-axis code review (Standards/Spec/GoF) run before commit, per
-      CLAUDE.md's hard rule — Spec axis must explicitly verify the
-      `bronze_capture_completed` semantics change is acceptable, not just
-      present
-- [ ] Verified live against a real large-batch run (ideally the current
-      reactivation-scale `daily_incremental` execution or its successor)
-      — confirm no OOM at the previous failure point
+- [x] `_capture_submission_bronze_snapshots` converted to a chunked
+      generator (`WAREHOUSE_SUBMISSION_SNAPSHOT_CHUNK_SIZE`, default 500);
+      `_dispatch_to_worker_pool` left unchanged, called once per chunk
+      from a new `_capture_submission_bronze_snapshots_for_chunk` helper
+      holding the original wave-based dispatch logic verbatim
+- [x] Caller (`_run_submissions_bronze_then_silver`) interleaves
+      capture/apply per chunk. Proven two ways, not one:
+      `test_chunks_are_yielded_lazily_not_materialized_upfront`
+      (`tests/unit/test_submissions_fetch_concurrency.py`) proves the
+      generator itself doesn't fetch chunk N+1 until chunk N is consumed;
+      `test_multi_chunk_submission_flow_interleaves_bronze_and_silver_per_chunk`
+      (`tests/unit/test_submission_phase_order.py`, replacing the old
+      `test_bulk_submission_flow_captures_all_bronze_before_silver`, whose
+      premise this fix deliberately changes) proves the caller applies
+      each chunk before capturing the next, not "all bronze then all
+      silver" globally. **Not proven**: that the caller's local
+      references to a chunk's large payloads are actually garbage
+      collected after that chunk's apply step (a `weakref`-based check) —
+      flagged by the Spec review pass as the literal "provably not held"
+      wording asks for; deliberately not built here given cost vs. the
+      two proofs above already covering the behavioral claim that matters
+      (bounded, lazy, per-chunk processing). Follow-up if ever in doubt.
+- [x] `bronze_capture_completed`'s new timing semantics covered by an
+      explicit test
+      (`test_bronze_capture_completed_fires_after_the_whole_interleaved_loop`)
+      and documented in the fix's comments — plus two more undocumented
+      consequences the Standards/Spec review passes found and this fix
+      then documented: `silver_apply_completed`'s duration now
+      near-duplicates `bronze_capture_completed`'s (no clean way to
+      measure apply-alone time once phases interleave, not built here),
+      and `silver_apply_started` no longer reports `raw_object_count`
+      (would always have been wrongly 0 once it fires before capture
+      begins).
+- [x] Full test suite green: 2994 passed, 6 skipped (only the 8
+      pre-existing, unrelated Postgres-integration failures remain,
+      confirmed via `git stash` comparison — not introduced by this fix)
+- [x] 3-axis code review (Standards/Spec/GoF) run before commit, per
+      CLAUDE.md's hard rule. GoF: clean, "ship as-is," no findings.
+      Standards: two real findings (both fixed — see above). Spec: three
+      findings — the two Standards also caught (fixed) plus the missing
+      `bronze_capture_completed` timing test (fixed) and the
+      caller-release memory proof gap (deliberately deferred, documented
+      above, not silently dropped).
+- [ ] Verified live against a real large-batch run — not yet done. The
+      currently-running reactivation-scale `daily_incremental` execution
+      started before this fix was built, so it does not exercise this
+      code; needs its own dedicated verification run once deployed.
