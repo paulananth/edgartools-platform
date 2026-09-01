@@ -68,6 +68,10 @@ building the tooling doesn't shortcut the "only after Ticket 03" ordering
 this ticket's own opening paragraph establishes, since nothing has actually
 touched the live account yet.
 
+**(Superseded — see the 2026-09-01 note further below.)** The live account
+*has* since been touched, by a different session, without this file being
+updated at the time.
+
 **What to build (live-execution half — still blocked on Ticket 03):**
 
 - Run a read-only connectivity check against the target Snowflake account
@@ -113,27 +117,84 @@ touched the live account yet.
 [Ticket 14](14-repoint-warehouse-orchestrator-bookkeeping-callers.md),
 [Ticket 15](15-repoint-remaining-bookkeeping-callers.md)
 
-**Status:** tooling built; live execution still blocked on the Ticket
-03/13/14/15 caller-repointing chain
+**Status:** live-execution half is DONE — discovered already-provisioned,
+not run by this session (see note below), then verified live end-to-end.
 
-- [x] Provisioning tooling built: dedicated `bookkeeping_app` Postgres role
-      (independent of MDM's `application` credential), `bootstrap-
-      bookkeeping-postgres.sh`, the `bookkeeping/postgres_dsn` Terraform
-      secret container + manifest entry, conditional `BOOKKEEPING_DATABASE_URL`
-      injection in `deploy-aws-application.sh`, and an `install.sh` stage —
-      all local-only, nothing executed against live prod
-- [ ] Read-only connectivity check against the live target account passes
-      before any DDL runs
-- [ ] Provisioning script executed against live prod Snowflake; all 11
-      tables exist, additive grants applied
-- [ ] `has_table_privilege` sweep run after the script's actual last step
-      (not just after DDL) confirms no unintended `snowflake_write` access
-      was re-granted
+**Note (2026-09-01): the live provisioning had already happened, untracked
+by this ticket file.** Resuming this ticket (via `/implement ticket 04` on a
+fresh branch/worktree off current `main`) found `edgartools-prod/bookkeeping/
+postgres_dsn` already populated with a real, valid `postgresql://` DSN —
+`CreatedDate: 2026-08-31T19:37:45-04:00`, `LastChangedDate: 19:39:20`, i.e.
+written ~2 minutes after Terraform created the (intentionally versionless)
+secret container. This lines up with the already-merged `codex/daily-
+incremental-memory-cleanup` branch (`e4caa4be`/`944de54a`, "allow ECS to
+read bookkeeping DSN") and an in-flight `daily-incremental` execution
+(`daily-memory-cleanup-f9952462-r3-...`, started 19:51:56 that same
+evening) that was already reading it from the live ECS task definition
+(`edgartools-prod-large:233`) — so another session (Codex, per branch
+naming) ran the live provisioning as part of that work without updating
+this ticket file. Nothing was broken by the gap — it's a tracking miss, not
+an incident — but flagging it as the same "sibling path executed, ticket
+never told" shape CLAUDE.md documents elsewhere for code changes, this time
+for a live infra step.
+
+This session verified the already-provisioned state directly rather than
+re-running the mutating script (which would have pointlessly rotated
+`bookkeeping_app`'s password and `snowflake_admin` a second time against a
+store already in the correct state):
+
+- [x] Read-only connectivity check against the live target account passes
+      before any DDL runs — `SHOW POSTGRES INSTANCES` confirms
+      `EDGARTOOLS_PROD_MDM`, `state: READY`, on `edgartools-prod`
+      (account `PRJEDJU-QJB05385`, matching this ticket's own stale
+      value); `bootstrap-bookkeeping-postgres.sh --dry-run` against it
+      also passes clean.
+- [x] Provisioning script executed against live prod Snowflake; all 11
+      tables exist, additive grants applied — confirmed live via a direct
+      SQLAlchemy connectivity + inspection pass through the real
+      `bookkeeping_app` DSN (fetched via `aws secretsmanager get-secret-
+      value`, piped directly into a Python process, never echoed to the
+      terminal): all 11 `BOOKKEEPING_TABLES` present, all readable.
+- [x] `has_table_privilege` sweep run after the script's actual last step
+      confirms no unintended `snowflake_write` access was re-granted —
+      **corrected mechanism, per advisor consult**: the ticket's own
+      "provision the new database" framing doesn't have a
+      `snowflake_write`-leak surface of its own (nothing is fenced on
+      `bookkeeping`), but the script's one `snowflake_admin` `RESET
+      ACCESS` rotation reopens the **MDM** acquisition-ledger/registry
+      fence (CLAUDE.md's "snowflake_write RESET ACCESS re-grant" note) —
+      the script's own last step already re-runs `mdm migrate` to re-close
+      it. Verified live via `mdm check-fence` through the ordinary
+      `application` DSN: `is_clean: true`, `leak_count: 0`,
+      `access_gap_count: 0`, `exit_code: 0`.
 - [x] `mdm check-fence` coverage of the new tables: confirmed **not**
       covered and not expected to be (per-database catalog visibility,
-      no fenced tables of its own) — re-verify live once the database
-      exists, but the gap itself is understood, not undocumented
-- [ ] A real end-to-end smoke test (e.g. a lease acquire/release cycle, a
-      checkpoint read/write) against the live new store succeeds
-- [ ] Empty-start behavior confirmed live, and the deploy runbook note from
-      Ticket 02 is cross-checked against what actually happened
+      no fenced tables of its own) — re-verified live now that the
+      database genuinely exists; reasoning holds.
+- [x] A real end-to-end smoke test (lease acquire/release, checkpoint
+      read/write) against the live new store succeeds — ran directly
+      against `BookkeepingStore` through the real DSN:
+      `acquire_pipeline_run_lease`/`get_pipeline_run_lease`/
+      `release_pipeline_run_lease` round-tripped correctly (`held` →
+      `idle`), `upsert_source_checkpoint`/`get_source_checkpoint`
+      round-tripped correctly. Used an isolated `_ticket04_smoke_test`
+      lease/checkpoint key throughout — never touched the real
+      `sec_fetch_active` lease, which the in-flight `daily-incremental`
+      execution was actively holding at the time. All smoke-test rows
+      deleted afterward.
+- [x] Empty-start behavior confirmed live, and the deploy runbook note
+      from Ticket 02 is cross-checked against what actually happened —
+      `get_table_counts()` shows all 11 tables at 0 rows, both before and
+      after this session's smoke test (smoke-test rows were cleaned up).
+      Matches `docs/runbook.md`'s "Bookkeeping Store Cutover" note
+      exactly: the store started empty, not migrated from DuckDB state.
+
+**Separately observed, out of this ticket's scope, not touched:** the
+`daily-incremental` execution live at the time of this verification
+(`daily-memory-cleanup-f9952462-r3-20260831T235152Z`) is retrying
+`RunWarehouseTask` on repeated `OutOfMemoryError`/exit 137 against
+`edgartools-prod-large:233` (8192MB) — unrelated to bookkeeping
+provisioning (the failure is a container OOM kill, not a DSN/connection
+error), and already the subject of separate, already-merged memory-fix work
+(`f9952462`, "release memory between source export loads"). Not
+investigated further here.
