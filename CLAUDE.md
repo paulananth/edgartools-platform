@@ -1915,6 +1915,57 @@ valid_from-only-difference-does-not-block-or-get-copied case, and a **positive c
 genuine retirement conflict still correctly blocks (i.e. confirming `is_current`/`valid_to` were
 not accidentally exempted alongside `valid_from`). Full repo suite green.
 
+## daily_incremental multi-hour runtime after Bookkeeping Postgres cutover 5-whys (expected, not a bug, 2026-09-01)
+
+**Problem:** A `daily_incremental` execution
+(`daily-incremental-ticket15-postfix-1788270018`) ran 6+ hours in
+`RunWarehouseTask` (one 3.5h attempt that OOM'd at 8192MB, then a retry
+still running past 5h total) — far past any prior `daily_incremental`
+duration on record in this file, with no crash-loop or retry-exhaustion
+signal, just very slow.
+
+1. Symptom: `RunWarehouseTask` running far longer than a normal ~7-day
+   incremental window should take, no error, no repeated retries — just
+   one very long-running task.
+2. Why so slow? Live CloudWatch logs showed `silver_apply_progress` events
+   with a fixed `cik_count: 12068` denominator — i.e. this run touched
+   essentially the **entire tracked company universe**, not a bounded
+   7-day delta.
+3. Why would a daily incremental touch the whole universe? `sec_company_
+   sync_state` (the table `get_tracked_ciks`/tracking-status filtering
+   reads to scope a run) now lives in the Bookkeeping Postgres store
+   (DuckDB Retirement Cutover Ticket 02/04), not DuckDB.
+4. Why would that make every CIK eligible? Ticket 02's own "Operator-
+   accepted cost" section: the Bookkeeping Postgres store was provisioned
+   **empty**, not migrated from existing DuckDB state, by explicit
+   operator decision — every CIK's real tracking status (`active`,
+   `bootstrap_completed_at`, etc.) was wiped, so every CIK reverted to
+   looking pending/eligible again.
+5. **Root cause:** this was the **first `daily_incremental` execution run
+   against the live, freshly-provisioned Bookkeeping Postgres store** —
+   exactly the reactivation hazard Ticket 02 flagged in advance ("every
+   currently paused/completed CIK reverts to pending and becomes eligible
+   for full re-bootstrap on the first post-cutover run"). Not a hang, not
+   a regression, not the accession-expansion bug from the earlier 5-whys
+   above (that fix, `--recurring-index-lookback-days 7`, was correctly in
+   effect this whole run) — a real, expected, **one-time** full-universe
+   pass triggered by the cutover's own documented empty-start design.
+
+**Resolution / what to check first for a slow `daily_incremental` (or
+`bootstrap`) run going forward:** before assuming a hang or regression,
+check live CloudWatch logs for `silver_apply_progress`'s `cik_count` field
+(or equivalent per-run CIK-count logging). A `cik_count` near the size of
+the full tracked universe on what should be a small incremental run is the
+signature of this exact cause — a bookkeeping-store (or any tracking-state
+store) reset, not a stuck task. This specific instance should self-resolve
+once this one run completes: `sec_company_sync_state` will hold real
+per-CIK status again, and the next `daily_incremental` run should return
+to its normal bounded scope. If a future cutover of any tracking-state
+store is done with an empty start again, expect and budget for one
+full-universe-scale run immediately afterward — this is not a one-off
+peculiarity of the Bookkeeping Postgres cutover, it is inherent to any
+"start empty, let CIKs reactivate naturally" migration design.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
