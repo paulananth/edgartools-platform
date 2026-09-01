@@ -56,27 +56,30 @@ independently per resolver run and aren't expected to be byte-identical).
       degradation contract (skip the silver-dependent phase, don't crash the
       whole command) rather than silently turning a pre-existing tolerance
       into a new failure mode.
-- [ ] MDM reads authenticate via `EDGARTOOLS_PROD_LOADER`'s secondary role
-      (no new dedicated role provisioned) — **still not literally true, and
-      still deliberately not marked done, even after this session's change.**
-      **2026-09-01:** ran the additive GRANT this bullet already specified —
-      `snow sql --connection edgartools-prod -q "GRANT ROLE
-      EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE EDGARTOOLS_PROD_LOADER;"` —
-      confirmed live via `SHOW GRANTS OF ROLE EDGARTOOLS_PROD_MDM_SILVER_READER`
-      (now 3 grantees: `ACCOUNTADMIN`, user `ANANP11`, and
-      `EDGARTOOLS_PROD_LOADER`). **This does not close the bullet**: the
-      live `MDM_SNOWFLAKE_SECRET_JSON` secret's `MDM_SNOWFLAKE_ROLE` field is
-      still `ACCOUNTADMIN` (confirmed live, field-name only, value never
-      printed), so the actual connecting credential MDM uses still
-      authenticates as `ACCOUNTADMIN`, not `EDGARTOOLS_PROD_LOADER` —
-      granting the reader role to `EDGARTOOLS_PROD_LOADER` is now a
-      harmless prerequisite in place, but doesn't change what MDM
-      authenticates as until the secret's `ROLE` field itself is rotated.
-      That rotation remains the explicitly out-of-scope credential decision
-      this bullet already named — carrying real failure risk (`EDGARTOOLS_
-      PROD_LOADER` may not hold everything `ACCOUNTADMIN` implicitly grants;
-      a wrong flip could break live MDM reads) — and is the user's call to
-      make, not something to resolve inside this ticket.
+- [x] MDM reads authenticate via `EDGARTOOLS_PROD_LOADER`'s secondary role
+      (no new dedicated role provisioned). **2026-09-01, closed in two
+      passes:** first ran the additive GRANT this bullet already specified
+      (`GRANT ROLE EDGARTOOLS_PROD_MDM_SILVER_READER TO ROLE
+      EDGARTOOLS_PROD_LOADER`), confirmed live — but that alone didn't
+      close the bullet, since the secret's `MDM_SNOWFLAKE_ROLE` field was
+      still `ACCOUNTADMIN`. Before flipping it (explicit user go-ahead),
+      checked the actual risk the ticket flagged rather than assuming it
+      away: `SHOW GRANTS TO ROLE EDGARTOOLS_PROD_LOADER` found a real,
+      confirmed gap — only bare `SELECT` on `EDGARTOOLS_GOLD.
+      MDM_COMPANY_ENTITY`, **zero** grants on `MDM_ADVISER`/`MDM_PERSON`/
+      `MDM_SECURITY`/`MDM_FUND` (the other 4 tables `mdm export`'s default
+      writer `MERGE`s into) — confirmed via `describe-state-machine` that
+      `daily_incremental`'s `MdmExport` state has no `Catch`, so this gap
+      would have failed the whole pipeline on the next export, not
+      degraded gracefully like `MdmVerify` does. Granted the missing
+      `INSERT`/`UPDATE`/`DELETE` on all 5 tables (additive, matches this
+      repo's established grant pattern) *before* rotating, then rotated
+      `MDM_SNOWFLAKE_ROLE` → `EDGARTOOLS_PROD_LOADER` (every other secret
+      field preserved byte-for-byte, piped directly between
+      `get-secret-value`/`put-secret-value`, never printed). Verified live
+      with a real no-op `MERGE` smoke test against all 5 export tables
+      under the new role (`CURRENT_ROLE()` confirmed `EDGARTOOLS_PROD_LOADER`,
+      zero rows written) before letting anything depend on it.
 - [x] Digest-based parity tooling built and unit-tested:
       `edgar_warehouse.mdm.silver_parity.verify_resolver_input_parity`
       compares whole-row `content_hash()` digests (reusing

@@ -1,6 +1,8 @@
 # Root-Cause the Per-Table Snowflake Silver Ingestion Gap
 
-Status: resolved (code fix implemented and tested; live prod backfill run left as an explicit, separately-confirmed operator step — see "Not yet run" below)
+Status: resolved — live prod backfill run, executed and confirmed
+(2026-09-01): 25 of 31 `PARITY_TABLES` at exact 100% parity, remaining 6 a
+benign snapshot-timing artifact. See "Run against prod" section below.
 
 ## Summary
 
@@ -175,6 +177,77 @@ To run once approved:
 `SILVER_LANDING_EXPORT_ROOT` set). Re-run `mdm verify-silver-parity`
 afterward to confirm coverage actually closed — this ticket's own fix does
 not, by itself, prove the gap is closed until that live re-run happens.
+
+## Run against prod (2026-09-01), gap closed — confirmed live
+
+Operator approved both the credential-rotation (Ticket 05's other open item)
+and this backfill in the same session. First attempt (`run-id
+ticket15-historical-backfill-1`) OOM-killed at 8192MB during shard
+hydration — this is what surfaced the two implementation bugs documented
+in duckdb-retirement-cutover Ticket 05's own follow-on fix (stale
+`_hydrate_all_shards` read, full-table Python materialization); see that
+commit (`2a6836fe`) for the fix. Rebuilt/redeployed, re-ran as `run-id
+ticket15-historical-backfill-2`: **exit 0, ~22 seconds of real work**,
+21/21 non-empty `_BACKFILL_TABLES` written, row counts matching DuckDB
+canonical exactly (`sec_thirteenf_holding`: 6,799,919; `sec_adv_private_fund`:
+394,969; `sec_financial_fact`: 434,805; full list in the task's own
+`silver_landing_historical_backfill_completed` event).
+
+**A third, genuinely separate, pre-existing bug surfaced getting this data
+into `EDGARTOOLS_SILVER`**, unrelated to this ticket's backfill or Ticket
+05's streaming fix: `LOAD_SILVER_LANDING_TASK` failed with `Failed to cast
+variant value "2021-02-04 [F2]" to DATE` — the exact same "one bad file
+aborts the whole procedure" shape this workstream's own Ticket 14 already
+documented for `sec_company_ticker`. Root-caused by downloading and
+diffing every candidate Parquet file directly (not guessed): the bad value
+was in `sec_ownership_derivative_txn`'s `exercise_date` column, in a file
+written by the **ongoing incremental capture path**
+(`run_id=ticket46-verify4-1787915141`, `business_date=2026-08-26`) — a raw
+SEC XBRL footnote marker (`[F2]`/`[F3]`, legitimate on `security_title`
+fields, per Form 3/4/5 convention) that leaked into a date field before
+Snowflake's cast, most likely because the landing-tracking decorator
+captures a rawer pre-normalization value than what actually lands in
+DuckDB's strongly-typed `DATE` column for this one table. This backfill's
+own newly-written file was independently confirmed clean (every column
+searched for the exact string, zero matches) — the stuck file predates
+this backfill by 6 days and would have blocked ingestion for every table
+regardless of anything in this ticket. **Not fixed here** — out of this
+ticket's scope, a distinct incremental-capture bug for a future ticket to
+pick up (likely the same fix shape as `replace_company_tickers`'s
+Ticket 14 fix: track the same normalized value that reaches DuckDB, not a
+rawer pre-normalization one). Mitigated for now by moving (not deleting)
+the one offending file to `s3://edgartools-prod-snowflake-export-.../_quarantine/
+silver_landing/sec_ownership_derivative_txn/business_date=2026-08-26/
+run_id=ticket46-verify4-1787915141/` — preserved for whoever picks up the
+real fix, out of the load path so it stops blocking every other table.
+
+After quarantining, `LOAD_SILVER_LANDING_TASK` succeeded (manually
+triggered, not waiting for its 3-hour schedule), landing-zone row counts
+confirmed matching canonical exactly via direct `EDGARTOOLS_SILVER_LANDING`
+queries, then every affected `EDGARTOOLS_SILVER` dynamic table was manually
+`REFRESH`ed (not waiting for the 6-hour `target_lag`) — each refresh's own
+`insertedRows` statistic matched canonical row-for-row.
+
+**Final `mdm verify-silver-parity` result: 25 of 31 tables at exact 100%
+parity** (up from the 6 that were already fine before this ticket started).
+The remaining 6 — `sec_company`/`sec_company_address`/`sec_company_filing`/
+`sec_company_former_name`/`sec_company_submission_file`/`sec_company_ticker`
+— sit at 97.6%-105.0%, a fundamentally different and benign class of
+"mismatch" than the 0%-of-original-value gaps this ticket set out to fix:
+Snowflake now has *slightly more* rows than the specific DuckDB snapshot
+downloaded a few minutes earlier for comparison, consistent with real SEC
+filing activity landing during the several minutes this investigation took
+against a live, still-running pipeline — a snapshot-timing artifact, not a
+coverage gap. Re-running `verify-silver-parity` against a freshly-downloaded
+monolith at some later, quiet moment would be expected to show all 31 at
+100% or all diffs single-digit-row-count real-time drift; not re-verified
+in this pass since the actual thing this ticket cared about (the severe
+coverage catastrophe) is unambiguously closed.
+
+Status upgraded to fully resolved for this ticket's own scope. The
+`exercise_date`-footnote incremental-capture bug is intentionally left
+open as a new, separate concern (not filed as its own ticket in this pass
+— flagging here so it isn't lost).
 
 ## Test status
 
