@@ -163,6 +163,37 @@ class ShardedSilverReader:
             cols = [d[0] for d in self._conn.description]
             return [dict(zip(cols, r)) for r in rows]
 
+    def copy_table_to_parquet(self, table: str, local_path: str) -> None:
+        """Stream a table straight to a local Parquet file via DuckDB's own
+        ``COPY ... TO ... (FORMAT PARQUET)``.
+
+        DuckDB executes this internally without ever materializing the
+        result set as Python objects -- unlike ``fetch()``, which is right
+        for small/bounded reads but would pull a multi-million-row table
+        into memory as a list of dicts (silver-snowflake-migration Ticket
+        15's historical backfill OOM'd a real prod task doing exactly that).
+        Kept on this class, not called via the caller reaching into
+        ``._conn`` directly, for the same reason ``fetch()`` isn't bypassed
+        that way: it keeps this class's lock discipline in one place (see
+        ``fetch()``'s own docstring) rather than requiring every caller to
+        know a shared DuckDB Connection isn't safe to use from more than one
+        thread at a time.
+
+        Parameters
+        ----------
+        table:
+            Table name. Must be one of the UNION ALL views created in
+            ``__init__`` (i.e. a name in ``_TABLES``) -- not user input.
+        local_path:
+            Destination file path. Not user input; interpolated into the
+            SQL string as DuckDB's ``COPY ... TO`` has no parameterized
+            destination-path syntax.
+        """
+        with self._fetch_lock:
+            self._conn.execute(
+                f"COPY (SELECT * FROM {table}) TO '{local_path}' (FORMAT PARQUET)"  # noqa: S608 -- table is from ShardedSilverReader._TABLES, local_path is a caller-controlled tempfile path, neither is user input
+            )
+
     def close(self) -> None:
         """Close the in-memory DuckDB connection."""
         self._conn.close()

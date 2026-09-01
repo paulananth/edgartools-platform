@@ -420,6 +420,40 @@ def test_sharded_silver_reader_unions_shards(tmp_path) -> None:
         reader.close()
 
 
+def test_sharded_silver_reader_copy_table_to_parquet_streams_via_duckdb(tmp_path) -> None:
+    """copy_table_to_parquet (silver-snowflake-migration Ticket 15) writes a
+    real Parquet file straight from DuckDB's own COPY, over the UNION ALL
+    view across shards -- the streaming alternative to fetch() for tables
+    too large to pull into memory as Python dicts."""
+    from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+
+    shard0 = tmp_path / "shard-0.duckdb"
+    shard1 = tmp_path / "shard-1.duckdb"
+
+    conn0 = duckdb.connect(str(shard0))
+    conn0.execute("CREATE TABLE sec_company (cik INT, company_name TEXT)")
+    conn0.execute("INSERT INTO sec_company VALUES (1, 'Alpha')")
+    conn0.close()
+
+    conn1 = duckdb.connect(str(shard1))
+    conn1.execute("CREATE TABLE sec_company (cik INT, company_name TEXT)")
+    conn1.execute("INSERT INTO sec_company VALUES (2, 'Beta')")
+    conn1.close()
+
+    reader = ShardedSilverReader([str(shard0), str(shard1)])
+    output_path = tmp_path / "sec_company.parquet"
+    try:
+        reader.copy_table_to_parquet("sec_company", str(output_path))
+    finally:
+        reader.close()
+
+    assert output_path.exists()
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(output_path)
+    assert sorted(table.column("company_name").to_pylist()) == ["Alpha", "Beta"]
+
+
 def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp_path) -> None:
     """ShardedSilverReader._TABLES must include every table a relationship-derive
     query joins against — sec_thirteenf_filing (INSTITUTIONAL_HOLDS) and
