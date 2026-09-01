@@ -9,7 +9,7 @@ from edgar_warehouse.application.commands import (
     acquire_identity_refresh_lease,
     acquire_sec_fetch_lease,
     backfill_mdm_entity_ids,
-    backfill_silver_landing_company_metadata,
+    backfill_silver_landing_historical,
     bootstrap,
     bootstrap_batch,
     bootstrap_full,
@@ -66,7 +66,7 @@ LEGACY_COMMAND_REGISTRY = {
     "bootstrap-fundamentals": bootstrap_fundamentals.execute,  # Branch B (AD-05)
     "gold-refresh": gold_refresh.execute,
     "backfill-mdm-entity-ids": backfill_mdm_entity_ids.execute,
-    "backfill-silver-landing-company-metadata": backfill_silver_landing_company_metadata.execute,
+    "backfill-silver-landing-historical": backfill_silver_landing_historical.execute,
     "fetch-adv-bulk": fetch_adv_bulk.execute,
     "fetch-firm-roster": fetch_firm_roster.execute,
     "ingest-relationship-sources": ingest_relationship_sources.execute,

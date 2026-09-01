@@ -237,8 +237,8 @@ def _handle_backfill_mdm_entity_ids(args: argparse.Namespace) -> int:
     return run_command("backfill-mdm-entity-ids", args)
 
 
-def _handle_backfill_silver_landing_company_metadata(args: argparse.Namespace) -> int:
-    return run_command("backfill-silver-landing-company-metadata", args)
+def _handle_backfill_silver_landing_historical(args: argparse.Namespace) -> int:
+    return run_command("backfill-silver-landing-historical", args)
 
 
 def _bookkeeping_store():
@@ -1484,17 +1484,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(backfill_mdm_entity_ids)
     backfill_mdm_entity_ids.set_defaults(handler=_handle_backfill_mdm_entity_ids)
 
-    backfill_silver_landing_company_metadata = subparsers.add_parser(
-        "backfill-silver-landing-company-metadata",
-        help="One-time seed of sec_company/sec_company_address/sec_company_former_name/"
-             "sec_company_submission_file into the Snowflake landing zone from DuckDB "
-             "canonical silver, for rows whose company metadata predates the landing-zone "
-             "write path and will never reach it through the checksum-gated incremental "
-             "path (see edgar_warehouse/silver_landing_company_backfill.py). Safe to re-run.",
+    backfill_silver_landing_historical = subparsers.add_parser(
+        "backfill-silver-landing-historical",
+        help="One-time seed of every verify-silver-parity table (except sec_company_ticker) "
+             "into the Snowflake landing zone from DuckDB canonical silver, for rows that "
+             "predate the landing-zone write path and will never reach it through the "
+             "skip-if-unchanged-gated incremental path (see "
+             "edgar_warehouse/silver_landing_historical_backfill.py). Safe to re-run.",
     )
-    _add_run_id_arg(backfill_silver_landing_company_metadata)
-    backfill_silver_landing_company_metadata.set_defaults(
-        handler=_handle_backfill_silver_landing_company_metadata
+    _add_run_id_arg(backfill_silver_landing_historical)
+    backfill_silver_landing_historical.set_defaults(
+        handler=_handle_backfill_silver_landing_historical
     )
 
     compare_filing_artifact_capture = subparsers.add_parser(

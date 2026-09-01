@@ -502,17 +502,19 @@ def _execute_warehouse_bronze_capture(
 
         return run_mdm_entity_backfill_sweep(context, run_id)
 
-    if command_name == "backfill-silver-landing-company-metadata":
-        # duckdb-retirement map: one-time seed of sec_company/address/
-        # former_name/submission_file into the landing zone -- see
-        # edgar_warehouse/silver_landing_company_backfill.py's module
+    if command_name == "backfill-silver-landing-historical":
+        # silver-snowflake-migration map, Ticket 15 (widened from the
+        # original duckdb-retirement company-metadata-only backfill): one-time
+        # seed of every verify-silver-parity table except sec_company_ticker
+        # into the landing zone -- see
+        # edgar_warehouse/silver_landing_historical_backfill.py's module
         # docstring. Reads every shard directly, same dispatch shape as
         # backfill-mdm-entity-ids above.
-        from edgar_warehouse.silver_landing_company_backfill import (
-            run_silver_landing_company_backfill,
+        from edgar_warehouse.silver_landing_historical_backfill import (
+            run_silver_landing_historical_backfill,
         )
 
-        return run_silver_landing_company_backfill(context, run_id)
+        return run_silver_landing_historical_backfill(context, run_id)
 
     # DuckDB Retirement Cutover Ticket 06: bootstrap-batch used to hydrate/open
     # a CIK-sharded shard-{0-3}.duckdb file here instead of the monolith, to
@@ -6840,9 +6842,9 @@ def _resolve_scope(
         # no meaningful CIK range/date/etc scope to report.
         return {}
 
-    if command_name == "backfill-silver-landing-company-metadata":
-        # duckdb-retirement map: one-time full-universe seed; no meaningful
-        # CIK range/date/etc scope to report.
+    if command_name == "backfill-silver-landing-historical":
+        # silver-snowflake-migration map, Ticket 15: one-time full-universe
+        # seed; no meaningful CIK range/date/etc scope to report.
         return {}
 
     if command_name == "fetch-adv-bulk":
