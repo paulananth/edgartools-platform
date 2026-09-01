@@ -631,21 +631,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--enable-filing-artifact-gated-capture",
         dest="enable_filing_artifact_gated_capture",
         action="store_true",
-        default=False,
         help=(
-            "Ticket 46 (change-propagation map): also run filing_artifact's "
-            "ledger-gated discovery/capture in-process for this run's final "
-            "business date, alongside the legacy artifact-fetch path, for "
-            "Ticket 10 Decision 2's side-by-side verification window. Off by "
-            "default. A failure here never fails this command -- but a "
-            "successful run is NOT passive observation: it advances the "
-            "Source Family Registry's real catch-up progress for "
-            "filing_artifact, the same signal Ticket 27's removal-evidence "
-            "bullets gate on."
+            "Run filing_artifact's ledger-gated discovery/capture in-process "
+            "for this run's final business date. Default on (Ticket 27 "
+            "filing_artifact cutover). Ownership forms are skipped in the "
+            "legacy artifact pipeline while this is on; "
+            "fetch_filing_artifacts stays in-tree as the dormant rollback "
+            "path (Ticket 10 Decision 6)."
+        ),
+    )
+    daily_incremental.add_argument(
+        "--disable-filing-artifact-gated-capture",
+        dest="enable_filing_artifact_gated_capture",
+        action="store_false",
+        help=(
+            "Ticket 27 rollback: restore the Ticket 46 side-by-side window. "
+            "Skip gated capture and let the legacy artifact pipeline fetch "
+            "OWNERSHIP_FORMS again."
         ),
     )
     _add_run_id_arg(daily_incremental)
-    daily_incremental.set_defaults(handler=_handle_daily_incremental)
+    daily_incremental.set_defaults(
+        handler=_handle_daily_incremental,
+        enable_filing_artifact_gated_capture=True,
+    )
 
     daily_index_for_date = subparsers.add_parser(
         "load-daily-form-index-for-date",

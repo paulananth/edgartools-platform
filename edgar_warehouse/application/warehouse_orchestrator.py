@@ -1535,8 +1535,8 @@ def _run_filing_artifact_gated_capture(
     command-branch-specific dependencies (see e.g. the mdm_entity_backfill/
     adv_bulk_ingest imports elsewhere in this file).
 
-    Raises on failure -- the caller (daily-incremental's own per-date loop)
-    owns failure isolation, not this dispatcher.
+    Raises on failure -- Ticket 27 made this the scheduled ownership
+    producer, so the caller must fail closed rather than isolate.
     """
     from edgar_warehouse.application.workflows.drive_filing_discovery import (
         run_filing_artifact_gated_capture_for_business_date,
@@ -1648,6 +1648,16 @@ def _capture_bronze_raw(
             run_id=sync_run_id,
             claimed_at=now,
         )
+        # Ticket 27 filing_artifact cutover: single source of truth for
+        # whether gated capture is live this run, consumed both to skip
+        # OWNERSHIP_FORMS in the legacy pipeline below and to gate the
+        # dispatch of the gated-capture call itself further down -- computed
+        # once so the two can't silently diverge (see CLAUDE.md's repeated
+        # "sibling path silently diverged" incidents for why that matters).
+        gated_capture_enabled = (
+            bool(arguments.get("enable_filing_artifact_gated_capture"))
+            and metrics["sync_status"] != "partial"
+        )
         # A previously claimed CIK can still have a newly forced-index accession.
         # Recurring artifact work therefore follows the exact accession union even
         # when no submissions-refresh claim is available for this run.
@@ -1670,6 +1680,7 @@ def _capture_bronze_raw(
                     required_candidate_rows=required_candidate_rows,
                     ownership_lookback_years=arguments.get("ownership_lookback_years"),
                     item_502_lookback_years=arguments.get("item_502_lookback_years"),
+                    skip_ownership_forms=gated_capture_enabled,
                 )
             except Exception:
                 if selected_ciks:
@@ -1693,37 +1704,29 @@ def _capture_bronze_raw(
             metrics["rows_inserted"] += result["rows_written"]
             metrics["rows_skipped"] += result["rows_skipped"]
             _merge_capture_network_metrics(metrics, result)
-        # Ticket 46 (change-propagation map): filing_artifact's ledger-gated
-        # discovery/capture, run in-process alongside the legacy
-        # artifact-fetch path above -- Ticket 10 Decision 2's side-by-side
-        # verification window. Off by default. Scoped to business_date_end
-        # only, not every date the recurring loop just sealed, to bound the
-        # extra SEC-fetch/memory cost this adds on top of a task with
-        # documented OOM history (see "Gold-build memory / daily_incremental
-        # OOM 5-whys" in CLAUDE.md) -- and skipped outright if this run's own
-        # daily-index loop ended partial, since there is nothing newly sealed
-        # to drive discovery from. Any failure here is caught and folded into
-        # metrics rather than raised, so it can never fail daily-incremental's
-        # own retry budget -- but that isolation is about failure only: a
-        # successful call is a real, deliberate write (it advances the
-        # Source Family Registry's catch-up progress, the signal Ticket 27's
-        # removal-evidence bullets gate on), not passive observation.
-        if arguments.get("enable_filing_artifact_gated_capture") and metrics["sync_status"] != "partial":
-            gated_capture: dict[str, Any] = {"business_date": business_date_end.isoformat()}
-            try:
-                gated_outcome = _run_filing_artifact_gated_capture(
-                    context=context,
-                    db=db,
-                    bookkeeping=bookkeeping,
-                    business_date=business_date_end.isoformat(),
-                    run_id=sync_run_id,
-                )
-                gated_capture["status"] = "ok"
-                gated_capture.update(gated_outcome)
-            except Exception as exc:  # noqa: BLE001 -- deliberate, see comment above
-                gated_capture["status"] = "error"
-                gated_capture["error"] = str(exc)
-            metrics["filing_artifact_gated_capture"] = gated_capture
+        # Ledger-gated discovery/capture is the scheduled ownership producer
+        # (Ticket 27). ASL does not pin the flag. OWNERSHIP_FORMS are
+        # skipped in the legacy pipeline above while this is on (Ticket 10
+        # Decision 6: dormant, not deleted). Fail closed -- swallowing the
+        # error after skipping ownership would silently drop the family's
+        # capture. Still scoped to business_date_end only, and skipped if
+        # this run's own daily-index loop ended partial (gated_capture_enabled,
+        # computed once above, is the same condition skip_ownership_forms
+        # used for the legacy pipeline -- see that comment for why they must
+        # never diverge).
+        if gated_capture_enabled:
+            gated_outcome = _run_filing_artifact_gated_capture(
+                context=context,
+                db=db,
+                bookkeeping=bookkeeping,
+                business_date=business_date_end.isoformat(),
+                run_id=sync_run_id,
+            )
+            metrics["filing_artifact_gated_capture"] = {
+                "business_date": business_date_end.isoformat(),
+                "status": "ok",
+                **gated_outcome,
+            }
         return raw_writes, metrics
 
     if command_name == "load-daily-form-index-for-date":
@@ -3361,6 +3364,7 @@ def _run_submissions_bronze_then_silver(
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
     filing_lookback_years: Any = None,
+    skip_ownership_forms: bool = False,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
     if release_mode and recurring_mode:
@@ -3550,6 +3554,7 @@ def _run_submissions_bronze_then_silver(
         repair_manifest_accessions=repair_manifest_accessions,
         ownership_lookback_years=ownership_lookback_years,
         item_502_lookback_years=item_502_lookback_years,
+        skip_ownership_forms=skip_ownership_forms,
     )
     raw_writes.extend(artifact_result["raw_writes"])
     rows_written += int(artifact_result["rows_written"])
@@ -3762,6 +3767,7 @@ def _run_configured_form_artifact_pipeline(
     repair_manifest_accessions: set[str] | None = None,
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
+    skip_ownership_forms: bool = False,
 ) -> dict[str, Any]:
     if release_mode and recurring_mode:
         raise WarehouseRuntimeError(
@@ -3796,6 +3802,7 @@ def _run_configured_form_artifact_pipeline(
         ownership_lookback_years=ownership_lookback_years,
         item_502_lookback_years=item_502_lookback_years,
         selection_metrics=selection_metrics,
+        skip_ownership_forms=skip_ownership_forms,
     )
     out_of_union: list[str] = []
     if recurring_mode:
@@ -4464,6 +4471,7 @@ def _configured_parser_accessions(
     item_502_lookback_years: Any = None,
     as_of: date | None = None,
     selection_metrics: dict[str, Any] | None = None,
+    skip_ownership_forms: bool = False,
 ) -> list[str]:
     ownership_years = _resolve_ownership_lookback_years(ownership_lookback_years)
     item_502_years = _resolve_item_502_lookback_years(
@@ -4477,6 +4485,7 @@ def _configured_parser_accessions(
     rejected_unconfigured_form = 0
     skipped_ownership_lookback = 0
     skipped_item_502_lookback = 0
+    skipped_ownership_cutover = 0
     selected_form_counts: dict[str, int] = {}
     deduped_accessions = _dedupe_strings(accession_numbers)
     for accession_number in deduped_accessions:
@@ -4489,6 +4498,9 @@ def _configured_parser_accessions(
             rejected_unconfigured_form += 1
             continue
         normalized = str(form or "").strip().upper()
+        if skip_ownership_forms and normalized in OWNERSHIP_FORMS:
+            skipped_ownership_cutover += 1
+            continue
         if normalized in OWNERSHIP_FORMS and not _ownership_within_lookback(
             filing, min_filing_date=ownership_min
         ):
@@ -4510,9 +4522,15 @@ def _configured_parser_accessions(
                 "configured_form_rejected_count": rejected_unconfigured_form,
                 "ownership_lookback_rejected_count": skipped_ownership_lookback,
                 "item_502_lookback_rejected_count": skipped_item_502_lookback,
+                "ownership_cutover_skipped_count": skipped_ownership_cutover,
                 "configured_candidate_count": len(selected),
                 "configured_form_counts": selected_form_counts,
             }
+        )
+    if skipped_ownership_cutover:
+        _emit_pipeline_event(
+            "legacy_ownership_forms_unregistered",
+            skipped_count=skipped_ownership_cutover,
         )
     if skipped_ownership_lookback:
         _emit_pipeline_event(
