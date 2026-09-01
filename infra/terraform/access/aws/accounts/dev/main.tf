@@ -29,6 +29,7 @@ locals {
   mdm_secret_arns = [
     for arn in [
       try(local.provisioning.mdm_postgres_dsn_secret_arn, ""),
+      try(local.provisioning.bookkeeping_postgres_dsn_secret_arn, ""),
       try(local.provisioning.mdm_neo4j_secret_arn, ""),
       try(local.provisioning.mdm_api_keys_secret_arn, ""),
       try(local.provisioning.mdm_snowflake_secret_arn, ""),
