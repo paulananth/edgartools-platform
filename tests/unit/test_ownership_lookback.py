@@ -217,6 +217,38 @@ class TestConfiguredParserAccessionsLookback:
         )
         assert selected == ["old-form4", "recent-item502"]
 
+    def test_skip_ownership_forms_unregisters_legacy_filing_artifact_family(self, monkeypatch):
+        monkeypatch.delenv("WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS", raising=False)
+        monkeypatch.delenv("WAREHOUSE_ITEM_502_LOOKBACK_YEARS", raising=False)
+        filings = {
+            "form4": {"form": "4", "filing_date": date(2025, 6, 1), "items": None},
+            "form3a": {"form": "3/A", "filing_date": date(2025, 6, 1), "items": None},
+            "form5": {"form": "5", "filing_date": date(2025, 6, 1), "items": None},
+            "adv": {"form": "ADV", "filing_date": date(2025, 6, 1), "items": None},
+            "thirteenf": {
+                "form": "13F-HR",
+                "filing_date": date(2025, 6, 1),
+                "items": None,
+            },
+            "item502": {
+                "form": "8-K",
+                "filing_date": date(2025, 6, 1),
+                "items": "5.02",
+            },
+        }
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(
+            db,
+            list(filings),
+            ownership_lookback_years=0,
+            item_502_lookback_years=0,
+            skip_ownership_forms=True,
+        )
+        assert selected == ["adv", "thirteenf", "item502"]
+        assert "form4" not in selected
+        assert "form3a" not in selected
+        assert "form5" not in selected
+
 
 class TestParseOwnershipBronzeLookback:
     def test_skips_old_filings_by_default(self, monkeypatch, tmp_path):
