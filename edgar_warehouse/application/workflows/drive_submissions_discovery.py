@@ -79,6 +79,13 @@ class UnsupportedDiscoveryPolicy(WarehouseRuntimeError):
     """A covered family declares a discovery_policy this driver does not implement."""
 
 
+def _bookkeeping_store() -> Any:
+    from edgar_warehouse.bookkeeping.database import get_engine as get_bookkeeping_engine, get_session
+    from edgar_warehouse.bookkeeping.store import BookkeepingStore
+
+    return BookkeepingStore(get_session(get_bookkeeping_engine()))
+
+
 def run_drive_submissions_discovery(args: Any) -> int:
     context = _build_warehouse_context(COMMAND_NAME)
     now = datetime.now(UTC)
@@ -122,9 +129,13 @@ def run_drive_submissions_discovery(args: Any) -> int:
 
     _hydrate_silver_database_from_storage(context)
     db = open_silver_database(context.silver_root)
+    # DuckDB Retirement Cutover Ticket 15 missed this call site: sec_company_
+    # sync_state (read by _resolve_ciks) lives in the Postgres-backed
+    # BookkeepingStore, not this local DuckDB `db` connection.
+    bookkeeping = _bookkeeping_store()
     try:
         ciks = _resolve_ciks(
-            db, cik_list=cik_list, tracking_status_filter=tracking_status_filter, limit=limit
+            bookkeeping, cik_list=cik_list, tracking_status_filter=tracking_status_filter, limit=limit
         )
         manifest = build_submissions_manifest(
             ciks, universe_label=f"{tracking_status_filter}:{run_id}"
@@ -188,7 +199,7 @@ def run_drive_submissions_discovery(args: Any) -> int:
 
 
 def _resolve_ciks(
-    db: Any,
+    bookkeeping: Any,
     *,
     cik_list: list[int] | None,
     tracking_status_filter: str,
@@ -197,7 +208,7 @@ def _resolve_ciks(
     if cik_list:
         ciks = list(cik_list)
     else:
-        ciks = db.get_tracked_ciks(tracking_status_filter)
+        ciks = bookkeeping.get_tracked_ciks(tracking_status_filter)
     if limit is not None:
         ciks = ciks[: int(limit)]
     return ciks

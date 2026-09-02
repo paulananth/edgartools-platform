@@ -25,6 +25,19 @@ from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
+def _flatten_chunks(chunk_iterator) -> list[dict]:
+    """bronze-capture-oom Ticket 01: _capture_submission_bronze_snapshots
+    now yields bounded chunks instead of returning one flat list. Every
+    CIK batch in this file is far smaller than the default chunk size, so
+    flattening reproduces the exact same flat list these tests already
+    assert against.
+    """
+    snapshots: list[dict] = []
+    for chunk in chunk_iterator:
+        snapshots.extend(chunk)
+    return snapshots
+
+
 class _SubmissionsBookkeeping:
     """Records the thread every db.get_source_checkpoint call ran on, for
     the DB-access-serialization test. Checkpoints are keyed exactly as
@@ -94,13 +107,15 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
                 context = SimpleNamespace(
                     bronze_root=StorageLocation(tmp), identity="tester@example.com"
                 )
-                snapshots = warehouse_orchestrator._capture_submission_bronze_snapshots(
-                    context=context,
-                    bookkeeping=bookkeeping,
-                    ciks=ciks,
-                    include_pagination=True,
-                    fetch_date=date(2026, 8, 3),
-                    force=False,
+                snapshots = _flatten_chunks(
+                    warehouse_orchestrator._capture_submission_bronze_snapshots(
+                        context=context,
+                        bookkeeping=bookkeeping,
+                        ciks=ciks,
+                        include_pagination=True,
+                        fetch_date=date(2026, 8, 3),
+                        force=False,
+                    )
                 )
                 outcomes[concurrency] = snapshots
 
@@ -155,13 +170,15 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
                 bronze_root=StorageLocation(tmp), identity="tester@example.com"
             )
             started = time.monotonic()
-            warehouse_orchestrator._capture_submission_bronze_snapshots(
-                context=context,
-                bookkeeping=bookkeeping,
-                ciks=ciks,
-                include_pagination=False,
-                fetch_date=date(2026, 8, 3),
-                force=False,
+            _flatten_chunks(
+                warehouse_orchestrator._capture_submission_bronze_snapshots(
+                    context=context,
+                    bookkeeping=bookkeeping,
+                    ciks=ciks,
+                    include_pagination=False,
+                    fetch_date=date(2026, 8, 3),
+                    force=False,
+                )
             )
             elapsed = time.monotonic() - started
 
@@ -198,13 +215,15 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
             context = SimpleNamespace(
                 bronze_root=StorageLocation(tmp), identity="tester@example.com"
             )
-            warehouse_orchestrator._capture_submission_bronze_snapshots(
-                context=context,
-                bookkeeping=bookkeeping,
-                ciks=ciks,
-                include_pagination=True,
-                fetch_date=date(2026, 8, 3),
-                force=False,
+            _flatten_chunks(
+                warehouse_orchestrator._capture_submission_bronze_snapshots(
+                    context=context,
+                    bookkeeping=bookkeeping,
+                    ciks=ciks,
+                    include_pagination=True,
+                    fetch_date=date(2026, 8, 3),
+                    force=False,
+                )
             )
 
         self.assertTrue(bookkeeping.call_thread_ids, "expected db.get_source_checkpoint calls to have been recorded")
@@ -241,13 +260,15 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
                 bronze_root=StorageLocation(tmp), identity="tester@example.com"
             )
             with self.assertRaises(ConnectionError):
-                warehouse_orchestrator._capture_submission_bronze_snapshots(
-                    context=context,
-                    bookkeeping=bookkeeping,
-                    ciks=ciks,
-                    include_pagination=False,
-                    fetch_date=date(2026, 8, 3),
-                    force=False,
+                _flatten_chunks(
+                    warehouse_orchestrator._capture_submission_bronze_snapshots(
+                        context=context,
+                        bookkeeping=bookkeeping,
+                        ciks=ciks,
+                        include_pagination=False,
+                        fetch_date=date(2026, 8, 3),
+                        force=False,
+                    )
                 )
 
     def test_cache_hits_skip_network_and_progress_still_fires(self) -> None:
@@ -280,14 +301,16 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
                 "_download_sec_bytes",
                 side_effect=AssertionError("cached CIK must not hit the network"),
             ):
-                snapshots = warehouse_orchestrator._capture_submission_bronze_snapshots(
-                    context=context,
-                    bookkeeping=bookkeeping,
-                    ciks=[cik],
-                    include_pagination=False,
-                    fetch_date=date(2026, 8, 3),
-                    force=False,
-                    on_progress=progress_calls.append,
+                snapshots = _flatten_chunks(
+                    warehouse_orchestrator._capture_submission_bronze_snapshots(
+                        context=context,
+                        bookkeeping=bookkeeping,
+                        ciks=[cik],
+                        include_pagination=False,
+                        fetch_date=date(2026, 8, 3),
+                        force=False,
+                        on_progress=progress_calls.append,
+                    )
                 )
 
         self.assertEqual(snapshots[0]["main_write_record"]["sha256"], sha256)
@@ -336,13 +359,15 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
                 warehouse_orchestrator, "read_bytes", side_effect=_delayed_read_bytes
             ):
                 started = time.monotonic()
-                snapshots = warehouse_orchestrator._capture_submission_bronze_snapshots(
-                    context=context,
-                    bookkeeping=bookkeeping,
-                    ciks=ciks,
-                    include_pagination=False,
-                    fetch_date=date(2026, 8, 3),
-                    force=False,
+                snapshots = _flatten_chunks(
+                    warehouse_orchestrator._capture_submission_bronze_snapshots(
+                        context=context,
+                        bookkeeping=bookkeeping,
+                        ciks=ciks,
+                        include_pagination=False,
+                        fetch_date=date(2026, 8, 3),
+                        force=False,
+                    )
                 )
                 elapsed = time.monotonic() - started
 
@@ -353,6 +378,57 @@ class SubmissionsFetchConcurrencyTests(unittest.TestCase):
         self.assertEqual(len(snapshots), len(ciks))
         for snapshot in snapshots:
             self.assertTrue(snapshot["main_write_record"]["cached"])
+
+
+    def test_chunks_are_yielded_lazily_not_materialized_upfront(self) -> None:
+        """bronze-capture-oom Ticket 01: proves the generator doesn't fetch a
+        later chunk until an earlier one has actually been consumed by the
+        caller -- the real fix for the confirmed prod OOM this ticket
+        documents (every CIK's payload held in memory at once), not just a
+        return-shape change from list to generator.
+        """
+        ciks = [7001, 7002, 7003, 7004, 7005]
+        payloads = {f"CIK{cik:010d}.json": _main_payload(cik) for cik in ciks}
+        fetched_ciks: list[int] = []
+
+        def download(url: str, identity: str) -> bytes:
+            for suffix, payload in payloads.items():
+                if url.endswith(suffix):
+                    fetched_ciks.append(int(suffix[3:13]))
+                    return payload
+            raise AssertionError(f"unexpected URL requested: {url}")
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            os.environ, {"WAREHOUSE_SUBMISSION_SNAPSHOT_CHUNK_SIZE": "2"}
+        ), patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=download):
+            bookkeeping = _SubmissionsBookkeeping()
+            context = SimpleNamespace(
+                bronze_root=StorageLocation(tmp), identity="tester@example.com"
+            )
+
+            generator = warehouse_orchestrator._capture_submission_bronze_snapshots(
+                context=context,
+                bookkeeping=bookkeeping,
+                ciks=ciks,
+                include_pagination=False,
+                fetch_date=date(2026, 8, 3),
+                force=False,
+            )
+
+            first_chunk = next(generator)
+            self.assertEqual(sorted(fetched_ciks), [7001, 7002])
+            self.assertEqual([s["cik"] for s in first_chunk], [7001, 7002])
+
+            second_chunk = next(generator)
+            self.assertEqual(sorted(fetched_ciks), [7001, 7002, 7003, 7004])
+            self.assertEqual([s["cik"] for s in second_chunk], [7003, 7004])
+
+            third_chunk = next(generator)
+            self.assertEqual(sorted(fetched_ciks), [7001, 7002, 7003, 7004, 7005])
+            self.assertEqual([s["cik"] for s in third_chunk], [7005])
+
+            with self.assertRaises(StopIteration):
+                next(generator)
 
 
 if __name__ == "__main__":

@@ -71,6 +71,26 @@ class TestVerifyResolverInputParityIdenticalRows:
         assert table.table == "sec_company"
         assert table.keys_compared == 5
         assert table.mismatched_keys == []
+        assert table.missing_keys == []
+
+    def test_payload_reports_missing_and_mismatched_as_separate_fields(self) -> None:
+        duckdb_rows = _company_rows(3)  # cik 0, 1, 2
+        snowflake_rows = [dict(r) for r in duckdb_rows if r["cik"] != 2]  # drop cik 2
+        snowflake_rows[1]["entity_name"] = "Drifted Name"  # cik 1 content differs
+
+        duckdb_reader = _FakeReader({"sec_company": duckdb_rows})
+        snowflake_reader = _FakeReader({"sec_company": snowflake_rows})
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["company"]
+        )
+
+        payload = result["company"].tables[0].to_payload()
+        assert payload["mismatched_keys_total"] == 1
+        assert payload["mismatched_keys_sample"] == [[1]]
+        assert payload["missing_keys_total"] == 1
+        assert payload["missing_keys_sample"] == [[2]]
+        assert payload["matches"] is False
 
 
 class TestVerifyResolverInputParityMismatch:
@@ -90,7 +110,15 @@ class TestVerifyResolverInputParityMismatch:
         table = result["company"].tables[0]
         assert table.mismatched_keys == [(1,)]
 
-    def test_row_missing_on_one_side_is_a_mismatch(self) -> None:
+    def test_row_missing_on_one_side_still_fails_but_is_reported_as_missing_not_mismatched(self) -> None:
+        """DuckDB Retirement Cutover Ticket 05's own flagged defect: the gate
+        used to conflate 'row absent on the other side' with 'row present on
+        both sides but content differs', reporting a coverage gap as a
+        content mismatch. A missing row must still fail the overall check
+        (this is not silently downgraded to a pass -- Ticket 15's job is to
+        close coverage gaps, not this gate's job to look past them) but must
+        be reported in its own category so an operator reading the payload
+        can tell a coverage gap from real content corruption."""
         duckdb_rows = _company_rows(3)
         snowflake_reader_rows = [r for r in duckdb_rows if r["cik"] != 2]
 
@@ -102,7 +130,32 @@ class TestVerifyResolverInputParityMismatch:
         )
 
         assert not result["company"].passed
-        assert (2,) in result["company"].tables[0].mismatched_keys
+        table = result["company"].tables[0]
+        assert (2,) in table.missing_keys
+        assert (2,) not in table.mismatched_keys
+
+    def test_scope_divergence_alone_does_not_masquerade_as_content_corruption(self) -> None:
+        """The actual bug this fix closes: previously, a key sampled from
+        DuckDB that simply doesn't exist yet in Snowflake (real prod state
+        as of 2026-09-01, per this ticket's own live-verification note) was
+        reported identically to a key whose content genuinely differs. Every
+        genuinely-overlapping row here is byte-identical; only one side has
+        an extra, non-overlapping row -- the payload must show that as pure
+        missingness, zero content mismatches."""
+        duckdb_rows = _company_rows(3)  # cik 0, 1, 2
+        snowflake_rows = [dict(r) for r in duckdb_rows if r["cik"] != 2]  # missing cik 2 only
+
+        duckdb_reader = _FakeReader({"sec_company": duckdb_rows})
+        snowflake_reader = _FakeReader({"sec_company": snowflake_rows})
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["company"]
+        )
+
+        table = result["company"].tables[0]
+        assert table.mismatched_keys == []
+        assert table.missing_keys == [(2,)]
+        assert not table.matches  # still fails overall -- missingness is not silently waved through
 
 
 class TestVerifyResolverInputParityTypeCoercion:

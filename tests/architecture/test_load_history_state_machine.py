@@ -624,8 +624,14 @@ def test_windowed_bootstrap_uses_large_task_definition(definition: dict) -> None
     (seed-universe was also on this same large-profile precedent at the
     time, but has since moved back to medium -- see
     test_seed_universe_uses_medium_task_definition above, ticket 07,
-    2026-08-20), while the underlying accumulation is tracked
-    separately."""
+    2026-08-20). The underlying accumulation itself is now fixed
+    (bronze-capture-oom Ticket 01: _capture_submission_bronze_snapshots
+    chunks internally instead of materializing every CIK's payload at
+    once) -- this task-profile stopgap has not been revisited since, and
+    reconsidering it (dropping back to wh_medium_arn, or raising
+    window_size again past the 1000 cap test_window_size_default_is_1000
+    below still documents) is a separate, not-yet-done follow-up, not
+    something this fix changed on its own."""
     branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     run_window = branch_a_states["WindowedBootstrap"]["ItemProcessor"]["States"]["RunWindow"]
     assert run_window["Parameters"]["TaskDefinition"] == "arn:wh-large"
@@ -638,12 +644,15 @@ def test_window_size_default_is_1000(definition: dict) -> None:
     credits over 7 days on EDGARTOOLS_PROD_REFRESH_WH, spiking on days
     load_history ran many small windows). Doubling window_size 500 -> 1000
     roughly halves REFRESH_AFTER_LOAD call volume per full-universe run.
-    Capped at 2x, not larger, because window_size also scales
-    WindowedBootstrap's still-unfixed _capture_submission_bronze_snapshots
-    accumulation (test_windowed_bootstrap_uses_large_task_definition above)
-    -- 1000 stays inside the same wh_large_arn/wh_medium_arn headroom ratio
-    that precedent already proved safe, rather than gambling on unmeasured
-    slack beyond it."""
+    Capped at 2x, not larger, because window_size also scaled
+    WindowedBootstrap's _capture_submission_bronze_snapshots accumulation
+    (test_windowed_bootstrap_uses_large_task_definition above) -- 1000
+    stays inside the same wh_large_arn/wh_medium_arn headroom ratio that
+    precedent already proved safe, rather than gambling on unmeasured
+    slack beyond it. That accumulation is now fixed (bronze-capture-oom
+    Ticket 01) -- this cap was never revisited afterward, so it is not
+    known whether a larger window_size is now also safe; treat 1000 as
+    still the validated value until someone re-measures."""
     assert definition["States"]["WindowSizeDefault"]["Result"] == 1000
 
 

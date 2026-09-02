@@ -237,11 +237,23 @@ class RowParityResult:
     table: str
     keys_compared: int
     mismatched_keys: list[tuple]
+    # Keys sampled from one reader that have no corresponding row on the
+    # other reader at all -- a coverage/scope gap, not a content difference.
+    # Kept as a distinct field from mismatched_keys (DuckDB Retirement
+    # Cutover Ticket 05's own flagged defect: this check used to conflate
+    # "row absent on the other side" with "row present on both sides but
+    # content differs", which meant a pure scope-divergence sample reported
+    # as if every row were corrupted, even when every genuinely-overlapping
+    # row was byte-identical). Still counts as a failure via `matches` below
+    # -- a coverage gap is a real gap, not silently waved through -- but is
+    # now labeled correctly so an operator can tell the two failure modes
+    # apart.
+    missing_keys: list[tuple] = field(default_factory=list)
     error: str | None = None
 
     @property
     def matches(self) -> bool:
-        return self.error is None and not self.mismatched_keys
+        return self.error is None and not self.mismatched_keys and not self.missing_keys
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -250,6 +262,8 @@ class RowParityResult:
             "matches": self.matches,
             "mismatched_keys_total": len(self.mismatched_keys),
             "mismatched_keys_sample": [list(k) for k in self.mismatched_keys[:_MAX_REPORTED_CIK_SAMPLE]],
+            "missing_keys_total": len(self.missing_keys),
+            "missing_keys_sample": [list(k) for k in self.missing_keys[:_MAX_REPORTED_CIK_SAMPLE]],
             "error": self.error,
         }
 
@@ -351,6 +365,7 @@ def verify_resolver_input_parity(
                 continue
 
             mismatched: list[tuple] = []
+            missing: list[tuple] = []
             fetch_error: str | None = None
             for key in keys:
                 try:
@@ -361,7 +376,7 @@ def verify_resolver_input_parity(
                     mismatched.append(key)
                     continue
                 if duckdb_row is None or snowflake_row is None:
-                    mismatched.append(key)
+                    missing.append(key)
                     continue
                 if content_hash(duckdb_row) != content_hash(snowflake_row):
                     mismatched.append(key)
@@ -371,6 +386,7 @@ def verify_resolver_input_parity(
                     table=table,
                     keys_compared=len(keys),
                     mismatched_keys=mismatched,
+                    missing_keys=missing,
                     error=fetch_error,
                 )
             )

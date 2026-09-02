@@ -195,3 +195,27 @@ commit.** GoF: clean, no findings. Standards: two minor, non-blocking notes
 function body, kept only to preserve the call signature) -- left as-is, judged
 not worth the churn. Spec: the `BOOKKEEPING_DATABASE_URL` ECS-secret gap above
 was this axis's one real finding, fixed prior to commit.
+
+**Gap found and fixed later (2026-09-01), not in the original recon pass:**
+`edgar_warehouse/application/workflows/drive_submissions_discovery.py` and
+`drive_company_facts_discovery.py` both still called `db.get_tracked_ciks(...)`
+against the local DuckDB `SilverDatabase` in `_resolve_ciks`'s `cik_list`-omitted
+fallback branch -- neither file nor `get_tracked_ciks` is mentioned anywhere in
+this ticket's text above, so this recon pass genuinely missed them (not a
+deliberately-deferred item like the three call sites documented earlier in this
+file). Because `sec_company_sync_state`'s DuckDB copy still physically exists
+(just empty/stale in production, since every real write already goes through
+`BookkeepingStore`), this didn't crash -- `get_tracked_ciks()` silently returned
+an empty CIK universe instead. Found while scoping a request to remove the 11
+bookkeeping tables' now-dead DuckDB DDL: that removal would have made the bug
+loud (a `CatalogException` on a missing table) rather than fixing the silent
+wrong-store read underneath it, so the read-repointing gap had to be fixed
+first regardless of whether/when the DDL itself is ever removed. Fixed the same
+way `drive_filing_discovery.py`/`bootstrap_fundamentals.py` already do: open a
+second `bookkeeping = _bookkeeping_store()` connection alongside `db` (which
+stays, still needed for the real SEC-content silver write path in both
+functions) and read `sec_company_sync_state` from there. New regression tests
+cover the `cik_list=None` path in both files -- every pre-existing test in
+either file passes an explicit `cik_list`, so none of them exercised this
+branch before. Full three-axis review re-run clean (no hard violations, no
+scope creep, no structural findings). Commit `268b27f6`.
