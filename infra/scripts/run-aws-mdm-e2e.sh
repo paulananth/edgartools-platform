@@ -20,7 +20,7 @@ Options:
   --aws-profile <profile>     AWS CLI profile. Default: AWS_PROFILE or normal AWS CLI resolution.
   --aws-region <region>       AWS region. Default: us-east-1.
   --application-file <path>   Deployment summary JSON. Default: infra/aws-<env>-application.json.
-  --mdm-run-limit <n>         Limit for mdm run. Default: 5.
+  --mdm-run-limit <n>         Limit for mdm mastering. Default: 5.
   --graph-limit <n>           Limit for backfill/sync graph. Default: 100.
   --snow-connection <name>    Snowflake connection for local verify-graph preflight.
                               Default: SNOW_CONNECTION or SNOWFLAKE_CONNECTION.
@@ -131,7 +131,7 @@ warn_lingering_neo4j_references() {
 
 run_hosted_graph_preflight() {
   local -a cmd env_args
-  cmd=(uv run --extra snowflake edgar-warehouse mdm verify-graph)
+  cmd=(uv run --extra snowflake edgar-warehouse mdm reconcile)
   env_args=()
 
   if [[ -n "$SNOW_CONNECTION_NAME" ]]; then

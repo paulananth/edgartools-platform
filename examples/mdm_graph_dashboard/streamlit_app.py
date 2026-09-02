@@ -28,7 +28,7 @@ SNOWFLAKE_GRAPH_UNAVAILABLE_COPY = (
     "Snowflake graph metrics unavailable. MDM overview remains available."
 )
 SNOWFLAKE_GRAPH_PERMISSION_DENIED_COPY = "Snowflake graph permission denied. Confirm the configured Snowflake role can run read-only graph diagnostics."
-NATIVE_APP_FAILURE_COPY = "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph` for the acceptance gate and review the remediation below."
+NATIVE_APP_FAILURE_COPY = "Snowflake Native App check failed. Run `edgar-warehouse mdm reconcile` for the acceptance gate and review the remediation below."
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -287,7 +287,7 @@ def _render_grouped_warnings(
             {
                 "severity": "warning",
                 "message": "Snowflake-hosted graph diagnostics contain mismatches.",
-                "action": "Review Mismatch Diagnostics, then run `edgar-warehouse mdm verify-graph` for the acceptance gate.",
+                "action": "Review Mismatch Diagnostics, then run `edgar-warehouse mdm reconcile` for the acceptance gate.",
             }
         )
 
@@ -578,7 +578,7 @@ def render_overview(
 ) -> None:
     st.title("EdgarTools MDM Graph")
     st.caption(
-        "Read-only MDM and Snowflake-hosted graph status. Dashboard refresh is inspection only; `edgar-warehouse mdm verify-graph` remains the acceptance gate."
+        "Read-only MDM and Snowflake-hosted graph status. Dashboard refresh is inspection only; `edgar-warehouse mdm reconcile` remains the acceptance gate."
     )
     if _render_mdm_unavailable(mdm_metrics):
         return

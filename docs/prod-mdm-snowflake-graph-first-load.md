@@ -22,7 +22,7 @@ storage, or new secret-management systems to this path.
 - Do not print connector traces, raw rows, account identifiers, or generated
   JSON containing environment details.
 - Use bounded graph deployment: `sync-graph --limit 100`.
-- Strict acceptance is `mdm verify-graph --native-app-compute-pool CPU_X64_XS`.
+- Strict acceptance is `mdm reconcile --native-app-compute-pool CPU_X64_XS`.
 
 ## Required Production Objects
 
@@ -33,8 +33,8 @@ Snowflake targets:
 - Graph schema: `NEO4J_GRAPH_MIGRATION`
 - Native App: `Neo4j_Graph_Analytics`
 - Native App database role: `NEO4J_GRAPH_ANALYTICS_MIGRATION_ROLE`
-- Runtime role (mirror writer + graph sync + verify: `mdm export`,
-  `mdm sync-graph`, `mdm verify-graph`): `EDGARTOOLS_PROD_LOADER` for all
+- Runtime role (mirror writer + graph sync + verify: `mdm publish`,
+  `mdm publish-relationships`, `mdm reconcile`): `EDGARTOOLS_PROD_LOADER` for all
   three -- **not** `EDGARTOOLS_PROD_DEPLOYER` as originally documented here.
   All three commands read the exact same `MDM_SNOWFLAKE_SECRET_JSON` secret
   (`edgar_warehouse.mdm.export.SnowflakeConnectionSettings.from_env()` and
@@ -54,7 +54,7 @@ Snowflake targets:
 (granted by `infra/snowflake/sql/bootstrap/10_graph_schema.sql`):
 
 - **`CREATE SCHEMA` on the parent `EDGARTOOLS_PROD` database itself** --
-  Snowflake gotcha: `mdm sync-graph`'s `CREATE SCHEMA IF NOT EXISTS` still
+  Snowflake gotcha: `mdm publish-relationships`'s `CREATE SCHEMA IF NOT EXISTS` still
   evaluates the `CREATE SCHEMA` privilege *before* checking whether the
   schema already exists. Pre-creating the schema as `ACCOUNTADMIN` does
   **not** let a role without this grant skip the check -- the database-level
@@ -91,7 +91,7 @@ the same models the Postgres MDM instance is built from -- for exactly the
 19 tables in `edgar_warehouse.mdm.migrations.runtime.MDM_TABLES`, and emits
 `CREATE TABLE IF NOT EXISTS` DDL plus the DML grants
 `EDGARTOOLS_PROD_LOADER` needs. It creates the schema and table *shape* only
-(zero rows) -- `mdm export` populates it on its next run from whatever is
+(zero rows) -- `mdm publish` populates it on its next run from whatever is
 pending in the Postgres MDM instance's `mdm_change_log`; there is no
 row-level Postgres-to-Snowflake copy step.
 
@@ -104,7 +104,7 @@ After the first load, verify:
 
 ## Graph Deploy And Verify
 
-Before the first `mdm sync-graph` against a rebuilt/new environment, apply
+Before the first `mdm publish-relationships` against a rebuilt/new environment, apply
 the graph schema bootstrap (idempotent, safe to re-run):
 
 ```bash
@@ -116,9 +116,9 @@ sed 's/{{ database }}/EDGARTOOLS_PROD/g' infra/snowflake/sql/neo4j_graph_analyti
 After mirror bootstrap and graph schema bootstrap:
 
 1. Run bounded graph materialization:
-   `mdm sync-graph --limit 100 --target-database EDGARTOOLS_PROD --target-schema NEO4J_GRAPH_MIGRATION --mdm-database EDGARTOOLS_PROD --mdm-schema MDM`.
+   `mdm publish-relationships --limit 100 --target-database EDGARTOOLS_PROD --target-schema NEO4J_GRAPH_MIGRATION --mdm-database EDGARTOOLS_PROD --mdm-schema MDM`.
 2. Run strict verification:
-   `mdm verify-graph --native-app-compute-pool CPU_X64_XS`.
+   `mdm reconcile --native-app-compute-pool CPU_X64_XS`.
 3. Record only sanitized counts and check statuses.
 
 Acceptance requires:
@@ -163,12 +163,12 @@ rebuilt for the go-live cutover (Cutover Stages 1-13), every other piece
 (gold, source, loader role, dashboards, Neo4j app) was re-provisioned via
 Terraform/bootstrap SQL, but this step had nothing to re-run. `EDGARTOOLS_PROD.MDM`
 came back as an empty, `ACCOUNTADMIN`-owned schema (created 2026-08-07, zero
-tables, zero grants to any application role), and the next `mdm export`
+tables, zero grants to any application role), and the next `mdm publish`
 failed: `SQL compilation error: Object 'EDGARTOOLS_PROD.MDM.MDM_ENTITY' does
 not exist or not authorized.`
 
 A second, independent gap compounded it: even if the tables had existed,
-`EDGARTOOLS_PROD_LOADER` -- the role `mdm export`'s mirror writer actually
+`EDGARTOOLS_PROD_LOADER` -- the role `mdm publish`'s mirror writer actually
 authenticates as -- had zero grants on the MDM schema. The "Required
 Production Objects" grants above were only ever written for
 `EDGARTOOLS_PROD_DEPLOYER`; nothing carried them over when the export path
@@ -190,7 +190,7 @@ just a description of what an operator did.
 ### 2026-08-09: same failure class, one step further down the pipeline
 
 Completing Stage 14 after the MDM mirror fix above hit an identical failure
-at the next stage: `mdm sync-graph` failed with `SQL compilation error:
+at the next stage: `mdm publish-relationships` failed with `SQL compilation error:
 Insufficient privileges to operate on database 'EDGARTOOLS_PROD'. Your
 primary role EDGARTOOLS_PROD_LOADER must have CREATE SCHEMA granted on
 DATABASE EDGARTOOLS_PROD.` `EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION` -- the
@@ -210,9 +210,9 @@ Two grants were needed, discovered one at a time:
    EDGARTOOLS_PROD` directly. Once granted, `sync-graph` succeeded.
 
 Also corrected a second inaccuracy in this doc's original "Required
-Production Objects" list: `mdm sync-graph`/`mdm verify-graph` were documented
+Production Objects" list: `mdm publish-relationships`/`mdm reconcile` were documented
 as running under `EDGARTOOLS_PROD_DEPLOYER`. They don't -- both read the same
-`MDM_SNOWFLAKE_SECRET_JSON` secret as `mdm export`, so all three commands run
+`MDM_SNOWFLAKE_SECRET_JSON` secret as `mdm publish`, so all three commands run
 as whatever role that one secret specifies (`EDGARTOOLS_PROD_LOADER`). There
 is no split mirror-writer/graph-sync role pair in this account; there never
 was, in code.

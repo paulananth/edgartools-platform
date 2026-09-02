@@ -428,10 +428,10 @@ MDM CLI commands:
 edgar-warehouse mdm check-connectivity --neo4j
 edgar-warehouse mdm migrate
 edgar-warehouse mdm seed-universe --tracking-status bootstrap_pending
-edgar-warehouse mdm run --entity-type all --limit 100
+edgar-warehouse mdm mastering --entity-type all --limit 100
 edgar-warehouse mdm derive-relationships --target-per-type 100
-edgar-warehouse mdm sync-graph --limit 100
-edgar-warehouse mdm verify-graph
+edgar-warehouse mdm publish-relationships --limit 100
+edgar-warehouse mdm reconcile
 edgar-warehouse mdm counts
 ```
 

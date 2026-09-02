@@ -1962,7 +1962,7 @@ class TestInstitutionalHoldsBatching:
         missing-source-table skip only checked for sec_thirteenf_holding in the
         error message. A real prod run where sec_thirteenf_filing (not
         sec_thirteenf_holding) was the absent table hit an uncaught
-        CatalogException and crashed the whole `mdm run` command instead of
+        CatalogException and crashed the whole `mdm mastering` command instead of
         emitting the same skip. Declaring both joined table names must catch
         either one being reported missing."""
         monkeypatch.setattr(
@@ -2179,7 +2179,7 @@ class TestRelationshipDerivationPlateauFix:
 # Bulk-loading + multi-threading (make-mdm-path-multi-threaded fix)
 #
 # Live evidence for this fix (CloudWatch overlap-counting against a real prod
-# `mdm run --entity-type all` execution, shard-fix-verify-1787134405): company
+# `mdm mastering --entity-type all` execution, shard-fix-verify-1787134405): company
 # resolution showed up to 16 concurrently-open SQL calls (the already-fixed
 # mdm-run-throughput map), but the relationship-derivation tail of the same
 # command showed exactly 1 -- strictly sequential -- for the entire ~5.6h+

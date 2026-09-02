@@ -206,7 +206,7 @@ def drain_publication_queue(
     Snowflake sync/verify step -- the real CLI caller (``mdm
     publication-drain``) wires them to
     ``SnowflakeGraphSyncExecutor.sync``/``SnowflakeGraphVerifier.verify``,
-    the same machinery ``mdm sync-graph``/``mdm verify-graph`` already use
+    the same machinery ``mdm publish-relationships``/``mdm reconcile`` already use
     in prod. Each is called with the request's ``generation_id`` (a fresh
     UUID minted on first claim, then persisted and reused across any retry
     of the same request).

@@ -124,7 +124,7 @@ def compute_remaining_batches(
     when the pointed-at run has no readable, non-empty manifest -- this is
     what separates a bogus pointer from a legitimately fully-done run
     (counts["remaining_batch_count"] == 0 with a real manifest is a valid,
-    non-error result that should proceed to MdmRun with an empty Map).
+    non-error result that should proceed to Mastering with an empty Map).
     """
     root = bronze_root.rstrip("/")
     manifest_path = f"{root}/{cik_batches_path(resume_ledger_run_id)}"

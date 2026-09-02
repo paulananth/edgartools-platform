@@ -1,4 +1,4 @@
-"""pipeline-resumability ticket 02: MdmRun's company-step resume support.
+"""pipeline-resumability ticket 02: Mastering's company-step resume support.
 
 A one-time CIK snapshot (the frozen candidate set -- mirrors
 batch_silver_resume.py's philosophy for BatchSilver: never re-derive from

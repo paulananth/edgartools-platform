@@ -18,7 +18,7 @@ since without the Postgres-only registry both sections would otherwise show
 the same entity/relationship parity data under different names.
 
 Mismatch samples and native-app checks reflect whatever generation
-``edgar-warehouse mdm verify-graph`` last published -- this dashboard never
+``edgar-warehouse mdm reconcile`` last published -- this dashboard never
 re-runs verification itself (GH-251 criterion 5: refresh happens only from
 graph_review_publish.py, called by the CLI). The "Row limit" control below
 is a client-side display truncation of already-published, already-bounded
@@ -42,21 +42,21 @@ FILTER_ALL = "All"
 
 BOUNDED_SAMPLE_COPY = (
     "Samples are bounded diagnostics captured at the last "
-    "`edgar-warehouse mdm verify-graph` run, not a live or exhaustive diff."
+    "`edgar-warehouse mdm reconcile` run, not a live or exhaustive diff."
 )
 FILTERED_EMPTY_HEADING = "No rows match the current filters."
 FILTERED_EMPTY_BODY = "Adjust the selected type or row limit, then review the table again."
 NO_ACTIVE_GENERATION_COPY = (
     "No generation has ever been activated in this environment, or the active "
     "generation has no published review rows yet. Run "
-    "`edgar-warehouse mdm verify-graph` against this environment, then refresh."
+    "`edgar-warehouse mdm reconcile` against this environment, then refresh."
 )
 REVIEW_UNAVAILABLE_COPY = (
     "MDM graph review data unavailable. Confirm this app's role has SELECT on "
     "the MDM_GRAPH_REVIEW views (EDGARTOOLS_GRAPH_REVIEW_READER) and retry."
 )
 NATIVE_APP_FAILURE_COPY = (
-    "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph` "
+    "Snowflake Native App check failed. Run `edgar-warehouse mdm reconcile` "
     "for the acceptance gate and review the remediation below."
 )
 
@@ -392,7 +392,7 @@ def render_overview(metrics: Mapping[str, Any]) -> None:
     st.title("EdgarTools MDM Graph Review")
     st.caption(
         "Read-only Snowflake-hosted graph review status, published by "
-        "`edgar-warehouse mdm verify-graph`. This dashboard is inspection "
+        "`edgar-warehouse mdm reconcile`. This dashboard is inspection "
         "only; verify-graph remains the acceptance gate."
     )
     if _render_unavailable(metrics):

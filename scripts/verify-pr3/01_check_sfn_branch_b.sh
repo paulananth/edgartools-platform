@@ -108,7 +108,7 @@ chk("WindowedBootstrap" not in S,
 sp = S.get("Stage1Parallel", {})
 chk(sp.get("Type") == "Parallel", "Stage1Parallel.Type == Parallel")
 chk(sp.get("ResultPath", "MISSING") is None, "Stage1Parallel.ResultPath is null")
-chk(sp.get("Next") == "MdmRun", "Stage1Parallel.Next == MdmRun")
+chk(sp.get("Next") == "Mastering", "Stage1Parallel.Next == Mastering")
 branches = sp.get("Branches", [])
 chk(len(branches) == 2, "Stage1Parallel has exactly 2 branches")
 
@@ -163,7 +163,7 @@ if len(branches) == 2:
         "Branch B windows via --cik-offset/--cik-limit (no --cik-list)")
 
 # ── MDM chain intact ──
-chk(S.get("MdmRun", {}).get("Next") == "MdmBackfill", "MdmRun present, chains to MdmBackfill")
+chk(S.get("Mastering", {}).get("Next") == "MdmBackfill", "Mastering present, chains to MdmBackfill")
 chk("GoldRefresh" in S and "WriteRunSummary" in S, "GoldRefresh + WriteRunSummary still present")
 
 for status, msg in results:

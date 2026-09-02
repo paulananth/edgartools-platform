@@ -66,7 +66,7 @@ _Avoid_: Daily identity refresh, historical filing backfill, MDM Reconciliation 
 
 **MDM Reconciliation Backstop**:
 The periodic full-universe MDM match, survivorship, and relationship re-derivation pass that catches drift a bounded 1-hop incremental pass cannot see: multi-hop ripple, below-threshold near-misses, and skip-if-unchanged hash staleness.
-_Avoid_: Identity Backstop Sweep, Daily Identity Refresh, Per-Type Exact Relationship Parity, mdm verify-graph, limited mdm run
+_Avoid_: Identity Backstop Sweep, Daily Identity Refresh, Per-Type Exact Relationship Parity, mdm reconcile, limited mdm mastering
 
 **Identity Refresh Slot**:
 One scheduled opportunity to run either a Daily Identity Refresh or an Identity Backstop Sweep; it may be completed or deferred but never overlaps another identity refresh.
@@ -469,7 +469,7 @@ A Step Functions state machine wrapping exactly one MDM CLI subcommand (`mdm run
 _Avoid_: `generation_build` (a bespoke multi-stage pipeline, not a single-command wrapper), `mdm_seed_universe` (also a single-command wrapper, but explicitly excluded from any future consolidation by its own separate keep-as-is decision — state-machine-consolidation wayfinder map, ticket 04)
 
 **MDM Pipeline Machine**:
-A Step Functions state machine chaining a distinct head (bronze/silver capture, ownership parsing, or nothing) into the shared MdmExport→MdmSync→MdmVerify tail, usually ending in gold-refresh. Exactly 5 today: `mdm_gold`, `ownership_mdm_gold`, `silver_mdm_gold`, `bronze_seed_silver_gold`, `residual_holds_graph`.
+A Step Functions state machine chaining a distinct head (bronze/silver capture, ownership parsing, or nothing) into the shared Publish→"Publish Relationships"→Reconcile tail (renamed from MdmExport→MdmSync→MdmVerify by mdm-stage-renaming ticket 01), usually ending in gold-refresh. Exactly 5 today: `mdm_gold`, `ownership_mdm_gold`, `silver_mdm_gold`, `bronze_seed_silver_gold`, `residual_holds_graph`.
 _Avoid_: Treating these as duplicated in shape beyond the tail's ordering — the flags, Catch clauses, retry counts, and (for `bronze_seed_silver_gold`) an entire second "strict" branch are genuinely different per machine, not copy-paste variance (state-machine-consolidation wayfinder map, ticket 02 addendum)
 
 **MDM Run Identity**:
@@ -485,7 +485,7 @@ _Avoid_: Full processing funnel, current-row last modifier, CloudWatch log windo
 _Avoid_: Grouping with the 7 MDM Utility Machines as "standalone" or "single-stage" (an earlier ticket draft did this and was corrected)
 
 **MDM Tail Sequencing Skeleton**:
-The minimal, order-enforcing extraction from an MDM Pipeline Machine's tail — a shared helper that wires already-built `MdmExport`/`MdmSync`/`MdmVerify` state dicts into the correct order (Export before Sync, per `docs/data-architecture.md` Issue 3) and optionally appends `GoldRefresh`. Deliberately does not standardize each state's command flags, Catch clauses, or retry policy — those remain caller-owned, next to the comments explaining why they differ.
+The minimal, order-enforcing extraction from an MDM Pipeline Machine's tail — a shared helper that wires already-built `Publish`/`"Publish Relationships"`/`Reconcile` state dicts (renamed from `MdmExport`/`MdmSync`/`MdmVerify` by mdm-stage-renaming ticket 01) into the correct order (Publish before Publish Relationships, per `docs/data-architecture.md` Issue 3) and optionally appends `GoldRefresh`. Deliberately does not standardize each state's command flags, Catch clauses, or retry policy — those remain caller-owned, next to the comments explaining why they differ.
 _Avoid_: A full unified "shared tail" abstraction covering flags/Catch/retry — rejected because the 5 MDM Pipeline Machines' tails are six genuinely distinct shapes, not one shape with parameters
 
 ### Production release readiness

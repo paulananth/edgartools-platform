@@ -21,7 +21,7 @@ from edgar_warehouse.mdm.survivorship import stage_candidate
 
 def content_hash(fields: dict[str, Any]) -> str:
     """Stable hash over the exact fields a resolver stages for one source
-    row, used to detect an unchanged row across separate ``mdm run``
+    row, used to detect an unchanged row across separate ``mdm mastering``
     invocations (single-path-per-layer map, Ticket 03). Callers must pass
     the same field set every time -- adding/removing a key changes the
     hash for every row, which is the desired (fail-safe, not fail-silent)

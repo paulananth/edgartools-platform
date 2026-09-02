@@ -95,11 +95,11 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         handler=_logged_handler("registry-record-catchup", _handle_registry_record_catchup)
     )
 
-    # run
-    run = mdm_sub.add_parser("run", help="Run MDM pipeline for one or all domains")
-    run.add_argument("--entity-type", choices=["company", "adviser", "security", "person", "fund", "all"], default="all")
-    run.add_argument("--limit", type=int, default=None)
-    run.add_argument(
+    # mastering (mdm-stage-renaming ticket 01: was "run")
+    mastering = mdm_sub.add_parser("mastering", help="Run MDM pipeline for one or all domains")
+    mastering.add_argument("--entity-type", choices=["company", "adviser", "security", "person", "fund", "all"], default="all")
+    mastering.add_argument("--limit", type=int, default=None)
+    mastering.add_argument(
         "--cik",
         action="append",
         type=int,
@@ -111,7 +111,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "companies). Repeatable."
         ),
     )
-    run.add_argument(
+    mastering.add_argument(
         "--run-id",
         default=None,
         help=(
@@ -121,7 +121,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "is not given (a fresh full-universe run)."
         ),
     )
-    run.add_argument(
+    mastering.add_argument(
         "--resume-ledger-run-id",
         default=None,
         help=(
@@ -132,15 +132,15 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "if no frozen CIK snapshot exists for it."
         ),
     )
-    run.set_defaults(handler=_logged_handler("run", _handle_run))
+    mastering.set_defaults(handler=_logged_handler("mastering", _handle_run))
 
     pub_drain = mdm_sub.add_parser(
         "publication-drain",
         help=(
             "RSYNC-01/03 ticket 36: claim mdm_publication_request rows queued by "
-            "'mdm run' and advance them through graph_building -> graph_verified -> "
+            "'mdm mastering' and advance them through graph_building -> graph_verified -> "
             "graph_active, using the same SnowflakeGraphSyncExecutor/SnowflakeGraphVerifier "
-            "machinery 'mdm sync-graph'/'mdm verify-graph' already use in prod."
+            "machinery 'mdm publish-relationships'/'mdm reconcile' already use in prod."
         ),
     )
     pub_drain.add_argument(
@@ -211,8 +211,9 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         handler=_logged_handler("verify-resolver-input-parity", _handle_verify_resolver_input_parity)
     )
 
+    # mdm-stage-renaming ticket 01: was "sync-graph"
     sync = mdm_sub.add_parser(
-        "sync-graph",
+        "publish-relationships",
         help="Materialize Snowflake graph-ready node and edge state from MDM",
     )
     sync.add_argument("--limit", type=int, default=None)
@@ -238,7 +239,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "run 'mdm graph-activate --generation-id <id>' once verified."
         ),
     )
-    sync.set_defaults(handler=_logged_handler("sync-graph", _handle_sync_graph))
+    sync.set_defaults(handler=_logged_handler("publish-relationships", _handle_sync_graph))
 
     derive = mdm_sub.add_parser(
         "derive-relationships",
@@ -419,8 +420,9 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     mg.set_defaults(handler=_logged_handler("merge", _handle_merge))
 
     # verify-graph
+    # mdm-stage-renaming ticket 01: was "verify-graph"
     vg = mdm_sub.add_parser(
-        "verify-graph",
+        "reconcile",
         help="Verify Snowflake graph parity and Native App graph execution",
     )
     vg.add_argument(
@@ -453,7 +455,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "pass/fail exit code either way -- see graph_review_publish.py."
         ),
     )
-    vg.set_defaults(handler=_logged_handler("verify-graph", _handle_verify_graph))
+    vg.set_defaults(handler=_logged_handler("reconcile", _handle_verify_graph))
 
     # verify-insider-coverage (Ticket 21 slice 3: insider-scoped EMPLOYED_BY gate)
     vic = mdm_sub.add_parser(
@@ -512,8 +514,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     br.add_argument("--run-id", default=None, help="Opaque identity for this MDM operation")
     br.set_defaults(handler=_logged_handler("backfill-relationships", _handle_backfill_relationships))
 
-    # export
-    ex = mdm_sub.add_parser("export")
+    # publish (mdm-stage-renaming ticket 01: was "export")
+    ex = mdm_sub.add_parser("publish")
     ex.add_argument("--since", default=None, help="ISO timestamp for incremental export")
     ex.add_argument("--entity-type", default=None)
     ex.add_argument(
@@ -522,7 +524,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         default=5_000,
         help="Rows per Snowflake upsert batch while draining all pending rows",
     )
-    ex.set_defaults(handler=_logged_handler("export", _handle_export))
+    ex.set_defaults(handler=_logged_handler("publish", _handle_export))
 
     # publication-claim (07-03 RSYNC-01/03: transactional publication queue coordinator)
     pc = mdm_sub.add_parser(
@@ -814,7 +816,7 @@ def _require_duckdb_silver_reader(command_name: str):
 
 # -- silver preflight helpers -----------------------------------------------
 
-# Fixed allowlist of required tables per entity type for 'mdm run'.
+# Fixed allowlist of required tables per entity type for 'mdm mastering'.
 # Values are True = table must be nonempty; False = table must exist (any count).
 # T-05-14: No operator-provided table name is ever used here.
 _REQUIRED_TABLES_RUN: dict[str, dict[str, bool]] = {
@@ -932,7 +934,7 @@ def _handle_run(args) -> int:
     from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
 
     required = _required_tables_for_run(args.entity_type)
-    silver, rc = _require_silver_reader(required, "mdm run")
+    silver, rc = _require_silver_reader(required, "mdm mastering")
     if rc != 0:
         return rc
 
@@ -969,7 +971,7 @@ def _handle_run(args) -> int:
             print(f"funds: {n}")
         if args.cik and args.entity_type not in {"person", "company"}:
             print(
-                "mdm run: --cik only applies to --entity-type person|company "
+                "mdm mastering: --cik only applies to --entity-type person|company "
                 f"(ignored for entity_type={args.entity_type})",
                 file=sys.stderr,
             )
@@ -980,11 +982,11 @@ def _handle_run(args) -> int:
 
 def _handle_publication_drain(args) -> int:
     """RSYNC-01/03 ticket 36: the scheduled consumer side of the MDM
-    publication outbox -- 'mdm run' (see _handle_run/MDMPipeline.run_all)
+    publication outbox -- 'mdm mastering' (see _handle_run/MDMPipeline.run_all)
     is the producer, this is the coordinator. Wires
     publication.drain_publication_queue's injected sync_fn/verify_fn to the
     same SnowflakeGraphSyncExecutor/SnowflakeGraphVerifier machinery
-    'mdm sync-graph'/'mdm verify-graph' already call in prod, so a drained
+    'mdm publish-relationships'/'mdm reconcile' already call in prod, so a drained
     request causes a real Snowflake graph write, not just a Postgres status
     flip (see the mdm/generation.py generation-builder pipeline for the
     cautionary counter-example: its own build_partition never wires to
@@ -1035,7 +1037,7 @@ def _handle_publication_drain(args) -> int:
                     generation_id=generation_id,
                 )
             )
-            # GH-251: every other live verify path (mdm verify-graph) publishes
+            # GH-251: every other live verify path (mdm reconcile) publishes
             # its payload to the generation-scoped review contract
             # (MDM_GRAPH_REVIEW schema, examples/mdm_graph_dashboard/) --
             # publication-drain must too, or generations verified through this

@@ -341,23 +341,23 @@ class TestCLICommands:
 
     def test_parser_exposes_verify_graph(self):
         from edgar_warehouse.cli import build_parser
-        args = build_parser().parse_args(["mdm", "verify-graph"])
-        assert args.mdm_command == "verify-graph"
+        args = build_parser().parse_args(["mdm", "reconcile"])
+        assert args.mdm_command == "reconcile"
 
     def test_parser_exposes_sync_graph(self):
         from edgar_warehouse.cli import build_parser
-        args = build_parser().parse_args(["mdm", "sync-graph"])
-        assert args.mdm_command == "sync-graph"
+        args = build_parser().parse_args(["mdm", "publish-relationships"])
+        assert args.mdm_command == "publish-relationships"
 
     def test_parser_sync_graph_limit(self):
         from edgar_warehouse.cli import build_parser
-        args = build_parser().parse_args(["mdm", "sync-graph", "--limit", "25"])
+        args = build_parser().parse_args(["mdm", "publish-relationships", "--limit", "25"])
         assert args.limit == 25
 
     def test_parser_sync_graph_per_type_limit(self):
         from edgar_warehouse.cli import build_parser
         args = build_parser().parse_args([
-            "mdm", "sync-graph",
+            "mdm", "publish-relationships",
             "--relationship-type", "HOLDS",
             "--limit-per-type", "100",
         ])
@@ -390,7 +390,7 @@ class TestCLICommands:
         """Extend existing e2e-operations test to include graph commands."""
         from edgar_warehouse.cli import build_parser
         parser = build_parser()
-        for cmd in ("backfill-relationships", "verify-graph", "sync-graph", "derive-relationships", "load-relationships"):
+        for cmd in ("backfill-relationships", "reconcile", "publish-relationships", "derive-relationships", "load-relationships"):
             args = parser.parse_args(["mdm", cmd])
             assert args.mdm_command == cmd
 

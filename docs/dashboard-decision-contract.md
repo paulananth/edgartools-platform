@@ -33,7 +33,7 @@ ledger or raw graph tables through these grants.
 ## Publish a verified watermark
 
 Publication is an operator assertion made only after the warehouse full-chain
-and integrity evidence has passed and `mdm verify-graph` has passed for the
+and integrity evidence has passed and `mdm reconcile` has passed for the
 same active graph generation. Insert a new immutable row; never update an old
 watermark to make it appear current.
 

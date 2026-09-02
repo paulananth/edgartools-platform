@@ -4,7 +4,7 @@ change-propagation map).
 Exercises the handler's own wiring -- that it constructs a real
 drain_publication_queue call with sync_fn/verify_fn hooked to the
 SnowflakeGraphSyncExecutor/SnowflakeGraphVerifier machinery
-`mdm sync-graph`/`mdm verify-graph` already use, and turns the drain
+`mdm publish-relationships`/`mdm reconcile` already use, and turns the drain
 result into the right exit code -- using stubbed Snowflake classes so this
 runs on plain SQLite with no Docker/live Snowflake required. The queue
 mechanics themselves are covered by tests/mdm/test_graph_publication_queue.py.

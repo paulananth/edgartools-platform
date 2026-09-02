@@ -385,7 +385,7 @@ def diagnose(silver: dict, mdm: dict, neo4j: dict) -> None:
             "  Why: run_securities() called _company_entity_id(issuer_cik) before the company\n"
             "  was resolved in MDM, OR issuer_cik in sec_company_filing does not match any\n"
             "  mdm_company.cik row.\n"
-            "  Fix: run 'mdm run --entity-type all' again (companies must be resolved first),\n"
+            "  Fix: run 'mdm mastering --entity-type all' again (companies must be resolved first),\n"
             "  then 'mdm backfill-relationships' to create ISSUED_BY instances."
         ),
         "ISSUED_BY instances in mdm_relationship_instance": (
@@ -394,7 +394,7 @@ def diagnose(silver: dict, mdm: dict, neo4j: dict) -> None:
         ),
         "ISSUED_BY edges in Neo4j": (
             f"ISSUED_BY instances exist in MDM (pending={inst_pending}) but are not in Neo4j.\n"
-            "  Fix: run 'mdm sync-graph --limit <n>' to push pending instances."
+            "  Fix: run 'mdm publish-relationships --limit <n>' to push pending instances."
             if inst_pending
             else "ISSUED_BY instances exist and are synced but graph shows 0 edges — check Neo4j AuraDB connectivity."
         ),
@@ -416,8 +416,8 @@ def diagnose(silver: dict, mdm: dict, neo4j: dict) -> None:
         print("  Why 4: run_securities() called _company_entity_id(issuer_cik) which returned None")
         print("  Why 5: issuer_cik from sec_company_filing did not match any mdm_company.cik at run time")
         print()
-        print("  Fix: run 'mdm run --entity-type all' (ensures companies exist before securities),")
-        print("       then 'mdm backfill-relationships', then 'mdm sync-graph'.")
+        print("  Fix: run 'mdm mastering --entity-type all' (ensures companies exist before securities),")
+        print("       then 'mdm backfill-relationships', then 'mdm publish-relationships'.")
         print("       Via Step Functions: trigger bootstrap (runs all three in order).")
 
 

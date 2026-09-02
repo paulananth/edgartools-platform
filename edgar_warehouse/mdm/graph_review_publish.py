@@ -1,4 +1,4 @@
-"""GH-251: persist ``mdm verify-graph``'s payload into the generation-scoped
+"""GH-251: persist ``mdm reconcile``'s payload into the generation-scoped
 Snowflake graph-review contract.
 
 The contract (bounded, read-only tables + views a managed dashboard can
@@ -8,7 +8,7 @@ defined in ``infra/snowflake/sql/graph_review/01_graph_review_contract.sql``
 (not applied to live Snowflake by this module -- see that file and the
 landing PR for what still needs a deliberate live-apply step).
 
-Refresh happens only from this module, called by ``mdm verify-graph``'s CLI
+Refresh happens only from this module, called by ``mdm reconcile``'s CLI
 handler -- never from dashboard interaction (GH-251 criterion 5). Writes are
 DELETE + INSERT scoped to one ``GENERATION_ID`` (idempotent re-publish of
 the same generation; never touches another generation's rows), mirroring
@@ -46,7 +46,7 @@ class GraphReviewPublishError(RuntimeError):
     """Raised when publishing review rows fails.
 
     Deliberately a distinct exception type from anything ``verify()``
-    raises: the CLI handler (``mdm verify-graph``) must be able to tell
+    raises: the CLI handler (``mdm reconcile``) must be able to tell
     "the graph parity check itself failed" apart from "verification
     succeeded but we couldn't publish the audit rows" and choose different
     handling for each -- conflating the two would make a review-publish

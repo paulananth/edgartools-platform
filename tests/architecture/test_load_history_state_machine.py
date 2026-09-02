@@ -8,7 +8,7 @@ Covers the data-architecture review fixes (see
 - Issue 2: MdmSeedUniverse (mdm seed-universe) must run before ComputeWindows,
   and bootstrap-next must pass the same tracking-status filter compute-windows
   uses (not its own single-status CLI default).
-- Issue 3: mdm export must precede mdm sync-graph.
+- Issue 3: mdm publish must precede mdm publish-relationships.
 - Issue 4: a thirteenf stage must exist in the generated state machine.
 
 These tests generate the real JSON by sourcing the actual bash function (no
@@ -355,7 +355,7 @@ def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: di
     assert definition["States"]["GoldRefresh"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
     order = _linear_order(definition)
-    assert order.index("MdmVerify") < order.index("GoldRefresh")
+    assert order.index("Reconcile") < order.index("GoldRefresh")
 
 
 # -- Issue 1 / 4: Branch B sequencing -----------------------------------------
@@ -380,13 +380,13 @@ def test_branch_b_modes_run_sequentially_after_stage1_parallel(definition: dict)
         "FetchEntityFacts",
         "FetchPerFilingFundamentals",
         "FetchThirteenFHoldings",
-        "MdmRun",
+        "Mastering",
     ):
         assert name in order
     assert order.index("IngestBronzeAndSilver") < order.index("FetchEntityFacts")
     assert order.index("FetchEntityFacts") < order.index("FetchPerFilingFundamentals")
     assert order.index("FetchPerFilingFundamentals") < order.index("FetchThirteenFHoldings")
-    assert order.index("FetchThirteenFHoldings") < order.index("MdmRun")
+    assert order.index("FetchThirteenFHoldings") < order.index("Mastering")
 
 
 def test_stage1b_entity_facts_command_shape(definition: dict) -> None:
@@ -454,15 +454,15 @@ def test_stage1b_maps_tolerate_isolated_window_failures(definition: dict) -> Non
 
 def test_mdm_export_precedes_mdm_sync_graph(definition: dict) -> None:
     order = _linear_order(definition)
-    assert "MdmExport" in order
-    assert "MdmSync" in order
-    assert order.index("MdmExport") < order.index("MdmSync")
-    assert "'mdm', 'export'" in _command_of(definition, "MdmExport")
-    assert "'mdm', 'sync-graph'" in _command_of(definition, "MdmSync")
+    assert "Publish" in order
+    assert "Publish Relationships" in order
+    assert order.index("Publish") < order.index("Publish Relationships")
+    assert "'mdm', 'publish'" in _command_of(definition, "Publish")
+    assert "'mdm', 'publish-relationships'" in _command_of(definition, "Publish Relationships")
 
 
 def test_mdm_backfill_chains_to_export_not_directly_to_sync(definition: dict) -> None:
-    assert definition["States"]["MdmBackfill"]["Next"] == "MdmExport"
+    assert definition["States"]["MdmBackfill"]["Next"] == "Publish"
 
 
 # -- fix-pipelines 06-03: DISTRIBUTED Map mode + total_cik_limit CIK-scoping ---------------
@@ -579,11 +579,11 @@ def test_every_states_task_definition_matches_expected_profile(definition: dict)
         "top.FetchFirmRoster": "arn:wh-medium",
         "top.FetchFirmRosterForced": "arn:wh-medium",
         "top.IngestFirmRosterSources": "arn:wh-medium",
-        "top.MdmRun": "arn:mdm-medium",
+        "top.Mastering": "arn:mdm-medium",
         "top.MdmBackfill": "arn:mdm-medium",
-        "top.MdmExport": "arn:mdm-medium",
-        "top.MdmSync": "arn:mdm-medium",
-        "top.MdmVerify": "arn:mdm-small",
+        "top.Publish": "arn:mdm-medium",
+        "top.Publish Relationships": "arn:mdm-medium",
+        "top.Reconcile": "arn:mdm-small",
         "top.GoldRefresh": "arn:wh-large",
         "top.WriteRunSummary": "arn:wh-medium",
     }
@@ -743,7 +743,7 @@ def test_window_size_total_cik_limit_artifact_policy_filing_lookback_checks_prec
 
 
 # -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 01):
-# AdvBulkFetch stage between FetchThirteenFHoldings and MdmRun ------------------------
+# AdvBulkFetch stage between FetchThirteenFHoldings and Mastering ------------------------
 
 
 def test_fetch_adv_bulk_stage_runs_after_stage1b_thirteenf_before_mdm_run(definition: dict) -> None:
@@ -751,10 +751,10 @@ def test_fetch_adv_bulk_stage_runs_after_stage1b_thirteenf_before_mdm_run(defini
     assert "FetchThirteenFHoldings" in order
     assert "FetchAdvBulk" in order
     assert "IngestAdvBulkSources" in order
-    assert "MdmRun" in order
+    assert "Mastering" in order
     assert order.index("FetchThirteenFHoldings") < order.index("FetchAdvBulk")
     assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
-    assert order.index("IngestAdvBulkSources") < order.index("MdmRun")
+    assert order.index("IngestAdvBulkSources") < order.index("Mastering")
 
 
 def test_fetch_adv_bulk_command_shape_with_no_sm_input_overrides(definition: dict) -> None:
@@ -839,7 +839,7 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
     load_history -- matches the existing Branch B / AD-13 lenient pattern, and
     directly implements the ADV Pipeline map's standing requirement (ticket 02's
     Notes) that entity resolution/graph sync must never gate on ADV data.
-    Catch falls through to ReleaseSecFetchLease, not MdmRun directly (release-
+    Catch falls through to ReleaseSecFetchLease, not Mastering directly (release-
     readiness ticket 84) -- these fetch stages are still inside the
     sec_fetch_active fetch-heavy span, so a failure must still release the
     lease before proceeding to MDM."""
@@ -848,14 +848,14 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
+    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
 
 
 def test_stage1b_thirteenf_catch_routes_into_adv_bulk_fetch_not_around_it(
     definition: dict,
 ) -> None:
     """Regression guard: FetchThirteenFHoldings's own (pre-existing) lenient Catch must
-    route into DatasetPeriodCheck, not straight to MdmRun -- otherwise a Branch B
+    route into DatasetPeriodCheck, not straight to Mastering -- otherwise a Branch B
     thirteenf failure (an expected, accepted AD-13 outcome, not a rare case)
     would silently skip the entire AdvBulkFetch stage instead of still attempting
     it before MDM runs."""
@@ -881,10 +881,10 @@ def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(def
     assert "IngestAdvBulkSources" in order
     assert "FetchFirmRoster" in order
     assert "IngestFirmRosterSources" in order
-    assert "MdmRun" in order
+    assert "Mastering" in order
     assert order.index("IngestAdvBulkSources") < order.index("FetchFirmRoster")
     assert order.index("FetchFirmRoster") < order.index("IngestFirmRosterSources")
-    assert order.index("IngestFirmRosterSources") < order.index("MdmRun")
+    assert order.index("IngestFirmRosterSources") < order.index("Mastering")
 
 
 def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_it(
@@ -892,7 +892,7 @@ def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_
 ) -> None:
     """Regression guard mirroring test_stage1b_thirteenf_catch_routes_into_adv_
     bulk_fetch_not_around_it above: IngestAdvBulkSources' success-path Next must
-    route into FirmRosterForceCheck, not straight to MdmRun -- otherwise the
+    route into FirmRosterForceCheck, not straight to Mastering -- otherwise the
     Firm Roster cross-check stage would be silently skipped every run."""
     assert definition["States"]["IngestAdvBulkSources"]["Next"] == "FirmRosterForceCheck"
 
@@ -941,13 +941,13 @@ def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(definition:
     through_to_mdm_run above: a transient Firm Roster fetch/ingest failure
     must never abort the rest of load_history -- this cross-check is purely
     additive visibility, per the parent spec. Catch falls through to
-    ReleaseSecFetchLease, not MdmRun directly (release-readiness ticket 84)."""
+    ReleaseSecFetchLease, not Mastering directly (release-readiness ticket 84)."""
     for state_name in ("FetchFirmRoster", "FetchFirmRosterForced", "IngestFirmRosterSources"):
         state = definition["States"][state_name]
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "MdmRun"
+    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
 
 
 def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
@@ -964,7 +964,7 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
 # ---------------------------------------------------------------------------
 # sec_fetch_active cross-command lease (release-readiness ticket 84):
 # AcquireSecFetchLease -> ReadSecFetchLeaseResult -> SecFetchLeaseAcquiredCheck
-# -> {SeedUniverse | SecFetchDeferred}, and ReleaseSecFetchLease before MdmRun.
+# -> {SeedUniverse | SecFetchDeferred}, and ReleaseSecFetchLease before Mastering.
 # load_history was restructured from the original parallel bootstrap-batch xN
 # Map into a sequential (MaxConcurrency=1) windowed pipeline (see the "Phased
 # pipeline" comment in the deploy script) -- no fan-out concern remains, so a
@@ -1015,14 +1015,14 @@ def test_load_history_releases_sec_fetch_lease_before_mdm_run(definition: dict) 
     cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "release-sec-fetch-lease" in cmd
     assert release["ResultPath"] is None
-    assert release["Next"] == "MdmRun"
+    assert release["Next"] == "Mastering"
     assert release["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
     ]
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
     assert fallback["Type"] == "Pass"
-    assert fallback["Next"] == "MdmRun"
+    assert fallback["Next"] == "Mastering"
     assert "End" not in fallback
 
 
@@ -1048,7 +1048,7 @@ def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definiti
     """The lease must be held across SeedUniverse, MdmSeedUniverse,
     IngestBronzeAndSilver/Stage1B, and the ADV/firm-roster chain -- i.e. acquired
     strictly before all of them and released strictly after all of them,
-    with no path that reaches MdmRun without passing through
+    with no path that reaches Mastering without passing through
     ReleaseSecFetchLease first. (Stage0CompanyIdentity/ReduceIdentityRefresh
     removed -- stage0-stage1-consolidation wayfinder map, ticket 02/04 --
     IngestBronzeAndSilver's WindowedBootstrap now covers the identity capture they
@@ -1059,7 +1059,7 @@ def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definiti
     assert order.index("MdmSeedUniverse") < order.index("IngestBronzeAndSilver")
     assert "ReleaseSecFetchLease" in order
     assert order.index("IngestBronzeAndSilver") < order.index("ReleaseSecFetchLease")
-    assert order.index("ReleaseSecFetchLease") < order.index("MdmRun")
+    assert order.index("ReleaseSecFetchLease") < order.index("Mastering")
 
 
 def test_load_history_previously_uncaught_states_release_lease_on_failure(definition: dict) -> None:

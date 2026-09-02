@@ -1,7 +1,7 @@
 -- GH-251: generation-scoped Snowflake graph-review contract.
 --
 -- Publishes the useful MDM/hosted-graph review state (the payload
--- `edgar-warehouse mdm verify-graph` already computes -- see
+-- `edgar-warehouse mdm reconcile` already computes -- see
 -- edgar_warehouse/mdm/snowflake_graph.py's SnowflakeGraphVerifier and
 -- edgar_warehouse/mdm/graph_review_publish.py) as bounded, read-only
 -- Snowflake objects, so a managed dashboard (GH-252) can inspect the active
@@ -155,7 +155,7 @@ GRANT SELECT ON VIEW {{ database }}.MDM_GRAPH_REVIEW.V_GRAPH_REVIEW_MISMATCH_SAM
 GRANT SELECT ON VIEW {{ database }}.MDM_GRAPH_REVIEW.V_GRAPH_REVIEW_NATIVE_APP_CHECK
   TO ROLE EDGARTOOLS_GRAPH_REVIEW_READER;
 
--- The writer role (whatever runs `mdm verify-graph` -- MDM_SNOWFLAKE_ROLE/
+-- The writer role (whatever runs `mdm reconcile` -- MDM_SNOWFLAKE_ROLE/
 -- DBT_SNOWFLAKE_ROLE per edgar_warehouse/mdm/export.py's
 -- SnowflakeConnectionSettings) needs write access to the 4 base tables.
 -- Grant this to that role by name once it's finalized for the target

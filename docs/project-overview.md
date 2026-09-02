@@ -276,11 +276,11 @@ Typical MDM CLI flow:
 
 ```bash
 edgar-warehouse mdm seed-universe
-edgar-warehouse mdm run --entity-type all
+edgar-warehouse mdm mastering --entity-type all
 edgar-warehouse mdm derive-relationships   # or backfill / load variants
-edgar-warehouse mdm export
-edgar-warehouse mdm sync-graph
-edgar-warehouse mdm verify-graph
+edgar-warehouse mdm publish
+edgar-warehouse mdm publish-relationships
+edgar-warehouse mdm reconcile
 ```
 
 ---
@@ -335,7 +335,7 @@ Canonical multi-company path: **`load_history`**
    seed-universe → bootstrap-batch (many ECS tasks, limited concurrency)
 
 2. MDM chain (after all bronze/silver windows finish)
-   mdm run → relationships → export → sync-graph → verify-graph
+   mdm mastering → relationships → publish → publish-relationships → reconcile
 
 3. Gold once
    gold-refresh → Snowflake manifest task → dbt/gold dynamic tables

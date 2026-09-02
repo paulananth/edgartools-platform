@@ -10,7 +10,7 @@
 --   Schema:   EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION
 --
 -- This script grants only the graph schema access required for Phase 3
--- `edgar-warehouse mdm verify-graph` Native App smoke checks. CREATE TABLE is
+-- `edgar-warehouse mdm reconcile` Native App smoke checks. CREATE TABLE is
 -- included because Neo4j Graph Analytics algorithms write bounded result tables
 -- into the governed graph schema.
 

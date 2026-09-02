@@ -132,13 +132,13 @@ def test_adv_bulk_projection_is_latest_and_idempotent(db_session) -> None:
 def test_fund_bulk_resolution_survives_adviser_resolving_after_the_fund(db_session) -> None:
     """A fund's adviser can become resolvable only after the fund itself was
     first inserted (its ADV filing simply arrives/resolves later). The next
-    `mdm run` re-processes the exact same source row: the fund's own
+    `mdm mastering` re-processes the exact same source row: the fund's own
     identity-derived entity_id is unchanged, but its dedup lookup key
     (adviser_entity_id, name) flips from (None, name) to (<real id>, name)
     now that the adviser resolves. Before the fix this re-attempted an
     INSERT under the same primary key and crashed with
     sqlalchemy.exc.IntegrityError (duplicate key on mdm_entity_pkey) --
-    reproduced live in prod 2026-08-09 via `mdm run --entity-type all
+    reproduced live in prod 2026-08-09 via `mdm mastering --entity-type all
     --limit 5`. The fund lookup must recognize its own entity_id first,
     regardless of what the adviser-dedup key currently resolves to.
     """

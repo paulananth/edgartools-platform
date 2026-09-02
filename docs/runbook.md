@@ -1069,7 +1069,7 @@ do not interpret some children completing as a partial success.
 
 ### Failures during MDM stages
 
-If `load_history` fails during `MdmRun`, `MdmBackfill`, `MdmSync`, or `MdmVerify`
+If `load_history` fails during `Mastering`, `MdmBackfill`, `Publish Relationships`, or `Reconcile`
 (after `BatchBootstrap` succeeded), skip re-batching and run only the MDM+gold stages:
 
 ```bash

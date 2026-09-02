@@ -30,7 +30,7 @@ def test_rewrite_task_definitions_is_scoped_and_exact() -> None:
             "mdm_sync_graph_Default": _task("medium:203"),
             "mdm_sync_graph_WithLimit": _task("medium:203"),
             "mdm_run_Default": _task("medium:203"),
-            "MdmVerify": _task("small:203"),
+            "Reconcile": _task("small:203"),
         }
     }
 
@@ -54,7 +54,7 @@ def test_rewrite_task_definitions_is_scoped_and_exact() -> None:
         rewritten["States"]["mdm_run_Default"]["Parameters"]["TaskDefinition"]
         == "medium:203"
     )
-    assert rewritten["States"]["MdmVerify"]["Parameters"]["TaskDefinition"] == (
+    assert rewritten["States"]["Reconcile"]["Parameters"]["TaskDefinition"] == (
         "small:203"
     )
     assert (
@@ -64,12 +64,12 @@ def test_rewrite_task_definitions_is_scoped_and_exact() -> None:
 
 
 def test_rewrite_task_definitions_fails_closed_on_unexpected_source() -> None:
-    definition = {"States": {"MdmSync": _task("medium:202")}}
+    definition = {"States": {"Publish Relationships": _task("medium:202")}}
 
     with pytest.raises(ValueError, match="expected source task definition"):
         ecs_sizing_canary.rewrite_task_definitions(
             definition,
-            state_names={"MdmSync"},
+            state_names={"Publish Relationships"},
             source_arn="medium:203",
             candidate_arn="large:137",
         )
@@ -97,7 +97,7 @@ def test_add_unbounded_sync_route_preserves_source_fallback() -> None:
                             {
                                 "Name": "edgar-warehouse",
                                 "Command.$": (
-                                    "States.Array('mdm', 'sync-graph', '--limit', "
+                                    "States.Array('mdm', 'publish-relationships', '--limit', "
                                     "States.Format('{}', $.limit))"
                                 ),
                             }
@@ -121,7 +121,7 @@ def test_add_unbounded_sync_route_preserves_source_fallback() -> None:
     command = rewritten["States"]["Ticket28RunUnboundedSync"]["Parameters"][
         "Overrides"
     ]["ContainerOverrides"][0]["Command.$"]
-    assert command == "States.Array('mdm', 'sync-graph')"
+    assert command == "States.Array('mdm', 'publish-relationships')"
     assert definition["States"]["SelectMode"]["Choices"][0]["Next"] == (
         "mdm_sync_graph_HasLimitPerTypeOverride"
     )
@@ -130,7 +130,7 @@ def test_add_unbounded_sync_route_preserves_source_fallback() -> None:
 def test_add_unbounded_residual_sync_removes_only_the_legacy_cap() -> None:
     definition = {
         "States": {
-            "MdmSync": {
+            "Publish Relationships": {
                 "Type": "Task",
                 "Parameters": {
                     "TaskDefinition": "medium:203",
@@ -139,7 +139,7 @@ def test_add_unbounded_residual_sync_removes_only_the_legacy_cap() -> None:
                             {
                                 "Name": "edgar-warehouse",
                                 "Command.$": (
-                                    "States.Array('mdm', 'sync-graph', "
+                                    "States.Array('mdm', 'publish-relationships', "
                                     "'--generation-id', $$.Execution.Name, "
                                     "'--limit-per-type', '200000')"
                                 ),
@@ -155,14 +155,14 @@ def test_add_unbounded_residual_sync_removes_only_the_legacy_cap() -> None:
     rewritten, changed = ecs_sizing_canary.add_unbounded_residual_sync(definition)
 
     assert changed is True
-    command = rewritten["States"]["MdmSync"]["Parameters"]["Overrides"][
+    command = rewritten["States"]["Publish Relationships"]["Parameters"]["Overrides"][
         "ContainerOverrides"
     ][0]["Command.$"]
     assert command == (
-        "States.Array('mdm', 'sync-graph', "
+        "States.Array('mdm', 'publish-relationships', "
         "'--generation-id', $$.Execution.Name)"
     )
-    assert "--limit-per-type" in definition["States"]["MdmSync"]["Parameters"][
+    assert "--limit-per-type" in definition["States"]["Publish Relationships"]["Parameters"][
         "Overrides"
     ]["ContainerOverrides"][0]["Command.$"]
 
@@ -170,13 +170,13 @@ def test_add_unbounded_residual_sync_removes_only_the_legacy_cap() -> None:
 def test_add_unbounded_residual_sync_fails_closed_on_unknown_command() -> None:
     definition = {
         "States": {
-            "MdmSync": {
+            "Publish Relationships": {
                 "Parameters": {
                     "Overrides": {
                         "ContainerOverrides": [
                             {
                                 "Command.$": (
-                                    "States.Array('mdm', 'sync-graph', "
+                                    "States.Array('mdm', 'publish-relationships', "
                                     "'--relationship-type', 'HOLDS')"
                                 )
                             }
@@ -196,7 +196,7 @@ def test_extract_task_attempts_preserves_state_retry_and_task_identity() -> None
         {
             "id": 1,
             "type": "TaskStateEntered",
-            "stateEnteredEventDetails": {"name": "MdmSync"},
+            "stateEnteredEventDetails": {"name": "Publish Relationships"},
         },
         {
             "id": 2,
@@ -209,7 +209,7 @@ def test_extract_task_attempts_preserves_state_retry_and_task_identity() -> None
         {
             "id": 3,
             "type": "TaskStateEntered",
-            "stateEnteredEventDetails": {"name": "MdmSync"},
+            "stateEnteredEventDetails": {"name": "Publish Relationships"},
         },
         {
             "id": 4,
@@ -224,8 +224,8 @@ def test_extract_task_attempts_preserves_state_retry_and_task_identity() -> None
     attempts = ecs_sizing_canary.extract_task_attempts(events)
 
     assert attempts == [
-        {"state": "MdmSync", "retry_ordinal": 1, "task_id": "task-1"},
-        {"state": "MdmSync", "retry_ordinal": 2, "task_id": "task-2"},
+        {"state": "Publish Relationships", "retry_ordinal": 1, "task_id": "task-1"},
+        {"state": "Publish Relationships", "retry_ordinal": 2, "task_id": "task-2"},
     ]
 
 
@@ -352,7 +352,7 @@ def test_evaluate_candidate_fails_closed_for_retry_missing_metrics_and_memory() 
             },
         },
         {
-            "state": "MdmVerify",
+            "state": "Reconcile",
             "retry_ordinal": 1,
             "exit_code": 0,
             "stop_code": "EssentialContainerExited",
@@ -367,7 +367,7 @@ def test_evaluate_candidate_fails_closed_for_retry_missing_metrics_and_memory() 
     assert result["passed"] is False
     assert "workload retry observed: MdmPersons attempt 2" in result["failures"]
     assert "memory peak gate failed for MdmPersons: 86.00% >= 85%" in result["failures"]
-    assert "task-bound telemetry missing for MdmVerify" in result["failures"]
+    assert "task-bound telemetry missing for Reconcile" in result["failures"]
 
 
 def test_parser_is_safe_by_default() -> None:
@@ -517,10 +517,10 @@ def test_validate_report_contract_binds_execution_state_tasks_and_image() -> Non
         "execution_arn": "execution:ticket28",
         "state_machine_arn": "stateMachine:immutable-hash",
         "image": "repo@sha256:abc",
-        "expected_task_states": ["MdmSecurities", "MdmVerify"],
+        "expected_task_states": ["MdmSecurities", "Reconcile"],
         "task_definition_contract": {
             "MdmSecurities": "medium:203",
-            "MdmVerify": "small:203",
+            "Reconcile": "small:203",
         },
     }
     execution = {
@@ -534,7 +534,7 @@ def test_validate_report_contract_binds_execution_state_tasks_and_image() -> Non
             "image": "repo@sha256:abc",
         },
         {
-            "state": "MdmVerify",
+            "state": "Reconcile",
             "task_definition_arn": "small:203",
             "image": "repo@sha256:abc",
         },

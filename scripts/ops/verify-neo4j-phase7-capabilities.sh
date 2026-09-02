@@ -104,13 +104,13 @@ run_sql contract_views "SELECT (SELECT COUNT(*) FROM ${DATABASE}.${GRAPH_SCHEMA}
 # The current repository verifier's WCC call is the maintained proof that the
 # Native App can project and execute against the contract views.
 verify_output="$(SNOWFLAKE_CONNECTION=snowconn DBT_SNOWFLAKE_DATABASE="$DATABASE" \
-  $UV_BIN run --extra snowflake edgar-warehouse mdm verify-graph 2>&1)"
+  $UV_BIN run --extra snowflake edgar-warehouse mdm reconcile 2>&1)"
 verify_rc=$?
 verify_compact="${verify_output//[[:space:]]/}"
 if [[ $verify_rc -eq 0 && "$verify_compact" == *'"failure_domains":[]'* && "$verify_compact" == *'"parity":"ok"'* ]]; then
-  record semantic_contract_parity PASS "command=SNOWFLAKE_CONNECTION=snowconn DBT_SNOWFLAKE_DATABASE=${DATABASE} uv run --extra snowflake edgar-warehouse mdm verify-graph; output=${verify_output:0:1200}"
+  record semantic_contract_parity PASS "command=SNOWFLAKE_CONNECTION=snowconn DBT_SNOWFLAKE_DATABASE=${DATABASE} uv run --extra snowflake edgar-warehouse mdm reconcile; output=${verify_output:0:1200}"
 else
-  record semantic_contract_parity FAIL "command=SNOWFLAKE_CONNECTION=snowconn DBT_SNOWFLAKE_DATABASE=${DATABASE} uv run --extra snowflake edgar-warehouse mdm verify-graph; exit=${verify_rc}; ${verify_output:0:1200}"
+  record semantic_contract_parity FAIL "command=SNOWFLAKE_CONNECTION=snowconn DBT_SNOWFLAKE_DATABASE=${DATABASE} uv run --extra snowflake edgar-warehouse mdm reconcile; exit=${verify_rc}; ${verify_output:0:1200}"
   ((failures+=1))
 fi
 

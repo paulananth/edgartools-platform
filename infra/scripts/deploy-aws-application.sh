@@ -84,7 +84,7 @@ Options:
                                     warehouse profile. Default: resolved by name
                                     (<prefix>/bookkeeping/postgres_dsn), same as the MDM DSN.
   --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
-  --mdm-run-limit <n>               Default limit for mdm run state machine. Default: 100; 0 means no default limit.
+  --mdm-run-limit <n>               Default limit for mdm mastering state machine. Default: 100; 0 means no default limit.
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
                                     tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
@@ -169,7 +169,7 @@ Options:
                                     -- draining slower than the warning threshold would trip
                                     the SLO on a healthy queue by construction). Never runs as
                                     a side effect of an ordinary deploy; run this flag alone,
-                                    after an explicit operator go, once `mdm run` (the
+                                    after an explicit operator go, once `mdm mastering` (the
                                     producer -- MDMPipeline.run_all) is confirmed enqueuing
                                     real requests. Exits immediately after configuring.
   --publication-drain-scheduler-role-arn <arn>
@@ -862,7 +862,7 @@ PY
 # Ticket 36 (change-propagation map): the scheduled consumer side of the
 # MDM->graph publication outbox (edgar_warehouse/mdm/publication.py). The
 # producer side (MDMPipeline.run_all -> request_publication, one request per
-# `mdm run` invocation) is unconditional and always live; this schedule is
+# `mdm mastering` invocation) is unconditional and always live; this schedule is
 # the off-by-default counterpart that actually drains the queue via
 # `mdm publication-drain` (mode mdm_publication_drain on the same
 # already-consolidated mdm-utility machine, mirroring
@@ -1434,7 +1434,7 @@ write_container_definitions() {
   # `backfill-mdm-entity-ids` command on this warehouse profile, not the MDM
   # profile -- it needs a direct Snowflake connection
   # (edgar_warehouse/mdm_entity_backfill.py's SnowflakeConnectionSettings.from_env())
-  # the same way `mdm export`/`mdm sync-graph` do on the MDM profile.
+  # the same way `mdm publish`/`mdm publish-relationships` do on the MDM profile.
   # BOOKKEEPING_POSTGRES_DSN_SECRET_ARN may also be empty (deliberately not
   # hard-required, unlike MDM_SNOWFLAKE_SECRET_ARN, until a caller-repointing
   # ticket actually depends on it -- provisioning ahead of any consumer
@@ -1499,8 +1499,8 @@ if mdm_postgres_dsn_secret_arn:
 # (mdm-ahead-of-silver map, Phase B) -- it runs on this warehouse profile and
 # needs a direct Snowflake connection
 # (SnowflakeConnectionSettings.from_env(), edgar_warehouse/mdm/export.py),
-# the same secret shape the MDM profile already injects for `mdm export`/
-# `mdm sync-graph`.
+# the same secret shape the MDM profile already injects for `mdm publish`/
+# `mdm publish-relationships`.
 if mdm_snowflake_secret_arn:
     secrets.append({"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": mdm_snowflake_secret_arn})
 # BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover, Ticket 04): a dedicated
@@ -1670,7 +1670,7 @@ TASK_DEF_MDM_LARGE_ARN=""
 if [[ "$DEPLOY_MDM" == "true" ]]; then
   TASK_DEF_MDM_SMALL_ARN="$(register_mdm_task_definition mdm-small 512 1024)"
   # mdm-medium memory raised 2048 -> 4096 (2026-07-25, residual-holds OOM):
-  # full-universe `mdm run --entity-type security` loads silver.duckdb (holdings/
+  # full-universe `mdm mastering --entity-type security` loads silver.duckdb (holdings/
   # ownership surfaces) and OOM-killed (exit 137) at 2048 MB on prod residual
   # holds pipeline residual-holds-20260725T221723Z / MdmSecurities. Same class of
   # failure as warehouse medium gold-from-silver (fix-pipelines 06-03).
@@ -1820,9 +1820,9 @@ mdm_workflow_command_expression() {
     mdm_check_connectivity) printf '%s\n' "States.Array('mdm', 'check-connectivity')" ;;
     mdm_run)
       if [[ "$MDM_RUN_LIMIT" -gt 0 ]]; then
-        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '${MDM_RUN_LIMIT}', '--run-id', \$\$.Execution.Name)"
+        printf '%s\n' "States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '${MDM_RUN_LIMIT}', '--run-id', \$\$.Execution.Name)"
       else
-        printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', \$\$.Execution.Name)"
+        printf '%s\n' "States.Array('mdm', 'mastering', '--entity-type', 'all', '--run-id', \$\$.Execution.Name)"
       fi
       ;;
     mdm_backfill_relationships)
@@ -1834,12 +1834,12 @@ mdm_workflow_command_expression() {
       ;;
     mdm_sync_graph)
       if [[ "$MDM_GRAPH_LIMIT" -gt 0 ]]; then
-        printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit', '${MDM_GRAPH_LIMIT}')"
+        printf '%s\n' "States.Array('mdm', 'publish-relationships', '--limit', '${MDM_GRAPH_LIMIT}')"
       else
-        printf '%s\n' "States.Array('mdm', 'sync-graph')"
+        printf '%s\n' "States.Array('mdm', 'publish-relationships')"
       fi
       ;;
-    mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'verify-graph')" ;;
+    mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'reconcile')" ;;
     mdm_check_fence) printf '%s\n' "States.Array('mdm', 'check-fence')" ;;
     mdm_publication_drain) printf '%s\n' "States.Array('mdm', 'publication-drain')" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
@@ -1850,9 +1850,9 @@ mdm_workflow_command_expression() {
 
 mdm_workflow_limit_command_expression() {
   case "$1" in
-    mdm_run) printf '%s\n' "States.Array('mdm', 'run', '--entity-type', 'all', '--limit', States.Format('{}', $.limit), '--run-id', \$\$.Execution.Name)" ;;
+    mdm_run) printf '%s\n' "States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', States.Format('{}', $.limit), '--run-id', \$\$.Execution.Name)" ;;
     mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'backfill-relationships', '--limit', States.Format('{}', $.limit), '--run-id', \$\$.Execution.Name)" ;;
-    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit', States.Format('{}', $.limit))" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'publish-relationships', '--limit', States.Format('{}', $.limit))" ;;
     mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}', '--limit', States.Format('{}', $.limit))" ;;
     *) return 0 ;;
   esac
@@ -1864,14 +1864,14 @@ mdm_workflow_limit_command_expression() {
 # translate the sentinel to an invocation with no --limit flag at all.
 mdm_workflow_unbounded_command_expression() {
   case "$1" in
-    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph')" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'publish-relationships')" ;;
     *) return 0 ;;
   esac
 }
 
 mdm_workflow_unbounded_relationship_command_expression() {
   case "$1" in
-    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'publish-relationships', '--relationship-type', $.relationship_type)" ;;
     *) return 0 ;;
   esac
 }
@@ -1879,7 +1879,7 @@ mdm_workflow_unbounded_relationship_command_expression() {
 mdm_workflow_relationship_command_expression() {
   case "$1" in
     mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type, '--run-id', \$\$.Execution.Name)" ;;
-    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'publish-relationships', '--relationship-type', $.relationship_type)" ;;
     *) return 0 ;;
   esac
 }
@@ -1887,7 +1887,7 @@ mdm_workflow_relationship_command_expression() {
 mdm_workflow_relationship_limit_command_expression() {
   case "$1" in
     mdm_backfill_relationships) printf '%s\n' "States.Array('mdm', 'derive-relationships', '--relationship-type', $.relationship_type, '--target-per-type', States.Format('{}', $.limit), '--run-id', \$\$.Execution.Name)" ;;
-    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type, '--limit', States.Format('{}', $.limit))" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'publish-relationships', '--relationship-type', $.relationship_type, '--limit', States.Format('{}', $.limit))" ;;
     *) return 0 ;;
   esac
 }
@@ -1900,7 +1900,7 @@ mdm_workflow_relationship_limit_command_expression() {
 # MDM workflow returns empty, same convention as the relationship_* helpers.
 mdm_workflow_limit_per_type_command_expression() {
   case "$1" in
-    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'sync-graph', '--limit-per-type', States.Format('{}', $.limit_per_type))" ;;
+    mdm_sync_graph) printf '%s\n' "States.Array('mdm', 'publish-relationships', '--limit-per-type', States.Format('{}', $.limit_per_type))" ;;
     *) return 0 ;;
   esac
 }
@@ -2600,7 +2600,7 @@ write_load_history_definition() {
   local output_file="$1"
   local wh_task_small_arn="$2"    # warehouse small  (compute-windows, write-run-summary)
   local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, per-window bootstrap-next/-fundamentals)
-  local mdm_task_small_arn="$4"   # mdm small        (mdm verify-graph — lightweight check)
+  local mdm_task_small_arn="$4"   # mdm small        (mdm reconcile — lightweight check)
   local mdm_task_medium_arn="$5"  # mdm medium       (mdm seed-universe, run, backfill-relationships, export, sync-graph)
   local wh_task_large_arn="$6"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
 
@@ -2779,7 +2779,7 @@ def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
         # ReleaseSecFetchLease on the happy path, so they were never
         # actually uncaught in the way this fixes. Distinct from
         # ReleaseSecFetchLease above (the happy-path release, which
-        # continues into MdmRun): this path always ends in Fail, preserving
+        # continues into Mastering): this path always ends in Fail, preserving
         # ExecutionsFailed/alarm visibility for a real work failure.
         "ReleaseSecFetchLeaseAfterFailure": {
             **ecs_state(wh_medium_arn,
@@ -3064,7 +3064,7 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # the shared function both paths called. The "Stage0 must run before ownership/ADV
 # for IS_INSIDER derivation" invariant this comment previously stated was traced
 # and found unenforced in code: _derive_is_insider resolves issuer CIKs via MDM
-# MdmCompany rows, populated by Stage 2's `mdm run`, which per the Phased Pipeline
+# MdmCompany rows, populated by Stage 2's `mdm mastering`, which per the Phased Pipeline
 # already only starts after Stage1/1B complete regardless of Stage0. No safeguard
 # replaces it -- nothing ever depended on it.
 #
@@ -3342,7 +3342,7 @@ fundamentals_thirteenf = {
 
 # (4d) AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 01 — ADV Pipeline map
 # ticket 06 decisions 2/4): fetches new SEC/IAPD advFilingData monthly archives and
-# ingests them into ADV silver, so MdmRun (which resolves adviser/fund entities as part
+# ingests them into ADV silver, so Mastering (which resolves adviser/fund entities as part
 # of its --entity-type all sweep) always sees fresh ADV data in the same execution.
 # Single ECS task pair, not a windowed Map — fetch-adv-bulk is not CIK-scoped, matching
 # GoldRefresh's precedent of one task for whole-warehouse-state work.
@@ -3400,7 +3400,7 @@ force_check = {
     "Default": "InvalidForceInput",
 }
 
-# Next="ReleaseSecFetchLease", not "MdmRun" directly -- these ADV/firm-roster
+# Next="ReleaseSecFetchLease", not "Mastering" directly -- these ADV/firm-roster
 # fetch stages are still inside the sec_fetch_active fetch-heavy span
 # (release-readiness ticket 84), so a failure here must still release the
 # lease before falling through to MDM, not skip release entirely.
@@ -3486,33 +3486,33 @@ ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
 ingest_firm_roster_sources["ResultPath"] = None
 
 # sec_fetch_active lease (release-readiness ticket 84): acquired right
-# before SeedUniverse, released right before MdmRun -- spans every state
+# before SeedUniverse, released right before Mastering -- spans every state
 # that actually calls SEC/IAPD (SeedUniverse, Branch A/B windowed
 # bootstrap+fundamentals, and the ADV/firm-roster fetch chain).
 # MdmSeedUniverse (an upsert from data SeedUniverse already fetched, no SEC
 # call itself) rides inside the span since it's sandwiched between two
 # fetch stages -- a few minutes of over-holding, not hours.
-sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "MdmRun")
+sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "Mastering")
 
 # (5)–(9) MDM chain + GoldRefresh — run once after ALL windows complete (same invariant as before).
-# MdmExport is new (data-architecture Issue 3): mdm sync-graph materializes Snowflake graph
+# Publish is new (data-architecture Issue 3): mdm publish-relationships materializes Snowflake graph
 # tables from the Snowflake MDM mirror, not from the runtime MDM database directly. Without an
 # export between backfill-relationships and sync-graph, sync-graph can read a stale or missing
 # mirror — graph output wouldn't reflect the MDM run this same execution just did.
 mdm_run = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
+    f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
     next_state="MdmBackfill")
 mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)",
-    next_state="MdmExport")
+    next_state="Publish")
 mdm_export = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'export')",
-    next_state="MdmSync")
+    "States.Array('mdm', 'publish')",
+    next_state="Publish Relationships")
 mdm_sync = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
-    next_state="MdmVerify")
+    f"States.Array('mdm', 'publish-relationships', '--limit', '{graph_limit}')",
+    next_state="Reconcile")
 mdm_verify = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'verify-graph')",
+    "States.Array('mdm', 'reconcile')",
     next_state="GoldRefresh")
 mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 # verify-graph is validation-only per docs/data-architecture.md: it reports
@@ -3591,11 +3591,11 @@ definition = {
         "FetchFirmRoster":          fetch_firm_roster,
         "FetchFirmRosterForced":    fetch_firm_roster_forced,
         "IngestFirmRosterSources":  ingest_firm_roster_sources,
-        "MdmRun":            mdm_run,
+        "Mastering":            mdm_run,
         "MdmBackfill":       mdm_backfill,
-        "MdmExport":         mdm_export,
-        "MdmSync":           mdm_sync,
-        "MdmVerify":         mdm_verify,
+        "Publish":         mdm_export,
+        "Publish Relationships":           mdm_sync,
+        "Reconcile":         mdm_verify,
         "GoldRefresh":       gold,
         "WriteRunSummary":   write_run_summary,
     },
@@ -3605,7 +3605,7 @@ PY
 }
 
 # Full pipeline for a single warehouse command followed by the MDM chain and gold refresh.
-# Shape: RunWarehouseTask → MdmRun → MdmBackfill → MdmSync → MdmVerify → GoldRefresh
+# Shape: RunWarehouseTask → Mastering → MdmBackfill → Publish Relationships → Reconcile → GoldRefresh
 # Used by bootstrap and daily_incremental.
 write_warehouse_mdm_gold_definition() {
   local output_file="$1"
@@ -3731,7 +3731,7 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 # way it did before that mapping existed.
 run_wh = ecs_state(run_wh_task_arn,
     f"States.Array('{wh_cmd}', '--run-id', $$.Execution.Name)",
-    next_state="MdmRun")
+    next_state="Mastering")
 if workflow_name == "daily_incremental":
     # Scheduled daily/backstop runs must derive filing candidates from an exact,
     # freshly forced index union. Identity selection remains independently scoped.
@@ -3740,22 +3740,22 @@ if workflow_name == "daily_incremental":
         "'--run-id', $$.Execution.Name)"
     )
 mdm_run = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
+    f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
     next_state="BackfillMdmEntityIds")
 mdm_backfill = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)",
-    next_state="MdmExport")
-# MdmExport precedes MdmSync (data-architecture Issue 3): sync-graph materializes Snowflake
+    next_state="Publish")
+# Publish precedes Publish Relationships (data-architecture Issue 3): sync-graph materializes Snowflake
 # graph tables from the Snowflake MDM mirror, not the runtime MDM database directly — without
 # an export here the mirror can be stale relative to the run/backfill that just completed.
 mdm_export = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'export')",
-    next_state="MdmSync")
+    "States.Array('mdm', 'publish')",
+    next_state="Publish Relationships")
 
 # mdm-ahead-of-silver map, Phase B wiring (ticket 06): backfill-mdm-entity-ids
 # sweeps the Snowflake EDGARTOOLS_SILVER tables for mdm_entity_id IS NULL rows
 # and fills them from MDM's already-resolved MdmSourceRef rows
-# (edgar_warehouse/mdm_entity_backfill.py). Placed right after MdmRun so the
+# (edgar_warehouse/mdm_entity_backfill.py). Placed right after Mastering so the
 # freshest resolution pass is visible, and before MdmBackfill (relationships)/
 # GoldRefresh so a newly backfilled entity_id can still reach this same
 # execution's gold build.
@@ -3781,10 +3781,10 @@ backfill_mdm_entity_ids["Catch"] = [{
     "Next": "MdmBackfill",
 }]
 mdm_sync = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')",
-    next_state="MdmVerify")
+    f"States.Array('mdm', 'publish-relationships', '--limit', '{graph_limit}')",
+    next_state="Reconcile")
 mdm_verify = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'verify-graph')",
+    "States.Array('mdm', 'reconcile')",
     next_state="GoldRefresh")
 mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 # verify-graph is validation-only per docs/data-architecture.md: it reports
@@ -3941,13 +3941,13 @@ if workflow_name != "daily_incremental":
     # sec_fetch_active lease (release-readiness ticket 84): SeedUniverse
     # (fetches company_tickers.json from SEC) and RunWarehouseTask (the
     # actual bootstrap SEC-fetch loop) are the fetch-heavy span; MDM/gold
-    # never call SEC, so the lease releases right before MdmRun.
+    # never call SEC, so the lease releases right before Mastering.
     run_wh["Next"] = "ReleaseSecFetchLease"
     # ticket 86: both states were previously uncaught -- a failure in
     # either wedged sec_fetch_active for the full 16h stale-reclaim window.
     seed_universe["Catch"] = sec_fetch_task_catch()
     run_wh["Catch"] = sec_fetch_task_catch()
-    sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "MdmRun")
+    sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "Mastering")
     definition = {
         "Comment": (
             f"{display}: (0) acquire cross-command sec_fetch_active lease, (0b) seed universe, "
@@ -3959,12 +3959,12 @@ if workflow_name != "daily_incremental":
             **sec_fetch_lease_states,
             "SeedUniverse":     seed_universe,
             "RunWarehouseTask": run_wh,
-            "MdmRun":           mdm_run,
+            "Mastering":           mdm_run,
             "BackfillMdmEntityIds": backfill_mdm_entity_ids,
             "MdmBackfill":      mdm_backfill,
-            "MdmExport":        mdm_export,
-            "MdmSync":          mdm_sync,
-            "MdmVerify":        mdm_verify,
+            "Publish":        mdm_export,
+            "Publish Relationships":          mdm_sync,
+            "Reconcile":        mdm_verify,
             "GoldRefresh":      gold,
         },
     }
@@ -4263,11 +4263,11 @@ else:
     }
 
     # AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
-    # ticket 06 decisions 2/4), inserted between RunWarehouseTask and MdmRun. Identical
+    # ticket 06 decisions 2/4), inserted between RunWarehouseTask and Mastering. Identical
     # shape to write_load_history_definition's own AdvBulkFetch stage (same "keep in
     # sync" duplication convention Stage0CompanyIdentity already established for this
     # file) — see that function's comments for the full rationale. run_wh was built
-    # above with Next="MdmRun" for the shared bootstrap/daily_incremental case; retarget
+    # above with Next="Mastering" for the shared bootstrap/daily_incremental case; retarget
     # it here since this branch only executes for daily_incremental.
     run_wh["Next"] = "DatasetPeriodCheck"
     run_wh["ResultPath"] = None
@@ -4317,7 +4317,7 @@ else:
         "Default": "InvalidForceInput",
     }
 
-    # Next="ReleaseSecFetchLease", not "MdmRun" directly -- these ADV/firm-roster
+    # Next="ReleaseSecFetchLease", not "Mastering" directly -- these ADV/firm-roster
     # fetch stages are still inside the sec_fetch_active fetch-heavy span
     # (release-readiness ticket 84), so a failure here must still release the
     # lease before falling through to MDM, not skip release entirely.
@@ -4390,7 +4390,7 @@ else:
     ingest_firm_roster_sources["ResultPath"] = None
 
     # sec_fetch_active lease (release-readiness ticket 84): acquired right
-    # before RefreshMode dispatch, released right before MdmRun -- spans
+    # before RefreshMode dispatch, released right before Mastering -- spans
     # every state that actually calls SEC/IAPD (identity-window compute,
     # ResolveCompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
     # itself, but sandwiched between two fetch stages], RunWarehouseTask,
@@ -4398,7 +4398,7 @@ else:
     # ReleaseLease above -- that lease prevents overlapping daily_incremental/
     # backstop runs of THIS command; this one prevents concurrent SEC/IAPD
     # traffic ACROSS the 5 different SEC-fetching commands.
-    sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "MdmRun")
+    sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "Mastering")
 
     definition = {
         "Comment": (
@@ -4446,12 +4446,12 @@ else:
             "FetchFirmRoster":         fetch_firm_roster,
             "FetchFirmRosterForced":   fetch_firm_roster_forced,
             "IngestFirmRosterSources": ingest_firm_roster_sources,
-            "MdmRun":           mdm_run,
+            "Mastering":           mdm_run,
             "BackfillMdmEntityIds": backfill_mdm_entity_ids,
             "MdmBackfill":      mdm_backfill,
-            "MdmExport":        mdm_export,
-            "MdmSync":          mdm_sync,
-            "MdmVerify":        mdm_verify,
+            "Publish":        mdm_export,
+            "Publish Relationships":          mdm_sync,
+            "Reconcile":        mdm_verify,
             "GoldRefresh":      gold,
             "ReleaseLease":     release_lease,
             "ReleaseLeaseFailedNonFatal": release_lease_failed_non_fatal,
@@ -4468,8 +4468,8 @@ PY
 write_silver_mdm_gold_definition() {
   local output_file="$1"
   local wh_task_medium_arn="$2"  # warehouse medium (seed-silver-batches, bootstrap-batch)
-  local mdm_task_small_arn="$3"  # mdm small   (mdm verify-graph)
-  local mdm_task_medium_arn="$4" # mdm medium  (mdm run, backfill, sync)
+  local mdm_task_small_arn="$3"  # mdm small   (mdm reconcile)
+  local mdm_task_medium_arn="$4" # mdm medium  (mdm mastering, backfill, sync)
   local wh_task_large_arn="$5"   # warehouse large (gold-refresh)
 
   python3 - "$output_file" "$CLUSTER_ARN" \
@@ -4552,23 +4552,23 @@ batch_map = {
         "States": {"RunBatch": batch},
     },
     "ResultPath": None,
-    "Next": "MdmRun",
+    "Next": "Mastering",
 }
 
 # INVARIANT: No --limit on MDM commands here. silver_mdm_gold is always a full bulk
 # re-run (all companies in silver), not an incremental daily update. A hard limit would
 # silently leave the majority of companies unprocessed in MDM and Neo4j.
 # MDM_RUN_LIMIT (incremental default 100) is intentionally NOT used here.
-mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="MdmExport")
-mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True)
-mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True)
-mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True)
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'mastering', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="Publish")
+mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True)
+mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish-relationships')", is_end=True)
+mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True)
 mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 # verify-graph is validation-only per docs/data-architecture.md: it reports
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
-# MdmExport-before-MdmSync ordering (data-architecture Issue 3) is enforced
+# Publish-before-Publish Relationships ordering (data-architecture Issue 3) is enforced
 # by wire_mdm_tail (state-machine-consolidation wayfinder map, ticket 02) —
 # see infra/scripts/mdm_tail_helper.py.
 mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
@@ -4596,7 +4596,7 @@ definition = {
         "SeedUniverse":     seed_universe,
         "SeedSilverBatches": seed,
         "BatchSilver":  batch_map,
-        "MdmRun":       mdm_run,
+        "Mastering":       mdm_run,
         "MdmBackfill":  mdm_backfill,
         **mdm_tail,
     },
@@ -4615,8 +4615,8 @@ PY
 write_bronze_seed_silver_gold_definition() {
   local output_file="$1"
   local wh_task_medium_arn="$2"  # warehouse medium (seed-bronze-batches, bootstrap-batch)
-  local mdm_task_small_arn="$3"  # mdm small   (mdm verify-graph)
-  local mdm_task_medium_arn="$4" # mdm medium  (mdm run, backfill, sync)
+  local mdm_task_small_arn="$3"  # mdm small   (mdm reconcile)
+  local mdm_task_medium_arn="$4" # mdm medium  (mdm mastering, backfill, sync)
   local wh_task_large_arn="$5"   # warehouse large (gold-refresh)
 
   python3 - "$output_file" "$CLUSTER_ARN" \
@@ -4865,7 +4865,7 @@ batch_map = {
         "States": {"RunBatch": batch},
     },
     "ResultPath": None,
-    "Next": "MdmRun",
+    "Next": "Mastering",
 }
 
 strict_batch = ecs_state(wh_medium_arn,
@@ -4902,7 +4902,7 @@ strict_batch_map = {
     "ResultPath": None,
     # Ticket 21: MDM must run before reconcile so IS_INSIDER versions exist for
     # verify-insider-coverage, which reconcile binds into PASS evidence.
-    "Next": "StrictMdmRun",
+    "Next": "StrictMastering",
 }
 
 # INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
@@ -4911,7 +4911,7 @@ strict_batch_map = {
 # --run-id / --resume-ledger-run-id (pipeline-resumability ticket 02):
 # resume_from_run_id is guaranteed present by this point
 # (resume_from_run_id_presence_check/_default above run before BatchSilver,
-# and MdmRun inherits $ unmodified -- BatchSilver's Map has ResultPath:
+# and Mastering inherits $ unmodified -- BatchSilver's Map has ResultPath:
 # None). --run-id is this execution's own identity (mirrors bootstrap-
 # batch's identical two-flag shape): when resume_from_run_id is empty
 # (fresh run), run_companies uses --run-id as the snapshot/outcome
@@ -4919,16 +4919,16 @@ strict_batch_map = {
 # unused for this purpose. Only run_companies (company resolution) honors
 # either flag today; other --entity-type all sub-steps ignore them until
 # mdm-run-throughput's own concurrency work makes them resumable too.
-mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name, '--resume-ledger-run-id', $.resume_from_run_id)", next_state="MdmBackfill")
-mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="MdmExport")
-mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True)
-mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True)
-mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True)
+mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'mastering', '--entity-type', 'all', '--run-id', $$.Execution.Name, '--resume-ledger-run-id', $.resume_from_run_id)", next_state="MdmBackfill")
+mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="Publish")
+mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True)
+mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish-relationships')", is_end=True)
+mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True)
 mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 # verify-graph is validation-only per docs/data-architecture.md: it reports
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
-# MdmExport-before-MdmSync ordering (data-architecture Issue 3) is enforced
+# Publish-before-Publish Relationships ordering (data-architecture Issue 3) is enforced
 # by wire_mdm_tail (state-machine-consolidation wayfinder map, ticket 02) —
 # see infra/scripts/mdm_tail_helper.py. The separate "strict" release-mode
 # branch below (Strict*) is untouched -- it has no sibling machine sharing
@@ -4936,7 +4936,7 @@ gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id
 mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
 
 # Ticket 21 chain (release_mode):
-#   StrictBatchSilver -> StrictMdmRun -> Backfill -> Idempotency
+#   StrictBatchSilver -> StrictMastering -> Backfill -> Idempotency
 #   -> StrictInsiderCoverage -> Reconcile (binds insider_coverage into PASS evidence)
 #   -> Export -> Sync -> VerifyCandidate -> Activate -> Verify -> Gold
 #
@@ -4948,7 +4948,7 @@ insider_coverage_uri = (
     + warehouse_bucket_name
     + "/warehouse/release-evidence/{}/insider_coverage.json', $$.Execution.Name)"
 )
-strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'run', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="StrictMdmBackfill")
+strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'mastering', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="StrictMdmBackfill")
 strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'backfill-relationships', '--run-id', $$.Execution.Name)", next_state="StrictMdmIdempotency")
 strict_mdm_idempotency = ecs_state(
     mdm_medium_arn,
@@ -4972,24 +4972,24 @@ strict_reconcile = ecs_state(
     "'--attestations-json', States.JsonToString($.attestations), "
     "'--execution-arn', $$.Execution.Id, "
     "'--insider-coverage', " + insider_coverage_uri + ")",
-    next_state="StrictMdmExport",
+    next_state="StrictPublish",
     retry_secs=60,
 )
-strict_mdm_export = ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", next_state="StrictMdmSync")
+strict_mdm_export = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", next_state="Strict Publish Relationships")
 # sync-graph publishes into an execution-scoped generation-id (not a fresh
-# random UUID each call, its no-flag default) so StrictMdmSyncIdempotency's
+# random UUID each call, its no-flag default) so Strict Publish Relationships Idempotency's
 # second sync-graph call targets the SAME generation (a real idempotency
-# check, not a second unrelated one), and so StrictMdmVerifyCandidate/
+# check, not a second unrelated one), and so Strict Reconcile Candidate/
 # StrictMdmActivate below can reference it deterministically. Before this,
 # nothing in any pipeline ever activated a generation, so the graph a
-# strict run just synced could never become the one StrictMdmVerify checks
+# strict run just synced could never become the one StrictReconcile checks
 # (RSYNC-02 bootstrap gap).
 strict_mdm_sync = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'sync-graph', '--generation-id', $$.Execution.Name)",
-    next_state="StrictMdmSyncIdempotency")
+    "States.Array('mdm', 'publish-relationships', '--generation-id', $$.Execution.Name)",
+    next_state="Strict Publish Relationships Idempotency")
 strict_mdm_sync_idempotency = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'sync-graph', '--generation-id', $$.Execution.Name)",
-    next_state="StrictMdmVerifyCandidate")
+    "States.Array('mdm', 'publish-relationships', '--generation-id', $$.Execution.Name)",
+    next_state="Strict Reconcile Candidate")
 # Verifies this run's candidate generation specifically (not the
 # currently-active one) -- on pass this promotes it 'building' -> 'verified',
 # the only status StrictMdmActivate's graph-activate accepts (07-05 RSYNC-02).
@@ -5002,15 +5002,15 @@ strict_mdm_sync_idempotency = ecs_state(mdm_medium_arn,
 # "Loading from an empty nodes table" before first activation, and passes only
 # after StrictMdmActivate flips the pointer). Running them here would test the
 # OLD active graph, not this candidate, and would deadlock a first-ever
-# activation forever. Capability is still checked for real by StrictMdmVerify
+# activation forever. Capability is still checked for real by StrictReconcile
 # below, once this candidate is actually the active generation.
 strict_mdm_verify_candidate = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'verify-graph', '--generation-id', $$.Execution.Name, '--skip-native-app')",
+    "States.Array('mdm', 'reconcile', '--generation-id', $$.Execution.Name, '--skip-native-app')",
     next_state="StrictMdmActivate")
 strict_mdm_activate = ecs_state(mdm_small_arn,
     "States.Array('mdm', 'graph-activate', '--generation-id', $$.Execution.Name)",
-    next_state="StrictMdmVerify")
-strict_mdm_verify = ecs_state(mdm_small_arn, "States.Array('mdm', 'verify-graph')", next_state="StrictGoldRefresh")
+    next_state="StrictReconcile")
+strict_mdm_verify = ecs_state(mdm_small_arn, "States.Array('mdm', 'reconcile')", next_state="StrictGoldRefresh")
 strict_gold = ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
 definition = {
@@ -5025,7 +5025,7 @@ definition = {
         "pipeline-resumability ticket 02: pass {\"resume_from_run_id\": \"<prior "
         "execution name>\"} to resume a stopped/failed run instead of a full "
         "restart -- BatchSilver skips already-done batches (default_batch_done "
-        "markers) and MdmRun's company step skips already-resolved CIKs "
+        "markers) and Mastering's company step skips already-resolved CIKs "
         "(company_done markers), both keyed under the original run's namespace. "
         "Fails closed if the pointed-at run has no frozen manifest/snapshot."
     ),
@@ -5035,17 +5035,17 @@ definition = {
         "StrictManifestCheck": strict_manifest_check,
         "StrictInputMissing": strict_input_missing,
         "StrictBatchSilver": strict_batch_map,
-        "StrictMdmRun": strict_mdm_run,
+        "StrictMastering": strict_mdm_run,
         "StrictMdmBackfill": strict_mdm_backfill,
         "StrictMdmIdempotency": strict_mdm_idempotency,
         "StrictInsiderCoverage": strict_insider_coverage,
         "ReconcileRelationshipRelease": strict_reconcile,
-        "StrictMdmExport": strict_mdm_export,
-        "StrictMdmSync": strict_mdm_sync,
-        "StrictMdmSyncIdempotency": strict_mdm_sync_idempotency,
-        "StrictMdmVerifyCandidate": strict_mdm_verify_candidate,
+        "StrictPublish": strict_mdm_export,
+        "Strict Publish Relationships": strict_mdm_sync,
+        "Strict Publish Relationships Idempotency": strict_mdm_sync_idempotency,
+        "Strict Reconcile Candidate": strict_mdm_verify_candidate,
         "StrictMdmActivate": strict_mdm_activate,
-        "StrictMdmVerify": strict_mdm_verify,
+        "StrictReconcile": strict_mdm_verify,
         "StrictGoldRefresh": strict_gold,
         "ResumeFromRunIdPresenceCheck": resume_from_run_id_presence_check,
         "ResumeFromRunIdDefault": resume_from_run_id_default,
@@ -5055,7 +5055,7 @@ definition = {
         "BatchSizeDefault": batch_size_default,
         "SeedFromBronze": seed_from_bronze,
         "BatchSilver":  batch_map,
-        "MdmRun":       mdm_run,
+        "Mastering":       mdm_run,
         "MdmBackfill":  mdm_backfill,
         **mdm_tail,
     },
@@ -5409,19 +5409,19 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
     return s
 
 tail = wire_mdm_tail(
-    ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True),
-    ecs_state(mdm_medium_arn, f"States.Array('mdm', 'sync-graph', '--limit', '{graph_limit}')", is_end=True),
-    ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True),
+    ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True),
+    ecs_state(mdm_medium_arn, f"States.Array('mdm', 'publish-relationships', '--limit', '{graph_limit}')", is_end=True),
+    ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True),
     gold_state=ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
 )
 
 definition = {
     "Comment": "MDM entity resolution + Neo4j sync + gold-refresh. No silver batch step — run after bronze+silver are complete.",
-    "StartAt": "MdmRun",
+    "StartAt": "Mastering",
     "States": {
-        "MdmRun":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'run', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)", next_state="MdmBackfill"),
-        "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)", next_state="MdmExport"),
-        # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
+        "Mastering":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)", next_state="MdmBackfill"),
+        "MdmBackfill": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'backfill-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)", next_state="Publish"),
+        # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is
         # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
         # map, ticket 02) — see infra/scripts/mdm_tail_helper.py.
         **tail,
@@ -5438,7 +5438,7 @@ PY
 
   # ownership_mdm_gold: Form 3/4/5 already in silver → persons + IS_INSIDER only
   # (Ticket 21). Companies are NOT re-resolved — they do not change on an
-  # insider load. No full mdm run --entity-type all.
+  # insider load. No full mdm mastering --entity-type all.
   ownership_mdm_gold_file="$(json_file sfn-ownership-mdm-gold)"
   python3 - "$ownership_mdm_gold_file" "$CLUSTER_ARN" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
@@ -5480,9 +5480,9 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
     return s
 
 tail = wire_mdm_tail(
-    ecs_state(mdm_medium_arn, "States.Array('mdm', 'export')", is_end=True),
-    ecs_state(mdm_medium_arn, "States.Array('mdm', 'sync-graph')", is_end=True),
-    ecs_state(mdm_small_arn,  "States.Array('mdm', 'verify-graph')", is_end=True),
+    ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True),
+    ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish-relationships')", is_end=True),
+    ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True),
     gold_state=ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
 )
 
@@ -5499,15 +5499,15 @@ definition = {
         # Companies are assumed already in MDM; only Form 3/4/5 persons.
         "MdmPersons": ecs_state(
             mdm_medium_arn,
-            "States.Array('mdm', 'run', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
+            "States.Array('mdm', 'mastering', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
             next_state="MdmIsInsider",
         ),
         "MdmIsInsider": ecs_state(
             mdm_medium_arn,
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
-            next_state="MdmExport",
+            next_state="Publish",
         ),
-        # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
+        # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is
         # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
         # map, ticket 02) — see infra/scripts/mdm_tail_helper.py.
         **tail,
@@ -5582,12 +5582,12 @@ definition = {
     "States": {
         "MdmSecurities": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'run', '--entity-type', 'security', '--run-id', $$.Execution.Name)",
+            "States.Array('mdm', 'mastering', '--entity-type', 'security', '--run-id', $$.Execution.Name)",
             next_state="MdmPersons",
         ),
         "MdmPersons": ecs_state(
             mdm_large_arn,
-            "States.Array('mdm', 'run', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
+            "States.Array('mdm', 'mastering', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
             next_state="MdmIsInsider",
         ),
         "MdmIsInsider": ecs_state(
@@ -5609,15 +5609,15 @@ definition = {
         "MdmInstitutionalHolds": ecs_state(
             mdm_large_arn,
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'INSTITUTIONAL_HOLDS', '--target-per-type', '50000', '--run-id', $$.Execution.Name)",
-            next_state="MdmExport",
+            next_state="Publish",
             retry_secs=180,
         ),
-        # MdmExport-before-MdmSync ordering (data-architecture Issue 3) is
+        # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is
         # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
         # map, ticket 02) — see infra/scripts/mdm_tail_helper.py. No
         # GoldRefresh here: this machine does not claim Ticket 20 GO.
         **wire_mdm_tail(
-            ecs_state(mdm_large_arn, "States.Array('mdm', 'export')", is_end=True),
+            ecs_state(mdm_large_arn, "States.Array('mdm', 'publish')", is_end=True),
             # Full-graph materialization (not residual types only). A type-filtered
             # sync produced incomplete candidate gen 69e139b0… (company/person/security
             # + HOLDS only) while verify without --generation-id checked the *active*
@@ -5628,7 +5628,7 @@ definition = {
                 mdm_large_arn,
                 (
                     "States.Array("
-                    "'mdm', 'sync-graph', "
+                    "'mdm', 'publish-relationships', "
                     "'--generation-id', $$.Execution.Name"
                     ")"
                 ),
@@ -5639,7 +5639,7 @@ definition = {
                 mdm_small_arn,
                 (
                     "States.Array("
-                    "'mdm', 'verify-graph', '--skip-native-app', "
+                    "'mdm', 'reconcile', '--skip-native-app', "
                     "'--generation-id', $$.Execution.Name"
                     ")"
                 ),

@@ -34,7 +34,7 @@ Two Snowflake-specific behaviors this module exists to paper over:
    ``connect()`` below flips the global to ``"qmark"`` for the single
    ``connect()`` call and restores it immediately after, so the mutation
    window is a few milliseconds around one call rather than a persistent
-   process-wide change that could affect ``mdm export``/``sync-graph``/
+   process-wide change that could affect ``mdm publish``/``sync-graph``/
    ``verify-graph``'s own pyformat-style Snowflake usage if they ever share
    a process with this reader.
 """

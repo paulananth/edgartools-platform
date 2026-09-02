@@ -107,7 +107,7 @@ def test_manual_mutation_binds_explicit_run_identity(db_session) -> None:
 def test_all_evidence_producing_pipeline_commands_accept_run_id() -> None:
     parser = build_parser()
     for command in (
-        "run",
+        "mastering",
         "derive-relationships",
         "backfill-relationships",
         "load-relationships",

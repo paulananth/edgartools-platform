@@ -8,7 +8,7 @@ edgar_warehouse.mdm.database.MdmSourceRef (populated by the existing
 resolvers via BaseResolver._register_source) rather than triggering
 resolution itself, so it never duplicates run_companies/run_persons/etc.'s
 own work. A NULL row with no MdmSourceRef match yet (not resolved by the
-most recent MdmRun) is left NULL for a later sweep to pick up.
+most recent Mastering) is left NULL for a later sweep to pick up.
 
 Ticket 06 (.scratch/mdm-ahead-of-silver/issues/06-narrow-backfill-storage-target.md):
 Snowflake only, full-row re-emission -- DuckDB is no longer read or written

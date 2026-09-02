@@ -1,5 +1,5 @@
 """Tests for the skip-if-unchanged fast path (single-path-per-layer map,
-Ticket 03): a fresh full ``mdm run`` previously re-resolved every company
+Ticket 03): a fresh full ``mdm mastering`` previously re-resolved every company
 from scratch, including rows already correctly resolved and unchanged
 since the last run -- idempotent (CIK-exact rematch reuses the entity_id)
 but wasted work. ``CompanyResolver.resolve_one`` now compares a content

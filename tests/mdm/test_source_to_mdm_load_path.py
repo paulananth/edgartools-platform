@@ -626,7 +626,7 @@ class TestS3BackedSilverSourceUsesObjectStorageReadBytes:
         """_duckdb_silver_reader() must call object_storage.read_bytes(s3_uri)
         for s3:// URIs -- still exercised (DuckDB Retirement Cutover Ticket
         05) because verify-silver-parity/verify-resolver-input-parity need
-        this DuckDB path; mdm run itself no longer reaches it (see
+        this DuckDB path; mdm mastering itself no longer reaches it (see
         test_s3_env_vars_do_not_affect_handle_run below)."""
         import edgar_warehouse.infrastructure.object_storage as obj_store
         import edgar_warehouse.mdm.cli as mdm_cli
@@ -656,7 +656,7 @@ class TestS3BackedSilverSourceUsesObjectStorageReadBytes:
         )
 
     def test_s3_env_vars_do_not_affect_handle_run(self, monkeypatch, tmp_path):
-        """DuckDB Retirement Cutover Ticket 05: mdm run's silver preflight
+        """DuckDB Retirement Cutover Ticket 05: mdm mastering's silver preflight
         must run before _session() is opened (unchanged intent from the
         original D-11/PIPE-03 decision this test used to encode) -- but the
         silver source is now Snowflake unconditionally. A legacy

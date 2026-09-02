@@ -114,7 +114,7 @@ class SnowflakeConnectionSettings:
         except ImportError as exc:  # pragma: no cover - depends on optional extra
             raise RuntimeError(
                 "snowflake-connector-python is not installed. Run with the snowflake extra, "
-                "for example: uv run --extra snowflake edgar-warehouse mdm export ..."
+                "for example: uv run --extra snowflake edgar-warehouse mdm publish ..."
             ) from exc
 
         return snowflake.connector.connect(**self.connection_kwargs())
@@ -455,7 +455,7 @@ class MDMExporter:
         disclosed subsidiaries) historically created entities without a
         change-log row, so edges could export while person/security nodes
         never reached the Snowflake MDM mirror. That produces
-        ``missing_graph_edge_endpoints`` at StrictMdmVerifyCandidate even
+        ``missing_graph_edge_endpoints`` at Strict Reconcile Candidate even
         when identity/property hashes match (Ticket 20).
 
         Idempotent full-set seal: safe to run after pending drains, including

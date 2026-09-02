@@ -2,7 +2,7 @@
 
 state-machine-consolidation wayfinder map, ticket 02: residual_holds_graph
 is the one MDM Pipeline Machine with no GoldRefresh at all (it does not
-claim Ticket 20 GO) and its own generation-scoped MdmSync/MdmVerify flags
+claim Ticket 20 GO) and its own generation-scoped Publish Relationships/Reconcile flags
 (--generation-id, --skip-native-app). This is the
 highest-risk of the three inline (non-function) MDM Pipeline Machine
 blocks for wire_mdm_tail's gold_state=None path.
@@ -76,23 +76,23 @@ def definition() -> dict:
 
 def test_tail_ordering_with_no_gold_refresh(definition: dict) -> None:
     s = definition["States"]
-    assert s["MdmInstitutionalHolds"]["Next"] == "MdmExport"
-    assert s["MdmExport"]["Next"] == "MdmSync"
-    assert s["MdmSync"]["Next"] == "MdmVerify"
-    assert s["MdmVerify"]["End"] is True
-    assert "Next" not in s["MdmVerify"]
+    assert s["MdmInstitutionalHolds"]["Next"] == "Publish"
+    assert s["Publish"]["Next"] == "Publish Relationships"
+    assert s["Publish Relationships"]["Next"] == "Reconcile"
+    assert s["Reconcile"]["End"] is True
+    assert "Next" not in s["Reconcile"]
     assert "GoldRefresh" not in s
 
 
 def test_sync_carries_generation_id_without_a_completeness_cap(definition: dict) -> None:
-    command = definition["States"]["MdmSync"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    command = definition["States"]["Publish Relationships"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "--generation-id" in command
     assert "$$.Execution.Name" in command
     assert "--limit-per-type" not in command
 
 
 def test_verify_carries_skip_native_app_and_generation_id(definition: dict) -> None:
-    command = definition["States"]["MdmVerify"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    command = definition["States"]["Reconcile"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "--skip-native-app" in command
     assert "--generation-id" in command
 
@@ -100,5 +100,5 @@ def test_verify_carries_skip_native_app_and_generation_id(definition: dict) -> N
 def test_export_uses_mdm_large_task_definition(definition: dict) -> None:
     # OOM safety: heavy stages use mdm-large, not mdm-medium (prod
     # MdmSecurities OOM on 2 GiB, see the generator's own comment).
-    assert definition["States"]["MdmExport"]["Parameters"]["TaskDefinition"] == "arn:mdm-large"
-    assert definition["States"]["MdmVerify"]["Parameters"]["TaskDefinition"] == "arn:mdm-small"
+    assert definition["States"]["Publish"]["Parameters"]["TaskDefinition"] == "arn:mdm-large"
+    assert definition["States"]["Reconcile"]["Parameters"]["TaskDefinition"] == "arn:mdm-small"

@@ -194,8 +194,8 @@ STARTED=$(date +%s)
 # ── step 0: entity resolve for residual holds (no company re-load) ────────────
 if [[ "$WITH_ENTITIES" == "true" ]]; then
     hr "Step 0 — Entity resolve (security + person only; no companies)"
-    run "mdm run security" uv run edgar-warehouse mdm run --entity-type security
-    run "mdm run person" uv run edgar-warehouse mdm run --entity-type person
+    run "mdm mastering security" uv run edgar-warehouse mdm mastering --entity-type security
+    run "mdm mastering person" uv run edgar-warehouse mdm mastering --entity-type person
 else
     hr "Step 0 — Entity resolve  [SKIPPED — use --with-entities / --residual-holds]"
 fi
@@ -228,7 +228,7 @@ fi
 # ── step 3: Snowflake graph sync ──────────────────────────────────────────────
 if [[ "$SKIP_GRAPH_SYNC" == "false" ]]; then
     hr "Step 3 — Snowflake graph sync"
-    SYNC_ARGS=(uv run edgar-warehouse mdm sync-graph --limit-per-type "$TARGET_PER_TYPE")
+    SYNC_ARGS=(uv run edgar-warehouse mdm publish-relationships --limit-per-type "$TARGET_PER_TYPE")
     # If specific types were requested, scope the sync to match
     if [[ ${#TYPES[@]} -gt 0 ]]; then
         for t in "${TYPES[@]}"; do

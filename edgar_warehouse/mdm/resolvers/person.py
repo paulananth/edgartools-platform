@@ -74,7 +74,7 @@ class PersonResolver(BaseResolver):
         source_id = f"{owner_row['accession_number']}:{owner_row.get('owner_index')}"
 
         # mdm-resolver-skip-unchanged map, Ticket 02: run_persons() has no
-        # resumable ledger (unlike run_companies()), so a restarted `mdm run`
+        # resumable ledger (unlike run_companies()), so a restarted `mdm mastering`
         # re-processes every ownership row from scratch. Mirrors
         # SecurityResolver.resolve_one's fix for the identical shape:
         # mdm_entity_attribute_stage is genuinely append-only with no

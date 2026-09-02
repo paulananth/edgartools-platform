@@ -1,12 +1,12 @@
 -- Idempotent DDL for the 5 MDM golden-record export targets that
 -- edgar_warehouse/mdm/export.py::MDMExporter.export_pending() MERGEs into.
 --
--- Root cause (06-03, 2026-07-10): `load_history`'s MdmExport step failed with
+-- Root cause (06-03, 2026-07-10): `load_history`'s Publish step failed with
 -- "Object 'EDGARTOOLS_DEV.EDGARTOOLS_GOLD.MDM_COMPANY' does not exist or not
 -- authorized" because export.py's SnowflakeConnectorWriter.upsert() assumes
 -- its 5 target tables (DOMAIN_TO_TABLE in export.py) already exist -- it only
 -- ever CREATEs a TEMPORARY staging table, never the target. There was no DDL
--- anywhere in this repo provisioning them; MdmExport had zero prior dev
+-- anywhere in this repo provisioning them; Publish had zero prior dev
 -- executions before this run, so the gap was never exercised.
 --
 -- Column shapes are derived from the SQLAlchemy models in

@@ -395,7 +395,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
             "MDM database unavailable. Check `MDM_DATABASE_URL`, confirm the database is reachable, and restart the dashboard.",
             "Snowflake graph metrics unavailable. MDM overview remains available.",
             "Snowflake graph permission denied. Confirm the configured Snowflake role can run read-only graph diagnostics.",
-            "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph` for the acceptance gate and review the remediation below.",
+            "Snowflake Native App check failed. Run `edgar-warehouse mdm reconcile` for the acceptance gate and review the remediation below.",
             "No rows match the current filters.",
             "Adjust the selected type or row limit, then review the table again.",
         ]
@@ -475,7 +475,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         module, fake_streamlit = _load_streamlit_app_with_fake_streamlit()
         failing_checks = [
             ("compute_pool", "Activate the Native App compute pool."),
-            ("GRAPH_INFO", "Run `edgar-warehouse mdm verify-graph`."),
+            ("GRAPH_INFO", "Run `edgar-warehouse mdm reconcile`."),
             ("BFS", "Review `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."),
             ("WCC", "Review `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`."),
         ]
@@ -510,7 +510,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "Snowflake Native App check failed. Run `edgar-warehouse mdm verify-graph`"
+                "Snowflake Native App check failed. Run `edgar-warehouse mdm reconcile`"
                 in message
                 for message in fake_streamlit.messages
             )
@@ -589,7 +589,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
 
         allowed_commands = {
             "edgar-warehouse mdm counts",
-            "edgar-warehouse mdm verify-graph",
+            "edgar-warehouse mdm reconcile",
         }
         mdm_commands = set(
             re.findall(r"^edgar-warehouse mdm [^\n`]+$", text, flags=re.MULTILINE)
@@ -639,7 +639,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         self.assertIn("--native-app-compute-pool", text)
         self.assertIn("--skip-preflight", text)
         self.assertIn("run_hosted_graph_preflight", text)
-        self.assertIn("uv run --extra snowflake edgar-warehouse mdm verify-graph", text)
+        self.assertIn("uv run --extra snowflake edgar-warehouse mdm reconcile", text)
         self.assertIn("SNOWFLAKE_CONNECTION=${SNOW_CONNECTION_NAME}", text)
         self.assertIn("DBT_SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE_NAME}", text)
         self.assertIn("MDM_SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE_NAME}", text)

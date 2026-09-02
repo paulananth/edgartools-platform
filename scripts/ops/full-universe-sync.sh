@@ -180,7 +180,7 @@ STARTED=$(date +%s)
 # ── step 1: entity resolution ─────────────────────────────────────────────────
 if [[ "$SKIP_ENTITIES" == "false" ]]; then
     hr "Step 1 — Entity resolution"
-    ENTITY_ARGS=(edgar-warehouse mdm run --entity-type all)
+    ENTITY_ARGS=(edgar-warehouse mdm mastering --entity-type all)
     [[ -n "$LIMIT" ]] && ENTITY_ARGS+=(--limit "$LIMIT")
     run "entity resolution" uv run "${ENTITY_ARGS[@]}"
 else
@@ -220,7 +220,7 @@ run "derive INSTITUTIONAL_HOLDS" uv run edgar-warehouse mdm derive-relationships
 # ── step 4: Snowflake graph sync ──────────────────────────────────────────────
 if [[ "$SKIP_GRAPH_SYNC" == "false" ]]; then
     hr "Step 4 — Snowflake graph sync"
-    run "sync-graph" uv run edgar-warehouse mdm sync-graph \
+    run "sync-graph" uv run edgar-warehouse mdm publish-relationships \
         --limit-per-type "$TARGET_PER_TYPE"
 else
     hr "Step 4 — Snowflake graph sync  [SKIPPED]"
@@ -229,7 +229,7 @@ fi
 # ── step 5: verify ────────────────────────────────────────────────────────────
 if [[ "$SKIP_GRAPH_SYNC" == "false" ]]; then
     hr "Step 5 — Verify graph"
-    run "verify-graph" uv run edgar-warehouse mdm verify-graph
+    run "verify-graph" uv run edgar-warehouse mdm reconcile
 fi
 
 # ── step 6: counts snapshot ───────────────────────────────────────────────────

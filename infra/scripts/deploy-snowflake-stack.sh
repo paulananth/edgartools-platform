@@ -108,7 +108,7 @@ TMP_DIR="${REPO_ROOT}/.tmp"
 # (including CI's own smoke-test.yml) actually produces, so that lookup
 # always silently resolved empty against a real operator setup. The shared
 # resolver reads ~/.snowflake/connections.toml, the layout SnowCLI actually
-# uses, and is the same chain `mdm export`/`mdm sync-graph` already trust.
+# uses, and is the same chain `mdm publish`/`mdm publish-relationships` already trust.
 load_password_from_snow_config() {
   if [[ -n "${TF_VAR_snowflake_password:-}" ]]; then
     return 0

@@ -172,7 +172,7 @@ def bug1_issued_by(env: str, region: str) -> None:
     print("         Fix: re-run backfill-issued-by.py with --limit <higher> or --limit 0")
     print("  Why 3b (missing issuer in MDM): issuer CIK was never resolved as an mdm_company row.")
     print("         Evidence to check: mdm_security.issuer_entity_id IS NULL for these titles.")
-    print("         Fix: run 'mdm run --entity-type all' then backfill-relationships again.")
+    print("         Fix: run 'mdm mastering --entity-type all' then backfill-relationships again.")
     print("  Next step: run check-issued-by-coverage.py --skip-silver to distinguish 3a vs 3b.")
 
 

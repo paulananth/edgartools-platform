@@ -60,7 +60,7 @@ class SecurityResolver(BaseResolver):
 
         # 2026-08-21 throughput investigation: run_securities() has no
         # resumable ledger (unlike run_companies(), ticket 7ffda2d7), so a
-        # restarted `mdm run` re-processes every ownership-transaction row
+        # restarted `mdm mastering` re-processes every ownership-transaction row
         # from scratch. Without this check, every re-run of an unchanged
         # row called _stage_attrs() again, and stage_candidate() always
         # INSERTs a fresh row with no dedup -- mdm_entity_attribute_stage

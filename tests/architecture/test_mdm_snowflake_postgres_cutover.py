@@ -112,7 +112,7 @@ def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -
 
 
 def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
-    """pipeline-resumability ticket 02: automatic resume for BatchSilver + MdmRun."""
+    """pipeline-resumability ticket 02: automatic resume for BatchSilver + Mastering."""
     text = _read(DEPLOY_SCRIPT)
 
     assert '"Default": "ResumeFromRunIdPresenceCheck"' in text
@@ -127,7 +127,7 @@ def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
     assert "compute_remaining_batches.pop(\"Retry\", None)" in text
     assert '"resume_from_run_id.$": "$.resume_from_run_id"' in text
     assert (
-        "States.Array('mdm', 'run', '--entity-type', 'all', "
+        "States.Array('mdm', 'mastering', '--entity-type', 'all', "
         "'--run-id', $$.Execution.Name, "
         "'--resume-ledger-run-id', $.resume_from_run_id)"
     ) in text
@@ -145,7 +145,7 @@ def test_bronze_seed_exposes_fail_closed_ticket20_release_path() -> None:
     assert "'verify-insider-coverage'" in text
     assert "'--attestations-json'" in text
     assert "States.JsonToString($.attestations)" in text
-    assert '"StrictMdmVerify": strict_mdm_verify' in text
+    assert '"StrictReconcile": strict_mdm_verify' in text
     assert '"StrictInsiderCoverage": strict_insider_coverage' in text
     assert 'strict_mdm_verify["Catch"]' not in text
 

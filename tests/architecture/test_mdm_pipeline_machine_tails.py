@@ -4,7 +4,7 @@ state-machine-consolidation wayfinder map, ticket 02: after the "one shared
 tail" premise turned out wrong (6 genuinely distinct tail shapes across
 mdm_gold/ownership_mdm_gold/silver_mdm_gold/bronze_seed_silver_gold/
 residual_holds_graph -- see the ticket's addendum), the revised scope wires
-each machine's own MdmExport/MdmSync/MdmVerify(/GoldRefresh) states through
+each machine's own Publish/Publish Relationships/Reconcile(/GoldRefresh) states through
 the shared wire_mdm_tail() sequencing skeleton (infra/scripts/
 mdm_tail_helper.py) instead of hand-typed Next pointers, while every flag/
 Catch/retry-count difference stays exactly as it was.
@@ -94,10 +94,10 @@ def bronze_seed_silver_gold(tmp_root: Path) -> dict:
 
 def test_silver_mdm_gold_tail_ordering(silver_mdm_gold: dict) -> None:
     s = silver_mdm_gold["States"]
-    assert s["MdmBackfill"]["Next"] == "MdmExport"
-    assert s["MdmExport"]["Next"] == "MdmSync"
-    assert s["MdmSync"]["Next"] == "MdmVerify"
-    assert s["MdmVerify"]["Next"] == "GoldRefresh"
+    assert s["MdmBackfill"]["Next"] == "Publish"
+    assert s["Publish"]["Next"] == "Publish Relationships"
+    assert s["Publish Relationships"]["Next"] == "Reconcile"
+    assert s["Reconcile"]["Next"] == "GoldRefresh"
     assert s["GoldRefresh"]["End"] is True
 
 
@@ -105,7 +105,7 @@ def test_silver_mdm_gold_verify_catch_fallthrough_preserved(silver_mdm_gold: dic
     # verify-graph must never block gold-refresh (docs/data-architecture.md)
     # -- this is exactly the kind of caller-owned behavior wire_mdm_tail is
     # deliberately blind to and must not strip.
-    verify = silver_mdm_gold["States"]["MdmVerify"]
+    verify = silver_mdm_gold["States"]["Reconcile"]
     assert verify.get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 
 
@@ -114,19 +114,19 @@ def test_silver_mdm_gold_no_limit_flag_on_mdm_commands(silver_mdm_gold: dict) ->
     # never carry MDM_RUN_LIMIT/MDM_GRAPH_LIMIT, even though those env vars
     # were set non-zero in this test's driver.
     s = silver_mdm_gold["States"]
-    for state_name in ("MdmRun", "MdmBackfill", "MdmSync"):
+    for state_name in ("Mastering", "MdmBackfill", "Publish Relationships"):
         command = s[state_name]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
         assert "--limit" not in command, f"{state_name} must not carry --limit: {command}"
 
 
 def test_bronze_seed_silver_gold_default_tail_ordering(bronze_seed_silver_gold: dict) -> None:
     s = bronze_seed_silver_gold["States"]
-    assert s["MdmBackfill"]["Next"] == "MdmExport"
-    assert s["MdmExport"]["Next"] == "MdmSync"
-    assert s["MdmSync"]["Next"] == "MdmVerify"
-    assert s["MdmVerify"]["Next"] == "GoldRefresh"
+    assert s["MdmBackfill"]["Next"] == "Publish"
+    assert s["Publish"]["Next"] == "Publish Relationships"
+    assert s["Publish Relationships"]["Next"] == "Reconcile"
+    assert s["Reconcile"]["Next"] == "GoldRefresh"
     assert s["GoldRefresh"]["End"] is True
-    assert s["MdmVerify"].get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
+    assert s["Reconcile"].get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
 
 
 def test_bronze_seed_silver_gold_strict_branch_untouched(bronze_seed_silver_gold: dict) -> None:
@@ -138,16 +138,16 @@ def test_bronze_seed_silver_gold_strict_branch_untouched(bronze_seed_silver_gold
     # since it has no sibling).
     s = bronze_seed_silver_gold["States"]
     for name in (
-        "StrictMdmExport", "StrictMdmSync", "StrictMdmSyncIdempotency",
-        "StrictMdmVerifyCandidate", "StrictMdmVerify", "StrictGoldRefresh",
+        "StrictPublish", "Strict Publish Relationships", "Strict Publish Relationships Idempotency",
+        "Strict Reconcile Candidate", "StrictReconcile", "StrictGoldRefresh",
     ):
         assert name in s, f"missing strict-mode state: {name}"
-    assert s["StrictMdmExport"]["Next"] == "StrictMdmSync"
-    assert s["StrictMdmVerify"]["Next"] == "StrictGoldRefresh"
+    assert s["StrictPublish"]["Next"] == "Strict Publish Relationships"
+    assert s["StrictReconcile"]["Next"] == "StrictGoldRefresh"
     assert s["StrictGoldRefresh"]["End"] is True
 
 
 def test_no_shared_state_names_between_default_and_strict_paths(bronze_seed_silver_gold: dict) -> None:
     s = bronze_seed_silver_gold["States"]
-    assert "MdmExport" in s and "StrictMdmExport" in s
-    assert s["MdmExport"] != s["StrictMdmExport"]
+    assert "Publish" in s and "StrictPublish" in s
+    assert s["Publish"] != s["StrictPublish"]

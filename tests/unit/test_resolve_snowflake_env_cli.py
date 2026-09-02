@@ -3,7 +3,7 @@
 This command exists so infra scripts stop reimplementing Snowflake
 credential resolution -- it's a thin CLI wrapper around
 SnowflakeConnectionSettings.from_env(), the same resolution chain already
-trusted by `mdm export`/`mdm sync-graph`. See
+trusted by `mdm publish`/`mdm publish-relationships`. See
 tests/mdm/test_export.py for the underlying chain's own env-var/JSON-secret
 coverage; these tests cover what's new here: the SnowCLI connections.toml
 file-parsing path (previously untested anywhere), the --connection flag,

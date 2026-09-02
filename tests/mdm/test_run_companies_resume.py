@@ -1,4 +1,4 @@
-"""pipeline-resumability ticket 02: MdmRun's company-step resume support.
+"""pipeline-resumability ticket 02: Mastering's company-step resume support.
 
 run_companies() previously re-resolved all companies from scratch on every
 call, with no way to skip already-done CIKs on a restart. These tests cover
@@ -59,7 +59,7 @@ class TestFreshRunWritesSnapshotAndFlushesOutcomes:
     def test_no_run_id_and_no_resume_ledger_run_id_skips_resume_infra(
         self, tmp_path: Path, monkeypatch
     ) -> None:
-        """Neither flag given (e.g. an ad-hoc local `mdm run company` call) --
+        """Neither flag given (e.g. an ad-hoc local `mdm mastering company` call) --
         behaves exactly like before this ticket, no snapshot/markers written."""
         monkeypatch.setenv("WAREHOUSE_BRONZE_ROOT", str(tmp_path))
         session = _seeded_sqlite_session(static_pool=True)

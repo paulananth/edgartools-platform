@@ -289,7 +289,7 @@ class MDMPipeline:
         # (no filings of that type loaded yet) and should trigger the same
         # graceful skip, not just the first-declared table. Checking only one
         # name left a real "table not created yet" error on the second table
-        # uncaught, crashing the whole mdm run instead of skipping that
+        # uncaught, crashing the whole mdm mastering instead of skipping that
         # relationship type.
         message = str(exc).lower()
         missing_markers = ("does not exist", "not found", "catalog error", "binder error")
@@ -877,7 +877,7 @@ class MDMPipeline:
         the same row) and any stub entity a type creates (e.g.
         HAS_PARENT_COMPANY's subsidiary stubs, EMPLOYED_BY's proxy-person
         stubs) is read by other types only as a best-effort, already-
-        idempotent lookup that quietly retries on the next `mdm run` when
+        idempotent lookup that quietly retries on the next `mdm mastering` when
         unresolved this run -- the exact same fallback the old strictly-
         sequential ordering already relied on (a type earlier in
         RELATIONSHIP_TYPES never saw a later type's stubs either). Falls
@@ -994,7 +994,7 @@ class MDMPipeline:
         # (only MANAGES_FUND did, before this). Without it, ensure_relationship
         # pays one existing-version SELECT plus one session.flush() round
         # trip per row -- confirmed live via CloudWatch overlap-counting
-        # during a real prod mdm run (max concurrently-open SQL calls == 1,
+        # during a real prod mdm mastering (max concurrently-open SQL calls == 1,
         # strictly sequential, unlike company/security/person resolution's
         # proven 16-way concurrency) that this per-row I/O is exactly what
         # made relationship derivation the slow, single-threaded tail of the
@@ -2074,7 +2074,7 @@ class MDMPipeline:
         # source_fetch_decision, a different subsystem run_all() never reads)
         # -- so this Run's own run_id is the identity used instead, generated
         # here if the caller didn't supply one (mirrors the uuid.uuid4()
-        # fallback mdm sync-graph already uses for generation_id). Gated on
+        # fallback mdm publish-relationships already uses for generation_id). Gated on
         # non-trivial output so an empty run_all() (nothing left to resolve)
         # doesn't enqueue a no-op publication request every invocation.
         resolved_total = (
@@ -2412,7 +2412,7 @@ class MDMPipeline:
         entity_type: str,
         changed_fields: Optional[dict] = None,
     ) -> None:
-        """Write mdm_change_log so stub entities drain through mdm export.
+        """Write mdm_change_log so stub entities drain through mdm publish.
 
         Relationship instances track export via graph_synced_at independently
         of mdm_change_log. Without a change-log row, stub persons/securities
