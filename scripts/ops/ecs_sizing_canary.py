@@ -1,4 +1,4 @@
-"""Prepare, launch, and report the ECS sizing canaries from Ticket 28.
+"""Prepare, launch, and report the ECS sizing canaries from Tickets 28 and 29.
 
 The command is deliberately dry-run-first. ``prepare`` derives unscheduled
 Standard state machines from the current production definitions and changes
@@ -42,7 +42,30 @@ FARGATE_GIB_HOUR_USD = 0.004446
 FARGATE_PRICING_SOURCE = "https://aws.amazon.com/fargate/pricing/"
 FARGATE_PRICING_CAPTURED_AT = "2026-08-29"
 CANARIES = {
+    "gold": {
+        "ticket": 29,
+        "source": "gold-refresh",
+        "name": "canary-ticket29-gold-medium",
+        "source_family": "large",
+        "candidate_family": "medium",
+        "state_prefix": "RunWarehouseTask",
+        "expected_changes": {1},
+        "input": {},
+        "execution_prefix": "ticket29-gold",
+    },
+    "gold-control": {
+        "ticket": 29,
+        "source": "gold-refresh",
+        "name": "canary-ticket29-gold-large-control",
+        "source_family": "large",
+        "candidate_family": "large",
+        "state_prefix": "RunWarehouseTask",
+        "expected_changes": {1},
+        "input": {},
+        "execution_prefix": "ticket29-gold-control",
+    },
     "sync": {
+        "ticket": 28,
         "source": "mdm-utility",
         "name": "canary-ticket28-mdm-sync-graph-large",
         "source_family": "mdm-medium",
@@ -50,8 +73,10 @@ CANARIES = {
         "state_prefix": "mdm_sync_graph_",
         "expected_changes": {5, 7},
         "input": {"mode": "mdm_sync_graph", "limit": 0},
+        "execution_prefix": "ticket28-sync",
     },
     "residual": {
+        "ticket": 28,
         "source": "residual-holds-graph",
         "name": "canary-ticket28-residual-holds-medium",
         "source_family": "mdm-large",
@@ -59,8 +84,10 @@ CANARIES = {
         "state_prefix": "Mdm",
         "expected_changes": {8},
         "input": {},
+        "execution_prefix": "ticket28-residual",
     },
     "residual-control": {
+        "ticket": 28,
         "source": "residual-holds-graph",
         "name": "canary-ticket28-residual-holds-large-control",
         "source_family": "mdm-large",
@@ -68,6 +95,7 @@ CANARIES = {
         "state_prefix": "Mdm",
         "expected_changes": {8},
         "input": {},
+        "execution_prefix": "ticket28-residual-control",
     },
 }
 
@@ -79,11 +107,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env", default="prod", choices=["dev", "prod"])
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    prepare = subparsers.add_parser("prepare", help="plan or upsert both canaries")
+    prepare = subparsers.add_parser("prepare", help="plan or upsert canaries")
     prepare.add_argument(
         "--apply", action="store_true", help="create/update unscheduled canary machines"
     )
     prepare.add_argument("--output", type=Path)
+    prepare.add_argument(
+        "--cohort",
+        dest="cohorts",
+        action="append",
+        choices=sorted(CANARIES),
+        help="prepare only this cohort; repeat to select more than one",
+    )
 
     start = subparsers.add_parser("start", help="launch one fresh canary execution")
     start.add_argument("cohort", choices=sorted(CANARIES))
@@ -102,6 +137,19 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--allow-running", action="store_true", help="emit provisional evidence"
     )
+
+    evaluate_gold = subparsers.add_parser(
+        "evaluate-gold", help="evaluate the matched Ticket 29 gold cohort"
+    )
+    evaluate_gold.add_argument("--control-report", required=True, type=Path)
+    evaluate_gold.add_argument(
+        "--candidate-report",
+        dest="candidate_reports",
+        required=True,
+        action="append",
+        type=Path,
+    )
+    evaluate_gold.add_argument("--output", type=Path)
     return parser
 
 
@@ -245,8 +293,7 @@ def add_unbounded_residual_sync(
         "'--limit-per-type', '200000')"
     )
     unbounded = (
-        "States.Array('mdm', 'sync-graph', "
-        "'--generation-id', $$.Execution.Name)"
+        "States.Array('mdm', 'sync-graph', '--generation-id', $$.Execution.Name)"
     )
     command = containers[0].get("Command.$")
     if command == unbounded:
@@ -342,8 +389,7 @@ def fargate_usage(
         "requested_vcpu_hours": vcpu_hours,
         "requested_memory_gib_hours": memory_gib_hours,
         "estimated_compute_cost_usd": (
-            vcpu_hours * FARGATE_VCPU_HOUR_USD
-            + memory_gib_hours * FARGATE_GIB_HOUR_USD
+            vcpu_hours * FARGATE_VCPU_HOUR_USD + memory_gib_hours * FARGATE_GIB_HOUR_USD
         ),
     }
 
@@ -369,9 +415,7 @@ def extract_task_attempts(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for event in events:
         event_type = event.get("type")
         if event_type == "TaskSucceeded":
-            raw_terminal = (event.get("taskSucceededEventDetails") or {}).get(
-                "output"
-            )
+            raw_terminal = (event.get("taskSucceededEventDetails") or {}).get("output")
         elif event_type == "TaskFailed":
             raw_terminal = (event.get("taskFailedEventDetails") or {}).get("cause")
         else:
@@ -490,6 +534,149 @@ def evaluate_execution(
     return {"passed": not failures, "failures": failures, "warnings": warnings}
 
 
+def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
+    from edgar_warehouse.serving.targets.snowflake import GOLD_EXPORT_MAP
+
+    tasks = evidence.get("tasks") or []
+    if len(tasks) != 1 or tasks[0].get("state") != "RunWarehouseTask":
+        raise ValueError("gold evidence must contain exactly one RunWarehouseTask")
+    completed = [
+        document
+        for document in tasks[0].get("application_evidence") or []
+        if document.get("event") == "gold_build_completed"
+    ]
+    if len(completed) != 1:
+        raise ValueError(
+            "gold evidence must contain exactly one gold_build_completed event"
+        )
+    event = completed[0]
+    manifest = event.get("gold_manifest") or []
+    if not manifest:
+        raise ValueError("gold_build_completed is missing its manifest")
+    normalized_manifest = []
+    for entry in manifest:
+        required = ("table_name", "row_count", "parquet_sha256", "byte_size")
+        missing = [key for key in required if entry.get(key) is None]
+        if missing:
+            raise ValueError(
+                f"gold manifest entry is missing {missing}: {entry.get('table_name')}"
+            )
+        normalized_manifest.append({key: entry[key] for key in required})
+    normalized_manifest.sort(key=lambda entry: str(entry["table_name"]))
+    row_counts = event.get("gold_row_counts") or {}
+    manifest_counts = {
+        str(entry["table_name"]): int(entry["row_count"])
+        for entry in normalized_manifest
+    }
+    if row_counts != manifest_counts:
+        raise ValueError("gold row counts do not match the durable manifest")
+    snowflake_counts = event.get("snowflake_export_counts") or {}
+    expected_snowflake_counts = {
+        export_name: manifest_counts[source_name]
+        for export_name, source_name in GOLD_EXPORT_MAP.items()
+        if source_name in manifest_counts
+    }
+    if snowflake_counts != expected_snowflake_counts:
+        raise ValueError(
+            "Snowflake export counts do not match the canonical gold export mapping"
+        )
+    return {
+        "manifest": normalized_manifest,
+        "gold_row_counts": row_counts,
+        "snowflake_export_counts": snowflake_counts,
+    }
+
+
+def evaluate_gold_cohort(
+    *, control: dict[str, Any], candidates: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Apply Ticket 29's matched-output, duration, and cost gates offline."""
+    if len(candidates) != 2:
+        raise ValueError("Ticket 29 requires exactly two candidate reports")
+    all_evidence = [control, *candidates]
+    failures: list[str] = []
+    expected_cohorts = ["gold-control", "gold", "gold"]
+    expected_profiles = ["large", "medium", "medium"]
+    images: set[str] = set()
+    source_hashes: set[str] = set()
+    input_content_identities: set[tuple[str, int]] = set()
+    outputs: list[dict[str, Any]] = []
+    for index, (evidence, expected_cohort, expected_profile) in enumerate(
+        zip(all_evidence, expected_cohorts, expected_profiles, strict=True)
+    ):
+        label = "control" if index == 0 else f"candidate {index}"
+        launch = evidence.get("launch_contract") or {}
+        if launch.get("ticket") != 29 or launch.get("cohort") != expected_cohort:
+            failures.append(f"{label} has the wrong Ticket 29 cohort identity")
+        task_definition = str(launch.get("candidate_task_definition_arn") or "")
+        if f"edgartools-prod-{expected_profile}:" not in task_definition:
+            failures.append(f"{label} is not on warehouse {expected_profile}")
+        images.add(str(launch.get("image") or ""))
+        source_hashes.add(str(launch.get("source_definition_hash") or ""))
+        input_identity = launch.get("input_identity") or {}
+        input_etag = str(input_identity.get("etag") or "")
+        input_size = input_identity.get("content_length")
+        if not input_etag or not isinstance(input_size, int):
+            failures.append(f"{label} is missing canonical silver input identity")
+        else:
+            input_content_identities.add((input_etag, input_size))
+        local_gates = evidence.get("execution_local_gates") or {}
+        if not local_gates.get("passed"):
+            failures.append(f"{label} failed execution-local gates")
+        outputs.append(_gold_output_identity(evidence))
+    if "" in images or len(images) != 1:
+        failures.append("candidate and control image identities do not match")
+    if "" in source_hashes or len(source_hashes) != 1:
+        failures.append("candidate and control source definitions do not match")
+    if len(input_content_identities) != 1:
+        failures.append("candidate and control input content identities do not match")
+    if any(output != outputs[0] for output in outputs[1:]):
+        failures.append("gold manifest or Snowflake export output parity failed")
+
+    control_duration = float(control["execution"]["duration_seconds"])
+    candidate_durations = [
+        float(candidate["execution"]["duration_seconds"]) for candidate in candidates
+    ]
+    candidate_duration_p95 = _percentile(candidate_durations, 0.95)
+    duration_regression = (candidate_duration_p95 / control_duration - 1) * 100
+    if duration_regression > 5:
+        failures.append(
+            f"candidate p95 duration regression {duration_regression:.2f}% exceeds 5%"
+        )
+
+    control_cost = float(control["estimated_compute_cost_usd"])
+    candidate_costs = [
+        float(candidate["estimated_compute_cost_usd"]) for candidate in candidates
+    ]
+    candidate_cost_p95 = _percentile(candidate_costs, 0.95)
+    cost_improvement = (1 - candidate_cost_p95 / control_cost) * 100
+    if cost_improvement < 10:
+        failures.append(
+            f"candidate p95 cost improvement {cost_improvement:.2f}% is below 10%"
+        )
+    input_content_identity = None
+    if len(input_content_identities) == 1:
+        etag, content_length = next(iter(input_content_identities))
+        input_content_identity = {
+            "etag": etag,
+            "content_length": content_length,
+        }
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "control_duration_seconds": control_duration,
+        "candidate_duration_seconds": candidate_durations,
+        "candidate_duration_p95_seconds": candidate_duration_p95,
+        "duration_regression_percent": duration_regression,
+        "control_cost_usd": control_cost,
+        "candidate_cost_usd": candidate_costs,
+        "candidate_cost_p95_usd": candidate_cost_p95,
+        "cost_improvement_percent": cost_improvement,
+        "input_content_identity": input_content_identity,
+        "output_identity": outputs[0],
+    }
+
+
 def validate_attempt_sequence(
     executions: list[dict[str, Any]], *, cohort: str, attempt: int
 ) -> None:
@@ -501,12 +688,13 @@ def validate_attempt_sequence(
     ]
     if running:
         raise ValueError(f"cohort execution is still RUNNING: {running[0]}")
-    current_prefix = f"ticket28-{cohort}-{attempt}-"
+    execution_prefix = CANARIES[cohort]["execution_prefix"]
+    current_prefix = f"{execution_prefix}-{attempt}-"
     if any(execution["name"].startswith(current_prefix) for execution in executions):
         raise ValueError(f"attempt {attempt} has already been used for {cohort}")
     if attempt == 1:
         return
-    prior_prefix = f"ticket28-{cohort}-{attempt - 1}-"
+    prior_prefix = f"{execution_prefix}-{attempt - 1}-"
     if not any(execution["name"].startswith(prior_prefix) for execution in executions):
         raise ValueError(f"prior attempt {attempt - 1} is absent for {cohort}")
 
@@ -515,13 +703,53 @@ def sequencing_cohorts(cohort: str) -> tuple[str, ...]:
     """Return cohorts that must never overlap at the Step Functions level."""
     if cohort in {"residual", "residual-control"}:
         return ("residual", "residual-control")
+    if cohort in {"gold", "gold-control"}:
+        return ("gold", "gold-control")
     return (cohort,)
 
 
-@contextmanager
-def residual_launch_lock(
+def execution_name(cohort: str, *, attempt: int, timestamp: str) -> str:
+    """Build the ticket-bound, never-reused execution identity."""
+    return f"{CANARIES[cohort]['execution_prefix']}-{attempt}-{timestamp}"
+
+
+def launch_concurrency_context(
+    active_task_arns: list[str], *, allow_concurrent: bool
+) -> dict[str, Any]:
+    """Record any explicitly accepted cluster overlap in launch evidence."""
+    return {
+        "allow_concurrent": allow_concurrent,
+        "active_task_arns": sorted(set(active_task_arns)),
+    }
+
+
+def gold_input_identity(
     cli: AwsCli, *, env: str, account: str
-) -> Iterator[None]:
+) -> dict[str, Any]:
+    """Capture the exact canonical silver object visible at canary launch."""
+    bucket = f"edgartools-{env}-warehouse-{account}"
+    key = "warehouse/silver/sec/silver.duckdb"
+    head = cli.call(
+        "s3api",
+        "head-object",
+        "--bucket",
+        bucket,
+        "--key",
+        key,
+    )
+    return {
+        "bucket": bucket,
+        "key": key,
+        "version_id": head.get("VersionId"),
+        "etag": str(head.get("ETag") or "").strip('"'),
+        "content_length": head.get("ContentLength"),
+        "last_modified": head.get("LastModified"),
+        "server_side_encryption": head.get("ServerSideEncryption"),
+    }
+
+
+@contextmanager
+def residual_launch_lock(cli: AwsCli, *, env: str, account: str) -> Iterator[None]:
     """Serialize candidate/control check+start with a durable S3 lock.
 
     The object has no automatic expiry. A crashed operator leaves a safe,
@@ -776,6 +1004,7 @@ def _definition_plan(
     )
     return {
         "cohort": cohort,
+        "ticket": config["ticket"],
         "canary_name": canary_name,
         "source_state_machine_arn": source_arn,
         "source_definition_hash": _json_hash(definition),
@@ -893,7 +1122,7 @@ def _ensure_immutable_canary(cli: AwsCli, plan: dict[str, Any]) -> str:
             *args,
             "--tags",
             "key=managed-by,value=ecs-sizing-canary",
-            "key=ticket,value=28",
+            f"key=ticket,value={plan['ticket']}",
         )
         arn = result["stateMachineArn"]
     cli.call(
@@ -903,7 +1132,7 @@ def _ensure_immutable_canary(cli: AwsCli, plan: dict[str, Any]) -> str:
         arn,
         "--tags",
         "key=managed-by,value=ecs-sizing-canary",
-        "key=ticket,value=28",
+        f"key=ticket,value={plan['ticket']}",
     )
     return arn
 
@@ -929,9 +1158,10 @@ def _write_json(path: Path | None, payload: Any) -> None:
 
 def prepare(cli: AwsCli, args: argparse.Namespace) -> int:
     account = _account(cli)
+    cohorts = args.cohorts or sorted(CANARIES)
     plans = [
         _definition_plan(cli, env=args.env, account=account, cohort=cohort)
-        for cohort in sorted(CANARIES)
+        for cohort in cohorts
     ]
     result: dict[str, Any] = {
         "mode": "apply" if args.apply else "dry-run",
@@ -1005,8 +1235,13 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
                 "canary definition drifted from the current production source; "
                 "rerun prepare --apply"
             )
+        input_identity = (
+            gold_input_identity(cli, env=args.env, account=account)
+            if args.cohort in {"gold", "gold-control"}
+            else None
+        )
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        name = f"ticket28-{args.cohort}-{args.attempt}-{timestamp}"
+        name = execution_name(args.cohort, attempt=args.attempt, timestamp=timestamp)
         started = cli.call(
             "stepfunctions",
             "start-execution",
@@ -1020,10 +1255,15 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
     launch_manifest = {
         **_public_plan(current_plan),
         "attempt": args.attempt,
+        "concurrency_context": launch_concurrency_context(
+            active_tasks, allow_concurrent=args.allow_concurrent
+        ),
         "execution_arn": started["executionArn"],
         "start_date": started["startDate"],
         "state_machine_arn": machine["stateMachineArn"],
     }
+    if input_identity is not None:
+        launch_manifest["input_identity"] = input_identity
     _write_json(
         args.output,
         launch_manifest,
@@ -1101,6 +1341,7 @@ def _insights_rows(
     start: datetime,
     end: datetime,
 ) -> list[dict]:
+    rows: list[dict[str, Any]] = []
     for ingestion_attempt in range(3):
         query = (
             "fields @timestamp, CpuUtilized, MemoryUtilized "
@@ -1120,7 +1361,7 @@ def _insights_rows(
             query,
         )
         query_id = started["queryId"]
-        rows: list[dict[str, Any]] = []
+        rows = []
         for _ in range(60):
             result = cli.call("logs", "get-query-results", "--query-id", query_id)
             if result["status"] == "Complete":
@@ -1353,6 +1594,25 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
     return 0 if gates["passed"] else 2
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read evidence {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise TypeError(f"evidence {path} must contain a JSON object")
+    return payload
+
+
+def evaluate_gold_reports(args: argparse.Namespace) -> int:
+    result = evaluate_gold_cohort(
+        control=_read_json(args.control_report),
+        candidates=[_read_json(path) for path in args.candidate_reports],
+    )
+    _write_json(args.output, result)
+    return 0 if result["passed"] else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1362,8 +1622,10 @@ def main(argv: list[str] | None = None) -> int:
             return prepare(cli, args)
         if args.command == "start":
             return start(cli, args)
-        return report(cli, args)
-    except (RuntimeError, ValueError) as exc:
+        if args.command == "report":
+            return report(cli, args)
+        return evaluate_gold_reports(args)
+    except (RuntimeError, TypeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 3
 

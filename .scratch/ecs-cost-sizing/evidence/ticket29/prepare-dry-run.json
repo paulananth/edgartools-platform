@@ -1,0 +1,51 @@
+{
+  "account": "690839588395",
+  "mode": "dry-run",
+  "plans": [
+    {
+      "canary_definition_hash": "d2588def42fa413a60c53b887fd5fb1d4fb7fdeb4398ab9dcc0a991c9350b033",
+      "canary_name": "canary-ticket29-gold-medium-d2588def42fa",
+      "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:238",
+      "changed_reference_count": 1,
+      "cohort": "gold",
+      "compatibility_overlays": [],
+      "covered_states": [
+        "RunWarehouseTask"
+      ],
+      "expected_task_states": [
+        "RunWarehouseTask"
+      ],
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:87b4690bb15274d08e0ed869cf5c3dba03b8150d9ffa75925b233faa07f87f07",
+      "source_definition_hash": "79cf6314d0a90b617c4e79a95d409ce201542a1b562292cc0e363aeb31002d46",
+      "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+      "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:233",
+      "task_definition_contract": {
+        "RunWarehouseTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:238"
+      },
+      "ticket": 29
+    },
+    {
+      "canary_definition_hash": "79cf6314d0a90b617c4e79a95d409ce201542a1b562292cc0e363aeb31002d46",
+      "canary_name": "canary-ticket29-gold-large-control-79cf6314d0a9",
+      "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:233",
+      "changed_reference_count": 0,
+      "cohort": "gold-control",
+      "compatibility_overlays": [],
+      "covered_states": [
+        "RunWarehouseTask"
+      ],
+      "expected_task_states": [
+        "RunWarehouseTask"
+      ],
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:87b4690bb15274d08e0ed869cf5c3dba03b8150d9ffa75925b233faa07f87f07",
+      "source_definition_hash": "79cf6314d0a90b617c4e79a95d409ce201542a1b562292cc0e363aeb31002d46",
+      "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+      "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:233",
+      "task_definition_contract": {
+        "RunWarehouseTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:233"
+      },
+      "ticket": 29
+    }
+  ],
+  "region": "us-east-1"
+}
