@@ -50,7 +50,7 @@ def _parse_adv_artifact(value: str) -> dict[str, object]:
     return artifact
 
 
-def _add_common_bootstrap_args(parser: argparse.ArgumentParser, include_recent_limit: bool) -> None:
+def _add_common_bootstrap_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cik-list", type=_parse_cik_list, help="Comma-separated CIK list")
     parser.add_argument(
         "--tracking-status-filter",
@@ -70,13 +70,6 @@ def _add_common_bootstrap_args(parser: argparse.ArgumentParser, include_recent_l
         action="store_false",
         help="Skip SEC reference refresh",
     )
-    if include_recent_limit:
-        parser.add_argument(
-            "--recent-limit",
-            type=int,
-            default=10,
-            help="Maximum number of recent filings to include per company",
-        )
     parser.add_argument(
         "--artifact-policy",
         default="all_attachments",
@@ -139,10 +132,6 @@ def _add_run_id_arg(parser: argparse.ArgumentParser) -> None:
 
 def _handle_bootstrap_full(args: argparse.Namespace) -> int:
     return run_command("bootstrap-full", args)
-
-
-def _handle_bootstrap(args: argparse.Namespace) -> int:
-    return run_command("bootstrap", args)
 
 
 def _handle_daily_incremental(args: argparse.Namespace) -> int:
@@ -544,17 +533,9 @@ def build_parser() -> argparse.ArgumentParser:
         "bootstrap-full",
         help="Load full filing history for tracked companies.",
     )
-    _add_common_bootstrap_args(bootstrap_full, include_recent_limit=False)
+    _add_common_bootstrap_args(bootstrap_full)
     _add_run_id_arg(bootstrap_full)
     bootstrap_full.set_defaults(handler=_handle_bootstrap_full)
-
-    bootstrap = subparsers.add_parser(
-        "bootstrap",
-        help="Load only the most recent filings for tracked companies.",
-    )
-    _add_common_bootstrap_args(bootstrap, include_recent_limit=True)
-    _add_run_id_arg(bootstrap)
-    bootstrap.set_defaults(handler=_handle_bootstrap)
 
     daily_incremental = subparsers.add_parser(
         "daily-incremental",

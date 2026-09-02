@@ -147,7 +147,7 @@ problem entirely.
 
 | Need | Location |
 |------|----------|
-| ETL runtime (form parsing, S3 writes) | `edgar_warehouse/application/warehouse_orchestrator.py` (`edgar_warehouse/runtime.py` and `edgar_warehouse/application/command_router.py` are compatibility shims re-exporting from here, not separate implementations) |
+| ETL runtime (form parsing, S3 writes) | `edgar_warehouse/application/warehouse_orchestrator.py` (`edgar_warehouse/runtime.py` is a pure re-export shim onto `edgar_warehouse/application/command_router.py`, which is real but thin: its own `run_command`/`run_seed_universe_command` route through `LEGACY_COMMAND_REGISTRY`/`execute_standard_command`, ultimately calling `warehouse_orchestrator._execute_warehouse` -- confirmed live 2026-09-02 while tracing `bootstrap`'s full call chain for its retirement, correcting this table's prior "both are compatibility shims re-exporting from here" claim) |
 | Silver-layer transformations | `edgar_warehouse/silver_store.py` (`edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase`, not a second implementation) |
 | Source-layer dimensional export (feeds `EDGARTOOLS_SOURCE`, not `EDGARTOOLS_GOLD` — see single-path-per-layer map Ticket 01, which is why this module was renamed off its old "gold_models.py" name) | `edgar_warehouse/serving/source_dimensional_export.py` (`edgar_warehouse/gold.py` is a thin compatibility shim re-exporting it, not a second implementation) |
 | Ownership / Form 3-4-5 parser | `edgar_warehouse/parsers/ownership.py` |
@@ -2052,11 +2052,12 @@ Stage 3 — Gold refresh (single ECS task)
     data_timestamp regardless of either clock.
 ```
 
-(Elsewhere in this repo, `bootstrap`/`daily_incremental`'s own Company Identity
+(Elsewhere in this repo, `daily_incremental`'s own Company Identity
 capture stage -- a different, sibling state named `ResolveCompanyIdentityBounded`
 in `write_warehouse_mdm_gold_definition` -- is unrelated to `load_history`'s
-Stage 0 above; it runs *before* bronze/silver capture in those two pipelines,
-not as a seeding step.)
+Stage 0 above; it runs *before* bronze/silver capture in that pipeline,
+not as a seeding step. `bootstrap` shared this same state until
+state-machine-consolidation ticket 06 retired the workflow entirely.)
 
 **`edgartools-prod-bootstrap-batched` (formerly a separate, standalone state
 machine running CIK batches with real parallelism via a `BatchBootstrap`
@@ -2157,8 +2158,17 @@ and governance boundary, not literally one shared connection string for both pro
 | Load 10+ companies (recommended) | `load_history` Step Function |
 | Single company debug/resync | `targeted_resync` Step Function |
 | Rebuild gold from existing silver | `gold_refresh` Step Function |
-| Recent filings only (fast) | `bootstrap` Step Function |
 | Daily incremental (ongoing) | `daily_incremental` Step Function |
+
+(`bootstrap` -- recent-N-filings-per-active-company, formerly listed here as
+"Recent filings only (fast)" -- was retired by state-machine-consolidation
+ticket 06: zero EventBridge schedule, exactly one execution ever, and it
+shared `daily_incremental`'s exact Step Functions shape via the same
+`write_warehouse_mdm_gold_definition` builder, differing only in company
+selection logic -- recency-capped per company vs. `daily_incremental`'s
+SEC-daily-index-driven discovery. `daily_incremental` is the sole remaining
+Warehouse Pipeline Machine and structurally supersedes it for ongoing use;
+`bootstrap-full`/`bootstrap-next` remain for full-history loads.)
 
 **Running `load_history` via Step Functions:**
 
@@ -2634,7 +2644,7 @@ These files exceed 30 KB. When modifying them, read section by section rather th
 
 | File | Size | Contents |
 |------|------|----------|
-| `edgar_warehouse/application/warehouse_orchestrator.py` | ~292 KB | Core ETL loop, form dispatch, S3 writes, bronze/silver publish paths. `edgar_warehouse/runtime.py` and `edgar_warehouse/application/command_router.py` are now thin compatibility shims that re-export from here, not separate implementations — this table previously pointed at those shims with stale sizes copied from an earlier version of this file. |
+| `edgar_warehouse/application/warehouse_orchestrator.py` | ~292 KB | Core ETL loop, form dispatch, S3 writes, bronze/silver publish paths. `edgar_warehouse/runtime.py` is a pure re-export shim; `edgar_warehouse/application/command_router.py` is a real (if thin) routing facade that ultimately delegates here (see Quick Navigation above for the exact chain) — this table previously pointed at both as pure shims with stale sizes copied from an earlier version of this file. |
 | `edgar_warehouse/silver_store.py` | ~190 KB | Record cleaning and transformation logic. `edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase` from here. |
 | `edgar_warehouse/serving/source_dimensional_export.py` | ~63 KB | Builds a source-layer dimensional export consumed by dbt — not the gold layer itself (see Quick Navigation above and `.scratch/single-path-per-layer/issues/01-enumerate-layer-transitions.md`; renamed off "gold_models.py" for exactly this reason). `edgar_warehouse/gold.py` is a compatibility shim re-exporting from here. |
 

@@ -78,22 +78,6 @@ class BronzeFileContractTests(unittest.TestCase):
         self.assertIn("gold", default_layers)
         self.assertIn("snowflake_export", default_layers)
 
-    def test_planned_writes_for_bootstrap_use_expected_bronze_manifest_path(self) -> None:
-        self.assertEqual(
-            planned_writes(
-                command_name="bootstrap",
-                command_path="bootstrap",
-                run_id="run-123",
-                scope={},
-            ),
-            default_path_resolver().planned_manifest_paths(
-                command_name="bootstrap",
-                command_path="bootstrap",
-                run_id="run-123",
-                scope={},
-            ),
-        )
-
     def test_planned_writes_for_bootstrap_next_use_expected_manifest_paths(self) -> None:
         self.assertEqual(
             planned_writes(

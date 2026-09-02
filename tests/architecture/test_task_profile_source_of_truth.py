@@ -25,14 +25,15 @@ today):
    ``load-daily-form-index-for-date``, ``catch-up-daily-form-index``,
    ``gold-refresh``, ``seed-universe``: workflow_profile()'s case statement,
    invoked directly (the real bash function).
-2. ``bootstrap``, ``daily-incremental``: workflow_profile() has cases for
-   these two, but they're DEAD CODE -- workflow_profile() is never called
-   with these names anywhere in the script (see that function's own
-   comment). Their actual RunWarehouseTask step -- the one that runs
-   `bootstrap`/`daily-incremental` themselves -- is built directly by
-   write_warehouse_mdm_gold_definition, which takes the medium/large ARNs
-   as plain parameters. Resolved by generating that function's real state
-   machine JSON and reading RunWarehouseTask's actual TaskDefinition.
+2. ``daily-incremental``: workflow_profile() has a case for this, but it's
+   DEAD CODE -- workflow_profile() is never called with this name anywhere
+   in the script (see that function's own comment). Its actual
+   RunWarehouseTask step -- the one that runs `daily-incremental` itself --
+   is built directly by write_warehouse_mdm_gold_definition, which takes
+   the medium/large ARNs as plain parameters. Resolved by generating that
+   function's real state machine JSON and reading RunWarehouseTask's
+   actual TaskDefinition. (``bootstrap`` was this path's other member
+   until state-machine-consolidation ticket 06 retired it.)
 3. ``bootstrap-next``: never passed to workflow_profile() or
    write_warehouse_mdm_gold_definition at all. load_history's per-window
    WindowedBootstrap/RunWindow task hardcodes its ARN directly. Resolved
@@ -108,15 +109,13 @@ _ALL_COMMANDS = {
     "gold-refresh",
     "seed-universe",
     "daily-incremental",
-    "bootstrap",
     "bootstrap-next",
 }
 
 # Commands whose RunWarehouseTask step is built directly by
-# write_warehouse_mdm_gold_definition -- workflow_profile() has cases for
-# these names but they are unreachable dead code (see module docstring,
-# path 2).
-_WAREHOUSE_MDM_GOLD_MEMBERS = {"bootstrap", "daily-incremental"}
+# write_warehouse_mdm_gold_definition -- workflow_profile() has a case for
+# this name but it is unreachable dead code (see module docstring, path 2).
+_WAREHOUSE_MDM_GOLD_MEMBERS = {"daily-incremental"}
 
 # bootstrap-next is never passed to workflow_profile() or
 # write_warehouse_mdm_gold_definition -- resolved instead via
@@ -214,8 +213,8 @@ def _resolve_command_task_profile(command_name: str) -> str:
 def _run_warehouse_task_profile(workflow_name: str) -> str:
     """Generate the real write_warehouse_mdm_gold_definition() state machine
     JSON for workflow_name and return which profile its RunWarehouseTask step
-    -- the one that actually runs `bootstrap`/`daily-incremental` themselves
-    -- resolves to. Same technique as
+    -- the one that actually runs `daily-incremental` itself -- resolves to.
+    Same technique as
     test_source_export_commands_task_sizing.py's helper of the same shape.
     write_warehouse_mdm_gold_definition now calls command_task_profile()
     internally (task-profile-consolidation ticket 02), so that function's

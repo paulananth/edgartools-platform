@@ -2,7 +2,10 @@
 # Trigger a state machine by short name. Replaces looking up ARNs every time.
 #
 # Available pipelines:
-#   recent             edgartools-dev-bootstrap  (DEFAULT: recent filings for active universe)
+#   recent             edgartools-dev-daily-incremental  (index-driven incremental load;
+#                        formerly targeted edgartools-dev-bootstrap, retired by
+#                        state-machine-consolidation ticket 06 -- zero schedule, one
+#                        execution ever)
 #   load-history       load_history  (EXPLICIT ONLY: seed new companies → batches → MDM → gold)
 #   silver             silver_mdm_gold   (re-process already-loaded bronze)
 #   silver-active      silver_mdm_gold with tracking_status_filter=active
@@ -46,9 +49,9 @@ aws_() { aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" "$@"; }
 
 case "$PIPELINE" in
   recent)
-    SM="${BASE}:${NAME_PREFIX}-bootstrap"
-    INPUT='{}'
-    LABEL="bootstrap (recent filings, active universe)"
+    SM="${BASE}:${NAME_PREFIX}-daily-incremental"
+    INPUT='{"refresh_mode": "daily"}'
+    LABEL="daily_incremental (index-driven incremental load)"
     ;;
   load-history)
     SM="${BASE}:${NAME_PREFIX}-load-history"
