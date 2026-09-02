@@ -43,7 +43,7 @@ def _recency_key(loaded_at: Optional[datetime]) -> float:
     surfaced this gap while adding skip-if-unchanged: every tie-break sort
     below picked the *first-ever* staged candidate on a priority tie, with
     no recency signal at all, so a genuinely newer value from a later
-    ``mdm run`` could permanently lose to a stale one -- ``loaded_at``
+    ``mdm mastering`` could permanently lose to a stale one -- ``loaded_at``
     already existed on ``mdm_entity_attribute_stage`` (server-defaulted
     NOW() on insert) but was never read. Missing ``loaded_at`` sorts last
     (least preferred), so an unpopulated timestamp can never win a tie it

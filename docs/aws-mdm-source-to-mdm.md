@@ -108,7 +108,7 @@ skipped on repeat runs.
 > as the precedent for obtaining ADV XML from the SEC FOIA Form ADV bulk dataset and uploading it
 > to the canonical bronze path.
 
-Before running `mdm run --entity-type adviser` or `mdm run --entity-type fund`, parse existing
+Before running `mdm mastering --entity-type adviser` or `mdm mastering --entity-type fund`, parse existing
 ADV bronze XML artifacts into the silver ADV tables (`sec_adv_filing`, `sec_adv_office`,
 `sec_adv_disclosure_event`, `sec_adv_private_fund`).
 
@@ -131,11 +131,11 @@ edgar-warehouse parse-adv-bronze \
 
 | MDM command | Required table | Minimum rows |
 |-------------|---------------|-------------|
-| `mdm run --entity-type adviser` | `sec_adv_filing` | **> 0** |
-| `mdm run --entity-type fund` | `sec_adv_private_fund` | **> 0** |
-| `mdm run --entity-type all` | *(does not enforce ADV tables)* | — |
+| `mdm mastering --entity-type adviser` | `sec_adv_filing` | **> 0** |
+| `mdm mastering --entity-type fund` | `sec_adv_private_fund` | **> 0** |
+| `mdm mastering --entity-type all` | *(does not enforce ADV tables)* | — |
 
-**Note:** `mdm run --entity-type all` does **not** enforce `sec_adv_filing` or
+**Note:** `mdm mastering --entity-type all` does **not** enforce `sec_adv_filing` or
 `sec_adv_private_fund` counts. If you use `--entity-type all` with empty ADV tables the adviser
 and fund loaders will silently no-op. Always run the targeted `--entity-type adviser` and
 `--entity-type fund` commands with the diagnostics check first.
@@ -159,26 +159,26 @@ export MDM_SILVER_DUCKDB="/tmp/edgar-warehouse-silver/silver/sec/silver.duckdb"
 Load all five entity domains (company, adviser, person, security, fund) from silver into MDM:
 
 ```bash
-edgar-warehouse mdm run --entity-type all
+edgar-warehouse mdm mastering --entity-type all
 ```
 
 Or load a single entity type:
 
 ```bash
-edgar-warehouse mdm run --entity-type company
-edgar-warehouse mdm run --entity-type adviser
-edgar-warehouse mdm run --entity-type person
-edgar-warehouse mdm run --entity-type security
-edgar-warehouse mdm run --entity-type fund
+edgar-warehouse mdm mastering --entity-type company
+edgar-warehouse mdm mastering --entity-type adviser
+edgar-warehouse mdm mastering --entity-type person
+edgar-warehouse mdm mastering --entity-type security
+edgar-warehouse mdm mastering --entity-type fund
 ```
 
 Add `--limit N` to process at most N entities per type:
 
 ```bash
-edgar-warehouse mdm run --entity-type all --limit 100
+edgar-warehouse mdm mastering --entity-type all --limit 100
 ```
 
-The loaders are idempotent: running `mdm run` twice against the same silver data leaves
+The loaders are idempotent: running `mdm mastering` twice against the same silver data leaves
 `mdm_company`, `mdm_adviser`, `mdm_person`, `mdm_security`, and `mdm_fund` counts stable.
 
 **Note:** `MDM_SILVER_DUCKDB` must be set and readable before this command opens the MDM
@@ -275,9 +275,9 @@ SELECT COUNT(*) AS private_fund_count FROM sec_adv_private_fund;
 |-----------|-------|
 | Bronze artifact capture (SEC fetch) | Pre-Phase 5 / outside this path |
 | Silver ownership backfill from bronze | Phase 5 (`parse-ownership-bronze`) |
-| MDM entity loads (all 5 domains) | Phase 5 (`mdm run`) |
+| MDM entity loads (all 5 domains) | Phase 5 (`mdm mastering`) |
 | Relationship derivation coverage | Phase 6 (`mdm derive-relationships`) |
-| Neo4j graph sync | Phase 7 (`mdm sync-graph`, `mdm verify-graph`) |
+| Neo4j graph sync | Phase 7 (`mdm publish-relationships`, `mdm reconcile`) |
 
 **Protected artifacts:** Generated deployment JSON (e.g., `infra/aws-dev-application.json`) and
 loader-fix workstream artifacts must not be edited during Phase 5 MDM operations. These are
@@ -310,15 +310,15 @@ sequence for the full-scale Phase 5 run is:
 4. **Run MDM entity loaders** (with `WAREHOUSE_STORAGE_ROOT` unset for local runs):
    ```bash
    unset WAREHOUSE_STORAGE_ROOT
-   edgar-warehouse mdm run --entity-type adviser
-   edgar-warehouse mdm run --entity-type fund
+   edgar-warehouse mdm mastering --entity-type adviser
+   edgar-warehouse mdm mastering --entity-type fund
    ```
 
 5. **Run the graph pipeline** (Phase 5 full-scale graph sync — Phase 10 deferred this step):
    ```bash
    edgar-warehouse mdm backfill-relationships
-   edgar-warehouse mdm sync-graph
-   edgar-warehouse mdm verify-graph
+   edgar-warehouse mdm publish-relationships
+   edgar-warehouse mdm reconcile
    ```
 
 Phase 10 validated steps 1–4 on a single sample (1 adviser, 1 fund). Step 5 is the remaining
@@ -375,7 +375,7 @@ SNOW_CONNECTION=snowconn snow sql --connection snowconn \
 export MDM_SNOWFLAKE_DATABASE="EDGARTOOLS_DEV"
 export MDM_SNOWFLAKE_SCHEMA="MDM"
 
-uv run --extra mdm-runtime --extra snowflake edgar-warehouse mdm sync-graph \
+uv run --extra mdm-runtime --extra snowflake edgar-warehouse mdm publish-relationships \
   --target-database EDGARTOOLS_DEV \
   --target-schema NEO4J_GRAPH_MIGRATION \
   --mdm-database EDGARTOOLS_DEV \

@@ -148,7 +148,7 @@ def test_generated_and_checked_in_mirror_ddl_preserve_run_identity_upgrade() -> 
 
 def test_mdm_cli_exposes_e2e_operations() -> None:
     parser = build_parser()
-    for command in ("migrate", "counts", "check-connectivity", "sync-graph", "api"):
+    for command in ("migrate", "counts", "check-connectivity", "publish-relationships", "api"):
         args = parser.parse_args(["mdm", command])
         assert args.command == "mdm"
         assert args.mdm_command == command

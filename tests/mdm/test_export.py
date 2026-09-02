@@ -77,7 +77,7 @@ def test_snowflake_connector_writer_multi_row_upsert_keeps_parse_json_out_of_val
     snowflake-connector-python's executemany rewrites INSERT ... VALUES (...)
     into a multi-row VALUES list, and Snowflake rejects any non-constant
     expression there ("002014 (22000): Invalid expression [PARSE_JSON(...)]
-    in VALUES clause"). Hit live by bronze_seed_silver_gold's MdmExport at
+    in VALUES clause"). Hit live by bronze_seed_silver_gold's Publish at
     real batch sizes (single-row batches masked it in dev). The supported
     pattern is INSERT ... SELECT PARSE_JSON(columnN) ... FROM VALUES (...).
     """

@@ -156,7 +156,7 @@ problem entirely.
 | Batch scripts per form type | `scripts/batch/` |
 | dbt gold models (23 dynamic tables — the actual gold layer) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
-| MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm sync-graph`/`mdm verify-graph` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
+| MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm publish-relationships`/`mdm reconcile` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
 | Operator MDM/graph review dashboard | `examples/mdm_graph_dashboard/` |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
 | Standalone Streamlit dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
@@ -196,18 +196,18 @@ Snowflake EDGARTOOLS_SILVER  <-- landing zone + dbt-native collapse
 dbt (infra/snowflake/dbt/edgartools_gold/)      MDM Postgres (Snowflake-hosted, NOT AWS
       |                                          RDS -- see "MDM database" note below)
       v                                          entity resolution: edgar_warehouse/mdm/
-EDGARTOOLS_GOLD  (23 dynamic tables)              ("mdm run", 6 entity types)
+EDGARTOOLS_GOLD  (23 dynamic tables)              ("mdm mastering", 6 entity types)
       |                                                  |
       v                                       +----------+-----------+
 Streamlit dashboard                            |                      |
 (infra/snowflake/streamlit/                    v                      v
  OR examples/dashboard/)              Snowflake                Snowflake
                                        NEO4J_GRAPH_MIGRATION    MDM mirror schema
-                                       schema -- Neo4j Graph    ("mdm export",
+                                       schema -- Neo4j Graph    ("mdm publish",
                                        Analytics Native App,    edgar_warehouse/
                                        NOT an external Neo4j    mdm/export.py)
-                                       ("mdm sync-graph" /
-                                       "mdm verify-graph" --
+                                       ("mdm publish-relationships" /
+                                       "mdm reconcile" --
                                        see "Graph storage"
                                        note below)
                                              |
@@ -1926,7 +1926,8 @@ Stage 0 — Company identity seeding (single steps, no windowing)
   SeedUniverse → MdmSeedUniverse
   • Seeds the CIK universe and MDM's own tracking state. Company entity
     *resolution* (IS_INSIDER, MANAGES_FUND, etc.) happens later, in Stage 2
-    (MdmRun) -- there is no separate identity-resolution state here; an
+    (Mastering, renamed from MdmRun by mdm-stage-renaming ticket 01) -- there
+    is no separate identity-resolution state here; an
     earlier load_history shape had one (stage0-stage1-consolidation map),
     removed when Stage0CompanyIdentity/ReduceIdentityRefresh were deleted.
 
@@ -1946,7 +1947,7 @@ Stage 1B — Fundamentals (windowed, MaxConcurrency=1 each, run after Stage 1)
   • XBRL company facts, 8-K/DEF 14A per-filing data, and 13F holdings respectively
 
 Stage 2 — MDM entity resolution (sequential Step Functions)
-  mdm-run → mdm-backfill-relationships → mdm-export → mdm-sync-graph → mdm-verify-graph
+  mdm-mastering → mdm-backfill-relationships → mdm-publish → mdm-publish-relationships → mdm-reconcile
   • Runs after Stage 1/1B complete so entity resolution sees the full silver dataset
   • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
 
@@ -1989,9 +1990,9 @@ fetched) and is unrelated to `load_history`'s own bootstrap Stage.
 As of the `neo4j-snowflake` workstream (v1.3, completed 2026-06-12), graph data lives
 *inside* Snowflake — the Neo4j Graph Analytics Native App, installed in the same Snowflake
 account as gold. There is no separate Neo4j database, no `NEO4J_URI`/`NEO4J_PASSWORD`
-secret, and no external Bolt connection. `mdm sync-graph` materializes
+secret, and no external Bolt connection. `mdm publish-relationships` materializes
 `MDM_GRAPH_NODES`/`MDM_GRAPH_EDGES` (plus per-label/per-type compatibility views) into a
-Snowflake schema (e.g. `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`); `mdm verify-graph` runs a
+Snowflake schema (e.g. `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`); `mdm reconcile` runs a
 strict SQL parity check plus Native App checks (compute pool, `GRAPH_INFO`, `BFS`, `WCC`)
 against that same Snowflake target. One credential (the same `MDM_SNOWFLAKE_*`/
 `DBT_SNOWFLAKE_*`/Snowflake CLI connection used everywhere else), one platform. Native App
@@ -2029,7 +2030,7 @@ only — no Snowflake/Neo4j orchestration logic lives in this module, per its
 own docstring.
 
 **The generation-scoped operator review contract** (GH-251):
-`edgar_warehouse/mdm/graph_review_publish.py` persists `mdm verify-graph`'s
+`edgar_warehouse/mdm/graph_review_publish.py` persists `mdm reconcile`'s
 payload into a bounded, read-only `MDM_GRAPH_REVIEW` schema that a managed
 dashboard (`examples/mdm_graph_dashboard/`) can query through a plain
 Snowpark session — no MDM Postgres DSN, no direct Neo4j credential needed by

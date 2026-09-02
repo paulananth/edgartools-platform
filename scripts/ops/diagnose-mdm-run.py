@@ -1,9 +1,9 @@
 """
-Diagnose why `mdm run` fails the silver preflight and recommend the correct
+Diagnose why `mdm mastering` fails the silver preflight and recommend the correct
 entity type to pass based on which tables actually have data.
 
 5-why findings this script was written to surface:
-  Why 1: mdm run --entity-type all --limit 5400 exits with code 1
+  Why 1: mdm mastering --entity-type all --limit 5400 exits with code 1
   Why 2: _validate_silver_tables reports problems
   Why 3a (old image): row[0] on a dict raises KeyError(0); str(KeyError(0)) == "0"
   Why 3b (new image): sec_adv_filing and sec_adv_private_fund have 0 rows
@@ -150,7 +150,7 @@ def report(counts: dict[str, int]) -> None:
     empty_adv = [t for t in ("sec_adv_filing", "sec_adv_private_fund") if counts.get(t, -1) == 0]
     if empty_adv:
         print(f"""
-  Why 1: mdm run --entity-type all exits with code 1
+  Why 1: mdm mastering --entity-type all exits with code 1
   Why 2: _validate_silver_tables reports "{', '.join(empty_adv)} has 0 rows"
   Why 3: ADV tables are empty — Form ADV (investment adviser) pipeline has not run
   Why 4: ADV parsing requires bootstrap with --form-type ADV, which has not been
@@ -227,9 +227,9 @@ def trigger_run(env: str, region: str, entity_type: str, limit: int) -> None:
                 sgs     = net.get("SecurityGroups", [])
                 break
 
-    command = ["mdm", "run", "--entity-type", entity_type, "--limit", str(limit)]
+    command = ["mdm", "mastering", "--entity-type", entity_type, "--limit", str(limit)]
 
-    hr(f"Triggering ECS task: mdm run --entity-type {entity_type} --limit {limit}")
+    hr(f"Triggering ECS task: mdm mastering --entity-type {entity_type} --limit {limit}")
     print(f"  Cluster:    {cluster.split('/')[-1]}")
     print(f"  Task def:   {task_def.split('/')[-1]}")
     print(f"  Subnets:    {subnets}")
@@ -299,7 +299,7 @@ def trigger_run(env: str, region: str, entity_type: str, limit: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Diagnose silver preflight failures for mdm run."
+        description="Diagnose silver preflight failures for mdm mastering."
     )
     parser.add_argument("--env",          default="dev")
     parser.add_argument("--region",       default=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))

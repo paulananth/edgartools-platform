@@ -460,7 +460,7 @@ def test_bootstrap_gold_refresh_is_still_a_plain_end_state(bootstrap_definition)
 # sec_fetch_active cross-command lease (release-readiness ticket 84):
 # AcquireSecFetchLease -> ReadSecFetchLeaseResult -> SecFetchLeaseAcquiredCheck
 # -> {<fetch-phase-start> | SecFetchDeferred}, and ReleaseSecFetchLease
-# before MdmRun. Independent of the existing identity-refresh lease above.
+# before Mastering. Independent of the existing identity-refresh lease above.
 # ---------------------------------------------------------------------------
 
 
@@ -493,14 +493,14 @@ def test_bootstrap_releases_sec_fetch_lease_before_mdm_run(bootstrap_definition)
     cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "release-sec-fetch-lease" in cmd
     assert release["ResultPath"] is None
-    assert release["Next"] == "MdmRun"
+    assert release["Next"] == "Mastering"
     assert release["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
     ]
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
     assert fallback["Type"] == "Pass"
-    assert fallback["Next"] == "MdmRun"
+    assert fallback["Next"] == "Mastering"
     assert "End" not in fallback
 
 
@@ -588,7 +588,7 @@ def test_daily_incremental_acquires_sec_fetch_lease_before_refresh_mode(
 def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
     daily_incremental_definition,
 ) -> None:
-    """Every path into MdmRun that used to go there directly from the ADV/
+    """Every path into Mastering that used to go there directly from the ADV/
     firm-roster fetch chain (the happy path and every Catch fallthrough)
     must now release the lease first -- a failure partway through the
     fetch-heavy span must not leave sec_fetch_active wedged for 16h."""
@@ -610,13 +610,13 @@ def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
     release = states["ReleaseSecFetchLease"]
     cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "release-sec-fetch-lease" in cmd
-    assert release["Next"] == "MdmRun"
+    assert release["Next"] == "Mastering"
     assert release["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
     ]
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
-    assert fallback["Next"] == "MdmRun"
+    assert fallback["Next"] == "Mastering"
 
 
 def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
@@ -692,5 +692,5 @@ def test_daily_incremental_has_both_leases_independently(daily_incremental_defin
 
     # GoldRefresh still routes to the identity-refresh ReleaseLease at the
     # very end of the run -- sec_fetch_active already released much earlier,
-    # right before MdmRun.
+    # right before Mastering.
     assert states["GoldRefresh"]["Next"] == "ReleaseLease"

@@ -393,7 +393,7 @@ def test_sync_graph_uses_snowflake_executor_without_neo4j_credentials(monkeypatc
     args = build_parser().parse_args(
         [
             "mdm",
-            "sync-graph",
+            "publish-relationships",
             "--relationship-type",
             "HOLDS",
             "--relationship-type",
@@ -483,7 +483,7 @@ def test_sync_graph_cli_payload_surfaces_capped_below_available(monkeypatch, cap
     )
 
     args = build_parser().parse_args(
-        ["mdm", "sync-graph", "--limit", "200", "--target-database", "EDGARTOOLS_DEV"]
+        ["mdm", "publish-relationships", "--limit", "200", "--target-database", "EDGARTOOLS_DEV"]
     )
     assert args.handler(args) == 0
 
@@ -511,7 +511,7 @@ def test_verify_graph_reports_strict_snowflake_parity(monkeypatch, capsys):
     )
     _patch_verify_settings(monkeypatch, connection)
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 0
 
@@ -577,7 +577,7 @@ def test_verify_graph_skip_review_publish_never_invokes_publisher(monkeypatch, c
         lambda *a, **k: calls.append((a, k)),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph", "--skip-review-publish"])
+    args = build_parser().parse_args(["mdm", "reconcile", "--skip-review-publish"])
 
     assert args.handler(args) == 0
     assert calls == []
@@ -605,7 +605,7 @@ def test_verify_graph_publishes_review_when_a_generation_is_active(monkeypatch, 
         lambda connection, **kwargs: published.append(kwargs),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 0
     assert len(published) == 1
@@ -640,7 +640,7 @@ def test_verify_graph_review_publish_failure_does_not_change_exit_code(monkeypat
         "edgar_warehouse.mdm.graph_review_publish.publish_graph_review", _boom
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     # Still 0 -- the fixture's graph parity passed; review-publish failing
     # must not flip that.
@@ -663,7 +663,7 @@ def test_verify_graph_no_active_generation_skips_publish_with_warning(monkeypatc
     )
     _patch_verify_settings(monkeypatch, connection)
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 0
     stderr = capsys.readouterr().err
@@ -689,7 +689,7 @@ def test_verify_graph_generation_id_flag_promotes_candidate_to_verified_on_pass(
     _patch_verify_settings(monkeypatch, connection)
 
     args = build_parser().parse_args(
-        ["mdm", "verify-graph", "--generation-id", "candidate-gen-123"]
+        ["mdm", "reconcile", "--generation-id", "candidate-gen-123"]
     )
 
     assert args.handler(args) == 0
@@ -715,7 +715,7 @@ def test_verify_graph_without_generation_id_never_touches_graph_generation_statu
     )
     _patch_verify_settings(monkeypatch, connection)
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 0
 
@@ -738,7 +738,7 @@ def test_verify_graph_fails_hard_when_native_app_grant_missing(monkeypatch, caps
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 1
 
@@ -779,7 +779,7 @@ def test_verify_graph_reports_capability_failure_separately(monkeypatch, capsys)
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
     assert args.handler(args) == 1
 
     payload = json.loads(capsys.readouterr().out)
@@ -808,7 +808,7 @@ def test_verify_graph_list_graphs_external_blocker_is_nonblocking(monkeypatch, c
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
     assert args.handler(args) == 0
 
     payload = json.loads(capsys.readouterr().out)
@@ -833,7 +833,7 @@ def test_verify_graph_skip_native_app_is_explicit_offline_only(monkeypatch, caps
     )
     _patch_verify_settings(monkeypatch, connection)
 
-    args = build_parser().parse_args(["mdm", "verify-graph", "--skip-native-app"])
+    args = build_parser().parse_args(["mdm", "reconcile", "--skip-native-app"])
 
     assert args.handler(args) == 0
 
@@ -878,7 +878,7 @@ def test_verify_graph_fails_with_node_mismatch_diagnostics(monkeypatch, capsys):
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 1
 
@@ -943,7 +943,7 @@ def test_verify_graph_fails_with_relationship_and_endpoint_diagnostics(monkeypat
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 1
 
@@ -1054,7 +1054,7 @@ def test_verify_graph_named_node_checks_all_6_types_present_and_ok(monkeypatch, 
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 0
 
@@ -1091,7 +1091,7 @@ def test_verify_graph_named_node_check_fails_when_type_missing_entirely(monkeypa
         FakeSnowflakeConnection(result_sets=_strict_parity_results(node_rows=node_rows)),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 1
 
@@ -1125,7 +1125,7 @@ def test_verify_graph_named_node_check_fails_on_present_type_count_mismatch(
         FakeSnowflakeConnection(result_sets=_strict_parity_results(node_rows=node_rows)),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 1
 
@@ -1157,7 +1157,7 @@ def test_verify_graph_named_relationship_checks_all_4_populated_types_present_an
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 0
 
@@ -1199,7 +1199,7 @@ def test_verify_graph_named_relationship_check_fails_when_type_missing_entirely(
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 1
 
@@ -1234,7 +1234,7 @@ def test_verify_graph_named_relationship_check_fails_on_present_type_count_misma
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 1
 
@@ -1267,7 +1267,7 @@ def test_verify_graph_named_relationship_checks_exclude_unpopulated_types(
         ),
     )
 
-    args = build_parser().parse_args(["mdm", "verify-graph"])
+    args = build_parser().parse_args(["mdm", "reconcile"])
 
     assert args.handler(args) == 0
 

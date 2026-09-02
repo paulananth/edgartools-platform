@@ -470,7 +470,7 @@ def _handle_resolve_snowflake_env(args: argparse.Namespace) -> int:
     """Print `export KEY=VALUE` shell lines for a Snowflake connection.
 
     Reuses SnowflakeConnectionSettings.from_env() -- the same resolution chain
-    already trusted by `mdm export`/`mdm sync-graph` -- instead of a second,
+    already trusted by `mdm publish`/`mdm publish-relationships` -- instead of a second,
     independent password-parsing implementation.
 
     The resolved password DOES appear in this command's stdout -- there is no
@@ -1860,7 +1860,7 @@ def build_parser() -> argparse.ArgumentParser:
         "resolve-snowflake-env",
         help="Resolve Snowflake connection settings for a named connection and print "
              "'export KEY=VALUE' shell lines (DBT_SNOWFLAKE_*, TF_VAR_snowflake_password). "
-             "Reuses the same resolution chain as `mdm export`/`mdm sync-graph`: individual "
+             "Reuses the same resolution chain as `mdm publish`/`mdm publish-relationships`: individual "
              "MDM_SNOWFLAKE_*/DBT_SNOWFLAKE_* env vars first, then the "
              "MDM_SNOWFLAKE_SECRET_JSON/DBT_SNOWFLAKE_SECRET_JSON blob, then SnowCLI's "
              "~/.snowflake/connections.toml. Output is shell code meant for eval \"$(...)\" -- "

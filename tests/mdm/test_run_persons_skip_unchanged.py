@@ -5,7 +5,7 @@ tests/mdm/test_run_companies_skip_unchanged.py and
 tests/mdm/test_run_securities_skip_unchanged.py).
 
 Root cause this closes: run_persons() has no resumable ledger (unlike
-run_companies()), so a restarted `mdm run` re-processes every ownership
+run_companies()), so a restarted `mdm mastering` re-processes every ownership
 reporting-owner row from scratch. Before this fix, PersonResolver.resolve_one
 never called _skip_if_unchanged, so every re-run of an unchanged row called
 _stage_attrs() again -- and stage_candidate() always INSERTs a fresh row
@@ -67,7 +67,7 @@ class TestPersonSkipIfUnchanged:
         assert stage_count_after_second == stage_count_after_first, (
             "second run over unchanged data must not re-stage -- this is the actual "
             "production bug: unbounded duplicate mdm_entity_attribute_stage growth "
-            "across repeated mdm run restarts"
+            "across repeated mdm mastering restarts"
         )
         assert change_log_count_after_second == change_log_count_after_first, (
             "second run over unchanged data must not run survivorship again"

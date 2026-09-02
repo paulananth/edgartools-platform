@@ -93,7 +93,7 @@ variable "parent_admin_role_name" {
 }
 
 variable "mdm_graph_review_dashboard_enabled" {
-  description = "Whether to provision the MDM_GRAPH_REVIEW Streamlit dashboard. Requires a prior generation-scoped `mdm sync-graph` + `graph-activate` run in this environment; see the module comment in main.tf."
+  description = "Whether to provision the MDM_GRAPH_REVIEW Streamlit dashboard. Requires a prior generation-scoped `mdm publish-relationships` + `graph-activate` run in this environment; see the module comment in main.tf."
   type        = bool
   default     = false
 }

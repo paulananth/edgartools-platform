@@ -7,17 +7,17 @@ Layers and what each does:
                   re-parses ownership XMLs from S3 bronze with --artifact-policy skip.
                   No submissions.json or filing index re-downloaded from SEC.
 
-  mdm             edgar-warehouse mdm run --entity-type all  (ECS direct)
+  mdm             edgar-warehouse mdm mastering --entity-type all  (ECS direct)
                   Resolves companies, persons, securities, advisers into MDM Postgres.
 
   backfill        mdm backfill-relationships  (Step Functions SM)
                   Patches NULL issuer_entity_id, creates ISSUED_BY / MANAGES_FUND
                   instances, syncs to Neo4j.
 
-  sync            mdm sync-graph  (Step Functions SM)
+  sync            mdm publish-relationships  (Step Functions SM)
                   Pushes pending mdm_relationship_instance rows to Neo4j AuraDB.
 
-  verify          mdm verify-graph  (Step Functions SM)
+  verify          mdm reconcile  (Step Functions SM)
                   Prints Neo4j node/edge counts to CloudWatch; exits non-zero on mismatch.
 
   gold            gold-refresh  (Step Functions SM)
@@ -40,8 +40,8 @@ Usage:
 Options:
   --env ENV             Environment prefix (default: dev)
   --region REGION       AWS region (default: us-east-1)
-  --mdm-limit N         Max entities per type for mdm run (default: 5400)
-  --sync-limit N        Max relationship rows for mdm sync-graph (default: 500)
+  --mdm-limit N         Max entities per type for mdm mastering (default: 5400)
+  --sync-limit N        Max relationship rows for mdm publish-relationships (default: 500)
   --skip-bronze         Skip bronze→silver layer
   --skip-mdm            Skip MDM layer
   --skip-backfill       Skip backfill layer
@@ -284,10 +284,10 @@ def layer_bronze_silver(env: str, region: str, acct: str,
 
 def layer_mdm(env: str, region: str, cfg: dict, limit: int,
               dry_run: bool) -> bool:
-    """Run mdm run --entity-type all via ECS direct (SM hardcodes all, bypassed here)."""
+    """Run mdm mastering --entity-type all via ECS direct (SM hardcodes all, bypassed here)."""
     hr("LAYER 2 — MDM  (entity resolution)")
     info(f"entity-type: all  limit: {limit}")
-    command = ["mdm", "run", "--entity-type", "all", "--limit", str(limit)]
+    command = ["mdm", "mastering", "--entity-type", "all", "--limit", str(limit)]
     return run_ecs_task(command, cfg, region, dry_run)
 
 
@@ -302,7 +302,7 @@ def layer_backfill(env: str, region: str, acct: str,
 
 def layer_sync(env: str, region: str, acct: str,
                limit: int, dry_run: bool) -> bool:
-    """mdm sync-graph — pushes pending relationship instances to Neo4j AuraDB."""
+    """mdm publish-relationships — pushes pending relationship instances to Neo4j AuraDB."""
     hr("LAYER 4 — Neo4j Sync  (sync-graph)")
     arn = sm_arn(env, "mdm-sync-graph", region, acct)
     name = f"sync-neo4j-{int(time.time())}"
@@ -311,7 +311,7 @@ def layer_sync(env: str, region: str, acct: str,
 
 def layer_verify(env: str, region: str, acct: str,
                  dry_run: bool) -> bool:
-    """mdm verify-graph — prints Neo4j counts to CloudWatch, validates coverage."""
+    """mdm reconcile — prints Neo4j counts to CloudWatch, validates coverage."""
     hr("LAYER 5 — Neo4j Verify  (verify-graph)")
     arn = sm_arn(env, "mdm-verify-graph", region, acct)
     name = f"sync-verify-{int(time.time())}"
@@ -337,7 +337,7 @@ def main() -> None:
     parser.add_argument("--env",           default="dev")
     parser.add_argument("--region",        default=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
     parser.add_argument("--mdm-limit",     type=int, default=5400,
-                        help="Max entities per type for mdm run (default: 5400)")
+                        help="Max entities per type for mdm mastering (default: 5400)")
     parser.add_argument("--sync-limit",    type=int, default=500,
                         help="Max relationship rows for sync-graph (default: 500)")
     parser.add_argument("--skip-bronze",   action="store_true",

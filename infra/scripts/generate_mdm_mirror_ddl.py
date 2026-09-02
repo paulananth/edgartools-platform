@@ -7,7 +7,7 @@ created by a one-off, uncommitted manual shell session on 2026-06-22. When
 the platform's Snowflake account was rebuilt as part of the go-live cutover,
 every other piece (gold, source, loader role, dashboards, Neo4j app) was
 re-provisioned via Terraform/bootstrap SQL, but this step had no script to
-re-run -- so the schema came back empty and `mdm export` failed with
+re-run -- so the schema came back empty and `mdm publish` failed with
 "Object 'EDGARTOOLS_PROD.MDM.MDM_ENTITY' does not exist or not authorized."
 
 This script reflects the authoritative schema straight from

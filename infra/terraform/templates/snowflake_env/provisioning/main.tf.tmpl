@@ -51,7 +51,7 @@ module "mdm_dashboard" {
   # Disabled by default for a newly generated environment: that contract's
   # fail-closed views depend on generation-scoped GRAPH_ACTIVE_POINTER /
   # GRAPH_GENERATION tables, which only exist after a
-  # `mdm sync-graph --generation-id ...` plus `graph-activate` run. Enabling
+  # `mdm publish-relationships --generation-id ...` plus `graph-activate` run. Enabling
   # this before those exist makes the first apply fail. Flip
   # mdm_graph_review_dashboard_enabled to true once the environment has had a
   # generation-scoped graph sync -- see CLAUDE.md's "Dev Terraform/Snowflake

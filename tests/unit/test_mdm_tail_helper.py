@@ -34,32 +34,32 @@ def test_wires_export_sync_verify_in_order_with_gold_refresh():
         gold_state=_task_state(),
     )
 
-    assert set(result) == {"MdmExport", "MdmSync", "MdmVerify", "GoldRefresh"}
-    assert result["MdmExport"]["Next"] == "MdmSync"
-    assert result["MdmSync"]["Next"] == "MdmVerify"
-    assert result["MdmVerify"]["Next"] == "GoldRefresh"
+    assert set(result) == {"Publish", "Publish Relationships", "Reconcile", "GoldRefresh"}
+    assert result["Publish"]["Next"] == "Publish Relationships"
+    assert result["Publish Relationships"]["Next"] == "Reconcile"
+    assert result["Reconcile"]["Next"] == "GoldRefresh"
     assert result["GoldRefresh"]["End"] is True
-    assert "End" not in result["MdmExport"]
-    assert "End" not in result["MdmSync"]
-    assert "End" not in result["MdmVerify"]
+    assert "End" not in result["Publish"]
+    assert "End" not in result["Publish Relationships"]
+    assert "End" not in result["Reconcile"]
     assert "Next" not in result["GoldRefresh"]
 
 
 def test_wires_export_sync_verify_without_gold_refresh():
     result = wire_mdm_tail(_task_state(), _task_state(), _task_state())
 
-    assert set(result) == {"MdmExport", "MdmSync", "MdmVerify"}
-    assert result["MdmExport"]["Next"] == "MdmSync"
-    assert result["MdmSync"]["Next"] == "MdmVerify"
-    assert result["MdmVerify"]["End"] is True
-    assert "Next" not in result["MdmVerify"]
+    assert set(result) == {"Publish", "Publish Relationships", "Reconcile"}
+    assert result["Publish"]["Next"] == "Publish Relationships"
+    assert result["Publish Relationships"]["Next"] == "Reconcile"
+    assert result["Reconcile"]["End"] is True
+    assert "Next" not in result["Reconcile"]
 
 
 def test_preserves_caller_supplied_flags_and_catch():
     export = _task_state(Parameters={"TaskDefinition": "arn:mdm-large"})
     sync = _task_state(Parameters={
         "TaskDefinition": "arn:mdm-large",
-        "Overrides": {"ContainerOverrides": [{"Command.$": "States.Array('mdm', 'sync-graph', '--generation-id', $$.Execution.Name)"}]},
+        "Overrides": {"ContainerOverrides": [{"Command.$": "States.Array('mdm', 'publish-relationships', '--generation-id', $$.Execution.Name)"}]},
     })
     verify = _task_state(Catch=[{"ErrorEquals": ["States.ALL"], "Next": "GoldRefresh"}])
 
@@ -67,9 +67,9 @@ def test_preserves_caller_supplied_flags_and_catch():
 
     # Flags/task-def/Catch pass through completely unchanged -- wire_mdm_tail
     # only ever touches Next/End.
-    assert result["MdmSync"]["Parameters"]["TaskDefinition"] == "arn:mdm-large"
-    assert "generation-id" in result["MdmSync"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
-    assert result["MdmVerify"]["Catch"] == [{"ErrorEquals": ["States.ALL"], "Next": "GoldRefresh"}]
+    assert result["Publish Relationships"]["Parameters"]["TaskDefinition"] == "arn:mdm-large"
+    assert "generation-id" in result["Publish Relationships"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert result["Reconcile"]["Catch"] == [{"ErrorEquals": ["States.ALL"], "Next": "GoldRefresh"}]
 
 
 def test_overwrites_pre_set_next_or_end_on_export_and_sync():
@@ -83,9 +83,9 @@ def test_overwrites_pre_set_next_or_end_on_export_and_sync():
 
     result = wire_mdm_tail(export, sync, verify, gold_state=_task_state())
 
-    assert "End" not in result["MdmExport"]
-    assert result["MdmExport"]["Next"] == "MdmSync"
-    assert result["MdmSync"]["Next"] == "MdmVerify"
+    assert "End" not in result["Publish"]
+    assert result["Publish"]["Next"] == "Publish Relationships"
+    assert result["Publish Relationships"]["Next"] == "Reconcile"
 
 
 def test_does_not_mutate_input_dicts():

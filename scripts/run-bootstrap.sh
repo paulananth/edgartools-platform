@@ -18,7 +18,7 @@
 #
 # What it does:
 #   1. bootstrap              — fetch recent SEC filings for active universe → bronze + silver
-#   2. mdm run → backfill-relationships → sync-graph (Neo4j) → verify-graph
+#   2. mdm mastering → backfill-relationships → sync-graph (Neo4j) → verify-graph
 #   3. gold-refresh           — builds all gold tables + Snowflake export manifest
 #
 # Secrets required in AWS Secrets Manager before running:

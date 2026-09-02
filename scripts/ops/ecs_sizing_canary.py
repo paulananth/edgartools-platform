@@ -199,7 +199,7 @@ def add_unbounded_sync_route(definition: dict[str, Any]) -> dict[str, Any]:
     )
     if len(containers) != 1:
         raise ValueError("sync-graph limit task has an unexpected container override")
-    containers[0]["Command.$"] = "States.Array('mdm', 'sync-graph')"
+    containers[0]["Command.$"] = "States.Array('mdm', 'publish-relationships')"
     states["Ticket28RunUnboundedSync"] = unbounded
     states["Ticket28HasUnboundedSyncLimit"] = {
         "Type": "Choice",
@@ -232,20 +232,20 @@ def add_unbounded_residual_sync(
     rewritten = copy.deepcopy(definition)
     containers = (
         (rewritten.get("States") or {})
-        .get("MdmSync", {})
+        .get("Publish Relationships", {})
         .get("Parameters", {})
         .get("Overrides", {})
         .get("ContainerOverrides", [])
     )
     if len(containers) != 1:
-        raise ValueError("residual MdmSync has an unexpected container override")
+        raise ValueError("residual Publish Relationships has an unexpected container override")
     legacy = (
-        "States.Array('mdm', 'sync-graph', "
+        "States.Array('mdm', 'publish-relationships', "
         "'--generation-id', $$.Execution.Name, "
         "'--limit-per-type', '200000')"
     )
     unbounded = (
-        "States.Array('mdm', 'sync-graph', "
+        "States.Array('mdm', 'publish-relationships', "
         "'--generation-id', $$.Execution.Name)"
     )
     command = containers[0].get("Command.$")

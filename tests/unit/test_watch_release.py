@@ -26,17 +26,17 @@ def test_render_state_entered_and_exited() -> None:
     entered = {
         "type": "TaskStateEntered",
         "timestamp": 1789000000.0,
-        "stateEnteredEventDetails": {"name": "StrictMdmVerify"},
+        "stateEnteredEventDetails": {"name": "StrictReconcile"},
     }
     exited = {
         "type": "TaskStateExited",
         "timestamp": 1789000060.0,
-        "stateExitedEventDetails": {"name": "StrictMdmVerify"},
+        "stateExitedEventDetails": {"name": "StrictReconcile"},
     }
     (line_in,) = watch_release.render_event(entered, "prod")
     (line_out,) = watch_release.render_event(exited, "prod")
-    assert "> StrictMdmVerify" in line_in
-    assert "StrictMdmVerify done" in line_out
+    assert "> StrictReconcile" in line_in
+    assert "StrictReconcile done" in line_out
 
 
 def test_render_task_submitted_extracts_ecs_task_id_and_tail_hint() -> None:

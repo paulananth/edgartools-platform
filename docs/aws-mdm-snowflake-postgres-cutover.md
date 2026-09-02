@@ -262,24 +262,24 @@ Observed throughput (2026-06-08, mdm-medium, Snowflake Postgres):
 | securities | 37,102 | ~155 min |
 | relationships | TBD | TBD |
 
-### ⚠️ Known issue: `mdm run --entity-type relationships` is not a valid command
+### ⚠️ Known issue: `mdm mastering --entity-type relationships` is not a valid command
 
 **Symptom:** ECS task exits with code 2 immediately:
 
 ```
-edgar-warehouse mdm run: error: argument --entity-type: invalid choice: 'relationships'
+edgar-warehouse mdm mastering: error: argument --entity-type: invalid choice: 'relationships'
 (choose from company, adviser, security, person, fund, all)
 ```
 
-**Root cause:** `relationships` is not a valid `--entity-type` value for `mdm run`.
+**Root cause:** `relationships` is not a valid `--entity-type` value for `mdm mastering`.
 Relationship derivation is a separate pipeline stage exposed via its own subcommand
-`mdm derive-relationships`, not via `mdm run`. The MDM CLI has three distinct
+`mdm derive-relationships`, not via `mdm mastering`. The MDM CLI has three distinct
 relationship commands:
 - `mdm derive-relationships` — derives relationship instances from resolved entities + silver facts (no graph sync)
 - `mdm load-relationships` — derives relationships AND optionally syncs to Snowflake graph tables
 - `mdm backfill-relationships` — legacy backfill from `mdm_fund`/`mdm_security` tables
 
-**Fix:** use `mdm derive-relationships` (not `mdm run --entity-type relationships`)
+**Fix:** use `mdm derive-relationships` (not `mdm mastering --entity-type relationships`)
 when running relationship derivation from ECS. This command runs after all entity
 domains (`company`, `person`, `security`, etc.) have completed.
 
@@ -330,7 +330,7 @@ The audit fails if:
 - the MDM DSN secret does not resolve to a Snowflake Postgres host.
 - warehouse or MDM task definitions do not inject the same `MDM_DATABASE_URL` secret ARN.
 - deployed state machines reference stale task definition revisions.
-- `mdm check-connectivity`, `mdm counts`, representative `mdm run`, or the warehouse tracked-CIK read smoke fails.
+- `mdm check-connectivity`, `mdm counts`, representative `mdm mastering`, or the warehouse tracked-CIK read smoke fails.
 
 ## 6. Remove AWS RDS
 

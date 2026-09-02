@@ -41,8 +41,8 @@ Stages (in --all order):
   build-partitions     mdm generation-build-partition for every planned partition.
   fan-in               mdm generation-fan-in (coverage ledger, verified/failed).
   activate-generation  mdm generation-activate (MDM-side activation).
-  sync-graph           mdm sync-graph (publish into the new generation; does not activate).
-  verify-graph         mdm verify-graph (identity/property parity, Native App checks).
+  sync-graph           mdm publish-relationships (publish into the new generation; does not activate).
+  verify-graph         mdm reconcile (identity/property parity, Native App checks).
   graph-activate       mdm graph-activate (single Snowflake active-generation pointer).
   coverage-report      mdm coverage-report (EDGE-07/08 categories).
   hosted-e2e           neo4j-snowflake-migration.py --hosted-e2e (traversal + parity SQL).
@@ -271,12 +271,12 @@ location = StorageLocation(root=os.environ['WAREHOUSE_BRONZE_ROOT'])
 path = location.join(f\"reference/mdm_generation/runs/${RUN_ID}/generation.json\")
 print(json.loads(read_bytes(path).decode('utf-8'))['generation_id'])
 " 2>&1)" || fail "could not resolve generation_id for run ${RUN_ID}: $generation_id"
-  run_stage_command sync-graph "mdm sync-graph --generation-id ${generation_id}" \
+  run_stage_command sync-graph "mdm publish-relationships --generation-id ${generation_id}" \
     mdm_cli sync-graph --generation-id "$generation_id" --target-database "$SNOWFLAKE_DATABASE_NAME"
 }
 
 stage_verify_graph() {
-  run_stage_command verify-graph "mdm verify-graph" mdm_cli verify-graph
+  run_stage_command verify-graph "mdm reconcile" mdm_cli verify-graph
 }
 
 stage_graph_activate() {

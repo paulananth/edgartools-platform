@@ -2,9 +2,9 @@
 --
 -- Root cause this file exists to fix: identical failure class to
 -- 09_mdm_mirror_schema.sql, one step further down the pipeline. The graph
--- destination schema (`mdm sync-graph`'s target -- see
+-- destination schema (`mdm publish-relationships`'s target -- see
 -- docs/prod-mdm-snowflake-graph-first-load.md) was never re-provisioned
--- after the Snowflake account cutover, so `mdm sync-graph` failed:
+-- after the Snowflake account cutover, so `mdm publish-relationships` failed:
 --   "SQL compilation error: Insufficient privileges to operate on database
 --   'EDGARTOOLS_PROD'. Your primary role EDGARTOOLS_PROD_LOADER must have
 --   CREATE SCHEMA granted on DATABASE EDGARTOOLS_PROD."

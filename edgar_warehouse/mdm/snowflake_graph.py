@@ -45,7 +45,7 @@ ALLOWED_RELATIONSHIP_TYPES = (
 # see 06-PHASE-CLOSURE-LEDGER.md for the evidenced disposition of each (two
 # source-coverage exclusions, one structural-API exclusion, two confirmed
 # bugs with an identified but deferred fix). None is added here: per D-05,
-# a type must not enter this tuple before its own mdm sync-graph has
+# a type must not enter this tuple before its own mdm publish-relationships has
 # produced rows -- adding any of the 5 now would false-fail verify-graph
 # for a type this environment has never actually populated. HAS_PARENT_COMPANY
 # and MANAGES_FUND remain out of Phase 6's scope entirely.
@@ -683,7 +683,7 @@ def _verify_native_app(
                 remediation=(
                     f"Run {grant_script}; then retry WCC with compute pool {compute_pool} "
                     "against the hosted MDM graph (projects the GRAPH_APP_NODES/"
-                    "GRAPH_APP_EDGES ID-only views created by `mdm sync-graph`)."
+                    "GRAPH_APP_EDGES ID-only views created by `mdm publish-relationships`)."
                 ),
             ),
             _native_execute_check(
@@ -788,7 +788,7 @@ def _native_sample_node_check(
 ) -> tuple[dict[str, Any], str]:
     remediation = (
         f"Materialize graph rows in {context['target_database']}.{context['target_schema']} "
-        "with `edgar-warehouse mdm sync-graph` before running Native App smoke checks."
+        "with `edgar-warehouse mdm publish-relationships` before running Native App smoke checks."
     )
     try:
         rows = _fetch_rows(
@@ -1943,7 +1943,7 @@ def _named_node_parity_checks(node_parity: dict[str, Any]) -> list[dict[str, Any
             check["remediation"] = (
                 f"No parity row for entity_type={entity_type!r}: confirm its "
                 "GRAPH_NODE_* view exists (render_graph_tables()) and re-run "
-                "mdm sync-graph."
+                "mdm publish-relationships."
             )
         checks.append(check)
     return checks
@@ -2012,7 +2012,7 @@ def _named_relationship_parity_checks(
         elif not present:
             check["remediation"] = (
                 f"No parity row for relationship_type={relationship_type!r}: confirm "
-                "mdm load-relationships has populated this type and re-run mdm sync-graph."
+                "mdm load-relationships has populated this type and re-run mdm publish-relationships."
             )
         checks.append(check)
     return checks

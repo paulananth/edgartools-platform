@@ -74,10 +74,10 @@ edgar-warehouse mdm seed-universe
 #    Add --limit 100 for a quick smoke test
 
 # 4. Run entity resolution pipeline
-edgar-warehouse mdm run --entity-type company
+edgar-warehouse mdm mastering --entity-type company
 
 # 5. Sync relationships to Neo4j
-edgar-warehouse mdm sync-graph
+edgar-warehouse mdm publish-relationships
 ```
 
 ---
@@ -95,7 +95,7 @@ edgar-warehouse mdm check-connectivity --neo4j
 edgar-warehouse mdm review list --status pending
 
 # Verify Neo4j graph (node/edge counts)
-edgar-warehouse mdm verify-graph
+edgar-warehouse mdm reconcile
 ```
 
 **Windows-specific E2E notes:**

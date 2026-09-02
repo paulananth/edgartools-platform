@@ -76,7 +76,7 @@ def _make_adv_fixture_db(path: str) -> None:
 
 
 class TestAdviserPreflight:
-    """sec_adv_filing must be nonempty before mdm run --entity-type adviser passes."""
+    """sec_adv_filing must be nonempty before mdm mastering --entity-type adviser passes."""
 
     def test_adviser_fail_on_empty_sec_adv_filing(self, tmp_path, monkeypatch):
         """Empty sec_adv_filing → _require_silver_reader returns rc=1."""
@@ -89,7 +89,7 @@ class TestAdviserPreflight:
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
         required = mdm_cli._required_tables_for_run("adviser")
-        reader, rc = mdm_cli._require_silver_reader(required, "mdm run")
+        reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
         assert rc == 1, f"Expected rc=1 (FAIL) for empty sec_adv_filing, got rc={rc}"
 
@@ -115,7 +115,7 @@ class TestAdviserPreflight:
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
         required = mdm_cli._required_tables_for_run("adviser")
-        reader, rc = mdm_cli._require_silver_reader(required, "mdm run")
+        reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
         assert rc == 0, f"Expected rc=0 (PASS) after inserting sec_adv_filing row, got rc={rc}"
 
@@ -131,7 +131,7 @@ class TestAdviserPreflight:
         required = mdm_cli._required_tables_for_run("adviser")
         reader, _rc = mdm_cli._require_silver_reader(
             {"sec_adv_filing": False},  # just-exist check — let reader be opened
-            "mdm run",
+            "mdm mastering",
         )
         if reader is None:
             pytest.skip("reader is None — silver source misconfigured in test env")
@@ -147,7 +147,7 @@ class TestAdviserPreflight:
 
 
 class TestFundPreflight:
-    """sec_adv_private_fund must be nonempty before mdm run --entity-type fund passes."""
+    """sec_adv_private_fund must be nonempty before mdm mastering --entity-type fund passes."""
 
     def test_fund_fail_on_empty_sec_adv_private_fund(self, tmp_path, monkeypatch):
         """Empty sec_adv_private_fund → _require_silver_reader returns rc=1."""
@@ -160,7 +160,7 @@ class TestFundPreflight:
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
         required = mdm_cli._required_tables_for_run("fund")
-        reader, rc = mdm_cli._require_silver_reader(required, "mdm run")
+        reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
         assert rc == 1, f"Expected rc=1 (FAIL) for empty sec_adv_private_fund, got rc={rc}"
 
@@ -184,6 +184,6 @@ class TestFundPreflight:
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
         required = mdm_cli._required_tables_for_run("fund")
-        reader, rc = mdm_cli._require_silver_reader(required, "mdm run")
+        reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
         assert rc == 0, f"Expected rc=0 (PASS) after inserting sec_adv_private_fund row, got rc={rc}"

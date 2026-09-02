@@ -47,7 +47,7 @@ class TestBoundedLimitMakesCumulativeProgress:
         """3 calls with limit=2 against a 5-company universe must resolve all
         5 -- not plateau at the same first 2 forever. This is the exact
         shape load_history/daily_incremental/bootstrap/mdm_gold hit in prod:
-        `mdm run --entity-type all --limit 100` (or --limit 200 for
+        `mdm mastering --entity-type all --limit 100` (or --limit 200 for
         sync-graph's sibling case), invoked repeatedly with no
         --resume-ledger-run-id."""
         session = _seeded_sqlite_session(static_pool=True)

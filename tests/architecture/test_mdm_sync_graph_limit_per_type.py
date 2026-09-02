@@ -1,6 +1,6 @@
 """Structural checks on the generated mdm_sync_graph Step Functions definition.
 
-Release-readiness ticket 94: `mdm sync-graph`'s CLI supports `--limit-per-type`,
+Release-readiness ticket 94: `mdm publish-relationships`'s CLI supports `--limit-per-type`,
 but the state machine's ASL only ever wired `$.limit` into the ECS command
 override -- an execution input of {"limit_per_type": N} was silently ignored,
 falling through to the bare default command (which itself resolves to a small
@@ -107,7 +107,7 @@ def test_sync_graph_wires_limit_per_type_as_new_entrypoint(tmp_root: Path) -> No
     command = _command_of(definition, "RunMdmTaskWithLimitPerType")
     assert "'--limit-per-type'" in command
     assert "$.limit_per_type" in command
-    assert "sync-graph" in command
+    assert "publish-relationships" in command
 
 
 def test_sync_graph_falls_through_to_original_chain_when_limit_per_type_absent(

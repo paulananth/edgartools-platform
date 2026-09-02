@@ -135,7 +135,7 @@ Grouped by domain. Each item notes the **primary gold/MDM source**.
 | G2 | Which funds does adviser A manage? | `MANAGES_FUND` |
 | G3 | Does person P appear across multiple issuers? | Person entity + edges |
 | G4 | Who audits company X? | `AUDITED_BY` |
-| G5 | Is graph parity healthy (MDM vs hosted graph)? | `mdm verify-graph` / operator status |
+| G5 | Is graph parity healthy (MDM vs hosted graph)? | `mdm reconcile` / operator status |
 
 ### H. Platform health (operators)
 

@@ -33,11 +33,11 @@ def test_residual_holds_graph_registered_and_named() -> None:
 
 def test_residual_holds_graph_does_not_re_run_all_companies() -> None:
     src = _extract_residual_definition_source()
-    # No mdm run --entity-type company|all (sync-graph may still list company
-    # nodes as materialization targets for endpoint integrity).
-    assert re.search(r"mdm',\s*'run',\s*'--entity-type',\s*'company'", src) is None
-    assert re.search(r"mdm',\s*'run',\s*'--entity-type',\s*'all'", src) is None
-    assert "'run', '--entity-type', 'security'" in src or "entity-type', 'security'" in src
+    # No mdm mastering --entity-type company|all (publish-relationships may still list
+    # company nodes as materialization targets for endpoint integrity).
+    assert re.search(r"mdm',\s*'mastering',\s*'--entity-type',\s*'company'", src) is None
+    assert re.search(r"mdm',\s*'mastering',\s*'--entity-type',\s*'all'", src) is None
+    assert "'mastering', '--entity-type', 'security'" in src or "entity-type', 'security'" in src
 
 
 def test_residual_holds_graph_covers_handoff_residual_types() -> None:
@@ -48,8 +48,8 @@ def test_residual_holds_graph_covers_handoff_residual_types() -> None:
     assert "person" in src
     # OOM-safe separate institutional step
     assert "MdmInstitutionalHolds" in src
-    assert "MdmExport" in src
-    assert "sync-graph" in src
+    assert "Publish" in src
+    assert "publish-relationships" in src
 
 
 def test_residual_holds_graph_full_sync_and_candidate_verify() -> None:
@@ -57,13 +57,13 @@ def test_residual_holds_graph_full_sync_and_candidate_verify() -> None:
     src = _extract_residual_definition_source()
     assert "$$.Execution.Name" in src
     assert "--generation-id" in src
-    # Full sync: no type-filtered sync-graph command for residual-only edges
+    # Full sync: no type-filtered publish-relationships command for residual-only edges
     assert re.search(
-        r"sync-graph',\s*'--entity-type',\s*'person'",
+        r"publish-relationships',\s*'--entity-type',\s*'person'",
         src,
     ) is None
-    assert "verify-graph', '--skip-native-app'" in src or (
-        "verify-graph" in src and "--skip-native-app" in src
+    assert "reconcile', '--skip-native-app'" in src or (
+        "reconcile" in src and "--skip-native-app" in src
     )
     assert "limit-per-type" not in src
 
@@ -82,8 +82,8 @@ def test_residual_holds_graph_uses_mdm_large_for_heavy_stages() -> None:
 
 
 def test_residual_holds_graph_order() -> None:
-    # state-machine-consolidation wayfinder map, ticket 02: MdmExport/
-    # MdmSync/MdmVerify are no longer literal dict-key strings in this
+    # state-machine-consolidation wayfinder map, ticket 02: Publish/
+    # Publish Relationships/Reconcile are no longer literal dict-key strings in this
     # source block -- they're built by the shared wire_mdm_tail() helper
     # (infra/scripts/mdm_tail_helper.py, unit-tested in
     # tests/unit/test_mdm_tail_helper.py) from three positional ecs_state(...)
@@ -119,9 +119,9 @@ def test_residual_holds_graph_order() -> None:
     wire_tail_idx = src.index("wire_mdm_tail(")
     assert order[-1][0] < wire_tail_idx, "wire_mdm_tail(...) must come after the head states"
 
-    export_idx = src.index("'mdm', 'export'", wire_tail_idx)
-    sync_idx = src.index("'mdm', 'sync-graph'", wire_tail_idx)
-    verify_idx = src.index("'mdm', 'verify-graph'", wire_tail_idx)
+    export_idx = src.index("'mdm', 'publish'", wire_tail_idx)
+    sync_idx = src.index("'mdm', 'publish-relationships'", wire_tail_idx)
+    verify_idx = src.index("'mdm', 'reconcile'", wire_tail_idx)
     assert wire_tail_idx < export_idx < sync_idx < verify_idx, (
         "wire_mdm_tail(...) positional args must be export, sync, verify in that order"
     )

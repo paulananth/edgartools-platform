@@ -3,7 +3,7 @@
 layer map Ticket 03 -- see tests/mdm/test_run_companies_skip_unchanged.py).
 
 Root cause this closes: run_securities() has no resumable ledger (unlike
-run_companies()), so a restarted `mdm run` re-processes every ownership-
+run_companies()), so a restarted `mdm mastering` re-processes every ownership-
 transaction row from scratch. Before this fix, SecurityResolver.resolve_one
 never called _skip_if_unchanged, so every re-run of an unchanged row called
 _stage_attrs() again -- and stage_candidate() always INSERTs a fresh row
@@ -66,7 +66,7 @@ class TestSecuritySkipIfUnchanged:
         assert stage_count_after_second == stage_count_after_first, (
             "second run over unchanged data must not re-stage -- this is the actual "
             "production bug: unbounded duplicate mdm_entity_attribute_stage growth "
-            "across repeated mdm run restarts"
+            "across repeated mdm mastering restarts"
         )
         assert change_log_count_after_second == change_log_count_after_first, (
             "second run over unchanged data must not run survivorship again"
@@ -111,7 +111,7 @@ class TestSecuritySkipIfUnchanged:
         assert first_entity.issuer_entity_id is None
 
         # Now resolve the company for CIK 111 (mirrors run_companies() having
-        # run between two mdm run attempts).
+        # run between two mdm mastering attempts).
         from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
 
         company_entity = MdmEntity(entity_type="company")

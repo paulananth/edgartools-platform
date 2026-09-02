@@ -34,13 +34,13 @@ BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 # Format: "short-name|display-label|sm-suffix|stages..."
 # Stage order must match write_load_history_definition(), write_silver_mdm_gold_definition(), etc. in infra/scripts/deploy-aws-application.sh
 declare -a MACHINES=(
-  "load-history|LOAD-HISTORY|load-history|SeedUniverse BatchBootstrap MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
-  "bootstrap|BOOTSTRAP|bootstrap|RunWarehouseTask MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
-  "daily|DAILY-INCREMENTAL|daily-incremental|RunWarehouseTask MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
-  "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches BatchSilver MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "load-history|LOAD-HISTORY|load-history|SeedUniverse BatchBootstrap Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
+  "bootstrap|BOOTSTRAP|bootstrap|RunWarehouseTask Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
+  "daily|DAILY-INCREMENTAL|daily-incremental|RunWarehouseTask Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
+  "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches BatchSilver Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
   "gold|GOLD-REFRESH|gold-refresh|GoldRefresh"
-  "mdm-gold|MDM-GOLD|mdm-gold|MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
-  "ownership|OWNERSHIP-MDM-GOLD|ownership-mdm-gold|ParseOwnershipBronze MdmRun MdmBackfill MdmSync MdmVerify GoldRefresh"
+  "mdm-gold|MDM-GOLD|mdm-gold|Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
+  "ownership|OWNERSHIP-MDM-GOLD|ownership-mdm-gold|ParseOwnershipBronze Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
 )
 
 show_machine() {

@@ -307,10 +307,10 @@ def summary(silver: dict, mdm: dict, neo4j: dict) -> None:
             print("  Root cause: artifact pipeline ran but parse produced no owners.")
             print("  → Check sec_parse_run for failed runs.")
         elif "IS_INSIDER in MDM" in first_fail:
-            print("  Root cause: mdm run found no sec_ownership_reporting_owner rows.")
+            print("  Root cause: mdm mastering found no sec_ownership_reporting_owner rows.")
             print("  → Re-run: ./scripts/ops/trigger.sh mdm-gold")
         elif "Neo4j" in first_fail:
-            print("  Root cause: mdm sync-graph not run or Neo4j unreachable.")
+            print("  Root cause: mdm publish-relationships not run or Neo4j unreachable.")
             print("  → Re-run: ./scripts/ops/trigger.sh mdm-gold")
     else:
         print("  ✓ Full IS_INSIDER path is working end-to-end")

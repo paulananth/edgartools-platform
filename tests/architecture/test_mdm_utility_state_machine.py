@@ -192,11 +192,11 @@ def test_sync_graph_zero_limit_routes_to_unbounded_command(definition: dict) -> 
     }
     task = states["mdm_sync_graph_RunMdmTaskUnbounded"]
     command = task["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
-    assert command == "States.Array('mdm', 'sync-graph')"
+    assert command == "States.Array('mdm', 'publish-relationships')"
     filtered_task = states["mdm_sync_graph_RunMdmTaskUnboundedWithRelationshipType"]
     filtered_command = filtered_task["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert filtered_command == (
-        "States.Array('mdm', 'sync-graph', '--relationship-type', $.relationship_type)"
+        "States.Array('mdm', 'publish-relationships', '--relationship-type', $.relationship_type)"
     )
 
     # limit_per_type remains the outermost, higher-specificity override.

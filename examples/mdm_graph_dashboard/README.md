@@ -89,7 +89,7 @@ environment variables and next actions only.
 Snowflake-hosted graph unavailable or permission-denied states do not block
 `MDM Overview`. `Neo4j Overview` and `Mismatch Diagnostics` show graph
 availability guidance while keeping MDM review available. See `edgar-warehouse
-mdm verify-graph` for the acceptance gate when graph metrics are unavailable.
+mdm reconcile` for the acceptance gate when graph metrics are unavailable.
 
 ## Existing checks
 
@@ -98,7 +98,7 @@ confirmation:
 
 ```bash
 edgar-warehouse mdm counts
-edgar-warehouse mdm verify-graph
+edgar-warehouse mdm reconcile
 ```
 
 Additional documentation-text references:
