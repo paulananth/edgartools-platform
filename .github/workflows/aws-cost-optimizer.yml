@@ -1,0 +1,100 @@
+name: AWS cost optimizer
+
+on:
+  schedule:
+    - cron: "17 8 * * 0"
+  workflow_dispatch:
+    inputs:
+      apply_s3_retention:
+        description: "Apply the exact classified S3 retention plan"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "690839588395"
+  RESOURCE_PREFIX: edgartools-prod
+
+jobs:
+  audit:
+    name: Weekly cost and retention audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Require the dedicated optimizer role
+        env:
+          ROLE_ARN: ${{ vars.AWS_COST_OPTIMIZER_ROLE_ARN }}
+        run: test -n "$ROLE_ARN" || { echo "AWS_COST_OPTIMIZER_ROLE_ARN repository variable is required" >&2; exit 1; }
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_COST_OPTIMIZER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run account cost audit
+        run: |
+          mkdir -p artifacts
+          uv run python scripts/ops/aws_cost_optimizer.py audit \
+            --expected-account-id "$AWS_ACCOUNT_ID" \
+            --resource-prefix "$RESOURCE_PREFIX" \
+            --output artifacts/aws-cost-audit.json
+
+      - name: Fetch the canonical accession retention authority
+        if: ${{ vars.AWS_COST_OPTIMIZER_RETENTION_AUTHORITY_URI != '' }}
+        env:
+          AUTHORITY_URI: ${{ vars.AWS_COST_OPTIMIZER_RETENTION_AUTHORITY_URI }}
+        run: aws s3 cp "$AUTHORITY_URI" artifacts/retention-authority.jsonl
+
+      - name: Plan classified S3 retention
+        id: retention
+        if: ${{ vars.AWS_COST_OPTIMIZER_RETENTION_AUTHORITY_URI != '' }}
+        run: |
+          uv run python scripts/ops/aws_cost_optimizer.py retention-plan \
+            --expected-account-id "$AWS_ACCOUNT_ID" \
+            --authority-jsonl artifacts/retention-authority.jsonl \
+            --max-authorities 1000 \
+            --output artifacts/s3-retention-plan.json \
+            | tee artifacts/s3-retention-plan-summary.json
+          echo "plan_hash=$(jq -r .plan_hash artifacts/s3-retention-plan.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Persist the reviewed plan before deletion
+        if: ${{ steps.retention.outputs.plan_hash != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3-retention-plan-${{ github.run_id }}
+          path: |
+            artifacts/retention-authority.jsonl
+            artifacts/s3-retention-plan.json
+            artifacts/s3-retention-plan-summary.json
+          retention-days: 90
+
+      - name: Apply exact expired S3 versions
+        if: >-
+          ${{ steps.retention.outputs.plan_hash != '' &&
+              (vars.AWS_COST_OPTIMIZER_APPLY_S3_RETENTION == 'true' ||
+               inputs.apply_s3_retention == true) }}
+        run: |
+          uv run python scripts/ops/aws_cost_optimizer.py retention-apply \
+            --plan artifacts/s3-retention-plan.json \
+            --plan-hash "${{ steps.retention.outputs.plan_hash }}" \
+            --confirm-delete-expired-s3 \
+            --evidence-dir artifacts/s3-retention-apply
+
+      - name: Upload audit and retention evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws-cost-optimizer-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 90
