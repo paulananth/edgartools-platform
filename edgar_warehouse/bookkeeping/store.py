@@ -45,6 +45,24 @@ class BookkeepingStore:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def commit(self) -> None:
+        """Durably commit every write issued through this store so far.
+
+        Every ``upsert_*``/``start_*``/``complete_*`` method below issues
+        exactly one ``self._session.execute()`` and relies on the caller to
+        commit -- mirroring ``edgar_warehouse.mdm``'s explicit
+        ``session.commit()`` convention (this store's own module docstring
+        says it is "ported 1:1" from that codebase's equivalent methods),
+        not a per-statement autocommit engine. Without an explicit call to
+        this method, every write made through this store is silently rolled
+        back when the owning process exits -- confirmed live 2026-09-01:
+        a checkpoint write logged as "status: succeeded" was unreadable by
+        both a separate task and a fresh rerun of the same command minutes
+        later, because nothing had ever called commit() on this store's
+        session in its whole call graph.
+        """
+        self._session.commit()
+
     # -- internal helpers ---------------------------------------------------
 
     def _insert_factory(self):

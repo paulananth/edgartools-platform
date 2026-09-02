@@ -72,6 +72,9 @@ def verify_pipeline_run(
         verification_status=report["status"],
         report=report,
     )
+    # See BookkeepingStore.commit's docstring -- without this, the write
+    # above is silently rolled back on process exit.
+    bookkeeping.commit()
     return report
 
 

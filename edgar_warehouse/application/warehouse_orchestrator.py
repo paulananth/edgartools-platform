@@ -710,6 +710,19 @@ def _execute_warehouse_bronze_capture(
                 "snowflake_export_row_counts": snowflake_export_counts or {},
             },
         )
+        # See BookkeepingStore.commit's docstring: without this, every write
+        # above is silently rolled back on process exit. Committed here,
+        # before silver publish/landing export, so it's durable regardless
+        # of what the rest of this command does -- if either of those then
+        # fails, the except block below corrects this to "failed" rather
+        # than leaving this "succeeded" commit standing.
+        #
+        # INVARIANT: nothing below this line may write to `bookkeeping` without
+        # also calling bookkeeping.commit() again -- a write added after this
+        # point would silently reintroduce this bug with no test to catch it
+        # unless that write also adds a durability test of its own shape (see
+        # tests/bookkeeping/test_store_commit.py).
+        bookkeeping.commit()
         db.close()
         db_closed = True
         _emit_pipeline_event(
@@ -776,16 +789,29 @@ def _execute_warehouse_bronze_capture(
                 table_counts=landing_export_counts,
             )
     except Exception as exc:
-        if not db_closed:
-            bookkeeping.complete_sync_run(run_id, status="failed", error_message=str(exc))
-            bookkeeping.complete_pipeline_run(
-                run_id,
-                status="failed",
-                writes=pipeline_writes,
-                raw_writes=raw_writes,
-                metrics=metrics,
-                error_message=str(exc),
-            )
+        # Deliberately unconditional (not gated on db_closed, unlike the
+        # finally block's db.close() below): complete_sync_run/
+        # complete_pipeline_run are plain idempotent UPDATE-by-run_id
+        # statements, safe to call again even if the success path already
+        # ran and committed a "succeeded" status above (e.g. silver publish
+        # or landing export -- both run after that commit, still inside
+        # this try block -- raised here). Gating this on db_closed would
+        # leave a durably committed, factually wrong "succeeded" record for
+        # a run that actually failed downstream of that commit -- worse
+        # than the pre-fix behavior of no durable record at all. This call
+        # correctly overwrites it to "failed" and commits the correction.
+        bookkeeping.complete_sync_run(run_id, status="failed", error_message=str(exc))
+        bookkeeping.complete_pipeline_run(
+            run_id,
+            status="failed",
+            writes=pipeline_writes,
+            raw_writes=raw_writes,
+            metrics=metrics,
+            error_message=str(exc),
+        )
+        # See BookkeepingStore.commit's docstring -- without this, this
+        # failure record is itself silently rolled back too.
+        bookkeeping.commit()
         _emit_pipeline_event(
             "pipeline_failed",
             command=command_name,

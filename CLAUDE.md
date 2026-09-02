@@ -1915,7 +1915,7 @@ valid_from-only-difference-does-not-block-or-get-copied case, and a **positive c
 genuine retirement conflict still correctly blocks (i.e. confirming `is_current`/`valid_to` were
 not accidentally exempted alongside `valid_from`). Full repo suite green.
 
-## daily_incremental multi-hour runtime after Bookkeeping Postgres cutover 5-whys (expected, not a bug, 2026-09-01)
+## daily_incremental multi-hour runtime after Bookkeeping Postgres cutover 5-whys (CORRECTED — not one-time, see bottom, 2026-09-01)
 
 **Problem:** A `daily_incremental` execution
 (`daily-incremental-ticket15-postfix-1788270018`) ran 6+ hours in
@@ -1965,6 +1965,43 @@ store is done with an empty start again, expect and budget for one
 full-universe-scale run immediately afterward — this is not a one-off
 peculiarity of the Bookkeeping Postgres cutover, it is inherent to any
 "start empty, let CIKs reactivate naturally" migration design.
+
+**CORRECTION (2026-09-01, same day): the "one-time, expected" conclusion
+above was wrong** — found while investigating a *separate* 16-minute silent
+stall in an unrelated diagnostic task, which led to discovering the real
+root cause. `edgar_warehouse/bookkeeping/store.py`'s `BookkeepingStore`
+**never calls `self._session.commit()` anywhere** across any of its 31
+write methods (`upsert_daily_index_checkpoint`, `upsert_company_sync_state`,
+`start_sync_run`/`complete_sync_run`, `start_pipeline_run`/
+`complete_pipeline_run`, etc.) — confirmed via `grep -n commit
+edgar_warehouse/bookkeeping/store.py` returning zero matches. SQLAlchemy's
+`Session` never auto-commits, so every write is silently rolled back by
+Postgres when the owning process exits, regardless of whether the call site
+logged `"status": "succeeded"`. Confirmed live, twice: wrote a checkpoint
+via one ECS task (logged success), then two independent later reads (a
+different task, and a fresh rerun of the identical command) both failed to
+see it.
+
+This means the reactivation was never one-time — **every**
+`daily_incremental`/`bootstrap` run has been losing its own tracking state
+on every single run since the Bookkeeping Postgres cutover, because no run
+has ever durably recorded that it processed anything. The "self-resolve
+once this one run completes" expectation above never held. Full root
+cause, fix (a `BookkeepingStore.commit()` method called at
+`_execute_warehouse_bronze_capture`'s two real conclusion points, following
+MDM's own explicit-commit-at-caller convention rather than introducing
+engine-level autocommit), and tests:
+`.scratch/bronze-capture-oom/issues/03-bookkeeping-store-never-commits-any-write.md`.
+Deployed to prod 2026-09-01; **not yet live-verified** — needs a fresh
+`daily_incremental` run to confirm checkpoints now actually survive a
+process restart.
+
+**Lesson:** "logged as succeeded, no error" is not evidence a database
+write is durable — the same class of gap as this file's other
+transaction/session-commit incidents (see the Ticket 20 Source Family
+Registry and migration-011 entries above), just on a store that had never
+been exercised across a real process-restart boundary before this
+investigation.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
