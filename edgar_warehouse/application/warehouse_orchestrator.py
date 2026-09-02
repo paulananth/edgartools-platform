@@ -6920,12 +6920,26 @@ def _resolve_scope(
     if command_name == "daily-incremental":
         start_date = _parse_date(arguments.get("start_date"), "start_date")
         end_date = _parse_date(arguments.get("end_date"), "end_date")
+        # Only a fully-automatic invocation (neither bound passed by the
+        # caller -- how the recurring state machine always calls this) may
+        # self-clamp below. Any explicit bound means the caller has an
+        # opinion about the range; a mismatch there is a real error, not
+        # "caught up" (bronze-capture-oom Ticket 03, Standards review: an
+        # explicit stale --end-date must still raise, not silently narrow).
+        end_date_was_explicit = end_date is not None
         if end_date is None:
             end_date = _latest_eligible_business_date(now)
         if start_date is None:
             last_success = bookkeeping.get_last_successful_checkpoint_date() if bookkeeping is not None else None
             if last_success:
                 start_date = _next_business_day(date.fromisoformat(last_success))
+                # See BookkeepingStore.commit's own ticket
+                # (.scratch/bronze-capture-oom/issues/03-...) -- "caught up,
+                # nothing new published yet" only became reachable once
+                # checkpoints started persisting. Clamp only when fully
+                # automatic; see comment above.
+                if start_date > end_date and not end_date_was_explicit:
+                    start_date = end_date
             else:
                 start_date = end_date
         if start_date is None or end_date is None:

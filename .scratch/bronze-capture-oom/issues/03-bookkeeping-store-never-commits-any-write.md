@@ -1,7 +1,9 @@
 # 03 — BookkeepingStore Never Commits Any Write
 
 Type: task
-Status: resolved (fix implemented + tested; not yet deployed)
+Status: resolved (fix implemented, tested, deployed, live-verified) — see
+"Third finding" below for a live-verification-driven follow-up fix still
+in progress on this same ticket
 Severity: critical — the real root cause behind Ticket 02's finding and behind
 the "one-time reactivation" this file previously documented in CLAUDE.md,
 which was itself wrong
@@ -170,14 +172,101 @@ already committed when this bug was found). Deployed via
 now points at `edgartools-prod-large:239`, which resolves to this image
 digest.
 
-**This specific `commit()` fix's own line of code has not yet been
-independently verified live** (deployed, but no fresh `daily_incremental`
-run has completed since — the previous live execution,
-`daily-incremental-ticket15-postfix-1788270018`, was stopped by explicit
-operator instruction before this fix was built). Needs a fresh run to
-confirm: a completed run's checkpoints/sync-state should now survive a
-process restart and a subsequent run should show real skip-if-unchanged
-behavior instead of reprocessing the full CIK universe.
+**Live-verified 2026-09-02**: sealed a `load-daily-form-index-for-date`
+checkpoint via one ECS task on the new image, reran the identical command,
+confirmed it took the cache-hit path (`rows_skipped: 1`, zero
+`sec_call_started` events) instead of re-fetching from SEC. The commit fix
+itself works exactly as designed.
+
+## Third finding: live daily_incremental run exposed a second, sibling bug
+
+Started a fresh `daily_incremental` execution
+(`daily-incremental-verify-bookkeeping-fix-1788343855`) to verify both
+fixes end-to-end. It progressed past `ResolveCompanyIdentityBounded`/
+`ReduceIdentityRefresh`, entered `RunWarehouseTask`, and its first attempt
+**actually worked** — sealed real, durable checkpoints for 2026-08-27
+through 2026-09-01 (`status: succeeded`) and correctly marked 2026-09-02 as
+`waiting_for_publish` (confirmed by querying the live Bookkeeping Postgres
+checkpoint table directly). That is the commit fix working exactly as
+intended, for the first time ever in prod.
+
+But the *next* three attempts all failed fast (~1 minute each, exit code
+2, not the multi-hour OOM pattern) with
+`WarehouseRuntimeError: start_date must be on or before end_date`, raised
+from `_resolve_scope`'s `"daily-incremental"` branch
+(`edgar_warehouse/application/warehouse_orchestrator.py:6902`).
+
+**Root cause:** `start_date = next_business_day(date.fromisoformat(last_success))`
+— with `last_success = "2026-09-01"` (the checkpoint the prior attempt had
+just durably sealed), this computes `start_date = 2026-09-02`. But
+`end_date = latest_eligible_business_date(now)` also resolves to
+`2026-09-01`, since SEC's 2026-09-02 daily index isn't published until
+06:00 ET the following day. `start_date (09-02) > end_date (09-01)` → the
+existing hard-error check fires. This is a genuine, previously-dormant
+bug: **it could never trigger before this fix**, because checkpoints never
+survived a process exit, so `last_success` was always `None` and
+`start_date` always fell back to `end_date` trivially. My own commit fix
+is what finally let a real `daily_incremental` run catch up to steady
+state and expose it — this specific case ("caught up, nothing new
+published yet") is the *correct*, expected condition for a recurring job,
+not an error.
+
+**Fix:** when `start_date` is auto-derived (not an explicit operator
+`--start-date`) and lands after `end_date`, clamp it back to `end_date`
+instead of raising — mirrors the existing sibling branch immediately below
+it (`else: start_date = end_date`, the no-prior-success case). Traced the
+downstream caller (`_capture_bronze_raw`'s daily-incremental dispatch,
+`warehouse_orchestrator.py:~1605-1620`): in the common recurring-mode case
+(`--recurring-index-lookback-days`, which every real invocation passes),
+`business_date_start` gets unconditionally overwritten from `business_date_end`
+anyway, so the clamped value's only real job in that path is to stop the
+scope-resolution step itself from raising — for a non-recurring invocation,
+the clamped value drives one iteration of `_load_daily_index_for_date` for
+`end_date`, which correctly takes its own existing cache-hit fast path.
+
+**Corrected by Standards review before commit:** the first version of this
+fix clamped whenever `start_date > end_date`, regardless of whether
+`end_date` came from an explicit `--end-date` or was auto-resolved. Live-
+reproduced the gap: a real `last_success` (e.g. `2026-09-01`) racing
+against an explicitly-passed, stale `--end-date` (e.g. `2026-08-15`) would
+silently clamp to a misleadingly narrow single-day window instead of
+raising — even though the operator explicitly asked for a specific end
+date. This contradicts the repo's fail-closed posture elsewhere (see the
+daily-accession-expansion 5-whys: "fails closed on expansion"). **Fixed**
+by scoping the clamp to a fully-automatic invocation only (`end_date_was_
+explicit` tracked before the auto-resolve default is applied) — any
+explicit `--start-date` or `--end-date` now still raises on a mismatch,
+matching the pre-fix behavior for that case exactly. The final
+`if start_date > end_date: raise` check is reachable for both the
+fully-explicit case and this explicit-end-date-vs-real-last-success case.
+
+**Test:** `tests/unit/test_daily_incremental_scope_resolution.py` (new, 5
+cases) — no-prior-success, normal-advance, the exact caught-up scenario
+(verified to fail before the fix with the identical live error message,
+pass after), explicit-args-still-raises, and
+`test_explicit_stale_end_date_still_raises_even_with_a_real_last_success`
+(the Standards-review finding above — verified to fail with the narrower
+clamp, pass with the `end_date_was_explicit` guard). Full suite re-run
+green: 2966 passed, 6 skipped.
+
+**Not yet deployed or re-verified live** as of this entry — needs a fresh
+`daily_incremental` run once this fix ships to confirm it reaches a real
+terminal state (`SUCCEEDED`) instead of failing on this date-range check.
+
+**Pre-existing wrinkle, found by `/gof-refactor-reviewer` review, not
+introduced by this fix and not blocking it:** `sync_scope_key_for_command`
+(`edgar_warehouse/domain/policy/command_scope.py:100`) builds the persisted
+`sync_run.scope_key` as `f"{business_date_start}:{business_date_end}"` from
+`_resolve_scope`'s value — *before* `_capture_bronze_raw`'s recurring-mode
+override (`business_date_start = business_date_end - timedelta(days=
+recurring_lookback_days - 1)`) ever runs. So for a caught-up recurring run,
+the logged `scope_key` (e.g. `"2026-09-01:2026-09-01"`) understates the
+actual lookback window that got revalidated. This mismatch already existed
+for the normal-advancing case before this fix — it was just never visible,
+because the caught-up case always raised before `start_sync_run` recorded
+anything. Now that the caught-up case succeeds, the misleading log record
+becomes visible for the first time. Worth a follow-up if bookkeeping audit
+trails matter here; not a correctness bug in the fix itself.
 
 ## Correction needed elsewhere
 
