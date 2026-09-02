@@ -1,9 +1,10 @@
-"""Contract tests for the Ticket 28 ECS sizing canary operator tool."""
+"""Contract tests for the Ticket 28/29 ECS sizing canary operator tool."""
 
 from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -621,6 +622,57 @@ def test_gold_input_identity_captures_versioned_canonical_silver() -> None:
     }
 
 
+def test_cluster_overlap_filters_to_other_tasks_in_execution_window() -> None:
+    tasks = [
+        {
+            "taskArn": "task/own",
+            "taskDefinitionArn": "large:1",
+            "createdAt": "2026-09-01T12:01:00+00:00",
+            "stoppedAt": "2026-09-01T12:02:00+00:00",
+        },
+        {
+            "taskArn": "task/before",
+            "taskDefinitionArn": "medium:1",
+            "createdAt": "2026-09-01T11:00:00+00:00",
+            "stoppedAt": "2026-09-01T11:59:59+00:00",
+        },
+        {
+            "taskArn": "task/overlap",
+            "taskDefinitionArn": "medium:2",
+            "createdAt": "2026-09-01T12:04:00+00:00",
+            "stoppedAt": "2026-09-01T12:08:00+00:00",
+            "overrides": {"containerOverrides": [{"command": ["daily-incremental"]}]},
+        },
+        {
+            "taskArn": "task/running",
+            "taskDefinitionArn": "large:2",
+            "createdAt": "2026-09-01T12:09:00+00:00",
+        },
+    ]
+
+    assert ecs_sizing_canary.overlapping_cluster_tasks(
+        tasks,
+        start=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+        end=datetime(2026, 9, 1, 12, 10, tzinfo=UTC),
+        excluded_task_arns={"task/own"},
+    ) == [
+        {
+            "task_arn": "task/overlap",
+            "task_definition_arn": "medium:2",
+            "created_at": "2026-09-01T12:04:00+00:00",
+            "stopped_at": "2026-09-01T12:08:00+00:00",
+            "command": ["daily-incremental"],
+        },
+        {
+            "task_arn": "task/running",
+            "task_definition_arn": "large:2",
+            "created_at": "2026-09-01T12:09:00+00:00",
+            "stopped_at": None,
+            "command": [],
+        },
+    ]
+
+
 def test_residual_launch_lock_uses_conditional_create_and_owned_delete() -> None:
     class FakeCli:
         def __init__(self) -> None:
@@ -759,6 +811,13 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
                 "cohort": cohort,
                 "image": "repo@sha256:current",
                 "source_definition_hash": "source-hash",
+                "changed_reference_count": 0 if profile == "large" else 1,
+                "compatibility_overlays": [],
+                "covered_states": ["RunWarehouseTask"],
+                "concurrency_context": {
+                    "allow_concurrent": False,
+                    "active_task_arns": [],
+                },
                 "input_identity": {
                     "etag": "input-sha",
                     "content_length": 300,
@@ -783,7 +842,19 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
                     },
                     "application_evidence": [
                         {
+                            "event": "silver_database_hydrated",
+                            "size_bytes": 300,
+                        },
+                        {
+                            "event": "gold_publish_started",
+                            "silver_table_counts": {
+                                "sec_company": 10,
+                                "sec_company_filing": 20,
+                            },
+                        },
+                        {
                             "event": "gold_build_completed",
+                            "table_count": 2,
                             "gold_manifest": manifest,
                             "gold_row_counts": {
                                 "dim_company": 10,
@@ -793,7 +864,15 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
                                 "company": 10,
                                 "filing_detail": 20,
                             },
-                        }
+                        },
+                        {
+                            "event": "silver_publish_completed",
+                            "silver_database": {
+                                "source_version": "input-sha",
+                                "staged_checksum": "input-sha",
+                                "size_bytes": 300,
+                            },
+                        },
                     ],
                 }
             ],
@@ -803,6 +882,7 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
                 "failures": [],
                 "warnings": [],
             },
+            "cluster_overlap": [],
         }
 
     result = ecs_sizing_canary.evaluate_gold_cohort(
@@ -824,11 +904,26 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
         "etag": "input-sha",
         "content_length": 300,
     }
+    assert result["record_funnel"] == {
+        "input_silver_table_counts": {
+            "sec_company": 10,
+            "sec_company_filing": 20,
+        },
+        "input_silver_rows": 30,
+        "attempted_gold_tables": 2,
+        "committed_gold_tables": 2,
+        "committed_gold_rows": 30,
+        "exported_serving_tables": 2,
+        "exported_serving_rows": 30,
+        "skipped_rejected_deduplicated": "not_applicable",
+    }
+    assert result["recovery_parity"] == {
+        "passed": True,
+        "mode": "same_asl_except_task_definition",
+    }
     assert result["failures"] == []
 
-    mismatched = evidence(
-        cohort="gold", profile="medium", duration=104.0, cost=0.0056
-    )
+    mismatched = evidence(cohort="gold", profile="medium", duration=104.0, cost=0.0056)
     mismatched["launch_contract"]["input_identity"]["etag"] = "changed-input"
     rejected = ecs_sizing_canary.evaluate_gold_cohort(
         control=evidence(
@@ -839,6 +934,7 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
             mismatched,
         ],
     )
-    assert "candidate and control input content identities do not match" in rejected[
-        "failures"
-    ]
+    assert (
+        "candidate and control input content identities do not match"
+        in rejected["failures"]
+    )

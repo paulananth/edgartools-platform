@@ -98,6 +98,7 @@ CANARIES = {
         "execution_prefix": "ticket28-residual-control",
     },
 }
+DEFAULT_CANARIES = ("residual", "residual-control", "sync")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -492,7 +493,10 @@ def extract_json_documents(messages: list[str]) -> list[dict[str, Any]]:
 
 
 def evaluate_execution(
-    *, execution_status: str, tasks: list[dict[str, Any]]
+    *,
+    execution_status: str,
+    tasks: list[dict[str, Any]],
+    cluster_overlap: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Apply the fail-closed execution-local Ticket 03/04 gates."""
     failures: list[str] = []
@@ -501,6 +505,11 @@ def evaluate_execution(
         failures.append(f"execution status is {execution_status}, not SUCCEEDED")
     if not tasks:
         failures.append("no ECS task attempts found in execution history")
+    if cluster_overlap:
+        failures.append(
+            f"canary was not isolated: {len(cluster_overlap)} other cluster task(s) "
+            "overlapped the execution"
+        )
     for task in tasks:
         state = task["state"]
         if task.get("retry_ordinal", 1) > 1:
@@ -540,16 +549,32 @@ def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
     tasks = evidence.get("tasks") or []
     if len(tasks) != 1 or tasks[0].get("state") != "RunWarehouseTask":
         raise ValueError("gold evidence must contain exactly one RunWarehouseTask")
-    completed = [
-        document
-        for document in tasks[0].get("application_evidence") or []
-        if document.get("event") == "gold_build_completed"
-    ]
-    if len(completed) != 1:
+    documents = tasks[0].get("application_evidence") or []
+
+    def single_event(name: str) -> dict[str, Any]:
+        matches = [document for document in documents if document.get("event") == name]
+        if len(matches) != 1:
+            raise ValueError(f"gold evidence must contain exactly one {name} event")
+        return matches[0]
+
+    hydrated = single_event("silver_database_hydrated")
+    started = single_event("gold_publish_started")
+    event = single_event("gold_build_completed")
+    published = single_event("silver_publish_completed")
+    silver_database = published.get("silver_database") or {}
+    hydrated_identity = {
+        "etag": str(silver_database.get("source_version") or ""),
+        "content_length": hydrated.get("size_bytes"),
+    }
+    if (
+        not hydrated_identity["etag"]
+        or not isinstance(hydrated_identity["content_length"], int)
+        or silver_database.get("staged_checksum") != hydrated_identity["etag"]
+        or silver_database.get("size_bytes") != hydrated_identity["content_length"]
+    ):
         raise ValueError(
-            "gold evidence must contain exactly one gold_build_completed event"
+            "hydrated canonical silver identity is incomplete or inconsistent"
         )
-    event = completed[0]
     manifest = event.get("gold_manifest") or []
     if not manifest:
         raise ValueError("gold_build_completed is missing its manifest")
@@ -580,7 +605,27 @@ def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(
             "Snowflake export counts do not match the canonical gold export mapping"
         )
+    table_count = event.get("table_count")
+    if table_count != len(normalized_manifest):
+        raise ValueError("attempted and committed gold table counts do not match")
+    silver_table_counts = started.get("silver_table_counts") or {}
+    if not silver_table_counts or not all(
+        isinstance(count, int) and count >= 0 for count in silver_table_counts.values()
+    ):
+        raise ValueError("gold input silver table counts are missing or invalid")
+    record_funnel = {
+        "input_silver_table_counts": silver_table_counts,
+        "input_silver_rows": sum(silver_table_counts.values()),
+        "attempted_gold_tables": table_count,
+        "committed_gold_tables": len(normalized_manifest),
+        "committed_gold_rows": sum(manifest_counts.values()),
+        "exported_serving_tables": len(snowflake_counts),
+        "exported_serving_rows": sum(snowflake_counts.values()),
+        "skipped_rejected_deduplicated": "not_applicable",
+    }
     return {
+        "hydrated_input_content_identity": hydrated_identity,
+        "record_funnel": record_funnel,
         "manifest": normalized_manifest,
         "gold_row_counts": row_counts,
         "snowflake_export_counts": snowflake_counts,
@@ -593,18 +638,24 @@ def evaluate_gold_cohort(
     """Apply Ticket 29's matched-output, duration, and cost gates offline."""
     if len(candidates) != 2:
         raise ValueError("Ticket 29 requires exactly two candidate reports")
-    all_evidence = [control, *candidates]
     failures: list[str] = []
-    expected_cohorts = ["gold-control", "gold", "gold"]
-    expected_profiles = ["large", "medium", "medium"]
+    run_specs = [
+        ("control", control, "gold-control", "large", 0),
+        ("candidate 1", candidates[0], "gold", "medium", 1),
+        ("candidate 2", candidates[1], "gold", "medium", 1),
+    ]
     images: set[str] = set()
     source_hashes: set[str] = set()
     input_content_identities: set[tuple[str, int]] = set()
     outputs: list[dict[str, Any]] = []
-    for index, (evidence, expected_cohort, expected_profile) in enumerate(
-        zip(all_evidence, expected_cohorts, expected_profiles, strict=True)
-    ):
-        label = "control" if index == 0 else f"candidate {index}"
+    recovery_parity_passed = True
+    for (
+        label,
+        evidence,
+        expected_cohort,
+        expected_profile,
+        expected_changes,
+    ) in run_specs:
         launch = evidence.get("launch_contract") or {}
         if launch.get("ticket") != 29 or launch.get("cohort") != expected_cohort:
             failures.append(f"{label} has the wrong Ticket 29 cohort identity")
@@ -613,6 +664,22 @@ def evaluate_gold_cohort(
             failures.append(f"{label} is not on warehouse {expected_profile}")
         images.add(str(launch.get("image") or ""))
         source_hashes.add(str(launch.get("source_definition_hash") or ""))
+        if (
+            launch.get("changed_reference_count") != expected_changes
+            or launch.get("compatibility_overlays") != []
+            or launch.get("covered_states") != ["RunWarehouseTask"]
+        ):
+            failures.append(f"{label} does not preserve structural recovery parity")
+            recovery_parity_passed = False
+        concurrency = launch.get("concurrency_context") or {}
+        if concurrency.get("allow_concurrent") or concurrency.get("active_task_arns"):
+            failures.append(f"{label} allowed concurrent cluster work")
+        if evidence.get("cluster_overlap") is None:
+            failures.append(
+                f"{label} is missing full-window cluster isolation evidence"
+            )
+        elif evidence["cluster_overlap"]:
+            failures.append(f"{label} overlapped other cluster work")
         input_identity = launch.get("input_identity") or {}
         input_etag = str(input_identity.get("etag") or "")
         input_size = input_identity.get("content_length")
@@ -623,7 +690,16 @@ def evaluate_gold_cohort(
         local_gates = evidence.get("execution_local_gates") or {}
         if not local_gates.get("passed"):
             failures.append(f"{label} failed execution-local gates")
-        outputs.append(_gold_output_identity(evidence))
+        output = _gold_output_identity(evidence)
+        outputs.append(output)
+        hydrated_identity = output["hydrated_input_content_identity"]
+        if hydrated_identity != {
+            "etag": input_etag,
+            "content_length": input_size,
+        }:
+            failures.append(
+                f"{label} hydrated silver does not match its launch content identity"
+            )
     if "" in images or len(images) != 1:
         failures.append("candidate and control image identities do not match")
     if "" in source_hashes or len(source_hashes) != 1:
@@ -673,6 +749,11 @@ def evaluate_gold_cohort(
         "candidate_cost_p95_usd": candidate_cost_p95,
         "cost_improvement_percent": cost_improvement,
         "input_content_identity": input_content_identity,
+        "record_funnel": outputs[0]["record_funnel"],
+        "recovery_parity": {
+            "passed": recovery_parity_passed,
+            "mode": "same_asl_except_task_definition",
+        },
         "output_identity": outputs[0],
     }
 
@@ -723,9 +804,7 @@ def launch_concurrency_context(
     }
 
 
-def gold_input_identity(
-    cli: AwsCli, *, env: str, account: str
-) -> dict[str, Any]:
+def gold_input_identity(cli: AwsCli, *, env: str, account: str) -> dict[str, Any]:
     """Capture the exact canonical silver object visible at canary launch."""
     bucket = f"edgartools-{env}-warehouse-{account}"
     key = "warehouse/silver/sec/silver.duckdb"
@@ -1158,7 +1237,7 @@ def _write_json(path: Path | None, payload: Any) -> None:
 
 def prepare(cli: AwsCli, args: argparse.Namespace) -> int:
     account = _account(cli)
-    cohorts = args.cohorts or sorted(CANARIES)
+    cohorts = args.cohorts or list(DEFAULT_CANARIES)
     plans = [
         _definition_plan(cli, env=args.env, account=account, cohort=cohort)
         for cohort in cohorts
@@ -1299,6 +1378,80 @@ def _parse_datetime(value: str | float | datetime) -> datetime:
         seconds = value / 1000 if value > 10_000_000_000 else value
         return datetime.fromtimestamp(seconds, tz=UTC)
     return datetime.fromisoformat(value).astimezone(UTC)
+
+
+def overlapping_cluster_tasks(
+    tasks: list[dict[str, Any]],
+    *,
+    start: datetime,
+    end: datetime,
+    excluded_task_arns: set[str],
+) -> list[dict[str, Any]]:
+    """Return other ECS tasks whose lifetimes intersect the canary window."""
+    overlaps: list[dict[str, Any]] = []
+    for task in tasks:
+        task_arn = str(task.get("taskArn") or "")
+        if not task_arn or task_arn in excluded_task_arns or not task.get("createdAt"):
+            continue
+        created = _parse_datetime(task["createdAt"])
+        stopped_raw = task.get("stoppedAt")
+        stopped = _parse_datetime(stopped_raw) if stopped_raw else None
+        if created > end or (stopped is not None and stopped < start):
+            continue
+        container_overrides = (task.get("overrides") or {}).get(
+            "containerOverrides"
+        ) or []
+        command = container_overrides[0].get("command") if container_overrides else []
+        overlaps.append(
+            {
+                "task_arn": task_arn,
+                "task_definition_arn": task.get("taskDefinitionArn"),
+                "created_at": task["createdAt"],
+                "stopped_at": stopped_raw,
+                "command": command or [],
+            }
+        )
+    return sorted(overlaps, key=lambda task: str(task["task_arn"]))
+
+
+def _cluster_overlap(
+    cli: AwsCli,
+    *,
+    cluster: str,
+    start: datetime,
+    end: datetime,
+    excluded_task_arns: set[str],
+) -> list[dict[str, Any]]:
+    task_arns: set[str] = set()
+    for status in ("RUNNING", "PENDING", "STOPPED"):
+        task_arns.update(
+            cli.call(
+                "ecs",
+                "list-tasks",
+                "--cluster",
+                cluster,
+                "--desired-status",
+                status,
+            ).get("taskArns", [])
+        )
+    tasks: list[dict[str, Any]] = []
+    sorted_arns = sorted(task_arns)
+    for offset in range(0, len(sorted_arns), 100):
+        page = cli.call(
+            "ecs",
+            "describe-tasks",
+            "--cluster",
+            cluster,
+            "--tasks",
+            *sorted_arns[offset : offset + 100],
+        )
+        tasks.extend(page.get("tasks", []))
+    return overlapping_cluster_tasks(
+        tasks,
+        start=start,
+        end=end,
+        excluded_task_arns=excluded_task_arns,
+    )
 
 
 def _normalize_terminal_task(task: dict[str, Any]) -> dict[str, Any]:
@@ -1548,12 +1701,23 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
         _describe_attempt(cli, cluster=cluster, attempt=attempt) for attempt in attempts
     ]
     validate_report_contract(execution, launch, tasks)
-    gates = evaluate_execution(execution_status=status, tasks=tasks)
     start_date = _parse_datetime(execution["startDate"])
     stop_date = (
         _parse_datetime(execution["stopDate"])
         if execution.get("stopDate")
         else datetime.now(UTC)
+    )
+    cluster_overlap = _cluster_overlap(
+        cli,
+        cluster=cluster,
+        start=start_date,
+        end=stop_date,
+        excluded_task_arns={str(task["task_arn"]) for task in tasks},
+    )
+    gates = evaluate_execution(
+        execution_status=status,
+        tasks=tasks,
+        cluster_overlap=cluster_overlap,
     )
     evidence = {
         "schema_version": 1,
@@ -1569,6 +1733,7 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
             "duration_seconds": (stop_date - start_date).total_seconds(),
         },
         "tasks": tasks,
+        "cluster_overlap": cluster_overlap,
         "fargate_pricing": {
             "operating_system": "Linux",
             "cpu_architecture": "x86_64",

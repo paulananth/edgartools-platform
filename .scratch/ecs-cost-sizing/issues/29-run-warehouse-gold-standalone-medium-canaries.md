@@ -1,8 +1,8 @@
 # Run `warehouse.gold_standalone` Medium Canaries
 
 Type: task
-Status: open
-Blocked by: none
+Status: parked
+Blocked by: completion and deployment of all Step Functions fixes
 
 ## Question
 
@@ -71,3 +71,26 @@ be matched. If their publish changes the ETag or size, the control is
 non-qualifying and a fresh control must precede both medium candidates. Ticket
 29 remains open; no profile promotion or production reference change has been
 made.
+
+## Parked (2026-09-01)
+
+Per operator direction, stop this cohort and restart it only after all Step
+Functions fixes are complete and deployed. No Ticket 29 execution is currently
+running. Do not reuse the existing control/candidate runs as promotion evidence:
+they remain diagnostic history because image/definition drift and production
+writer overlap prevented a qualifying current-image cohort.
+
+Restart procedure after the blocker clears:
+
+1. fetch/rebase onto current `origin/main` and re-run the dry-run GoF/design and
+   code-review gates;
+2. re-query the live `gold_refresh` definition, current warehouse profiles,
+   image digest, and running/pending ECS tasks;
+3. prepare fresh immutable unscheduled control/candidate definitions from that
+   exact live source;
+4. require a writer-free window for the complete control plus two sequential
+   medium executions, with full-window overlap evidence and hydrated silver
+   content identity matching each launch; and
+5. evaluate correctness, funnel, structural recovery, idempotency, telemetry,
+   p95 duration, and validated-output cost before resolving the ticket or
+   changing any production profile reference.
