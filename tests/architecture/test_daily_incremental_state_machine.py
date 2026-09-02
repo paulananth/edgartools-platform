@@ -7,9 +7,11 @@ Covers the Company Identity Pipeline wayfinder map's ticket 06 (see
   reusing ticket 05's exact windowed capture shape (ComputeWindows + a
   strict, MaxConcurrency=1 Map), ahead of the existing RunWarehouseTask/MDM
   chain.
-- bootstrap (the other caller of write_warehouse_mdm_gold_definition) is
-  explicitly untouched -- ticket 06 scoped the restructure to
-  daily_incremental only.
+
+(bootstrap, the other former caller of write_warehouse_mdm_gold_definition,
+was explicitly untouched by this restructure at the time -- and was later
+retired entirely by state-machine-consolidation ticket 06. Its regression
+tests here were removed alongside it.)
 
 These tests generate the real JSON by sourcing the actual bash function (no
 duplicated/hand-maintained copy of the state machine shape) and asserting on
@@ -142,11 +144,6 @@ def _generate(workflow_name: str) -> dict:
 @pytest.fixture(scope="module")
 def daily_definition() -> dict:
     return _generate("daily_incremental")
-
-
-@pytest.fixture(scope="module")
-def bootstrap_definition() -> dict:
-    return _generate("bootstrap")
 
 
 def _command_of_state(state: dict) -> str:
@@ -318,13 +315,6 @@ def test_scheduled_daily_filing_ingestion_forces_exact_seven_day_index_boundary(
     assert "'--recurring-index-lookback-days', '7'" in cmd
 
 
-def test_bootstrap_does_not_inherit_recurring_daily_index_boundary(
-    bootstrap_definition: dict,
-) -> None:
-    cmd = _command_of(bootstrap_definition, "RunWarehouseTask")
-    assert "--recurring-index-lookback-days" not in cmd
-
-
 def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
     daily_definition: dict,
 ) -> None:
@@ -332,23 +322,6 @@ def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
     single gold-refresh, no dedicated refresh added."""
     gold_refresh_states = [name for name in daily_definition["States"] if "Gold" in name]
     assert gold_refresh_states == ["GoldRefresh"]
-
-
-# -- ticket 06: bootstrap is explicitly untouched -----------------------------
-
-
-def test_bootstrap_unaffected_by_daily_incremental_restructure(bootstrap_definition: dict) -> None:
-    """Ticket 06 scoped the restructure to daily_incremental only -- bootstrap
-    (recent-filings-only mode) keeps its original shape: SeedUniverse ->
-    RunWarehouseTask, no Stage0CompanyIdentity, no ComputeWindows. StartAt is
-    now AcquireSecFetchLease, not SeedUniverse directly (release-readiness
-    ticket 84's cross-command lease, added to both branches of the shared
-    function)."""
-    assert bootstrap_definition["StartAt"] == "AcquireSecFetchLease"
-    assert "Stage0CompanyIdentity" not in bootstrap_definition["States"]
-    assert "ComputeWindows" not in bootstrap_definition["States"]
-    order = _linear_order_with_choice(bootstrap_definition, prefer={"SecFetchLeaseAcquiredCheck": "SeedUniverse"})
-    assert order.index("SeedUniverse") < order.index("RunWarehouseTask")
 
 
 # -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 02):
@@ -477,18 +450,6 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
     assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
 
 
-def test_bootstrap_unaffected_by_adv_bulk_fetch_wiring(bootstrap_definition: dict) -> None:
-    """bootstrap shares write_warehouse_mdm_gold_definition with daily_incremental
-    but is architecturally separate (its own workflow_name branch) -- the new
-    AdvBulkFetch stage must not appear in bootstrap's generated JSON.
-    RunWarehouseTask routes to ReleaseSecFetchLease, then Mastering (ticket 84)."""
-    assert "FetchAdvBulk" not in bootstrap_definition["States"]
-    assert "DatasetPeriodCheck" not in bootstrap_definition["States"]
-    assert "ForceCheck" not in bootstrap_definition["States"]
-    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "ReleaseSecFetchLease"
-    assert bootstrap_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
-
-
 def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null(
     daily_definition: dict,
 ) -> None:
@@ -577,16 +538,6 @@ def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(
     assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
 
 
-def test_bootstrap_unaffected_by_firm_roster_wiring(bootstrap_definition: dict) -> None:
-    """bootstrap shares write_warehouse_mdm_gold_definition with daily_incremental
-    but is architecturally separate -- the new Firm Roster states must not
-    appear in bootstrap's generated JSON. RunWarehouseTask routes to
-    ReleaseSecFetchLease, then Mastering (ticket 84)."""
-    assert "FetchFirmRoster" not in bootstrap_definition["States"]
-    assert "FirmRosterForceCheck" not in bootstrap_definition["States"]
-    assert bootstrap_definition["States"]["RunWarehouseTask"]["Next"] == "ReleaseSecFetchLease"
-    assert bootstrap_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
-
 
 def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
     daily_definition: dict,
@@ -598,10 +549,10 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
 
 
 # -- mdm-ahead-of-silver map, Phase B wiring: BackfillMdmEntityIds sweep -----
-# Both bootstrap and daily_incremental share write_warehouse_mdm_gold_definition's
-# Mastering -> ... -> MdmBackfill chain, so this sub-chain must appear identically
-# in both branches -- parametrize over both fixtures rather than duplicating
-# the assertions.
+# Originally parametrized over both daily_definition and bootstrap_definition
+# (both shared write_warehouse_mdm_gold_definition's Mastering -> ... ->
+# MdmBackfill chain); bootstrap was retired by state-machine-consolidation
+# ticket 06, so these now cover daily_definition only.
 #
 # Ticket 06 (.scratch/mdm-ahead-of-silver/issues/06-narrow-backfill-storage-target.md)
 # simplified this from an earlier lease-guarded shape (AcquireEntityBackfillLease/
@@ -613,17 +564,12 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
 # if the lease-guarded design is ever needed again.
 
 
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_mdm_run_routes_directly_into_backfill_mdm_entity_ids(
-    definition_fixture: str, request: pytest.FixtureRequest
-) -> None:
-    definition = request.getfixturevalue(definition_fixture)
-    assert definition["States"]["Mastering"]["Next"] == "BackfillMdmEntityIds"
+def test_mdm_run_routes_directly_into_backfill_mdm_entity_ids(daily_definition: dict) -> None:
+    assert daily_definition["States"]["Mastering"]["Next"] == "BackfillMdmEntityIds"
 
 
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
 def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_mdm_backfill(
-    definition_fixture: str, request: pytest.FixtureRequest
+    daily_definition: dict,
 ) -> None:
     """wh_medium_arn, not large: the Snowflake-only sweep (ticket 06) issues
     SQL queries, not a full-shard download, so it doesn't need large's
@@ -631,9 +577,8 @@ def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_mdm
     MDM/gold run -- the sweep is its own retry (ticket 05: the next pass
     re-selects the same still-NULL rows) -- so both the happy path and the
     Catch converge on MdmBackfill."""
-    definition = request.getfixturevalue(definition_fixture)
-    state = definition["States"]["BackfillMdmEntityIds"]
-    cmd = _command_of(definition, "BackfillMdmEntityIds")
+    state = daily_definition["States"]["BackfillMdmEntityIds"]
+    cmd = _command_of(daily_definition, "BackfillMdmEntityIds")
     assert "'backfill-mdm-entity-ids'" in cmd
     assert "$$.Execution.Name" in cmd
     assert state["Parameters"]["TaskDefinition"] == "arn:wh-medium"
@@ -643,14 +588,10 @@ def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_mdm
     ]
 
 
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_no_entity_backfill_lease_states_remain(
-    definition_fixture: str, request: pytest.FixtureRequest
-) -> None:
+def test_no_entity_backfill_lease_states_remain(daily_definition: dict) -> None:
     """The lease-guarded shape ticket 06 superseded must not linger as dead
     states in the generated definition."""
-    definition = request.getfixturevalue(definition_fixture)
-    states = definition["States"]
+    states = daily_definition["States"]
     for name in (
         "AcquireEntityBackfillLease",
         "ReadEntityBackfillLeaseResult",
@@ -662,14 +603,10 @@ def test_no_entity_backfill_lease_states_remain(
         assert name not in states
 
 
-@pytest.mark.parametrize("definition_fixture", ["daily_definition", "bootstrap_definition"])
-def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(
-    definition_fixture: str, request: pytest.FixtureRequest
-) -> None:
+def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(daily_definition: dict) -> None:
     """The main sec_fetch_active span (build_sec_fetch_lease_states, guarding
     SeedUniverse/RunWarehouseTask) is untouched by the entity-backfill sweep
     simplification -- it still releases right before Mastering."""
-    definition = request.getfixturevalue(definition_fixture)
-    states = definition["States"]
+    states = daily_definition["States"]
     assert states["ReleaseSecFetchLease"]["Next"] == "Mastering"
     assert states["AcquireSecFetchLease"]["Next"] == "ReadSecFetchLeaseResult"

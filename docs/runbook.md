@@ -717,14 +717,14 @@ operator-managed state machine explicitly:
 
 ```bash
 STATE_MACHINE_ARN="$(
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap"])' \
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap_full"])' \
     infra/aws-prod-application.json
 )"
 
 aws stepfunctions start-execution \
   --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap"}'
+  --input '{"trigger":"operator","workflow":"bootstrap_full"}'
 ```
 
 For a bounded replay, pass a `cik_list` string to workflows that support it:
@@ -733,14 +733,19 @@ For a bounded replay, pass a `cik_list` string to workflows that support it:
 aws stepfunctions start-execution \
   --profile sec_platform_deployer \
   --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap","cik_list":"0000320193,0000789019"}'
+  --input '{"trigger":"operator","workflow":"bootstrap_full","cik_list":"0000320193,0000789019"}'
 ```
+
+(The `bootstrap` recent-10-filings-per-company workflow shown here in earlier
+revisions was retired by state-machine-consolidation ticket 06 -- zero
+EventBridge schedule, one execution ever, fully superseded by
+`daily-incremental`'s index-driven selection for ongoing use.)
 
 ### Local Run (development / testing)
 
 ```bash
 export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"
-edgar-warehouse bootstrap --tracking-status-filter active
+edgar-warehouse bootstrap-full --tracking-status-filter active
 ```
 
 ---
@@ -994,7 +999,7 @@ The simplest recovery. Already-loaded CIKs are skipped automatically (DEC-009
 idempotency). Use this unless you need to load only specific CIKs.
 
 ```bash
-./scripts/ops/trigger.sh bootstrap
+./scripts/ops/trigger.sh load-history
 ```
 
 ### Option B: Targeted recovery for specific CIKs

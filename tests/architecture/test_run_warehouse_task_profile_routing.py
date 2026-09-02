@@ -1,14 +1,12 @@
-"""Proves RunWarehouseTask's (bootstrap/daily-incremental's own run step)
-task profile is genuinely *routed through* command_task_profile() at
-runtime, not just coincidentally equal to what command_task_profile()
-would say.
+"""Proves RunWarehouseTask's (daily-incremental's own run step) task
+profile is genuinely *routed through* command_task_profile() at runtime,
+not just coincidentally equal to what command_task_profile() would say.
 
 Resolves task-profile-consolidation wayfinder map ticket 02
 (.scratch/task-profile-consolidation/issues/
 02-route-write-warehouse-mdm-gold-definition-through-the-shared-profile.md).
-Ticket 01 already proved command_task_profile("bootstrap")/
-command_task_profile("daily-incremental") == "large" matches
-write_warehouse_mdm_gold_definition's real live wiring
+Ticket 01 already proved command_task_profile("daily-incremental") ==
+"large" matches write_warehouse_mdm_gold_definition's real live wiring
 (test_task_profile_source_of_truth.py) -- but a value match alone doesn't
 prove the *wiring itself* changed; the function could still hardcode
 wh_task_large_arn directly and happen to agree. This file proves the real
@@ -20,6 +18,10 @@ time, not definition time, so a redefinition between sourcing and invoking
 genuinely intercepts the call. Mirrors
 test_bootstrap_next_task_profile_routing.py's technique exactly (ticket 03's
 equivalent proof for the sibling call site).
+
+(Originally parametrized over ["bootstrap", "daily_incremental"] --
+bootstrap was retired by state-machine-consolidation ticket 06, so these
+now cover daily_incremental only.)
 """
 from __future__ import annotations
 
@@ -115,12 +117,11 @@ def _run_warehouse_task_definition(
     return definition["States"]["RunWarehouseTask"]["Parameters"]["TaskDefinition"]
 
 
-@pytest.mark.parametrize("workflow_name", ["bootstrap", "daily_incremental"])
+@pytest.mark.parametrize("workflow_name", ["daily_incremental"])
 def test_run_warehouse_task_uses_real_command_task_profile_result(workflow_name: str) -> None:
     """With the real, unmodified command_task_profile(), RunWarehouseTask's
-    TaskDefinition must equal the large ARN -- command_task_profile('bootstrap')
-    and command_task_profile('daily-incremental') both resolve to "large"
-    (ticket 01's mapping)."""
+    TaskDefinition must equal the large ARN -- command_task_profile('daily-incremental')
+    resolves to "large" (ticket 01's mapping)."""
     arn = _run_warehouse_task_definition(workflow_name, command_task_profile_override=None)
     assert arn == _WH_LARGE_ARN, (
         f"{workflow_name}'s RunWarehouseTask resolved to {arn!r}, expected the "
@@ -128,7 +129,7 @@ def test_run_warehouse_task_uses_real_command_task_profile_result(workflow_name:
     )
 
 
-@pytest.mark.parametrize("workflow_name", ["bootstrap", "daily_incremental"])
+@pytest.mark.parametrize("workflow_name", ["daily_incremental"])
 def test_run_warehouse_task_genuinely_routes_through_command_task_profile(
     workflow_name: str,
 ) -> None:
@@ -140,13 +141,18 @@ def test_run_warehouse_task_genuinely_routes_through_command_task_profile(
     NOT calling command_task_profile() at runtime -- it's still hardcoding
     the ARN directly, and the override had nothing to intercept.
 
-    bootstrap also legitimately calls command_task_profile('seed-universe')
-    for its own SeedUniverse state (large-profile-unscoped-load-audit
-    ticket 02) -- the stub answers that call too, so this test stays
-    scoped to RunWarehouseTask's own routing (see
-    test_warehouse_mdm_gold_seed_universe_task_profile_routing.py for
-    SeedUniverse's own proof)."""
-    real_command_name = "bootstrap" if workflow_name == "bootstrap" else "daily-incremental"
+    The stub also answers 'seed-universe' unconditionally in case the
+    generated definition includes a SeedUniverse state, so this test stays
+    scoped to RunWarehouseTask's own routing regardless. (The dedicated
+    SeedUniverse-routing proof this docstring used to point to,
+    test_warehouse_mdm_gold_seed_universe_task_profile_routing.py, was
+    deleted by state-machine-consolidation ticket 06: the production branch
+    it exercised, write_warehouse_mdm_gold_definition's
+    `if workflow_name != "daily_incremental":`, is now dead code with no
+    live caller -- daily_incremental's own branch does not reach it. A
+    future revival of that branch for a new second caller should re-add a
+    routing test rather than assume this one still proves it.)"""
+    real_command_name = "daily-incremental"
     override = (
         'command_task_profile() {\n'
         f'  case "$1" in\n'
@@ -169,7 +175,7 @@ def test_run_warehouse_task_genuinely_routes_through_command_task_profile(
 
 @pytest.mark.parametrize(
     ("workflow_name", "real_command_name"),
-    [("bootstrap", "bootstrap"), ("daily_incremental", "daily-incremental")],
+    [("daily_incremental", "daily-incremental")],
 )
 def test_run_warehouse_task_calls_command_task_profile_with_exact_command_name(
     workflow_name: str, real_command_name: str
@@ -177,9 +183,12 @@ def test_run_warehouse_task_calls_command_task_profile_with_exact_command_name(
     """write_warehouse_mdm_gold_definition must call command_task_profile()
     with exactly the real hyphenated CLI command name, not the underscore
     workflow_name spelling -- a stub that fails on anything else must still
-    let generation succeed. bootstrap also legitimately calls it with
-    'seed-universe' for its own SeedUniverse state (large-profile-
-    unscoped-load-audit ticket 02) -- allowed here too."""
+    let generation succeed. The stub also permits a 'seed-universe' call
+    defensively (that lookup is gated on workflow_name != "daily_incremental"
+    in the real function -- see its own comment -- so daily_incremental
+    itself must never trigger it; this test's own parametrization is
+    daily_incremental-only after state-machine-consolidation ticket 06
+    retired the other former case, `bootstrap`, which did call it)."""
     strict_stub = (
         'command_task_profile() {\n'
         f'  if [ "$1" != "{real_command_name}" ] && [ "$1" != "seed-universe" ]; then\n'

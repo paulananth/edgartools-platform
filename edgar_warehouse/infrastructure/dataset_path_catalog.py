@@ -43,7 +43,6 @@ _ALLOWED_TEMPLATE_TOKENS = frozenset(
 )
 _DEFAULT_MANIFEST_COMMANDS = frozenset(
     {
-        "bootstrap",
         "bootstrap-full",
         "bootstrap-batch",
         "bootstrap-fundamentals",

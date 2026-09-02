@@ -10,7 +10,6 @@ from edgar_warehouse.application.commands import (
     acquire_sec_fetch_lease,
     backfill_mdm_entity_ids,
     backfill_silver_landing_historical,
-    bootstrap,
     bootstrap_batch,
     bootstrap_full,
     bootstrap_fundamentals,
@@ -43,7 +42,6 @@ from edgar_warehouse.application.commands import (
 
 LEGACY_COMMAND_REGISTRY = {
     "bootstrap-full": bootstrap_full.execute,
-    "bootstrap": bootstrap.execute,
     "compute-windows": compute_windows.execute,
     "compute-identity-refresh-window": compute_identity_refresh_window.execute,
     "compute-remaining-batches": compute_remaining_batches.execute,

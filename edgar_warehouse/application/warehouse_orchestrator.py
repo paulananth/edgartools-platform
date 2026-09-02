@@ -89,7 +89,6 @@ if TYPE_CHECKING:
 SOURCE_EXPORT_COMMANDS = {
     "bootstrap-full",
     "bootstrap-next",
-    "bootstrap",
     # bootstrap-batch deliberately excluded: parallel batch tasks do bronze+silver only.
     # Gold is built once by gold-refresh after all batches complete.
     "daily-incremental",
@@ -1772,37 +1771,6 @@ def _capture_bronze_raw(
         _merge_capture_network_metrics(metrics, result)
         if result["status"] in {"waiting_for_publish", "failed_retryable"}:
             metrics["sync_status"] = "partial"
-        return raw_writes, metrics
-
-    if command_name == "bootstrap":
-        ciks = _resolve_bootstrap_target_ciks(
-            bookkeeping=bookkeeping,
-            raw_ciks=scope.get("cik_list"),
-            command_name=command_name,
-            tracking_status_filter=str(scope.get("tracking_status_filter", "active")),
-            cik_limit=arguments.get("cik_limit"),
-            cik_offset=int(arguments.get("cik_offset") or 0),
-        )
-        result = _run_submissions_bronze_then_silver(
-            context=context,
-            db=db,
-            bookkeeping=bookkeeping,
-            sync_run_id=sync_run_id,
-            ciks=ciks,
-            include_pagination=False,
-            fetch_date=now.date(),
-            force=bool(arguments.get("force")),
-            load_mode="bootstrap",
-            recent_limit=arguments.get("recent_limit"),
-            artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
-            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
-            ownership_lookback_years=arguments.get("ownership_lookback_years"),
-            item_502_lookback_years=arguments.get("item_502_lookback_years"),
-        )
-        raw_writes.extend(result["raw_writes"])
-        metrics["rows_inserted"] += result["rows_written"]
-        metrics["rows_skipped"] += result["rows_skipped"]
-        _merge_capture_network_metrics(metrics, result)
         return raw_writes, metrics
 
     if command_name == "bootstrap-full":
@@ -6898,13 +6866,6 @@ def _resolve_scope(
             now=now,
             silver_root=silver_root,
         )
-    if command_name == "bootstrap":
-        return {
-            "cik_list": arguments.get("cik_list"),
-            "recent_limit": arguments.get("recent_limit"),
-            "tracking_status_filter": arguments.get("tracking_status_filter"),
-        }
-
     if command_name == "bootstrap-full":
         return {
             "cik_list": arguments.get("cik_list"),

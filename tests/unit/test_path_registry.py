@@ -152,17 +152,17 @@ class WarehousePathResolverTests(unittest.TestCase):
     def test_resolver_plans_default_and_special_manifest_paths(self) -> None:
         self.assertEqual(
             self.resolver.planned_manifest_paths(
-                command_name="bootstrap",
-                command_path="bootstrap",
+                command_name="targeted-resync",
+                command_path="targeted-resync",
                 run_id="run-123",
                 scope={},
             ),
             {
-                "bronze": "runs/bootstrap/run-123/manifest.json",
-                "staging": "staging/runs/bootstrap/run-123/manifest.json",
-                "silver": "silver/sec/runs/bootstrap/run-123/manifest.json",
-                "gold": "gold/runs/bootstrap/run-123/manifest.json",
-                "artifacts": "artifacts/runs/bootstrap/run-123/manifest.json",
+                "bronze": "runs/targeted-resync/run-123/manifest.json",
+                "staging": "staging/runs/targeted-resync/run-123/manifest.json",
+                "silver": "silver/sec/runs/targeted-resync/run-123/manifest.json",
+                "gold": "gold/runs/targeted-resync/run-123/manifest.json",
+                "artifacts": "artifacts/runs/targeted-resync/run-123/manifest.json",
             },
         )
         self.assertEqual(
@@ -295,12 +295,12 @@ class CaptureSpecFactoryTests(unittest.TestCase):
         self.assertEqual(
             self.factory.manifest_output(
                 layer="bronze",
-                command_name="bootstrap",
-                command_path="bootstrap",
+                command_name="targeted-resync",
+                command_path="targeted-resync",
                 run_id="run-123",
                 scope={},
             ).relative_path,
-            "runs/bootstrap/run-123/manifest.json",
+            "runs/targeted-resync/run-123/manifest.json",
         )
         self.assertEqual(
             self.factory.gold_table_output("company", "run-123").relative_path,

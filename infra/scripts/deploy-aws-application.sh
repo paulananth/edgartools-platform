@@ -1760,18 +1760,19 @@ command_task_profile() {
     # issue the identical command with identical arguments against the same
     # shared canonical file.
     seed-universe) printf '%s\n' "medium" ;;
-    # daily-incremental/bootstrap: these two commands are never actually
-    # dispatched through workflow_profile()'s pass-through above (its real
-    # caller loop only iterates bootstrap_full/targeted_resync/
-    # full_reconcile/load_daily_form_index_for_date/
-    # catch_up_daily_form_index/gold_refresh/seed_universe). Their real
-    # resolved profile instead comes from write_warehouse_mdm_gold_definition's
-    # RunWarehouseTask step (ticket 02), which calls command_task_profile()
-    # directly with these same names -- so these two case arms exist for
-    # completeness/direct callers of command_task_profile() itself, not
-    # because anything routes through workflow_profile() to reach them.
+    # daily-incremental: never actually dispatched through
+    # workflow_profile()'s pass-through above (its real caller loop only
+    # iterates bootstrap_full/targeted_resync/full_reconcile/
+    # load_daily_form_index_for_date/catch_up_daily_form_index/
+    # gold_refresh/seed_universe). Its real resolved profile instead comes
+    # from write_warehouse_mdm_gold_definition's RunWarehouseTask step
+    # (ticket 02), which calls command_task_profile() directly with this
+    # same name -- so this case arm exists for completeness/direct callers
+    # of command_task_profile() itself, not because anything routes through
+    # workflow_profile() to reach it. (bootstrap, decommissioned
+    # state-machine-consolidation ticket 06, used to share this same
+    # comment -- removed along with its case arm below.)
     daily-incremental) printf '%s\n' "large" ;;
-    bootstrap) printf '%s\n' "large" ;;
     # bootstrap-next: never dispatched through workflow_profile() or
     # write_warehouse_mdm_gold_definition -- load_history's per-window
     # `bootstrap-next --silver-only` task (write_load_history_definition's
@@ -1793,7 +1794,6 @@ command_task_profile() {
 workflow_command_expression() {
   case "$1" in
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name)" ;;
-    bootstrap) printf '%s\n' "States.Array('bootstrap', '--run-id', \$\$.Execution.Name)" ;;
     bootstrap_full) printf '%s\n' "States.Array('bootstrap-full', '--run-id', \$\$.Execution.Name)" ;;
     targeted_resync) printf '%s\n' "States.Array('targeted-resync', '--scope-type', \$.scope_type, '--scope-key', \$.scope_key, '--run-id', \$\$.Execution.Name)" ;;
     full_reconcile) printf '%s\n' "States.Array('full-reconcile', '--run-id', \$\$.Execution.Name)" ;;
@@ -1808,7 +1808,6 @@ workflow_command_expression() {
 workflow_cik_command_expression() {
   case "$1" in
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
-    bootstrap) printf '%s\n' "States.Array('bootstrap', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
     bootstrap_full) printf '%s\n' "States.Array('bootstrap-full', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
     *) return 0 ;;
   esac
@@ -2017,9 +2016,8 @@ def build_sec_fetch_lease_states(acquired_next_state):
     shape) behind the shared lease, and releases it right before the
     execution ends. No operator-alert notification, unlike daily_incremental's
     identity-refresh lease -- these are operator-triggered ad-hoc runs
-    (bootstrap_full, targeted_resync), matching
-    write_warehouse_mdm_gold_definition's bootstrap branch: the operator
-    running one is already watching it.
+    (bootstrap_full, targeted_resync): the operator running one is already
+    watching it.
     """
     def lease_task_state(command_expression, next_state=None, is_end=False):
         s = run_task_state(command_expression, next_state=next_state, is_end=is_end)
@@ -2699,8 +2697,8 @@ graph_limit = str(mdm_graph_limit)
 
 def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
     """Cross-command sec_fetch_active lease (release-readiness ticket 84):
-    load_history is operator-triggered and ad-hoc (like bootstrap/
-    bootstrap_full/targeted_resync, unlike the scheduled daily_incremental),
+    load_history is operator-triggered and ad-hoc (like bootstrap_full/
+    targeted_resync, unlike the scheduled daily_incremental),
     so no operator-alert notification on defer -- the operator triggering it
     is already watching the run. load_history was restructured from the
     original parallel bootstrap-batch xN Map into a sequential
@@ -2997,7 +2995,7 @@ artifact_policy_default = {
 # bootstrap-next (see `per_window` below). Unlike artifact_policy's default (which
 # preserves full-artifact capture), the default here is 2 years -- unlike the CLI/code
 # level default of 0 (disabled, used by every OTHER caller: daily_incremental,
-# targeted_resync, bootstrap, etc., none of which pass this flag and are therefore
+# targeted_resync, etc., none of which pass this flag and are therefore
 # unaffected), load_history's own default is intentionally bounded per an explicit
 # operator decision (2026-08-05): general filing discovery (10-K/10-Q/8-K/DEF 14A/13F/
 # ADV/etc) should not silently pull a company's entire multi-decade filing history on
@@ -3606,36 +3604,41 @@ PY
 
 # Full pipeline for a single warehouse command followed by the MDM chain and gold refresh.
 # Shape: RunWarehouseTask → Mastering → MdmBackfill → Publish Relationships → Reconcile → GoldRefresh
-# Used by bootstrap and daily_incremental.
+# Used by daily_incremental. (Also used by bootstrap until state-machine-consolidation
+# ticket 06 retired it -- zero EventBridge schedule, one execution ever.)
 write_warehouse_mdm_gold_definition() {
   local output_file="$1"
   local wh_task_medium_arn="$2"   # warehouse medium (the bronze/silver command)
   local mdm_task_small_arn="$3"   # mdm small  (verify-graph)
   local mdm_task_medium_arn="$4"  # mdm medium (run, backfill, sync)
   local wh_task_large_arn="$5"    # warehouse large (gold-refresh)
-  local workflow_name="$6"        # e.g. bootstrap or daily_incremental
+  local workflow_name="$6"        # e.g. daily_incremental
   local bronze_bucket_name="$7"   # daily_incremental's Stage0CompanyIdentity ItemReader
   local operator_alert_topic_arn="$8" # daily_incremental deferral notification target
 
   # task-profile-consolidation wayfinder map, ticket 02
   # (.scratch/task-profile-consolidation/issues/
   # 02-route-write-warehouse-mdm-gold-definition-through-the-shared-profile.md):
-  # RunWarehouseTask -- the step that actually runs `bootstrap`/
-  # `daily-incremental` themselves, i.e. the step that OOM'd in prod when this
-  # was still hardcoded (gold_refresh May 2026, daily_incremental July 2026) --
-  # now resolves its task profile via command_task_profile(), ticket 01's
-  # single source of truth, instead of unconditionally using wh_task_large_arn
-  # below. workflow_name here is the underscore Step-Functions-workflow
-  # spelling ("bootstrap"/"daily_incremental"); command_task_profile() is keyed
-  # by the real hyphenated CLI command name, so translate first -- mirrors the
+  # RunWarehouseTask -- the step that actually runs `daily-incremental`
+  # itself, i.e. the step that OOM'd in prod when this was still hardcoded
+  # (gold_refresh May 2026, daily_incremental July 2026) -- now resolves its
+  # task profile via command_task_profile(), ticket 01's single source of
+  # truth, instead of unconditionally using wh_task_large_arn below.
+  # workflow_name here is the underscore Step-Functions-workflow spelling
+  # ("daily_incremental"); command_task_profile() is keyed by the real
+  # hyphenated CLI command name, so translate first -- mirrors the
   # WAREHOUSE_COMMANDS dict inside the python heredoc below (that dict still
   # exists for building the actual `States.Array(...)` command expression;
   # this bash-side case is a separate, smaller lookup solely for the
   # command_task_profile() call, since bash and the embedded python are
-  # different processes and can't share that dict directly).
+  # different processes and can't share that dict directly). Kept as a
+  # case/esac (not collapsed to a single assignment) even though
+  # daily_incremental is currently the sole caller -- this function has been
+  # touched in 10+ commits and previously had a second caller (`bootstrap`,
+  # retired by state-machine-consolidation ticket 06); the dispatch shape is
+  # a proven extension point, not speculative generality.
   local run_wh_command
   case "$workflow_name" in
-    bootstrap) run_wh_command="bootstrap" ;;
     daily_incremental) run_wh_command="daily-incremental" ;;
     *) fail "write_warehouse_mdm_gold_definition: unknown workflow_name: $workflow_name" ;;
   esac
@@ -3689,8 +3692,7 @@ mdm_limit   = str(mdm_run_limit)
 graph_limit = str(mdm_graph_limit)
 
 WAREHOUSE_COMMANDS = {
-    "bootstrap": "bootstrap",
-    "daily_incremental":   "daily-incremental",
+    "daily_incremental": "daily-incremental",
 }
 wh_cmd = WAREHOUSE_COMMANDS[workflow_name]
 
@@ -3802,11 +3804,14 @@ def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
     4 SEC-fetching commands platform-wide. Mirrors the identity-refresh
     lease pattern's shape (AcquireLease/ReadLeaseResult/LeaseAcquiredCheck/
     Deferred/ReleaseLease/ReleaseLeaseFailedNonFatal) but is deliberately a
-    defer-and-terminate disposition, not a polling wait: an operator-
-    triggered ad-hoc run (bootstrap) relies on the operator re-triggering
-    once free, matching how these commands are already operated today (no
-    auto-retry exists for their failures either); the scheduled
-    daily_incremental relies on its own next scheduled slot, same as its
+    defer-and-terminate disposition, not a polling wait: a future
+    operator-triggered ad-hoc caller of this function (daily_incremental
+    is currently the sole caller; bootstrap used to be the other one,
+    retired by state-machine-consolidation ticket 06) would rely on the
+    operator re-triggering once free, matching how ad-hoc commands are
+    already operated today (no auto-retry exists for their failures
+    either); the scheduled daily_incremental relies on its own next
+    scheduled slot, same as its
     existing identity-refresh lease. No mode/backstop concept, unlike the
     identity-refresh lease -- a caller either gets the lease or is deferred.
     Notification-on-defer is conditional on operator_alert_topic_arn being
@@ -4170,11 +4175,15 @@ else:
         "End": True,
     }
 
-    # GoldRefresh (`gold`, built above) is shared with the bootstrap branch's
-    # standalone definition, which is_end=True there. Mutating it here is
-    # safe: this Python process only ever executes one of the if/else
-    # branches per invocation (see run_wh["Next"] retarget above, same
-    # pattern), so bootstrap's own use of `gold` is never affected.
+    # GoldRefresh (`gold`, built above) defaults to is_end=True for a
+    # standalone/single-workflow shape; mutating it here to chain into
+    # ReleaseLease only happens inside this daily_incremental-only branch
+    # (see run_wh["Next"] retarget above, same pattern), so no other caller
+    # of this function is affected. (Historically this comment described a
+    # second live `bootstrap` case sharing the same construction --
+    # retired by state-machine-consolidation ticket 06; the dispatch shape
+    # itself is left in place as a proven extension point, see the
+    # workflow_name case/esac comment above.)
     del gold["End"]
     gold["Next"] = "ReleaseLease"
     refresh_mode = {
@@ -4267,8 +4276,8 @@ else:
     # shape to write_load_history_definition's own AdvBulkFetch stage (same "keep in
     # sync" duplication convention Stage0CompanyIdentity already established for this
     # file) — see that function's comments for the full rationale. run_wh was built
-    # above with Next="Mastering" for the shared bootstrap/daily_incremental case; retarget
-    # it here since this branch only executes for daily_incremental.
+    # above with Next="Mastering" as the default for this function's general shape;
+    # retarget it here since this branch only executes for daily_incremental.
     run_wh["Next"] = "DatasetPeriodCheck"
     run_wh["ResultPath"] = None
     run_wh["Catch"] = sec_fetch_task_catch()
@@ -5348,18 +5357,12 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  # bootstrap: recent filings → MDM chain → gold. Same shape as load_history
-  # but scoped to the 10 most recent filings per active company instead of a full batch sweep.
-  recent10_definition_file="$(json_file sfn-bootstrap)"
-  write_warehouse_mdm_gold_definition "$recent10_definition_file" \
-    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "bootstrap" "$BRONZE_BUCKET_NAME" ""
-  recent10_state_machine_arn="$(upsert_state_machine bootstrap "$recent10_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "bootstrap" "$recent10_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
+  # bootstrap (recent-10-filings-per-active-company workflow) retired by
+  # state-machine-consolidation ticket 06 -- zero EventBridge schedule, one
+  # execution ever (a verification run), fully superseded by
+  # daily_incremental's index-driven selection. edgartools-prod-bootstrap
+  # was explicitly deleted from AWS as part of that ticket; this script no
+  # longer registers or updates it.
 
   # daily_incremental: daily new filings → MDM chain → gold. Same pipeline shape.
   if is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
@@ -5685,7 +5688,7 @@ PY
 
   # generation_build: parallel immutable graph generation build (07-04, RSYNC-04).
   # Plan -> bounded-concurrency partition fan-out -> fan-in verify -> activate.
-  # Standalone (not chained into load_history/bootstrap/daily_incremental yet --
+  # Standalone (not chained into load_history/daily_incremental yet --
   # 07-05 owns wiring the shared Snowflake activation pointer those pipelines read).
   generation_build_file="$(json_file sfn-generation-build)"
   write_generation_build_definition "$generation_build_file" \
