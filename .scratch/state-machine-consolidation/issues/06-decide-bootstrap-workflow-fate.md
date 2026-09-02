@@ -2,7 +2,7 @@
 
 Type: task
 
-Status: claimed
+Status: resolved
 
 ## Question
 
@@ -146,10 +146,28 @@ CLI subcommand entirely, not just the AWS-side registration.
   via `aws events list-targets-by-rule`) but wasn't called out in this
   ticket's own narrative until now -- noting it explicitly here rather than
   leaving it an undocumented side effect.
-- AWS deletion (rollback snapshot + `aws stepfunctions delete-state-machine`
-  for `edgartools-prod-bootstrap`, mirroring this map's own ticket 03/05
-  precedent -- a routine redeploy does not delete a machine removed from
-  `deploy-aws-application.sh`'s registration list) -- not yet done.
+- Merged as PR #530 (`598195d4`). Warehouse image rebuilt/pushed/verified
+  (`sha256:b255c10f...` -- confirmed `bootstrap` absent from
+  `build_parser()`'s subcommand choices) and deployed to prod via
+  `deploy-aws-application.sh`; confirmed the generated
+  `infra/aws-prod-application.json` manifest has zero `"bootstrap"`
+  references in `state_machines`. Rollback snapshot of the live
+  `edgartools-prod-bootstrap` definition captured to
+  `.scratch/state-machine-consolidation/rollback-snapshots/edgartools-prod-bootstrap-2026-09-02.json`,
+  then the state machine explicitly deleted via
+  `aws stepfunctions delete-state-machine` (confirmed `status: DELETING`
+  immediately after).
+
+## Answer
+
+Full retirement, executed exactly as decided: CLI subcommand, dispatch
+branches, three separate command-classification registries, a second
+undocumented dispatch chain (command_router.py), AWS Step Functions
+registration, and the live state machine itself are all gone.
+`daily-incremental` is now the sole Warehouse Pipeline Machine. Full test
+suite green throughout (2947 passed, 6 skipped); 3-axis code review found
+and fixed 5 real issues across all three axes before merge. See "What was
+done" above for the complete change list and review findings.
 
 ## Deliverable
 
@@ -167,4 +185,5 @@ CLI subcommand entirely, not just the AWS-side registration.
 - [x] Full test suite green
 - [x] 3-axis code review (Standards/Spec/GoF) before commit -- all three
       done, all findings fixed
+- [x] Rollback snapshot + explicit AWS state machine deletion
 - [ ] Rollback snapshot + explicit AWS state machine deletion
