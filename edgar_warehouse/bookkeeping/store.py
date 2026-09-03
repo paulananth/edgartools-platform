@@ -86,6 +86,11 @@ class BookkeepingStore:
             return date.fromisoformat(value)
         return value
 
+    @staticmethod
+    def _chunks(items: list, size: int):
+        for i in range(0, len(items), size):
+            yield items[i : i + size]
+
     # -- stg_daily_index_filing / sec_daily_index_checkpoint ----------------
 
     def merge_daily_index_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
@@ -232,32 +237,76 @@ class BookkeepingStore:
         row = self._session.get(DiscoveryCheckpoint, (scope_type, scope_key))
         return self._to_dict(row) if row else None
 
+    # daily_incremental's own --recurring-index-lookback-days revalidation
+    # (CLAUDE.md's "Daily accession-expansion 5-whys") deliberately re-claims
+    # the same rolling-window CIK set on every run -- confirmed live
+    # 2026-09-03, two consecutive same-day daily_incremental executions both
+    # emitted cik_count: 9205 for the identical 5 business days. At that
+    # scale the original per-CIK loop below (one SELECT + one INSERT per
+    # CIK, no batching) cost ~30 minutes of pure Postgres round-trip latency
+    # every single run, confirmed via CloudWatch: a ~36-minute silent gap
+    # between the last SEC daily-index download and the first
+    # bronze_capture_progress log line, with zero log output in between.
+    # Batched into one chunked SELECT (existing in_progress-under-another-run
+    # rows) plus one chunked bulk upsert -- same claim semantics (dedupe
+    # input, skip a CIK in_progress under a different run_id, allow the same
+    # run_id to reclaim), just O(2 * ceil(N/chunk_size)) round trips instead
+    # of O(2N). Chunk size bounds bind-parameter count per statement (each
+    # upserted row is 9 columns; Postgres' ~65535-parameter-per-statement
+    # ceiling would otherwise be exceeded well before N=9205).
+    _DISCOVERY_CLAIM_CHUNK_SIZE = 1000
+
     def claim_discovery_ciks(
         self, ciks: list[int], *, discovery_source: str, run_id: str, claimed_at: datetime
     ) -> list[int]:
-        claimed: list[int] = []
+        deduped: list[int] = []
         seen: set[int] = set()
-        insert_factory = self._insert_factory()
         for raw_cik in ciks:
             cik = int(raw_cik)
             if cik in seen:
                 continue
             seen.add(cik)
-            scope_key = str(cik)
-            existing = self.get_discovery_checkpoint("cik", scope_key)
-            if existing and existing.get("status") == "in_progress" and existing.get("run_id") != run_id:
-                continue
-            stmt = insert_factory(DiscoveryCheckpoint).values(
-                scope_type="cik",
-                scope_key=scope_key,
-                discovery_source=discovery_source,
-                status="in_progress",
-                run_id=run_id,
-                claimed_at=claimed_at,
-                finished_at=None,
-                updated_at=claimed_at,
-                metadata_json=None,
+            deduped.append(cik)
+        if not deduped:
+            return []
+
+        scope_keys = [str(cik) for cik in deduped]
+        blocked: set[str] = set()
+        for chunk in self._chunks(scope_keys, self._DISCOVERY_CLAIM_CHUNK_SIZE):
+            stmt = select(
+                DiscoveryCheckpoint.scope_key,
+                DiscoveryCheckpoint.status,
+                DiscoveryCheckpoint.run_id,
+            ).where(
+                DiscoveryCheckpoint.scope_type == "cik",
+                DiscoveryCheckpoint.scope_key.in_(chunk),
             )
+            for scope_key, status, existing_run_id in self._session.execute(stmt).all():
+                if status == "in_progress" and existing_run_id != run_id:
+                    blocked.add(scope_key)
+
+        claimed = [cik for cik, scope_key in zip(deduped, scope_keys) if scope_key not in blocked]
+        if not claimed:
+            return []
+
+        insert_factory = self._insert_factory()
+        claimed_scope_keys = [str(cik) for cik in claimed]
+        for chunk in self._chunks(claimed_scope_keys, self._DISCOVERY_CLAIM_CHUNK_SIZE):
+            values = [
+                {
+                    "scope_type": "cik",
+                    "scope_key": scope_key,
+                    "discovery_source": discovery_source,
+                    "status": "in_progress",
+                    "run_id": run_id,
+                    "claimed_at": claimed_at,
+                    "finished_at": None,
+                    "updated_at": claimed_at,
+                    "metadata_json": None,
+                }
+                for scope_key in chunk
+            ]
+            stmt = insert_factory(DiscoveryCheckpoint).values(values)
             excluded = stmt.excluded
             stmt = stmt.on_conflict_do_update(
                 index_elements=[DiscoveryCheckpoint.scope_type, DiscoveryCheckpoint.scope_key],
@@ -272,7 +321,6 @@ class BookkeepingStore:
                 },
             )
             self._session.execute(stmt)
-            claimed.append(cik)
         return claimed
 
     def finish_discovery_ciks(

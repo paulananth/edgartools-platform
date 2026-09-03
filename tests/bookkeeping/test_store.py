@@ -183,6 +183,62 @@ class TestDiscoveryCheckpoint:
     def test_get_missing_returns_none(self, store: BookkeepingStore) -> None:
         assert store.get_discovery_checkpoint("cik", "999") is None
 
+    def test_claim_preserves_input_order_and_skips_only_blocked_ciks(
+        self, store: BookkeepingStore
+    ) -> None:
+        """A mixed batch (some CIKs blocked by a concurrent different run,
+        most free) must claim exactly the free ones, in their original
+        relative order -- proving the batched SELECT-then-filter-then-bulk-
+        upsert rewrite preserves the original per-row loop's exact claim
+        semantics, not just its net claimed-count."""
+        store.claim_discovery_ciks([2, 4], discovery_source="daily", run_id="run-1", claimed_at=_now())
+        claimed = store.claim_discovery_ciks(
+            [1, 2, 3, 4, 5], discovery_source="daily", run_id="run-2", claimed_at=_now()
+        )
+        assert claimed == [1, 3, 5]
+        assert store.get_discovery_checkpoint("cik", "2")["run_id"] == "run-1"
+        assert store.get_discovery_checkpoint("cik", "4")["run_id"] == "run-1"
+        for cik in (1, 3, 5):
+            assert store.get_discovery_checkpoint("cik", str(cik))["run_id"] == "run-2"
+
+    def test_claim_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        """Regression guard for the live 2026-09-03 incident: the original
+        claim_discovery_ciks issued one SELECT + one INSERT per CIK, with no
+        batching at all -- confirmed live as a ~36-minute silent stall on a
+        9,205-CIK daily_incremental run (CloudWatch: zero log output between
+        the last SEC daily-index download and the first bronze_capture_progress
+        line). Chunk size is monkeypatched small so this test proves the
+        chunking behavior itself without needing thousands of rows."""
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_DISCOVERY_CLAIM_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))  # 250 CIKs, chunk size 10 -> 25 chunks
+            claimed = store.claim_discovery_ciks(
+                ciks, discovery_source="daily", run_id="run-1", claimed_at=_now()
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert claimed == ciks
+        # 25 SELECT chunks + 25 upsert chunks = 50 statements -- not 500
+        # (2 round trips per CIK, what the original per-row loop cost).
+        assert len(statements) <= 55, (
+            f"expected ~50 batched statements (25 SELECT + 25 upsert chunks "
+            f"for 250 CIKs at chunk size 10), got {len(statements)} -- "
+            "claim_discovery_ciks may have regressed to one round trip per CIK"
+        )
+        assert len(statements) < len(ciks)
+
 
 # -- pipeline_run_lease -------------------------------------------------------
 
