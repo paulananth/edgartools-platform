@@ -81,13 +81,13 @@ def _generate_definition(workflow_name: str, alert_topic_arn: str = _FAKE_ALERT_
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket" "{alert_topic_arn}"\n',
+            f'"{_FAKE_MEDIUM_ARN}" "{_FAKE_LARGE_ARN}" '
+            f'"{workflow_name}" "fake-bronze-bucket" "{alert_topic_arn}" '
+            '"arn:fake-mdm-machine"\n',
             encoding="utf-8",
         )
 
@@ -386,7 +386,7 @@ def test_gold_refresh_routes_to_release_lease_not_end(daily_incremental_definiti
     -- the function's shared `gold` object defaults to is_end=True (the
     general/standalone shape) and is only mutated inside this
     daily_incremental-only branch."""
-    gold_refresh = daily_incremental_definition["States"]["GoldRefresh"]
+    gold_refresh = daily_incremental_definition["States"]["FactPublishtoGold"]
     assert "End" not in gold_refresh
     assert gold_refresh["Next"] == "ReleaseLease"
 
@@ -460,13 +460,13 @@ def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
     release = states["ReleaseSecFetchLease"]
     cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "release-sec-fetch-lease" in cmd
-    assert release["Next"] == "Mastering"
+    assert release["Next"] == "RunMdmChain"
     assert release["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
     ]
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
-    assert fallback["Next"] == "Mastering"
+    assert fallback["Next"] == "RunMdmChain"
 
 
 def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
@@ -542,4 +542,4 @@ def test_daily_incremental_has_both_leases_independently(daily_incremental_defin
     # GoldRefresh still routes to the identity-refresh ReleaseLease at the
     # very end of the run -- sec_fetch_active already released much earlier,
     # right before Mastering.
-    assert states["GoldRefresh"]["Next"] == "ReleaseLease"
+    assert states["FactPublishtoGold"]["Next"] == "ReleaseLease"

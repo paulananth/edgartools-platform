@@ -120,13 +120,13 @@ def _generate(workflow_name: str) -> dict:
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"
-            "MDM_RUN_LIMIT=100\n"
-            "MDM_GRAPH_LIMIT=200\n"
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            '"arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large" '
-            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n',
+            '"arn:wh-medium" "arn:wh-large" '
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts" '
+            '"arn:mdm-machine"\n',
             encoding="utf-8",
         )
 
@@ -289,12 +289,13 @@ def test_daily_incremental_no_seed_universe(daily_definition: dict) -> None:
     assert "MdmSeedUniverse" not in daily_definition["States"]
 
 
-def test_daily_incremental_mdm_run_still_uses_entity_type_all(daily_definition: dict) -> None:
-    """No dedicated --entity-type company MDM call: the existing
-    --entity-type all call already resolves companies as part of its sweep
-    (run_all() calls run_companies())."""
-    cmd = _command_of(daily_definition, "Mastering")
-    assert "'--entity-type', 'all'" in cmd
+# Mastering itself (--entity-type all, no dedicated --entity-type company
+# call -- run_all() already calls run_companies() as part of its sweep)
+# no longer exists at this level (state-machine-consolidation wayfinder
+# map, ticket 07) -- it moved into the single MDM machine, invoked here as
+# one RunMdmChain nested execution. Covered by
+# tests/architecture/test_mdm_state_machine.py against the real generated
+# MDM machine instead.
 
 
 def test_daily_filing_ingestion_does_not_inherit_identity_cik_batches(
@@ -318,10 +319,11 @@ def test_scheduled_daily_filing_ingestion_forces_exact_seven_day_index_boundary(
 def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
     daily_definition: dict,
 ) -> None:
-    """Exactly one GoldRefresh state -- company-identity feeds the existing
-    single gold-refresh, no dedicated refresh added."""
+    """Exactly one FactPublishtoGold state (renamed from GoldRefresh --
+    state-machine-consolidation wayfinder map, ticket 07) -- company-identity
+    feeds the existing single gold-refresh, no dedicated refresh added."""
     gold_refresh_states = [name for name in daily_definition["States"] if "Gold" in name]
-    assert gold_refresh_states == ["GoldRefresh"]
+    assert gold_refresh_states == ["FactPublishtoGold"]
 
 
 # -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 02):
@@ -373,10 +375,10 @@ def test_fetch_adv_bulk_stage_runs_after_run_warehouse_task_before_mdm_run(
     assert "RunWarehouseTask" in order
     assert "FetchAdvBulk" in order
     assert "IngestAdvBulkSources" in order
-    assert "Mastering" in order
+    assert "RunMdmChain" in order
     assert order.index("RunWarehouseTask") < order.index("FetchAdvBulk")
     assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
-    assert order.index("IngestAdvBulkSources") < order.index("Mastering")
+    assert order.index("IngestAdvBulkSources") < order.index("RunMdmChain")
 
 
 def test_fetch_adv_bulk_command_shape_with_no_sm_input_overrides(daily_definition: dict) -> None:
@@ -447,7 +449,7 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
 
 
 def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null(
@@ -480,10 +482,10 @@ def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(
     assert "IngestAdvBulkSources" in order
     assert "FetchFirmRoster" in order
     assert "IngestFirmRosterSources" in order
-    assert "Mastering" in order
+    assert "RunMdmChain" in order
     assert order.index("IngestAdvBulkSources") < order.index("FetchFirmRoster")
     assert order.index("FetchFirmRoster") < order.index("IngestFirmRosterSources")
-    assert order.index("IngestFirmRosterSources") < order.index("Mastering")
+    assert order.index("IngestFirmRosterSources") < order.index("RunMdmChain")
 
 
 def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_it(
@@ -535,7 +537,7 @@ def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
 
 
 
@@ -564,28 +566,17 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
 # if the lease-guarded design is ever needed again.
 
 
-def test_mdm_run_routes_directly_into_backfill_mdm_entity_ids(daily_definition: dict) -> None:
-    assert daily_definition["States"]["Mastering"]["Next"] == "BackfillMdmEntityIds"
-
-
-def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_infer_relationships(
-    daily_definition: dict,
-) -> None:
-    """wh_medium_arn, not large: the Snowflake-only sweep (ticket 06) issues
-    SQL queries, not a full-shard download, so it doesn't need large's
-    headroom. A sweep failure must not fail this otherwise-successful
-    MDM/gold run -- the sweep is its own retry (ticket 05: the next pass
-    re-selects the same still-NULL rows) -- so both the happy path and the
-    Catch converge on Infer Relationships."""
-    state = daily_definition["States"]["BackfillMdmEntityIds"]
-    cmd = _command_of(daily_definition, "BackfillMdmEntityIds")
-    assert "'backfill-mdm-entity-ids'" in cmd
-    assert "$$.Execution.Name" in cmd
-    assert state["Parameters"]["TaskDefinition"] == "arn:wh-medium"
-    assert state["Next"] == "Infer Relationships"
-    assert state["Catch"] == [
-        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Infer Relationships"}
-    ]
+# Mastering -> BackfillMdmEntityIds (renamed BackpropagateIdsToSilver) ->
+# Infer Relationships no longer exist at this level (state-machine-
+# consolidation wayfinder map, ticket 07) -- they moved into the single MDM
+# machine, invoked here as one RunMdmChain nested execution. Also widened
+# from daily_incremental-only to every MDM-machine caller per this
+# implementation's own follow-up decision. Covered by
+# tests/architecture/test_mdm_state_machine.py against the real generated
+# MDM machine instead (test_tail_order_is_mastering_through_reconcile,
+# test_backpropagate_ids_to_silver_uses_backfill_mdm_entity_ids_command,
+# test_backpropagate_ids_to_silver_failure_is_non_fatal,
+# test_backpropagate_ids_to_silver_uses_the_warehouse_medium_profile).
 
 
 def test_no_entity_backfill_lease_states_remain(daily_definition: dict) -> None:
@@ -608,5 +599,5 @@ def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(daily_definition
     SeedUniverse/RunWarehouseTask) is untouched by the entity-backfill sweep
     simplification -- it still releases right before Mastering."""
     states = daily_definition["States"]
-    assert states["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert states["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
     assert states["AcquireSecFetchLease"]["Next"] == "ReadSecFetchLeaseResult"

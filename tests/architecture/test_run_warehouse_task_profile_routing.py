@@ -95,11 +95,11 @@ def _run_warehouse_task_definition(
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            f'"{_WH_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_WH_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n'
+            f'"{_WH_MEDIUM_ARN}" "{_WH_LARGE_ARN}" '
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts" '
+            '"arn:fake-mdm-machine"\n'
         )
         driver = tmp_path / "driver.sh"
         driver.write_text("\n".join(script_parts), encoding="utf-8")

@@ -2587,20 +2587,320 @@ PY
 # consistency race inherent to bootstrap_batched's concurrent-writer/DISTRIBUTED-Map
 # architecture. See .scratch/state-machine-consolidation/issues/03-decide-bootstrap-batched-deletion.md.
 
+# The single MDM machine (state-machine-consolidation wayfinder map,
+# ticket 07): Mastering -> BackpropagateIdsToSilver -> Infer Relationships
+# -> Publish -> Publish Relationships -> Reconcile, deployed once and
+# invoked by every caller (daily_incremental, load_history, the seed
+# machine) as a nested execution via mdm_tail_helper.py's
+# call_mdm_machine(), instead of each hand-duplicating this chain --
+# confirmed live at the time of writing that daily_incremental
+# (write_warehouse_mdm_gold_definition) and load_history
+# (write_load_history_definition) each independently hand-rolled an
+# identical copy of it, entirely outside wire_mdm_tail() -- exactly the
+# drift risk wire_mdm_tail() (ticket 02) was built to prevent, recurring
+# somewhere ticket 02 never reached.
+#
+# Deliberately ends at Reconcile: GoldRefresh (renamed FactPublishtoGold
+# at every caller) is NOT part of this machine -- confirmed via code
+# reading (edgar_warehouse/mdm/export.py's DOMAIN_TO_TABLE,
+# warehouse_orchestrator.py's gold-refresh handler) that Publish (writes
+# MDM's 5 entity tables directly from Postgres) and gold-refresh (rebuilds
+# ~18 other, silver-derived gold tables, independent of MDM) are genuinely
+# different jobs. Each caller runs its own FactPublishtoGold step, if it
+# wants one, after this nested execution returns -- matching
+# residual_holds_graph's existing precedent of not running gold-refresh at
+# all when its own run made no new bronze/silver capture.
+#
+# BackpropagateIdsToSilver (backfill-mdm-entity-ids, renamed from
+# BackfillMdmEntityIds) was daily_incremental-only before ticket 07 --
+# folded into every caller here since it has nothing to do with which
+# head ran before Mastering.
+#
+# Deploying this requires the runtime_access Terraform module's
+# step_functions_runtime policy to include the
+# StepFunctionsGetEventsForStepFunctionsExecutionRule EventBridge rule ARN
+# (added alongside this change) -- states:startExecution.sync:2 manages
+# its own EventBridge rule to detect nested-execution completion, distinct
+# from the StepFunctionsGetEventsForECSTaskRule already granted for plain
+# ecs:runTask.sync states.
+write_mdm_definition() {
+  local output_file="$1"
+  local mdm_task_small_arn="$2"   # mdm small  (reconcile)
+  local mdm_task_medium_arn="$3"  # mdm medium (mastering, infer-relationships, publish, publish-relationships)
+  local wh_task_medium_arn="$4"   # warehouse medium (backfill-mdm-entity-ids)
+
+  python3 - "$output_file" "$CLUSTER_ARN" \
+    "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_medium_arn" \
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ mdm_small_arn, mdm_medium_arn, wh_medium_arn,
+ container_name, subnet_json, security_group_json,
+ mdm_run_limit, mdm_graph_limit) = sys.argv[1:]
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+mdm_limit   = str(mdm_run_limit)
+graph_limit = str(mdm_graph_limit)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                    "AssignPublicIp": "ENABLED",
+                    "SecurityGroups": security_groups,
+                    "Subnets": subnets,
+                },
+            },
+            "Overrides": {
+                "ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}],
+            },
+        },
+        "Retry": [{
+            "ErrorEquals": ["States.TaskFailed"],
+            "IntervalSeconds": retry_secs,
+            "BackoffRate": 2.0,
+            "MaxAttempts": 2,
+        }],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+# Every command below reads $.run_id (this nested execution's own input
+# field), never $$.Execution.Name -- see mdm_tail_helper.py's
+# call_mdm_machine() docstring for why that hop is mandatory here.
+mastering = ecs_state(mdm_medium_arn,
+    f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $.run_id)",
+    next_state="BackpropagateIdsToSilver")
+
+backpropagate_ids_to_silver = ecs_state(wh_medium_arn,
+    "States.Array('backfill-mdm-entity-ids', '--run-id', $.run_id)",
+    next_state="Infer Relationships")
+# mdm-ahead-of-silver map, Phase B wiring (ticket 06): a sweep failure must
+# not fail this otherwise-successful MDM run -- the sweep IS its own retry
+# (mdm-ahead-of-silver ticket 05: the next pass re-selects the same
+# still-NULL rows).
+backpropagate_ids_to_silver["Catch"] = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    "Next": "Infer Relationships",
+}]
+
+infer_relationships = ecs_state(mdm_medium_arn,
+    f"States.Array('mdm', 'infer-relationships', '--limit', '{graph_limit}', '--run-id', $.run_id)",
+    next_state="Publish")
+
+# Publish precedes Publish Relationships (data-architecture Issue 3):
+# publish-relationships materializes Snowflake graph tables from the
+# Snowflake MDM mirror, not the runtime MDM database directly -- without a
+# publish here the mirror can be stale relative to the mastering/infer-
+# relationships this same nested execution just did.
+publish = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", next_state="Publish Relationships")
+publish_relationships = ecs_state(mdm_medium_arn,
+    f"States.Array('mdm', 'publish-relationships', '--limit', '{graph_limit}')",
+    next_state="Reconcile")
+
+reconcile = ecs_state(mdm_small_arn, "States.Array('mdm', 'reconcile')", is_end=True)
+# reconcile is validation-only per docs/data-architecture.md: it reports
+# parity but must never fail this otherwise-successful MDM run.
+reconcile["Catch"] = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    "Next": "ReconcileFailedNonFatal",
+}]
+reconcile_failed_non_fatal = {
+    "Type": "Pass",
+    "Comment": "reconcile is validation-only -- a failure here must not mark an otherwise-successful MDM run FAILED.",
+    "End": True,
+}
+
+definition = {
+    "Comment": (
+        "The single MDM machine (state-machine-consolidation wayfinder map, ticket 07): "
+        "Mastering -> BackpropagateIdsToSilver -> Infer Relationships -> Publish -> "
+        "Publish Relationships -> Reconcile. Callers invoke via "
+        "states:startExecution.sync:2 with Input: {\"run_id\": <calling execution's own "
+        "$$.Execution.Name>}. Ends at Reconcile -- gold-refresh (FactPublishtoGold at "
+        "every caller) is deliberately not part of this machine; each caller runs its own "
+        "after this nested execution returns."
+    ),
+    "StartAt": "Mastering",
+    "States": {
+        "Mastering": mastering,
+        "BackpropagateIdsToSilver": backpropagate_ids_to_silver,
+        "Infer Relationships": infer_relationships,
+        "Publish": publish,
+        "Publish Relationships": publish_relationships,
+        "Reconcile": reconcile,
+        "ReconcileFailedNonFatal": reconcile_failed_non_fatal,
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+# The single seed machine (state-machine-consolidation wayfinder map,
+# ticket 07): merges the former standalone seed_universe (warehouse-level
+# CIK/ticker discovery) + mdm_seed_universe (MDM-level enrollment)
+# machines, which ticket 04 had previously locked as deliberately separate
+# -- reversed here per the user's explicit request. Ad-hoc operator tool
+# only, matching what both predecessors already were: confirmed via code
+# reading that no pipeline calls either standalone machine today
+# (load_history inlines its own SeedUniverse -> MdmSeedUniverse directly;
+# daily_incremental never seeds at all) -- so this machine's only caller is
+# an operator, same as before the merge. Preserves the real,
+# still-used --tracking-status (deploy-time default,
+# MDM_SEED_UNIVERSE_TRACKING_STATUS) / --limit (execution-input override)
+# capability ticket 04 originally found value in keeping.
+#
+# Chains seed-universe (CIK/ticker discovery) -> mdm seed-universe (MDM
+# enrollment, reads what seed-universe just wrote to silver/bookkeeping --
+# confirmed via code reading that `mdm seed-universe --source silver`, the
+# default, is not an independent fetch) -> the single MDM machine
+# (Mastering..Reconcile), mirroring what load_history's own untouched
+# inline seeding already does.
+write_seed_definition() {
+  local output_file="$1"
+  local wh_task_medium_arn="$2"    # warehouse medium (seed-universe)
+  local mdm_task_small_arn="$3"    # mdm small (mdm seed-universe -- matches the
+                                    # predecessor standalone mdm_seed_universe
+                                    # machine's own profile, task_definition_for_mdm_workflow()'s
+                                    # mdm_seed_universe case; NOT load_history's
+                                    # inline mdm_medium_arn copy, a separate,
+                                    # untouched call site with no shared history)
+  local mdm_state_machine_arn="$4" # the single MDM machine (ticket 07)
+
+  python3 - "$output_file" "$CLUSTER_ARN" \
+    "$wh_task_medium_arn" "$mdm_task_small_arn" \
+    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
+    "$MDM_SEED_UNIVERSE_TRACKING_STATUS" "$mdm_state_machine_arn" "$SCRIPT_DIR" <<'PY'
+import json, pathlib, sys
+
+(output_file, cluster_arn,
+ wh_medium_arn, mdm_small_arn,
+ container_name, subnet_json, security_group_json,
+ mdm_seed_universe_tracking_status, mdm_state_machine_arn, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import call_mdm_machine
+
+subnets = json.loads(subnet_json)
+security_groups = json.loads(security_group_json)
+
+def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=60):
+    s = {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::ecs:runTask.sync",
+        "Parameters": {
+            "LaunchType": "FARGATE",
+            "Cluster": cluster_arn,
+            "TaskDefinition": task_def_arn,
+            "PropagateTags": "TASK_DEFINITION",
+            "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                    "AssignPublicIp": "ENABLED",
+                    "SecurityGroups": security_groups,
+                    "Subnets": subnets,
+                },
+            },
+            "Overrides": {
+                "ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}],
+            },
+        },
+        "Retry": [{
+            "ErrorEquals": ["States.TaskFailed"],
+            "IntervalSeconds": retry_secs,
+            "BackoffRate": 2.0,
+            "MaxAttempts": 2,
+        }],
+    }
+    if is_end:
+        s["End"] = True
+    else:
+        s["Next"] = next_state
+    return s
+
+# No sec_fetch_active lease -- matches the predecessor standalone
+# seed_universe machine, which was deliberately never wrapped (it doesn't
+# call SEC at meaningful volume; see the bootstrap_full/targeted_resync-only
+# wrap_with_sec_fetch_lease logic elsewhere in this script).
+seed_universe = ecs_state(wh_medium_arn,
+    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
+    next_state="HasLimitOverride")
+
+# Mirrors write_mdm_workflow_definition's own HasLimitOverride Choice shape
+# (the predecessor standalone mdm_seed_universe machine's exact contract) --
+# --tracking-status stays a deploy-time default, --limit is the one real
+# per-execution override.
+has_limit_override = {
+    "Type": "Choice",
+    "Choices": [{
+        "And": [
+            {"Variable": "$.limit", "IsPresent": True},
+            {"Variable": "$.limit", "IsNumeric": True},
+        ],
+        "Next": "MdmSeedUniverseWithLimit",
+    }],
+    "Default": "MdmSeedUniverseDefault",
+}
+mdm_seed_universe_default = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'seed-universe', '--tracking-status', '{mdm_seed_universe_tracking_status}')",
+    next_state="RunMdmChain")
+mdm_seed_universe_with_limit = ecs_state(mdm_small_arn,
+    f"States.Array('mdm', 'seed-universe', '--tracking-status', '{mdm_seed_universe_tracking_status}', "
+    "'--limit', States.Format('{}', $.limit))",
+    next_state="RunMdmChain")
+
+run_mdm_chain = call_mdm_machine(mdm_state_machine_arn, is_end=True)
+
+definition = {
+    "Comment": (
+        "The single seed machine (state-machine-consolidation wayfinder map, ticket 07): "
+        "merges the former standalone seed_universe + mdm_seed_universe machines. Ad-hoc "
+        "operator tool only -- no pipeline calls this. Chains seed-universe (CIK/ticker "
+        "discovery) -> mdm seed-universe (MDM enrollment) -> the single MDM machine "
+        "(Mastering..Reconcile)."
+    ),
+    "StartAt": "SeedUniverse",
+    "States": {
+        "SeedUniverse": seed_universe,
+        "HasLimitOverride": has_limit_override,
+        "MdmSeedUniverseDefault": mdm_seed_universe_default,
+        "MdmSeedUniverseWithLimit": mdm_seed_universe_with_limit,
+        "RunMdmChain": run_mdm_chain,
+    },
+}
+pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 # Phased pipeline: seed → compute windows → sequential windowed bootstrap → MDM chain → gold → run summary.
 # Replaces the original DISTRIBUTED Map over cik_batches.jsonl with an INLINE Map (MaxConcurrency=1)
 # over cik_windows.jsonl written by compute-windows.  Sequential windows ensure silver.duckdb is
 # consistent at each step; MDM + gold run once after all windows complete.
 # Implements CHUNK-02 (sequential windowed SM) and CHUNK-04 SM-side (per-window bootstrap-next command).
-# Uses direct ECS task states throughout (no nested Step Function executions) so the
-# existing sec_platform_runner_step_functions role needs no extra EventBridge permissions.
+# Calls out to the single MDM machine (state-machine-consolidation wayfinder map, ticket 07)
+# for Mastering..Reconcile via mdm_tail_helper.py's call_mdm_machine() instead of inlining it.
 write_load_history_definition() {
   local output_file="$1"
   local wh_task_small_arn="$2"    # warehouse small  (compute-windows, write-run-summary)
   local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, per-window bootstrap-next/-fundamentals)
-  local mdm_task_small_arn="$4"   # mdm small        (mdm reconcile — lightweight check)
-  local mdm_task_medium_arn="$5"  # mdm medium       (mdm seed-universe, mastering, infer-relationships, publish, publish-relationships)
-  local wh_task_large_arn="$6"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
+  local mdm_task_medium_arn="$4"  # mdm medium       (mdm seed-universe)
+  local wh_task_large_arn="$5"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
+  local mdm_state_machine_arn="$6" # the single MDM machine (state-machine-consolidation
+                                    # wayfinder map, ticket 07) -- Mastering..Reconcile,
+                                    # invoked as a nested execution instead of inlined here
 
   # task-profile-consolidation wayfinder map, ticket 03
   # (.scratch/task-profile-consolidation/issues/
@@ -2652,17 +2952,19 @@ write_load_history_definition() {
   esac
 
   python3 - "$output_file" "$CLUSTER_ARN" \
-    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
+    "$wh_task_small_arn" "$wh_task_medium_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$MDM_SEED_UNIVERSE_TRACKING_STATUS" \
-    "$bootstrap_next_task_arn" "$seed_universe_task_arn" <<'PY'
+    "$MDM_SEED_UNIVERSE_TRACKING_STATUS" \
+    "$bootstrap_next_task_arn" "$seed_universe_task_arn" "$mdm_state_machine_arn" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
- wh_small_arn, wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
+ wh_small_arn, wh_medium_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit, mdm_seed_universe_tracking_status,
- bootstrap_next_task_arn, seed_universe_task_arn) = sys.argv[1:]
+ mdm_seed_universe_tracking_status,
+ bootstrap_next_task_arn, seed_universe_task_arn, mdm_state_machine_arn, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import call_mdm_machine
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -2691,9 +2993,6 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
     else:
         s["Next"] = next_state
     return s
-
-mdm_limit = str(mdm_run_limit)
-graph_limit = str(mdm_graph_limit)
 
 def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
     """Cross-command sec_fetch_active lease (release-readiness ticket 84):
@@ -3490,31 +3789,16 @@ ingest_firm_roster_sources["ResultPath"] = None
 # MdmSeedUniverse (an upsert from data SeedUniverse already fetched, no SEC
 # call itself) rides inside the span since it's sandwiched between two
 # fetch stages -- a few minutes of over-holding, not hours.
-sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "Mastering")
+sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "RunMdmChain")
 
-# (5)–(9) MDM chain + GoldRefresh — run once after ALL windows complete (same invariant as before).
-# Publish is new (data-architecture Issue 3): mdm publish-relationships materializes Snowflake graph
-# tables from the Snowflake MDM mirror, not from the runtime MDM database directly. Without an
-# publish between infer-relationships and publish-relationships, publish-relationships can read
-# a stale or missing mirror — graph output wouldn't reflect the MDM run this same execution just did.
-mdm_run = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
-    next_state="Infer Relationships")
-mdm_backfill = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'infer-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)",
-    next_state="Publish")
-mdm_export = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'publish')",
-    next_state="Publish Relationships")
-mdm_sync = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'publish-relationships', '--limit', '{graph_limit}')",
-    next_state="Reconcile")
-mdm_verify = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'reconcile')",
-    next_state="GoldRefresh")
-mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
-# verify-graph is validation-only per docs/data-architecture.md: it reports
-# parity but must never block gold-refresh, so a verify failure falls through.
+# (5)-(9) MDM chain + FactPublishtoGold — run once after ALL windows complete
+# (same invariant as before). Mastering..Reconcile now live in the single MDM
+# machine (state-machine-consolidation wayfinder map, ticket 07), invoked as
+# one nested execution instead of hand-duplicated here -- see
+# mdm_tail_helper.py's call_mdm_machine() and write_mdm_definition() for the
+# full chain and why Publish must precede Publish Relationships
+# (data-architecture Issue 3).
+run_mdm_chain = call_mdm_machine(mdm_state_machine_arn, next_state="FactPublishtoGold")
 gold = ecs_state(wh_large_arn,
     "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
     next_state="WriteRunSummary", retry_secs=60)
@@ -3589,12 +3873,8 @@ definition = {
         "FetchFirmRoster":          fetch_firm_roster,
         "FetchFirmRosterForced":    fetch_firm_roster_forced,
         "IngestFirmRosterSources":  ingest_firm_roster_sources,
-        "Mastering":            mdm_run,
-        "Infer Relationships":       mdm_backfill,
-        "Publish":         mdm_export,
-        "Publish Relationships":           mdm_sync,
-        "Reconcile":         mdm_verify,
-        "GoldRefresh":       gold,
+        "RunMdmChain":       run_mdm_chain,
+        "FactPublishtoGold": gold,
         "WriteRunSummary":   write_run_summary,
     },
 }
@@ -3603,18 +3883,21 @@ PY
 }
 
 # Full pipeline for a single warehouse command followed by the MDM chain and gold refresh.
-# Shape: RunWarehouseTask → Mastering → Infer Relationships → Publish Relationships → Reconcile → GoldRefresh
+# Shape: RunWarehouseTask → RunMdmChain (nested execution of the single MDM
+# machine, Mastering..Reconcile -- state-machine-consolidation wayfinder
+# map, ticket 07) → FactPublishtoGold (renamed from GoldRefresh)
 # Used by daily_incremental. (Also used by bootstrap until state-machine-consolidation
 # ticket 06 retired it -- zero EventBridge schedule, one execution ever.)
 write_warehouse_mdm_gold_definition() {
   local output_file="$1"
   local wh_task_medium_arn="$2"   # warehouse medium (the bronze/silver command)
-  local mdm_task_small_arn="$3"   # mdm small  (verify-graph)
-  local mdm_task_medium_arn="$4"  # mdm medium (run, backfill, sync)
-  local wh_task_large_arn="$5"    # warehouse large (gold-refresh)
-  local workflow_name="$6"        # e.g. daily_incremental
-  local bronze_bucket_name="$7"   # daily_incremental's Stage0CompanyIdentity ItemReader
-  local operator_alert_topic_arn="$8" # daily_incremental deferral notification target
+  local wh_task_large_arn="$3"    # warehouse large (gold-refresh)
+  local workflow_name="$4"        # e.g. daily_incremental
+  local bronze_bucket_name="$5"   # daily_incremental's Stage0CompanyIdentity ItemReader
+  local operator_alert_topic_arn="$6" # daily_incremental deferral notification target
+  local mdm_state_machine_arn="$7" # the single MDM machine (state-machine-consolidation
+                                    # wayfinder map, ticket 07) -- Mastering..Reconcile,
+                                    # invoked as a nested execution instead of inlined here
 
   # task-profile-consolidation wayfinder map, ticket 02
   # (.scratch/task-profile-consolidation/issues/
@@ -3674,22 +3957,24 @@ write_warehouse_mdm_gold_definition() {
   fi
 
   python3 - "$output_file" "$CLUSTER_ARN" \
-    "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
+    "$wh_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$workflow_name" "$bronze_bucket_name" \
-    "$operator_alert_topic_arn" "$run_wh_task_arn" "$seed_universe_task_arn" <<'PY'
+    "$workflow_name" "$bronze_bucket_name" \
+    "$operator_alert_topic_arn" "$run_wh_task_arn" "$seed_universe_task_arn" \
+    "$mdm_state_machine_arn" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
- wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
+ wh_medium_arn, wh_large_arn,
  container_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit, workflow_name, bronze_bucket_name,
- operator_alert_topic_arn, run_wh_task_arn, seed_universe_task_arn) = sys.argv[1:]
+ workflow_name, bronze_bucket_name,
+ operator_alert_topic_arn, run_wh_task_arn, seed_universe_task_arn,
+ mdm_state_machine_arn, script_dir) = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from mdm_tail_helper import call_mdm_machine
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
-mdm_limit   = str(mdm_run_limit)
-graph_limit = str(mdm_graph_limit)
 
 WAREHOUSE_COMMANDS = {
     "daily_incremental": "daily-incremental",
@@ -3733,7 +4018,7 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 # way it did before that mapping existed.
 run_wh = ecs_state(run_wh_task_arn,
     f"States.Array('{wh_cmd}', '--run-id', $$.Execution.Name)",
-    next_state="Mastering")
+    next_state="RunMdmChain")
 if workflow_name == "daily_incremental":
     # Scheduled daily/backstop runs must derive filing candidates from an exact,
     # freshly forced index union. Identity selection remains independently scoped.
@@ -3741,56 +4026,15 @@ if workflow_name == "daily_incremental":
         "States.Array('daily-incremental', '--recurring-index-lookback-days', '7', "
         "'--run-id', $$.Execution.Name)"
     )
-mdm_run = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)",
-    next_state="BackfillMdmEntityIds")
-mdm_backfill = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'infer-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)",
-    next_state="Publish")
-# Publish precedes Publish Relationships (data-architecture Issue 3): sync-graph materializes Snowflake
-# graph tables from the Snowflake MDM mirror, not the runtime MDM database directly — without
-# an export here the mirror can be stale relative to the run/backfill that just completed.
-mdm_export = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'publish')",
-    next_state="Publish Relationships")
-
-# mdm-ahead-of-silver map, Phase B wiring (ticket 06): backfill-mdm-entity-ids
-# sweeps the Snowflake EDGARTOOLS_SILVER tables for mdm_entity_id IS NULL rows
-# and fills them from MDM's already-resolved MdmSourceRef rows
-# (edgar_warehouse/mdm_entity_backfill.py). Placed right after Mastering so the
-# freshest resolution pass is visible, and before Infer Relationships/
-# GoldRefresh so a newly backfilled entity_id can still reach this same
-# execution's gold build.
-#
-# No sec_fetch_active lease here (unlike this map's own first cut at this
-# wiring, superseded by ticket 06): the sweep is Snowflake-only now -- it
-# reads pending rows from Snowflake and re-emits full rows via the same
-# LandingExportBuffer/Snowpipe append-only path every other silver write
-# uses, touching no DuckDB shard file. The concurrent-writer-clobber risk
-# that lease existed to guard against (_hydrate_all_shards/
-# _publish_shard_if_remote against a shared shard file) no longer applies.
-# wh_medium_arn, not wh_large_arn, for the same reason -- no full-shard
-# download, just SQL queries.
-backfill_mdm_entity_ids = ecs_state(wh_medium_arn,
-    "States.Array('backfill-mdm-entity-ids', '--run-id', $$.Execution.Name)",
-    next_state="Infer Relationships", retry_secs=60)
-backfill_mdm_entity_ids["Catch"] = [{
-    "ErrorEquals": ["States.ALL"],
-    "ResultPath": None,
-    # A sweep failure must not fail this otherwise-successful MDM/gold run --
-    # the sweep IS its own retry (mdm-ahead-of-silver ticket 05: the next
-    # pass re-selects the same still-NULL rows).
-    "Next": "Infer Relationships",
-}]
-mdm_sync = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'publish-relationships', '--limit', '{graph_limit}')",
-    next_state="Reconcile")
-mdm_verify = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'reconcile')",
-    next_state="GoldRefresh")
-mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
-# verify-graph is validation-only per docs/data-architecture.md: it reports
-# parity but must never block gold-refresh, so a verify failure falls through.
+# Mastering, BackpropagateIdsToSilver (renamed from BackfillMdmEntityIds --
+# mdm-ahead-of-silver map, Phase B wiring, ticket 06), Infer Relationships,
+# Publish, Publish Relationships, and Reconcile now all live in the single
+# MDM machine (state-machine-consolidation wayfinder map, ticket 07),
+# invoked here as one nested execution instead of hand-duplicated -- see
+# mdm_tail_helper.py's call_mdm_machine() and write_mdm_definition() for
+# the full chain, ordering rationale, and non-fatal Catch semantics
+# (unchanged from what this function used to inline directly).
+run_mdm_chain = call_mdm_machine(mdm_state_machine_arn, next_state="FactPublishtoGold")
 gold = ecs_state(wh_large_arn,
     "States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
     is_end=True, retry_secs=60)
@@ -3927,545 +4171,493 @@ def sec_fetch_task_catch():
     failure releases the lease promptly instead of leaving it held for the
     16h stale-reclaim window."""
     return [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}]
+# ResolveCompanyIdentityBounded: Company Identity Pipeline wayfinder map,
+# ticket 06. A strict, MaxConcurrency=1, delta-then-reduce Map --
+# bootstrap-fundamentals --mode company-identity over explicit
+# --cik-list batches (compute-identity-refresh-window's cik_batches.jsonl),
+# each persisting only an immutable delta, merged into canonical exactly
+# once by ReduceIdentityRefresh below -- ahead of the existing
+# RunWarehouseTask/MDM chain, so company data is current before the
+# existing mdm-run(--entity-type all) resolves companies as part of its
+# sweep (run_all() calls run_companies()) -- no separate --entity-type
+# company call needed. daily_incremental had zero prod executions ever
+# (confirmed via list-executions) as of ticket 06, so this was a clean
+# restructure, not a migration of live behavior.
+#
+# No SeedUniverse/MdmSeedUniverse here, matching daily_incremental's
+# existing choice to skip seed-universe entirely -- it processes the
+# already-tracked universe for daily updates, not newly-discovered CIKs.
+# batch_size is a fixed literal (not SM-input-configurable like
+# load_history's WindowSizeCheck/TotalCikLimitCheck): daily_incremental is
+# a scheduled job that always runs the same shape, unlike load_history's
+# operator-triggered, variously-scoped ad-hoc runs.
+#
+# NOTE: write_load_history_definition's Stage0CompanyIdentity (Company
+# Identity Hydrate Elimination map, ticket 03) was restructured to this
+# same delta-then-reduce shape -- these two functions can't share code
+# directly (each is its own `python3 -` subprocess), so a shape change
+# here (command flags, failure-handling policy, ItemReader key
+# expression) must be mirrored there too.
+#
+# refresh_mode (release-readiness ticket 45/49, "Decide whether/how to
+# narrow daily_incremental's Stage 0"): the full-universe ComputeWindows ->
+# Stage0CompanyIdentity pair below took 10h16m alone on the first-ever prod
+# execution (ticket 45's evidence), because it reprocesses the entire
+# ~26,300-CIK tracked universe every run instead of just the CIKs that
+# actually filed something recently. RefreshMode branches on
+# $.refresh_mode: "backstop" selects the complete active company-eligible
+# universe (the weekly Identity Backstop Sweep); the default "daily" path
+# intersects the trailing 7 days' impacted CIKs with that same bounded
+# universe. Both use the explicit-CIK Stage 0 Map and converge on
+# RunWarehouseTask.
+#
+# AcquireLease/ReleaseLease (release-readiness ticket 49, go-live follow-up):
+# a run-level lease shared by the Daily Identity Refresh and the Identity
+# Backstop Sweep so they never run concurrently. ecs:runTask.sync doesn't
+# surface app-level stdout/metrics to a Choice state, so the acquire
+# command writes lease_result.json to S3 (bronze root) as its source of
+# truth; ReadLeaseResult reads it back via the aws-sdk:s3:getObject
+# service integration and States.StringToJson, and LeaseAcquiredCheck
+# branches on the parsed lease_acquired boolean. An explicit
+# lease_acquired=false routes to Deferred -- an explicit terminal state,
+# not an invisible skip -- and starts no downstream data work.
+#
+# NOTE (deliberate, found sharp in code review): ReadLeaseResult has no
+# Retry/Catch. A missing or corrupt lease_result.json (S3 write failure,
+# object not found) fails the Task outright -- it does NOT fall through
+# to Deferred. This is intentional: "lease busy" (a benign, expected
+# outcome) and "something is actually broken" (an unknown failure mode)
+# are different dispositions, and silently treating the latter as the
+# former would mask real bugs behind a falsely reassuring "deferred, all
+# good" event. An unreadable lease result fails the execution loudly
+# instead.
+#
+# Stale-lease reclaim (20h -- 2h of margin past the Identity Backstop
+# Sweep's own 18h completion/alarm bound, so a new run's acquire can't
+# race a legitimately-still-finishing backstop mid-ReleaseLease) lives in
+# acquire_pipeline_run_lease itself (silver_store.py), not here, so a
+# crashed run can't wedge the schedule permanently -- release-on-failure
+# elsewhere in this chain is therefore best-effort, not wrapped in Catch
+# on every downstream state.
+validate_force_input = {
+    "Type": "Choice",
+    "Comment": "Accept an omitted or boolean force input; reject every other type before workload execution.",
+    "Choices": [
+        {"Variable": "$.force", "IsPresent": False, "Next": "ForceDefault"},
+        {"Variable": "$.force", "IsBoolean": True, "Next": "RefreshModeCheck"},
+    ],
+    "Default": "InvalidForceInput",
+}
+force_default = {
+    "Type": "Pass",
+    "Comment": "Normalize an omitted operator force input to false.",
+    "Result": False,
+    "ResultPath": "$.force",
+    "Next": "RefreshModeCheck",
+}
+invalid_force_input = {
+    "Type": "Fail",
+    "Error": "InvalidForceInput",
+    "Cause": "Optional execution input 'force' must be a JSON boolean when present.",
+}
 
-# All workflows except daily_incremental seed the universe first so any
-# bootstrap_pending CIKs are enrolled before the main pipeline step runs.
-if workflow_name != "daily_incremental":
-    # large-profile-unscoped-load-audit ticket 02 (2026-08-22): now routed
-    # through command_task_profile('seed-universe') (bash side, above),
-    # same as write_load_history_definition's own SeedUniverse (ticket 07)
-    # -- resolves to "medium" today; the full-canonical-silver.duckdb
-    # hydrate this state used to be unconditionally exposed to on the old
-    # hardcoded wh_large_arn is the seed-universe-narrow-hydrate map's
-    # already-fixed streaming path (PR #392), confirmed live, so this
-    # state machine is no longer "equally exposed" the way this comment
-    # used to say.
-    seed_universe = ecs_state(seed_universe_task_arn,
-        "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
-        next_state="RunWarehouseTask", retry_secs=60)
-    # sec_fetch_active lease (release-readiness ticket 84): SeedUniverse
-    # (fetches company_tickers.json from SEC) and RunWarehouseTask (the
-    # actual bootstrap SEC-fetch loop) are the fetch-heavy span; MDM/gold
-    # never call SEC, so the lease releases right before Mastering.
-    run_wh["Next"] = "ReleaseSecFetchLease"
-    # ticket 86: both states were previously uncaught -- a failure in
-    # either wedged sec_fetch_active for the full 16h stale-reclaim window.
-    seed_universe["Catch"] = sec_fetch_task_catch()
-    run_wh["Catch"] = sec_fetch_task_catch()
-    sec_fetch_lease_states = build_sec_fetch_lease_states("SeedUniverse", "Mastering")
-    definition = {
-        "Comment": (
-            f"{display}: (0) acquire cross-command sec_fetch_active lease, (0b) seed universe, "
-            "(1) bronze+silver capture, (1b) release sec_fetch_active lease, "
-            "(2) MDM entity resolution + Neo4j sync, (3) gold build + Snowflake export manifest."
-        ),
-        "StartAt": "AcquireSecFetchLease",
-        "States": {
-            **sec_fetch_lease_states,
-            "SeedUniverse":     seed_universe,
-            "RunWarehouseTask": run_wh,
-            "Mastering":           mdm_run,
-            "BackfillMdmEntityIds": backfill_mdm_entity_ids,
-            "Infer Relationships":      mdm_backfill,
-            "Publish":        mdm_export,
-            "Publish Relationships":          mdm_sync,
-            "Reconcile":        mdm_verify,
-            "GoldRefresh":      gold,
-        },
-    }
-else:
-    # ResolveCompanyIdentityBounded: Company Identity Pipeline wayfinder map,
-    # ticket 06. A strict, MaxConcurrency=1, delta-then-reduce Map --
-    # bootstrap-fundamentals --mode company-identity over explicit
-    # --cik-list batches (compute-identity-refresh-window's cik_batches.jsonl),
-    # each persisting only an immutable delta, merged into canonical exactly
-    # once by ReduceIdentityRefresh below -- ahead of the existing
-    # RunWarehouseTask/MDM chain, so company data is current before the
-    # existing mdm-run(--entity-type all) resolves companies as part of its
-    # sweep (run_all() calls run_companies()) -- no separate --entity-type
-    # company call needed. daily_incremental had zero prod executions ever
-    # (confirmed via list-executions) as of ticket 06, so this was a clean
-    # restructure, not a migration of live behavior.
-    #
-    # No SeedUniverse/MdmSeedUniverse here, matching daily_incremental's
-    # existing choice to skip seed-universe entirely -- it processes the
-    # already-tracked universe for daily updates, not newly-discovered CIKs.
-    # batch_size is a fixed literal (not SM-input-configurable like
-    # load_history's WindowSizeCheck/TotalCikLimitCheck): daily_incremental is
-    # a scheduled job that always runs the same shape, unlike load_history's
-    # operator-triggered, variously-scoped ad-hoc runs.
-    #
-    # NOTE: write_load_history_definition's Stage0CompanyIdentity (Company
-    # Identity Hydrate Elimination map, ticket 03) was restructured to this
-    # same delta-then-reduce shape -- these two functions can't share code
-    # directly (each is its own `python3 -` subprocess), so a shape change
-    # here (command flags, failure-handling policy, ItemReader key
-    # expression) must be mirrored there too.
-    #
-    # refresh_mode (release-readiness ticket 45/49, "Decide whether/how to
-    # narrow daily_incremental's Stage 0"): the full-universe ComputeWindows ->
-    # Stage0CompanyIdentity pair below took 10h16m alone on the first-ever prod
-    # execution (ticket 45's evidence), because it reprocesses the entire
-    # ~26,300-CIK tracked universe every run instead of just the CIKs that
-    # actually filed something recently. RefreshMode branches on
-    # $.refresh_mode: "backstop" selects the complete active company-eligible
-    # universe (the weekly Identity Backstop Sweep); the default "daily" path
-    # intersects the trailing 7 days' impacted CIKs with that same bounded
-    # universe. Both use the explicit-CIK Stage 0 Map and converge on
-    # RunWarehouseTask.
-    #
-    # AcquireLease/ReleaseLease (release-readiness ticket 49, go-live follow-up):
-    # a run-level lease shared by the Daily Identity Refresh and the Identity
-    # Backstop Sweep so they never run concurrently. ecs:runTask.sync doesn't
-    # surface app-level stdout/metrics to a Choice state, so the acquire
-    # command writes lease_result.json to S3 (bronze root) as its source of
-    # truth; ReadLeaseResult reads it back via the aws-sdk:s3:getObject
-    # service integration and States.StringToJson, and LeaseAcquiredCheck
-    # branches on the parsed lease_acquired boolean. An explicit
-    # lease_acquired=false routes to Deferred -- an explicit terminal state,
-    # not an invisible skip -- and starts no downstream data work.
-    #
-    # NOTE (deliberate, found sharp in code review): ReadLeaseResult has no
-    # Retry/Catch. A missing or corrupt lease_result.json (S3 write failure,
-    # object not found) fails the Task outright -- it does NOT fall through
-    # to Deferred. This is intentional: "lease busy" (a benign, expected
-    # outcome) and "something is actually broken" (an unknown failure mode)
-    # are different dispositions, and silently treating the latter as the
-    # former would mask real bugs behind a falsely reassuring "deferred, all
-    # good" event. An unreadable lease result fails the execution loudly
-    # instead.
-    #
-    # Stale-lease reclaim (20h -- 2h of margin past the Identity Backstop
-    # Sweep's own 18h completion/alarm bound, so a new run's acquire can't
-    # race a legitimately-still-finishing backstop mid-ReleaseLease) lives in
-    # acquire_pipeline_run_lease itself (silver_store.py), not here, so a
-    # crashed run can't wedge the schedule permanently -- release-on-failure
-    # elsewhere in this chain is therefore best-effort, not wrapped in Catch
-    # on every downstream state.
-    validate_force_input = {
-        "Type": "Choice",
-        "Comment": "Accept an omitted or boolean force input; reject every other type before workload execution.",
-        "Choices": [
-            {"Variable": "$.force", "IsPresent": False, "Next": "ForceDefault"},
-            {"Variable": "$.force", "IsBoolean": True, "Next": "RefreshModeCheck"},
-        ],
-        "Default": "InvalidForceInput",
-    }
-    force_default = {
-        "Type": "Pass",
-        "Comment": "Normalize an omitted operator force input to false.",
-        "Result": False,
-        "ResultPath": "$.force",
-        "Next": "RefreshModeCheck",
-    }
-    invalid_force_input = {
-        "Type": "Fail",
-        "Error": "InvalidForceInput",
-        "Cause": "Optional execution input 'force' must be a JSON boolean when present.",
-    }
+refresh_mode_check = {
+    "Type": "Choice",
+    "Comment": "Route to AcquireLease directly when caller supplied refresh_mode; otherwise inject the 'daily' default.",
+    "Choices": [
+        {
+            "Variable": "$.refresh_mode",
+            "IsPresent": True,
+            "Next": "AcquireLease",
+        }
+    ],
+    "Default": "RefreshModeDefault",
+}
+refresh_mode_default = {
+    "Type": "Pass",
+    "Comment": "Inject default refresh_mode='daily' when caller passed {} or omitted the key.",
+    "Result": "daily",
+    "ResultPath": "$.refresh_mode",
+    "Next": "AcquireLease",
+}
 
-    refresh_mode_check = {
-        "Type": "Choice",
-        "Comment": "Route to AcquireLease directly when caller supplied refresh_mode; otherwise inject the 'daily' default.",
-        "Choices": [
-            {
-                "Variable": "$.refresh_mode",
-                "IsPresent": True,
-                "Next": "AcquireLease",
-            }
-        ],
-        "Default": "RefreshModeDefault",
-    }
-    refresh_mode_default = {
-        "Type": "Pass",
-        "Comment": "Inject default refresh_mode='daily' when caller passed {} or omitted the key.",
-        "Result": "daily",
-        "ResultPath": "$.refresh_mode",
-        "Next": "AcquireLease",
-    }
+acquire_lease = ecs_state(wh_medium_arn,
+    "States.Array('acquire-identity-refresh-lease', '--mode', States.Format('{}', $.refresh_mode), "
+    "'--run-id', $$.Execution.Name)",
+    next_state="ReadLeaseResult", retry_secs=30)
+acquire_lease["ResultPath"] = None
 
-    acquire_lease = ecs_state(wh_medium_arn,
-        "States.Array('acquire-identity-refresh-lease', '--mode', States.Format('{}', $.refresh_mode), "
-        "'--run-id', $$.Execution.Name)",
-        next_state="ReadLeaseResult", retry_secs=30)
-    acquire_lease["ResultPath"] = None
+read_lease_result = {
+    "Type": "Task",
+    "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+    "Parameters": {
+        "Bucket": bronze_bucket_name,
+        "Key.$": "States.Format('warehouse/bronze/reference/identity_refresh_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+    },
+    "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
+    "ResultPath": "$.lease_check",
+    "Next": "LeaseAcquiredCheck",
+}
 
-    read_lease_result = {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+lease_acquired_check = {
+    "Type": "Choice",
+    "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared Daily Identity Refresh / Identity Backstop Sweep lease.",
+    "Choices": [
+        {
+            "Variable": "$.lease_check.parsed.lease_acquired",
+            "BooleanEquals": True,
+            "Next": "ApplyEffectiveRefreshMode",
+        }
+    ],
+    "Default": "NotifyDeferred",
+}
+
+notify_deferred = {
+    "Type": "Task",
+    "Comment": "Notify the AWS Operator for every lease-busy slot before returning the explicit deferred disposition. A delivery failure is not relabeled as a benign defer.",
+    "Resource": "arn:aws:states:::sns:publish",
+    "Parameters": {
+        "TopicArn": operator_alert_topic_arn,
+        "Subject": "EdgarTools Daily Identity Refresh deferred",
+        "Message.$": "States.JsonToString($.lease_check.parsed)",
+    },
+    "ResultPath": None,
+    "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 5,
+        "BackoffRate": 2.0,
+        "MaxAttempts": 3,
+    }],
+    "Next": "Deferred",
+}
+
+apply_effective_refresh_mode = {
+    "Type": "Pass",
+    "Comment": "Overwrite $.refresh_mode with the lease-resolved effective mode. An overdue backstop (persisted on pipeline_run_lease.backstop_overdue, set when a prior 'backstop' attempt was deferred) takes priority over whatever this trigger's own regular schedule slot requested (release-readiness ticket 45's 'prioritize the next available slot' requirement) -- acquire-identity-refresh-lease resolves that server-side and lease_result.json carries the resolved value, not the raw trigger payload, so RefreshMode's dispatch below must read from there instead of the original $.refresh_mode.",
+    "InputPath": "$.lease_check.parsed.mode",
+    "ResultPath": "$.refresh_mode",
+    "Next": "AcquireSecFetchLease",
+}
+
+deferred = {
+    "Type": "Pass",
+    "Comment": "Lease already held by another run -- an explicit disposition, not an invisible skip. No downstream data work started; the next successful refresh catches up filing-signaled work (release-readiness ticket 45).",
+    # A labeled top-level field, not just app-level events buried in
+    # CloudWatch: an operator glancing at this execution's own output in
+    # the Step Functions console sees why it stopped without digging.
+    "Parameters": {
+        "disposition": "deferred",
+        "lease_check.$": "$.lease_check.parsed",
+    },
+    "ResultPath": "$.deferred_summary",
+    "End": True,
+}
+
+# large, not medium (release-readiness ticket 89): a real prod run's
+# ReleaseLease OOM-killed (exit 137) on medium's 4096MB on all 4
+# attempts, right after ReduceIdentityRefresh/GoldRefresh had just made
+# canonical heavier within the same run -- same root cause ticket 83
+# already fixed for ReduceIdentityRefresh above. The Catch below only
+# stops that from failing an otherwise-successful gold build; it does
+# not make the release succeed, so every retry left the lease
+# permanently held with no visible error (execution still SUCCEEDED).
+release_lease = ecs_state(wh_large_arn,
+    "States.Array('release-identity-refresh-lease', '--run-id', $$.Execution.Name)",
+    is_end=True, retry_secs=30)
+release_lease["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseLeaseFailedNonFatal"}]
+
+release_lease_failed_non_fatal = {
+    "Type": "Pass",
+    "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful gold build FAILED. The 18h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged lease.",
+    "End": True,
+}
+
+# GoldRefresh (`gold`, built above) defaults to is_end=True for a
+# standalone/single-workflow shape; mutating it here to chain into
+# ReleaseLease only happens inside this daily_incremental-only branch
+# (see run_wh["Next"] retarget above, same pattern), so no other caller
+# of this function is affected. (Historically this comment described a
+# second live `bootstrap` case sharing the same construction --
+# retired by state-machine-consolidation ticket 06; the dispatch shape
+# itself is left in place as a proven extension point, see the
+# workflow_name case/esac comment above.)
+del gold["End"]
+gold["Next"] = "ReleaseLease"
+refresh_mode = {
+    "Type": "Choice",
+    "Comment": "Both scheduled identity modes use the active operating-or-current-SEC-ticker universe: backstop selects the complete eligible set; daily intersects it with the trailing index window.",
+    "Choices": [
+        {
+            "Variable": "$.refresh_mode",
+            "StringEquals": "backstop",
+            "Next": "ComputeIdentityBackstopUniverse",
+        }
+    ],
+    "Default": "ComputeIdentityRefreshWindow",
+}
+
+compute_identity_refresh_window = ecs_state(wh_medium_arn,
+    "States.Array('compute-identity-refresh-window', '--mode', 'daily', "
+    "'--lookback-days', '7', "
+    "'--batch-size', '500', '--run-id', $$.Execution.Name)",
+    next_state="ResolveCompanyIdentityBounded")
+compute_identity_refresh_window["ResultPath"] = None
+# ticket 86: previously uncaught -- these states, plus
+# ResolveCompanyIdentityBounded/ReduceIdentityRefresh/RunWarehouseTask
+# below, are all inside the sec_fetch_active fetch-heavy span with no
+# release-on-failure path before this fix.
+compute_identity_refresh_window["Catch"] = sec_fetch_task_catch()
+
+compute_identity_backstop_universe = ecs_state(wh_medium_arn,
+    "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
+    "'--batch-size', '500', '--run-id', $$.Execution.Name)",
+    next_state="ResolveCompanyIdentityBounded")
+compute_identity_backstop_universe["ResultPath"] = None
+compute_identity_backstop_universe["Catch"] = sec_fetch_task_catch()
+
+per_batch_company_identity = ecs_state(wh_medium_arn,
+    "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
+    "'--cik-list', $.cik_list, '--identity-refresh-run-id', $.identity_refresh_run_id, "
+    "'--run-id', $.identity_refresh_run_id)",
+    is_end=True)
+
+# large, not medium (release-readiness ticket 83): a real prod run was
+# OOM-killed (exit 137) on medium's 4096MB mid-merge on the largest
+# protected table, even after the code-level fix (this same ticket)
+# that stopped holding every verified candidate as Python bytes for the
+# whole reducer call. Belt-and-suspenders headroom, matching the
+# gold-build-memory-reliability precedent's RunWarehouseTask move.
+reduce_identity_refresh = ecs_state(wh_large_arn,
+    "States.Array('reduce-identity-refresh', '--run-id', $$.Execution.Name, '--max-attempts', '3')",
+    next_state="RunWarehouseTask")
+# The command performs the bounded reducer-only retry itself. Step
+# Functions must not create an additional retry envelope with a different
+# budget or accidentally re-enter Map work.
+reduce_identity_refresh["Retry"] = [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 1,
+                                      "BackoffRate": 1.0, "MaxAttempts": 1}]
+reduce_identity_refresh["Catch"] = sec_fetch_task_catch()
+
+stage0_company_identity_bounded = {
+    "Type": "Map",
+    "Comment": "Stage 0 scheduled company identity: explicit CIK batches already bounded by the shared active operating-or-current-SEC-ticker eligibility contract.",
+    "MaxConcurrency": 1,
+    "ToleratedFailurePercentage": 0,
+    "ItemReader": {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
         "Parameters": {
             "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/identity_refresh_lease/runs/{}/lease_result.json', $$.Execution.Name)",
+            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
         },
-        "ResultSelector": {"parsed.$": "States.StringToJson($.Body)"},
-        "ResultPath": "$.lease_check",
-        "Next": "LeaseAcquiredCheck",
-    }
+    },
+    # ItemSelector is evaluated in the parent Map execution. Copy the
+    # parent daily-run identity into each child input before the
+    # DISTRIBUTED processor starts; inside a child, $$.Execution.Name is
+    # the child execution name and cannot address the parent's run plan.
+    "ItemSelector": {
+        "cik_list.$": "$$.Map.Item.Value.cik_list",
+        "identity_refresh_run_id.$": "$$.Execution.Name",
+    },
+    "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
+        "StartAt": "RunCompanyIdentityBatch",
+        "States": {"RunCompanyIdentityBatch": per_batch_company_identity},
+    },
+    "ResultPath": None,
+    "Next": "ReduceIdentityRefresh",
+    "Catch": sec_fetch_task_catch(),
+}
 
-    lease_acquired_check = {
-        "Type": "Choice",
-        "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared Daily Identity Refresh / Identity Backstop Sweep lease.",
-        "Choices": [
-            {
-                "Variable": "$.lease_check.parsed.lease_acquired",
-                "BooleanEquals": True,
-                "Next": "ApplyEffectiveRefreshMode",
-            }
-        ],
-        "Default": "NotifyDeferred",
-    }
+# AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
+# ticket 06 decisions 2/4), inserted between RunWarehouseTask and Mastering. Identical
+# shape to write_load_history_definition's own AdvBulkFetch stage (same "keep in
+# sync" duplication convention Stage0CompanyIdentity already established for this
+# file) — see that function's comments for the full rationale. run_wh was built
+# above with Next="Mastering" as the default for this function's general shape;
+# retarget it here since this branch only executes for daily_incremental.
+run_wh["Next"] = "DatasetPeriodCheck"
+run_wh["ResultPath"] = None
+run_wh["Catch"] = sec_fetch_task_catch()
 
-    notify_deferred = {
-        "Type": "Task",
-        "Comment": "Notify the AWS Operator for every lease-busy slot before returning the explicit deferred disposition. A delivery failure is not relabeled as a benign defer.",
-        "Resource": "arn:aws:states:::sns:publish",
-        "Parameters": {
-            "TopicArn": operator_alert_topic_arn,
-            "Subject": "EdgarTools Daily Identity Refresh deferred",
-            "Message.$": "States.JsonToString($.lease_check.parsed)",
+dataset_period_check = {
+    "Type": "Choice",
+    "Comment": "Route to ForceCheck directly when caller supplied dataset_period; otherwise inject the empty-string default.",
+    "Choices": [
+        {
+            "Variable": "$.dataset_period",
+            "IsPresent": True,
+            "Next": "ForceCheck",
+        }
+    ],
+    "Default": "DatasetPeriodDefault",
+}
+
+dataset_period_default = {
+    "Type": "Pass",
+    "Comment": "Inject default dataset_period='' when caller passed {} or omitted the key — fetch-adv-bulk auto-detects the rolling window in that case.",
+    "Result": "",
+    "ResultPath": "$.dataset_period",
+    "Next": "ForceCheck",
+}
+
+force_check = {
+    "Type": "Choice",
+    "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
+    "Choices": [
+        {
+            "Variable": "$.force",
+            "IsPresent": False,
+            "Next": "FetchAdvBulk",
         },
-        "ResultPath": None,
-        "Retry": [{
-            "ErrorEquals": ["States.TaskFailed"],
-            "IntervalSeconds": 5,
-            "BackoffRate": 2.0,
-            "MaxAttempts": 3,
-        }],
-        "Next": "Deferred",
-    }
-
-    apply_effective_refresh_mode = {
-        "Type": "Pass",
-        "Comment": "Overwrite $.refresh_mode with the lease-resolved effective mode. An overdue backstop (persisted on pipeline_run_lease.backstop_overdue, set when a prior 'backstop' attempt was deferred) takes priority over whatever this trigger's own regular schedule slot requested (release-readiness ticket 45's 'prioritize the next available slot' requirement) -- acquire-identity-refresh-lease resolves that server-side and lease_result.json carries the resolved value, not the raw trigger payload, so RefreshMode's dispatch below must read from there instead of the original $.refresh_mode.",
-        "InputPath": "$.lease_check.parsed.mode",
-        "ResultPath": "$.refresh_mode",
-        "Next": "AcquireSecFetchLease",
-    }
-
-    deferred = {
-        "Type": "Pass",
-        "Comment": "Lease already held by another run -- an explicit disposition, not an invisible skip. No downstream data work started; the next successful refresh catches up filing-signaled work (release-readiness ticket 45).",
-        # A labeled top-level field, not just app-level events buried in
-        # CloudWatch: an operator glancing at this execution's own output in
-        # the Step Functions console sees why it stopped without digging.
-        "Parameters": {
-            "disposition": "deferred",
-            "lease_check.$": "$.lease_check.parsed",
+        {
+            "Variable": "$.force",
+            "BooleanEquals": True,
+            "Next": "FetchAdvBulkForced",
         },
-        "ResultPath": "$.deferred_summary",
-        "End": True,
-    }
-
-    # large, not medium (release-readiness ticket 89): a real prod run's
-    # ReleaseLease OOM-killed (exit 137) on medium's 4096MB on all 4
-    # attempts, right after ReduceIdentityRefresh/GoldRefresh had just made
-    # canonical heavier within the same run -- same root cause ticket 83
-    # already fixed for ReduceIdentityRefresh above. The Catch below only
-    # stops that from failing an otherwise-successful gold build; it does
-    # not make the release succeed, so every retry left the lease
-    # permanently held with no visible error (execution still SUCCEEDED).
-    release_lease = ecs_state(wh_large_arn,
-        "States.Array('release-identity-refresh-lease', '--run-id', $$.Execution.Name)",
-        is_end=True, retry_secs=30)
-    release_lease["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseLeaseFailedNonFatal"}]
-
-    release_lease_failed_non_fatal = {
-        "Type": "Pass",
-        "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful gold build FAILED. The 18h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged lease.",
-        "End": True,
-    }
-
-    # GoldRefresh (`gold`, built above) defaults to is_end=True for a
-    # standalone/single-workflow shape; mutating it here to chain into
-    # ReleaseLease only happens inside this daily_incremental-only branch
-    # (see run_wh["Next"] retarget above, same pattern), so no other caller
-    # of this function is affected. (Historically this comment described a
-    # second live `bootstrap` case sharing the same construction --
-    # retired by state-machine-consolidation ticket 06; the dispatch shape
-    # itself is left in place as a proven extension point, see the
-    # workflow_name case/esac comment above.)
-    del gold["End"]
-    gold["Next"] = "ReleaseLease"
-    refresh_mode = {
-        "Type": "Choice",
-        "Comment": "Both scheduled identity modes use the active operating-or-current-SEC-ticker universe: backstop selects the complete eligible set; daily intersects it with the trailing index window.",
-        "Choices": [
-            {
-                "Variable": "$.refresh_mode",
-                "StringEquals": "backstop",
-                "Next": "ComputeIdentityBackstopUniverse",
-            }
-        ],
-        "Default": "ComputeIdentityRefreshWindow",
-    }
-
-    compute_identity_refresh_window = ecs_state(wh_medium_arn,
-        "States.Array('compute-identity-refresh-window', '--mode', 'daily', "
-        "'--lookback-days', '7', "
-        "'--batch-size', '500', '--run-id', $$.Execution.Name)",
-        next_state="ResolveCompanyIdentityBounded")
-    compute_identity_refresh_window["ResultPath"] = None
-    # ticket 86: previously uncaught -- these states, plus
-    # ResolveCompanyIdentityBounded/ReduceIdentityRefresh/RunWarehouseTask
-    # below, are all inside the sec_fetch_active fetch-heavy span with no
-    # release-on-failure path before this fix.
-    compute_identity_refresh_window["Catch"] = sec_fetch_task_catch()
-
-    compute_identity_backstop_universe = ecs_state(wh_medium_arn,
-        "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
-        "'--batch-size', '500', '--run-id', $$.Execution.Name)",
-        next_state="ResolveCompanyIdentityBounded")
-    compute_identity_backstop_universe["ResultPath"] = None
-    compute_identity_backstop_universe["Catch"] = sec_fetch_task_catch()
-
-    per_batch_company_identity = ecs_state(wh_medium_arn,
-        "States.Array('bootstrap-fundamentals', '--mode', 'company-identity', "
-        "'--cik-list', $.cik_list, '--identity-refresh-run-id', $.identity_refresh_run_id, "
-        "'--run-id', $.identity_refresh_run_id)",
-        is_end=True)
-
-    # large, not medium (release-readiness ticket 83): a real prod run was
-    # OOM-killed (exit 137) on medium's 4096MB mid-merge on the largest
-    # protected table, even after the code-level fix (this same ticket)
-    # that stopped holding every verified candidate as Python bytes for the
-    # whole reducer call. Belt-and-suspenders headroom, matching the
-    # gold-build-memory-reliability precedent's RunWarehouseTask move.
-    reduce_identity_refresh = ecs_state(wh_large_arn,
-        "States.Array('reduce-identity-refresh', '--run-id', $$.Execution.Name, '--max-attempts', '3')",
-        next_state="RunWarehouseTask")
-    # The command performs the bounded reducer-only retry itself. Step
-    # Functions must not create an additional retry envelope with a different
-    # budget or accidentally re-enter Map work.
-    reduce_identity_refresh["Retry"] = [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 1,
-                                          "BackoffRate": 1.0, "MaxAttempts": 1}]
-    reduce_identity_refresh["Catch"] = sec_fetch_task_catch()
-
-    stage0_company_identity_bounded = {
-        "Type": "Map",
-        "Comment": "Stage 0 scheduled company identity: explicit CIK batches already bounded by the shared active operating-or-current-SEC-ticker eligibility contract.",
-        "MaxConcurrency": 1,
-        "ToleratedFailurePercentage": 0,
-        "ItemReader": {
-            "Resource": "arn:aws:states:::s3:getObject",
-            "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-            "Parameters": {
-                "Bucket": bronze_bucket_name,
-                "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
-            },
+        {
+            "Variable": "$.force",
+            "BooleanEquals": False,
+            "Next": "FetchAdvBulk",
         },
-        # ItemSelector is evaluated in the parent Map execution. Copy the
-        # parent daily-run identity into each child input before the
-        # DISTRIBUTED processor starts; inside a child, $$.Execution.Name is
-        # the child execution name and cannot address the parent's run plan.
-        "ItemSelector": {
-            "cik_list.$": "$$.Map.Item.Value.cik_list",
-            "identity_refresh_run_id.$": "$$.Execution.Name",
+    ],
+    "Default": "InvalidForceInput",
+}
+
+# Next="ReleaseSecFetchLease", not "Mastering" directly -- these ADV/firm-roster
+# fetch stages are still inside the sec_fetch_active fetch-heavy span
+# (release-readiness ticket 84), so a failure here must still release the
+# lease before falling through to MDM, not skip release entirely.
+adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
+
+fetch_adv_bulk = ecs_state(wh_medium_arn,
+    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+    next_state="IngestAdvBulkSources")
+fetch_adv_bulk["Catch"] = adv_bulk_fetch_catch
+fetch_adv_bulk["ResultPath"] = None
+
+fetch_adv_bulk_forced = ecs_state(wh_medium_arn,
+    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+    next_state="IngestAdvBulkSources")
+fetch_adv_bulk_forced["Catch"] = adv_bulk_fetch_catch
+fetch_adv_bulk_forced["ResultPath"] = None
+
+ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
+    "States.Array('ingest-relationship-sources', '--source-manifest', "
+    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
+    "'--run-id', $$.Execution.Name)",
+    next_state="FirmRosterForceCheck")
+ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
+ingest_adv_bulk_sources["ResultPath"] = None
+
+# Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02) --
+# same shape/rationale as load_history's copy above (kept in sync per this file's
+# documented Stage0CompanyIdentity duplication convention).
+firm_roster_force_check = {
+    "Type": "Choice",
+    "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
+    "Choices": [
+        {
+            "Variable": "$.force",
+            "IsPresent": False,
+            "Next": "FetchFirmRoster",
         },
-        "ItemProcessor": {
-            "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-            "StartAt": "RunCompanyIdentityBatch",
-            "States": {"RunCompanyIdentityBatch": per_batch_company_identity},
+        {
+            "Variable": "$.force",
+            "BooleanEquals": True,
+            "Next": "FetchFirmRosterForced",
         },
-        "ResultPath": None,
-        "Next": "ReduceIdentityRefresh",
-        "Catch": sec_fetch_task_catch(),
-    }
-
-    # AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
-    # ticket 06 decisions 2/4), inserted between RunWarehouseTask and Mastering. Identical
-    # shape to write_load_history_definition's own AdvBulkFetch stage (same "keep in
-    # sync" duplication convention Stage0CompanyIdentity already established for this
-    # file) — see that function's comments for the full rationale. run_wh was built
-    # above with Next="Mastering" as the default for this function's general shape;
-    # retarget it here since this branch only executes for daily_incremental.
-    run_wh["Next"] = "DatasetPeriodCheck"
-    run_wh["ResultPath"] = None
-    run_wh["Catch"] = sec_fetch_task_catch()
-
-    dataset_period_check = {
-        "Type": "Choice",
-        "Comment": "Route to ForceCheck directly when caller supplied dataset_period; otherwise inject the empty-string default.",
-        "Choices": [
-            {
-                "Variable": "$.dataset_period",
-                "IsPresent": True,
-                "Next": "ForceCheck",
-            }
-        ],
-        "Default": "DatasetPeriodDefault",
-    }
-
-    dataset_period_default = {
-        "Type": "Pass",
-        "Comment": "Inject default dataset_period='' when caller passed {} or omitted the key — fetch-adv-bulk auto-detects the rolling window in that case.",
-        "Result": "",
-        "ResultPath": "$.dataset_period",
-        "Next": "ForceCheck",
-    }
-
-    force_check = {
-        "Type": "Choice",
-        "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
-        "Choices": [
-            {
-                "Variable": "$.force",
-                "IsPresent": False,
-                "Next": "FetchAdvBulk",
-            },
-            {
-                "Variable": "$.force",
-                "BooleanEquals": True,
-                "Next": "FetchAdvBulkForced",
-            },
-            {
-                "Variable": "$.force",
-                "BooleanEquals": False,
-                "Next": "FetchAdvBulk",
-            },
-        ],
-        "Default": "InvalidForceInput",
-    }
-
-    # Next="ReleaseSecFetchLease", not "Mastering" directly -- these ADV/firm-roster
-    # fetch stages are still inside the sec_fetch_active fetch-heavy span
-    # (release-readiness ticket 84), so a failure here must still release the
-    # lease before falling through to MDM, not skip release entirely.
-    adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
-
-    fetch_adv_bulk = ecs_state(wh_medium_arn,
-        "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-        next_state="IngestAdvBulkSources")
-    fetch_adv_bulk["Catch"] = adv_bulk_fetch_catch
-    fetch_adv_bulk["ResultPath"] = None
-
-    fetch_adv_bulk_forced = ecs_state(wh_medium_arn,
-        "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-        next_state="IngestAdvBulkSources")
-    fetch_adv_bulk_forced["Catch"] = adv_bulk_fetch_catch
-    fetch_adv_bulk_forced["ResultPath"] = None
-
-    ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
-        "States.Array('ingest-relationship-sources', '--source-manifest', "
-        f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
-        "'--run-id', $$.Execution.Name)",
-        next_state="FirmRosterForceCheck")
-    ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
-    ingest_adv_bulk_sources["ResultPath"] = None
-
-    # Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02) --
-    # same shape/rationale as load_history's copy above (kept in sync per this file's
-    # documented Stage0CompanyIdentity duplication convention).
-    firm_roster_force_check = {
-        "Type": "Choice",
-        "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
-        "Choices": [
-            {
-                "Variable": "$.force",
-                "IsPresent": False,
-                "Next": "FetchFirmRoster",
-            },
-            {
-                "Variable": "$.force",
-                "BooleanEquals": True,
-                "Next": "FetchFirmRosterForced",
-            },
-            {
-                "Variable": "$.force",
-                "BooleanEquals": False,
-                "Next": "FetchFirmRoster",
-            },
-        ],
-        "Default": "InvalidForceInput",
-    }
-
-    fetch_firm_roster = ecs_state(wh_medium_arn,
-        "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-        next_state="IngestFirmRosterSources")
-    fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
-    fetch_firm_roster["ResultPath"] = None
-
-    fetch_firm_roster_forced = ecs_state(wh_medium_arn,
-        "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-        next_state="IngestFirmRosterSources")
-    fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
-    fetch_firm_roster_forced["ResultPath"] = None
-
-    ingest_firm_roster_sources = ecs_state(wh_medium_arn,
-        "States.Array('ingest-relationship-sources', '--source-manifest', "
-        f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
-        "'--run-id', $$.Execution.Name)",
-        next_state="ReleaseSecFetchLease")
-    ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
-    ingest_firm_roster_sources["ResultPath"] = None
-
-    # sec_fetch_active lease (release-readiness ticket 84): acquired right
-    # before RefreshMode dispatch, released right before Mastering -- spans
-    # every state that actually calls SEC/IAPD (identity-window compute,
-    # ResolveCompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
-    # itself, but sandwiched between two fetch stages], RunWarehouseTask,
-    # and the ADV/firm-roster fetch chain). Independent of AcquireLease/
-    # ReleaseLease above -- that lease prevents overlapping daily_incremental/
-    # backstop runs of THIS command; this one prevents concurrent SEC/IAPD
-    # traffic ACROSS the 5 different SEC-fetching commands.
-    sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "Mastering")
-
-    definition = {
-        "Comment": (
-            f"{display}: (0) RefreshMode -- backstop (complete company-eligible universe, weekly) vs "
-            "daily (index-impacted company-eligible intersection, default), both emitted by "
-            "compute-identity-refresh-window -- release-readiness ticket 45/49/51, "
-            "(0a) AcquireSecFetchLease -- cross-command sec_fetch_active lease (ticket 84), "
-            "(0b) ResolveCompanyIdentityBounded -- Company Identity capture, strict, runs "
-            "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
-            "(1) bronze+silver capture, (1a) ReleaseSecFetchLease, (1b) AdvBulkFetch -- fetch-adv-bulk + "
-            "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
-            "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
-            "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
-            "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
-            "Snowflake export manifest."
-        ),
-        "StartAt": "ValidateForceInput",
-        "TimeoutSeconds": 18 * 60 * 60,
-        "States": {
-            "ValidateForceInput": validate_force_input,
-            "ForceDefault":       force_default,
-            "InvalidForceInput":  invalid_force_input,
-            "RefreshModeCheck":   refresh_mode_check,
-            "RefreshModeDefault": refresh_mode_default,
-            "AcquireLease":       acquire_lease,
-            "ReadLeaseResult":    read_lease_result,
-            "LeaseAcquiredCheck": lease_acquired_check,
-            "NotifyDeferred":      notify_deferred,
-            "ApplyEffectiveRefreshMode": apply_effective_refresh_mode,
-            "Deferred":           deferred,
-            **sec_fetch_lease_states,
-            "RefreshMode":        refresh_mode,
-            "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
-            "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
-            "ResolveCompanyIdentityBounded": stage0_company_identity_bounded,
-            "ReduceIdentityRefresh": reduce_identity_refresh,
-            "RunWarehouseTask": run_wh,
-            "DatasetPeriodCheck":   dataset_period_check,
-            "DatasetPeriodDefault": dataset_period_default,
-            "ForceCheck":           force_check,
-            "FetchAdvBulk":         fetch_adv_bulk,
-            "FetchAdvBulkForced":   fetch_adv_bulk_forced,
-            "IngestAdvBulkSources": ingest_adv_bulk_sources,
-            "FirmRosterForceCheck":    firm_roster_force_check,
-            "FetchFirmRoster":         fetch_firm_roster,
-            "FetchFirmRosterForced":   fetch_firm_roster_forced,
-            "IngestFirmRosterSources": ingest_firm_roster_sources,
-            "Mastering":           mdm_run,
-            "BackfillMdmEntityIds": backfill_mdm_entity_ids,
-            "Infer Relationships":      mdm_backfill,
-            "Publish":        mdm_export,
-            "Publish Relationships":          mdm_sync,
-            "Reconcile":        mdm_verify,
-            "GoldRefresh":      gold,
-            "ReleaseLease":     release_lease,
-            "ReleaseLeaseFailedNonFatal": release_lease_failed_non_fatal,
+        {
+            "Variable": "$.force",
+            "BooleanEquals": False,
+            "Next": "FetchFirmRoster",
         },
-    }
+    ],
+    "Default": "InvalidForceInput",
+}
+
+fetch_firm_roster = ecs_state(wh_medium_arn,
+    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
+    next_state="IngestFirmRosterSources")
+fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
+fetch_firm_roster["ResultPath"] = None
+
+fetch_firm_roster_forced = ecs_state(wh_medium_arn,
+    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
+    next_state="IngestFirmRosterSources")
+fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
+fetch_firm_roster_forced["ResultPath"] = None
+
+ingest_firm_roster_sources = ecs_state(wh_medium_arn,
+    "States.Array('ingest-relationship-sources', '--source-manifest', "
+    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
+    "'--run-id', $$.Execution.Name)",
+    next_state="ReleaseSecFetchLease")
+ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
+ingest_firm_roster_sources["ResultPath"] = None
+
+# sec_fetch_active lease (release-readiness ticket 84): acquired right
+# before RefreshMode dispatch, released right before Mastering -- spans
+# every state that actually calls SEC/IAPD (identity-window compute,
+# ResolveCompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
+# itself, but sandwiched between two fetch stages], RunWarehouseTask,
+# and the ADV/firm-roster fetch chain). Independent of AcquireLease/
+# ReleaseLease above -- that lease prevents overlapping daily_incremental/
+# backstop runs of THIS command; this one prevents concurrent SEC/IAPD
+# traffic ACROSS the 5 different SEC-fetching commands.
+sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "RunMdmChain")
+
+definition = {
+    "Comment": (
+        f"{display}: (0) RefreshMode -- backstop (complete company-eligible universe, weekly) vs "
+        "daily (index-impacted company-eligible intersection, default), both emitted by "
+        "compute-identity-refresh-window -- release-readiness ticket 45/49/51, "
+        "(0a) AcquireSecFetchLease -- cross-command sec_fetch_active lease (ticket 84), "
+        "(0b) ResolveCompanyIdentityBounded -- Company Identity capture, strict, runs "
+        "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
+        "(1) bronze+silver capture, (1a) ReleaseSecFetchLease, (1b) AdvBulkFetch -- fetch-adv-bulk + "
+        "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
+        "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
+        "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
+        "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
+        "Snowflake export manifest."
+    ),
+    "StartAt": "ValidateForceInput",
+    "TimeoutSeconds": 18 * 60 * 60,
+    "States": {
+        "ValidateForceInput": validate_force_input,
+        "ForceDefault":       force_default,
+        "InvalidForceInput":  invalid_force_input,
+        "RefreshModeCheck":   refresh_mode_check,
+        "RefreshModeDefault": refresh_mode_default,
+        "AcquireLease":       acquire_lease,
+        "ReadLeaseResult":    read_lease_result,
+        "LeaseAcquiredCheck": lease_acquired_check,
+        "NotifyDeferred":      notify_deferred,
+        "ApplyEffectiveRefreshMode": apply_effective_refresh_mode,
+        "Deferred":           deferred,
+        **sec_fetch_lease_states,
+        "RefreshMode":        refresh_mode,
+        "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
+        "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
+        "ResolveCompanyIdentityBounded": stage0_company_identity_bounded,
+        "ReduceIdentityRefresh": reduce_identity_refresh,
+        "RunWarehouseTask": run_wh,
+        "DatasetPeriodCheck":   dataset_period_check,
+        "DatasetPeriodDefault": dataset_period_default,
+        "ForceCheck":           force_check,
+        "FetchAdvBulk":         fetch_adv_bulk,
+        "FetchAdvBulkForced":   fetch_adv_bulk_forced,
+        "IngestAdvBulkSources": ingest_adv_bulk_sources,
+        "FirmRosterForceCheck":    firm_roster_force_check,
+        "FetchFirmRoster":         fetch_firm_roster,
+        "FetchFirmRosterForced":   fetch_firm_roster_forced,
+        "IngestFirmRosterSources": ingest_firm_roster_sources,
+        "RunMdmChain":       run_mdm_chain,
+        "FactPublishtoGold": gold,
+        "ReleaseLease":     release_lease,
+        "ReleaseLeaseFailedNonFatal": release_lease_failed_non_fatal,
+    },
+}
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -5308,12 +5500,11 @@ WORKFLOW_ARNS_FILE="$(json_file workflow-arns)"
 printf '{\n' > "$WORKFLOW_ARNS_FILE"
 first_workflow=true
 
-# seed_universe: the standalone edgartools-dev-seed-universe state machine
-# predates this script's workflow loop and was orphaned (its frozen task-def
-# revision pointed at an ECR digest that had been garbage-collected, so every
-# execution failed with CannotPullContainerError). Managing it here adopts the
-# legacy machine in dev and creates it in newer environments.
-for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh seed_universe; do
+# seed_universe removed from this loop (state-machine-consolidation
+# wayfinder map, ticket 07) -- merged with mdm_seed_universe into the
+# single "seed" machine (write_seed_definition), registered in the
+# DEPLOY_MDM block below since it now needs the MDM machine's ARN.
+for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
   profile="$(workflow_profile "$workflow")"
   task_definition_arn="$(task_definition_for_profile "$profile")"
   command_expression="$(workflow_command_expression "$workflow")"
@@ -5345,11 +5536,26 @@ PY
 done
 
 if [[ "$DEPLOY_MDM" == "true" ]]; then
+  # mdm: the single MDM machine (state-machine-consolidation wayfinder map,
+  # ticket 07). Deployed first in this block since load_history and
+  # daily_incremental below both need its ARN to build their own
+  # states:startExecution.sync:2 Task states.
+  mdm_definition_file="$(json_file sfn-mdm)"
+  write_mdm_definition "$mdm_definition_file" \
+    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MEDIUM_ARN"
+  mdm_state_machine_arn="$(upsert_state_machine mdm "$mdm_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
+  python3 - "mdm" "$mdm_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+import json, sys
+print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
+PY
+
   # load_history: the recommended way to load 100+ companies.
   # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
   phased_definition_file="$(json_file sfn-load-history)"
   write_load_history_definition "$phased_definition_file" \
-    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
+    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+    "$mdm_state_machine_arn"
   phased_state_machine_arn="$(upsert_state_machine load_history "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "load_history" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
@@ -5371,8 +5577,9 @@ PY
   require_confirmed_operator_alert_topic "$OPERATOR_ALERT_TOPIC_ARN"
   daily_definition_file="$(json_file sfn-daily-incremental)"
   write_warehouse_mdm_gold_definition "$daily_definition_file" \
-    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "daily_incremental" "$BRONZE_BUCKET_NAME" "$OPERATOR_ALERT_TOPIC_ARN"
+    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+    "daily_incremental" "$BRONZE_BUCKET_NAME" "$OPERATOR_ALERT_TOPIC_ARN" \
+    "$mdm_state_machine_arn"
   daily_state_machine_arn="$(upsert_state_machine daily_incremental "$daily_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
   python3 - "daily_incremental" "$daily_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
@@ -5380,64 +5587,15 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  # mdm_gold: MDM entity resolution + Neo4j sync + gold-refresh, no silver batch step.
-  # Use after BatchBootstrap already completed — skips all submission downloading.
-  mdm_gold_file="$(json_file sfn-mdm-gold)"
-  python3 - "$mdm_gold_file" "$CLUSTER_ARN" \
-    "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_LARGE_ARN" \
-    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
-import json, pathlib, sys
-(output_file, cluster_arn,
- mdm_medium_arn, mdm_small_arn, wh_large_arn,
- container_name, subnet_json, security_group_json,
- mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
-sys.path.insert(0, script_dir)
-from mdm_tail_helper import wire_mdm_tail
-subnets = json.loads(subnet_json)
-security_groups = json.loads(security_group_json)
-mdm_limit   = str(mdm_run_limit)
-graph_limit = str(mdm_graph_limit)
-
-def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
-    s = {"Type": "Task", "Resource": "arn:aws:states:::ecs:runTask.sync",
-         "Parameters": {"LaunchType": "FARGATE", "Cluster": cluster_arn,
-                        "TaskDefinition": task_def_arn, "PropagateTags": "TASK_DEFINITION",
-                        "NetworkConfiguration": {"AwsvpcConfiguration": {
-                            "AssignPublicIp": "ENABLED", "SecurityGroups": security_groups, "Subnets": subnets}},
-                        "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]}},
-         "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs, "BackoffRate": 2.0, "MaxAttempts": 2}]}
-    if is_end: s["End"] = True
-    else: s["Next"] = next_state
-    return s
-
-tail = wire_mdm_tail(
-    ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True),
-    ecs_state(mdm_medium_arn, f"States.Array('mdm', 'publish-relationships', '--limit', '{graph_limit}')", is_end=True),
-    ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True),
-    gold_state=ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
-)
-
-definition = {
-    "Comment": "MDM entity resolution + Neo4j sync + gold-refresh. No silver batch step — run after bronze+silver are complete.",
-    "StartAt": "Mastering",
-    "States": {
-        "Mastering":      ecs_state(mdm_medium_arn, f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $$.Execution.Name)", next_state="Infer Relationships"),
-        "Infer Relationships": ecs_state(mdm_medium_arn, f"States.Array('mdm', 'infer-relationships', '--limit', '{graph_limit}', '--run-id', $$.Execution.Name)", next_state="Publish"),
-        # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is
-        # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
-        # map, ticket 02) — see infra/scripts/mdm_tail_helper.py.
-        **tail,
-    },
-}
-pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
-PY
-  mdm_gold_arn="$(upsert_state_machine mdm_gold "$mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "mdm_gold" "$mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
+  # mdm_gold retired (state-machine-consolidation wayfinder map, ticket 07):
+  # it had no head of its own -- just the tail with nothing in front -- so
+  # it became a 100% redundant duplicate of the new single MDM machine
+  # (deployed above as "mdm") the moment that machine existed. Anyone who
+  # wants "just run the MDM tail standalone" runs the mdm machine directly;
+  # zero capability lost. Not yet deleted live in AWS as of this commit --
+  # see the ticket for the rollback-snapshot-then-delete-state-machine
+  # checklist this repo's own precedent (tickets 03/04/05) uses for
+  # retiring a deployed machine.
 
   # ownership_mdm_gold: Form 3/4/5 already in silver → persons + IS_INSIDER only
   # (Ticket 21). Companies are NOT re-resolved — they do not change on an
@@ -5700,18 +5858,18 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  # mdm_seed_universe: kept as its own standalone deployed machine (state-
-  # machine-consolidation wayfinder map, ticket 04) -- it preserves a real,
-  # currently-only-here --tracking-status/--limit override capability, and
-  # is free to generate via write_mdm_workflow_definition as-is.
-  mdm_seed_universe_task_definition_arn="$(task_definition_for_mdm_workflow mdm_seed_universe)"
-  mdm_seed_universe_command_expression="$(mdm_workflow_command_expression mdm_seed_universe)"
-  mdm_seed_universe_limit_command_expression="$(mdm_workflow_limit_command_expression mdm_seed_universe)"
-  mdm_seed_universe_definition_file="$(json_file sfn-mdm-seed-universe)"
-  write_mdm_workflow_definition "$mdm_seed_universe_definition_file" "$mdm_seed_universe_task_definition_arn" "$mdm_seed_universe_command_expression" "$mdm_seed_universe_limit_command_expression" "" "" ""
-  mdm_seed_universe_arn="$(upsert_state_machine mdm_seed_universe "$mdm_seed_universe_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  # seed: the single seed machine (state-machine-consolidation wayfinder
+  # map, ticket 07) -- merges the former standalone seed_universe +
+  # mdm_seed_universe machines (ticket 04's "keep both separate" call
+  # reversed per explicit user request). Registered here, after "mdm"
+  # above, since it needs the MDM machine's ARN for its own final
+  # RunMdmChain nested-execution call.
+  seed_mdm_task_definition_arn="$(task_definition_for_mdm_workflow mdm_seed_universe)"
+  seed_definition_file="$(json_file sfn-seed)"
+  write_seed_definition "$seed_definition_file" "$TASK_DEF_MEDIUM_ARN" "$seed_mdm_task_definition_arn" "$mdm_state_machine_arn"
+  seed_arn="$(upsert_state_machine seed "$seed_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "mdm_seed_universe" "$mdm_seed_universe_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+  python3 - "seed" "$seed_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY

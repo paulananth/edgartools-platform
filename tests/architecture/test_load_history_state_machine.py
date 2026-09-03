@@ -113,13 +113,12 @@ def definition() -> dict:
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"
-            "MDM_RUN_LIMIT=100\n"
-            "MDM_GRAPH_LIMIT=200\n"
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_load_history_definition "{out_file.as_posix()}" '
-            '"arn:wh-small" "arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large"\n',
+            '"arn:wh-small" "arn:wh-medium" "arn:mdm-medium" "arn:wh-large" "arn:mdm-machine"\n',
             encoding="utf-8",
         )
 
@@ -351,11 +350,11 @@ def test_load_history_has_one_final_gold_refresh_after_mdm_verify(definition: di
                     walk(branch["States"], f"{label}.{name}(Parallel[{index}])")
 
     walk(definition["States"], "top")
-    assert [name for name, _ in gold_commands] == ["top.GoldRefresh"]
-    assert definition["States"]["GoldRefresh"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
+    assert [name for name, _ in gold_commands] == ["top.FactPublishtoGold"]
+    assert definition["States"]["FactPublishtoGold"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
 
     order = _linear_order(definition)
-    assert order.index("Reconcile") < order.index("GoldRefresh")
+    assert order.index("RunMdmChain") < order.index("FactPublishtoGold")
 
 
 # -- Issue 1 / 4: Branch B sequencing -----------------------------------------
@@ -380,13 +379,13 @@ def test_branch_b_modes_run_sequentially_after_stage1_parallel(definition: dict)
         "FetchEntityFacts",
         "FetchPerFilingFundamentals",
         "FetchThirteenFHoldings",
-        "Mastering",
+        "RunMdmChain",
     ):
         assert name in order
     assert order.index("IngestBronzeAndSilver") < order.index("FetchEntityFacts")
     assert order.index("FetchEntityFacts") < order.index("FetchPerFilingFundamentals")
     assert order.index("FetchPerFilingFundamentals") < order.index("FetchThirteenFHoldings")
-    assert order.index("FetchThirteenFHoldings") < order.index("Mastering")
+    assert order.index("FetchThirteenFHoldings") < order.index("RunMdmChain")
 
 
 def test_stage1b_entity_facts_command_shape(definition: dict) -> None:
@@ -450,19 +449,14 @@ def test_stage1b_maps_tolerate_isolated_window_failures(definition: dict) -> Non
 
 
 # -- Issue 3: export before graph sync ----------------------------------------
-
-
-def test_mdm_export_precedes_mdm_sync_graph(definition: dict) -> None:
-    order = _linear_order(definition)
-    assert "Publish" in order
-    assert "Publish Relationships" in order
-    assert order.index("Publish") < order.index("Publish Relationships")
-    assert "'mdm', 'publish'" in _command_of(definition, "Publish")
-    assert "'mdm', 'publish-relationships'" in _command_of(definition, "Publish Relationships")
-
-
-def test_mdm_backfill_chains_to_export_not_directly_to_sync(definition: dict) -> None:
-    assert definition["States"]["Infer Relationships"]["Next"] == "Publish"
+#
+# Publish/Publish Relationships/Infer Relationships no longer exist at this
+# level (state-machine-consolidation wayfinder map, ticket 07) -- they moved
+# into the single MDM machine, invoked here as one RunMdmChain nested
+# execution. Their own ordering invariant (Publish before Publish
+# Relationships, data-architecture Issue 3) is covered by
+# tests/architecture/test_mdm_state_machine.py::test_publish_precedes_publish_relationships
+# against the real generated MDM machine instead.
 
 
 # -- fix-pipelines 06-03: DISTRIBUTED Map mode + total_cik_limit CIK-scoping ---------------
@@ -579,12 +573,12 @@ def test_every_states_task_definition_matches_expected_profile(definition: dict)
         "top.FetchFirmRoster": "arn:wh-medium",
         "top.FetchFirmRosterForced": "arn:wh-medium",
         "top.IngestFirmRosterSources": "arn:wh-medium",
-        "top.Mastering": "arn:mdm-medium",
-        "top.Infer Relationships": "arn:mdm-medium",
-        "top.Publish": "arn:mdm-medium",
-        "top.Publish Relationships": "arn:mdm-medium",
-        "top.Reconcile": "arn:mdm-small",
-        "top.GoldRefresh": "arn:wh-large",
+        # Mastering/Infer Relationships/Publish/Publish Relationships/Reconcile
+        # moved into the single MDM machine (ticket 07) -- RunMdmChain (a
+        # states:startExecution.sync:2 Task, no TaskDefinition of its own)
+        # replaces all five here; their profiles are covered by
+        # test_mdm_state_machine.py against the real MDM machine instead.
+        "top.FactPublishtoGold": "arn:wh-large",
         "top.WriteRunSummary": "arn:wh-medium",
     }
 
@@ -751,10 +745,10 @@ def test_fetch_adv_bulk_stage_runs_after_stage1b_thirteenf_before_mdm_run(defini
     assert "FetchThirteenFHoldings" in order
     assert "FetchAdvBulk" in order
     assert "IngestAdvBulkSources" in order
-    assert "Mastering" in order
+    assert "RunMdmChain" in order
     assert order.index("FetchThirteenFHoldings") < order.index("FetchAdvBulk")
     assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
-    assert order.index("IngestAdvBulkSources") < order.index("Mastering")
+    assert order.index("IngestAdvBulkSources") < order.index("RunMdmChain")
 
 
 def test_fetch_adv_bulk_command_shape_with_no_sm_input_overrides(definition: dict) -> None:
@@ -848,7 +842,7 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
 
 
 def test_stage1b_thirteenf_catch_routes_into_adv_bulk_fetch_not_around_it(
@@ -881,10 +875,10 @@ def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(def
     assert "IngestAdvBulkSources" in order
     assert "FetchFirmRoster" in order
     assert "IngestFirmRosterSources" in order
-    assert "Mastering" in order
+    assert "RunMdmChain" in order
     assert order.index("IngestAdvBulkSources") < order.index("FetchFirmRoster")
     assert order.index("FetchFirmRoster") < order.index("IngestFirmRosterSources")
-    assert order.index("IngestFirmRosterSources") < order.index("Mastering")
+    assert order.index("IngestFirmRosterSources") < order.index("RunMdmChain")
 
 
 def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_it(
@@ -947,7 +941,7 @@ def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(definition:
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
 
 
 def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_null(
@@ -1015,14 +1009,14 @@ def test_load_history_releases_sec_fetch_lease_before_mdm_run(definition: dict) 
     cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "release-sec-fetch-lease" in cmd
     assert release["ResultPath"] is None
-    assert release["Next"] == "Mastering"
+    assert release["Next"] == "RunMdmChain"
     assert release["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
     ]
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
     assert fallback["Type"] == "Pass"
-    assert fallback["Next"] == "Mastering"
+    assert fallback["Next"] == "RunMdmChain"
     assert "End" not in fallback
 
 
@@ -1059,7 +1053,7 @@ def test_load_history_sec_fetch_lease_spans_the_whole_windowed_pipeline(definiti
     assert order.index("MdmSeedUniverse") < order.index("IngestBronzeAndSilver")
     assert "ReleaseSecFetchLease" in order
     assert order.index("IngestBronzeAndSilver") < order.index("ReleaseSecFetchLease")
-    assert order.index("ReleaseSecFetchLease") < order.index("Mastering")
+    assert order.index("ReleaseSecFetchLease") < order.index("RunMdmChain")
 
 
 def test_load_history_previously_uncaught_states_release_lease_on_failure(definition: dict) -> None:

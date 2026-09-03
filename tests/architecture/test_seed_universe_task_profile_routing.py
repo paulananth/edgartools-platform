@@ -96,13 +96,12 @@ def _seed_universe_task_definition(command_task_profile_override: str | None) ->
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'write_load_history_definition "{out_file.as_posix()}" '
             f'"{_WH_SMALL_ARN}" "{_WH_MEDIUM_ARN}" '
-            '"arn:fake-mdm-small" "arn:fake-mdm-medium" '
-            f'"{_WH_LARGE_ARN}"\n'
+            '"arn:fake-mdm-medium" '
+            f'"{_WH_LARGE_ARN}" "arn:fake-mdm-machine"\n'
         )
         driver = tmp_path / "driver.sh"
         driver.write_text("\n".join(script_parts), encoding="utf-8")

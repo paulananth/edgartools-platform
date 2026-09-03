@@ -242,13 +242,13 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n',
+            f'"{_FAKE_MEDIUM_ARN}" "{_FAKE_LARGE_ARN}" '
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts" '
+            '"arn:fake-mdm-machine"\n',
             encoding="utf-8",
         )
 
@@ -304,15 +304,14 @@ def _run_load_history_bootstrap_next_profile() -> str:
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_load_history_definition "{out_file.as_posix()}" '
             f'"{_FAKE_WH_SMALL_ARN}" "{_FAKE_WH_MEDIUM_ARN}" '
-            '"arn:fake-mdm-small" "arn:fake-mdm-medium" '
-            f'"{_FAKE_WH_LARGE_ARN}"\n',
+            '"arn:fake-mdm-medium" '
+            f'"{_FAKE_WH_LARGE_ARN}" "arn:fake-mdm-machine"\n',
             encoding="utf-8",
         )
 
