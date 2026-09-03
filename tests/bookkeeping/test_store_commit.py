@@ -62,3 +62,49 @@ class TestCommitDurability:
             row = later_store.get_source_checkpoint("s", "k")
             assert row is not None
             assert row["raw_object_id"] == "first"
+
+
+class TestRollbackDurability:
+    def test_rollback_discards_the_write_even_though_it_was_readable_in_session(
+        self, store: BookkeepingStore, session: Session
+    ) -> None:
+        """bronze-capture-oom Ticket 02: a write made earlier in a run must
+        not survive a rollback issued after it, even though it was visible
+        to reads within the same still-open session beforehand."""
+        store.upsert_source_checkpoint(
+            {"source_name": "s", "source_key": "k", "raw_object_id": "should-not-survive"}
+        )
+        assert store.get_source_checkpoint("s", "k") is not None
+
+        store.rollback()
+
+        assert store.get_source_checkpoint("s", "k") is None
+
+        engine = session.get_bind()
+        session.close()
+        with Session(engine) as later_session:
+            later_store = BookkeepingStore(later_session)
+            assert later_store.get_source_checkpoint("s", "k") is None
+
+    def test_a_write_issued_after_rollback_still_commits_normally(
+        self, store: BookkeepingStore, session: Session
+    ) -> None:
+        """Rollback must not leave the session unusable for later writes in
+        the same run (the except-block recovery path relies on this)."""
+        store.upsert_source_checkpoint(
+            {"source_name": "s", "source_key": "k", "raw_object_id": "discarded"}
+        )
+        store.rollback()
+
+        store.upsert_source_checkpoint(
+            {"source_name": "s", "source_key": "k", "raw_object_id": "kept"}
+        )
+        store.commit()
+
+        engine = session.get_bind()
+        session.close()
+        with Session(engine) as later_session:
+            later_store = BookkeepingStore(later_session)
+            row = later_store.get_source_checkpoint("s", "k")
+            assert row is not None
+            assert row["raw_object_id"] == "kept"

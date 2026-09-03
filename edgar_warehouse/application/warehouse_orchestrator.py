@@ -534,16 +534,18 @@ def _execute_warehouse_bronze_capture(
     bookkeeping = _bookkeeping_store()
     sync_mode = _sync_mode_for_command(command_name)
     sync_scope_type = _sync_scope_type_for_command(command_name, scope)
-    bookkeeping.start_sync_run(
-        {
-            "sync_run_id": run_id,
-            "sync_mode": sync_mode,
-            "scope_type": sync_scope_type,
-            "scope_key": _sync_scope_key_for_command(command_name, scope),
-            "started_at": now,
-            "status": "running",
-        }
-    )
+    # Captured as named variables (not inline dict literals) so the except
+    # block below can re-issue both start_* upserts after a rollback --
+    # see the INVARIANT comment near bookkeeping.commit() further down.
+    sync_run_row = {
+        "sync_run_id": run_id,
+        "sync_mode": sync_mode,
+        "scope_type": sync_scope_type,
+        "scope_key": _sync_scope_key_for_command(command_name, scope),
+        "started_at": now,
+        "status": "running",
+    }
+    bookkeeping.start_sync_run(sync_run_row)
     pipeline_writes = _planned_pipeline_writes(
         context=context,
         command_name=command_name,
@@ -556,26 +558,23 @@ def _execute_warehouse_bronze_capture(
         ),
         include_gold_manifest=publish_gold,
     )
-    bookkeeping.start_pipeline_run(
-        {
-            "pipeline_run_id": run_id,
-            "command_name": command_name,
-            "runtime_mode": context.runtime_mode,
-            "environment_name": context.environment_name,
-            "started_at": now,
-            "status": "running",
-            "arguments": arguments,
-            "scope": scope,
-            "bronze_root": context.bronze_root.root,
-            "storage_root": context.storage_root.root,
-            "silver_root": context.silver_root.root,
-            "serving_export_root": (
-                context.snowflake_export_root.root
-                if context.snowflake_export_root is not None
-                else None
-            ),
-        }
-    )
+    pipeline_run_row = {
+        "pipeline_run_id": run_id,
+        "command_name": command_name,
+        "runtime_mode": context.runtime_mode,
+        "environment_name": context.environment_name,
+        "started_at": now,
+        "status": "running",
+        "arguments": arguments,
+        "scope": scope,
+        "bronze_root": context.bronze_root.root,
+        "storage_root": context.storage_root.root,
+        "silver_root": context.silver_root.root,
+        "serving_export_root": (
+            context.snowflake_export_root.root if context.snowflake_export_root is not None else None
+        ),
+    }
+    bookkeeping.start_pipeline_run(pipeline_run_row)
 
     raw_writes: list[dict[str, Any]] = []
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
@@ -649,9 +648,13 @@ def _execute_warehouse_bronze_capture(
                 gold_row_counts[manifest_entry["table_name"]] = int(manifest_entry["row_count"])
                 # Recorded per table, not batched at the end of the loop: this is
                 # an idempotent per-(run_id, storage_layer, table_name) upsert, so
-                # a later table's export failure can't erase an earlier table's
-                # already-durable manifest row the way a single end-of-loop call
-                # would (that table's write already succeeded on disk).
+                # a later table's export failure can't overwrite an earlier
+                # table's row with different content the way a single
+                # end-of-loop call would. NOT independently durable, though --
+                # bronze-capture-oom Ticket 02: bookkeeping.commit() only fires
+                # once, after silver publish succeeds; if any table's export
+                # fails, the except block rolls back every row staged this run,
+                # including earlier tables' entries from this same loop.
                 bookkeeping.record_gold_manifest(
                     run_id=run_id,
                     command_name=command_name,
@@ -709,19 +712,27 @@ def _execute_warehouse_bronze_capture(
                 "snowflake_export_row_counts": snowflake_export_counts or {},
             },
         )
-        # See BookkeepingStore.commit's docstring: without this, every write
-        # above is silently rolled back on process exit. Committed here,
-        # before silver publish/landing export, so it's durable regardless
-        # of what the rest of this command does -- if either of those then
-        # fails, the except block below corrects this to "failed" rather
-        # than leaving this "succeeded" commit standing.
+        # bronze-capture-oom Ticket 02: bookkeeping.commit() deliberately
+        # does NOT happen here, before silver publish/landing export.
+        # Every bookkeeping write issued anywhere in this run (start_sync_run/
+        # start_pipeline_run above, any checkpoint upserts inside
+        # _capture_bronze_raw, complete_sync_run/complete_pipeline_run just
+        # above) shares one uncommitted session -- committing before publish
+        # would make a checkpoint durably claim "content captured" even if
+        # the publish that was supposed to make that true then fails or the
+        # task is killed (OOM) before ever reaching it. The next run's
+        # skip-if-unchanged comparison can't tell that apart from a genuine
+        # no-op skip -- silent, permanent data loss. See
+        # .scratch/bronze-capture-oom/issues/02-checkpoint-outruns-silver-publish-on-crash.md.
+        # Tradeoff, accepted deliberately: this leaves the bookkeeping
+        # transaction open for as long as _publish_silver_database_with_retry
+        # takes, which is unbounded-retry by default -- a long stall there
+        # delays this run's commit, but never loses data, since SEC capture
+        # is documented idempotent and a retry safely re-processes.
         #
-        # INVARIANT: nothing below this line may write to `bookkeeping` without
-        # also calling bookkeeping.commit() again -- a write added after this
-        # point would silently reintroduce this bug with no test to catch it
-        # unless that write also adds a durability test of its own shape (see
-        # tests/bookkeeping/test_store_commit.py).
-        bookkeeping.commit()
+        # INVARIANT: the only commit for a successful run is below, after
+        # silver publish and landing export have both actually succeeded.
+        # Do not add an earlier bookkeeping.commit() call in this try block.
         db.close()
         db_closed = True
         _emit_pipeline_event(
@@ -787,18 +798,32 @@ def _execute_warehouse_bronze_capture(
                 run_id=run_id,
                 table_counts=landing_export_counts,
             )
+        # Silver publish and landing export have both actually succeeded at
+        # this point -- only now is it safe to durably commit this run's
+        # bookkeeping writes (start_sync_run/start_pipeline_run above,
+        # any checkpoint upserts from _capture_bronze_raw, and the
+        # complete_sync_run/complete_pipeline_run "succeeded" writes above).
+        # See BookkeepingStore.commit's docstring: without this call, every
+        # one of those writes is silently rolled back on process exit.
+        bookkeeping.commit()
     except Exception as exc:
-        # Deliberately unconditional (not gated on db_closed, unlike the
-        # finally block's db.close() below): complete_sync_run/
-        # complete_pipeline_run are plain idempotent UPDATE-by-run_id
-        # statements, safe to call again even if the success path already
-        # ran and committed a "succeeded" status above (e.g. silver publish
-        # or landing export -- both run after that commit, still inside
-        # this try block -- raised here). Gating this on db_closed would
-        # leave a durably committed, factually wrong "succeeded" record for
-        # a run that actually failed downstream of that commit -- worse
-        # than the pre-fix behavior of no durable record at all. This call
-        # correctly overwrites it to "failed" and commits the correction.
+        # Nothing from this run has been committed yet (see the success-path
+        # comment above) -- roll back whatever this run staged (any
+        # checkpoint upserts from _capture_bronze_raw, the "succeeded"
+        # complete_sync_run/complete_pipeline_run writes if execution got
+        # that far, and the start_sync_run/start_pipeline_run inserts from
+        # the top of this function) before recording failure. Without this,
+        # bronze-capture-oom Ticket 02's exposure reopens: a checkpoint
+        # staged mid-run would durably commit here alongside the failure
+        # record, even though the content it describes never reached
+        # canonical Silver.
+        bookkeeping.rollback()
+        # rollback() discarded the start_sync_run/start_pipeline_run upserts
+        # too (same transaction) -- complete_sync_run/complete_pipeline_run
+        # are plain UPDATE-by-run_id statements, so the row must exist again
+        # in this fresh transaction before they can match anything.
+        bookkeeping.start_sync_run(sync_run_row)
+        bookkeeping.start_pipeline_run(pipeline_run_row)
         bookkeeping.complete_sync_run(run_id, status="failed", error_message=str(exc))
         bookkeeping.complete_pipeline_run(
             run_id,
