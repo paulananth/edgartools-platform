@@ -500,19 +500,22 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     gc.add_argument("--retention-days", type=int, default=None)
     gc.set_defaults(handler=_logged_handler("graph-cleanup-generations", _handle_graph_cleanup_generations))
 
-    # backfill-relationships
+    # infer-relationships (previously "backfill-relationships" -- renamed to
+    # remove the confusion with the genuinely one-time backfill-mdm-entity-ids
+    # repair job; this step runs on every MDM chain execution, deriving
+    # relationship links between the entities Mastering just resolved)
     br = mdm_sub.add_parser(
-        "backfill-relationships",
+        "infer-relationships",
         help="Derive relationship instances from mdm_fund/mdm_security and sync to Neo4j",
     )
     br.add_argument(
         "--limit",
         type=int,
         default=100,
-        help="Maximum number of relationship instances to backfill and sync (default: 100)",
+        help="Maximum number of relationship instances to infer and sync (default: 100)",
     )
     br.add_argument("--run-id", default=None, help="Opaque identity for this MDM operation")
-    br.set_defaults(handler=_logged_handler("backfill-relationships", _handle_backfill_relationships))
+    br.set_defaults(handler=_logged_handler("infer-relationships", _handle_backfill_relationships))
 
     # publish (mdm-stage-renaming ticket 01: was "export")
     ex = mdm_sub.add_parser("publish")
@@ -2250,7 +2253,7 @@ def _handle_backfill_relationships(args) -> int:
     # stderr print already explains what happened), rather than letting it
     # take down Phase 2 (MANAGES_FUND/ISSUED_BY derivation, which doesn't
     # need silver at all) along with it.
-    silver, _rc = _open_snowflake_silver_reader("mdm backfill-relationships")
+    silver, _rc = _open_snowflake_silver_reader("mdm infer-relationships")
     try:
         # Phase 1: repair mdm_security.issuer_entity_id = NULL rows before deriving ISSUED_BY.
         # Root cause: run_companies(limit=100) may not have processed a security's issuer on the

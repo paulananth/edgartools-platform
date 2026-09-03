@@ -101,8 +101,8 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert "Catch" not in states["StrictMdmActivate"]
     assert "Catch" not in states["StrictReconcile"]
     assert "Catch" not in states["StrictInsiderCoverage"]
-    assert states["StrictMastering"]["Next"] == "StrictMdmBackfill"
-    assert states["StrictMdmBackfill"]["Next"] == "StrictMdmIdempotency"
+    assert states["StrictMastering"]["Next"] == "Strict Infer Relationships"
+    assert states["Strict Infer Relationships"]["Next"] == "StrictMdmIdempotency"
     assert states["StrictMdmIdempotency"]["Next"] == "StrictInsiderCoverage"
     assert states["StrictInsiderCoverage"]["Next"] == "ReconcileRelationshipRelease"
     assert states["ReconcileRelationshipRelease"]["Next"] == "StrictPublish"

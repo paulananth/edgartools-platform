@@ -94,7 +94,7 @@ def bronze_seed_silver_gold(tmp_root: Path) -> dict:
 
 def test_silver_mdm_gold_tail_ordering(silver_mdm_gold: dict) -> None:
     s = silver_mdm_gold["States"]
-    assert s["MdmBackfill"]["Next"] == "Publish"
+    assert s["Infer Relationships"]["Next"] == "Publish"
     assert s["Publish"]["Next"] == "Publish Relationships"
     assert s["Publish Relationships"]["Next"] == "Reconcile"
     assert s["Reconcile"]["Next"] == "GoldRefresh"
@@ -114,14 +114,14 @@ def test_silver_mdm_gold_no_limit_flag_on_mdm_commands(silver_mdm_gold: dict) ->
     # never carry MDM_RUN_LIMIT/MDM_GRAPH_LIMIT, even though those env vars
     # were set non-zero in this test's driver.
     s = silver_mdm_gold["States"]
-    for state_name in ("Mastering", "MdmBackfill", "Publish Relationships"):
+    for state_name in ("Mastering", "Infer Relationships", "Publish Relationships"):
         command = s[state_name]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
         assert "--limit" not in command, f"{state_name} must not carry --limit: {command}"
 
 
 def test_bronze_seed_silver_gold_default_tail_ordering(bronze_seed_silver_gold: dict) -> None:
     s = bronze_seed_silver_gold["States"]
-    assert s["MdmBackfill"]["Next"] == "Publish"
+    assert s["Infer Relationships"]["Next"] == "Publish"
     assert s["Publish"]["Next"] == "Publish Relationships"
     assert s["Publish Relationships"]["Next"] == "Reconcile"
     assert s["Reconcile"]["Next"] == "GoldRefresh"

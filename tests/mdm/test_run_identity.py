@@ -109,7 +109,7 @@ def test_all_evidence_producing_pipeline_commands_accept_run_id() -> None:
     for command in (
         "mastering",
         "derive-relationships",
-        "backfill-relationships",
+        "infer-relationships",
         "load-relationships",
     ):
         args = parser.parse_args(["mdm", command, "--run-id", "execution-123"])

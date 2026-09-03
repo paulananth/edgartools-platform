@@ -31,16 +31,21 @@ ACCOUNT=$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null
 BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 
 # ── State machines to show ────────────────────────────────────────────────────
-# Format: "short-name|display-label|sm-suffix|stages..."
+# Format: "short-name|display-label|sm-suffix|stages..." -- stages comma-
+# separated (not space-separated: two real stage names, "Publish
+# Relationships" and "Infer Relationships", contain a literal space, so a
+# space-based split here would silently break those two entries -- found
+# while renaming MdmBackfill -> Infer Relationships, itself a second
+# instance of the same shape "Publish Relationships" already was).
 # Stage order must match write_load_history_definition(), write_silver_mdm_gold_definition(), etc. in infra/scripts/deploy-aws-application.sh
 declare -a MACHINES=(
-  "load-history|LOAD-HISTORY|load-history|SeedUniverse BatchBootstrap Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
-  "bootstrap|BOOTSTRAP|bootstrap|RunWarehouseTask Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
-  "daily|DAILY-INCREMENTAL|daily-incremental|RunWarehouseTask Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
-  "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches BatchSilver Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
+  "load-history|LOAD-HISTORY|load-history|SeedUniverse,BatchBootstrap,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
+  "bootstrap|BOOTSTRAP|bootstrap|RunWarehouseTask,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
+  "daily|DAILY-INCREMENTAL|daily-incremental|RunWarehouseTask,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
+  "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches,BatchSilver,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
   "gold|GOLD-REFRESH|gold-refresh|GoldRefresh"
-  "mdm-gold|MDM-GOLD|mdm-gold|Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
-  "ownership|OWNERSHIP-MDM-GOLD|ownership-mdm-gold|ParseOwnershipBronze Mastering MdmBackfill Publish Relationships Reconcile GoldRefresh"
+  "mdm-gold|MDM-GOLD|mdm-gold|Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
+  "ownership|OWNERSHIP-MDM-GOLD|ownership-mdm-gold|ParseOwnershipBronze,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
 )
 
 show_machine() {
@@ -119,7 +124,7 @@ else: print('{}')
   echo "$history" | STAGES="$stages_str" python3 -c "
 import json, sys, os
 events = json.load(sys.stdin)['events']
-stages = os.environ.get('STAGES','').split()
+stages = os.environ.get('STAGES','').split(',')
 entered, exited, failed = set(), set(), set()
 for e in events:
     s = (e.get('stateEnteredEventDetails') or {}).get('name','')

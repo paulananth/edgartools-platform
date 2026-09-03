@@ -48,6 +48,39 @@ class _ConnectionSettings(Protocol):
     def connect(self) -> Any: ...
 
 
+def connect_with_qmark_paramstyle(settings_factory: Callable[[], _ConnectionSettings]) -> Any:
+    """Build a settings object via ``settings_factory`` and connect, with
+    the module-global ``snowflake.connector.paramstyle`` scoped to
+    ``"qmark"`` for exactly the ``connect()`` call.
+
+    Bind-parameter style: MDM's SQL (this reader, and
+    ``mdm_entity_backfill.py``'s pending-row sweep) uses ``?`` positional
+    placeholders throughout (DuckDB's native style).
+    snowflake-connector-python defaults to ``pyformat`` (``%s``) and does
+    not accept ``paramstyle`` as a per-connection ``connect()`` kwarg -- it
+    is a module-level global, read once and cached on the connection
+    object at connect time (confirmed live: flipping it after connect has
+    no effect on that connection; a real ``mdm_entity_backfill.py`` prod
+    crash on 2026-09-02, ``TypeError: not all arguments converted during
+    string formatting``, was exactly a caller that built ``?``-style SQL
+    without ever taking this scoping path). Flipping the global only for
+    this one call and restoring it immediately after keeps the mutation
+    window a few milliseconds around one call rather than a persistent
+    process-wide change that could affect ``mdm publish``/``sync-graph``/
+    ``verify-graph``'s own pyformat-style Snowflake usage if they ever
+    share a process with a caller of this function.
+    """
+    import snowflake.connector as sc
+
+    settings = settings_factory()
+    original_paramstyle = sc.paramstyle
+    sc.paramstyle = "qmark"
+    try:
+        return settings.connect()
+    finally:
+        sc.paramstyle = original_paramstyle
+
+
 def _mdm_silver_reader_settings() -> _ConnectionSettings:
     """EDGARTOOLS_SILVER connection settings, scoped to MDM's dedicated
     read-only role.
@@ -81,18 +114,10 @@ class SnowflakeSilverReader:
     ) -> "SnowflakeSilverReader":
         """Build a settings object via ``settings_factory`` and connect,
         with the module-global ``paramstyle`` scoped to ``"qmark"`` for
-        exactly the ``connect()`` call (see module docstring, point 2).
-        """
-        import snowflake.connector as sc
-
-        settings = settings_factory()
-        original_paramstyle = sc.paramstyle
-        sc.paramstyle = "qmark"
-        try:
-            connection = settings.connect()
-        finally:
-            sc.paramstyle = original_paramstyle
-        return cls(connection)
+        exactly the ``connect()`` call (see module docstring, point 2, and
+        ``connect_with_qmark_paramstyle``'s own docstring for the full
+        Snowflake-connector-quirk explanation)."""
+        return cls(connect_with_qmark_paramstyle(settings_factory))
 
     def fetch(self, sql: str, params: list | None = None) -> list[dict]:
         cursor = self._connection.cursor()

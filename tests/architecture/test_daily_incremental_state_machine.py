@@ -551,7 +551,7 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
 # -- mdm-ahead-of-silver map, Phase B wiring: BackfillMdmEntityIds sweep -----
 # Originally parametrized over both daily_definition and bootstrap_definition
 # (both shared write_warehouse_mdm_gold_definition's Mastering -> ... ->
-# MdmBackfill chain); bootstrap was retired by state-machine-consolidation
+# Infer Relationships chain); bootstrap was retired by state-machine-consolidation
 # ticket 06, so these now cover daily_definition only.
 #
 # Ticket 06 (.scratch/mdm-ahead-of-silver/issues/06-narrow-backfill-storage-target.md)
@@ -568,7 +568,7 @@ def test_mdm_run_routes_directly_into_backfill_mdm_entity_ids(daily_definition: 
     assert daily_definition["States"]["Mastering"]["Next"] == "BackfillMdmEntityIds"
 
 
-def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_mdm_backfill(
+def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_infer_relationships(
     daily_definition: dict,
 ) -> None:
     """wh_medium_arn, not large: the Snowflake-only sweep (ticket 06) issues
@@ -576,15 +576,15 @@ def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_mdm
     headroom. A sweep failure must not fail this otherwise-successful
     MDM/gold run -- the sweep is its own retry (ticket 05: the next pass
     re-selects the same still-NULL rows) -- so both the happy path and the
-    Catch converge on MdmBackfill."""
+    Catch converge on Infer Relationships."""
     state = daily_definition["States"]["BackfillMdmEntityIds"]
     cmd = _command_of(daily_definition, "BackfillMdmEntityIds")
     assert "'backfill-mdm-entity-ids'" in cmd
     assert "$$.Execution.Name" in cmd
     assert state["Parameters"]["TaskDefinition"] == "arn:wh-medium"
-    assert state["Next"] == "MdmBackfill"
+    assert state["Next"] == "Infer Relationships"
     assert state["Catch"] == [
-        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "MdmBackfill"}
+        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Infer Relationships"}
     ]
 
 
