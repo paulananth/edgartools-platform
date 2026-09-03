@@ -39,6 +39,56 @@ which — does the seed machine grow to include ownership-parsing/
 silver-batching/residual-holds derivation, or do these become new
 execution-input variants of `daily_incremental`/`load_history`)?
 
-## Answer
+## Answer (in progress — 1 of 4 machines decided, 3 remain open)
 
-(not yet resolved)
+**`ownership_mdm_gold`: deleted outright (user-directed, 2026-09-03).**
+Investigated its one live execution ever (`ownership-mdm-gold-10cik-20260725T204806Z`)
+before deciding — it was a manual operator `ABORT`, not a real failure:
+`parse-ownership-bronze` has no CIK-scoping capability (only `--limit`/
+`--accession-list`), so it always does a universe-wide missing-artifact
+scan (~189k artifacts at the time); the operator caught this and manually
+redirected rather than let it run needlessly. User asked whether this
+machine (and `residual_holds_graph`) should be deleted "unless something
+unique is discovered" — `parse-ownership-bronze` (this machine's head) was
+confirmed called nowhere else in the deploy script, a genuinely unique,
+idempotent bronze-reparse-without-refetch capability. That uniqueness was
+reported, but the user directed deletion anyway. Rollback snapshot at
+[ownership-mdm-gold-definition-snapshot-2026-09-03.json](rollback-snapshots/ownership-mdm-gold-definition-snapshot-2026-09-03.json).
+Also deleted the smaller, byte-identical `MdmPersons` duplication
+(`mdm mastering --entity-type person`) that this machine shared with
+`residual_holds_graph` before this — confirmed redundant with `mdm
+mastering --entity-type all` (`edgar_warehouse/mdm/pipeline.py`'s
+`MDMPipeline.run_all`, which already calls `run_persons`).
+
+**`residual_holds_graph`: kept, tail left inline (not rewired to call the
+new MDM machine).** Same "delete unless unique" framing applied — found it
+IS unique: the only deployed pipeline that masters securities, derives
+`IS_INSIDER`/`HOLDS`/`COMPANY_HOLDS`/`INSTITUTIONAL_HOLDS` in order, and
+publishes/syncs/reconciles the result (the generic `mdm_backfill_relationships`
+utility mode does one relationship type per manual trigger only, no
+mastering, no publish). Separately: user asked whether these 4 relationship
+types should fold into the new MDM machine's automatic tail (would then run
+on every `daily_incremental`/`load_history` execution) — investigation found
+`derive_relationships()`'s underlying `_derive_*` methods (confirmed for
+`_derive_holds`, `_derive_institutional_holds`) have no incremental/diff
+filtering at all, full source-table scan every invocation regardless of
+`target_per_type` — folding this into a pipeline named "daily incremental"
+would be architecturally inconsistent with the rest of the platform. User
+agreed; tracked as its own map,
+[mdm-relationship-incremental-filters](../mdm-relationship-incremental-filters/map.md).
+Investigated why both of `residual_holds_graph`'s live executions failed:
+execution 1 OOM'd (exit 137) at `MdmSecurities` on the old 2GiB profile —
+already fixed, current code runs it on `mdm_large`; execution 2 (a retry,
+started 28s later) hit a stale image-pull error on its first attempt (infra,
+self-resolved), then succeeded through every single stage
+(`MdmSecurities`→...→`MdmSync`), only failing 3x with a plain `exit code 1`
+at the final `MdmVerify` state — root cause unrecoverable (CloudWatch log
+retention is 7 days, executions are 39 days old). `MdmPersons` also deleted
+from this machine's head (same redundancy as above).
+
+**Still open:** `silver_mdm_gold` and `bronze_seed_silver_gold`'s default
+path — earlier discussion recommended both keep their existing heads
+unchanged and rewire their tails to a nested call into the new MDM machine
+(matching `daily_incremental`/`load_history`/`seed`'s pattern), chaining
+into `FactPublishtoGold` afterward exactly as today — but this was never
+confirmed by explicit user answer nor implemented. Needs its own pass.

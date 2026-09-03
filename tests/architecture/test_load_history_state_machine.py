@@ -470,7 +470,10 @@ def test_windowed_bootstrap_and_stage1b_maps_use_distributed_mode(definition: di
     prior dev executions (06-02 findings), so the INLINE+ItemReader combination in these
     four Map states was never actually exercised. All four Map states that read
     cik_windows.jsonl via ItemReader must use Mode=DISTRIBUTED (matching the already-working
-    pattern in write_ownership_mdm_gold_definition's batch_map elsewhere in this script)."""
+    pattern in write_warehouse_mdm_gold_definition's stage0_company_identity_bounded
+    Map elsewhere in this script -- previously cited ownership_mdm_gold's "batch_map,"
+    which never actually existed; ownership_mdm_gold itself was retired outright
+    in state-machine-consolidation wayfinder map ticket 08)."""
     branch_a_states = definition["States"]["IngestBronzeAndSilver"]["Branches"][0]["States"]
     windowed_bootstrap = branch_a_states["WindowedBootstrap"]
     assert windowed_bootstrap["ItemProcessor"]["ProcessorConfig"]["Mode"] == "DISTRIBUTED"

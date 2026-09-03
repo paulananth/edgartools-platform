@@ -94,11 +94,6 @@ case "$PIPELINE" in
     INPUT='{}'
     LABEL="mdm (Mastering → BackpropagateIdsToSilver → Infer Relationships → Publish → Publish Relationships → Reconcile; no gold-refresh -- chain 'gold' afterward if needed)"
     ;;
-  ownership)
-    SM="${BASE}:${NAME_PREFIX}-ownership-mdm-gold"
-    INPUT='{}'
-    LABEL="ownership_mdm_gold (parse bronze XMLs → MDM persons → Neo4j → gold)"
-    ;;
   mdm-verify)
     SM="${BASE}:${NAME_PREFIX}-mdm-utility"
     INPUT='{"mode": "mdm_verify_graph"}'

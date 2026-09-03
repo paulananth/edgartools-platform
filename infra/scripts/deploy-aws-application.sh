@@ -3405,8 +3405,12 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # error at WindowedBootstrap. MaxConcurrency=1 still enforces one window at a time under
 # DISTRIBUTED mode (each item runs as its own STANDARD child execution, at most 1
 # concurrently). Matches the already-working DISTRIBUTED pattern used by
-# write_ownership_mdm_gold_definition's batch_map (Mode: DISTRIBUTED, ExecutionType:
-# STANDARD) elsewhere in this script.
+# write_warehouse_mdm_gold_definition's stage0_company_identity_bounded Map
+# (Mode: DISTRIBUTED, ExecutionType: STANDARD) elsewhere in this script.
+# (Previously cited write_ownership_mdm_gold_definition's "batch_map" --
+# that machine never actually had one; ownership_mdm_gold was retired
+# outright in state-machine-consolidation wayfinder map ticket 08, and
+# this citation was stale even before that.)
 #
 # large, not medium (2026-08-10, live full-universe task #35): a 500-CIK
 # window's `bootstrap-next --silver-only` OOM'd (exit 137) twice in a row on wh_medium_arn
@@ -5597,98 +5601,14 @@ PY
   # checklist this repo's own precedent (tickets 03/04/05) uses for
   # retiring a deployed machine.
 
-  # ownership_mdm_gold: Form 3/4/5 already in silver → persons + IS_INSIDER only
-  # (Ticket 21). Companies are NOT re-resolved — they do not change on an
-  # insider load. No full mdm mastering --entity-type all.
-  ownership_mdm_gold_file="$(json_file sfn-ownership-mdm-gold)"
-  python3 - "$ownership_mdm_gold_file" "$CLUSTER_ARN" \
-    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$SCRIPT_DIR" <<'PY'
-import json, pathlib, sys
-
-(output_file, cluster_arn,
- wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
- container_name, subnet_json, security_group_json, script_dir) = sys.argv[1:]
-sys.path.insert(0, script_dir)
-from mdm_tail_helper import wire_mdm_tail
-
-subnets = json.loads(subnet_json)
-security_groups = json.loads(security_group_json)
-
-def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
-    s = {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::ecs:runTask.sync",
-        "Parameters": {
-            "LaunchType": "FARGATE",
-            "Cluster": cluster_arn,
-            "TaskDefinition": task_def_arn,
-            "PropagateTags": "TASK_DEFINITION",
-            "NetworkConfiguration": {"AwsvpcConfiguration": {
-                "AssignPublicIp": "ENABLED",
-                "SecurityGroups": security_groups,
-                "Subnets": subnets,
-            }},
-            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
-        },
-        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
-                   "BackoffRate": 2.0, "MaxAttempts": 2}],
-    }
-    if is_end:
-        s["End"] = True
-    else:
-        s["Next"] = next_state
-    return s
-
-tail = wire_mdm_tail(
-    ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True),
-    ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish-relationships')", is_end=True),
-    ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True),
-    gold_state=ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60),
-)
-
-definition = {
-    "Comment": (
-        "Ticket 21 insider path: optional parse-ownership-bronze, then PERSON-only "
-        "MDM resolve + IS_INSIDER derive (no company re-load), export/sync-graph, gold."
-    ),
-    "StartAt": "ParseOwnershipBronze",
-    "States": {
-        # MdmPersons ("mdm mastering --entity-type person") removed
-        # (state-machine-consolidation wayfinder map, ticket 08,
-        # 2026-09-03): confirmed duplicated across this machine and
-        # residual_holds_graph, and confirmed redundant with the new
-        # single MDM machine's Mastering state ("mdm mastering
-        # --entity-type all" already calls MDMPipeline.run_persons --
-        # edgar_warehouse/mdm/pipeline.py's run_all). Known gap this
-        # deletion accepts: a standalone run of this machine that
-        # discovers brand-new persons via ParseOwnershipBronze, with no
-        # recent daily_incremental Mastering pass to have already
-        # resolved them, will feed MdmIsInsider unresolved persons.
-        # Accepted given this machine's near-zero live usage (1 aborted
-        # execution ever).
-        "ParseOwnershipBronze": ecs_state(wh_medium_arn,
-            "States.Array('parse-ownership-bronze', '--run-id', $$.Execution.Name)",
-            next_state="MdmIsInsider", retry_secs=60),
-        "MdmIsInsider": ecs_state(
-            mdm_medium_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
-            next_state="Publish",
-        ),
-        # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is
-        # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
-        # map, ticket 02) — see infra/scripts/mdm_tail_helper.py.
-        **tail,
-    },
-}
-pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
-PY
-  ownership_mdm_gold_arn="$(upsert_state_machine ownership_mdm_gold "$ownership_mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "ownership_mdm_gold" "$ownership_mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
+  # ownership_mdm_gold retired (state-machine-consolidation wayfinder map,
+  # ticket 08, 2026-09-03): user directed deletion after investigation
+  # showed its one live execution ever was a manual operator ABORT (not
+  # a real failure) worked around by the operator manually skipping the
+  # universe-wide parse-ownership-bronze scan -- ParseOwnershipBronze had
+  # no CIK-scoping capability. Rollback snapshot captured before live AWS
+  # deletion:
+  # .scratch/state-machine-consolidation/rollback-snapshots/ownership-mdm-gold-definition-snapshot-2026-09-03.json
 
   # residual_holds_graph: Ticket 20 residual after EMPLOYED_BY bulk-load —
   # populate security nodes + IS_INSIDER + HOLDS + COMPANY_HOLDS +

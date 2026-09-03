@@ -45,8 +45,12 @@ declare -a MACHINES=(
   "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches,BatchSilver,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
   "gold|GOLD-REFRESH|gold-refresh|GoldRefresh"
   "mdm-gold|MDM-GOLD|mdm-gold|Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
-  "ownership|OWNERSHIP-MDM-GOLD|ownership-mdm-gold|ParseOwnershipBronze,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
 )
+# ownership-mdm-gold retired (state-machine-consolidation wayfinder map,
+# ticket 08, 2026-09-03) -- removed from this list. Note: mdm-gold above
+# and several other rows in this array are also stale as of ticket 07
+# (state-machine-consolidation map) -- not corrected in this pass, out of
+# scope for the ownership-mdm-gold deletion this comment documents.
 
 show_machine() {
   local short="$1" label="$2" suffix="$3" stages_str="$4"
