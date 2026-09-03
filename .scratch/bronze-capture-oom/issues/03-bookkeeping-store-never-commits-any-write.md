@@ -2,8 +2,8 @@
 
 Type: task
 Status: resolved (fix implemented, tested, deployed, live-verified) — see
-"Third finding" below for a live-verification-driven follow-up fix still
-in progress on this same ticket
+"Third finding" below for a sibling bug this fix exposed, itself now also
+fixed, tested, deployed, and live-verified (2026-09-03)
 Severity: critical — the real root cause behind Ticket 02's finding and behind
 the "one-time reactivation" this file previously documented in CLAUDE.md,
 which was itself wrong
@@ -249,9 +249,23 @@ pass after), explicit-args-still-raises, and
 clamp, pass with the `end_date_was_explicit` guard). Full suite re-run
 green: 2966 passed, 6 skipped.
 
-**Not yet deployed or re-verified live** as of this entry — needs a fresh
-`daily_incremental` run once this fix ships to confirm it reaches a real
-terminal state (`SUCCEEDED`) instead of failing on this date-range check.
+**Live-verified 2026-09-03** (via `/diagnose`, root-causing what looked
+live like an unexplained "self-resolved" failure before this git history
+was found): confirmed via `git merge-base --is-ancestor fecd88f1 HEAD` that
+this exact commit landed on `main` through PR #529
+(`claude/daily-incremental-caught-up-clamp`) at 2026-09-02 07:03:59 -0400 —
+19 minutes after the last of the 4 failed attempts
+(`daily-incremental-verify-bookkeeping-fix-1788343855`, last failure
+06:44:54 -0400) and 11 minutes before the next execution
+(`daily-incremental-bothfixes-1788347684`, started 07:14:48 -0400)
+succeeded. Confirmed via `aws stepfunctions list-executions` that every
+`daily-incremental` execution since has reached `SUCCEEDED`
+(`bothfixes-1788347684`, `bothfixes-take2-1788349393`,
+`stresstest-zero-updates-1788383101` — the last of which also confirmed
+the commit fix itself is holding: `catalog_network_fetches: 0` across
+9,457 CIKs, i.e. zero re-fetches from SEC, while still landing 42,604 real
+backlog rows into silver). This is the fresh run this note was waiting on
+— reached a real terminal `SUCCEEDED` state, not the date-range check.
 
 **Pre-existing wrinkle, found by `/gof-refactor-reviewer` review, not
 introduced by this fix and not blocking it:** `sync_scope_key_for_command`
