@@ -65,6 +65,34 @@ class FakeSnowflakeConnectionSettings:
         return FakeSnowflakeConnection(self._table_data)
 
 
+class RecordingConnectSettings:
+    """Stand-in settings object that records the module-global paramstyle
+    at the moment .connect() is called, so tests can assert a qmark-scoping
+    window without touching a real Snowflake connection or the module
+    global outside the test's control. Shared by every test proving a
+    connect() call site is correctly wrapped in
+    connect_with_qmark_paramstyle()."""
+
+    def __init__(self, connection: "FakeSnowflakeConnection") -> None:
+        self._connection = connection
+        self.paramstyle_during_connect: str | None = None
+
+    def connect(self) -> "FakeSnowflakeConnection":
+        import snowflake.connector as sc
+
+        self.paramstyle_during_connect = sc.paramstyle
+        return self._connection
+
+
+class RaisingConnectSettings:
+    """Settings object whose .connect() always raises -- proves the
+    paramstyle restore in connect_with_qmark_paramstyle() runs even when
+    the wrapped connect() call fails."""
+
+    def connect(self):
+        raise RuntimeError("boom")
+
+
 # The 5 orphan evidence tables source_dimensional_export.py's Snowflake-silver-reading
 # builders query (dbt-gold-silver-rewiring map, Ticket 06). Callers that
 # only need those builders to complete without error -- not to exercise

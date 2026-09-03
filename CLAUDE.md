@@ -2003,6 +2003,68 @@ Registry and migration-011 entries above), just on a store that had never
 been exercised across a real process-restart boundary before this
 investigation.
 
+## mdm_entity_backfill.py Snowflake paramstyle crash 5-whys (fixed 2026-09-02)
+
+**Problem:** `backfill-mdm-entity-ids` (`run_mdm_entity_backfill_sweep`) crashed
+on its first real batch of pending rows with `TypeError: not all arguments
+converted during string formatting`, raised from inside
+`snowflake-connector-python`'s own `_preprocess_pyformat_query`.
+
+1. Symptom: the crash traces through `_fetch_pending_rows_batches`'s
+   `cursor.execute(sql, params)` call, where `sql` uses `?`-style (qmark)
+   placeholders — DuckDB's native bind style, reused here by convention with
+   every other MDM SQL string in this codebase.
+2. Why does a qmark-style query fail against Snowflake? `snowflake-connector-
+   python` defaults its module-global `paramstyle` to `pyformat` (`%s`), not
+   `qmark`. Passed a `?`-placeholder string under that default, the connector's
+   own preprocessor tries to `%`-format the SQL text against the params and
+   fails outright — `?` is not a valid `%`-format specifier.
+3. Why wasn't this caught earlier? `run_mdm_entity_backfill_sweep`'s connect
+   call site (`connection = _silver_connection_settings().connect()`) never
+   touched `paramstyle` at all — it silently inherited whichever value was
+   ambient in the process, which is `pyformat` unless something else already
+   flipped it.
+4. Why does flipping `paramstyle` even matter, and why wasn't it just missing
+   a one-line fix? A **sibling module already had the fix** —
+   `edgar_warehouse/silver_support/snowflake_reader.py`'s
+   `SnowflakeSilverReader.connect()` — but the fix isn't "set paramstyle to
+   qmark before calling execute()"; it's "set it to qmark for exactly the
+   `connect()` call itself." Snowflake's connector reads the global
+   `paramstyle` **once, at connect time**, and caches it on the connection
+   object — mutating the global afterward has no effect on an
+   already-open connection (confirmed live against that sibling module's own
+   docstring and tests). `mdm_entity_backfill.py`'s connect call site never
+   went through this dance at all.
+5. **Root cause:** the qmark-paramstyle-scoping requirement is a genuinely
+   non-obvious Snowflake connector quirk, encoded correctly in exactly one
+   place in the codebase (`snowflake_reader.py`) — a second, independent
+   caller (`mdm_entity_backfill.py`) that also needed a qmark-style Snowflake
+   connection had no way to discover that requirement short of reading that
+   other module's docstring, and didn't.
+
+**Fix:** extracted the scoping dance into a new shared function,
+`connect_with_qmark_paramstyle()` (`edgar_warehouse/silver_support/
+snowflake_reader.py`), carrying the full explanation in its own docstring.
+`SnowflakeSilverReader.connect()` now delegates to it (no behavior change,
+proven by its existing tests passing unchanged). `mdm_entity_backfill.py`'s
+connect call site now calls it too, closing the crash.
+`/gof-refactor-reviewer` consulted before this edit (CLAUDE.md hard rule):
+verdict was extraction is justified here specifically because a real,
+already-realized bug (not a hypothetical) came from the dance's absence at a
+second call site, and the "why" is non-obvious enough that a third
+undiscovered call site duplicating it inline risks getting it subtly wrong
+again.
+
+Tests: `tests/unit/test_connect_with_qmark_paramstyle.py` (new, covers the
+shared function directly — sets qmark only during connect, restores on both
+success and a raised exception); `tests/unit/test_snowflake_silver_reader.py`
+updated to prove `SnowflakeSilverReader.connect()` still delegates correctly;
+`tests/mdm/test_entity_backfill.py` gained
+`test_sweep_connects_with_qmark_paramstyle`, using a settings double that
+records the ambient paramstyle at the moment `.connect()` is called — the
+prior end-to-end test only used a plain `MagicMock`, which never exercised
+this timing at all and would not have caught this bug. Full repo suite green.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live

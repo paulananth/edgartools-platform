@@ -332,7 +332,16 @@ def run_mdm_entity_backfill_sweep(context: Any, run_id: str) -> dict[str, Any]:
     engine = get_engine(mdm_url)
     started_at = datetime.now(UTC)
 
-    connection = _silver_connection_settings().connect()
+    # _fetch_pending_rows_batches (below) builds `?`-style (qmark) SQL --
+    # snowflake-connector-python defaults to pyformat and only honors qmark
+    # placeholders when the module-global paramstyle is set at connect()
+    # time (see connect_with_qmark_paramstyle's own docstring). Confirmed
+    # live 2026-09-02: a plain `_silver_connection_settings().connect()`
+    # call here crashed with `TypeError: not all arguments converted
+    # during string formatting` on the first real pending-row batch.
+    from edgar_warehouse.silver_support.snowflake_reader import connect_with_qmark_paramstyle
+
+    connection = connect_with_qmark_paramstyle(_silver_connection_settings)
     try:
         landing_export = LandingExportBuffer()
         with Session(engine) as session:

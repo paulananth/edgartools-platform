@@ -13,7 +13,11 @@ from typing import Any
 import pytest
 
 from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
-from tests.unit._fake_snowflake import FakeSnowflakeConnection
+from tests.unit._fake_snowflake import (
+    FakeSnowflakeConnection,
+    RaisingConnectSettings,
+    RecordingConnectSettings,
+)
 
 
 def _reader_over(table_data: dict[str, tuple[list[str], list[tuple]]]) -> tuple[SnowflakeSilverReader, FakeSnowflakeConnection]:
@@ -102,22 +106,6 @@ def test_reader_has_no_duckdb_shaped_conn_attribute():
     assert not hasattr(reader, "_conn")
 
 
-class _RecordingSettings:
-    """Records the module paramstyle at the moment .connect() is called,
-    so tests can assert the qmark scoping window without touching a real
-    Snowflake connection or the module global outside the test's control."""
-
-    def __init__(self, connection: FakeSnowflakeConnection) -> None:
-        self._connection = connection
-        self.paramstyle_during_connect: str | None = None
-
-    def connect(self) -> FakeSnowflakeConnection:
-        import snowflake.connector as sc
-
-        self.paramstyle_during_connect = sc.paramstyle
-        return self._connection
-
-
 def test_connect_sets_qmark_paramstyle_only_for_the_connect_call():
     # snowflake-connector-python is an optional extra (pyproject.toml's
     # "snowflake" group) -- not installed in the tests/unit/ CI job, matching
@@ -131,7 +119,7 @@ def test_connect_sets_qmark_paramstyle_only_for_the_connect_call():
     assert original != "qmark", "test assumes qmark is not already the ambient default"
 
     connection = FakeSnowflakeConnection({})
-    settings = _RecordingSettings(connection)
+    settings = RecordingConnectSettings(connection)
 
     reader = SnowflakeSilverReader.connect(settings_factory=lambda: settings)
 
@@ -145,12 +133,8 @@ def test_connect_restores_paramstyle_even_if_connect_raises():
 
     original = sc.paramstyle
 
-    class _RaisingSettings:
-        def connect(self) -> Any:
-            raise RuntimeError("boom")
-
     with pytest.raises(RuntimeError, match="boom"):
-        SnowflakeSilverReader.connect(settings_factory=lambda: _RaisingSettings())
+        SnowflakeSilverReader.connect(settings_factory=lambda: RaisingConnectSettings())
 
     assert sc.paramstyle == original
 
