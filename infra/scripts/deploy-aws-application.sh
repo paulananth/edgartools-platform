@@ -5554,7 +5554,7 @@ PY
   # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
   phased_definition_file="$(json_file sfn-load-history)"
   write_load_history_definition "$phased_definition_file" \
-    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
+    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
     "$mdm_state_machine_arn"
   phased_state_machine_arn="$(upsert_state_machine load_history "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
