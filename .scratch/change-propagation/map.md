@@ -141,6 +141,7 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [52 — Check whether the capture-parity harness exercises the legacy path](issues/52-check-harness-exercises-legacy-capture.md) — Confirmed: Ticket 51 never runs legacy capture. "Legacy" snapshots are hand-built fixtures; the only live driver added is gated `--cik-list`. Ticket 46 still *invokes* both paths in `daily-incremental` when the flag is on, but nothing diffs their outputs. Follow-up [53](issues/53-drive-legacy-and-gated-capture-into-parity-diff.md).
 - [53 — Drive both legacy and gated capture into the parity diff](issues/53-drive-legacy-and-gated-capture-into-parity-diff.md) — `run_dual_path_filing_artifact_parity` runs real `fetch_filing_artifacts` then CIK-scoped gated capture and diffs the two captured sets. Apple stage-1 passes; an unrelated CIK in the same sealed index is not processed.
 - [27 — Contract legacy acquisition bypasses](issues/27-contract-legacy-acquisition-bypasses.md) — First family slice (not the six whole-ticket bullets): `daily-incremental` now defaults gated capture on for `filing_artifact`; OWNERSHIP_FORMS are skipped in the legacy artifact pipeline while that flag is on; `fetch_filing_artifacts` stays dormant in-tree; gated failures fail the command. Rollback is `--disable-filing-artifact-gated-capture`. ADV/13F/8-K and `load_history` are unchanged.
+- [55 — Decide whether reference_catalog retires warehouse seed-universe](issues/55-decide-whether-reference-catalog-retires-seed-universe.md) — Not justified yet, but narrower than first framed: one real core need (discover CIKs + register them into tracked/sync state, fused since this repo's first commit) plus two later, separable add-ons (MDM-active dedup added 2026-08-10 `#394`; CIK-batch write) that consume the CIK list as output and were never real blockers. `reference_catalog` covers only the fetch half of the core need and hasn't passed Decision 2 for even that. Registration half is Ticket 54's already-open scope (seed-universe is a second caller into its `sec_company_sync_state`); fetch-layer parity harness split out as new Ticket 56.
 
 ## Ticket 03 implementation tickets
 
@@ -181,6 +182,8 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [41 — Build the cross-stage watermark aggregator](issues/41-build-cross-stage-watermark-aggregator.md) — **Resolved** — see Decisions so far above.
 - [43 — Migration 013's owner-gated statements have no live deploy path via the `application` DSN](issues/43-acquisition-owner-migrations-unreappliable-via-application-dsn.md) — **Resolved** — see Decisions so far above.
 - [44 — Monitor for `snowflake_write` privilege drift on fenced acquisition tables](issues/44-monitor-snowflake-write-privilege-drift.md) — **Resolved** — see Decisions so far above.
+- [55 — Decide whether reference_catalog retires warehouse seed-universe](issues/55-decide-whether-reference-catalog-retires-seed-universe.md) — **Resolved** — see Decisions so far above.
+- [56 — Build the reference_catalog capture-parity harness](issues/56-build-reference-catalog-capture-parity-harness.md) — Ticket 55's fetch-layer proof. Ready-for-agent; not blocked by Ticket 54.
 
 ## Not yet specified
 
@@ -195,6 +198,14 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
   whether to wire it to `SnowflakeGraphSyncExecutor` (Ticket 36's
   `publication-drain` coordinator's own approach), repurpose it, or retire
   it in favor of the simpler `sync-graph`/`verify-graph` pair.
+- Whether `seed-universe`'s MDM-active-CIK dedup and its per-run CIK-batch
+  manifest write (`_write_cik_universe_batches`) need any gated-path home
+  at all — found while resolving Ticket 55, neither maps onto anything this
+  map's Source Family Registry model expresses (one reads MDM, the other
+  writes an S3 side-artifact, neither is a Postgres change-detection table
+  like Ticket 54's scope). Not sharp enough to ticket: nobody has asked to
+  retire either specifically, and it's unclear either needs to move even if
+  `seed-universe`'s fetch layer eventually cuts over.
 
 ## Out of scope
 
