@@ -543,3 +543,50 @@ def test_daily_incremental_has_both_leases_independently(daily_incremental_defin
     # very end of the run -- sec_fetch_active already released much earlier,
     # right before Mastering.
     assert states["FactPublishtoGold"]["Next"] == "ReleaseLease"
+
+
+def test_sec_fetch_deferred_releases_the_already_acquired_identity_refresh_lease(
+    daily_incremental_definition,
+) -> None:
+    """Regression guard for a lease-leak found live 2026-09-03: by the time
+    AcquireSecFetchLease ever runs, AcquireLease (the identity-refresh
+    lease, spanning the whole run) has ALWAYS already succeeded --
+    AcquireSecFetchLease's only inbound edge is ApplyEffectiveRefreshMode,
+    itself only reachable via LeaseAcquiredCheck's lease_acquired=True
+    branch. If the sec_fetch_active lease is busy and this run gets
+    deferred, it must release the identity-refresh lease it's already
+    holding before terminating -- otherwise that lease stays held under
+    this (now-terminated) execution's own run_id until the 20h stale-lease
+    reclaim, silently blocking every subsequent daily_incremental
+    execution's own AcquireLease. Confirmed live:
+    daily-incremental-claimfix-verify2-1788478059 got sec-fetch-deferred
+    and stranded the identity-refresh lease exactly this way.
+
+    Walks the real generated graph forward from
+    SecFetchLeaseAcquiredCheck's Default (busy) branch, following each
+    state's single Next pointer, until it reaches either a state whose
+    command contains "release-identity-refresh-lease" (pass) or a
+    terminal End:true state with no such release anywhere on the path
+    (fail)."""
+    states = daily_incremental_definition["States"]
+    current = states["SecFetchLeaseAcquiredCheck"]["Default"]
+    visited: list[str] = []
+    released = False
+    for _ in range(len(states) + 1):  # bounded walk; a real cycle would be a separate bug
+        visited.append(current)
+        state = states[current]
+        cmd = json.dumps(state.get("Parameters", {}))
+        if "release-identity-refresh-lease" in cmd:
+            released = True
+            break
+        if state.get("End"):
+            break
+        nxt = state.get("Next")
+        if nxt is None:
+            break
+        current = nxt
+
+    assert released, (
+        f"SecFetchDeferred path ({' -> '.join(visited)}) terminates without "
+        "releasing the already-acquired identity-refresh lease"
+    )

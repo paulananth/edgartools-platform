@@ -4610,6 +4610,47 @@ ingest_firm_roster_sources["ResultPath"] = None
 # traffic ACROSS the 5 different SEC-fetching commands.
 sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "RunMdmChain")
 
+# Lease-leak bug found live 2026-09-03 (via /diagnosing-bugs): unlike
+# write_single_workflow_definition's/write_load_history_definition's own
+# copies of build_sec_fetch_lease_states, THIS caller has always already
+# acquired the identity-refresh lease (AcquireLease, above) by the time
+# AcquireSecFetchLease runs -- confirmed via the generated graph:
+# AcquireSecFetchLease's only inbound edge is ApplyEffectiveRefreshMode,
+# itself reachable only through LeaseAcquiredCheck's lease_acquired=True
+# branch. The generic SecFetchDeferred state built above terminates
+# immediately (End: True) without releasing that already-held lease,
+# stranding it under this run's own (now-terminated) run_id until the
+# 20h stale-lease reclaim -- confirmed live: a deferred execution
+# (daily-incremental-claimfix-verify2-1788478059) left the identity-refresh
+# lease held by itself, silently blocking every subsequent
+# daily_incremental execution's own AcquireLease. Mutating the
+# caller-agnostic object from this caller-specific scope, not the shared
+# build_sec_fetch_lease_states() helper itself (mirrors gold["Next"] =
+# "ReleaseLease" below) -- the other two callers never acquire this lease
+# first, so they must not gain this branch.
+del sec_fetch_lease_states["SecFetchDeferred"]["End"]
+sec_fetch_lease_states["SecFetchDeferred"]["Next"] = "ReleaseLeaseAfterSecFetchDefer"
+release_lease_after_sec_fetch_defer = ecs_state(wh_medium_arn,
+    "States.Array('release-identity-refresh-lease', '--run-id', $$.Execution.Name)",
+    is_end=True, retry_secs=30)
+# ResultPath: None -- preserve $.sec_fetch_deferred_summary (set by
+# SecFetchDeferred just before this state runs) as the execution's final
+# output, instead of this task's own raw ecs:runTask.sync response
+# silently replacing the whole $ (the exact landmine
+# write_bronze_seed_silver_gold_definition's seed_from_bronze comment
+# documents for the identical ecs_state() default).
+release_lease_after_sec_fetch_defer["ResultPath"] = None
+release_lease_after_sec_fetch_defer["Catch"] = [{
+    "ErrorEquals": ["States.ALL"],
+    "ResultPath": None,
+    "Next": "ReleaseLeaseAfterSecFetchDeferFailedNonFatal",
+}]
+release_lease_after_sec_fetch_defer_failed_non_fatal = {
+    "Type": "Pass",
+    "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful deferred run FAILED. The 20h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged lease.",
+    "End": True,
+}
+
 definition = {
     "Comment": (
         f"{display}: (0) RefreshMode -- backstop (complete company-eligible universe, weekly) vs "
@@ -4660,6 +4701,8 @@ definition = {
         "FactPublishtoGold": gold,
         "ReleaseLease":     release_lease,
         "ReleaseLeaseFailedNonFatal": release_lease_failed_non_fatal,
+        "ReleaseLeaseAfterSecFetchDefer": release_lease_after_sec_fetch_defer,
+        "ReleaseLeaseAfterSecFetchDeferFailedNonFatal": release_lease_after_sec_fetch_defer_failed_non_fatal,
     },
 }
 pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
