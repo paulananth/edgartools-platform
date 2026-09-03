@@ -5654,15 +5654,22 @@ definition = {
     ),
     "StartAt": "ParseOwnershipBronze",
     "States": {
+        # MdmPersons ("mdm mastering --entity-type person") removed
+        # (state-machine-consolidation wayfinder map, ticket 08,
+        # 2026-09-03): confirmed duplicated across this machine and
+        # residual_holds_graph, and confirmed redundant with the new
+        # single MDM machine's Mastering state ("mdm mastering
+        # --entity-type all" already calls MDMPipeline.run_persons --
+        # edgar_warehouse/mdm/pipeline.py's run_all). Known gap this
+        # deletion accepts: a standalone run of this machine that
+        # discovers brand-new persons via ParseOwnershipBronze, with no
+        # recent daily_incremental Mastering pass to have already
+        # resolved them, will feed MdmIsInsider unresolved persons.
+        # Accepted given this machine's near-zero live usage (1 aborted
+        # execution ever).
         "ParseOwnershipBronze": ecs_state(wh_medium_arn,
             "States.Array('parse-ownership-bronze', '--run-id', $$.Execution.Name)",
-            next_state="MdmPersons", retry_secs=60),
-        # Companies are assumed already in MDM; only Form 3/4/5 persons.
-        "MdmPersons": ecs_state(
-            mdm_medium_arn,
-            "States.Array('mdm', 'mastering', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
-            next_state="MdmIsInsider",
-        ),
+            next_state="MdmIsInsider", retry_secs=60),
         "MdmIsInsider": ecs_state(
             mdm_medium_arn,
             "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
@@ -5741,14 +5748,16 @@ definition = {
     ),
     "StartAt": "MdmSecurities",
     "States": {
+        # MdmPersons ("mdm mastering --entity-type person") removed
+        # (state-machine-consolidation wayfinder map, ticket 08,
+        # 2026-09-03) -- same rationale/accepted gap as
+        # ownership_mdm_gold's identical deletion, see that machine's
+        # comment. This machine's own docstring above already documents
+        # "Does not re-resolve companies" as a deliberate scope choice;
+        # persons carry the same caveat now.
         "MdmSecurities": ecs_state(
             mdm_large_arn,
             "States.Array('mdm', 'mastering', '--entity-type', 'security', '--run-id', $$.Execution.Name)",
-            next_state="MdmPersons",
-        ),
-        "MdmPersons": ecs_state(
-            mdm_large_arn,
-            "States.Array('mdm', 'mastering', '--entity-type', 'person', '--run-id', $$.Execution.Name)",
             next_state="MdmIsInsider",
         ),
         "MdmIsInsider": ecs_state(

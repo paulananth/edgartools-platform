@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: claimed
 
 ## Question
 
