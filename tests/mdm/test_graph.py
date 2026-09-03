@@ -5,7 +5,7 @@ Layers (each builds on the previous):
   2. GraphRegistry          — loads from in-memory SQLite
   3. GraphSyncEngine        — record_relationship + sync_pending with mock bolt
   4. backfill_relationship_instances — derives rows from mdm_fund/mdm_security
-  5. CLI commands           — verify-graph, backfill-relationships, sync-graph
+  5. CLI commands           — verify-graph, infer-relationships, sync-graph
   6. CLI bolt:// URI fix    — neo4j:// -> bolt:// normalisation
 """
 from __future__ import annotations
@@ -327,16 +327,16 @@ class TestBackfillRelationshipInstances:
 # ===========================================================================
 
 class TestCLICommands:
-    def test_parser_exposes_backfill_relationships(self):
+    def test_parser_exposes_infer_relationships(self):
         from edgar_warehouse.cli import build_parser
         parser = build_parser()
-        args = parser.parse_args(["mdm", "backfill-relationships", "--limit", "50"])
-        assert args.mdm_command == "backfill-relationships"
+        args = parser.parse_args(["mdm", "infer-relationships", "--limit", "50"])
+        assert args.mdm_command == "infer-relationships"
         assert args.limit == 50
 
-    def test_parser_backfill_default_limit_100(self):
+    def test_parser_infer_relationships_default_limit_100(self):
         from edgar_warehouse.cli import build_parser
-        args = build_parser().parse_args(["mdm", "backfill-relationships"])
+        args = build_parser().parse_args(["mdm", "infer-relationships"])
         assert args.limit == 100
 
     def test_parser_exposes_verify_graph(self):
@@ -390,7 +390,7 @@ class TestCLICommands:
         """Extend existing e2e-operations test to include graph commands."""
         from edgar_warehouse.cli import build_parser
         parser = build_parser()
-        for cmd in ("backfill-relationships", "reconcile", "publish-relationships", "derive-relationships", "load-relationships"):
+        for cmd in ("infer-relationships", "reconcile", "publish-relationships", "derive-relationships", "load-relationships"):
             args = parser.parse_args(["mdm", cmd])
             assert args.mdm_command == cmd
 

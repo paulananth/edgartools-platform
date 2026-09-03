@@ -2097,7 +2097,7 @@ Stage 1B — Fundamentals (windowed, MaxConcurrency=1 each, run after Stage 1)
   • XBRL company facts, 8-K/DEF 14A per-filing data, and 13F holdings respectively
 
 Stage 2 — MDM entity resolution (sequential Step Functions)
-  mdm-mastering → mdm-backfill-relationships → mdm-publish → mdm-publish-relationships → mdm-reconcile
+  mdm-mastering → mdm-infer-relationships → mdm-publish → mdm-publish-relationships → mdm-reconcile
   • Runs after Stage 1/1B complete so entity resolution sees the full silver dataset
   • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
 
