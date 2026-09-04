@@ -29,7 +29,7 @@ def main():
 
     STAGES = [
         "silver_database_hydrated",
-        "bronze_capture_started",
+        "sec_load_started",
         "bronze_capture_completed",
         "silver_apply_started",
         "silver_apply_completed",

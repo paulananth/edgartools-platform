@@ -3371,7 +3371,7 @@ def _run_submissions_bronze_then_silver(
     total_ciks = len(ciks)
     bronze_started_at = datetime.now(UTC)
     _emit_pipeline_event(
-        "bronze_capture_started",
+        "sec_load_started",
         cik_count=total_ciks,
         include_pagination=include_pagination,
         load_mode=load_mode,
