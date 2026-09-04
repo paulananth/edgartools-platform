@@ -52,10 +52,13 @@ jobs:
           run-id: ${{ inputs.plan_run_id }}
 
       - name: Apply exact expired S3 versions
+        env:
+          PLAN_HASH: ${{ inputs.plan_hash }}
         run: |
+          [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || { echo "plan_hash must be 64 lowercase hex characters" >&2; exit 1; }
           uv run python scripts/ops/aws_cost_optimizer.py retention-apply \
             --plan artifacts/s3-retention-plan.json \
-            --plan-hash "${{ inputs.plan_hash }}" \
+            --plan-hash "$PLAN_HASH" \
             --confirm-delete-expired-s3 \
             --evidence-dir artifacts/s3-retention-apply
 
