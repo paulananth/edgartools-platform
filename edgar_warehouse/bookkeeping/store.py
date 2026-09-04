@@ -63,6 +63,19 @@ class BookkeepingStore:
         """
         self._session.commit()
 
+    def rollback(self) -> None:
+        """Discard every write issued through this store since the last commit.
+
+        bronze-capture-oom Ticket 02: a checkpoint write is only meaningful
+        if the content it describes actually reached canonical Silver. A
+        caller whose publish step fails after issuing checkpoint writes
+        (but before this store's own commit()) must discard them here
+        before recording and committing a "failed" run status -- otherwise
+        the next run's skip-if-unchanged comparison believes content was
+        captured that was, in fact, discarded on this run's crash.
+        """
+        self._session.rollback()
+
     # -- internal helpers ---------------------------------------------------
 
     def _insert_factory(self):
