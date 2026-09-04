@@ -179,6 +179,24 @@ Options:
                                     --configure-publication-drain-schedule enable. Same role
                                     shape as --fence-monitor-scheduler-role-arn (EventBridge ->
                                     StartExecution on this one state machine).
+  --configure-reconciliation-backstop-schedule <enable|disable>
+                                    Off-by-default operator control (Ticket 50, change-
+                                    propagation map) for the monthly MDM Reconciliation
+                                    Backstop: creates/updates (enable) or removes (disable) one
+                                    EventBridge rule invoking edgartools-<env>-mdm-utility with
+                                    {"mode": "mdm_reconciliation_backstop"} on the 1st of every
+                                    month. A deferred run (the shared mdm_resolution lease held
+                                    by ordinary `mdm mastering` or another backstop attempt) is
+                                    not an error -- it retries next month. Never runs as a side
+                                    effect of an ordinary deploy; run this flag alone, after an
+                                    explicit operator go. Exits immediately after configuring.
+  --reconciliation-backstop-scheduler-role-arn <arn>
+                                    IAM role ARN EventBridge assumes to start
+                                    edgartools-<env>-mdm-utility for the reconciliation-backstop
+                                    schedule. Required with
+                                    --configure-reconciliation-backstop-schedule enable. Same
+                                    role shape as --publication-drain-scheduler-role-arn
+                                    (EventBridge -> StartExecution on this one state machine).
   -h, --help                        Show this help.
 USAGE
 }
@@ -278,6 +296,8 @@ FENCE_MONITOR_SCHEDULER_ROLE_ARN=""
 CONFIGURE_FENCE_MONITOR_ALARM=""
 CONFIGURE_PUBLICATION_DRAIN_SCHEDULE=""
 PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN=""
+CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE=""
+RECONCILIATION_BACKSTOP_SCHEDULER_ROLE_ARN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -342,6 +362,8 @@ while [[ $# -gt 0 ]]; do
     --fence-monitor-scheduler-role-arn) FENCE_MONITOR_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     --configure-publication-drain-schedule) CONFIGURE_PUBLICATION_DRAIN_SCHEDULE="${2:?}"; shift 2 ;;
     --publication-drain-scheduler-role-arn) PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
+    --configure-reconciliation-backstop-schedule) CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE="${2:?}"; shift 2 ;;
+    --reconciliation-backstop-scheduler-role-arn) RECONCILIATION_BACKSTOP_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     --configure-fence-monitor-alarm) CONFIGURE_FENCE_MONITOR_ALARM="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -427,6 +449,15 @@ if ! is_empty "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE"; then
   esac
   if [[ "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE" == "enable" ]] && is_empty "$PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN"; then
     fail "--publication-drain-scheduler-role-arn is required with --configure-publication-drain-schedule enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE"; then
+  case "$CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE" in
+    enable|disable) ;;
+    *) fail "--configure-reconciliation-backstop-schedule must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE" == "enable" ]] && is_empty "$RECONCILIATION_BACKSTOP_SCHEDULER_ROLE_ARN"; then
+    fail "--reconciliation-backstop-scheduler-role-arn is required with --configure-reconciliation-backstop-schedule enable"
   fi
 fi
 
@@ -820,14 +851,23 @@ fi
 # (LOAD_SILVER_LANDING_TASK's actual driver) to weigh against. Revisit if a
 # real incident's time-to-detection ever matters enough to want tighter,
 # now that there would be at least one data point to size against.
-configure_fence_monitor_schedule() {
-  local action="$1" role_arn="$2"
+# Shared skeleton for a single-target EventBridge rule invoking
+# edgartools-<env>-mdm-utility with {"mode": "<mode>"} -- extracted
+# (change-propagation Ticket 50, /gof-refactor-reviewer) after this became
+# the 3rd near-identical copy (fence-monitor, publication-drain,
+# reconciliation-backstop below): each caller differs only in rule-name
+# suffix, EventBridge target id, mode string, schedule expression, and
+# description text. Every existing schedule's rule name, target id, mode,
+# schedule, and description are preserved byte-for-byte through this
+# extraction -- only the mechanism is now shared.
+configure_scheduled_utility_rule() {
+  local action="$1" role_arn="$2" rule_suffix="$3" target_id="$4" mode="$5" schedule_expr="$6" description="$7"
   local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-utility"
-  local rule_name="${NAME_PREFIX}-fence-monitor"
+  local rule_name="${NAME_PREFIX}-${rule_suffix}"
 
   if [[ "$action" == "disable" ]]; then
     if aws_cli events describe-rule --name "$rule_name" >/dev/null 2>&1; then
-      aws_cli events remove-targets --rule "$rule_name" --ids fence-monitor-sfn >/dev/null
+      aws_cli events remove-targets --rule "$rule_name" --ids "$target_id" >/dev/null
       aws_cli events delete-rule --name "$rule_name"
       log "Deleted EventBridge rule ${rule_name}"
     else
@@ -837,26 +877,54 @@ configure_fence_monitor_schedule() {
   fi
 
   local targets_json
-  targets_json="$(python3 - "$state_machine_arn" "$role_arn" <<'PY'
+  targets_json="$(python3 - "$state_machine_arn" "$role_arn" "$target_id" "$mode" <<'PY'
 import json
 import sys
 
-arn, role_arn = sys.argv[1:3]
+arn, role_arn, target_id, mode = sys.argv[1:5]
 print(json.dumps([{
-    "Id": "fence-monitor-sfn",
+    "Id": target_id,
     "Arn": arn,
     "RoleArn": role_arn,
-    "Input": json.dumps({"mode": "mdm_check_fence"}),
+    "Input": json.dumps({"mode": mode}),
 }]))
 PY
 )"
   aws_cli events put-rule \
     --name "$rule_name" \
-    --schedule-expression "rate(4 hours)" \
+    --schedule-expression "$schedule_expr" \
     --state ENABLED \
-    --description "Ticket 44 (change-propagation map): recurring mdm check-fence drift check" >/dev/null
+    --description "$description" >/dev/null
   aws_cli events put-targets --rule "$rule_name" --targets "$targets_json" >/dev/null
-  log "EventBridge rule ${rule_name} configured (rate(4 hours))"
+  log "EventBridge rule ${rule_name} configured (${schedule_expr})"
+}
+
+# Ticket 44 (change-propagation map), split from Ticket 30's own live
+# incident: run `mdm check-fence` (mode mdm_check_fence on the already-
+# consolidated mdm_utility machine, not a bespoke new state machine --
+# see write_mdm_utility_definition's own comment) on a recurring schedule
+# so a future credential rotation reopening Ticket 30's fence -- confirmed
+# live to happen on *any* RESET ACCESS call, not just an unusual one -- gets
+# caught without a human having to remember to check.
+#
+# Sizing rationale for "every 4 hours" (not a placeholder default -- see
+# CLAUDE.md's LOAD_SILVER_LANDING_TASK credit-burn 5-whys for why that
+# matters): the trigger this guards against -- an out-of-band credential
+# rotation run outside bootstrap-prod-mdm.sh's own now-self-healing flow,
+# e.g. manual incident response -- has no observed historical frequency to
+# size a cadence against; it's rare and unscheduled by nature, not a
+# recurring load pattern like LOAD_SILVER_LANDING_TASK's polling problem
+# was. Absent that data, this instead bounds worst-case exposure to
+# comfortably inside a single business day (6 checks/day) while the cost
+# side is negligible regardless of interval: a handful of read-only
+# has_table_privilege/pg_class queries on the mdm-small task profile,
+# seconds of Fargate runtime, no Snowflake-warehouse-resume billing concern
+# (LOAD_SILVER_LANDING_TASK's actual driver) to weigh against. Revisit if a
+# real incident's time-to-detection ever matters enough to want tighter,
+# now that there would be at least one data point to size against.
+configure_fence_monitor_schedule() {
+  configure_scheduled_utility_rule "$1" "$2" "fence-monitor" "fence-monitor-sfn" "mdm_check_fence" \
+    "rate(4 hours)" "Ticket 44 (change-propagation map): recurring mdm check-fence drift check"
 }
 
 # Ticket 36 (change-propagation map): the scheduled consumer side of the
@@ -873,46 +941,33 @@ PY
 # slower than the warning threshold would trip it on an otherwise-healthy
 # queue by construction.
 configure_publication_drain_schedule() {
-  local action="$1" role_arn="$2"
-  local state_machine_arn="arn:aws:states:${AWS_REGION_NAME}:${ACCOUNT_ID}:stateMachine:${NAME_PREFIX}-mdm-utility"
-  local rule_name="${NAME_PREFIX}-publication-drain"
+  configure_scheduled_utility_rule "$1" "$2" "publication-drain" "publication-drain-sfn" "mdm_publication_drain" \
+    "rate(5 minutes)" "Ticket 36 (change-propagation map): recurring MDM->graph publication outbox drain"
+}
 
-  if [[ "$action" == "disable" ]]; then
-    if aws_cli events describe-rule --name "$rule_name" >/dev/null 2>&1; then
-      aws_cli events remove-targets --rule "$rule_name" --ids publication-drain-sfn >/dev/null
-      aws_cli events delete-rule --name "$rule_name"
-      log "Deleted EventBridge rule ${rule_name}"
-    else
-      log "EventBridge rule ${rule_name} does not exist -- nothing to disable"
-    fi
-    return 0
-  fi
-
-  local targets_json
-  targets_json="$(python3 - "$state_machine_arn" "$role_arn" <<'PY'
-import json
-import sys
-
-arn, role_arn = sys.argv[1:3]
-print(json.dumps([{
-    "Id": "publication-drain-sfn",
-    "Arn": arn,
-    "RoleArn": role_arn,
-    "Input": json.dumps({"mode": "mdm_publication_drain"}),
-}]))
-PY
-)"
-  aws_cli events put-rule \
-    --name "$rule_name" \
-    --schedule-expression "rate(5 minutes)" \
-    --state ENABLED \
-    --description "Ticket 36 (change-propagation map): recurring MDM->graph publication outbox drain" >/dev/null
-  aws_cli events put-targets --rule "$rule_name" --targets "$targets_json" >/dev/null
-  log "EventBridge rule ${rule_name} configured (rate(5 minutes))"
+# Ticket 50 (change-propagation map): the MDM Reconciliation Backstop --
+# MDMPipeline.run_all() across every entity type with skip-if-unchanged off
+# and no --limit, via `mdm reconcile-backstop` (mode
+# mdm_reconciliation_backstop on the same consolidated mdm-utility machine,
+# mirroring configure_publication_drain_schedule immediately above). Off by
+# default, per Ticket 50's own decision. Monthly, not Sunday (distinct from
+# the unrelated Identity Backstop Sweep) -- a deferred invocation (the
+# shared mdm_resolution lease held by ordinary `mdm mastering` or another
+# backstop attempt) is not an error; it retries next month by construction
+# of the schedule itself, with no overdue-priority mechanism needed (see
+# lease.py's module docstring).
+configure_reconciliation_backstop_schedule() {
+  configure_scheduled_utility_rule "$1" "$2" "reconciliation-backstop" "reconciliation-backstop-sfn" "mdm_reconciliation_backstop" \
+    "cron(0 6 1 * ? *)" "Ticket 50 (change-propagation map): monthly MDM Reconciliation Backstop"
 }
 
 if ! is_empty "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE"; then
   configure_publication_drain_schedule "$CONFIGURE_PUBLICATION_DRAIN_SCHEDULE" "$PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN"
+  exit 0
+fi
+
+if ! is_empty "$CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE"; then
+  configure_reconciliation_backstop_schedule "$CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE" "$RECONCILIATION_BACKSTOP_SCHEDULER_ROLE_ARN"
   exit 0
 fi
 
@@ -1699,6 +1754,13 @@ task_definition_for_mdm_workflow() {
     # sync-graph and verify-graph machinery in one invocation -- sized like
     # mdm_sync_graph (medium), not the smaller mdm_verify_graph-alone cost.
     mdm_run|mdm_backfill_relationships|mdm_sync_graph|mdm_publication_drain) printf '%s\n' "$TASK_DEF_MDM_MEDIUM_ARN" ;;
+    # mdm_reconciliation_backstop (Ticket 50, change-propagation map) runs the
+    # same run_all() as mdm_run, but unbounded (no --limit) and across the
+    # full universe with skip-if-unchanged off -- unmeasured as of this
+    # writing (Ticket 38's own "first measured run sets the duration bound"),
+    # so start conservative on the large profile rather than guess medium is
+    # enough and risk an OOM on the very first real invocation.
+    mdm_reconciliation_backstop) printf '%s\n' "$TASK_DEF_MDM_LARGE_ARN" ;;
     *) fail "unknown MDM workflow: $1" ;;
   esac
 }
@@ -1841,6 +1903,7 @@ mdm_workflow_command_expression() {
     mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'reconcile')" ;;
     mdm_check_fence) printf '%s\n' "States.Array('mdm', 'check-fence')" ;;
     mdm_publication_drain) printf '%s\n' "States.Array('mdm', 'publication-drain')" ;;
+    mdm_reconciliation_backstop) printf '%s\n' "States.Array('mdm', 'reconcile-backstop', '--run-id', \$\$.Execution.Name)" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
     mdm_seed_universe) printf '%s\n' "States.Array('mdm', 'seed-universe', '--tracking-status', '${MDM_SEED_UNIVERSE_TRACKING_STATUS}')" ;;
     *) fail "unknown MDM workflow: $1" ;;
@@ -2333,8 +2396,9 @@ PY
 # mdm_check_connectivity, mdm_run, mdm_backfill_relationships, mdm_sync_graph,
 # mdm_verify_graph, mdm_counts, (Ticket 44, change-propagation map)
 # mdm_check_fence, and (Ticket 36, change-propagation map)
-# mdm_publication_drain -- into one deployed machine, selected via execution input
-# {"mode": "<workflow>"}. Each mode's override chain (limit /
+# mdm_publication_drain, and (Ticket 50, change-propagation map)
+# mdm_reconciliation_backstop -- into one deployed machine, selected via
+# execution input {"mode": "<workflow>"}. Each mode's override chain (limit /
 # relationship_type / limit_per_type) is copied verbatim from
 # write_mdm_workflow_definition's own branching, just with every state name
 # prefixed by the workflow name so all of them can coexist in one flat
@@ -2346,7 +2410,7 @@ write_mdm_utility_definition() {
   local output_file="$1"
   local workflows_json="[" first="true" workflow task_arn default_cmd limit_cmd unbounded_cmd unbounded_relationship_cmd relationship_cmd relationship_limit_cmd limit_per_type_cmd entry
 
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence mdm_publication_drain; do
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence mdm_publication_drain mdm_reconciliation_backstop; do
     task_arn="$(task_definition_for_mdm_workflow "$workflow")"
     default_cmd="$(mdm_workflow_command_expression "$workflow")"
     limit_cmd="$(mdm_workflow_limit_command_expression "$workflow")"

@@ -644,6 +644,38 @@ class MdmChangeLog(Base):
     )
 
 
+class MdmPipelineLease(Base):
+    """Single-row-per-lease-name exclusivity table for full-universe MDM
+    passes (change-propagation Ticket 50: the MDM Reconciliation Backstop).
+
+    Deliberately a smaller, MDM-Postgres-local cousin of
+    ``edgar_warehouse.bookkeeping.models.PipelineRunLease`` (the warehouse's
+    own Bookkeeping Postgres store, a *different* Postgres instance -- see
+    CLAUDE.md's "MDM database" note -- so that table's rows are not reachable
+    from here) -- no ``backstop_overdue`` column: Ticket 50 only asks for
+    "retries on the next slot," which the monthly EventBridge schedule
+    already provides on its own; the Identity Refresh Slot's fuller
+    overdue-takes-priority mechanism is a different subsystem's own decision,
+    not something this ticket asked to replicate.
+    """
+
+    __tablename__ = "mdm_pipeline_lease"
+
+    lease_name: Mapped[str] = mapped_column(Text, primary_key=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    run_id: Mapped[str] = mapped_column(Text, nullable=False)
+    mode: Mapped[str] = mapped_column(Text, nullable=False)
+    acquired_at: Mapped[object] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    released_at: Mapped[Optional[object]] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    updated_at: Mapped[object] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('held','idle')", name="ck_pipeline_lease_status"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # GRAPH REGISTRY TABLES
 # ---------------------------------------------------------------------------

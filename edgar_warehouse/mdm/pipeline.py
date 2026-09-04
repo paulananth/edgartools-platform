@@ -320,6 +320,7 @@ class MDMPipeline:
         resume_ledger_run_id: Optional[str] = None,
         run_id: Optional[str] = None,
         bookkeeping: "BookkeepingStore",
+        reconciliation_pass: bool = False,
     ) -> int:
         """Resolve companies from silver.
 
@@ -500,7 +501,10 @@ class MDMPipeline:
                 )
                 ticker = ticker_by_cik.get(row["cik"])
                 tracking = tracking_by_cik.get(row["cik"])
-                outcome = resolver.resolve_one(worker_ctx, "edgar_cik", row, ticker, tracking)
+                outcome = resolver.resolve_one(
+                    worker_ctx, "edgar_cik", row, ticker, tracking,
+                    reconciliation_pass=reconciliation_pass,
+                )
                 worker_session.commit()
                 return (
                     int(row["cik"]),
@@ -654,7 +658,9 @@ class MDMPipeline:
                 raise
         return processed
 
-    def run_securities(self, limit: Optional[int] = None) -> int:
+    def run_securities(
+        self, limit: Optional[int] = None, *, reconciliation_pass: bool = False
+    ) -> int:
         """Resolve ownership-transaction security titles into MDM entities.
 
         Runs on a bounded thread pool, grouped by (issuer_entity_id,
@@ -761,7 +767,10 @@ class MDMPipeline:
 
         def _process(ctx: ResolverContext, row: dict) -> None:
             issuer_entity_id = company_entity_id_by_cik.get(row.get("issuer_cik"))
-            resolver.resolve_one(ctx, "ownership_filing", row, issuer_entity_id)
+            resolver.resolve_one(
+                ctx, "ownership_filing", row, issuer_entity_id,
+                reconciliation_pass=reconciliation_pass,
+            )
 
         return self._run_grouped_concurrent(
             keyed_rows,
@@ -777,6 +786,7 @@ class MDMPipeline:
         *,
         issuer_ciks: Optional[Iterable[int]] = None,
         owner_ciks: Optional[Iterable[int]] = None,
+        reconciliation_pass: bool = False,
     ) -> int:
         """Resolve Form 3/4/5 reporting owners into MDM person entities.
 
@@ -855,7 +865,8 @@ class MDMPipeline:
 
         def _process(worker_ctx: ResolverContext, row: dict) -> None:
             resolver.resolve_one(worker_ctx, "ownership_filing", row,
-                                  issuer_cik=row.get("issuer_cik"))
+                                  issuer_cik=row.get("issuer_cik"),
+                                  reconciliation_pass=reconciliation_pass)
 
         keyed_rows = [(row.get("owner_cik"), row) for row in cik_rows]
         processed = self._run_grouped_concurrent(
@@ -869,7 +880,8 @@ class MDMPipeline:
         started_at = time.monotonic()
         for row in unscoped_rows:
             resolver.resolve_one(ctx, "ownership_filing", row,
-                                 issuer_cik=row.get("issuer_cik"))
+                                 issuer_cik=row.get("issuer_cik"),
+                                 reconciliation_pass=reconciliation_pass)
             processed += 1
             if processed % log_interval == 0:
                 emit_mdm_event("mdm_progress", domain="person", processed=processed, elapsed_ms=elapsed_ms(started_at))
@@ -1980,8 +1992,21 @@ class MDMPipeline:
         resume_ledger_run_id: Optional[str] = None,
         run_id: Optional[str] = None,
         bookkeeping: "BookkeepingStore",
+        reconciliation_pass: bool = False,
     ) -> PipelineStats:
         """Resolve all 5 entity types, then derive relationships.
+
+        ``reconciliation_pass`` (change-propagation Ticket 50, the MDM
+        Reconciliation Backstop) turns off every step's skip-if-unchanged
+        shortcut and routes company/security/person rescoring through
+        BaseResolver's finding-disposition logic instead of a plain merge
+        -- see reconciliation_backstop.py and resolvers/base.py's
+        ``_reconcile_against_existing`` docstring. Not threaded to
+        run_advisers/run_funds: adv_bulk.py's bulk rewrite has no
+        skip-if-unchanged shortcut and never produces a MatchVerdict at all
+        (confirmed by reading it), so there is nothing for this flag to
+        turn off there -- adding an always-inert parameter to those two
+        calls would be pure Speculative Generality.
 
         mdm-run-step-parallelism wayfinder map, ticket 02: the 5
         entity-resolution steps run as concurrent top-level futures instead
@@ -2034,11 +2059,18 @@ class MDMPipeline:
                     resume_ledger_run_id=resume_ledger_run_id,
                     run_id=run_id,
                     bookkeeping=bookkeeping,
+                    reconciliation_pass=reconciliation_pass,
                 ),
             ),
             ("advisers_processed", lambda wp: wp.run_advisers(limit=limit)),
-            ("securities_processed", lambda wp: wp.run_securities(limit=limit)),
-            ("persons_processed", lambda wp: wp.run_persons(limit=limit)),
+            (
+                "securities_processed",
+                lambda wp: wp.run_securities(limit=limit, reconciliation_pass=reconciliation_pass),
+            ),
+            (
+                "persons_processed",
+                lambda wp: wp.run_persons(limit=limit, reconciliation_pass=reconciliation_pass),
+            ),
             ("funds_processed", lambda wp: wp.run_funds(limit=limit)),
         )
 
@@ -2161,7 +2193,8 @@ class MDMPipeline:
                 ]
                 if neighbor_owner_ciks:
                     stats.neighbor_persons_rechecked = self.run_persons(
-                        owner_ciks=neighbor_owner_ciks
+                        owner_ciks=neighbor_owner_ciks,
+                        reconciliation_pass=reconciliation_pass,
                     )
 
         stats.relationship_counts_by_type = self.derive_relationships(target_per_type=limit)
