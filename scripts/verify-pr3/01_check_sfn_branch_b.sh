@@ -163,7 +163,7 @@ if len(branches) == 2:
         "Branch B windows via --cik-offset/--cik-limit (no --cik-list)")
 
 # ── MDM chain intact ──
-chk(S.get("Mastering", {}).get("Next") == "MdmBackfill", "Mastering present, chains to MdmBackfill")
+chk(S.get("Mastering", {}).get("Next") == "Infer Relationships", "Mastering present, chains to Infer Relationships")
 chk("GoldRefresh" in S and "WriteRunSummary" in S, "GoldRefresh + WriteRunSummary still present")
 
 for status, msg in results:

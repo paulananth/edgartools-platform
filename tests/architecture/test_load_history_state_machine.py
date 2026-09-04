@@ -462,7 +462,7 @@ def test_mdm_export_precedes_mdm_sync_graph(definition: dict) -> None:
 
 
 def test_mdm_backfill_chains_to_export_not_directly_to_sync(definition: dict) -> None:
-    assert definition["States"]["MdmBackfill"]["Next"] == "Publish"
+    assert definition["States"]["Infer Relationships"]["Next"] == "Publish"
 
 
 # -- fix-pipelines 06-03: DISTRIBUTED Map mode + total_cik_limit CIK-scoping ---------------
@@ -580,7 +580,7 @@ def test_every_states_task_definition_matches_expected_profile(definition: dict)
         "top.FetchFirmRosterForced": "arn:wh-medium",
         "top.IngestFirmRosterSources": "arn:wh-medium",
         "top.Mastering": "arn:mdm-medium",
-        "top.MdmBackfill": "arn:mdm-medium",
+        "top.Infer Relationships": "arn:mdm-medium",
         "top.Publish": "arn:mdm-medium",
         "top.Publish Relationships": "arn:mdm-medium",
         "top.Reconcile": "arn:mdm-small",

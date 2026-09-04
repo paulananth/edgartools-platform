@@ -207,6 +207,14 @@ def test_sweep_requires_silver_landing_export_root(tmp_path) -> None:
 
 
 def test_sweep_end_to_end_writes_full_row_and_emits_completed_event(tmp_path) -> None:
+    # connect_with_qmark_paramstyle imports the real snowflake.connector
+    # module to scope its global (see the module's own docstring); this
+    # test's row-processing assertions don't need that real package, and
+    # CI's "MDM tests" job installs the `mdm` extra, not `snowflake` -- so
+    # bypass the dance entirely and go straight to the fake settings'
+    # .connect(). test_sweep_connects_with_qmark_paramstyle (below) is the
+    # one test that exercises the real dance, gated on
+    # pytest.importorskip("snowflake.connector").
     mdm_db_path = tmp_path / "mdm.sqlite"
     engine = create_engine(f"sqlite:///{mdm_db_path}")
     Base.metadata.create_all(engine)
@@ -229,6 +237,10 @@ def test_sweep_end_to_end_writes_full_row_and_emits_completed_event(tmp_path) ->
 
     with patch.dict(os.environ, {"MDM_DATABASE_URL": f"sqlite:///{mdm_db_path}"}), \
          patch("edgar_warehouse.mdm_entity_backfill._silver_connection_settings", return_value=fake_settings), \
+         patch(
+             "edgar_warehouse.silver_support.snowflake_reader.connect_with_qmark_paramstyle",
+             side_effect=lambda settings_factory: settings_factory().connect(),
+         ), \
          patch("edgar_warehouse.serving.silver_landing_writer.write_landing_export") as mock_write, \
          patch("edgar_warehouse.application.warehouse_orchestrator._emit_pipeline_event") as mock_emit:
         mock_write.return_value = {"sec_company": 1}
@@ -259,6 +271,45 @@ def test_sweep_end_to_end_writes_full_row_and_emits_completed_event(tmp_path) ->
     assert mock_emit.call_args.kwargs["totals"]["sec_company"] == 1
 
 
+def test_sweep_connects_with_qmark_paramstyle(tmp_path) -> None:
+    """bronze-capture-oom-adjacent live prod crash, 2026-09-02:
+    _fetch_pending_rows_batches builds `?`-style SQL, but
+    snowflake-connector-python defaults to pyformat and only honors qmark
+    when the module-global paramstyle is set to "qmark" at connect() time
+    (see connect_with_qmark_paramstyle's own docstring) -- confirmed live
+    via TypeError: not all arguments converted during string formatting.
+    The prior end-to-end test mocks _silver_connection_settings with a
+    plain MagicMock, which never exercises this timing at all; this test
+    uses a settings double that records the ambient paramstyle at the
+    moment .connect() is called, the same technique
+    test_connect_with_qmark_paramstyle.py uses for the shared helper
+    itself."""
+    sc = pytest.importorskip("snowflake.connector")
+
+    mdm_db_path = tmp_path / "mdm.sqlite"
+    engine = create_engine(f"sqlite:///{mdm_db_path}")
+    Base.metadata.create_all(engine)
+    engine.dispose()
+
+    fake_connection = _FakeConnection({"SEC_COMPANY": (["CIK", "ENTITY_NAME", "MDM_ENTITY_ID"], [])})
+    from tests.unit._fake_snowflake import RecordingConnectSettings
+
+    recording_settings = RecordingConnectSettings(fake_connection)
+
+    context = _local_context(tmp_path)
+
+    with patch.dict(os.environ, {"MDM_DATABASE_URL": f"sqlite:///{mdm_db_path}"}), \
+         patch("edgar_warehouse.mdm_entity_backfill._silver_connection_settings", return_value=recording_settings), \
+         patch("edgar_warehouse.serving.silver_landing_writer.write_landing_export") as mock_write, \
+         patch("edgar_warehouse.application.warehouse_orchestrator._emit_pipeline_event"):
+        mock_write.return_value = {}
+        from edgar_warehouse.mdm_entity_backfill import run_mdm_entity_backfill_sweep
+
+        run_mdm_entity_backfill_sweep(context, "test-run")
+
+    assert recording_settings.paramstyle_during_connect == "qmark"
+
+
 def test_sweep_reports_remaining_null_count_for_unresolved_rows(tmp_path) -> None:
     """mdm-ahead-of-silver ticket 05's stuck-NULL alarm watches
     remaining_null_count -- rows with no matching MdmSourceRef yet must be
@@ -282,6 +333,10 @@ def test_sweep_reports_remaining_null_count_for_unresolved_rows(tmp_path) -> Non
 
     with patch.dict(os.environ, {"MDM_DATABASE_URL": f"sqlite:///{mdm_db_path}"}), \
          patch("edgar_warehouse.mdm_entity_backfill._silver_connection_settings", return_value=fake_settings), \
+         patch(
+             "edgar_warehouse.silver_support.snowflake_reader.connect_with_qmark_paramstyle",
+             side_effect=lambda settings_factory: settings_factory().connect(),
+         ), \
          patch("edgar_warehouse.serving.silver_landing_writer.write_landing_export", return_value={}), \
          patch("edgar_warehouse.application.warehouse_orchestrator._emit_pipeline_event"):
         from edgar_warehouse.mdm_entity_backfill import run_mdm_entity_backfill_sweep
