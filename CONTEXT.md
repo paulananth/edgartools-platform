@@ -60,6 +60,10 @@ _Avoid_: Silver row as download proof, S3 presence alone, parser upgrade as auto
 The recurring company-identity refresh for tracked entities whose recent SEC daily-index activity signals that their submissions state may have changed.
 _Avoid_: Daily full-universe identity sweep, filing ingestion
 
+**Find Companies To Check Today**:
+The step that resolves which tracked companies belong in a Daily Identity Refresh's scope, by reading the trailing lookback window of SEC daily indexes for filing activity; it only builds that scope and does not itself re-fetch or re-resolve any company-identity data. Implemented as the `compute-identity-refresh-window` command / `FindCompaniesWithNewFilings` state.
+_Avoid_: Treating this as the refresh itself (Daily Identity Refresh processes the scope this step produces), re-scanning the complete tracked universe (that is Identity Backstop Sweep's job), a data-mutating step
+
 **Identity Backstop Sweep**:
 The periodic refresh of company identity across the complete active company-eligible universe (`entity_type = operating` or present in the captured canonical SEC ticker snapshot), covering administrative submissions changes that have no filing signal.
 _Avoid_: Daily identity refresh, historical filing backfill, MDM Reconciliation Backstop

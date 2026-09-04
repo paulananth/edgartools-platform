@@ -7,7 +7,7 @@ Generates the real write_warehouse_mdm_gold_definition() state machine JSON
 tests/architecture/test_gold_affecting_commands_task_sizing.py) and asserts:
 
 - daily_incremental's default path (no refresh_mode input, or refresh_mode
-  != "backstop") routes through the new bounded ComputeIdentityRefreshWindow
+  != "backstop") routes through the new bounded FindCompaniesWithNewFilings
   -> ResolveCompanyIdentityBounded stages, NOT the full-universe ComputeWindows
   path that took 10h16m alone on the first prod execution (ticket 45's
   evidence).
@@ -123,9 +123,9 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     states = daily_incremental_definition["States"]
     refresh_mode = states["RefreshMode"]
     assert refresh_mode["Type"] == "Choice"
-    assert refresh_mode["Default"] == "ComputeIdentityRefreshWindow"
+    assert refresh_mode["Default"] == "FindCompaniesWithNewFilings"
 
-    compute_window = states["ComputeIdentityRefreshWindow"]
+    compute_window = states["FindCompaniesWithNewFilings"]
     cmd = compute_window["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "compute-identity-refresh-window" in cmd
     assert "'--mode', 'daily'" in cmd
@@ -228,7 +228,7 @@ def test_daily_incremental_both_modes_share_explicit_cik_stage0(
     daily_incremental_definition,
 ) -> None:
     states = daily_incremental_definition["States"]
-    assert states["ComputeIdentityRefreshWindow"]["Next"] == (
+    assert states["FindCompaniesWithNewFilings"]["Next"] == (
         "ResolveCompanyIdentityBounded"
     )
     assert states["ComputeIdentityBackstopUniverse"]["Next"] == (
@@ -472,7 +472,7 @@ def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
 def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
     daily_incremental_definition,
 ) -> None:
-    """release-readiness ticket 86: ComputeIdentityRefreshWindow/
+    """release-readiness ticket 86: FindCompaniesWithNewFilings/
     ComputeIdentityBackstopUniverse/ResolveCompanyIdentityBounded/
     ReduceIdentityRefresh/RunWarehouseTask had no Catch at all -- a real
     failure in any of them wedged sec_fetch_active for the full 16h
@@ -484,7 +484,7 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
         {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
     ]
     for previously_uncaught_state in (
-        "ComputeIdentityRefreshWindow",
+        "FindCompaniesWithNewFilings",
         "ComputeIdentityBackstopUniverse",
         "ResolveCompanyIdentityBounded",
         "ReduceIdentityRefresh",

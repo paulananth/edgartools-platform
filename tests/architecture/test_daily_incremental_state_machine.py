@@ -230,14 +230,14 @@ def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_s
 ) -> None:
     """The default (no refresh_mode input) path no longer runs the
     full-universe ComputeWindows/Stage0CompanyIdentity pair -- it runs the
-    bounded ComputeIdentityRefreshWindow/ResolveCompanyIdentityBounded pair
+    bounded FindCompaniesWithNewFilings/ResolveCompanyIdentityBounded pair
     instead (ticket 45/49). Backstop uses the same explicit-CIK stage with a
     complete company-eligible input."""
     order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
-    assert "ComputeIdentityRefreshWindow" in order
+    assert "FindCompaniesWithNewFilings" in order
     assert "ResolveCompanyIdentityBounded" in order
     assert "RunWarehouseTask" in order
-    assert order.index("ComputeIdentityRefreshWindow") < order.index("ResolveCompanyIdentityBounded")
+    assert order.index("FindCompaniesWithNewFilings") < order.index("ResolveCompanyIdentityBounded")
     assert order.index("ResolveCompanyIdentityBounded") < order.index("RunWarehouseTask")
 
 
@@ -466,7 +466,7 @@ def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null
 
 def test_daily_tasks_before_force_check_preserve_operator_input(daily_definition: dict) -> None:
     for state_name in (
-        "ComputeIdentityRefreshWindow",
+        "FindCompaniesWithNewFilings",
         "ComputeIdentityBackstopUniverse",
         "RunWarehouseTask",
     ):

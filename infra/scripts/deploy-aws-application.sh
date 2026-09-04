@@ -4407,20 +4407,26 @@ refresh_mode = {
             "Next": "ComputeIdentityBackstopUniverse",
         }
     ],
-    "Default": "ComputeIdentityRefreshWindow",
+    "Default": "FindCompaniesWithNewFilings",
 }
 
-compute_identity_refresh_window = ecs_state(wh_medium_arn,
+# CONTEXT.md: "Find Companies To Check Today" -- resolves this run's Daily
+# Identity Refresh scope from the trailing SEC daily-index lookback window;
+# it does not itself re-fetch or re-resolve any company-identity data.
+# State renamed (was ComputeIdentityRefreshWindow) for a business-readable
+# name; the underlying `compute-identity-refresh-window` CLI command is
+# unchanged.
+find_companies_with_new_filings = ecs_state(wh_medium_arn,
     "States.Array('compute-identity-refresh-window', '--mode', 'daily', "
     "'--lookback-days', '7', "
     "'--batch-size', '500', '--run-id', $$.Execution.Name)",
     next_state="ResolveCompanyIdentityBounded")
-compute_identity_refresh_window["ResultPath"] = None
+find_companies_with_new_filings["ResultPath"] = None
 # ticket 86: previously uncaught -- these states, plus
 # ResolveCompanyIdentityBounded/ReduceIdentityRefresh/RunWarehouseTask
 # below, are all inside the sec_fetch_active fetch-heavy span with no
 # release-on-failure path before this fix.
-compute_identity_refresh_window["Catch"] = sec_fetch_task_catch()
+find_companies_with_new_filings["Catch"] = sec_fetch_task_catch()
 
 compute_identity_backstop_universe = ecs_state(wh_medium_arn,
     "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
@@ -4692,7 +4698,7 @@ definition = {
         "Deferred":           deferred,
         **sec_fetch_lease_states,
         "RefreshMode":        refresh_mode,
-        "ComputeIdentityRefreshWindow": compute_identity_refresh_window,
+        "FindCompaniesWithNewFilings": find_companies_with_new_filings,
         "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
         "ResolveCompanyIdentityBounded": stage0_company_identity_bounded,
         "ReduceIdentityRefresh": reduce_identity_refresh,
@@ -5044,7 +5050,7 @@ seed_from_bronze = ecs_state(wh_medium_arn,
 # States.ItemReaderFailed on every fresh (non-resumed) execution, 100% of
 # the time, confirmed live. Every other "do work but preserve $ for a
 # downstream state" ecs_state() call in this file (seed, mdm_seed_universe,
-# compute_windows, fetch_adv_bulk, run_wh, compute_identity_refresh_window,
+# compute_windows, fetch_adv_bulk, run_wh, find_companies_with_new_filings,
 # etc. -- 30+ instances) already sets this explicitly; this was a genuine
 # omission from pipeline-resumability ticket 02, not touched since.
 seed_from_bronze["ResultPath"] = None
