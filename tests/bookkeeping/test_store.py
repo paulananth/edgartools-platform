@@ -938,55 +938,15 @@ class TestDailyIndexFiling:
         assert store.get_pending_checkpoint_dates("2026-08-28") == ["2026-08-25", "2026-08-26"]
 
 
-# -- sec_reconcile_finding -----------------------------------------------------
-
-
-class TestReconcileFinding:
-    def test_insert_then_get(self, store: BookkeepingStore) -> None:
-        n = store.insert_reconcile_findings(
-            [
-                {
-                    "reconcile_run_id": "r1",
-                    "cik": 1,
-                    "scope_type": "full",
-                    "object_type": "filing",
-                    "object_key": "0001",
-                    "drift_type": "hash_mismatch",
-                }
-            ]
-        )
-        assert n == 1
-        rows = store.get_reconcile_findings("r1")
-        assert len(rows) == 1
-        assert rows[0]["severity"] == "medium"
-        assert rows[0]["status"] == "detected"
-
-    def test_upsert_overwrites_on_conflict(self, store: BookkeepingStore) -> None:
-        base = {
-            "reconcile_run_id": "r1",
-            "cik": 1,
-            "scope_type": "full",
-            "object_type": "filing",
-            "object_key": "0001",
-            "drift_type": "hash_mismatch",
-        }
-        store.insert_reconcile_findings([base])
-        store.insert_reconcile_findings([{**base, "status": "resolved"}])
-        rows = store.get_reconcile_findings("r1")
-        assert len(rows) == 1
-        assert rows[0]["status"] == "resolved"
-
-
-# -- get_table_counts (narrow, 11-table version) -------------------------------
+# -- get_table_counts (narrow, 10-table version) -------------------------------
 
 
 class TestTableCounts:
-    def test_counts_all_11_tables(self, store: BookkeepingStore) -> None:
+    def test_counts_all_10_tables(self, store: BookkeepingStore) -> None:
         store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
         counts = store.get_table_counts()
-        assert len(counts) == 11
+        assert len(counts) == 10
         assert counts["sec_company_sync_state"] == 1
-        assert counts["sec_reconcile_finding"] == 0
 
 
 # -- get_all_company_sync_states (Ticket 03) -----------------------------------

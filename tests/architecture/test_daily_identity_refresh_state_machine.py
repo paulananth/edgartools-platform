@@ -37,7 +37,7 @@ _WMG_END = "\nPY\n}\n"
 
 # write_warehouse_mdm_gold_definition calls command_task_profile()
 # internally (task-profile-consolidation ticket 02) to resolve
-# RunWarehouseTask's profile -- extracted and sourced alongside it below.
+# CaptureAndVerifyNewFilings's profile -- extracted and sourced alongside it below.
 _COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
 _COMMAND_TASK_PROFILE_END = "\n}\n"
 
@@ -161,14 +161,14 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     reducer = states["ReduceIdentityRefresh"]
     reducer_cmd = reducer["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "reduce-identity-refresh" in reducer_cmd
-    assert reducer["Next"] == "RunWarehouseTask"
+    assert reducer["Next"] == "CaptureAndVerifyNewFilings"
 
 
 def test_reduce_identity_refresh_runs_on_the_large_task_definition(daily_incremental_definition) -> None:
     """Release-readiness ticket 83: a real prod run was OOM-killed (exit 137)
     on the medium (4096MB) task definition mid-merge on the largest
     protected table. Must run on large (8192MB), matching the
-    gold-build-memory-reliability precedent's RunWarehouseTask move --
+    gold-build-memory-reliability precedent's CaptureAndVerifyNewFilings move --
     confirmed to fail against the pre-fix wh_medium_arn wiring."""
     reducer = daily_incremental_definition["States"]["ReduceIdentityRefresh"]
     assert reducer["Parameters"]["TaskDefinition"] == _FAKE_LARGE_ARN
@@ -474,7 +474,7 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
 ) -> None:
     """release-readiness ticket 86: FindCompaniesWithNewFilings/
     ComputeIdentityBackstopUniverse/ResolveCompanyIdentityBounded/
-    ReduceIdentityRefresh/RunWarehouseTask had no Catch at all -- a real
+    ReduceIdentityRefresh/CaptureAndVerifyNewFilings had no Catch at all -- a real
     failure in any of them wedged sec_fetch_active for the full 16h
     stale-reclaim window. Deliberately excludes FetchAdvBulk/
     IngestFirmRosterSources etc., which already had their own Catch
@@ -488,7 +488,7 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
         "ComputeIdentityBackstopUniverse",
         "ResolveCompanyIdentityBounded",
         "ReduceIdentityRefresh",
-        "RunWarehouseTask",
+        "CaptureAndVerifyNewFilings",
     ):
         assert states[previously_uncaught_state]["Catch"] == expected_catch
 

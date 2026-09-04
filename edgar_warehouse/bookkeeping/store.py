@@ -1,14 +1,14 @@
-"""BookkeepingStore: SQLAlchemy-backed store for the 11 operational tables.
+"""BookkeepingStore: SQLAlchemy-backed store for the 10 operational tables.
 
 Ported 1:1 from edgar_warehouse.silver_store.SilverDatabase's equivalent
 methods (DuckDB Retirement Cutover Ticket 02). Method names and signatures
 match the originals so Ticket 03's caller repointing is close to mechanical.
 Two methods from the original surface are deliberately NOT ported here:
-`get_all_filing_texts` (queries sec_filing_text, not one of these 11 tables)
+`get_all_filing_texts` (queries sec_filing_text, not one of these 10 tables)
 and `get_company_identity_ciks` (a cross-store join against sec_company/
 sec_company_ticker) -- both are Ticket 03's territory, see that ticket and
 Ticket 02's own file for the full reasoning. `get_table_counts` here is a
-narrowed, 11-table-only reimplementation; the original's whole-database
+narrowed, 10-table-only reimplementation; the original's whole-database
 contract is also Ticket 03's job (merging this store's counts with DuckDB's
 remaining content-table counts).
 """
@@ -34,7 +34,6 @@ from edgar_warehouse.bookkeeping.models import (
     SecCompanySyncState,
     SecDailyIndexCheckpoint,
     SecParseRun,
-    SecReconcileFinding,
     SecSourceCheckpoint,
     SecSyncRun,
     StgDailyIndexFiling,
@@ -1062,69 +1061,7 @@ class BookkeepingStore:
         rows = self._session.execute(stmt).all()
         return [{"cik": r[0]} for r in rows]
 
-    # -- sec_reconcile_finding -----------------------------------------------
-
-    def insert_reconcile_findings(self, rows: list[dict[str, Any]]) -> int:
-        insert_factory = self._insert_factory()
-        count = 0
-        for row in rows:
-            detected_at = row.get("detected_at") or datetime.now(timezone.utc)
-            stmt = insert_factory(SecReconcileFinding).values(
-                reconcile_run_id=row["reconcile_run_id"],
-                cik=row["cik"],
-                scope_type=row["scope_type"],
-                object_type=row["object_type"],
-                object_key=row["object_key"],
-                drift_type=row["drift_type"],
-                expected_value_hash=row.get("expected_value_hash"),
-                actual_value_hash=row.get("actual_value_hash"),
-                severity=row.get("severity", "medium"),
-                recommended_action=row.get("recommended_action", "manual_review"),
-                status=row.get("status", "detected"),
-                detected_at=detected_at,
-                resolved_at=row.get("resolved_at"),
-                resync_run_id=row.get("resync_run_id"),
-            )
-            excluded = stmt.excluded
-            stmt = stmt.on_conflict_do_update(
-                index_elements=[
-                    SecReconcileFinding.reconcile_run_id,
-                    SecReconcileFinding.cik,
-                    SecReconcileFinding.scope_type,
-                    SecReconcileFinding.object_type,
-                    SecReconcileFinding.object_key,
-                    SecReconcileFinding.drift_type,
-                ],
-                set_={
-                    "expected_value_hash": excluded.expected_value_hash,
-                    "actual_value_hash": excluded.actual_value_hash,
-                    "severity": excluded.severity,
-                    "recommended_action": excluded.recommended_action,
-                    "status": excluded.status,
-                    "detected_at": excluded.detected_at,
-                    "resolved_at": excluded.resolved_at,
-                    "resync_run_id": excluded.resync_run_id,
-                },
-            )
-            self._session.execute(stmt)
-            count += 1
-        return count
-
-    def get_reconcile_findings(self, reconcile_run_id: str) -> list[dict[str, Any]]:
-        stmt = (
-            select(SecReconcileFinding)
-            .where(SecReconcileFinding.reconcile_run_id == reconcile_run_id)
-            .order_by(
-                SecReconcileFinding.cik,
-                SecReconcileFinding.scope_type,
-                SecReconcileFinding.object_type,
-                SecReconcileFinding.object_key,
-            )
-        )
-        rows = self._session.execute(stmt).scalars().all()
-        return [self._to_dict(r) for r in rows]
-
-    # -- narrowed get_table_counts (11 tables only; see module docstring) ----
+    # -- narrowed get_table_counts (10 tables only; see module docstring) ----
 
     def get_table_counts(self) -> dict[str, int]:
         # Looks up the Core Table straight from Base.metadata (keyed by the

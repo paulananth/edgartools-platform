@@ -49,7 +49,6 @@ _DEFAULT_MANIFEST_COMMANDS = frozenset(
         "bootstrap-next",
         "daily-incremental",
         "targeted-resync",
-        "full-reconcile",
     }
 )
 _REFERENCE_SOURCES = frozenset({"company_tickers", "company_tickers_exchange"})

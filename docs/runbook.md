@@ -960,8 +960,8 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
 
 ### Bookkeeping Store Cutover (DuckDB Retirement, in progress)
 
-- **The 11 operational bookkeeping tables** (checkpoints, sync-state, leases,
-  the run audit trail, the gold publish manifest, and reconcile findings —
+- **The 10 operational bookkeeping tables** (checkpoints, sync-state, leases,
+  the run audit trail, and the gold publish manifest —
   see `.scratch/duckdb-retirement-cutover/issues/02-move-bookkeeping-tables-to-snowflake-postgres.md`)
   are moving off DuckDB onto a dedicated Snowflake-hosted Postgres store
   (`edgar_warehouse/bookkeeping/`, `BOOKKEEPING_DATABASE_URL`).

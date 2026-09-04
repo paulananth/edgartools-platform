@@ -3938,7 +3938,7 @@ class SilverDatabase:
     def get_table_counts(self) -> dict[str, int]:
         """Return current row count for every silver table, keyed by table name.
 
-        DuckDB Retirement Cutover Ticket 14: the 11 ``BOOKKEEPING_TABLES``
+        DuckDB Retirement Cutover Ticket 14: the 10 ``BOOKKEEPING_TABLES``
         names are excluded here on purpose, from both the baseline set and
         the live ``duckdb_tables()`` result -- these tables moved to the
         Postgres-backed ``BookkeepingStore`` and are no longer written via

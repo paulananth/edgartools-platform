@@ -1,4 +1,4 @@
-"""SQLAlchemy models for the 11 operational bookkeeping tables.
+"""SQLAlchemy models for the 10 operational bookkeeping tables.
 
 Ported from the DuckDB DDL in edgar_warehouse.silver_store's `_DDL` string
 (DuckDB Retirement Cutover Ticket 02). Type mapping: DuckDB `TIMESTAMPTZ` ->
@@ -317,42 +317,9 @@ class SecCompanySyncState(Base):
     last_error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
-class SecReconcileFinding(Base):
-    __tablename__ = "sec_reconcile_finding"
-    __table_args__ = (
-        PrimaryKeyConstraint(
-            "reconcile_run_id",
-            "cik",
-            "scope_type",
-            "object_type",
-            "object_key",
-            "drift_type",
-        ),
-    )
-
-    reconcile_run_id: Mapped[str] = mapped_column(Text, nullable=False)
-    cik: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    scope_type: Mapped[str] = mapped_column(Text, nullable=False)
-    object_type: Mapped[str] = mapped_column(Text, nullable=False)
-    object_key: Mapped[str] = mapped_column(Text, nullable=False)
-    drift_type: Mapped[str] = mapped_column(Text, nullable=False)
-    expected_value_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    actual_value_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    severity: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    recommended_action: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    detected_at: Mapped[Optional[object]] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
-    resolved_at: Mapped[Optional[object]] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
-    resync_run_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-
-#: The 11 in-scope table names, in dependency-free (no FKs between them)
+#: The 10 in-scope table names, in dependency-free (no FKs between them)
 #: alphabetical-ish grouping order -- used by the provisioning script and by
-#: BookkeepingStore.get_table_counts' narrow (11-table) implementation.
+#: BookkeepingStore.get_table_counts' narrow (10-table) implementation.
 BOOKKEEPING_TABLES: tuple[str, ...] = (
     "sec_company_sync_state",
     "sec_source_checkpoint",
@@ -364,5 +331,4 @@ BOOKKEEPING_TABLES: tuple[str, ...] = (
     "sec_daily_index_checkpoint",
     "stg_daily_index_filing",
     "gold_manifest",
-    "sec_reconcile_finding",
 )

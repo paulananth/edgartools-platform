@@ -246,19 +246,18 @@ SEC EDGAR API
 
 ## Issue 11 — No end-to-end data quality validation framework
 
-**Observation:** `full-reconcile` checks SEC drift (is bronze in sync with SEC upstream?), not gold-vs-silver consistency, row count thresholds, or cross-table referential integrity.
+**Observation:** There is now no automated upstream-drift check at all (is bronze in sync with SEC upstream?), let alone gold-vs-silver consistency, row count thresholds, or cross-table referential integrity. `full-reconcile` was this codebase's only such check — decommissioned entirely (zero executions ever, no schedule, `edgar_warehouse/reconcile.py` deleted) since this observation was first written, widening this gap rather than closing it.
 
 **5-Whys:**
-1. Only upstream drift (bronze vs SEC) is checked systematically
-2. Downstream quality (silver vs gold, row counts, NULL ratios) has no automated gates
-3. Each team member relies on ad-hoc queries for quality checks
-4. No quality SLAs or metrics are defined for the pipeline
-5. Quality validation scope was limited to the reconcile command added for SEC sync
+1. No upstream drift (bronze vs SEC) or downstream quality (silver vs gold, row counts, NULL ratios) is checked systematically anymore
+2. Each team member relies on ad-hoc queries for quality checks
+3. No quality SLAs or metrics are defined for the pipeline
+4. The one prior systematic check (`full-reconcile`) was scoped to upstream drift only, and was itself removed for being unused (zero executions ever) rather than widened
+5. Quality validation was never treated as its own cross-layer concern separate from any one command's own scope
 
-**Root cause:** Quality validation is limited to upstream-drift detection; downstream data quality is assumed correct.
+**Root cause:** Quality validation has never been treated as a first-class, cross-layer concern; the one prior attempt was narrowly scoped and has since been removed rather than replaced.
 
 **Affected files:**
-- `edgar_warehouse/reconcile.py` — limited to SEC drift detection
 - `edgar_warehouse/silver_store.py` — `get_table_counts()` exists but is unused in CI/gates
 - `tests/` — no cross-layer consistency tests
 

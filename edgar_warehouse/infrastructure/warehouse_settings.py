@@ -16,7 +16,6 @@ SERVING_EXPORT_COMMANDS = frozenset(
         # gold-refresh handles the single gold build after all batches complete.
         "daily-incremental",
         "targeted-resync",
-        "full-reconcile",
         "seed-universe",
         "gold-refresh",
     }

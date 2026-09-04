@@ -34,23 +34,31 @@ logger = logging.getLogger(__name__)
 # Table routing configuration
 # ---------------------------------------------------------------------------
 
-# DuckDB Retirement Cutover Ticket 15 review (decided, left as-is): 7 of the
-# 11 bookkeeping tables appear below (sec_company_sync_state,
-# sec_reconcile_finding in CIK_DIRECT_TABLES; sec_sync_run,
-# sec_source_checkpoint, sec_daily_index_checkpoint, stg_daily_index_filing,
-# sec_parse_run in GLOBAL_TABLES) even though none of them are written to any
-# DuckDB shard by the live pipeline anymore -- they moved to the
-# Postgres-backed BookkeepingStore (Tickets 13-15). Deliberately NOT removed
-# from this routing config: this command's whole purpose is faithfully
-# copying whatever rows physically exist in a source silver.duckdb file into
-# 4 shards, including an operator re-running it against an older,
-# pre-cutover monolith that still has real (not just frozen-stale) rows in
-# these tables -- removing the entries would silently DROP that historical
-# data on migration instead of copying it. The physical DuckDB tables and
-# their rows aren't going away as part of this ticket set, only the live
+# DuckDB Retirement Cutover Ticket 15 review (decided, left as-is): 6 of the
+# 10 bookkeeping tables appear below (sec_company_sync_state in
+# CIK_DIRECT_TABLES; sec_sync_run, sec_source_checkpoint,
+# sec_daily_index_checkpoint, stg_daily_index_filing, sec_parse_run in
+# GLOBAL_TABLES) even though none of them are written to any DuckDB shard by
+# the live pipeline anymore -- they moved to the Postgres-backed
+# BookkeepingStore (Tickets 13-15). Deliberately NOT removed from this
+# routing config: this command's whole purpose is faithfully copying
+# whatever rows physically exist in a source silver.duckdb file into 4
+# shards, including an operator re-running it against an older, pre-cutover
+# monolith that still has real (not just frozen-stale) rows in these tables
+# -- removing the entries would silently DROP that historical data on
+# migration instead of copying it. The physical DuckDB tables and their
+# rows aren't going away as part of this ticket set, only the live
 # read/write call sites; this migration tool's job (faithful row copy) is
 # unaffected by where writes happen going forward. Cost of leaving this
 # as-is is zero: migrating stale/frozen bookkeeping-table rows into a shard
+#
+# sec_reconcile_finding stays in CIK_DIRECT_TABLES below despite no longer
+# being one of BookkeepingStore's tables at all -- full-reconcile (its only
+# writer, both DuckDB- and Postgres-side) was decommissioned entirely, so
+# this is now a purely legacy DuckDB artifact rather than a
+# migrated-to-Postgres one, but the same historical-row-preservation
+# argument applies unchanged: an operator migrating an old monolith may
+# still have real drift-finding rows captured before the decommission.
 # nothing reads them from anymore (ShardedSilverReader's own bookkeeping-table
 # entries are a separate, already-tracked cleanup -- see that ticket's
 # deferred item) has no functional effect.

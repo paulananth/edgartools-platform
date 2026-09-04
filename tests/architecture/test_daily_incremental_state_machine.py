@@ -5,7 +5,7 @@ Covers the Company Identity Pipeline wayfinder map's ticket 06 (see
 
 - daily_incremental is restructured with a new Stage0CompanyIdentity phase,
   reusing ticket 05's exact windowed capture shape (ComputeWindows + a
-  strict, MaxConcurrency=1 Map), ahead of the existing RunWarehouseTask/MDM
+  strict, MaxConcurrency=1 Map), ahead of the existing CaptureAndVerifyNewFilings/MDM
   chain.
 
 (bootstrap, the other former caller of write_warehouse_mdm_gold_definition,
@@ -37,7 +37,7 @@ _END_MARKER = "\nPY\n}\n"
 
 # write_warehouse_mdm_gold_definition calls command_task_profile()
 # internally (task-profile-consolidation ticket 02) to resolve
-# RunWarehouseTask's profile -- extracted and sourced alongside it below.
+# CaptureAndVerifyNewFilings's profile -- extracted and sourced alongside it below.
 _COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
 _COMMAND_TASK_PROFILE_END = "\n}\n"
 
@@ -236,9 +236,9 @@ def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_s
     order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
     assert "FindCompaniesWithNewFilings" in order
     assert "ResolveCompanyIdentityBounded" in order
-    assert "RunWarehouseTask" in order
+    assert "CaptureAndVerifyNewFilings" in order
     assert order.index("FindCompaniesWithNewFilings") < order.index("ResolveCompanyIdentityBounded")
-    assert order.index("ResolveCompanyIdentityBounded") < order.index("RunWarehouseTask")
+    assert order.index("ResolveCompanyIdentityBounded") < order.index("CaptureAndVerifyNewFilings")
 
 
 def test_daily_incremental_stage0_company_identity_command_shape(daily_definition: dict) -> None:
@@ -301,9 +301,9 @@ def test_daily_incremental_no_seed_universe(daily_definition: dict) -> None:
 def test_daily_filing_ingestion_does_not_inherit_identity_cik_batches(
     daily_definition: dict,
 ) -> None:
-    """The company filter scopes Stage 0 only. RunWarehouseTask retains the
+    """The company filter scopes Stage 0 only. CaptureAndVerifyNewFilings retains the
     ordinary daily-incremental filing contract and receives no identity batch."""
-    cmd = _command_of(daily_definition, "RunWarehouseTask")
+    cmd = _command_of(daily_definition, "CaptureAndVerifyNewFilings")
     assert "'daily-incremental'" in cmd
     assert "'--cik-list'" not in cmd
     assert "$.cik_list" not in cmd
@@ -312,7 +312,7 @@ def test_daily_filing_ingestion_does_not_inherit_identity_cik_batches(
 def test_scheduled_daily_filing_ingestion_forces_exact_seven_day_index_boundary(
     daily_definition: dict,
 ) -> None:
-    cmd = _command_of(daily_definition, "RunWarehouseTask")
+    cmd = _command_of(daily_definition, "CaptureAndVerifyNewFilings")
     assert "'--recurring-index-lookback-days', '7'" in cmd
 
 
@@ -327,13 +327,13 @@ def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
 
 
 # -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 02):
-# AdvBulkFetch stage between RunWarehouseTask and Mastering -------------------------
+# AdvBulkFetch stage between CaptureAndVerifyNewFilings and Mastering -------------------------
 
 
 def _linear_order_with_choice(definition: dict, prefer: dict[str, str] | None = None) -> list[str]:
     """Like _linear_order but also follows Choice states, needed once
     DatasetPeriodCheck/ForceCheck/LeaseAcquiredCheck (Choice states) sit
-    between RunWarehouseTask and Mastering -- the module-level _linear_order
+    between CaptureAndVerifyNewFilings and Mastering -- the module-level _linear_order
     only follows plain "Next", matching this file's original no-Choice-states
     shape.
 
@@ -372,11 +372,11 @@ def test_fetch_adv_bulk_stage_runs_after_run_warehouse_task_before_mdm_run(
     daily_definition: dict,
 ) -> None:
     order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
-    assert "RunWarehouseTask" in order
+    assert "CaptureAndVerifyNewFilings" in order
     assert "FetchAdvBulk" in order
     assert "IngestAdvBulkSources" in order
     assert "RunMdmChain" in order
-    assert order.index("RunWarehouseTask") < order.index("FetchAdvBulk")
+    assert order.index("CaptureAndVerifyNewFilings") < order.index("FetchAdvBulk")
     assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
     assert order.index("IngestAdvBulkSources") < order.index("RunMdmChain")
 
@@ -468,7 +468,7 @@ def test_daily_tasks_before_force_check_preserve_operator_input(daily_definition
     for state_name in (
         "FindCompaniesWithNewFilings",
         "ComputeIdentityBackstopUniverse",
-        "RunWarehouseTask",
+        "CaptureAndVerifyNewFilings",
     ):
         assert daily_definition["States"][state_name]["ResultPath"] is None, (
             f"{state_name} must preserve normalized operator input through ForceCheck"
@@ -596,7 +596,7 @@ def test_no_entity_backfill_lease_states_remain(daily_definition: dict) -> None:
 
 def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(daily_definition: dict) -> None:
     """The main sec_fetch_active span (build_sec_fetch_lease_states, guarding
-    SeedUniverse/RunWarehouseTask) is untouched by the entity-backfill sweep
+    SeedUniverse/CaptureAndVerifyNewFilings) is untouched by the entity-backfill sweep
     simplification -- it still releases right before Mastering."""
     states = daily_definition["States"]
     assert states["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"

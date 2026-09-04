@@ -2151,6 +2151,80 @@ reclaims (proving the new check is scoped to `'succeeded'` only). Full
 repo suite green: 2923 passed, 6 skipped (same pre-existing, unrelated gaps
 as every prior entry in this file).
 
+## full-reconcile decommissioned entirely (2026-09-04)
+
+**`full-reconcile`** (SEC-drift detection: compare live SEC submissions
+truth against stored warehouse state, write `sec_reconcile_finding` rows,
+optionally auto-heal by launching a targeted resync) was removed
+end-to-end, not just its unused scheduling wrapper. Live evidence before
+touching anything: `edgartools-prod-full-reconcile` had **zero executions
+ever** and **no EventBridge schedule** — the same bar this file already
+used to retire `bootstrap` and `edgartools-prod-bootstrap-batched` — and
+`docs/data-architecture.md` already classified its usage pattern as
+"Manual/backfill-only," meaning the standalone Step Functions wrapper was
+never how this command was meant to be invoked in the first place.
+
+**Removed:**
+- The Step Functions state machine itself (`edgartools-prod-full-reconcile`)
+  — deleted live (definition snapshot captured first for rollback), and
+  its entry removed from `deploy-aws-application.sh`'s
+  `write_single_workflow_definition` loop, `command_task_profile()`,
+  `workflow_command_expression()`.
+- The CLI command (`edgar-warehouse full-reconcile`), its subparser and
+  handler in `cli.py`, its registry entry in
+  `application/commands/__init__.py`, and the command module itself
+  (`application/commands/full_reconcile.py`).
+- `application/workflows/silver_reconcile_pipeline.py` and
+  `edgar_warehouse/reconcile.py` (both had zero callers outside
+  full-reconcile — confirmed live, not assumed, before deleting; the
+  shared `stage_*_loader` functions `reconcile.py` imported from
+  `edgar_warehouse/loaders.py` are NOT part of this — those are shared
+  with `submissions_orchestrator`'s real write path used by every
+  submissions-writing command, untouched).
+- `full-reconcile`'s dispatch block and its two private helpers
+  (`_resolve_reconcile_ciks`, `_capture_reconcile_snapshot`) in
+  `warehouse_orchestrator.py`, plus its membership in
+  `SOURCE_EXPORT_COMMANDS`/`SNOWFLAKE_EXPORT_COMMANDS` there,
+  `SERVING_EXPORT_COMMANDS` in `warehouse_settings.py`,
+  `_DEFAULT_MANIFEST_COMMANDS` in `dataset_path_catalog.py`, and its
+  branches in `domain/policy/command_scope.py`.
+- The Postgres-side `SecReconcileFinding` SQLAlchemy model and
+  `BookkeepingStore.insert_reconcile_findings`/`get_reconcile_findings`
+  (only ever called from full-reconcile's own dispatch block) —
+  `BOOKKEEPING_TABLES` is now 10 tables, not 11. The live prod
+  `sec_reconcile_finding` Postgres table was confirmed empty (0 rows) and
+  dropped.
+
+**Deliberately NOT removed** (a real tension surfaced and resolved
+explicitly, not silently): `sec_reconcile_finding`'s **DuckDB-side**
+schema (`silver_store.py`'s `CREATE TABLE`, now-orphaned
+`SilverDatabase.insert_reconcile_findings`/`get_reconcile_findings` with
+zero remaining callers) and its membership in three DuckDB registries —
+`silver_protection.py`'s `EXCLUDED_OPERATIONAL_TABLES`,
+`silver_support/sharded_reader.py`'s table list, and
+`migrate_silver_shards.py`'s `CIK_DIRECT_TABLES`. A prior, already-decided
+ticket review (DuckDB Retirement Cutover Ticket 15) deliberately kept
+these for historical-row-migration fidelity: an operator re-running
+`migrate-silver-shards` against an older, pre-cutover monolith may still
+have real drift-finding rows captured before this decommission, and
+stripping the registry entries would silently drop that data instead of
+copying it. The same argument applies unchanged post-decommission — if
+anything more so, since there is no live writer left at all to ever
+recreate that history. Confirmed live: the DuckDB copy was always a dead
+write path anyway (`SilverDatabase.insert_reconcile_findings` had zero
+callers even before this decommission — the real writes only ever went
+through `BookkeepingStore`), so nothing was actually reachable/writable on
+the DuckDB side to begin with; only the schema/registry membership (for
+migration-fidelity reasons) and the dead methods (harmless, unreferenced)
+remain.
+
+Verified: `tests/architecture/`, `tests/bookkeeping/`, and the full repo
+suite green after removal (excluding pre-existing, unrelated `fastapi`
+import-collection errors in `tests/mdm/test_api.py`/
+`test_temporal_graph_queries.py`/`test_runtime_ops.py`, present before
+this change). `CONTEXT.md`'s Single-Command Workflow Machine entry updated
+to 6 machines.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live

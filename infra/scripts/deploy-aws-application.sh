@@ -1660,7 +1660,7 @@ TASK_DEF_MEDIUM_ARN="$(register_task_definition medium 1024 4096)"
 # 37c3171's "move gold-refresh to large" fix was memory-ineffective -- confirmed when
 # daily_incremental (medium, 4096MB) OOM-killed 4x building sec_thirteenf_holding.
 # 8192 matches mdm-large's floor for the same class of full-universe gold-build memory
-# pressure. daily_incremental/bootstrap/full_reconcile/gold_refresh all moved onto this
+# pressure. daily_incremental/bootstrap/gold_refresh all moved onto this
 # profile below (workflow_profile()) since they share the identical build_gold() call
 # site -- see .scratch/gold-build-memory-reliability/issues/03-decide-task-memory-fix-to-unblock-daily-incremental.md.
 TASK_DEF_LARGE_ARN="$(register_task_definition large 2048 8192)"
@@ -1731,7 +1731,6 @@ command_task_profile() {
   case "$1" in
     bootstrap-full) printf '%s\n' "large" ;;
     targeted-resync) printf '%s\n' "large" ;;
-    full-reconcile) printf '%s\n' "large" ;;
     load-daily-form-index-for-date) printf '%s\n' "small" ;;
     catch-up-daily-form-index) printf '%s\n' "small" ;;
     gold-refresh) printf '%s\n' "large" ;;
@@ -1762,10 +1761,10 @@ command_task_profile() {
     seed-universe) printf '%s\n' "medium" ;;
     # daily-incremental: never actually dispatched through
     # workflow_profile()'s pass-through above (its real caller loop only
-    # iterates bootstrap_full/targeted_resync/full_reconcile/
+    # iterates bootstrap_full/targeted_resync/
     # load_daily_form_index_for_date/catch_up_daily_form_index/
     # gold_refresh/seed_universe). Its real resolved profile instead comes
-    # from write_warehouse_mdm_gold_definition's RunWarehouseTask step
+    # from write_warehouse_mdm_gold_definition's CaptureAndVerifyNewFilings step
     # (ticket 02), which calls command_task_profile() directly with this
     # same name -- so this case arm exists for completeness/direct callers
     # of command_task_profile() itself, not because anything routes through
@@ -1796,7 +1795,6 @@ workflow_command_expression() {
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name)" ;;
     bootstrap_full) printf '%s\n' "States.Array('bootstrap-full', '--run-id', \$\$.Execution.Name)" ;;
     targeted_resync) printf '%s\n' "States.Array('targeted-resync', '--scope-type', \$.scope_type, '--scope-key', \$.scope_key, '--run-id', \$\$.Execution.Name)" ;;
-    full_reconcile) printf '%s\n' "States.Array('full-reconcile', '--run-id', \$\$.Execution.Name)" ;;
     load_daily_form_index_for_date) printf '%s\n' "States.Array('load-daily-form-index-for-date', \$.target_date, '--run-id', \$\$.Execution.Name)" ;;
     catch_up_daily_form_index) printf '%s\n' "States.Array('catch-up-daily-form-index', '--run-id', \$\$.Execution.Name)" ;;
     gold_refresh) printf '%s\n' "States.Array('gold-refresh', '--run-id', \$\$.Execution.Name)" ;;
@@ -3897,7 +3895,7 @@ PY
 }
 
 # Full pipeline for a single warehouse command followed by the MDM chain and gold refresh.
-# Shape: RunWarehouseTask → RunMdmChain (nested execution of the single MDM
+# Shape: CaptureAndVerifyNewFilings → RunMdmChain (nested execution of the single MDM
 # machine, Mastering..Reconcile -- state-machine-consolidation wayfinder
 # map, ticket 07) → FactPublishtoGold (renamed from GoldRefresh)
 # Used by daily_incremental. (Also used by bootstrap until state-machine-consolidation
@@ -3916,7 +3914,7 @@ write_warehouse_mdm_gold_definition() {
   # task-profile-consolidation wayfinder map, ticket 02
   # (.scratch/task-profile-consolidation/issues/
   # 02-route-write-warehouse-mdm-gold-definition-through-the-shared-profile.md):
-  # RunWarehouseTask -- the step that actually runs `daily-incremental`
+  # CaptureAndVerifyNewFilings (formerly RunWarehouseTask) -- the step that actually runs `daily-incremental`
   # itself, i.e. the step that OOM'd in prod when this was still hardcoded
   # (gold_refresh May 2026, daily_incremental July 2026) -- now resolves its
   # task profile via command_task_profile(), ticket 01's single source of
@@ -4191,7 +4189,7 @@ def sec_fetch_task_catch():
 # --cik-list batches (compute-identity-refresh-window's cik_batches.jsonl),
 # each persisting only an immutable delta, merged into canonical exactly
 # once by ReduceIdentityRefresh below -- ahead of the existing
-# RunWarehouseTask/MDM chain, so company data is current before the
+# CaptureAndVerifyNewFilings/MDM chain, so company data is current before the
 # existing mdm-run(--entity-type all) resolves companies as part of its
 # sweep (run_all() calls run_companies()) -- no separate --entity-type
 # company call needed. daily_incremental had zero prod executions ever
@@ -4223,7 +4221,7 @@ def sec_fetch_task_catch():
 # universe (the weekly Identity Backstop Sweep); the default "daily" path
 # intersects the trailing 7 days' impacted CIKs with that same bounded
 # universe. Both use the explicit-CIK Stage 0 Map and converge on
-# RunWarehouseTask.
+# CaptureAndVerifyNewFilings.
 #
 # AcquireLease/ReleaseLease (release-readiness ticket 49, go-live follow-up):
 # a run-level lease shared by the Daily Identity Refresh and the Identity
@@ -4423,7 +4421,7 @@ find_companies_with_new_filings = ecs_state(wh_medium_arn,
     next_state="ResolveCompanyIdentityBounded")
 find_companies_with_new_filings["ResultPath"] = None
 # ticket 86: previously uncaught -- these states, plus
-# ResolveCompanyIdentityBounded/ReduceIdentityRefresh/RunWarehouseTask
+# ResolveCompanyIdentityBounded/ReduceIdentityRefresh/CaptureAndVerifyNewFilings
 # below, are all inside the sec_fetch_active fetch-heavy span with no
 # release-on-failure path before this fix.
 find_companies_with_new_filings["Catch"] = sec_fetch_task_catch()
@@ -4449,7 +4447,7 @@ per_batch_company_identity = ecs_state(wh_medium_arn,
 # gold-build-memory-reliability precedent's RunWarehouseTask move.
 reduce_identity_refresh = ecs_state(wh_large_arn,
     "States.Array('reduce-identity-refresh', '--run-id', $$.Execution.Name, '--max-attempts', '3')",
-    next_state="RunWarehouseTask")
+    next_state="CaptureAndVerifyNewFilings")
 # The command performs the bounded reducer-only retry itself. Step
 # Functions must not create an additional retry envelope with a different
 # budget or accidentally re-enter Map work.
@@ -4489,7 +4487,7 @@ stage0_company_identity_bounded = {
 }
 
 # AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
-# ticket 06 decisions 2/4), inserted between RunWarehouseTask and Mastering. Identical
+# ticket 06 decisions 2/4), inserted between CaptureAndVerifyNewFilings and Mastering. Identical
 # shape to write_load_history_definition's own AdvBulkFetch stage (same "keep in
 # sync" duplication convention Stage0CompanyIdentity already established for this
 # file) — see that function's comments for the full rationale. run_wh was built
@@ -4619,7 +4617,7 @@ ingest_firm_roster_sources["ResultPath"] = None
 # before RefreshMode dispatch, released right before Mastering -- spans
 # every state that actually calls SEC/IAPD (identity-window compute,
 # ResolveCompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
-# itself, but sandwiched between two fetch stages], RunWarehouseTask,
+# itself, but sandwiched between two fetch stages], CaptureAndVerifyNewFilings,
 # and the ADV/firm-roster fetch chain). Independent of AcquireLease/
 # ReleaseLease above -- that lease prevents overlapping daily_incremental/
 # backstop runs of THIS command; this one prevents concurrent SEC/IAPD
@@ -4702,7 +4700,7 @@ definition = {
         "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
         "ResolveCompanyIdentityBounded": stage0_company_identity_bounded,
         "ReduceIdentityRefresh": reduce_identity_refresh,
-        "RunWarehouseTask": run_wh,
+        "CaptureAndVerifyNewFilings": run_wh,
         "DatasetPeriodCheck":   dataset_period_check,
         "DatasetPeriodDefault": dataset_period_default,
         "ForceCheck":           force_check,
@@ -5567,7 +5565,7 @@ first_workflow=true
 # wayfinder map, ticket 07) -- merged with mdm_seed_universe into the
 # single "seed" machine (write_seed_definition), registered in the
 # DEPLOY_MDM block below since it now needs the MDM machine's ARN.
-for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
+for workflow in bootstrap_full targeted_resync load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
   profile="$(workflow_profile "$workflow")"
   task_definition_arn="$(task_definition_for_profile "$profile")"
   command_expression="$(workflow_command_expression "$workflow")"
@@ -5575,7 +5573,7 @@ for workflow in bootstrap_full targeted_resync full_reconcile load_daily_form_in
   definition_file="$(json_file "sfn-${workflow}")"
   # sec_fetch_active cross-command lease (release-readiness ticket 84):
   # only bootstrap_full and targeted_resync are among the 5 SEC-fetching
-  # commands (CLAUDE.md's Phased Pipeline scope); full_reconcile,
+  # commands (CLAUDE.md's Phased Pipeline scope);
   # load_daily_form_index_for_date, catch_up_daily_form_index, gold_refresh,
   # and seed_universe don't call SEC at meaningful volume and stay unwrapped.
   wrap_with_sec_fetch_lease=""

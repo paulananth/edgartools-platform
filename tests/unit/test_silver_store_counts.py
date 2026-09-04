@@ -16,14 +16,14 @@ def test_get_table_counts_reports_missing_legacy_tables_as_zero(tmp_path):
 
 
 def test_get_table_counts_excludes_bookkeeping_tables(tmp_path):
-    """DuckDB Retirement Cutover Ticket 14: the 11 bookkeeping tables moved to
+    """DuckDB Retirement Cutover Ticket 14: the 10 bookkeeping tables moved to
     the Postgres-backed BookkeepingStore, so SilverDatabase.get_table_counts()
     must never report them -- even though _DDL still creates them locally --
     so a caller's dict-merge with BookkeepingStore.get_table_counts() can't
     collide or overwrite the real Postgres-side count with a stale DuckDB 0."""
     db = SilverDatabase(str(tmp_path / "silver.duckdb"))
     try:
-        # sec_company_sync_state is one of the 11 -- still physically present
+        # sec_company_sync_state is one of the 10 -- still physically present
         # in DuckDB's own DDL (Ticket 14 doesn't drop the tables, only stops
         # reading/writing them from warehouse_orchestrator.py), so this
         # asserts the exclusion is enforced explicitly, not just an artifact

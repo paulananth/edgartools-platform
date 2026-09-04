@@ -70,7 +70,7 @@ from edgar_warehouse.bookkeeping.models import BOOKKEEPING_TABLES
 
 
 def provision(engine: Engine, *, grant_role: str | None = None) -> None:
-    """Create the 11 bookkeeping tables (idempotent) and, if given a role,
+    """Create the 10 bookkeeping tables (idempotent) and, if given a role,
     grant it additive DML + future-table access."""
     tables = [Base.metadata.tables[name] for name in BOOKKEEPING_TABLES]
     Base.metadata.create_all(engine, tables=tables, checkfirst=True)

@@ -41,7 +41,7 @@ BASE="arn:aws:states:${AWS_REGION}:${ACCOUNT}:stateMachine"
 declare -a MACHINES=(
   "load-history|LOAD-HISTORY|load-history|SeedUniverse,BatchBootstrap,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
   "bootstrap|BOOTSTRAP|bootstrap|RunWarehouseTask,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
-  "daily|DAILY-INCREMENTAL|daily-incremental|RunWarehouseTask,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
+  "daily|DAILY-INCREMENTAL|daily-incremental|CaptureAndVerifyNewFilings,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
   "silver|SILVER-MDM-GOLD|silver-mdm-gold|SeedSilverBatches,BatchSilver,Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"
   "gold|GOLD-REFRESH|gold-refresh|GoldRefresh"
   "mdm-gold|MDM-GOLD|mdm-gold|Mastering,Infer Relationships,Publish,Publish Relationships,Reconcile,GoldRefresh"

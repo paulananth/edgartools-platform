@@ -55,11 +55,6 @@ from edgar_warehouse.loaders import (
     stage_pagination_filing_loader,
     stage_recent_filing_loader,
 )
-from edgar_warehouse.reconcile import (
-    build_reconcile_findings,
-    mark_findings_for_resync,
-    mark_findings_resolved,
-)
 from edgar_warehouse.infrastructure.run_manifest_builder import (
     SNOWFLAKE_EXPORT_TABLES,
     layer_manifest,
@@ -93,7 +88,6 @@ SOURCE_EXPORT_COMMANDS = {
     # Gold is built once by gold-refresh after all batches complete.
     "daily-incremental",
     "targeted-resync",
-    "full-reconcile",
     "gold-refresh",  # builds gold from current silver state, no bronze capture
 }
 SNOWFLAKE_EXPORT_COMMANDS = SOURCE_EXPORT_COMMANDS | {"seed-universe"}
@@ -610,7 +604,7 @@ def _execute_warehouse_bronze_capture(
             rows_skipped=metrics.get("rows_skipped", 0),
         )
         # DuckDB Retirement Cutover Ticket 14: db.get_table_counts() now
-        # excludes the 11 bookkeeping tables entirely (they moved to
+        # excludes the 10 bookkeeping tables entirely (they moved to
         # Postgres) -- merge in bookkeeping's own counts for those so this
         # diagnostic dict keeps covering every silver table, content and
         # bookkeeping alike, with no colliding/stale-zero keys.
@@ -1974,67 +1968,6 @@ def _capture_bronze_raw(
             metrics["rows_inserted"] += pipeline_result["rows_written"]
             return raw_writes, metrics
         raise WarehouseRuntimeError(f"Unsupported targeted-resync scope_type: {scope_type}")
-
-    if command_name == "full-reconcile":
-        ciks = _resolve_reconcile_ciks(
-            bookkeeping=bookkeeping,
-            raw_ciks=scope.get("cik_list"),
-            sample_limit=scope.get("sample_limit"),
-        )
-        all_findings: list[dict[str, Any]] = []
-        for cik in ciks:
-            snapshot = _capture_reconcile_snapshot(
-                context=context,
-                bookkeeping=bookkeeping,
-                cik=cik,
-                fetch_date=now.date(),
-                force=bool(arguments.get("force", True)),
-            )
-            raw_writes.append(snapshot["write_record"])
-            findings = build_reconcile_findings(
-                db=db,
-                cik=cik,
-                sync_run_id=sync_run_id,
-                submissions_payload=snapshot["payload"],
-            )
-            all_findings.extend(findings)
-        if all_findings:
-            bookkeeping.insert_reconcile_findings(all_findings)
-            metrics["rows_inserted"] += len(all_findings)
-        if scope.get("auto_heal"):
-            healed_rows = mark_findings_for_resync(all_findings, resync_run_id=sync_run_id)
-            if healed_rows:
-                bookkeeping.insert_reconcile_findings(healed_rows)
-            resolved_rows: list[dict[str, Any]] = []
-            for row in healed_rows:
-                if row["recommended_action"] == "accession_resync":
-                    _run_accession_resync(
-                        context=context,
-                        db=db,
-                        bookkeeping=bookkeeping,
-                        sync_run_id=sync_run_id,
-                        accession_number=row["object_key"],
-                        include_artifacts=True,
-                        include_text=True,
-                        include_parsers=True,
-                        force=True,
-                    )
-                else:
-                    submissions_orchestrator(
-                        context=context,
-                        db=db,
-                        bookkeeping=bookkeeping,
-                        sync_run_id=sync_run_id,
-                        cik=int(row["cik"]),
-                        include_pagination=True,
-                        fetch_date=now.date(),
-                        force=True,
-                        load_mode="targeted_resync",
-                    )
-                resolved_rows.append(row)
-            if resolved_rows:
-                bookkeeping.insert_reconcile_findings(mark_findings_resolved(resolved_rows, resync_run_id=sync_run_id))
-        return raw_writes, metrics
 
     if command_name == "catch-up-daily-form-index":
         end_date = date.fromisoformat(scope["end_date"])
@@ -6013,21 +5946,6 @@ def _read_bronze_if_cached(
     )
 
 
-def _capture_reconcile_snapshot(
-    *,
-    context: WarehouseCommandContext,
-    bookkeeping: "BookkeepingStore",
-    cik: int,
-    fetch_date: date,
-    force: bool = True,
-) -> dict[str, Any]:
-    snapshot = _capture_submissions_main(
-        context=context, bookkeeping=bookkeeping, cik=cik, fetch_date=fetch_date, force=force,
-    )
-    snapshot["write_record"]["source_name"] = "submissions_main"
-    return snapshot
-
-
 def _load_daily_index_for_date(
     *,
     context: WarehouseCommandContext,
@@ -6627,18 +6545,6 @@ def _resolve_bootstrap_target_ciks(
     return ciks
 
 
-def _resolve_reconcile_ciks(
-    *,
-    bookkeeping: "BookkeepingStore",
-    raw_ciks: Any,
-    sample_limit: int | None,
-) -> list[int]:
-    ciks = [_parse_cik(value) for value in raw_ciks] if raw_ciks else bookkeeping.get_tracked_ciks("active")
-    if sample_limit is not None:
-        return ciks[: int(sample_limit)]
-    return ciks
-
-
 def _decode_json_bytes(payload: bytes, source_url: str) -> dict[str, Any]:
     try:
         document = json.loads(payload.decode("utf-8"))
@@ -6919,13 +6825,6 @@ def _resolve_scope(
         return {
             "scope_key": arguments.get("scope_key"),
             "scope_type": arguments.get("scope_type"),
-        }
-
-    if command_name == "full-reconcile":
-        return {
-            "auto_heal": arguments.get("auto_heal"),
-            "cik_list": arguments.get("cik_list"),
-            "sample_limit": arguments.get("sample_limit"),
         }
 
     if command_name == "seed-universe":

@@ -1,9 +1,10 @@
 """Verifies write_single_workflow_definition's sec_fetch_active lease wiring
 (release-readiness ticket 84, implementing ticket 80's Phase 1 primitive)
 for bootstrap_full and targeted_resync -- the two SEC-fetching commands
-among the 7 workflows sharing this function that need the cross-command
-lease. full_reconcile, load_daily_form_index_for_date,
-catch_up_daily_form_index, gold_refresh, and seed_universe stay unwrapped.
+among the 6 workflows sharing this function that need the cross-command
+lease. load_daily_form_index_for_date, catch_up_daily_form_index,
+gold_refresh, and seed_universe stay unwrapped. (full_reconcile was a
+seventh member of this set until it was decommissioned entirely.)
 
 Generates the real write_single_workflow_definition() state machine JSON
 (same driver mechanism as test_daily_identity_refresh_state_machine.py).
