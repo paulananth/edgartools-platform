@@ -101,6 +101,112 @@ class TestCompanySyncState:
         store.seed_company_sync_state_bulk([1])
         assert store.get_company_sync_state(1)["last_error_message"] is None
 
+    def test_seed_if_missing_new_ciks_get_caller_supplied_status(
+        self, store: BookkeepingStore
+    ) -> None:
+        n = store.seed_company_sync_state_bulk_if_missing([1, 2, 3], tracking_status="active")
+        assert n == 3
+        for cik in (1, 2, 3):
+            assert store.get_company_sync_state(cik)["tracking_status"] == "active"
+
+    def test_seed_if_missing_leaves_existing_row_completely_untouched(
+        self, store: BookkeepingStore
+    ) -> None:
+        """Unlike seed_company_sync_state_bulk (which always clears
+        last_error_message on conflict), seed_company_sync_state_bulk_if_missing
+        must leave an already-tracked CIK's row byte-for-byte alone --
+        including last_error_message -- since it exists to preserve
+        _seed_silver_tracking_status's original per-row loop's exact
+        "existing rows keep their current status" behavior."""
+        store.upsert_company_sync_state(
+            {"cik": 1, "tracking_status": "paused", "last_error_message": "boom"}
+        )
+        store.seed_company_sync_state_bulk_if_missing([1, 2], tracking_status="active")
+        row1 = store.get_company_sync_state(1)
+        assert row1["tracking_status"] == "paused"
+        assert row1["last_error_message"] == "boom"
+        assert store.get_company_sync_state(2)["tracking_status"] == "active"
+
+    def test_seed_if_missing_dedupes_input(self, store: BookkeepingStore) -> None:
+        n = store.seed_company_sync_state_bulk_if_missing([1, 1, 2], tracking_status="active")
+        assert n == 2
+
+    def test_seed_if_missing_empty_input(self, store: BookkeepingStore) -> None:
+        assert store.seed_company_sync_state_bulk_if_missing([], tracking_status="active") == 0
+
+    def test_seed_if_missing_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        """Regression guard for the live 2026-09-03 incident (found alongside
+        the claim_discovery_ciks fix in the same daily_incremental
+        investigation): the original _seed_silver_tracking_status issued one
+        SELECT + one conditional INSERT per CIK, with no batching -- its own
+        multi-minute stall sitting immediately before claim_discovery_ciks in
+        the same call chain, at the same ~9,205-CIK real prod scale."""
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_COMPANY_SYNC_STATE_BULK_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))  # 250 CIKs, chunk size 10 -> 25 chunks
+            n = store.seed_company_sync_state_bulk_if_missing(ciks, tracking_status="active")
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert n == 250
+        # 25 chunked INSERT...ON CONFLICT DO NOTHING statements -- not 250
+        # (one SELECT + one INSERT per CIK, what the original per-row loop cost).
+        assert len(statements) <= 30, (
+            f"expected ~25 batched statements (25 insert chunks for 250 CIKs "
+            f"at chunk size 10), got {len(statements)} -- "
+            "seed_company_sync_state_bulk_if_missing may have regressed to "
+            "one round trip per CIK"
+        )
+        assert len(statements) < len(ciks)
+
+    def test_demote_bulk_overwrites_status(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
+        n = store.demote_company_sync_state_bulk([1, 2], demoted_at=_now())
+        assert n == 2
+        assert store.get_company_sync_state(1)["tracking_status"] == "deregistered"
+        assert store.get_company_sync_state(2)["tracking_status"] == "deregistered"
+
+    def test_demote_bulk_dedupes_input(self, store: BookkeepingStore) -> None:
+        n = store.demote_company_sync_state_bulk([1, 1, 2], demoted_at=_now())
+        assert n == 2
+
+    def test_demote_bulk_empty_input(self, store: BookkeepingStore) -> None:
+        assert store.demote_company_sync_state_bulk([], demoted_at=_now()) == 0
+
+    def test_demote_bulk_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_COMPANY_SYNC_STATE_BULK_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))
+            n = store.demote_company_sync_state_bulk(ciks, demoted_at=_now())
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert n == 250
+        assert len(statements) <= 30
+        assert len(statements) < len(ciks)
+
     def test_seed_bulk_empty_input(self, store: BookkeepingStore) -> None:
         assert store.seed_company_sync_state_bulk([]) == 0
 
@@ -182,6 +288,198 @@ class TestDiscoveryCheckpoint:
 
     def test_get_missing_returns_none(self, store: BookkeepingStore) -> None:
         assert store.get_discovery_checkpoint("cik", "999") is None
+
+    def test_claim_preserves_input_order_and_skips_only_blocked_ciks(
+        self, store: BookkeepingStore
+    ) -> None:
+        """A mixed batch (some CIKs blocked by a concurrent different run,
+        most free) must claim exactly the free ones, in their original
+        relative order -- proving the batched SELECT-then-filter-then-bulk-
+        upsert rewrite preserves the original per-row loop's exact claim
+        semantics, not just its net claimed-count."""
+        store.claim_discovery_ciks([2, 4], discovery_source="daily", run_id="run-1", claimed_at=_now())
+        claimed = store.claim_discovery_ciks(
+            [1, 2, 3, 4, 5], discovery_source="daily", run_id="run-2", claimed_at=_now()
+        )
+        assert claimed == [1, 3, 5]
+        assert store.get_discovery_checkpoint("cik", "2")["run_id"] == "run-1"
+        assert store.get_discovery_checkpoint("cik", "4")["run_id"] == "run-1"
+        for cik in (1, 3, 5):
+            assert store.get_discovery_checkpoint("cik", str(cik))["run_id"] == "run-2"
+
+    def test_claim_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        """Regression guard for the live 2026-09-03 incident: the original
+        claim_discovery_ciks issued one SELECT + one INSERT per CIK, with no
+        batching at all -- confirmed live as a ~36-minute silent stall on a
+        9,205-CIK daily_incremental run (CloudWatch: zero log output between
+        the last SEC daily-index download and the first bronze_capture_progress
+        line). Chunk size is monkeypatched small so this test proves the
+        chunking behavior itself without needing thousands of rows."""
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_DISCOVERY_CLAIM_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))  # 250 CIKs, chunk size 10 -> 25 chunks
+            claimed = store.claim_discovery_ciks(
+                ciks, discovery_source="daily", run_id="run-1", claimed_at=_now()
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert claimed == ciks
+        # 25 SELECT chunks + 25 upsert chunks = 50 statements -- not 500
+        # (2 round trips per CIK, what the original per-row loop cost).
+        assert len(statements) <= 55, (
+            f"expected ~50 batched statements (25 SELECT + 25 upsert chunks "
+            f"for 250 CIKs at chunk size 10), got {len(statements)} -- "
+            "claim_discovery_ciks may have regressed to one round trip per CIK"
+        )
+        assert len(statements) < len(ciks)
+
+    def test_claim_skips_cik_already_succeeded_same_day_for_same_source(
+        self, store: BookkeepingStore
+    ) -> None:
+        """Live evidence (change-propagation daily_incremental follow-up,
+        2026-09-04): claim_discovery_ciks only ever blocked a CIK that was
+        'in_progress' under a *different* run -- once finish_discovery_ciks
+        marked a CIK 'succeeded', the very next run (even minutes later, same
+        calendar day) re-claimed and fully reprocessed it. Confirmed live:
+        two same-day daily_incremental runs both claimed the identical 8,699
+        CIKs. This narrows Ticket 45's deliberate 'force-recheck the trailing
+        seven calendar days on every run' design (still fully intact for
+        anything not already succeeded *today*) without touching it -- see
+        the two tests below for that boundary explicitly preserved."""
+        first_run_time = datetime(2026, 8, 28, 6, 30, 0, tzinfo=timezone.utc)
+        store.claim_discovery_ciks(
+            [1, 2], discovery_source="daily_incremental", run_id="run-1", claimed_at=first_run_time
+        )
+        store.finish_discovery_ciks(
+            [1, 2],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=first_run_time,
+        )
+
+        second_run_time = datetime(2026, 8, 28, 15, 11, 0, tzinfo=timezone.utc)
+        claimed = store.claim_discovery_ciks(
+            [1, 2], discovery_source="daily_incremental", run_id="run-2", claimed_at=second_run_time
+        )
+        assert claimed == []
+        assert store.get_discovery_checkpoint("cik", "1")["run_id"] == "run-1"
+
+    def test_claim_reclaims_cik_succeeded_on_a_prior_calendar_day(
+        self, store: BookkeepingStore
+    ) -> None:
+        """The 7-day recheck window (Ticket 45) must keep working: a CIK
+        whose last success was a prior calendar day is reclaimed normally,
+        so a late SEC daily-index republish is still caught on the next
+        day's run."""
+        yesterday = datetime(2026, 8, 27, 23, 59, 0, tzinfo=timezone.utc)
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=yesterday
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=yesterday,
+        )
+
+        today = datetime(2026, 8, 28, 0, 5, 0, tzinfo=timezone.utc)
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-2", claimed_at=today
+        )
+        assert claimed == [1]
+
+    def test_claim_same_day_success_only_blocks_the_same_discovery_source(
+        self, store: BookkeepingStore
+    ) -> None:
+        """A same-day success under one discovery_source (e.g.
+        daily_incremental) must not silently suppress a different source
+        (e.g. bootstrap_next) from claiming the same CIK -- matches the
+        existing cross-source in_progress semantics
+        (test_claim_skips_cik_in_progress_under_different_run has no
+        source-scoping either, so this preserves that same shape for the
+        new same-day-succeeded check)."""
+        run_time = _now()
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=run_time
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=run_time,
+        )
+
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="bootstrap_next", run_id="run-2", claimed_at=run_time
+        )
+        assert claimed == [1]
+
+    def test_claim_allows_the_same_run_id_to_reclaim_its_own_same_day_success(
+        self, store: BookkeepingStore
+    ) -> None:
+        """Regression guard (found by /code-review's Spec axis): the
+        class-level comment above this method has always documented 'allow
+        the same run_id to reclaim' as an invariant. The same-day-succeeded
+        block added for the cross-run bug above must not silently drop that
+        invariant -- a run resuming or retrying under its own run_id must
+        never be blocked by its own prior success, only a *different* run's
+        same-day success should suppress a reclaim."""
+        run_time = _now()
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=run_time
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=run_time,
+        )
+
+        later_same_day = run_time + timedelta(hours=1)
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=later_same_day
+        )
+        assert claimed == [1]
+
+    def test_claim_reclaims_a_same_day_failed_cik_normally(
+        self, store: BookkeepingStore
+    ) -> None:
+        """The same-day-succeeded block must only ever gate status=='succeeded'
+        -- a CIK a prior same-day run marked 'failed' must remain immediately
+        reclaimable, same as before this fix."""
+        run_time = _now()
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=run_time
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="failed",
+            finished_at=run_time,
+        )
+
+        later_same_day = run_time + timedelta(hours=1)
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-2", claimed_at=later_same_day
+        )
+        assert claimed == [1]
 
 
 # -- pipeline_run_lease -------------------------------------------------------
@@ -640,55 +938,15 @@ class TestDailyIndexFiling:
         assert store.get_pending_checkpoint_dates("2026-08-28") == ["2026-08-25", "2026-08-26"]
 
 
-# -- sec_reconcile_finding -----------------------------------------------------
-
-
-class TestReconcileFinding:
-    def test_insert_then_get(self, store: BookkeepingStore) -> None:
-        n = store.insert_reconcile_findings(
-            [
-                {
-                    "reconcile_run_id": "r1",
-                    "cik": 1,
-                    "scope_type": "full",
-                    "object_type": "filing",
-                    "object_key": "0001",
-                    "drift_type": "hash_mismatch",
-                }
-            ]
-        )
-        assert n == 1
-        rows = store.get_reconcile_findings("r1")
-        assert len(rows) == 1
-        assert rows[0]["severity"] == "medium"
-        assert rows[0]["status"] == "detected"
-
-    def test_upsert_overwrites_on_conflict(self, store: BookkeepingStore) -> None:
-        base = {
-            "reconcile_run_id": "r1",
-            "cik": 1,
-            "scope_type": "full",
-            "object_type": "filing",
-            "object_key": "0001",
-            "drift_type": "hash_mismatch",
-        }
-        store.insert_reconcile_findings([base])
-        store.insert_reconcile_findings([{**base, "status": "resolved"}])
-        rows = store.get_reconcile_findings("r1")
-        assert len(rows) == 1
-        assert rows[0]["status"] == "resolved"
-
-
-# -- get_table_counts (narrow, 11-table version) -------------------------------
+# -- get_table_counts (narrow, 10-table version) -------------------------------
 
 
 class TestTableCounts:
-    def test_counts_all_11_tables(self, store: BookkeepingStore) -> None:
+    def test_counts_all_10_tables(self, store: BookkeepingStore) -> None:
         store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
         counts = store.get_table_counts()
-        assert len(counts) == 11
+        assert len(counts) == 10
         assert counts["sec_company_sync_state"] == 1
-        assert counts["sec_reconcile_finding"] == 0
 
 
 # -- get_all_company_sync_states (Ticket 03) -----------------------------------

@@ -7,7 +7,7 @@ Generates the real write_warehouse_mdm_gold_definition() state machine JSON
 tests/architecture/test_gold_affecting_commands_task_sizing.py) and asserts:
 
 - daily_incremental's default path (no refresh_mode input, or refresh_mode
-  != "backstop") routes through the new bounded ComputeIdentityRefreshWindow
+  != "backstop") routes through the new bounded FindCompaniesWithNewFilings
   -> ResolveCompanyIdentityBounded stages, NOT the full-universe ComputeWindows
   path that took 10h16m alone on the first prod execution (ticket 45's
   evidence).
@@ -37,7 +37,7 @@ _WMG_END = "\nPY\n}\n"
 
 # write_warehouse_mdm_gold_definition calls command_task_profile()
 # internally (task-profile-consolidation ticket 02) to resolve
-# RunWarehouseTask's profile -- extracted and sourced alongside it below.
+# CaptureAndVerifyNewFilings's profile -- extracted and sourced alongside it below.
 _COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
 _COMMAND_TASK_PROFILE_END = "\n}\n"
 
@@ -81,13 +81,13 @@ def _generate_definition(workflow_name: str, alert_topic_arn: str = _FAKE_ALERT_
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket" "{alert_topic_arn}"\n',
+            f'"{_FAKE_MEDIUM_ARN}" "{_FAKE_LARGE_ARN}" '
+            f'"{workflow_name}" "fake-bronze-bucket" "{alert_topic_arn}" '
+            '"arn:fake-mdm-machine"\n',
             encoding="utf-8",
         )
 
@@ -123,9 +123,9 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     states = daily_incremental_definition["States"]
     refresh_mode = states["RefreshMode"]
     assert refresh_mode["Type"] == "Choice"
-    assert refresh_mode["Default"] == "ComputeIdentityRefreshWindow"
+    assert refresh_mode["Default"] == "FindCompaniesWithNewFilings"
 
-    compute_window = states["ComputeIdentityRefreshWindow"]
+    compute_window = states["FindCompaniesWithNewFilings"]
     cmd = compute_window["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "compute-identity-refresh-window" in cmd
     assert "'--mode', 'daily'" in cmd
@@ -161,14 +161,14 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
     reducer = states["ReduceIdentityRefresh"]
     reducer_cmd = reducer["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "reduce-identity-refresh" in reducer_cmd
-    assert reducer["Next"] == "RunWarehouseTask"
+    assert reducer["Next"] == "CaptureAndVerifyNewFilings"
 
 
 def test_reduce_identity_refresh_runs_on_the_large_task_definition(daily_incremental_definition) -> None:
     """Release-readiness ticket 83: a real prod run was OOM-killed (exit 137)
     on the medium (4096MB) task definition mid-merge on the largest
     protected table. Must run on large (8192MB), matching the
-    gold-build-memory-reliability precedent's RunWarehouseTask move --
+    gold-build-memory-reliability precedent's CaptureAndVerifyNewFilings move --
     confirmed to fail against the pre-fix wh_medium_arn wiring."""
     reducer = daily_incremental_definition["States"]["ReduceIdentityRefresh"]
     assert reducer["Parameters"]["TaskDefinition"] == _FAKE_LARGE_ARN
@@ -228,7 +228,7 @@ def test_daily_incremental_both_modes_share_explicit_cik_stage0(
     daily_incremental_definition,
 ) -> None:
     states = daily_incremental_definition["States"]
-    assert states["ComputeIdentityRefreshWindow"]["Next"] == (
+    assert states["FindCompaniesWithNewFilings"]["Next"] == (
         "ResolveCompanyIdentityBounded"
     )
     assert states["ComputeIdentityBackstopUniverse"]["Next"] == (
@@ -386,7 +386,7 @@ def test_gold_refresh_routes_to_release_lease_not_end(daily_incremental_definiti
     -- the function's shared `gold` object defaults to is_end=True (the
     general/standalone shape) and is only mutated inside this
     daily_incremental-only branch."""
-    gold_refresh = daily_incremental_definition["States"]["GoldRefresh"]
+    gold_refresh = daily_incremental_definition["States"]["FactPublishtoGold"]
     assert "End" not in gold_refresh
     assert gold_refresh["Next"] == "ReleaseLease"
 
@@ -460,21 +460,21 @@ def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
     release = states["ReleaseSecFetchLease"]
     cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "release-sec-fetch-lease" in cmd
-    assert release["Next"] == "Mastering"
+    assert release["Next"] == "RunMdmChain"
     assert release["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
     ]
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
-    assert fallback["Next"] == "Mastering"
+    assert fallback["Next"] == "RunMdmChain"
 
 
 def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
     daily_incremental_definition,
 ) -> None:
-    """release-readiness ticket 86: ComputeIdentityRefreshWindow/
+    """release-readiness ticket 86: FindCompaniesWithNewFilings/
     ComputeIdentityBackstopUniverse/ResolveCompanyIdentityBounded/
-    ReduceIdentityRefresh/RunWarehouseTask had no Catch at all -- a real
+    ReduceIdentityRefresh/CaptureAndVerifyNewFilings had no Catch at all -- a real
     failure in any of them wedged sec_fetch_active for the full 16h
     stale-reclaim window. Deliberately excludes FetchAdvBulk/
     IngestFirmRosterSources etc., which already had their own Catch
@@ -484,11 +484,11 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
         {"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}
     ]
     for previously_uncaught_state in (
-        "ComputeIdentityRefreshWindow",
+        "FindCompaniesWithNewFilings",
         "ComputeIdentityBackstopUniverse",
         "ResolveCompanyIdentityBounded",
         "ReduceIdentityRefresh",
-        "RunWarehouseTask",
+        "CaptureAndVerifyNewFilings",
     ):
         assert states[previously_uncaught_state]["Catch"] == expected_catch
 
@@ -542,4 +542,51 @@ def test_daily_incremental_has_both_leases_independently(daily_incremental_defin
     # GoldRefresh still routes to the identity-refresh ReleaseLease at the
     # very end of the run -- sec_fetch_active already released much earlier,
     # right before Mastering.
-    assert states["GoldRefresh"]["Next"] == "ReleaseLease"
+    assert states["FactPublishtoGold"]["Next"] == "ReleaseLease"
+
+
+def test_sec_fetch_deferred_releases_the_already_acquired_identity_refresh_lease(
+    daily_incremental_definition,
+) -> None:
+    """Regression guard for a lease-leak found live 2026-09-03: by the time
+    AcquireSecFetchLease ever runs, AcquireLease (the identity-refresh
+    lease, spanning the whole run) has ALWAYS already succeeded --
+    AcquireSecFetchLease's only inbound edge is ApplyEffectiveRefreshMode,
+    itself only reachable via LeaseAcquiredCheck's lease_acquired=True
+    branch. If the sec_fetch_active lease is busy and this run gets
+    deferred, it must release the identity-refresh lease it's already
+    holding before terminating -- otherwise that lease stays held under
+    this (now-terminated) execution's own run_id until the 20h stale-lease
+    reclaim, silently blocking every subsequent daily_incremental
+    execution's own AcquireLease. Confirmed live:
+    daily-incremental-claimfix-verify2-1788478059 got sec-fetch-deferred
+    and stranded the identity-refresh lease exactly this way.
+
+    Walks the real generated graph forward from
+    SecFetchLeaseAcquiredCheck's Default (busy) branch, following each
+    state's single Next pointer, until it reaches either a state whose
+    command contains "release-identity-refresh-lease" (pass) or a
+    terminal End:true state with no such release anywhere on the path
+    (fail)."""
+    states = daily_incremental_definition["States"]
+    current = states["SecFetchLeaseAcquiredCheck"]["Default"]
+    visited: list[str] = []
+    released = False
+    for _ in range(len(states) + 1):  # bounded walk; a real cycle would be a separate bug
+        visited.append(current)
+        state = states[current]
+        cmd = json.dumps(state.get("Parameters", {}))
+        if "release-identity-refresh-lease" in cmd:
+            released = True
+            break
+        if state.get("End"):
+            break
+        nxt = state.get("Next")
+        if nxt is None:
+            break
+        current = nxt
+
+    assert released, (
+        f"SecFetchDeferred path ({' -> '.join(visited)}) terminates without "
+        "releasing the already-acquired identity-refresh lease"
+    )

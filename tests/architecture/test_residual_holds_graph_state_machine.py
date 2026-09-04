@@ -93,11 +93,15 @@ def test_residual_holds_graph_order() -> None:
     # keeps checking source-level ordering, just via the new shape: the head
     # states' literal keys, then the wire_mdm_tail(...) call's three
     # positional export/sync/verify command arguments in the mandated order.
+    # MdmPersons removed (state-machine-consolidation wayfinder map,
+    # ticket 08, 2026-09-03): confirmed duplicated with ownership_mdm_gold's
+    # own copy and redundant with the new single MDM machine's Mastering
+    # state ("mdm mastering --entity-type all" already resolves persons).
     src = _extract_residual_definition_source()
+    assert '"MdmPersons"' not in src, "MdmPersons should be deleted, not just reordered"
     order = []
     for name in (
         "MdmSecurities",
-        "MdmPersons",
         "MdmIsInsider",
         "MdmHolds",
         "MdmCompanyHolds",
@@ -109,7 +113,6 @@ def test_residual_holds_graph_order() -> None:
     order_names = [n for _, n in sorted(order)]
     assert order_names == [
         "MdmSecurities",
-        "MdmPersons",
         "MdmIsInsider",
         "MdmHolds",
         "MdmCompanyHolds",

@@ -71,8 +71,6 @@ def sync_mode_for_command(command_name: str) -> str:
         return "incremental"
     if command_name == "targeted-resync":
         return "resync"
-    if command_name == "full-reconcile":
-        return "reconcile"
     return "incremental"
 
 
@@ -90,8 +88,6 @@ def sync_scope_type_for_command(command_name: str, scope: dict[str, Any]) -> str
         if scope_type == "accession":
             return "artifact_fetch"
         return "reference"
-    if command_name == "full-reconcile":
-        return "reconcile"
     return "submissions"
 
 

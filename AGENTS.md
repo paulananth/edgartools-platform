@@ -355,7 +355,6 @@ edgar-warehouse daily-incremental --start-date YYYY-MM-DD --end-date YYYY-MM-DD
 edgar-warehouse load-daily-form-index-for-date YYYY-MM-DD
 edgar-warehouse catch-up-daily-form-index --end-date YYYY-MM-DD
 edgar-warehouse targeted-resync --scope-type cik --scope-key 0000320193
-edgar-warehouse full-reconcile --sample-limit 100
 ```
 
 Step Functions execution example:

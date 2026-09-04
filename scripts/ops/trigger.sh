@@ -10,7 +10,13 @@
 #   silver             silver_mdm_gold   (re-process already-loaded bronze)
 #   silver-active      silver_mdm_gold with tracking_status_filter=active
 #   silver-pending     silver_mdm_gold with tracking_status_filter=bootstrap_pending
-#   gold               gold_refresh      (rebuild gold from current silver)
+#   gold               gold_refresh      (rebuild gold from current silver, aka
+#                        FactPublishtoGold at every MDM Pipeline Machine's own
+#                        tail -- see state-machine-consolidation ticket 07)
+#   mdm                mdm  (state-machine-consolidation ticket 07: the single MDM
+#                        machine -- Mastering..Reconcile, ends before gold-refresh;
+#                        replaces mdm-gold, which had no head of its own and was
+#                        deleted outright as a 100% redundant duplicate of this)
 #   mdm-run            mdm_utility mode=mdm_run
 #   mdm-verify         mdm_utility mode=mdm_verify_graph
 #   mdm-sync           mdm_utility mode=mdm_sync_graph
@@ -39,7 +45,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$PIPELINE" ]] && { echo "Usage: $0 [--env dev] <pipeline>"; echo "Pipelines: recent load-history silver silver-active silver-pending gold mdm-gold mdm-run mdm-verify mdm-sync"; exit 2; }
+[[ -z "$PIPELINE" ]] && { echo "Usage: $0 [--env dev] <pipeline>"; echo "Pipelines: recent load-history silver silver-active silver-pending gold mdm mdm-run mdm-verify mdm-sync"; exit 2; }
 
 NAME_PREFIX="edgartools-${ENVIRONMENT}"
 ACCOUNT=$(aws ${AWS_PROFILE_ARG} --region "$AWS_REGION" sts get-caller-identity --query Account --output text 2>/dev/null)
@@ -83,15 +89,10 @@ case "$PIPELINE" in
     INPUT='{"mode": "mdm_run"}'
     LABEL="mdm_run (mdm_utility mode=mdm_run)"
     ;;
-  mdm-gold)
-    SM="${BASE}:${NAME_PREFIX}-mdm-gold"
+  mdm)
+    SM="${BASE}:${NAME_PREFIX}-mdm"
     INPUT='{}'
-    LABEL="mdm_gold (MDM chain → Neo4j sync → gold-refresh, no silver batch)"
-    ;;
-  ownership)
-    SM="${BASE}:${NAME_PREFIX}-ownership-mdm-gold"
-    INPUT='{}'
-    LABEL="ownership_mdm_gold (parse bronze XMLs → MDM persons → Neo4j → gold)"
+    LABEL="mdm (Mastering → BackpropagateIdsToSilver → Infer Relationships → Publish → Publish Relationships → Reconcile; no gold-refresh -- chain 'gold' afterward if needed)"
     ;;
   mdm-verify)
     SM="${BASE}:${NAME_PREFIX}-mdm-utility"
@@ -105,7 +106,7 @@ case "$PIPELINE" in
     ;;
   *)
     echo "Unknown pipeline: $PIPELINE" >&2
-    echo "Valid: recent load-history silver silver-active silver-pending gold mdm-run mdm-verify mdm-sync" >&2
+    echo "Valid: recent load-history silver silver-active silver-pending gold mdm mdm-run mdm-verify mdm-sync" >&2
     exit 2
     ;;
 esac

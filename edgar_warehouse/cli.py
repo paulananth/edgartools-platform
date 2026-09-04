@@ -182,10 +182,6 @@ def _handle_targeted_resync(args: argparse.Namespace) -> int:
     return run_command("targeted-resync", args)
 
 
-def _handle_full_reconcile(args: argparse.Namespace) -> int:
-    return run_command("full-reconcile", args)
-
-
 def _handle_seed_universe(args: argparse.Namespace) -> int:
     return run_command("seed-universe", args)
 
@@ -992,35 +988,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(targeted_resync)
     targeted_resync.set_defaults(handler=_handle_targeted_resync)
-
-    full_reconcile = subparsers.add_parser(
-        "full-reconcile",
-        help="Compare live SEC truth to warehouse state and optionally auto-heal drift.",
-    )
-    full_reconcile.add_argument("--cik-list", type=_parse_cik_list, help="Comma-separated CIK list")
-    full_reconcile.add_argument("--sample-limit", type=int, help="Limit the number of tracked companies")
-    full_reconcile.add_argument(
-        "--include-reference-refresh",
-        dest="include_reference_refresh",
-        action="store_true",
-        default=True,
-        help="Refresh SEC reference files before reconciliation",
-    )
-    full_reconcile.add_argument(
-        "--no-include-reference-refresh",
-        dest="include_reference_refresh",
-        action="store_false",
-        help="Skip SEC reference refresh",
-    )
-    full_reconcile.add_argument(
-        "--no-auto-heal",
-        dest="auto_heal",
-        action="store_false",
-        default=True,
-        help="Detect drift without launching targeted resync",
-    )
-    _add_run_id_arg(full_reconcile)
-    full_reconcile.set_defaults(handler=_handle_full_reconcile)
 
     seed_universe = subparsers.add_parser(
         "seed-universe",

@@ -5,7 +5,7 @@ Covers the Company Identity Pipeline wayfinder map's ticket 06 (see
 
 - daily_incremental is restructured with a new Stage0CompanyIdentity phase,
   reusing ticket 05's exact windowed capture shape (ComputeWindows + a
-  strict, MaxConcurrency=1 Map), ahead of the existing RunWarehouseTask/MDM
+  strict, MaxConcurrency=1 Map), ahead of the existing CaptureAndVerifyNewFilings/MDM
   chain.
 
 (bootstrap, the other former caller of write_warehouse_mdm_gold_definition,
@@ -37,7 +37,7 @@ _END_MARKER = "\nPY\n}\n"
 
 # write_warehouse_mdm_gold_definition calls command_task_profile()
 # internally (task-profile-consolidation ticket 02) to resolve
-# RunWarehouseTask's profile -- extracted and sourced alongside it below.
+# CaptureAndVerifyNewFilings's profile -- extracted and sourced alongside it below.
 _COMMAND_TASK_PROFILE_START = "command_task_profile() {\n"
 _COMMAND_TASK_PROFILE_END = "\n}\n"
 
@@ -120,13 +120,13 @@ def _generate(workflow_name: str) -> dict:
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"
-            "MDM_RUN_LIMIT=100\n"
-            "MDM_GRAPH_LIMIT=200\n"
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            '"arn:wh-medium" "arn:mdm-small" "arn:mdm-medium" "arn:wh-large" '
-            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n',
+            '"arn:wh-medium" "arn:wh-large" '
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts" '
+            '"arn:mdm-machine"\n',
             encoding="utf-8",
         )
 
@@ -230,15 +230,15 @@ def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_s
 ) -> None:
     """The default (no refresh_mode input) path no longer runs the
     full-universe ComputeWindows/Stage0CompanyIdentity pair -- it runs the
-    bounded ComputeIdentityRefreshWindow/ResolveCompanyIdentityBounded pair
+    bounded FindCompaniesWithNewFilings/ResolveCompanyIdentityBounded pair
     instead (ticket 45/49). Backstop uses the same explicit-CIK stage with a
     complete company-eligible input."""
     order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
-    assert "ComputeIdentityRefreshWindow" in order
+    assert "FindCompaniesWithNewFilings" in order
     assert "ResolveCompanyIdentityBounded" in order
-    assert "RunWarehouseTask" in order
-    assert order.index("ComputeIdentityRefreshWindow") < order.index("ResolveCompanyIdentityBounded")
-    assert order.index("ResolveCompanyIdentityBounded") < order.index("RunWarehouseTask")
+    assert "CaptureAndVerifyNewFilings" in order
+    assert order.index("FindCompaniesWithNewFilings") < order.index("ResolveCompanyIdentityBounded")
+    assert order.index("ResolveCompanyIdentityBounded") < order.index("CaptureAndVerifyNewFilings")
 
 
 def test_daily_incremental_stage0_company_identity_command_shape(daily_definition: dict) -> None:
@@ -289,20 +289,21 @@ def test_daily_incremental_no_seed_universe(daily_definition: dict) -> None:
     assert "MdmSeedUniverse" not in daily_definition["States"]
 
 
-def test_daily_incremental_mdm_run_still_uses_entity_type_all(daily_definition: dict) -> None:
-    """No dedicated --entity-type company MDM call: the existing
-    --entity-type all call already resolves companies as part of its sweep
-    (run_all() calls run_companies())."""
-    cmd = _command_of(daily_definition, "Mastering")
-    assert "'--entity-type', 'all'" in cmd
+# Mastering itself (--entity-type all, no dedicated --entity-type company
+# call -- run_all() already calls run_companies() as part of its sweep)
+# no longer exists at this level (state-machine-consolidation wayfinder
+# map, ticket 07) -- it moved into the single MDM machine, invoked here as
+# one RunMdmChain nested execution. Covered by
+# tests/architecture/test_mdm_state_machine.py against the real generated
+# MDM machine instead.
 
 
 def test_daily_filing_ingestion_does_not_inherit_identity_cik_batches(
     daily_definition: dict,
 ) -> None:
-    """The company filter scopes Stage 0 only. RunWarehouseTask retains the
+    """The company filter scopes Stage 0 only. CaptureAndVerifyNewFilings retains the
     ordinary daily-incremental filing contract and receives no identity batch."""
-    cmd = _command_of(daily_definition, "RunWarehouseTask")
+    cmd = _command_of(daily_definition, "CaptureAndVerifyNewFilings")
     assert "'daily-incremental'" in cmd
     assert "'--cik-list'" not in cmd
     assert "$.cik_list" not in cmd
@@ -311,27 +312,28 @@ def test_daily_filing_ingestion_does_not_inherit_identity_cik_batches(
 def test_scheduled_daily_filing_ingestion_forces_exact_seven_day_index_boundary(
     daily_definition: dict,
 ) -> None:
-    cmd = _command_of(daily_definition, "RunWarehouseTask")
+    cmd = _command_of(daily_definition, "CaptureAndVerifyNewFilings")
     assert "'--recurring-index-lookback-days', '7'" in cmd
 
 
 def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
     daily_definition: dict,
 ) -> None:
-    """Exactly one GoldRefresh state -- company-identity feeds the existing
-    single gold-refresh, no dedicated refresh added."""
+    """Exactly one FactPublishtoGold state (renamed from GoldRefresh --
+    state-machine-consolidation wayfinder map, ticket 07) -- company-identity
+    feeds the existing single gold-refresh, no dedicated refresh added."""
     gold_refresh_states = [name for name in daily_definition["States"] if "Gold" in name]
-    assert gold_refresh_states == ["GoldRefresh"]
+    assert gold_refresh_states == ["FactPublishtoGold"]
 
 
 # -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 02):
-# AdvBulkFetch stage between RunWarehouseTask and Mastering -------------------------
+# AdvBulkFetch stage between CaptureAndVerifyNewFilings and Mastering -------------------------
 
 
 def _linear_order_with_choice(definition: dict, prefer: dict[str, str] | None = None) -> list[str]:
     """Like _linear_order but also follows Choice states, needed once
     DatasetPeriodCheck/ForceCheck/LeaseAcquiredCheck (Choice states) sit
-    between RunWarehouseTask and Mastering -- the module-level _linear_order
+    between CaptureAndVerifyNewFilings and Mastering -- the module-level _linear_order
     only follows plain "Next", matching this file's original no-Choice-states
     shape.
 
@@ -370,13 +372,13 @@ def test_fetch_adv_bulk_stage_runs_after_run_warehouse_task_before_mdm_run(
     daily_definition: dict,
 ) -> None:
     order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
-    assert "RunWarehouseTask" in order
+    assert "CaptureAndVerifyNewFilings" in order
     assert "FetchAdvBulk" in order
     assert "IngestAdvBulkSources" in order
-    assert "Mastering" in order
-    assert order.index("RunWarehouseTask") < order.index("FetchAdvBulk")
+    assert "RunMdmChain" in order
+    assert order.index("CaptureAndVerifyNewFilings") < order.index("FetchAdvBulk")
     assert order.index("FetchAdvBulk") < order.index("IngestAdvBulkSources")
-    assert order.index("IngestAdvBulkSources") < order.index("Mastering")
+    assert order.index("IngestAdvBulkSources") < order.index("RunMdmChain")
 
 
 def test_fetch_adv_bulk_command_shape_with_no_sm_input_overrides(daily_definition: dict) -> None:
@@ -447,7 +449,7 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
 
 
 def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null(
@@ -464,9 +466,9 @@ def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null
 
 def test_daily_tasks_before_force_check_preserve_operator_input(daily_definition: dict) -> None:
     for state_name in (
-        "ComputeIdentityRefreshWindow",
+        "FindCompaniesWithNewFilings",
         "ComputeIdentityBackstopUniverse",
-        "RunWarehouseTask",
+        "CaptureAndVerifyNewFilings",
     ):
         assert daily_definition["States"][state_name]["ResultPath"] is None, (
             f"{state_name} must preserve normalized operator input through ForceCheck"
@@ -480,10 +482,10 @@ def test_firm_roster_stage_runs_after_ingest_adv_bulk_sources_before_mdm_run(
     assert "IngestAdvBulkSources" in order
     assert "FetchFirmRoster" in order
     assert "IngestFirmRosterSources" in order
-    assert "Mastering" in order
+    assert "RunMdmChain" in order
     assert order.index("IngestAdvBulkSources") < order.index("FetchFirmRoster")
     assert order.index("FetchFirmRoster") < order.index("IngestFirmRosterSources")
-    assert order.index("IngestFirmRosterSources") < order.index("Mastering")
+    assert order.index("IngestFirmRosterSources") < order.index("RunMdmChain")
 
 
 def test_ingest_adv_bulk_sources_routes_into_firm_roster_force_check_not_around_it(
@@ -535,7 +537,7 @@ def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
 
 
 
@@ -564,28 +566,17 @@ def test_fetch_and_ingest_firm_roster_states_preserve_sm_input_via_result_path_n
 # if the lease-guarded design is ever needed again.
 
 
-def test_mdm_run_routes_directly_into_backfill_mdm_entity_ids(daily_definition: dict) -> None:
-    assert daily_definition["States"]["Mastering"]["Next"] == "BackfillMdmEntityIds"
-
-
-def test_backfill_mdm_entity_ids_runs_on_medium_profile_and_falls_through_to_infer_relationships(
-    daily_definition: dict,
-) -> None:
-    """wh_medium_arn, not large: the Snowflake-only sweep (ticket 06) issues
-    SQL queries, not a full-shard download, so it doesn't need large's
-    headroom. A sweep failure must not fail this otherwise-successful
-    MDM/gold run -- the sweep is its own retry (ticket 05: the next pass
-    re-selects the same still-NULL rows) -- so both the happy path and the
-    Catch converge on Infer Relationships."""
-    state = daily_definition["States"]["BackfillMdmEntityIds"]
-    cmd = _command_of(daily_definition, "BackfillMdmEntityIds")
-    assert "'backfill-mdm-entity-ids'" in cmd
-    assert "$$.Execution.Name" in cmd
-    assert state["Parameters"]["TaskDefinition"] == "arn:wh-medium"
-    assert state["Next"] == "Infer Relationships"
-    assert state["Catch"] == [
-        {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Infer Relationships"}
-    ]
+# Mastering -> BackfillMdmEntityIds (renamed BackpropagateIdsToSilver) ->
+# Infer Relationships no longer exist at this level (state-machine-
+# consolidation wayfinder map, ticket 07) -- they moved into the single MDM
+# machine, invoked here as one RunMdmChain nested execution. Also widened
+# from daily_incremental-only to every MDM-machine caller per this
+# implementation's own follow-up decision. Covered by
+# tests/architecture/test_mdm_state_machine.py against the real generated
+# MDM machine instead (test_tail_order_is_mastering_through_reconcile,
+# test_backpropagate_ids_to_silver_uses_backfill_mdm_entity_ids_command,
+# test_backpropagate_ids_to_silver_failure_is_non_fatal,
+# test_backpropagate_ids_to_silver_uses_the_warehouse_medium_profile).
 
 
 def test_no_entity_backfill_lease_states_remain(daily_definition: dict) -> None:
@@ -605,8 +596,8 @@ def test_no_entity_backfill_lease_states_remain(daily_definition: dict) -> None:
 
 def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(daily_definition: dict) -> None:
     """The main sec_fetch_active span (build_sec_fetch_lease_states, guarding
-    SeedUniverse/RunWarehouseTask) is untouched by the entity-backfill sweep
+    SeedUniverse/CaptureAndVerifyNewFilings) is untouched by the entity-backfill sweep
     simplification -- it still releases right before Mastering."""
     states = daily_definition["States"]
-    assert states["ReleaseSecFetchLease"]["Next"] == "Mastering"
+    assert states["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
     assert states["AcquireSecFetchLease"]["Next"] == "ReadSecFetchLeaseResult"

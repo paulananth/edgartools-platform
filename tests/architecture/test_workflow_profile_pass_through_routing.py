@@ -87,7 +87,6 @@ def _run_workflow_profile(
     [
         ("bootstrap_full", "large"),
         ("targeted_resync", "large"),
-        ("full_reconcile", "large"),
         ("load_daily_form_index_for_date", "small"),
         ("catch_up_daily_form_index", "small"),
         ("gold_refresh", "large"),

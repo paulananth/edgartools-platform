@@ -1,4 +1,4 @@
-"""Proves RunWarehouseTask's (daily-incremental's own run step) task
+"""Proves CaptureAndVerifyNewFilings's (daily-incremental's own run step) task
 profile is genuinely *routed through* command_task_profile() at runtime,
 not just coincidentally equal to what command_task_profile() would say.
 
@@ -12,7 +12,7 @@ prove the *wiring itself* changed; the function could still hardcode
 wh_task_large_arn directly and happen to agree. This file proves the real
 call happens by overriding command_task_profile() with a stub *after*
 sourcing write_warehouse_mdm_gold_definition's real body, and checking the
-stub's answer -- not the original hardcode's -- is what RunWarehouseTask's
+stub's answer -- not the original hardcode's -- is what CaptureAndVerifyNewFilings's
 TaskDefinition ends up with. Function resolution in bash happens at call
 time, not definition time, so a redefinition between sourcing and invoking
 genuinely intercepts the call. Mirrors
@@ -63,7 +63,7 @@ def _run_warehouse_task_definition(
     workflow_name: str, command_task_profile_override: str | None
 ) -> str:
     """Generate write_warehouse_mdm_gold_definition()'s real ASL for
-    workflow_name and return RunWarehouseTask's resolved TaskDefinition ARN.
+    workflow_name and return CaptureAndVerifyNewFilings's resolved TaskDefinition ARN.
 
     When ``command_task_profile_override`` is given, it's sourced *after*
     the real command_task_profile() and write_warehouse_mdm_gold_definition
@@ -95,11 +95,11 @@ def _run_warehouse_task_definition(
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            f'"{_WH_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_WH_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n'
+            f'"{_WH_MEDIUM_ARN}" "{_WH_LARGE_ARN}" '
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts" '
+            '"arn:fake-mdm-machine"\n'
         )
         driver = tmp_path / "driver.sh"
         driver.write_text("\n".join(script_parts), encoding="utf-8")
@@ -114,17 +114,17 @@ def _run_warehouse_task_definition(
             )
         definition = json.loads(out_file.read_text(encoding="utf-8"))
 
-    return definition["States"]["RunWarehouseTask"]["Parameters"]["TaskDefinition"]
+    return definition["States"]["CaptureAndVerifyNewFilings"]["Parameters"]["TaskDefinition"]
 
 
 @pytest.mark.parametrize("workflow_name", ["daily_incremental"])
 def test_run_warehouse_task_uses_real_command_task_profile_result(workflow_name: str) -> None:
-    """With the real, unmodified command_task_profile(), RunWarehouseTask's
+    """With the real, unmodified command_task_profile(), CaptureAndVerifyNewFilings's
     TaskDefinition must equal the large ARN -- command_task_profile('daily-incremental')
     resolves to "large" (ticket 01's mapping)."""
     arn = _run_warehouse_task_definition(workflow_name, command_task_profile_override=None)
     assert arn == _WH_LARGE_ARN, (
-        f"{workflow_name}'s RunWarehouseTask resolved to {arn!r}, expected the "
+        f"{workflow_name}'s CaptureAndVerifyNewFilings resolved to {arn!r}, expected the "
         f"large ARN {_WH_LARGE_ARN!r}"
     )
 
@@ -136,14 +136,14 @@ def test_run_warehouse_task_genuinely_routes_through_command_task_profile(
     """Overriding command_task_profile() to answer "medium" for this
     workflow's real hyphenated command name -- after
     write_warehouse_mdm_gold_definition's real body is already sourced --
-    must flip RunWarehouseTask's TaskDefinition to the medium ARN. If this
+    must flip CaptureAndVerifyNewFilings's TaskDefinition to the medium ARN. If this
     fails (still resolves to large), write_warehouse_mdm_gold_definition is
     NOT calling command_task_profile() at runtime -- it's still hardcoding
     the ARN directly, and the override had nothing to intercept.
 
     The stub also answers 'seed-universe' unconditionally in case the
     generated definition includes a SeedUniverse state, so this test stays
-    scoped to RunWarehouseTask's own routing regardless. (The dedicated
+    scoped to CaptureAndVerifyNewFilings's own routing regardless. (The dedicated
     SeedUniverse-routing proof this docstring used to point to,
     test_warehouse_mdm_gold_seed_universe_task_profile_routing.py, was
     deleted by state-machine-consolidation ticket 06: the production branch
@@ -164,7 +164,7 @@ def test_run_warehouse_task_genuinely_routes_through_command_task_profile(
     )
     arn = _run_warehouse_task_definition(workflow_name, command_task_profile_override=override)
     assert arn == _WH_MEDIUM_ARN, (
-        f"{workflow_name}'s RunWarehouseTask resolved to {arn!r} even with "
+        f"{workflow_name}'s CaptureAndVerifyNewFilings resolved to {arn!r} even with "
         f"command_task_profile() stubbed to answer 'medium' for "
         f"{real_command_name!r} -- expected the medium ARN {_WH_MEDIUM_ARN!r}. "
         "This means write_warehouse_mdm_gold_definition is not genuinely "

@@ -2141,6 +2141,166 @@ records the ambient paramstyle at the moment `.connect()` is called — the
 prior end-to-end test only used a plain `MagicMock`, which never exercised
 this timing at all and would not have caught this bug. Full repo suite green.
 
+## daily_incremental same-day re-claim 5-whys (fixed 2026-09-04)
+
+**Problem:** A manually-started `daily_incremental` execution
+(`daily-incremental-1788549087`) re-processed `cik_count: 8699` — live
+CloudWatch logs showed every one of those CIKs' silver-apply rows
+correctly skipped (`rows_written: 0`), but the run still paid the full
+per-CIK discovery/checkpoint-resolution cost, ~35-44 minutes of pure
+overhead, for a set of CIKs an earlier same-day run
+(`daily-incremental-resultpathfix-clean-1788517378`, finished ~4h51m
+earlier) had already fully succeeded on.
+
+1. Symptom: two `daily_incremental` executions on the same calendar day
+   both claimed the identical 8,699-CIK set — confirmed via a direct,
+   read-only query against prod Bookkeeping Postgres:
+   `discovery_checkpoint` showed the morning run's `run_id` with
+   `status='succeeded'` for exactly 8,699 `scope_key`s, and the afternoon
+   run's own live log emitted the same `cik_count: 8699`.
+2. Why does a same-day rerun redo the same CIKs? `claim_discovery_ciks`
+   (`edgar_warehouse/bookkeeping/store.py`) only ever blocked a CIK that
+   was `status='in_progress'` under a *different* `run_id` — a genuinely
+   concurrent-writer guard, not a "was this already done" check.
+3. Why didn't a `'succeeded'` status block reclaim? It was never designed
+   to: `claim_discovery_ciks`'s whole job (per its own pre-existing
+   docstring) is "prevent active overlap" between concurrent runs, not
+   "don't redo recently-finished work" — those are two different
+   guarantees that happened to share one function, and only the first was
+   ever built.
+4. Why wasn't this caught by the already-known "9,205 CIKs, same 5
+   business days" observation from 2026-09-03 (recorded in this function's
+   own pre-fix comment)? That comment correctly diagnosed the *symptom*
+   (a same-day rerun reprocesses the same CIK union) and fixed its
+   *performance* cost (batching the round trips from O(N) to O(chunks)),
+   but treated the redundant reclaim itself as an accepted consequence of
+   Ticket 45's deliberate "force-recheck the trailing seven calendar days
+   on every run" design (`.scratch/release-readiness/issues/
+   45-decide-narrow-daily-incremental-stage0-and-cadence.md`) — nobody
+   had separated "recheck across calendar days, by design" from "recheck
+   within the same calendar day, never decided."
+5. **Root cause:** `claim_discovery_ciks` conflated two distinct
+   dedup guarantees under one status field — "not concurrently in
+   progress" (real, needed, already correct) and "not already finished
+   recently" (assumed by callers to follow from the first, but never
+   actually implemented) — and the one prior investigation into this
+   exact symptom fixed the performance cost of the gap without noticing
+   the gap itself was fixable without touching Ticket 45's deliberate
+   7-day design at all.
+
+**Fix:** `claim_discovery_ciks` gained a second blocking condition — a CIK
+already `status='succeeded'` under the *same* `discovery_source`, with
+`finished_at` on the *same UTC calendar day* as this call's `claimed_at`,
+is now also blocked from reclaim. Deliberately narrow: scoped to same
+source (a different source, e.g. `bootstrap_next`, is unaffected) and same
+calendar day only — a CIK last succeeded on a *prior* day is reclaimed
+exactly as before, so Ticket 45's 7-day late-republish protection is fully
+intact. A same `run_id` reclaiming its own prior same-day success is also
+explicitly exempted (`existing_run_id != run_id` in the new condition),
+preserving this method's original, always-documented "allow the same
+run_id to reclaim" invariant — a real gap found by `/code-review`'s Spec
+axis in the first draft, fixed before commit rather than shipped silently
+narrowed. New `_as_utc_date` static helper normalizes the date comparison
+against SQLite's real behavior in this store's own test suite (SQLite has
+no genuine `TIMESTAMP(timezone=True)` support and drops tzinfo on
+round-trip, unlike Postgres in prod, which always returns a tz-aware
+value) — `.astimezone()` on a naive datetime assumes local system time,
+which would have silently mis-shifted the date depending on the running
+machine's timezone; reproduced live in this fix's own test suite before
+being corrected.
+
+Verified live against real prod Bookkeeping Postgres (read-only investigation,
+then a scoped smoke test using 10 clearly-fake CIK numbers,
+900000001-900000010, split across 3 isolated scenario groups covering the
+blocked case, the cross-source-unaffected case, and the prior-day-still-
+reclaims case) — all five expected outcomes confirmed, zero leftover rows
+after cleanup. Not run as a full end-to-end `daily_incremental` execution
+against the fix (that requires a new warehouse image build + deploy,
+not done in this pass) — the live verification is at the `BookkeepingStore`
+layer directly, the same layer the bug lives in.
+
+Tests: 6 in `tests/bookkeeping/test_store.py`'s `TestDiscoveryCheckpoint` —
+same-day-blocked (the core fix), prior-calendar-day-still-reclaims (Ticket
+45's window, unchanged), cross-source-isolation, same-run-id-can-still-
+reclaim (the Spec-review regression guard), and same-day-`failed`-still-
+reclaims (proving the new check is scoped to `'succeeded'` only). Full
+repo suite green: 2923 passed, 6 skipped (same pre-existing, unrelated gaps
+as every prior entry in this file).
+
+## full-reconcile decommissioned entirely (2026-09-04)
+
+**`full-reconcile`** (SEC-drift detection: compare live SEC submissions
+truth against stored warehouse state, write `sec_reconcile_finding` rows,
+optionally auto-heal by launching a targeted resync) was removed
+end-to-end, not just its unused scheduling wrapper. Live evidence before
+touching anything: `edgartools-prod-full-reconcile` had **zero executions
+ever** and **no EventBridge schedule** — the same bar this file already
+used to retire `bootstrap` and `edgartools-prod-bootstrap-batched` — and
+`docs/data-architecture.md` already classified its usage pattern as
+"Manual/backfill-only," meaning the standalone Step Functions wrapper was
+never how this command was meant to be invoked in the first place.
+
+**Removed:**
+- The Step Functions state machine itself (`edgartools-prod-full-reconcile`)
+  — deleted live (definition snapshot captured first for rollback), and
+  its entry removed from `deploy-aws-application.sh`'s
+  `write_single_workflow_definition` loop, `command_task_profile()`,
+  `workflow_command_expression()`.
+- The CLI command (`edgar-warehouse full-reconcile`), its subparser and
+  handler in `cli.py`, its registry entry in
+  `application/commands/__init__.py`, and the command module itself
+  (`application/commands/full_reconcile.py`).
+- `application/workflows/silver_reconcile_pipeline.py` and
+  `edgar_warehouse/reconcile.py` (both had zero callers outside
+  full-reconcile — confirmed live, not assumed, before deleting; the
+  shared `stage_*_loader` functions `reconcile.py` imported from
+  `edgar_warehouse/loaders.py` are NOT part of this — those are shared
+  with `submissions_orchestrator`'s real write path used by every
+  submissions-writing command, untouched).
+- `full-reconcile`'s dispatch block and its two private helpers
+  (`_resolve_reconcile_ciks`, `_capture_reconcile_snapshot`) in
+  `warehouse_orchestrator.py`, plus its membership in
+  `SOURCE_EXPORT_COMMANDS`/`SNOWFLAKE_EXPORT_COMMANDS` there,
+  `SERVING_EXPORT_COMMANDS` in `warehouse_settings.py`,
+  `_DEFAULT_MANIFEST_COMMANDS` in `dataset_path_catalog.py`, and its
+  branches in `domain/policy/command_scope.py`.
+- The Postgres-side `SecReconcileFinding` SQLAlchemy model and
+  `BookkeepingStore.insert_reconcile_findings`/`get_reconcile_findings`
+  (only ever called from full-reconcile's own dispatch block) —
+  `BOOKKEEPING_TABLES` is now 10 tables, not 11. The live prod
+  `sec_reconcile_finding` Postgres table was confirmed empty (0 rows) and
+  dropped.
+
+**Deliberately NOT removed** (a real tension surfaced and resolved
+explicitly, not silently): `sec_reconcile_finding`'s **DuckDB-side**
+schema (`silver_store.py`'s `CREATE TABLE`, now-orphaned
+`SilverDatabase.insert_reconcile_findings`/`get_reconcile_findings` with
+zero remaining callers) and its membership in three DuckDB registries —
+`silver_protection.py`'s `EXCLUDED_OPERATIONAL_TABLES`,
+`silver_support/sharded_reader.py`'s table list, and
+`migrate_silver_shards.py`'s `CIK_DIRECT_TABLES`. A prior, already-decided
+ticket review (DuckDB Retirement Cutover Ticket 15) deliberately kept
+these for historical-row-migration fidelity: an operator re-running
+`migrate-silver-shards` against an older, pre-cutover monolith may still
+have real drift-finding rows captured before this decommission, and
+stripping the registry entries would silently drop that data instead of
+copying it. The same argument applies unchanged post-decommission — if
+anything more so, since there is no live writer left at all to ever
+recreate that history. Confirmed live: the DuckDB copy was always a dead
+write path anyway (`SilverDatabase.insert_reconcile_findings` had zero
+callers even before this decommission — the real writes only ever went
+through `BookkeepingStore`), so nothing was actually reachable/writable on
+the DuckDB side to begin with; only the schema/registry membership (for
+migration-fidelity reasons) and the dead methods (harmless, unreferenced)
+remain.
+
+Verified: `tests/architecture/`, `tests/bookkeeping/`, and the full repo
+suite green after removal (excluding pre-existing, unrelated `fastapi`
+import-collection errors in `tests/mdm/test_api.py`/
+`test_temporal_graph_queries.py`/`test_runtime_ops.py`, present before
+this change). `CONTEXT.md`'s Single-Command Workflow Machine entry updated
+to 6 machines.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live

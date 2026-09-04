@@ -308,7 +308,6 @@ Defined in `edgar_warehouse/cli.py` → `edgar_warehouse` package.
 | `parse-adv-bronze` | Parse operator-supplied ADV bronze |
 | `gold-refresh` | Rebuild gold / Snowflake export once |
 | `targeted-resync` | Repair or re-fetch a single CIK / scope |
-| `full-reconcile` | Compare expected vs actual warehouse state |
 | `mdm …` | Entity resolution, graph, counts, migrations |
 
 Required identity for SEC requests (must include an email):

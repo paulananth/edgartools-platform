@@ -1,14 +1,14 @@
-"""BookkeepingStore: SQLAlchemy-backed store for the 11 operational tables.
+"""BookkeepingStore: SQLAlchemy-backed store for the 10 operational tables.
 
 Ported 1:1 from edgar_warehouse.silver_store.SilverDatabase's equivalent
 methods (DuckDB Retirement Cutover Ticket 02). Method names and signatures
 match the originals so Ticket 03's caller repointing is close to mechanical.
 Two methods from the original surface are deliberately NOT ported here:
-`get_all_filing_texts` (queries sec_filing_text, not one of these 11 tables)
+`get_all_filing_texts` (queries sec_filing_text, not one of these 10 tables)
 and `get_company_identity_ciks` (a cross-store join against sec_company/
 sec_company_ticker) -- both are Ticket 03's territory, see that ticket and
 Ticket 02's own file for the full reasoning. `get_table_counts` here is a
-narrowed, 11-table-only reimplementation; the original's whole-database
+narrowed, 10-table-only reimplementation; the original's whole-database
 contract is also Ticket 03's job (merging this store's counts with DuckDB's
 remaining content-table counts).
 """
@@ -34,7 +34,6 @@ from edgar_warehouse.bookkeeping.models import (
     SecCompanySyncState,
     SecDailyIndexCheckpoint,
     SecParseRun,
-    SecReconcileFinding,
     SecSourceCheckpoint,
     SecSyncRun,
     StgDailyIndexFiling,
@@ -98,6 +97,28 @@ class BookkeepingStore:
         if isinstance(value, str):
             return date.fromisoformat(value)
         return value
+
+    @staticmethod
+    def _chunks(items: list, size: int):
+        for i in range(0, len(items), size):
+            yield items[i : i + size]
+
+    @staticmethod
+    def _as_utc_date(value: datetime) -> date:
+        """Every caller in this codebase writes timestamps as tz-aware UTC
+        (the ``datetime.now(UTC)`` convention) -- but SQLite (this store's
+        test/dev dialect) has no real ``TIMESTAMP(timezone=True)`` support
+        and silently drops tzinfo on round trip, unlike Postgres (prod),
+        which always returns a tz-aware value. ``.astimezone()`` on a naive
+        datetime assumes *local system time*, which would misconvert an
+        already-UTC value read back from SQLite and shift its date --
+        reproduced live in this module's own test suite. Treat a naive value
+        as already-UTC instead of guessing; only convert when a real
+        timezone is attached.
+        """
+        if value.tzinfo is None:
+            return value.date()
+        return value.astimezone(timezone.utc).date()
 
     # -- stg_daily_index_filing / sec_daily_index_checkpoint ----------------
 
@@ -245,32 +266,122 @@ class BookkeepingStore:
         row = self._session.get(DiscoveryCheckpoint, (scope_type, scope_key))
         return self._to_dict(row) if row else None
 
+    # daily_incremental's own --recurring-index-lookback-days revalidation
+    # (CLAUDE.md's "Daily accession-expansion 5-whys") deliberately re-claims
+    # the same rolling-window CIK set across separate calendar days -- that
+    # part is intentional (Ticket 45, release-readiness map: "force-recheck
+    # the trailing seven calendar days on every run", to catch a late SEC
+    # daily-index republish). It was NOT intentional for two runs on the SAME
+    # calendar day: confirmed live 2026-09-03, two consecutive same-day
+    # daily_incremental executions both emitted cik_count: 9205 for the
+    # identical 5 business days -- the second run fully reprocessed CIKs the
+    # first had already succeeded on minutes earlier. At that scale the
+    # original per-CIK loop below (one SELECT + one INSERT per CIK, no
+    # batching) cost ~30 minutes of pure Postgres round-trip latency every
+    # single run, confirmed via CloudWatch: a ~36-minute silent gap between
+    # the last SEC daily-index download and the first bronze_capture_progress
+    # log line, with zero log output in between. Batched into one chunked
+    # SELECT (existing in_progress-under-another-run rows, plus a same-day
+    # succeeded-under-this-source check added as a follow-up fix, see
+    # claim_discovery_ciks' own inline comment) plus one chunked bulk upsert
+    # -- O(2 * ceil(N/chunk_size)) round trips instead of O(2N). Chunk size
+    # bounds bind-parameter count per statement (each upserted row is 9
+    # columns; Postgres' ~65535-parameter-per-statement ceiling would
+    # otherwise be exceeded well before N=9205).
+    _DISCOVERY_CLAIM_CHUNK_SIZE = 1000
+
     def claim_discovery_ciks(
         self, ciks: list[int], *, discovery_source: str, run_id: str, claimed_at: datetime
     ) -> list[int]:
-        claimed: list[int] = []
+        deduped: list[int] = []
         seen: set[int] = set()
-        insert_factory = self._insert_factory()
         for raw_cik in ciks:
             cik = int(raw_cik)
             if cik in seen:
                 continue
             seen.add(cik)
-            scope_key = str(cik)
-            existing = self.get_discovery_checkpoint("cik", scope_key)
-            if existing and existing.get("status") == "in_progress" and existing.get("run_id") != run_id:
-                continue
-            stmt = insert_factory(DiscoveryCheckpoint).values(
-                scope_type="cik",
-                scope_key=scope_key,
-                discovery_source=discovery_source,
-                status="in_progress",
-                run_id=run_id,
-                claimed_at=claimed_at,
-                finished_at=None,
-                updated_at=claimed_at,
-                metadata_json=None,
+            deduped.append(cik)
+        if not deduped:
+            return []
+
+        scope_keys = [str(cik) for cik in deduped]
+        claimed_at_date = self._as_utc_date(claimed_at)
+        blocked: set[str] = set()
+        for chunk in self._chunks(scope_keys, self._DISCOVERY_CLAIM_CHUNK_SIZE):
+            stmt = select(
+                DiscoveryCheckpoint.scope_key,
+                DiscoveryCheckpoint.status,
+                DiscoveryCheckpoint.run_id,
+                DiscoveryCheckpoint.discovery_source,
+                DiscoveryCheckpoint.finished_at,
+            ).where(
+                DiscoveryCheckpoint.scope_type == "cik",
+                DiscoveryCheckpoint.scope_key.in_(chunk),
             )
+            for (
+                scope_key,
+                status,
+                existing_run_id,
+                existing_source,
+                finished_at,
+            ) in self._session.execute(stmt).all():
+                if status == "in_progress" and existing_run_id != run_id:
+                    blocked.add(scope_key)
+                elif (
+                    status == "succeeded"
+                    and existing_run_id != run_id
+                    and existing_source == discovery_source
+                    and finished_at is not None
+                    and self._as_utc_date(finished_at) == claimed_at_date
+                ):
+                    # daily_incremental follow-up (change-propagation map),
+                    # confirmed live 2026-09-04: without this, a CIK that
+                    # already succeeded earlier *today* under this same
+                    # discovery_source was reclaimed and fully reprocessed by
+                    # the very next run, no matter how recently it finished --
+                    # two same-day daily_incremental runs both claimed the
+                    # identical 8,699 CIKs. Scoped to same discovery_source and
+                    # same UTC calendar day only: a different source (e.g.
+                    # bootstrap_next) is unaffected, and Ticket 45's deliberate
+                    # 7-day-recheck design is untouched for any CIK not
+                    # already succeeded today -- it is reclaimed normally on
+                    # the next calendar day, still catching late SEC
+                    # daily-index republishes exactly as before.
+                    #
+                    # existing_run_id != run_id preserves this method's
+                    # original, pre-existing invariant (this docstring's own
+                    # class-level comment above always said "allow the same
+                    # run_id to reclaim") -- a run resuming/retrying under its
+                    # own run_id must never be blocked by its own prior
+                    # success, only a *different* run's same-day success
+                    # should suppress a reclaim. Not reachable via today's
+                    # production callers (each execution gets a fresh
+                    # run_id), but this is a real invariant worth keeping
+                    # explicit and tested, not silently dropped.
+                    blocked.add(scope_key)
+
+        claimed = [cik for cik, scope_key in zip(deduped, scope_keys) if scope_key not in blocked]
+        if not claimed:
+            return []
+
+        insert_factory = self._insert_factory()
+        claimed_scope_keys = [str(cik) for cik in claimed]
+        for chunk in self._chunks(claimed_scope_keys, self._DISCOVERY_CLAIM_CHUNK_SIZE):
+            values = [
+                {
+                    "scope_type": "cik",
+                    "scope_key": scope_key,
+                    "discovery_source": discovery_source,
+                    "status": "in_progress",
+                    "run_id": run_id,
+                    "claimed_at": claimed_at,
+                    "finished_at": None,
+                    "updated_at": claimed_at,
+                    "metadata_json": None,
+                }
+                for scope_key in chunk
+            ]
+            stmt = insert_factory(DiscoveryCheckpoint).values(values)
             excluded = stmt.excluded
             stmt = stmt.on_conflict_do_update(
                 index_elements=[DiscoveryCheckpoint.scope_type, DiscoveryCheckpoint.scope_key],
@@ -285,7 +396,6 @@ class BookkeepingStore:
                 },
             )
             self._session.execute(stmt)
-            claimed.append(cik)
         return claimed
 
     def finish_discovery_ciks(
@@ -846,6 +956,86 @@ class BookkeepingStore:
         self._session.execute(stmt)
         return len(deduped)
 
+    # Sibling of _DISCOVERY_CLAIM_CHUNK_SIZE's bug (found live 2026-09-03,
+    # same daily_incremental investigation, same /diagnosing-bugs session):
+    # _seed_silver_tracking_status/_demote_deregistered_ciks
+    # (warehouse_orchestrator.py) looped one SELECT+INSERT (seed) or one
+    # INSERT (demote) per CIK, no batching -- at daily_incremental's real
+    # ~9,205 impacted-CIK scale this was a second, independent multi-minute
+    # stall sitting immediately BEFORE claim_discovery_ciks in the same
+    # call chain, confirmed live via CloudWatch after the
+    # claim_discovery_ciks fix alone did not close the observed gap.
+    _COMPANY_SYNC_STATE_BULK_CHUNK_SIZE = 1000
+
+    def seed_company_sync_state_bulk_if_missing(
+        self, ciks: list[int], *, tracking_status: str
+    ) -> int:
+        """Bulk-insert sec_company_sync_state rows for CIKs with no existing
+        row, leaving any already-tracked CIK's row completely untouched --
+        not even last_error_message, unlike seed_company_sync_state_bulk
+        above (which hardcodes tracking_status='bootstrap_pending' and
+        always clears last_error_message on conflict; a genuinely different
+        caller/contract, seed-universe's own initial seeding, not this
+        one). ON CONFLICT DO NOTHING is the correct primitive for "insert
+        only if truly new" -- preserves _seed_silver_tracking_status's
+        existing "existing rows keep their current status" contract
+        (tests/unit/test_pipeline_tracking_state.py) while batching what
+        was previously one SELECT + one conditional INSERT per CIK into
+        chunked bulk statements.
+        """
+        deduped = list(dict.fromkeys(int(cik) for cik in ciks))
+        if not deduped:
+            return 0
+        insert_factory = self._insert_factory()
+        for chunk in self._chunks(deduped, self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            values = [
+                {"cik": cik, "tracking_status": tracking_status, "last_error_message": None}
+                for cik in chunk
+            ]
+            stmt = insert_factory(SecCompanySyncState).values(values)
+            stmt = stmt.on_conflict_do_nothing(index_elements=[SecCompanySyncState.cik])
+            self._session.execute(stmt)
+        return len(deduped)
+
+    def demote_company_sync_state_bulk(self, ciks: list[int], *, demoted_at: datetime) -> int:
+        """Bulk-set tracking_status='deregistered' for CIKs with a Form 15
+        deregistration filing (seed-universe ticket 03) -- unconditional
+        overwrite (a company filing Form 15 was, by definition, already
+        tracked), mirroring upsert_company_sync_state's own ON CONFLICT
+        semantics for exactly the 3 fields _demote_deregistered_ciks sets,
+        just batched. Unspecified columns (bootstrap_completed_at, etc.)
+        are omitted from the INSERT the same way the original per-row
+        upsert_company_sync_state({"cik":..., "tracking_status":...,
+        "last_main_sync_at":..., "last_error_message": None}) call left
+        them as None -- functionally identical, not merely similar.
+        """
+        deduped = list(dict.fromkeys(int(cik) for cik in ciks))
+        if not deduped:
+            return 0
+        insert_factory = self._insert_factory()
+        for chunk in self._chunks(deduped, self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            values = [
+                {
+                    "cik": cik,
+                    "tracking_status": "deregistered",
+                    "last_main_sync_at": demoted_at,
+                    "last_error_message": None,
+                }
+                for cik in chunk
+            ]
+            stmt = insert_factory(SecCompanySyncState).values(values)
+            excluded = stmt.excluded
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[SecCompanySyncState.cik],
+                set_={
+                    "tracking_status": excluded.tracking_status,
+                    "last_main_sync_at": excluded.last_main_sync_at,
+                    "last_error_message": excluded.last_error_message,
+                },
+            )
+            self._session.execute(stmt)
+        return len(deduped)
+
     def get_tracked_ciks(self, tracking_status_filter: str = "active") -> list[int]:
         stmt = select(SecCompanySyncState.cik)
         tokens = [t.strip() for t in (tracking_status_filter or "").split(",") if t.strip()]
@@ -884,69 +1074,7 @@ class BookkeepingStore:
         rows = self._session.execute(stmt).all()
         return [{"cik": r[0]} for r in rows]
 
-    # -- sec_reconcile_finding -----------------------------------------------
-
-    def insert_reconcile_findings(self, rows: list[dict[str, Any]]) -> int:
-        insert_factory = self._insert_factory()
-        count = 0
-        for row in rows:
-            detected_at = row.get("detected_at") or datetime.now(timezone.utc)
-            stmt = insert_factory(SecReconcileFinding).values(
-                reconcile_run_id=row["reconcile_run_id"],
-                cik=row["cik"],
-                scope_type=row["scope_type"],
-                object_type=row["object_type"],
-                object_key=row["object_key"],
-                drift_type=row["drift_type"],
-                expected_value_hash=row.get("expected_value_hash"),
-                actual_value_hash=row.get("actual_value_hash"),
-                severity=row.get("severity", "medium"),
-                recommended_action=row.get("recommended_action", "manual_review"),
-                status=row.get("status", "detected"),
-                detected_at=detected_at,
-                resolved_at=row.get("resolved_at"),
-                resync_run_id=row.get("resync_run_id"),
-            )
-            excluded = stmt.excluded
-            stmt = stmt.on_conflict_do_update(
-                index_elements=[
-                    SecReconcileFinding.reconcile_run_id,
-                    SecReconcileFinding.cik,
-                    SecReconcileFinding.scope_type,
-                    SecReconcileFinding.object_type,
-                    SecReconcileFinding.object_key,
-                    SecReconcileFinding.drift_type,
-                ],
-                set_={
-                    "expected_value_hash": excluded.expected_value_hash,
-                    "actual_value_hash": excluded.actual_value_hash,
-                    "severity": excluded.severity,
-                    "recommended_action": excluded.recommended_action,
-                    "status": excluded.status,
-                    "detected_at": excluded.detected_at,
-                    "resolved_at": excluded.resolved_at,
-                    "resync_run_id": excluded.resync_run_id,
-                },
-            )
-            self._session.execute(stmt)
-            count += 1
-        return count
-
-    def get_reconcile_findings(self, reconcile_run_id: str) -> list[dict[str, Any]]:
-        stmt = (
-            select(SecReconcileFinding)
-            .where(SecReconcileFinding.reconcile_run_id == reconcile_run_id)
-            .order_by(
-                SecReconcileFinding.cik,
-                SecReconcileFinding.scope_type,
-                SecReconcileFinding.object_type,
-                SecReconcileFinding.object_key,
-            )
-        )
-        rows = self._session.execute(stmt).scalars().all()
-        return [self._to_dict(r) for r in rows]
-
-    # -- narrowed get_table_counts (11 tables only; see module docstring) ----
+    # -- narrowed get_table_counts (10 tables only; see module docstring) ----
 
     def get_table_counts(self) -> dict[str, int]:
         # Looks up the Core Table straight from Base.metadata (keyed by the

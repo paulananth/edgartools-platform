@@ -1,4 +1,4 @@
-"""Structural checks on the 5 MDM Pipeline Machines' shared-tail wiring.
+"""Structural checks on the remaining 4 MDM Pipeline Machines' shared-tail wiring.
 
 state-machine-consolidation wayfinder map, ticket 02: after the "one shared
 tail" premise turned out wrong (6 genuinely distinct tail shapes across
@@ -8,6 +8,12 @@ each machine's own Publish/Publish Relationships/Reconcile(/GoldRefresh) states 
 the shared wire_mdm_tail() sequencing skeleton (infra/scripts/
 mdm_tail_helper.py) instead of hand-typed Next pointers, while every flag/
 Catch/retry-count difference stays exactly as it was.
+
+mdm_gold retired by ticket 07 (deleted outright -- it had no head, fully
+redundant with the new single MDM machine); the remaining 4
+(ownership_mdm_gold, silver_mdm_gold, bronze_seed_silver_gold's default
+path, residual_holds_graph) still use wire_mdm_tail() as-is, their fate
+left open in ticket 08.
 
 These tests generate the real JSON by sourcing the actual bash functions,
 mirroring test_load_history_state_machine.py's approach. Network-free: no

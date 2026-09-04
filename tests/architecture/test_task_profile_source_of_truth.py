@@ -21,17 +21,19 @@ load-daily-form-index-for-date / catch-up-daily-form-index / seed-universe,
 which aren't gold-affecting but are still resolved via workflow_profile()
 today):
 
-1. ``bootstrap-full``, ``targeted-resync``, ``full-reconcile``,
+1. ``bootstrap-full``, ``targeted-resync``,
    ``load-daily-form-index-for-date``, ``catch-up-daily-form-index``,
    ``gold-refresh``, ``seed-universe``: workflow_profile()'s case statement,
-   invoked directly (the real bash function).
+   invoked directly (the real bash function). (``full-reconcile`` was a
+   member of this set until it was decommissioned entirely -- zero
+   executions ever, no schedule, no live caller of its CLI command left.)
 2. ``daily-incremental``: workflow_profile() has a case for this, but it's
    DEAD CODE -- workflow_profile() is never called with this name anywhere
    in the script (see that function's own comment). Its actual
-   RunWarehouseTask step -- the one that runs `daily-incremental` itself --
+   CaptureAndVerifyNewFilings step -- the one that runs `daily-incremental` itself --
    is built directly by write_warehouse_mdm_gold_definition, which takes
    the medium/large ARNs as plain parameters. Resolved by generating that
-   function's real state machine JSON and reading RunWarehouseTask's
+   function's real state machine JSON and reading CaptureAndVerifyNewFilings's
    actual TaskDefinition. (``bootstrap`` was this path's other member
    until state-machine-consolidation ticket 06 retired it.)
 3. ``bootstrap-next``: never passed to workflow_profile() or
@@ -103,7 +105,6 @@ pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not a
 _ALL_COMMANDS = {
     "bootstrap-full",
     "targeted-resync",
-    "full-reconcile",
     "load-daily-form-index-for-date",
     "catch-up-daily-form-index",
     "gold-refresh",
@@ -112,7 +113,7 @@ _ALL_COMMANDS = {
     "bootstrap-next",
 }
 
-# Commands whose RunWarehouseTask step is built directly by
+# Commands whose CaptureAndVerifyNewFilings step is built directly by
 # write_warehouse_mdm_gold_definition -- workflow_profile() has a case for
 # this name but it is unreachable dead code (see module docstring, path 2).
 _WAREHOUSE_MDM_GOLD_MEMBERS = {"daily-incremental"}
@@ -137,7 +138,7 @@ _LOAD_HISTORY_END = "\nPY\n}\n"
 
 # Fake ARNs passed into write_warehouse_mdm_gold_definition's medium/large
 # parameters -- distinguishable strings so the generated JSON's
-# RunWarehouseTask.Parameters.TaskDefinition tells us which one was used.
+# CaptureAndVerifyNewFilings.Parameters.TaskDefinition tells us which one was used.
 _FAKE_MEDIUM_ARN = "arn:fake-wh-medium"
 _FAKE_LARGE_ARN = "arn:fake-wh-large"
 _FAKE_ARN_PROFILE = {_FAKE_MEDIUM_ARN: "medium", _FAKE_LARGE_ARN: "large"}
@@ -212,7 +213,7 @@ def _resolve_command_task_profile(command_name: str) -> str:
 
 def _run_warehouse_task_profile(workflow_name: str) -> str:
     """Generate the real write_warehouse_mdm_gold_definition() state machine
-    JSON for workflow_name and return which profile its RunWarehouseTask step
+    JSON for workflow_name and return which profile its CaptureAndVerifyNewFilings step
     -- the one that actually runs `daily-incremental` itself -- resolves to.
     Same technique as
     test_source_export_commands_task_sizing.py's helper of the same shape.
@@ -242,13 +243,13 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_warehouse_mdm_gold_definition "{out_file.as_posix()}" '
-            f'"{_FAKE_MEDIUM_ARN}" "arn:fake-mdm-small" "arn:fake-mdm-medium" "{_FAKE_LARGE_ARN}" '
-            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts"\n',
+            f'"{_FAKE_MEDIUM_ARN}" "{_FAKE_LARGE_ARN}" '
+            f'"{workflow_name}" "fake-bronze-bucket" "arn:aws:sns:us-east-1:000000000000:fake-alerts" '
+            '"arn:fake-mdm-machine"\n',
             encoding="utf-8",
         )
 
@@ -262,9 +263,9 @@ def _run_warehouse_task_profile(workflow_name: str) -> str:
             )
         definition = json.loads(out_file.read_text(encoding="utf-8"))
 
-    arn = definition["States"]["RunWarehouseTask"]["Parameters"]["TaskDefinition"]
+    arn = definition["States"]["CaptureAndVerifyNewFilings"]["Parameters"]["TaskDefinition"]
     assert arn in _FAKE_ARN_PROFILE, (
-        f"{workflow_name}'s RunWarehouseTask resolved to an unrecognized ARN {arn!r} -- "
+        f"{workflow_name}'s CaptureAndVerifyNewFilings resolved to an unrecognized ARN {arn!r} -- "
         "write_warehouse_mdm_gold_definition's parameter wiring changed shape"
     )
     return _FAKE_ARN_PROFILE[arn]
@@ -304,15 +305,14 @@ def _run_load_history_bootstrap_next_profile() -> str:
             'BRONZE_BUCKET_NAME="fake-bronze-bucket"\n'
             'PUBLIC_SUBNET_IDS_JSON=\'["subnet-aaaa","subnet-bbbb"]\'\n'
             'SECURITY_GROUP_IDS_JSON=\'["sg-cccc"]\'\n'
-            'MDM_RUN_LIMIT=100\n'
-            'MDM_GRAPH_LIMIT=200\n'
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
+            f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
             f'source "{command_task_profile_file.as_posix()}"\n'
             f'source "{fn_file.as_posix()}"\n'
             f'write_load_history_definition "{out_file.as_posix()}" '
             f'"{_FAKE_WH_SMALL_ARN}" "{_FAKE_WH_MEDIUM_ARN}" '
-            '"arn:fake-mdm-small" "arn:fake-mdm-medium" '
-            f'"{_FAKE_WH_LARGE_ARN}"\n',
+            '"arn:fake-mdm-medium" '
+            f'"{_FAKE_WH_LARGE_ARN}" "arn:fake-mdm-machine"\n',
             encoding="utf-8",
         )
 

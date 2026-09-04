@@ -139,7 +139,7 @@ STATE="$(echo "$INSTANCE_JSON" | python3 -c "import json,sys; rows=json.load(sys
 log "Instance READY. host=${HOST}"
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  log "DRY RUN — would rotate snowflake_admin once, create database '${DATABASE}' + role '${ROLE_NAME}', provision 11 tables, write secret:"
+  log "DRY RUN — would rotate snowflake_admin once, create database '${DATABASE}' + role '${ROLE_NAME}', provision 10 tables, write secret:"
   log "  ${BOOKKEEPING_POSTGRES_DSN_SECRET_ID}"
   exit 0
 fi
@@ -232,7 +232,7 @@ conn.close()
 
 bookkeeping_dsn = f"postgresql://{quote_plus(role_name)}:{quote_plus(app_pw)}@{host}:5432/{database}?sslmode=require"
 
-# Provision the 11 bookkeeping tables as bookkeeping_app itself (it just
+# Provision the 10 bookkeeping tables as bookkeeping_app itself (it just
 # received CREATE on schema public), so it owns what it creates -- no
 # REASSIGN OWNED dance needed, unlike MDM's snowflake_admin-runs-DDL shape.
 sys.path.insert(0, repo_root)

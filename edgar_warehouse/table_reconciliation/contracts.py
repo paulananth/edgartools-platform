@@ -9,7 +9,7 @@ integrity-proof.md``) rather than inventing a parallel one.
 Table universe: every key of ``PROTECTED_TABLE_REGISTRY``
 (``edgar_warehouse/silver_protection.py``) except ``pipeline_run_lease`` --
 that one table is run-level concurrency bookkeeping, not SEC content (same
-"11 bookkeeping tables are a different concern" boundary Ticket 08's own
+"10 bookkeeping tables are a different concern" boundary Ticket 08's own
 spec draws against Ticket 02's scope). ``business_keys``/``authority_column``/
 ``provenance_columns`` are taken directly from that registry rather than
 re-declared here -- it is already this repo's fail-closed source of truth

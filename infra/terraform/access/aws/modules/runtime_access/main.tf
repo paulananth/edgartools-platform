@@ -359,7 +359,22 @@ resource "aws_iam_role_policy" "step_functions_runtime" {
           "events:PutRule",
           "events:DescribeRule"
         ]
-        Resource = "arn:aws:events:${local.aws_region}:${data.aws_caller_identity.current.account_id}:rule/StepFunctionsGetEventsForECSTaskRule"
+        # Two separate AWS-managed EventBridge rules, one per resource type
+        # a .sync/.sync:2 Task can wait on -- the ECS one (StopTask/RunTask
+        # completion) already existed here; the Step-Functions one
+        # (state-machine-consolidation wayfinder map, ticket 07: the single
+        # MDM machine, called via states:startExecution.sync:2 from
+        # daily_incremental/load_history/the seed machine) is additive.
+        # states:StartExecution/DescribeExecution/StopExecution/
+        # RedriveExecution below were already broadly granted (Resource:
+        # "*") before ticket 07 -- this rule ARN was the one genuinely
+        # missing piece, per write_load_history_definition's own
+        # pre-ticket-07 comment ("no nested Step Function executions... so
+        # the existing role needs no extra EventBridge permissions").
+        Resource = [
+          "arn:aws:events:${local.aws_region}:${data.aws_caller_identity.current.account_id}:rule/StepFunctionsGetEventsForECSTaskRule",
+          "arn:aws:events:${local.aws_region}:${data.aws_caller_identity.current.account_id}:rule/StepFunctionsGetEventsForStepFunctionsExecutionRule",
+        ]
       },
       {
         Effect = "Allow"

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from edgar.ownership import Ownership
+
+_DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 PARSER_NAME = "ownership_v1"
 PARSER_VERSION = "2"
@@ -44,7 +47,7 @@ def parse_ownership(accession_number: str, content: str, form_type: str) -> dict
                 "owner_index": 1,
                 "txn_index": txn_index,
                 "security_title": str(getattr(txn, "security", None) or ""),
-                "transaction_date": _to_str(getattr(txn, "date", None)),
+                "transaction_date": _to_date_str(getattr(txn, "date", None)),
                 "transaction_code": str(getattr(txn, "transaction_code", None) or ""),
                 "transaction_shares": _to_float(getattr(txn, "shares", None)),
                 "transaction_price": _to_float(getattr(txn, "price", None)),
@@ -64,7 +67,7 @@ def parse_ownership(accession_number: str, content: str, form_type: str) -> dict
                 "owner_index": 1,
                 "txn_index": txn_index,
                 "security_title": str(getattr(txn, "security", None) or ""),
-                "transaction_date": _to_str(getattr(txn, "date", None)),
+                "transaction_date": _to_date_str(getattr(txn, "date", None)),
                 "transaction_code": str(getattr(txn, "transaction_code", None) or ""),
                 "transaction_shares": _to_float(getattr(txn, "shares", None)),
                 "transaction_price": _to_float(getattr(txn, "price", None)),
@@ -72,8 +75,8 @@ def parse_ownership(accession_number: str, content: str, form_type: str) -> dict
                 "shares_owned_after": _to_float(getattr(txn, "remaining", None)),
                 "ownership_direct_indirect": str(getattr(txn, "direct_indirect", None) or ""),
                 "conversion_or_exercise_price": _to_float(getattr(txn, "exercise_price", None)),
-                "exercise_date": _to_str(getattr(txn, "exercise_date", None)),
-                "expiration_date": _to_str(getattr(txn, "expiration_date", None)),
+                "exercise_date": _to_date_str(getattr(txn, "exercise_date", None)),
+                "expiration_date": _to_date_str(getattr(txn, "expiration_date", None)),
                 "underlying_security_title": str(getattr(txn, "underlying_security", None) or ""),
                 "underlying_security_shares": _to_float(getattr(txn, "underlying_shares", None)),
                 "parser_version": PARSER_VERSION,
@@ -106,3 +109,20 @@ def _to_str(value: Any) -> str | None:
         return None
     s = str(value)
     return s if s else None
+
+
+def _to_date_str(value: Any) -> str | None:
+    """Extract a leading YYYY-MM-DD date from a raw filing value.
+
+    SEC Form 3/4/5 XML legitimately attaches footnote markers (e.g.
+    "2021-02-04 [F2]") to date fields. DuckDB's implicit VARCHAR->DATE cast
+    silently truncates such values, but Snowflake's COPY INTO cast is
+    strict and rejects them outright -- aborting the whole silver-landing
+    load for every table, not just this row. Normalize at the source so
+    both consumers see the same clean value.
+    """
+    if value is None:
+        return None
+    s = str(value)
+    match = _DATE_PREFIX.match(s)
+    return match.group(0) if match else None
