@@ -27,9 +27,10 @@ hash-bound deletion of exact expired versions under settled year/day rules.
 - An **Artifact Retention Class** binds an S3 bucket/prefix pattern to its date
   basis, minimum retention period, disposition (`retain`, `transition`,
   `expire`, or `review`), and protection checks.
-- **Remediation** is any state-changing action. The script may execute only the
-  exact S3 VersionId deletion set bound to an unchanged reviewed plan hash;
-  every other remediation remains guidance only.
+- **Remediation** is any state-changing action. A separate manually dispatched,
+  protected workflow may execute only an exact S3 VersionId deletion set from
+  a prior run, bound to the independently reviewed plan hash; every other
+  remediation remains guidance only.
 - Report projected savings of at least USD 1/month, service spend increasing
   more than 20 percent month over month, and safety or configuration drift
   regardless of dollar value.
@@ -45,6 +46,8 @@ hash-bound deletion of exact expired versions under settled year/day rules.
   and [ECS and Step Functions Value, Cost, and Throughput Optimization](../ecs-cost-sizing/map.md).
 - S3 deletion must preserve versioning, encryption, public-access protection,
   the retention plan/evidence itself, and every unexpired or unmatched bundle.
+  Cross-accession deduplicated objects inherit the latest cutoff of every
+  referencing filing; current or unclassified references block deletion.
 - Fargate findings are task-bound candidates only. Do not recommend a profile
   promotion or downgrade without matched correctness, utilization, throughput,
   completion-time, recovery, idempotency, and cost evidence from the ECS map.
@@ -73,8 +76,8 @@ hash-bound deletion of exact expired versions under settled year/day rules.
   — The audit ranks S3 and Fargate first, inventories secondary AWS cost
   surfaces, and keeps all non-S3 findings advisory.
 - [Schedule the Weekly Cost Audit](issues/04-schedule-weekly-audit.md)
-  — A weekly and manual GitHub Actions workflow uses OIDC, persists the plan
-  before any optional deletion, and requires an explicit apply gate.
+  — Weekly audit/plan and separate protected manual apply workflows use OIDC;
+  apply consumes a prior persisted artifact plus its reviewed hash.
 - [Verify the Cost Audit End to End](issues/05-verify-audit-end-to-end.md)
   — Focused and full tests pass; the live read-only audit completed against the
   intended account with no collection gaps and no resource mutations.

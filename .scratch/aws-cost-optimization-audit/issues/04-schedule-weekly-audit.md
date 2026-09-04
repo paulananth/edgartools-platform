@@ -16,9 +16,9 @@ silently broadening credentials.
 
 ## Answer
 
-Resolved 2026-09-02. `.github/workflows/aws-cost-optimizer.yml` runs every
+Resolved 2026-09-03. `.github/workflows/aws-cost-optimizer.yml` runs every
 Sunday and on demand through an explicitly configured OIDC role. It uploads the
-audit and plan artifacts. S3 deletion stays disabled unless the repository or
-manual-run apply gate is true, and the reviewed plan is uploaded before apply.
-The workflow documents its role and authority-artifact prerequisites instead
-of provisioning or broadening IAM in application code.
+audit and plan artifacts but cannot delete. A separate protected manual apply
+workflow requires a prior plan run ID and independently reviewed hash. The
+workflows document exact role and authority-artifact prerequisites instead of
+provisioning or broadening IAM in application code.

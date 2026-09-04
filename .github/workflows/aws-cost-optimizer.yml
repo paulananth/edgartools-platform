@@ -4,12 +4,6 @@ on:
   schedule:
     - cron: "17 8 * * 0"
   workflow_dispatch:
-    inputs:
-      apply_s3_retention:
-        description: "Apply the exact classified S3 retention plan"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   id-token: write
@@ -78,18 +72,6 @@ jobs:
             artifacts/s3-retention-plan.json
             artifacts/s3-retention-plan-summary.json
           retention-days: 90
-
-      - name: Apply exact expired S3 versions
-        if: >-
-          ${{ steps.retention.outputs.plan_hash != '' &&
-              (vars.AWS_COST_OPTIMIZER_APPLY_S3_RETENTION == 'true' ||
-               inputs.apply_s3_retention == true) }}
-        run: |
-          uv run python scripts/ops/aws_cost_optimizer.py retention-apply \
-            --plan artifacts/s3-retention-plan.json \
-            --plan-hash "${{ steps.retention.outputs.plan_hash }}" \
-            --confirm-delete-expired-s3 \
-            --evidence-dir artifacts/s3-retention-apply
 
       - name: Upload audit and retention evidence
         if: always()

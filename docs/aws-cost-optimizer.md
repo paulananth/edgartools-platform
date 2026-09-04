@@ -56,9 +56,13 @@ uv run python scripts/ops/aws_cost_optimizer.py \
   --output /tmp/retention-authority.jsonl
 ```
 
-The query includes every known filing and text key and marks the accession
-incomplete if an attachment lacks its registered raw object. An incomplete or
-unmatched accession is never selected.
+The query includes every known filing and text key, requires registered index,
+primary-attachment, and projected-text evidence, and marks the accession
+incomplete if an attachment lacks its registered raw object. Because raw bytes
+are deduplicated across accessions, it also emits every cross-accession filing
+that references an object stored under the bundle. The planner uses the latest
+retention deadline across those references; a current or unclassified reference
+blocks deletion. An incomplete or unmatched accession is never selected.
 
 Publish the authority at a protected operational prefix outside every deletion
 rule, for example:
@@ -86,9 +90,11 @@ uv run python scripts/ops/aws_cost_optimizer.py \
 ```
 
 Apply requires the exact reviewed plan hash and an explicit confirmation. It
-re-reads every affected key and refuses if any VersionId, ETag, size, latest
-status, or delete marker changed. It deletes in exact-VersionId batches and
-then proves every planned version is absent.
+re-reads every affected prefix and refuses if any VersionId, ETag, size, latest
+status, or delete marker changed. It deletes only exact planned VersionIds, so
+a concurrent new version cannot be deleted, and then requires each affected
+prefix to be empty. A concurrent addition is preserved and reported as failed
+post-apply drift.
 
 ```bash
 PLAN_HASH="$(jq -r .plan_hash /tmp/s3-retention-plan.json)"
@@ -105,17 +111,27 @@ uv run python scripts/ops/aws_cost_optimizer.py \
 ## Weekly GitHub Actions configuration
 
 `.github/workflows/aws-cost-optimizer.yml` runs Sundays at 08:17 UTC and can be
-started manually. Configure these repository variables:
+started manually. It audits and persists a plan but never deletes. Configure
+these repository variables:
 
 - `AWS_COST_OPTIMIZER_ROLE_ARN`: dedicated GitHub OIDC role.
 - `AWS_COST_OPTIMIZER_RETENTION_AUTHORITY_URI`: protected S3 URI containing the
   refreshed JSONL authority.
-- `AWS_COST_OPTIMIZER_APPLY_S3_RETENTION`: set to `true` to let scheduled runs
-  apply the exact plan. If absent or false, scheduled runs audit and plan only.
+
+After reviewing that artifact, manually run
+`.github/workflows/aws-cost-retention-apply.yml` with the prior optimizer run ID
+and its reviewed plan hash. Configure the `aws-cost-retention` GitHub environment
+with required reviewers so plan creation cannot approve its own deletion.
+Set `AWS_COST_RETENTION_APPLY_ROLE_ARN` in that protected environment to a
+separate OIDC role; the weekly audit role must not have deletion permission.
 
 The role needs the read-only actions listed in
 `.scratch/aws-cost-optimization-audit/research/aws-cost-audit-surfaces-2026-09-02.md`.
-When scheduled retention apply is enabled, add only `s3:DeleteObjectVersion` on
+For the separate reviewed-retention role, add only `s3:DeleteObjectVersion` on
 `arn:aws:s3:::edgartools-prod-bronze-690839588395/warehouse/bronze/filings/*`
 and `/warehouse/bronze/text/*`; do not grant `s3:DeleteObject`, bucket lifecycle
 mutation, or deletion on the authority/evidence prefix.
+The audit role also needs `s3:GetObject` only on the exact protected authority
+object. If that object uses SSE-KMS, grant `kms:Decrypt` only for its key and
+only through S3. The apply role needs `s3:ListBucketVersions` on the Bronze
+bucket in addition to the scoped `s3:DeleteObjectVersion` permission.

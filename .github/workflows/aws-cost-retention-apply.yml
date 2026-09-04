@@ -1,0 +1,68 @@
+name: Apply reviewed AWS S3 retention plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_run_id:
+        description: "Completed AWS cost optimizer run containing the reviewed plan"
+        required: true
+        type: string
+      plan_hash:
+        description: "Reviewed SHA-256 from that plan"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  apply:
+    name: Delete exact reviewed S3 versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: aws-cost-retention
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Require the dedicated optimizer role
+        env:
+          ROLE_ARN: ${{ vars.AWS_COST_RETENTION_APPLY_ROLE_ARN }}
+        run: test -n "$ROLE_ARN" || { echo "AWS_COST_RETENTION_APPLY_ROLE_ARN environment variable is required" >&2; exit 1; }
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_COST_RETENTION_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download the previously persisted reviewed plan
+        uses: actions/download-artifact@v4
+        with:
+          name: s3-retention-plan-${{ inputs.plan_run_id }}
+          path: artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.plan_run_id }}
+
+      - name: Apply exact expired S3 versions
+        run: |
+          uv run python scripts/ops/aws_cost_optimizer.py retention-apply \
+            --plan artifacts/s3-retention-plan.json \
+            --plan-hash "${{ inputs.plan_hash }}" \
+            --confirm-delete-expired-s3 \
+            --evidence-dir artifacts/s3-retention-apply
+
+      - name: Upload deletion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws-cost-retention-apply-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 90

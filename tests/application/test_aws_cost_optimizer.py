@@ -13,6 +13,7 @@ from edgar_warehouse.application.aws_cost_optimizer import (
     AwsOperationGuard,
     CostPolicy,
     ObjectVersion,
+    RetentionReference,
     build_cost_findings,
     build_s3_retention_plan,
     compute_plan_hash,
@@ -144,6 +145,111 @@ def test_retention_plan_fails_closed_for_unclassified_object_in_bundle() -> None
     )
 
 
+def test_retention_plan_uses_latest_cross_accession_reference_deadline() -> None:
+    authority = _authority("0000000001-20-000001", "4", "2020-01-01")
+    authority = AccessionAuthority(
+        **{
+            **authority.__dict__,
+            "retention_references": (
+                RetentionReference(
+                    accession_number="0000000002-23-000001",
+                    form="DEF 14A",
+                    filing_date="2023-01-01",
+                ),
+            ),
+        }
+    )
+
+    held = build_s3_retention_plan(
+        [authority],
+        _versions(authority),
+        as_of=date(2026, 9, 2),
+        expected_account_id="690839588395",
+    )
+    expired = build_s3_retention_plan(
+        [authority],
+        _versions(authority),
+        as_of=date(2029, 1, 2),
+        expected_account_id="690839588395",
+        current_date=date(2030, 1, 1),
+    )
+
+    assert held.bundles == ()
+    assert expired.bundles[0].retain_through == "2028-01-01"
+
+
+def test_retention_plan_blocks_unclassified_cross_accession_reference() -> None:
+    authority = _authority("0000000001-20-000001", "4", "2020-01-01")
+    authority = AccessionAuthority(
+        **{
+            **authority.__dict__,
+            "retention_references": (
+                RetentionReference(
+                    accession_number="0000000002-19-000001",
+                    form="10-K",
+                    filing_date="2019-01-01",
+                ),
+            ),
+        }
+    )
+
+    plan = build_s3_retention_plan(
+        [authority],
+        _versions(authority),
+        as_of=date(2026, 9, 2),
+        expected_account_id="690839588395",
+    )
+
+    assert plan.bundles == ()
+    assert plan.unmatched == (
+        "0000000001-20-000001: shared object has an unclassified or current reference",
+    )
+
+
+def test_retention_plan_blocks_every_duplicate_authority_row() -> None:
+    expired = _authority("0000000001-20-000001", "4", "2020-01-01")
+    unexpired = _authority("0000000001-20-000001", "DEF 14A", "2024-01-01")
+
+    plan = build_s3_retention_plan(
+        [expired, unexpired],
+        _versions(expired),
+        as_of=date(2026, 9, 2),
+        expected_account_id="690839588395",
+    )
+
+    assert plan.bundles == ()
+    assert plan.unmatched == ("0000000001-20-000001: duplicate authority rows",)
+    assert (
+        aws_cost_optimizer_cli.select_expired_authorities(
+            [expired, unexpired], as_of=date(2026, 9, 2), limit=1000
+        )
+        == []
+    )
+
+
+def test_retention_plan_and_apply_reject_future_as_of_dates() -> None:
+    authority = _authority("0000000001-20-000001", "4", "2020-01-01")
+    with pytest.raises(ValueError, match="as_of cannot be in the future"):
+        build_s3_retention_plan(
+            [authority],
+            _versions(authority),
+            as_of=date(2099, 1, 1),
+            expected_account_id="690839588395",
+            current_date=date(2026, 9, 3),
+        )
+
+    plan = build_s3_retention_plan(
+        [authority],
+        _versions(authority),
+        as_of=date(2026, 9, 2),
+        expected_account_id="690839588395",
+        current_date=date(2026, 9, 3),
+    ).to_dict()
+    plan["as_of"] = "2099-01-01"
+    with pytest.raises(ValueError, match="plan as_of cannot be in the future"):
+        validate_s3_retention_plan_for_apply(plan, current_date=date(2026, 9, 3))
+
+
 def test_plan_hash_detects_any_reviewed_plan_change() -> None:
     authority = _authority("0000000001-20-000001", "DEF 14A", "2020-01-01")
     plan = build_s3_retention_plan(
@@ -197,6 +303,20 @@ def test_apply_validation_rejects_coerced_policy_flags_and_empty_versions() -> N
         validate_s3_retention_plan_for_apply(plan)
 
 
+def test_apply_validation_rejects_duplicate_accession_bundles() -> None:
+    authority = _authority("0000000001-20-000001", "4", "2020-01-01")
+    plan = build_s3_retention_plan(
+        [authority],
+        _versions(authority),
+        as_of=date(2026, 9, 2),
+        expected_account_id="690839588395",
+    ).to_dict()
+    plan["bundles"] = [*plan["bundles"], plan["bundles"][0]]
+
+    with pytest.raises(ValueError, match="duplicate accession bundle"):
+        validate_s3_retention_plan_for_apply(plan)
+
+
 def test_require_account_rejects_invalid_or_unexpected_identity() -> None:
     class FakeCli:
         def read(self, service: str, operation: str) -> dict[str, str]:
@@ -244,6 +364,17 @@ def test_cost_findings_rank_s3_and_fargate_and_apply_thresholds() -> None:
     assert findings[0].drift_percent == pytest.approx(140.0)
 
 
+def test_cost_drift_threshold_does_not_require_one_dollar_increase() -> None:
+    findings = build_cost_findings(
+        previous_month={"AWS Key Management Service": 0.10},
+        latest_month={"AWS Key Management Service": 0.20},
+        policy=CostPolicy(minimum_monthly_savings_usd=1.0, drift_percent=20.0),
+    )
+
+    assert len(findings) == 1
+    assert findings[0].kind == "spend_drift"
+
+
 def test_authority_jsonl_requires_explicit_complete_bundle(tmp_path: Path) -> None:
     path = tmp_path / "authority.jsonl"
     path.write_text(
@@ -282,6 +413,15 @@ def test_normalize_snowflake_authority_accepts_uppercase_columns(tmp_path: Path)
                     "OBJECT_KEYS": [
                         "warehouse/bronze/filings/sec/cik=1/accession=0000000001-23-000001/primary/a.xml"
                     ],
+                    "RETENTION_REFERENCES": [
+                        {
+                            "ACCESSION_NUMBER": "0000000002-24-000001",
+                            "FORM": "DEF 14A",
+                            "FILING_DATE": "2024-04-01",
+                            "ITEM_502": False,
+                            "RETAIN_CURRENT": False,
+                        }
+                    ],
                 }
             ]
         ),
@@ -293,6 +433,7 @@ def test_normalize_snowflake_authority_accepts_uppercase_columns(tmp_path: Path)
     assert authority.accession_number == "0000000001-23-000001"
     assert authority.complete is True
     assert authority.item_502 is False
+    assert authority.retention_references[0].form == "DEF 14A"
 
 
 def test_apply_revalidates_then_deletes_exact_versions(tmp_path: Path) -> None:
@@ -348,3 +489,63 @@ def test_apply_revalidates_then_deletes_exact_versions(tmp_path: Path) -> None:
     assert {row["VersionId"] for row in cli.deleted} == {"version-1", "version-2"}
     assert (tmp_path / "evidence" / "reviewed-plan.json").exists()
     assert (tmp_path / "evidence" / "post-delete-result.json").exists()
+
+
+def test_apply_preserves_and_reports_concurrent_unplanned_version(tmp_path: Path) -> None:
+    authority = _authority("0000000001-20-000001", "4", "2020-01-01")
+    plan = build_s3_retention_plan(
+        [authority],
+        _versions(authority),
+        as_of=date(2026, 9, 2),
+        expected_account_id="690839588395",
+    )
+    concurrent = ObjectVersion(
+        bucket="edgartools-prod-bronze-690839588395",
+        key=authority.object_keys[0],
+        version_id="concurrent-version",
+        etag='"concurrent"',
+        size_bytes=1,
+        is_latest=True,
+        kind="version",
+    )
+
+    class FakeCli:
+        def __init__(self) -> None:
+            self.list_calls = 0
+
+        def read(self, service: str, operation: str, *arguments: str) -> dict[str, object]:
+            if (service, operation) == ("sts", "get-caller-identity"):
+                return {"Account": "690839588395"}
+            self.list_calls += 1
+            visible = _versions(authority) if self.list_calls == 1 else [concurrent]
+            return {
+                "IsTruncated": False,
+                "Versions": [
+                    {
+                        "Key": version.key,
+                        "VersionId": version.version_id,
+                        "ETag": version.etag,
+                        "Size": version.size_bytes,
+                        "IsLatest": version.is_latest,
+                    }
+                    for version in visible
+                ],
+            }
+
+        def delete_versions(self, *, bucket: str, batch_file: Path) -> dict[str, object]:
+            payload = json.loads(batch_file.read_text(encoding="utf-8"))
+            return {"Deleted": payload["Objects"]}
+
+    with pytest.raises(RuntimeError, match="concurrent unplanned versions"):
+        aws_cost_optimizer_cli.apply_retention_plan(
+            FakeCli(),
+            plan=plan.to_dict(),
+            expected_hash=plan.plan_hash,
+            evidence_dir=tmp_path / "evidence",
+        )
+
+    result = json.loads(
+        (tmp_path / "evidence" / "post-delete-result.json").read_text(encoding="utf-8")
+    )
+    assert result["complete"] is False
+    assert result["concurrent_versions"][0]["version_id"] == "concurrent-version"

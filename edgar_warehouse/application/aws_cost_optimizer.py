@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 S3_SERVICE = "Amazon Simple Storage Service"
@@ -52,6 +53,15 @@ class CostFinding:
 
 
 @dataclass(frozen=True)
+class RetentionReference:
+    accession_number: str
+    form: str
+    filing_date: str
+    item_502: bool = False
+    retain_current: bool = False
+
+
+@dataclass(frozen=True)
 class AccessionAuthority:
     accession_number: str
     form: str
@@ -60,6 +70,7 @@ class AccessionAuthority:
     item_502: bool = False
     retain_current: bool = False
     complete: bool = True
+    retention_references: tuple[RetentionReference, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -82,6 +93,7 @@ class DeletionBundle:
     retention_years: int
     item_502: bool
     retain_current: bool
+    retention_references: tuple[RetentionReference, ...]
     versions: tuple[ObjectVersion, ...]
 
 
@@ -120,7 +132,7 @@ def build_cost_findings(
         previous = float(previous_month.get(service, 0.0))
         latest = float(latest)
         increase = latest - previous
-        if increase < policy.minimum_monthly_savings_usd:
+        if increase <= 0:
             continue
         drift = 100.0 if previous <= 0 else increase / previous * 100.0
         if drift <= policy.drift_percent:
@@ -157,6 +169,31 @@ def retention_deadline(authority: AccessionAuthority) -> date | None:
     if years is None or authority.retain_current:
         return None
     return _add_years(authority.filing_date, years)
+
+
+def effective_retention_deadline(authority: AccessionAuthority) -> date | None:
+    """Return the latest cutoff across the owner and every shared-object user."""
+    deadline = retention_deadline(authority)
+    if deadline is None:
+        return None
+    for reference in authority.retention_references:
+        try:
+            reference_date = date.fromisoformat(reference.filing_date)
+        except ValueError:
+            return None
+        referenced = AccessionAuthority(
+            accession_number=reference.accession_number,
+            form=reference.form,
+            filing_date=reference_date,
+            object_keys=(),
+            item_502=reference.item_502,
+            retain_current=reference.retain_current,
+        )
+        reference_deadline = retention_deadline(referenced)
+        if reference_deadline is None:
+            return None
+        deadline = max(deadline, reference_deadline)
+    return deadline
 
 
 def _canonical_payload(value: Mapping[str, Any]) -> bytes:
@@ -233,30 +270,40 @@ def build_s3_retention_plan(
     *,
     as_of: date,
     expected_account_id: str,
+    current_date: date | None = None,
 ) -> S3RetentionPlan:
     """Select complete, expired accession bundles and every exact VersionId."""
     if not expected_account_id.isdigit() or len(expected_account_id) != 12:
         raise ValueError("expected_account_id must be exactly 12 digits")
+    current_date = current_date or datetime.now(UTC).date()
+    if as_of > current_date:
+        raise ValueError("as_of cannot be in the future")
     versions_by_key: dict[str, list[ObjectVersion]] = {}
     for version in versions:
         versions_by_key.setdefault(version.key, []).append(version)
 
     bundles: list[DeletionBundle] = []
     unmatched: list[str] = []
-    seen_accessions: set[str] = set()
+    accession_counts = Counter(item.accession_number for item in authorities)
+    reported_duplicates: set[str] = set()
     for authority in sorted(authorities, key=lambda item: item.accession_number):
-        if authority.accession_number in seen_accessions:
-            unmatched.append(f"{authority.accession_number}: duplicate authority row")
+        if accession_counts[authority.accession_number] > 1:
+            if authority.accession_number not in reported_duplicates:
+                unmatched.append(f"{authority.accession_number}: duplicate authority rows")
+                reported_duplicates.add(authority.accession_number)
             continue
-        seen_accessions.add(authority.accession_number)
         years = retention_years(authority)
         if years is None:
             unmatched.append(
                 f"{authority.accession_number}: form {authority.form} has no classified retention rule"
             )
             continue
-        retain_through = retention_deadline(authority)
+        retain_through = effective_retention_deadline(authority)
         if retain_through is None:
+            if authority.retention_references:
+                unmatched.append(
+                    f"{authority.accession_number}: shared object has an unclassified or current reference"
+                )
             continue
         if as_of <= retain_through:
             continue
@@ -278,6 +325,7 @@ def build_s3_retention_plan(
                 retention_years=years,
                 item_502=authority.item_502,
                 retain_current=authority.retain_current,
+                retention_references=authority.retention_references,
                 versions=selected,
             )
         )
@@ -309,6 +357,8 @@ def build_s3_retention_plan(
 
 def validate_s3_retention_plan_for_apply(
     plan: Mapping[str, Any],
+    *,
+    current_date: date | None = None,
 ) -> tuple[ObjectVersion, ...]:
     """Revalidate policy and destructive scope independently of plan creation."""
     if plan.get("schema_version") != 1:
@@ -317,16 +367,33 @@ def validate_s3_retention_plan_for_apply(
     if not account_id.isdigit() or len(account_id) != 12:
         raise ValueError("plan expected_account_id must be exactly 12 digits")
     as_of = date.fromisoformat(str(plan.get("as_of") or ""))
+    current_date = current_date or datetime.now(UTC).date()
+    if as_of > current_date:
+        raise ValueError("plan as_of cannot be in the future")
     versions: list[ObjectVersion] = []
     identities: set[tuple[str, str, str]] = set()
+    accessions: set[str] = set()
     for bundle in plan.get("bundles") or []:
         accession = str(bundle.get("accession_number") or "")
+        if accession in accessions:
+            raise ValueError(f"plan contains duplicate accession bundle {accession}")
+        accessions.add(accession)
         form = str(bundle.get("form") or "")
         filing_date = date.fromisoformat(str(bundle.get("filing_date") or ""))
         item_502 = bundle.get("item_502")
         retain_current = bundle.get("retain_current")
         if not isinstance(item_502, bool) or not isinstance(retain_current, bool):
             raise TypeError(f"plan bundle {accession} policy flags must be booleans")
+        references: list[RetentionReference] = []
+        for reference_row in bundle.get("retention_references") or []:
+            reference = RetentionReference(**reference_row)
+            if not isinstance(reference.item_502, bool) or not isinstance(
+                reference.retain_current, bool
+            ):
+                raise TypeError(
+                    f"plan bundle {accession} reference policy flags must be booleans"
+                )
+            references.append(reference)
         authority = AccessionAuthority(
             accession_number=accession,
             form=form,
@@ -335,9 +402,10 @@ def validate_s3_retention_plan_for_apply(
             retain_current=retain_current,
             complete=True,
             object_keys=(),
+            retention_references=tuple(references),
         )
         years = retention_years(authority)
-        deadline = retention_deadline(authority)
+        deadline = effective_retention_deadline(authority)
         if years is None or deadline is None:
             raise ValueError(f"plan bundle {accession} has no active deletion rule")
         if int(bundle.get("retention_years", -1)) != years:

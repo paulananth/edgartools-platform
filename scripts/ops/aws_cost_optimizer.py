@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -30,9 +30,10 @@ from edgar_warehouse.application.aws_cost_optimizer import (
     AwsOperationGuard,
     CostPolicy,
     ObjectVersion,
+    RetentionReference,
     build_cost_findings,
     build_s3_retention_plan,
-    retention_deadline,
+    effective_retention_deadline,
     validate_s3_retention_plan_for_apply,
     verify_plan_hash,
 )
@@ -459,6 +460,21 @@ def load_authorities(path: Path) -> list[AccessionAuthority]:
             if isinstance(raw_keys, str):
                 raw_keys = json.loads(raw_keys)
             keys = tuple(str(value) for value in raw_keys)
+            raw_references = row.get("retention_references") or []
+            if not isinstance(raw_references, list):
+                raise TypeError("retention_references must be an array")
+            references = tuple(
+                RetentionReference(
+                    accession_number=str(reference["accession_number"]),
+                    form=str(reference["form"] or ""),
+                    filing_date=str(reference["filing_date"] or "")[:10],
+                    item_502=_bool_value(reference.get("item_502", False), "item_502"),
+                    retain_current=_bool_value(
+                        reference.get("retain_current", False), "retain_current"
+                    ),
+                )
+                for reference in raw_references
+            )
             authorities.append(
                 AccessionAuthority(
                     accession_number=str(row["accession_number"]),
@@ -470,6 +486,7 @@ def load_authorities(path: Path) -> list[AccessionAuthority]:
                     ),
                     complete=_bool_value(row.get("complete", False), "complete"),
                     object_keys=keys,
+                    retention_references=references,
                 )
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -501,6 +518,35 @@ def normalize_snowflake_authority(source: Path, destination: Path) -> int:
             raw_keys = json.loads(raw_keys)
         if not isinstance(raw_keys, list):
             raise TypeError(f"Snowflake authority row {index} has invalid OBJECT_KEYS")
+        raw_references = lowered.get("retention_references") or []
+        if isinstance(raw_references, str):
+            raw_references = json.loads(raw_references)
+        if not isinstance(raw_references, list):
+            raise TypeError(
+                f"Snowflake authority row {index} has invalid RETENTION_REFERENCES"
+            )
+        references = [
+            {
+                "accession_number": reference.get("accession_number")
+                or reference.get("ACCESSION_NUMBER"),
+                "form": reference.get("form") or reference.get("FORM") or "",
+                "filing_date": str(
+                    reference.get("filing_date") or reference.get("FILING_DATE") or ""
+                )[:10],
+                "item_502": _bool_value(
+                    reference.get("item_502", reference.get("ITEM_502", False)),
+                    "ITEM_502",
+                ),
+                "retain_current": _bool_value(
+                    reference.get(
+                        "retain_current", reference.get("RETAIN_CURRENT", False)
+                    ),
+                    "RETAIN_CURRENT",
+                ),
+            }
+            for reference in raw_references
+        ]
+        references.sort(key=lambda reference: str(reference["accession_number"]))
         normalized.append(
             {
                 "accession_number": lowered.get("accession_number"),
@@ -512,6 +558,7 @@ def normalize_snowflake_authority(source: Path, destination: Path) -> int:
                 ),
                 "complete": _bool_value(lowered.get("complete", False), "COMPLETE"),
                 "object_keys": sorted({str(key) for key in raw_keys if key}),
+                "retention_references": references,
             }
         )
     normalized.sort(key=lambda row: str(row["accession_number"]))
@@ -591,6 +638,30 @@ def collect_versions(
             )
             versions.extend(_normalize_versions(payload, bucket=bucket, prefix=prefix))
     return versions
+
+
+def select_expired_authorities(
+    authorities: Iterable[AccessionAuthority],
+    *,
+    as_of: date,
+    limit: int,
+) -> list[AccessionAuthority]:
+    rows = list(authorities)
+    accession_counts = Counter(row.accession_number for row in rows)
+    selected = [
+        authority
+        for authority in rows
+        if accession_counts[authority.accession_number] == 1
+        and effective_retention_deadline(authority) is not None
+        and as_of > effective_retention_deadline(authority)
+    ]
+    selected.sort(
+        key=lambda authority: (
+            effective_retention_deadline(authority),
+            authority.accession_number,
+        )
+    )
+    return selected[:limit]
 
 
 def _version_identity(version: ObjectVersion) -> tuple[str, str, str, str, str, int, bool]:
@@ -685,16 +756,18 @@ def apply_retention_plan(
         remaining.extend(_normalize_versions(payload, bucket=bucket, prefix=prefix))
     planned_ids = {(item.bucket, item.key, item.version_id) for item in planned}
     not_deleted = [
-        item
-        for item in remaining
-        if (item.bucket, item.key, item.version_id) in planned_ids
+        item for item in remaining if (item.bucket, item.key, item.version_id) in planned_ids
+    ]
+    concurrent_versions = [
+        item for item in remaining if (item.bucket, item.key, item.version_id) not in planned_ids
     ]
     result = {
         "plan_hash": expected_hash,
         "deleted_versions": len(planned),
         "deleted_bytes": sum(item.size_bytes for item in planned),
-        "complete": not not_deleted,
+        "complete": not not_deleted and not concurrent_versions,
         "remaining_planned_versions": [item.__dict__ for item in not_deleted],
+        "concurrent_versions": [item.__dict__ for item in concurrent_versions],
         "responses": responses,
     }
     (evidence_dir / "post-delete-result.json").write_text(
@@ -702,6 +775,11 @@ def apply_retention_plan(
     )
     if not_deleted:
         raise RuntimeError("post-delete verification found planned VersionIds still present")
+    if concurrent_versions:
+        raise RuntimeError(
+            "post-delete verification found concurrent unplanned versions; exact planned "
+            "versions were deleted but the accession prefix is not empty"
+        )
     return result
 
 
@@ -728,20 +806,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "retention-plan":
         require_account(cli, args.expected_account_id)
+        current_date = datetime.now(UTC).date()
+        if args.as_of > current_date:
+            raise ValueError("--as-of cannot be in the future")
         authorities = load_authorities(args.authority_jsonl)
-        expired = [
-            authority
-            for authority in authorities
-            if (retention_deadline(authority) is not None)
-            and args.as_of > retention_deadline(authority)
-        ]
-        expired.sort(
-            key=lambda authority: (
-                retention_deadline(authority),
-                authority.accession_number,
-            )
+        expired = select_expired_authorities(
+            authorities,
+            as_of=args.as_of,
+            limit=args.max_authorities,
         )
-        expired = expired[: args.max_authorities]
         versions = collect_versions(
             cli,
             expired,
