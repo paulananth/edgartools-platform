@@ -881,6 +881,86 @@ class BookkeepingStore:
         self._session.execute(stmt)
         return len(deduped)
 
+    # Sibling of _DISCOVERY_CLAIM_CHUNK_SIZE's bug (found live 2026-09-03,
+    # same daily_incremental investigation, same /diagnosing-bugs session):
+    # _seed_silver_tracking_status/_demote_deregistered_ciks
+    # (warehouse_orchestrator.py) looped one SELECT+INSERT (seed) or one
+    # INSERT (demote) per CIK, no batching -- at daily_incremental's real
+    # ~9,205 impacted-CIK scale this was a second, independent multi-minute
+    # stall sitting immediately BEFORE claim_discovery_ciks in the same
+    # call chain, confirmed live via CloudWatch after the
+    # claim_discovery_ciks fix alone did not close the observed gap.
+    _COMPANY_SYNC_STATE_BULK_CHUNK_SIZE = 1000
+
+    def seed_company_sync_state_bulk_if_missing(
+        self, ciks: list[int], *, tracking_status: str
+    ) -> int:
+        """Bulk-insert sec_company_sync_state rows for CIKs with no existing
+        row, leaving any already-tracked CIK's row completely untouched --
+        not even last_error_message, unlike seed_company_sync_state_bulk
+        above (which hardcodes tracking_status='bootstrap_pending' and
+        always clears last_error_message on conflict; a genuinely different
+        caller/contract, seed-universe's own initial seeding, not this
+        one). ON CONFLICT DO NOTHING is the correct primitive for "insert
+        only if truly new" -- preserves _seed_silver_tracking_status's
+        existing "existing rows keep their current status" contract
+        (tests/unit/test_pipeline_tracking_state.py) while batching what
+        was previously one SELECT + one conditional INSERT per CIK into
+        chunked bulk statements.
+        """
+        deduped = list(dict.fromkeys(int(cik) for cik in ciks))
+        if not deduped:
+            return 0
+        insert_factory = self._insert_factory()
+        for chunk in self._chunks(deduped, self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            values = [
+                {"cik": cik, "tracking_status": tracking_status, "last_error_message": None}
+                for cik in chunk
+            ]
+            stmt = insert_factory(SecCompanySyncState).values(values)
+            stmt = stmt.on_conflict_do_nothing(index_elements=[SecCompanySyncState.cik])
+            self._session.execute(stmt)
+        return len(deduped)
+
+    def demote_company_sync_state_bulk(self, ciks: list[int], *, demoted_at: datetime) -> int:
+        """Bulk-set tracking_status='deregistered' for CIKs with a Form 15
+        deregistration filing (seed-universe ticket 03) -- unconditional
+        overwrite (a company filing Form 15 was, by definition, already
+        tracked), mirroring upsert_company_sync_state's own ON CONFLICT
+        semantics for exactly the 3 fields _demote_deregistered_ciks sets,
+        just batched. Unspecified columns (bootstrap_completed_at, etc.)
+        are omitted from the INSERT the same way the original per-row
+        upsert_company_sync_state({"cik":..., "tracking_status":...,
+        "last_main_sync_at":..., "last_error_message": None}) call left
+        them as None -- functionally identical, not merely similar.
+        """
+        deduped = list(dict.fromkeys(int(cik) for cik in ciks))
+        if not deduped:
+            return 0
+        insert_factory = self._insert_factory()
+        for chunk in self._chunks(deduped, self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            values = [
+                {
+                    "cik": cik,
+                    "tracking_status": "deregistered",
+                    "last_main_sync_at": demoted_at,
+                    "last_error_message": None,
+                }
+                for cik in chunk
+            ]
+            stmt = insert_factory(SecCompanySyncState).values(values)
+            excluded = stmt.excluded
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[SecCompanySyncState.cik],
+                set_={
+                    "tracking_status": excluded.tracking_status,
+                    "last_main_sync_at": excluded.last_main_sync_at,
+                    "last_error_message": excluded.last_error_message,
+                },
+            )
+            self._session.execute(stmt)
+        return len(deduped)
+
     def get_tracked_ciks(self, tracking_status_filter: str = "active") -> list[int]:
         stmt = select(SecCompanySyncState.cik)
         tokens = [t.strip() for t in (tracking_status_filter or "").split(",") if t.strip()]

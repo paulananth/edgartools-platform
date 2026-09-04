@@ -101,6 +101,112 @@ class TestCompanySyncState:
         store.seed_company_sync_state_bulk([1])
         assert store.get_company_sync_state(1)["last_error_message"] is None
 
+    def test_seed_if_missing_new_ciks_get_caller_supplied_status(
+        self, store: BookkeepingStore
+    ) -> None:
+        n = store.seed_company_sync_state_bulk_if_missing([1, 2, 3], tracking_status="active")
+        assert n == 3
+        for cik in (1, 2, 3):
+            assert store.get_company_sync_state(cik)["tracking_status"] == "active"
+
+    def test_seed_if_missing_leaves_existing_row_completely_untouched(
+        self, store: BookkeepingStore
+    ) -> None:
+        """Unlike seed_company_sync_state_bulk (which always clears
+        last_error_message on conflict), seed_company_sync_state_bulk_if_missing
+        must leave an already-tracked CIK's row byte-for-byte alone --
+        including last_error_message -- since it exists to preserve
+        _seed_silver_tracking_status's original per-row loop's exact
+        "existing rows keep their current status" behavior."""
+        store.upsert_company_sync_state(
+            {"cik": 1, "tracking_status": "paused", "last_error_message": "boom"}
+        )
+        store.seed_company_sync_state_bulk_if_missing([1, 2], tracking_status="active")
+        row1 = store.get_company_sync_state(1)
+        assert row1["tracking_status"] == "paused"
+        assert row1["last_error_message"] == "boom"
+        assert store.get_company_sync_state(2)["tracking_status"] == "active"
+
+    def test_seed_if_missing_dedupes_input(self, store: BookkeepingStore) -> None:
+        n = store.seed_company_sync_state_bulk_if_missing([1, 1, 2], tracking_status="active")
+        assert n == 2
+
+    def test_seed_if_missing_empty_input(self, store: BookkeepingStore) -> None:
+        assert store.seed_company_sync_state_bulk_if_missing([], tracking_status="active") == 0
+
+    def test_seed_if_missing_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        """Regression guard for the live 2026-09-03 incident (found alongside
+        the claim_discovery_ciks fix in the same daily_incremental
+        investigation): the original _seed_silver_tracking_status issued one
+        SELECT + one conditional INSERT per CIK, with no batching -- its own
+        multi-minute stall sitting immediately before claim_discovery_ciks in
+        the same call chain, at the same ~9,205-CIK real prod scale."""
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_COMPANY_SYNC_STATE_BULK_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))  # 250 CIKs, chunk size 10 -> 25 chunks
+            n = store.seed_company_sync_state_bulk_if_missing(ciks, tracking_status="active")
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert n == 250
+        # 25 chunked INSERT...ON CONFLICT DO NOTHING statements -- not 250
+        # (one SELECT + one INSERT per CIK, what the original per-row loop cost).
+        assert len(statements) <= 30, (
+            f"expected ~25 batched statements (25 insert chunks for 250 CIKs "
+            f"at chunk size 10), got {len(statements)} -- "
+            "seed_company_sync_state_bulk_if_missing may have regressed to "
+            "one round trip per CIK"
+        )
+        assert len(statements) < len(ciks)
+
+    def test_demote_bulk_overwrites_status(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
+        n = store.demote_company_sync_state_bulk([1, 2], demoted_at=_now())
+        assert n == 2
+        assert store.get_company_sync_state(1)["tracking_status"] == "deregistered"
+        assert store.get_company_sync_state(2)["tracking_status"] == "deregistered"
+
+    def test_demote_bulk_dedupes_input(self, store: BookkeepingStore) -> None:
+        n = store.demote_company_sync_state_bulk([1, 1, 2], demoted_at=_now())
+        assert n == 2
+
+    def test_demote_bulk_empty_input(self, store: BookkeepingStore) -> None:
+        assert store.demote_company_sync_state_bulk([], demoted_at=_now()) == 0
+
+    def test_demote_bulk_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_COMPANY_SYNC_STATE_BULK_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))
+            n = store.demote_company_sync_state_bulk(ciks, demoted_at=_now())
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert n == 250
+        assert len(statements) <= 30
+        assert len(statements) < len(ciks)
+
     def test_seed_bulk_empty_input(self, store: BookkeepingStore) -> None:
         assert store.seed_company_sync_state_bulk([]) == 0
 

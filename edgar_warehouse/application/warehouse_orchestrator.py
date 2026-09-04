@@ -6705,19 +6705,17 @@ def _seed_silver_tracking_status(
 
     DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
     bookkeeping store -- this function never touched a DuckDB content table.
+
+    Batched (found live 2026-09-03, /diagnosing-bugs): this used to loop a
+    single-row SELECT + conditional INSERT per CIK -- at daily_incremental's
+    real ~9,205 impacted-CIK scale that was its own multi-minute stall,
+    sitting immediately before the (separately fixed) claim_discovery_ciks
+    bottleneck in the same call chain. seed_company_sync_state_bulk_if_missing
+    preserves the exact same "existing rows keep their current status"
+    contract via ON CONFLICT DO NOTHING, batched into chunked bulk
+    statements instead of one round trip per CIK.
     """
-    now = datetime.now(UTC)
-    for cik in _dedupe_ints(ciks):
-        if bookkeeping.get_company_sync_state(cik) is not None:
-            continue
-        bookkeeping.upsert_company_sync_state(
-            {
-                "cik": cik,
-                "tracking_status": tracking_status,
-                "last_main_sync_at": now,
-                "last_error_message": None,
-            }
-        )
+    bookkeeping.seed_company_sync_state_bulk_if_missing(ciks, tracking_status=tracking_status)
 
 
 # Real EDGAR daily-index form-type strings for deregistration (confirmed live
@@ -6748,16 +6746,14 @@ def _demote_deregistered_ciks(bookkeeping: "BookkeepingStore", ciks: list[int], 
 
     DuckDB Retirement Cutover Ticket 14: tracking state now comes from the
     bookkeeping store -- this function never touched a DuckDB content table.
+
+    Batched (found live 2026-09-03, /diagnosing-bugs, same investigation as
+    _seed_silver_tracking_status's sibling fix): one INSERT per CIK, no
+    batching. demote_company_sync_state_bulk preserves the exact same
+    unconditional-overwrite contract via ON CONFLICT DO UPDATE, just as
+    chunked bulk statements.
     """
-    for cik in _dedupe_ints(ciks):
-        bookkeeping.upsert_company_sync_state(
-            {
-                "cik": cik,
-                "tracking_status": "deregistered",
-                "last_main_sync_at": now,
-                "last_error_message": None,
-            }
-        )
+    bookkeeping.demote_company_sync_state_bulk(ciks, demoted_at=now)
 
 
 def _apply_bronze_cik_limit(ciks: list[int]) -> list[int]:
