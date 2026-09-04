@@ -92,3 +92,40 @@ unchanged and rewire their tails to a nested call into the new MDM machine
 (matching `daily_incremental`/`load_history`/`seed`'s pattern), chaining
 into `FactPublishtoGold` afterward exactly as today — but this was never
 confirmed by explicit user answer nor implemented. Needs its own pass.
+
+**Design worked out and reviewed (2026-09-03), not yet implemented —
+paused at user's request ("keep a note i dont want to work on anything
+yet").** `/implement ticket 08` surfaced a real conflict before any code
+was written: `silver_mdm_gold`'s and `bronze_seed_silver_gold`'s own
+`Mastering` states both have a load-bearing invariant the new MDM
+machine's `Mastering` doesn't honor today — no `--limit`, always a full
+unbounded bulk re-run (their own comment: "A hard limit would silently
+leave the majority of companies unprocessed in MDM and Neo4j"), versus
+the MDM machine's `Mastering`/`Infer Relationships` always applying
+`--limit` (bound to deploy-time `MDM_RUN_LIMIT`/`MDM_GRAPH_LIMIT`).
+Naively rewiring either caller as-is would silently turn "reprocess
+everything" into "reprocess ~100 companies." `bronze_seed_silver_gold`
+also passes `--resume-ledger-run-id $.resume_from_run_id` to its
+`Mastering`, which nothing else needs (confirmed safe to always include
+with a `""` default for other callers —
+`edgar_warehouse/mdm/pipeline.py:360`'s `str(resume_ledger_run_id or
+"").strip()` treats empty-string and absent identically).
+
+Reviewed design (`/gof-refactor-reviewer` consulted, verdict: sound, no
+blocking findings): add two optional input fields to the MDM machine's
+contract, `unbounded` (bool) and `resume_ledger_run_id` (string, default
+`""`); a Choice+Pass pair (mirroring this file's own established idiom —
+`batch_size_check`/`batch_size_default`,
+`resume_from_run_id_presence_check`/`default` in
+`write_bronze_seed_silver_gold_definition`) injects
+`$.effective_mdm_limit`/`$.effective_mdm_graph_limit` as either a large
+sentinel (unbounded) or the existing deploy-time defaults (bounded,
+unchanged for `daily_incremental`/`load_history`/`seed`) *before*
+`Mastering` runs; `Mastering`/`Infer Relationships` read those via
+`States.Format` instead of a bash-interpolated hardcoded value.
+`call_mdm_machine()` (`mdm_tail_helper.py`) needs a new optional
+`extra_input` parameter to carry these caller-supplied fields through —
+not yet implemented. Full design detail and the reviewer's exact findings
+are in this session's transcript; re-derive from this note plus a fresh
+`/gof-refactor-reviewer` pass if picked up in a different session, rather
+than trusting this summary blindly.
