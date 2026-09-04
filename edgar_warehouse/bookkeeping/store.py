@@ -91,6 +91,23 @@ class BookkeepingStore:
         for i in range(0, len(items), size):
             yield items[i : i + size]
 
+    @staticmethod
+    def _as_utc_date(value: datetime) -> date:
+        """Every caller in this codebase writes timestamps as tz-aware UTC
+        (the ``datetime.now(UTC)`` convention) -- but SQLite (this store's
+        test/dev dialect) has no real ``TIMESTAMP(timezone=True)`` support
+        and silently drops tzinfo on round trip, unlike Postgres (prod),
+        which always returns a tz-aware value. ``.astimezone()`` on a naive
+        datetime assumes *local system time*, which would misconvert an
+        already-UTC value read back from SQLite and shift its date --
+        reproduced live in this module's own test suite. Treat a naive value
+        as already-UTC instead of guessing; only convert when a real
+        timezone is attached.
+        """
+        if value.tzinfo is None:
+            return value.date()
+        return value.astimezone(timezone.utc).date()
+
     # -- stg_daily_index_filing / sec_daily_index_checkpoint ----------------
 
     def merge_daily_index_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
@@ -239,21 +256,26 @@ class BookkeepingStore:
 
     # daily_incremental's own --recurring-index-lookback-days revalidation
     # (CLAUDE.md's "Daily accession-expansion 5-whys") deliberately re-claims
-    # the same rolling-window CIK set on every run -- confirmed live
-    # 2026-09-03, two consecutive same-day daily_incremental executions both
-    # emitted cik_count: 9205 for the identical 5 business days. At that
-    # scale the original per-CIK loop below (one SELECT + one INSERT per
-    # CIK, no batching) cost ~30 minutes of pure Postgres round-trip latency
-    # every single run, confirmed via CloudWatch: a ~36-minute silent gap
-    # between the last SEC daily-index download and the first
-    # bronze_capture_progress log line, with zero log output in between.
-    # Batched into one chunked SELECT (existing in_progress-under-another-run
-    # rows) plus one chunked bulk upsert -- same claim semantics (dedupe
-    # input, skip a CIK in_progress under a different run_id, allow the same
-    # run_id to reclaim), just O(2 * ceil(N/chunk_size)) round trips instead
-    # of O(2N). Chunk size bounds bind-parameter count per statement (each
-    # upserted row is 9 columns; Postgres' ~65535-parameter-per-statement
-    # ceiling would otherwise be exceeded well before N=9205).
+    # the same rolling-window CIK set across separate calendar days -- that
+    # part is intentional (Ticket 45, release-readiness map: "force-recheck
+    # the trailing seven calendar days on every run", to catch a late SEC
+    # daily-index republish). It was NOT intentional for two runs on the SAME
+    # calendar day: confirmed live 2026-09-03, two consecutive same-day
+    # daily_incremental executions both emitted cik_count: 9205 for the
+    # identical 5 business days -- the second run fully reprocessed CIKs the
+    # first had already succeeded on minutes earlier. At that scale the
+    # original per-CIK loop below (one SELECT + one INSERT per CIK, no
+    # batching) cost ~30 minutes of pure Postgres round-trip latency every
+    # single run, confirmed via CloudWatch: a ~36-minute silent gap between
+    # the last SEC daily-index download and the first bronze_capture_progress
+    # log line, with zero log output in between. Batched into one chunked
+    # SELECT (existing in_progress-under-another-run rows, plus a same-day
+    # succeeded-under-this-source check added as a follow-up fix, see
+    # claim_discovery_ciks' own inline comment) plus one chunked bulk upsert
+    # -- O(2 * ceil(N/chunk_size)) round trips instead of O(2N). Chunk size
+    # bounds bind-parameter count per statement (each upserted row is 9
+    # columns; Postgres' ~65535-parameter-per-statement ceiling would
+    # otherwise be exceeded well before N=9205).
     _DISCOVERY_CLAIM_CHUNK_SIZE = 1000
 
     def claim_discovery_ciks(
@@ -271,18 +293,59 @@ class BookkeepingStore:
             return []
 
         scope_keys = [str(cik) for cik in deduped]
+        claimed_at_date = self._as_utc_date(claimed_at)
         blocked: set[str] = set()
         for chunk in self._chunks(scope_keys, self._DISCOVERY_CLAIM_CHUNK_SIZE):
             stmt = select(
                 DiscoveryCheckpoint.scope_key,
                 DiscoveryCheckpoint.status,
                 DiscoveryCheckpoint.run_id,
+                DiscoveryCheckpoint.discovery_source,
+                DiscoveryCheckpoint.finished_at,
             ).where(
                 DiscoveryCheckpoint.scope_type == "cik",
                 DiscoveryCheckpoint.scope_key.in_(chunk),
             )
-            for scope_key, status, existing_run_id in self._session.execute(stmt).all():
+            for (
+                scope_key,
+                status,
+                existing_run_id,
+                existing_source,
+                finished_at,
+            ) in self._session.execute(stmt).all():
                 if status == "in_progress" and existing_run_id != run_id:
+                    blocked.add(scope_key)
+                elif (
+                    status == "succeeded"
+                    and existing_run_id != run_id
+                    and existing_source == discovery_source
+                    and finished_at is not None
+                    and self._as_utc_date(finished_at) == claimed_at_date
+                ):
+                    # daily_incremental follow-up (change-propagation map),
+                    # confirmed live 2026-09-04: without this, a CIK that
+                    # already succeeded earlier *today* under this same
+                    # discovery_source was reclaimed and fully reprocessed by
+                    # the very next run, no matter how recently it finished --
+                    # two same-day daily_incremental runs both claimed the
+                    # identical 8,699 CIKs. Scoped to same discovery_source and
+                    # same UTC calendar day only: a different source (e.g.
+                    # bootstrap_next) is unaffected, and Ticket 45's deliberate
+                    # 7-day-recheck design is untouched for any CIK not
+                    # already succeeded today -- it is reclaimed normally on
+                    # the next calendar day, still catching late SEC
+                    # daily-index republishes exactly as before.
+                    #
+                    # existing_run_id != run_id preserves this method's
+                    # original, pre-existing invariant (this docstring's own
+                    # class-level comment above always said "allow the same
+                    # run_id to reclaim") -- a run resuming/retrying under its
+                    # own run_id must never be blocked by its own prior
+                    # success, only a *different* run's same-day success
+                    # should suppress a reclaim. Not reachable via today's
+                    # production callers (each execution gets a fresh
+                    # run_id), but this is a real invariant worth keeping
+                    # explicit and tested, not silently dropped.
                     blocked.add(scope_key)
 
         claimed = [cik for cik, scope_key in zip(deduped, scope_keys) if scope_key not in blocked]

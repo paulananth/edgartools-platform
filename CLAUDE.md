@@ -2065,6 +2065,92 @@ records the ambient paramstyle at the moment `.connect()` is called — the
 prior end-to-end test only used a plain `MagicMock`, which never exercised
 this timing at all and would not have caught this bug. Full repo suite green.
 
+## daily_incremental same-day re-claim 5-whys (fixed 2026-09-04)
+
+**Problem:** A manually-started `daily_incremental` execution
+(`daily-incremental-1788549087`) re-processed `cik_count: 8699` — live
+CloudWatch logs showed every one of those CIKs' silver-apply rows
+correctly skipped (`rows_written: 0`), but the run still paid the full
+per-CIK discovery/checkpoint-resolution cost, ~35-44 minutes of pure
+overhead, for a set of CIKs an earlier same-day run
+(`daily-incremental-resultpathfix-clean-1788517378`, finished ~4h51m
+earlier) had already fully succeeded on.
+
+1. Symptom: two `daily_incremental` executions on the same calendar day
+   both claimed the identical 8,699-CIK set — confirmed via a direct,
+   read-only query against prod Bookkeeping Postgres:
+   `discovery_checkpoint` showed the morning run's `run_id` with
+   `status='succeeded'` for exactly 8,699 `scope_key`s, and the afternoon
+   run's own live log emitted the same `cik_count: 8699`.
+2. Why does a same-day rerun redo the same CIKs? `claim_discovery_ciks`
+   (`edgar_warehouse/bookkeeping/store.py`) only ever blocked a CIK that
+   was `status='in_progress'` under a *different* `run_id` — a genuinely
+   concurrent-writer guard, not a "was this already done" check.
+3. Why didn't a `'succeeded'` status block reclaim? It was never designed
+   to: `claim_discovery_ciks`'s whole job (per its own pre-existing
+   docstring) is "prevent active overlap" between concurrent runs, not
+   "don't redo recently-finished work" — those are two different
+   guarantees that happened to share one function, and only the first was
+   ever built.
+4. Why wasn't this caught by the already-known "9,205 CIKs, same 5
+   business days" observation from 2026-09-03 (recorded in this function's
+   own pre-fix comment)? That comment correctly diagnosed the *symptom*
+   (a same-day rerun reprocesses the same CIK union) and fixed its
+   *performance* cost (batching the round trips from O(N) to O(chunks)),
+   but treated the redundant reclaim itself as an accepted consequence of
+   Ticket 45's deliberate "force-recheck the trailing seven calendar days
+   on every run" design (`.scratch/release-readiness/issues/
+   45-decide-narrow-daily-incremental-stage0-and-cadence.md`) — nobody
+   had separated "recheck across calendar days, by design" from "recheck
+   within the same calendar day, never decided."
+5. **Root cause:** `claim_discovery_ciks` conflated two distinct
+   dedup guarantees under one status field — "not concurrently in
+   progress" (real, needed, already correct) and "not already finished
+   recently" (assumed by callers to follow from the first, but never
+   actually implemented) — and the one prior investigation into this
+   exact symptom fixed the performance cost of the gap without noticing
+   the gap itself was fixable without touching Ticket 45's deliberate
+   7-day design at all.
+
+**Fix:** `claim_discovery_ciks` gained a second blocking condition — a CIK
+already `status='succeeded'` under the *same* `discovery_source`, with
+`finished_at` on the *same UTC calendar day* as this call's `claimed_at`,
+is now also blocked from reclaim. Deliberately narrow: scoped to same
+source (a different source, e.g. `bootstrap_next`, is unaffected) and same
+calendar day only — a CIK last succeeded on a *prior* day is reclaimed
+exactly as before, so Ticket 45's 7-day late-republish protection is fully
+intact. A same `run_id` reclaiming its own prior same-day success is also
+explicitly exempted (`existing_run_id != run_id` in the new condition),
+preserving this method's original, always-documented "allow the same
+run_id to reclaim" invariant — a real gap found by `/code-review`'s Spec
+axis in the first draft, fixed before commit rather than shipped silently
+narrowed. New `_as_utc_date` static helper normalizes the date comparison
+against SQLite's real behavior in this store's own test suite (SQLite has
+no genuine `TIMESTAMP(timezone=True)` support and drops tzinfo on
+round-trip, unlike Postgres in prod, which always returns a tz-aware
+value) — `.astimezone()` on a naive datetime assumes local system time,
+which would have silently mis-shifted the date depending on the running
+machine's timezone; reproduced live in this fix's own test suite before
+being corrected.
+
+Verified live against real prod Bookkeeping Postgres (read-only investigation,
+then a scoped smoke test using 10 clearly-fake CIK numbers,
+900000001-900000010, split across 3 isolated scenario groups covering the
+blocked case, the cross-source-unaffected case, and the prior-day-still-
+reclaims case) — all five expected outcomes confirmed, zero leftover rows
+after cleanup. Not run as a full end-to-end `daily_incremental` execution
+against the fix (that requires a new warehouse image build + deploy,
+not done in this pass) — the live verification is at the `BookkeepingStore`
+layer directly, the same layer the bug lives in.
+
+Tests: 6 in `tests/bookkeeping/test_store.py`'s `TestDiscoveryCheckpoint` —
+same-day-blocked (the core fix), prior-calendar-day-still-reclaims (Ticket
+45's window, unchanged), cross-source-isolation, same-run-id-can-still-
+reclaim (the Spec-review regression guard), and same-day-`failed`-still-
+reclaims (proving the new check is scoped to `'succeeded'` only). Full
+repo suite green: 2923 passed, 6 skipped (same pre-existing, unrelated gaps
+as every prior entry in this file).
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live

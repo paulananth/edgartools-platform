@@ -345,6 +345,142 @@ class TestDiscoveryCheckpoint:
         )
         assert len(statements) < len(ciks)
 
+    def test_claim_skips_cik_already_succeeded_same_day_for_same_source(
+        self, store: BookkeepingStore
+    ) -> None:
+        """Live evidence (change-propagation daily_incremental follow-up,
+        2026-09-04): claim_discovery_ciks only ever blocked a CIK that was
+        'in_progress' under a *different* run -- once finish_discovery_ciks
+        marked a CIK 'succeeded', the very next run (even minutes later, same
+        calendar day) re-claimed and fully reprocessed it. Confirmed live:
+        two same-day daily_incremental runs both claimed the identical 8,699
+        CIKs. This narrows Ticket 45's deliberate 'force-recheck the trailing
+        seven calendar days on every run' design (still fully intact for
+        anything not already succeeded *today*) without touching it -- see
+        the two tests below for that boundary explicitly preserved."""
+        first_run_time = datetime(2026, 8, 28, 6, 30, 0, tzinfo=timezone.utc)
+        store.claim_discovery_ciks(
+            [1, 2], discovery_source="daily_incremental", run_id="run-1", claimed_at=first_run_time
+        )
+        store.finish_discovery_ciks(
+            [1, 2],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=first_run_time,
+        )
+
+        second_run_time = datetime(2026, 8, 28, 15, 11, 0, tzinfo=timezone.utc)
+        claimed = store.claim_discovery_ciks(
+            [1, 2], discovery_source="daily_incremental", run_id="run-2", claimed_at=second_run_time
+        )
+        assert claimed == []
+        assert store.get_discovery_checkpoint("cik", "1")["run_id"] == "run-1"
+
+    def test_claim_reclaims_cik_succeeded_on_a_prior_calendar_day(
+        self, store: BookkeepingStore
+    ) -> None:
+        """The 7-day recheck window (Ticket 45) must keep working: a CIK
+        whose last success was a prior calendar day is reclaimed normally,
+        so a late SEC daily-index republish is still caught on the next
+        day's run."""
+        yesterday = datetime(2026, 8, 27, 23, 59, 0, tzinfo=timezone.utc)
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=yesterday
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=yesterday,
+        )
+
+        today = datetime(2026, 8, 28, 0, 5, 0, tzinfo=timezone.utc)
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-2", claimed_at=today
+        )
+        assert claimed == [1]
+
+    def test_claim_same_day_success_only_blocks_the_same_discovery_source(
+        self, store: BookkeepingStore
+    ) -> None:
+        """A same-day success under one discovery_source (e.g.
+        daily_incremental) must not silently suppress a different source
+        (e.g. bootstrap_next) from claiming the same CIK -- matches the
+        existing cross-source in_progress semantics
+        (test_claim_skips_cik_in_progress_under_different_run has no
+        source-scoping either, so this preserves that same shape for the
+        new same-day-succeeded check)."""
+        run_time = _now()
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=run_time
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=run_time,
+        )
+
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="bootstrap_next", run_id="run-2", claimed_at=run_time
+        )
+        assert claimed == [1]
+
+    def test_claim_allows_the_same_run_id_to_reclaim_its_own_same_day_success(
+        self, store: BookkeepingStore
+    ) -> None:
+        """Regression guard (found by /code-review's Spec axis): the
+        class-level comment above this method has always documented 'allow
+        the same run_id to reclaim' as an invariant. The same-day-succeeded
+        block added for the cross-run bug above must not silently drop that
+        invariant -- a run resuming or retrying under its own run_id must
+        never be blocked by its own prior success, only a *different* run's
+        same-day success should suppress a reclaim."""
+        run_time = _now()
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=run_time
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=run_time,
+        )
+
+        later_same_day = run_time + timedelta(hours=1)
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=later_same_day
+        )
+        assert claimed == [1]
+
+    def test_claim_reclaims_a_same_day_failed_cik_normally(
+        self, store: BookkeepingStore
+    ) -> None:
+        """The same-day-succeeded block must only ever gate status=='succeeded'
+        -- a CIK a prior same-day run marked 'failed' must remain immediately
+        reclaimable, same as before this fix."""
+        run_time = _now()
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=run_time
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="failed",
+            finished_at=run_time,
+        )
+
+        later_same_day = run_time + timedelta(hours=1)
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-2", claimed_at=later_same_day
+        )
+        assert claimed == [1]
+
 
 # -- pipeline_run_lease -------------------------------------------------------
 
