@@ -9,7 +9,8 @@
   that deserves operator review. It does not authorize a change.
 - **Remediation** — any state-changing AWS operation, including delete, stop,
   resize, lifecycle, retention, schedule, concurrency, and IAM changes.
-  Remediation may appear only as inert guidance in the audit output.
+  Remediation appears only as inert guidance in the audit output; exact S3
+  VersionId deletion exists only in the separate protected apply workflow.
 - **Projected monthly savings** — a conservative USD estimate derived from a
   cited billed usage dimension or an explicitly labeled approximation.
 - **Material candidate** — projected savings of at least USD 1/month.
@@ -22,8 +23,9 @@
   Authority and complete-bundle checks below.
 - **Accession Retention Authority** — a durable row binding accession, form,
   filing date, item/source classification, applicable consumer windows, and
-  the maximum `retain_through` date. It is the deletion authority for every
-  filing index/document/text object in that accession bundle.
+  cross-accession references used to compute the maximum `retain_through`
+  date. It is the deletion authority for every registered document/text object
+  in that accession bundle.
 - **Artifact Retention Class** — a bucket/prefix pattern plus artifact type,
   date basis, minimum retention period, terminal disposition, and required
   protection checks.

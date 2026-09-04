@@ -56,8 +56,8 @@ uv run python scripts/ops/aws_cost_optimizer.py \
   --output /tmp/retention-authority.jsonl
 ```
 
-The query includes every known filing and text key, requires registered index,
-primary-attachment, and projected-text evidence, and marks the accession
+The query includes every known filing and text key, requires a registered
+primary attachment and projected-text evidence, and marks the accession
 incomplete if an attachment lacks its registered raw object. Because raw bytes
 are deduplicated across accessions, it also emits every cross-accession filing
 that references an object stored under the bundle. The planner uses the latest
@@ -77,7 +77,11 @@ aws --profile sec_platform_deployer --region us-east-1 s3 cp \
 
 Planning lists exact current versions, noncurrent versions, and delete markers
 for each complete expired bundle. The default batch is capped at 1,000
-authorities so weekly cleanup remains bounded.
+authorities so weekly cleanup remains bounded. The plan reports gross projected
+monthly savings for observed `STANDARD` bytes at the current US East first-tier
+rate of USD 0.023/GB-month from the
+[AWS S3 pricing page](https://aws.amazon.com/s3/pricing/); other storage classes
+remain explicit pricing gaps rather than receiving a false estimate.
 
 ```bash
 uv run python scripts/ops/aws_cost_optimizer.py \

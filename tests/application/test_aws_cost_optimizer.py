@@ -103,6 +103,33 @@ def test_retention_plan_uses_each_artifacts_canonical_year_window() -> None:
     )
 
 
+def test_retention_plan_projects_observed_standard_storage_savings() -> None:
+    authority = _authority("0000000001-20-000001", "4", "2020-01-01")
+    versions = _versions(authority)
+    versions[0] = ObjectVersion(
+        **{**versions[0].__dict__, "size_bytes": 50_000_000_000}
+    )
+    versions[1] = ObjectVersion(
+        **{
+            **versions[1].__dict__,
+            "size_bytes": 10_000_000_000,
+            "storage_class": "STANDARD_IA",
+        }
+    )
+
+    plan = build_s3_retention_plan(
+        [authority],
+        versions,
+        as_of=date(2026, 9, 2),
+        expected_account_id="690839588395",
+    )
+
+    assert plan.standard_storage_bytes == 50_000_000_000
+    assert plan.projected_standard_storage_savings_usd_month == 1.15
+    assert plan.unpriced_storage_classes == ("STANDARD_IA",)
+    assert validate_s3_retention_plan_for_apply(plan.to_dict()) == tuple(versions)
+
+
 def test_retention_plan_fails_closed_for_incomplete_bundle() -> None:
     authority = _authority("0000000001-20-000001", "DEF 14A", "2020-01-01")
     plan = build_s3_retention_plan(

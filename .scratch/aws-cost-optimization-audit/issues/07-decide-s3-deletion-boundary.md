@@ -30,9 +30,10 @@ Implementation contract:
   runtime defaults.
 - Build an Accession Retention Authority because the existing S3 key does not
   encode form/item type. Use the maximum applicable consumer cutoff.
-- Select the complete index/document/text bundle and exact current/noncurrent
-  VersionIds. Never delete a partial, unmatched, unexpired, or concurrently
-  changed bundle.
+- Select the complete registered-document/text bundle and exact
+  current/noncurrent VersionIds. Never target a partial, unmatched, unexpired,
+  or unplanned version. Preflight rejects drift; a version written after
+  preflight is never targeted, survives, and makes post-apply verification fail.
 - Bind apply to the reviewed plan hash, revalidate identity/version state, keep
   pre/post evidence, and fail closed on drift.
 - Existing day-based ephemeral rules remain day-based; unsettled non-filing

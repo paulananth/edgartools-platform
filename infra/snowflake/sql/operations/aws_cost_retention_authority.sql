@@ -96,7 +96,6 @@ SELECT
   COALESCE(completeness.attachment_count, 0) > 0
     AND COALESCE(completeness.primary_attachment_count, 0) > 0
     AND COALESCE(completeness.missing_raw_object_count, 0) = 0
-    AND COUNT_IF(paths.object_key LIKE '%/index/%') > 0
     AND COUNT_IF(paths.object_key LIKE 'warehouse/bronze/text/%') > 0
     AS complete,
   COALESCE(

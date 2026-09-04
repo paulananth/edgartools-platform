@@ -17,6 +17,7 @@ from typing import Any
 
 S3_SERVICE = "Amazon Simple Storage Service"
 ECS_SERVICE = "Amazon Elastic Container Service"
+S3_STANDARD_US_EAST_1_USD_PER_GB_MONTH = 0.023
 
 FORM_RETENTION_YEARS: dict[str, int] = {
     "13F-HR": 3,
@@ -82,6 +83,7 @@ class ObjectVersion:
     size_bytes: int
     is_latest: bool
     kind: str
+    storage_class: str = "STANDARD"
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,9 @@ class S3RetentionPlan:
     unmatched: tuple[str, ...]
     total_versions: int
     total_bytes: int
+    standard_storage_bytes: int
+    projected_standard_storage_savings_usd_month: float
+    unpriced_storage_classes: tuple[str, ...]
     plan_hash: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -334,6 +339,28 @@ def build_s3_retention_plan(
     total_bytes = sum(
         version.size_bytes for bundle in bundles for version in bundle.versions
     )
+    standard_storage_bytes = sum(
+        version.size_bytes
+        for bundle in bundles
+        for version in bundle.versions
+        if version.storage_class == "STANDARD"
+    )
+    projected_standard_storage_savings = round(
+        standard_storage_bytes
+        / 1_000_000_000
+        * S3_STANDARD_US_EAST_1_USD_PER_GB_MONTH,
+        6,
+    )
+    unpriced_storage_classes = tuple(
+        sorted(
+            {
+                version.storage_class
+                for bundle in bundles
+                for version in bundle.versions
+                if version.storage_class not in {"STANDARD", "NOT_APPLICABLE"}
+            }
+        )
+    )
     base: dict[str, Any] = {
         "schema_version": 1,
         "expected_account_id": expected_account_id,
@@ -342,6 +369,9 @@ def build_s3_retention_plan(
         "unmatched": unmatched,
         "total_versions": total_versions,
         "total_bytes": total_bytes,
+        "standard_storage_bytes": standard_storage_bytes,
+        "projected_standard_storage_savings_usd_month": projected_standard_storage_savings,
+        "unpriced_storage_classes": unpriced_storage_classes,
     }
     return S3RetentionPlan(
         schema_version=1,
@@ -351,6 +381,9 @@ def build_s3_retention_plan(
         unmatched=tuple(unmatched),
         total_versions=total_versions,
         total_bytes=total_bytes,
+        standard_storage_bytes=standard_storage_bytes,
+        projected_standard_storage_savings_usd_month=projected_standard_storage_savings,
+        unpriced_storage_classes=unpriced_storage_classes,
         plan_hash=compute_plan_hash(base),
     )
 
@@ -439,6 +472,33 @@ def validate_s3_retention_plan_for_apply(
         raise ValueError("plan total_versions does not match bundle contents")
     if int(plan.get("total_bytes", -1)) != sum(item.size_bytes for item in versions):
         raise ValueError("plan total_bytes does not match bundle contents")
+    standard_storage_bytes = sum(
+        item.size_bytes for item in versions if item.storage_class == "STANDARD"
+    )
+    if int(plan.get("standard_storage_bytes", -1)) != standard_storage_bytes:
+        raise ValueError("plan standard_storage_bytes does not match bundle contents")
+    projected_savings = round(
+        standard_storage_bytes
+        / 1_000_000_000
+        * S3_STANDARD_US_EAST_1_USD_PER_GB_MONTH,
+        6,
+    )
+    if (
+        float(plan.get("projected_standard_storage_savings_usd_month", -1))
+        != projected_savings
+    ):
+        raise ValueError("plan projected Standard storage savings do not match policy")
+    unpriced_storage_classes = tuple(
+        sorted(
+            {
+                item.storage_class
+                for item in versions
+                if item.storage_class not in {"STANDARD", "NOT_APPLICABLE"}
+            }
+        )
+    )
+    if tuple(plan.get("unpriced_storage_classes") or ()) != unpriced_storage_classes:
+        raise ValueError("plan unpriced storage classes do not match bundle contents")
     return tuple(versions)
 
 

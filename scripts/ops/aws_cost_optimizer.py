@@ -597,6 +597,11 @@ def _normalize_versions(
                     size_bytes=int(row.get("Size") or 0),
                     is_latest=bool(row.get("IsLatest")),
                     kind=kind,
+                    storage_class=(
+                        str(row.get("StorageClass") or "STANDARD")
+                        if kind == "version"
+                        else "NOT_APPLICABLE"
+                    ),
                 )
             )
     return versions
@@ -664,7 +669,9 @@ def select_expired_authorities(
     return selected[:limit]
 
 
-def _version_identity(version: ObjectVersion) -> tuple[str, str, str, str, str, int, bool]:
+def _version_identity(
+    version: ObjectVersion,
+) -> tuple[str, str, str, str, str, int, bool, str]:
     return (
         version.bucket,
         version.key,
@@ -673,6 +680,7 @@ def _version_identity(version: ObjectVersion) -> tuple[str, str, str, str, str, 
         version.etag,
         version.size_bytes,
         version.is_latest,
+        version.storage_class,
     )
 
 
@@ -828,7 +836,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(plan.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print(json.dumps({"output": str(args.output), "plan_hash": plan.plan_hash, "bundles": len(plan.bundles), "versions": plan.total_versions, "bytes": plan.total_bytes, "unmatched": len(plan.unmatched)}, sort_keys=True))
+        print(json.dumps({"output": str(args.output), "plan_hash": plan.plan_hash, "bundles": len(plan.bundles), "versions": plan.total_versions, "bytes": plan.total_bytes, "projected_standard_storage_savings_usd_month": plan.projected_standard_storage_savings_usd_month, "unmatched": len(plan.unmatched)}, sort_keys=True))
         return 0
     if not args.confirm_delete_expired_s3:
         raise SystemExit("retention-apply requires --confirm-delete-expired-s3")
