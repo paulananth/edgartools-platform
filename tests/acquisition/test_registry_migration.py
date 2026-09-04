@@ -59,13 +59,17 @@ def test_postgres_schema_versions_and_gates_activation() -> None:
     assert "revoke all privileges on source_registry_version, source_registry_coverage" in normalized
 
 
-def test_bootstrap_and_restore_cover_source_registry() -> None:
-    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+def test_restore_covers_source_registry() -> None:
+    # Ticket 47 (change-propagation map): bootstrap-prod-mdm.sh used to
+    # re-REVOKE `application` from source_registry_version/coverage here via
+    # its own SET ROLE edgartools_acquisition_registry_owner + REVOKE, on a
+    # fresh connection opened after the `mdm migrate` subprocess exits. That
+    # was always redundant with -- and, being a separate cross-connection
+    # REVOKE, the reproducible cause of a failure mode analogous to -- what
+    # 014_source_registry.sql's own internal REVOKE already does atomically
+    # (see test_postgres_schema_versions_and_gates_activation above). So this
+    # is restore-only now.
     restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
-
-    assert "source_registry_version" in bootstrap
-    assert "edgartools_acquisition_registry_owner" in bootstrap
-    assert "SET ROLE edgartools_acquisition_registry_owner;" in bootstrap
 
     assert "CREATE ROLE edgartools_acquisition_registry_owner NOLOGIN" in restore
     assert "GRANT edgartools_acquisition_registry_owner TO application" in restore

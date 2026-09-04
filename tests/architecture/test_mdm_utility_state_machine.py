@@ -43,6 +43,7 @@ _EXPECTED_MODES = {
     "mdm_counts",
     "mdm_check_fence",
     "mdm_publication_drain",
+    "mdm_reconciliation_backstop",
 }
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
@@ -74,6 +75,7 @@ def definition() -> dict:
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"
             'TASK_DEF_MDM_SMALL_ARN="arn:mdm-small"\n'
             'TASK_DEF_MDM_MEDIUM_ARN="arn:mdm-medium"\n'
+            'TASK_DEF_MDM_LARGE_ARN="arn:mdm-large"\n'
             "MDM_RUN_LIMIT=0\n"
             "MDM_GRAPH_LIMIT=0\n"
             'MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"\n'
@@ -209,7 +211,10 @@ def test_no_override_workflows_route_straight_to_a_single_task_state(definition:
     # mdm_migrate/mdm_check_connectivity/mdm_counts have no limit or
     # relationship overrides at all -- their mode should route directly to
     # one Task state, no Choice wrapping.
-    for mode in ("mdm_migrate", "mdm_check_connectivity", "mdm_counts", "mdm_check_fence", "mdm_publication_drain"):
+    for mode in (
+        "mdm_migrate", "mdm_check_connectivity", "mdm_counts", "mdm_check_fence",
+        "mdm_publication_drain", "mdm_reconciliation_backstop",
+    ):
         start = next(
             c["Next"] for c in definition["States"]["SelectMode"]["Choices"]
             if c["StringEquals"] == mode
