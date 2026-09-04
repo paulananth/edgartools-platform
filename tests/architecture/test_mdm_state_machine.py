@@ -190,3 +190,25 @@ def test_publish_precedes_publish_relationships(mdm_definition: dict) -> None:
     # publish first, the mirror can be stale relative to this run.
     order = _linear_order(mdm_definition)
     assert order.index("Publish") < order.index("Publish Relationships")
+
+
+def test_every_task_state_preserves_input_via_result_path_none(mdm_definition: dict) -> None:
+    # Confirmed live 2026-09-03/04: an ecs:runTask.sync Task state's default
+    # ResultPath ($) replaces the ENTIRE state input with its own ECS
+    # task-description result. Since Mastering/BackpropagateIdsToSilver/
+    # Infer Relationships all read $.run_id (see the run-id test above),
+    # any state in this chain missing ResultPath=None destroys $.run_id for
+    # every state after it -- and the resulting error is an uncatchable
+    # States.Runtime (Catch: States.ALL does not intercept it), so it
+    # silently exhausts this chain's own Retry and fails the whole
+    # execution. A real daily_incremental execution hit exactly this at
+    # BackpropagateIdsToSilver before this test existed.
+    for name, state in mdm_definition["States"].items():
+        if state.get("Type") != "Task":
+            continue
+        assert "ResultPath" in state and state["ResultPath"] is None, (
+            f"{name}: ResultPath must be explicitly null (found "
+            f"{state.get('ResultPath', '<key absent, defaults to $>')!r}) "
+            f"-- an absent ResultPath replaces the whole state input with "
+            f"this task's own ECS result, destroying $.run_id"
+        )

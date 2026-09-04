@@ -2665,6 +2665,7 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
                 "ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}],
             },
         },
+        "ResultPath": None,
         "Retry": [{
             "ErrorEquals": ["States.TaskFailed"],
             "IntervalSeconds": retry_secs,
@@ -2678,9 +2679,18 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
         s["Next"] = next_state
     return s
 
-# Every command below reads $.run_id (this nested execution's own input
-# field), never $$.Execution.Name -- see mdm_tail_helper.py's
-# call_mdm_machine() docstring for why that hop is mandatory here.
+# ResultPath=None on every state above is load-bearing, not cosmetic: every
+# command below reads $.run_id (this nested execution's own input field,
+# never $$.Execution.Name -- see mdm_tail_helper.py's call_mdm_machine()
+# docstring for why that hop is mandatory here). Without ResultPath=None,
+# an ecs:runTask.sync Task state's default behavior replaces the ENTIRE
+# state input with its own ECS task-description result, destroying
+# $.run_id after the first state runs it. Confirmed live 2026-09-03/04:
+# a real daily_incremental execution failed at BackpropagateIdsToSilver
+# with "The JsonPath argument for the field '$.run_id' could not be
+# found" -- an uncatchable States.Runtime error (Catch: States.ALL does
+# not intercept it), so it silently exhausted this chain's own Retry and
+# failed the whole execution rather than degrading gracefully.
 mastering = ecs_state(mdm_medium_arn,
     f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $.run_id)",
     next_state="BackpropagateIdsToSilver")
