@@ -276,47 +276,36 @@ for stmt in [
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO application;",
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO application;",
     # Acquisition history is intentionally excluded from the shared runtime
-    # principal's broad legacy grants. Runtime code must SET one fenced role.
+    # principal's broad legacy grants above (which only ever reach objects
+    # snowflake_admin owns, so they silently skip every acquisition/registry
+    # object regardless). Runtime code must SET one fenced role to reach them.
     #
-    # These REVOKEs target tables/views by name, which Postgres gates on
-    # ownership (unlike the "ON ALL TABLES IN SCHEMA" grants above, which
-    # silently skip objects the grantor doesn't own) -- and by this point
-    # ownership of every acquisition object has already moved from
-    # snowflake_admin to edgartools_acquisition_owner (013_acquisition_ledger.sql's
-    # own `ALTER TABLE ... OWNER TO edgartools_acquisition_owner` statements,
-    # applied inside the `mdm migrate` call above). snowflake_admin is
-    # neither superuser nor still the owner at this point, so REVOKE fails
-    # outright with "permission denied for table" -- reproduced live against
-    # prod 2026-08-24 on a from-empty acquisition-ledger provisioning run.
-    # Fix: the same migration also granted snowflake_admin non-inherited,
-    # SET-TRUE membership in edgartools_acquisition_owner (its DO block's
-    # `GRANT edgartools_acquisition_owner TO %I WITH INHERIT FALSE, SET TRUE`
-    # where %I = current_user = snowflake_admin during that call) -- so
-    # SET ROLE into it just for these three statements, matching the
-    # session identity that actually holds the confirming ownership.
-    "SET ROLE edgartools_acquisition_owner;",
-    # Ticket 25: source_evidence_conflict is owned by edgartools_acquisition_owner
-    # too (like source_revision, not a new dedicated role -- CREATE on schema
-    # public was only ever granted to the owner role, confirmed live: an
-    # earlier attempt to own this table under edgartools_acquisition_processor
-    # instead failed with "permission denied for schema public" running the
-    # migration as `application`), so it belongs in this same REVOKE list.
-    # Ticket 34: source_evidence_import is owned by edgartools_acquisition_owner
-    # too, same reasoning as source_evidence_conflict just above -- CREATE on
-    # schema public was never granted to any operational role, only the
-    # owner role, so it belongs in this same REVOKE list.
-    "REVOKE ALL PRIVILEGES ON source_observation_cursor, source_fetch_decision, source_fetch_work, source_fetch_transition, source_revision, source_processing_decision, source_expected_producer, source_evidence_conflict, source_evidence_import FROM application;",
-    "REVOKE ALL PRIVILEGES ON source_change_status FROM application;",
-    "REVOKE ALL PRIVILEGES ON source_change_status_detail FROM application;",
-    "RESET ROLE;",
-    # Ticket 20: source_registry_version/source_registry_coverage are owned
-    # by a *different* dedicated role (edgartools_acquisition_registry_owner,
-    # not edgartools_acquisition_owner) -- the same ownership-timing REVOKE
-    # bug above would recur here under the wrong role, so this needs its own
-    # SET ROLE targeting the role that actually owns these two tables.
-    "SET ROLE edgartools_acquisition_registry_owner;",
-    "REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage FROM application;",
-    "RESET ROLE;",
+    # Ticket 47 (change-propagation map): this step used to also re-REVOKE
+    # `application` from a hardcoded list of acquisition/registry
+    # tables/views here, via SET ROLE + REVOKE ALL on this fresh connection,
+    # opened right after the `mdm migrate` subprocess above exits. That was
+    # always fully redundant -- every one of those objects is already
+    # fenced from `application` and `snowflake_write` atomically, inside
+    # the SAME transaction that creates and owns it, by its own owning
+    # migration file (013_acquisition_ledger.sql / 014_source_registry.sql /
+    # 015_source_evidence_conflict.sql /
+    # 017_source_exclusion_and_evidence_import.sql). The redundant copy's
+    # own separate, later connection was also the reproducible (2/2 live)
+    # cause of a permission-denied failure on the newest such object -- full
+    # live evidence, root-cause reasoning, and verification in
+    # 47-bootstrap-prod-mdm-revoke-fails-on-fresh-owner-transfer.md; do not
+    # re-duplicate that narrative here, keep this comment as a pointer.
+    #
+    # Removing this step trades nothing away: `mdm check-fence` (Ticket 44)
+    # is the live monitor for the 11 acquisition/registry *tables* this step
+    # used to also cover (not the 2 views, `source_change_status` and
+    # `source_change_status_detail` -- check-fence's `pg_class` discovery is
+    # table-scoped, `relkind = 'r'` only; those two views rely solely on
+    # 013's own atomic internal REVOKE, with no independent live monitor).
+    # REAPPLY_PY further below already re-runs `mdm migrate` itself (not a
+    # hardcoded REVOKE list) as the true last database-mutating step, which
+    # is what actually re-closes the fence after both RESET ACCESS calls
+    # reopen it.
 ]:
     cur.execute(stmt)
 cur.close()

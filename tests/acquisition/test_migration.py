@@ -140,13 +140,37 @@ def test_postgres_schema_materializes_ordered_source_revisions() -> None:
         assert excluded not in normalized
 
 
-def test_bootstrap_and_restore_preserve_dedicated_acquisition_owner() -> None:
+def test_bootstrap_preserves_dedicated_acquisition_owner_without_a_redundant_revoke() -> None:
+    """Ticket 47 (change-propagation map): bootstrap-prod-mdm.sh used to
+    re-REVOKE `application` from a hardcoded list of acquisition tables
+    (starting with source_observation_cursor) here, on a fresh connection
+    opened right after the `mdm migrate` subprocess exits. That was always
+    redundant -- 013_acquisition_ledger.sql (and its 014/015/017 siblings)
+    already fences every one of those tables from `application` *and*
+    `snowflake_write` atomically, inside the same transaction that creates
+    and owns them -- and the redundant copy was also the reproducible (2/2
+    live) cause of a permission-denied failure on the newest such table,
+    since a fresh cross-connection REVOKE can race a brief Snowflake-hosted
+    Postgres catalog-consistency window for an object another connection
+    just committed. It must not come back.
+    """
     bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
-    restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
 
     assert "CREATE ROLE application NOLOGIN" in bootstrap
-    assert "REVOKE ALL PRIVILEGES ON source_observation_cursor" in bootstrap
-    assert "source_revision" in bootstrap
+    assert "REASSIGN OWNED BY snowflake_admin TO application" in bootstrap
+    assert "REVOKE ALL PRIVILEGES ON source_observation_cursor" not in bootstrap
+    # The quoted, comma-terminated Python list-item form specifically -- not
+    # a bare substring match against "SET ROLE edgartools_acquisition_owner"
+    # -- so a future comment that quotes the statement in prose (the
+    # retained Ticket 47 comment nearby already does this style of
+    # quoting for other statements) doesn't false-fail this regression test.
+    assert '"SET ROLE edgartools_acquisition_owner;",' not in bootstrap
+
+
+def test_restore_preserves_dedicated_acquisition_owner() -> None:
+    restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
+
+    assert "source_revision" in restore
     assert "OWNER TO edgartools_acquisition_owner" in restore
     assert "FROM application" in restore
     assert "GRANT edgartools_acquisition_coordinator TO application" in restore
@@ -208,13 +232,19 @@ def test_postgres_schema_seals_processing_decisions_and_expected_producers() -> 
     assert "create or replace view source_change_status_detail" in normalized
 
 
-def test_bootstrap_and_restore_cover_processing_and_expected_producer() -> None:
-    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+def test_restore_covers_processing_and_expected_producer() -> None:
+    # Ticket 47 (change-propagation map): bootstrap-prod-mdm.sh no longer
+    # names acquisition tables individually -- see
+    # test_bootstrap_preserves_dedicated_acquisition_owner_without_a_redundant_revoke
+    # -- so this is restore-only now; bootstrap's coverage of these tables is
+    # via `mdm migrate` itself, proven by
+    # test_postgres_schema_seals_processing_decisions_and_expected_producers
+    # above against the migration file directly.
     restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
 
-    assert "source_processing_decision" in bootstrap
-    assert "source_expected_producer" in bootstrap
-    assert "source_change_status_detail" in bootstrap
+    assert "source_processing_decision" in restore
+    assert "source_expected_producer" in restore
+    assert "source_change_status_detail" in restore
     assert "edgartools_acquisition_silver_finalizer" in restore
     assert (
         "to_regclass('public.source_processing_decision') IS NOT NULL" in restore
@@ -272,11 +302,12 @@ def test_conflict_migration_grants_read_access_to_every_other_acquisition_role()
         assert role in normalized
 
 
-def test_bootstrap_and_restore_cover_evidence_conflict() -> None:
-    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+def test_restore_covers_evidence_conflict() -> None:
+    # Ticket 47 (change-propagation map): bootstrap-prod-mdm.sh no longer
+    # names acquisition tables individually, so this is restore-only now --
+    # see test_bootstrap_preserves_dedicated_acquisition_owner_without_a_redundant_revoke.
     restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
 
-    assert "source_evidence_conflict" in bootstrap
     assert "to_regclass('public.source_evidence_conflict') IS NOT NULL" in restore
     assert (
         "ALTER TABLE source_evidence_conflict OWNER TO edgartools_acquisition_owner"
@@ -347,11 +378,12 @@ def test_evidence_import_migration_grants_read_access_to_every_other_acquisition
         assert role in normalized
 
 
-def test_bootstrap_and_restore_cover_exclusion_and_evidence_import() -> None:
-    bootstrap = (REPO_ROOT / "infra/scripts/bootstrap-prod-mdm.sh").read_text()
+def test_restore_covers_exclusion_and_evidence_import() -> None:
+    # Ticket 47 (change-propagation map): bootstrap-prod-mdm.sh no longer
+    # names acquisition tables individually, so this is restore-only now --
+    # see test_bootstrap_preserves_dedicated_acquisition_owner_without_a_redundant_revoke.
     restore = (REPO_ROOT / "infra/snowflake/postgres/mdm_post_restore.sql").read_text()
 
-    assert "source_evidence_import" in bootstrap
     assert "to_regclass('public.source_evidence_import') IS NOT NULL" in restore
     assert (
         "ALTER TABLE source_evidence_import OWNER TO edgartools_acquisition_owner"
