@@ -1,7 +1,7 @@
 # adv_bulk.py's bare SELECT * LIMIT N plateaus on restart, like Ticket 94's run_companies bug
 
 Type: task
-Status: open
+Status: resolved (2026-09-05) — see `## Answer`; fix tracked elsewhere, not here.
 Blocked by: none
 
 ## Question
@@ -34,9 +34,19 @@ open work?
 
 ## Answer
 
-Not yet answered — filed here rather than fixed speculatively. Whoever
-picks this up should first confirm live impact: check whether any
-production `mdm run`/`load_history` invocation actually passes a `limit`
-to `run_advisers`/`run_funds` (a scoped/bounded run, not the default
-unlimited `mdm run --entity-type all`) — if `limit` is never set in
-practice, this bug has zero live effect and the fix can wait indefinitely.
+**Live impact confirmed 2026-09-05** (raised during the
+`fundamentals-daily-integration` map's grilling round on whether ADV is
+wired for diff processing into `daily_incremental`): `daily_incremental`'s
+`RunMdmChain` calls `mdm mastering --entity-type all --limit 100` every
+single day (`MDM_RUN_LIMIT` defaults to 100,
+`deploy-aws-application.sh:1882`), and `MDMPipeline.run_all(limit=100)`
+forwards that exact `limit` straight into `run_advisers(limit=limit)` and
+`run_funds(limit=limit)` (`pipeline.py:2065,2073`) — so this is not a
+theoretical exposure, it fires on every production `daily_incremental`
+execution. `limit` is never unset in practice for this path.
+
+Picked up and tracked as
+[Ticket 06 on the `fundamentals-daily-integration` map](../../fundamentals-daily-integration/issues/06-fix-adv-bulk-select-limit-plateau.md)
+rather than fixed here — the user chose to fix it there, alongside that
+map's other `daily_incremental` incremental-scoping work, rather than
+under release-readiness. See that ticket for the fix design and status.
