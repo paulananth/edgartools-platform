@@ -15,6 +15,18 @@ from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.resolvers.base import BaseResolver, ResolverContext
 from edgar_warehouse.mdm.rules import MDMRuleEngine
 from edgar_warehouse.mdm.stewardship import quarantine
+from edgar_warehouse.mdm.survivorship import MergeResult
+
+
+def _merge_result(entity_id: str, field_name: str, winning_value: str) -> MergeResult:
+    return MergeResult(
+        entity_id=entity_id,
+        field_name=field_name,
+        winning_value=winning_value,
+        winning_stage_id=None,
+        winning_source=None,
+        rule_applied="test",
+    )
 
 
 def _make_entity(session, entity_type: str) -> str:
@@ -44,7 +56,9 @@ def test_resolver_change_evidence_preserves_operation_run_id(db_session) -> None
         run_id="pipeline-run-123",
     )
 
-    BaseResolver(entity_type="company")._log_change(ctx, entity_id, {"name": "Issuer"})
+    BaseResolver(entity_type="company")._log_change(
+        ctx, entity_id, existing={}, merge_results={"name": _merge_result(entity_id, "name", "Issuer")}
+    )
     db_session.flush()
 
     row = db_session.scalar(select(db.MdmChangeLog).where(db.MdmChangeLog.entity_id == entity_id))
@@ -63,8 +77,12 @@ def test_resolver_generates_one_identity_for_blank_context_and_reuses_it(db_sess
     )
     resolver = BaseResolver(entity_type="company")
 
-    resolver._log_change(ctx, first_entity_id)
-    resolver._log_change(ctx, second_entity_id)
+    resolver._log_change(
+        ctx, first_entity_id, existing={}, merge_results={"name": _merge_result(first_entity_id, "name", "A")}
+    )
+    resolver._log_change(
+        ctx, second_entity_id, existing={}, merge_results={"name": _merge_result(second_entity_id, "name", "B")}
+    )
     db_session.flush()
 
     rows = list(db_session.scalars(select(db.MdmChangeLog).order_by(db.MdmChangeLog.entity_id)))

@@ -2412,6 +2412,92 @@ future prod deploy that includes new migration files as incomplete until
 "the image is current" and "the migration was applied" are two separate
 facts, and only one of them is guaranteed by a deploy script.
 
+## mdm_change_log had no write-side diff, unboundedly regenerating mdm publish's backlog (fixed 2026-09-05)
+
+**Problem:** a user question ("why did `mdm publish` export 456,624
+rows — is there no diff processing?") during the same-day monitoring
+session above led to a live investigation. Two consecutive `RunMdmChain`
+`Publish` steps, ~8 hours apart, each reported exporting essentially the
+same huge row count (456,637, then 456,624) even though the intervening
+`Mastering` step was capped at `--limit 100` per entity type (~300
+entities total). That arithmetic doesn't support "300 new rows caused
+456K more exports."
+
+1. Symptom: `mdm publish`'s own diff (`export_pending`/`export_all_pending`
+   in `edgar_warehouse/mdm/export.py`, `WHERE exported_at IS NULL`) is
+   real and does work — confirmed live via a direct read-only Postgres
+   query immediately after this run's publish: `unexported = 0`. So the
+   read/export side isn't the gap.
+2. Why does a near-identical huge count reappear then? A separate live
+   query broke `mdm_change_log` down by `entity_id`: **one single entity
+   had 40,356 change_log rows**, the top 5 combined ~66,000+. No genuine
+   content field changes 40,000 times for one security.
+3. Why does one entity accumulate that many rows? `BaseResolver._log_change`
+   (`edgar_warehouse/mdm/resolvers/base.py`) was called **unconditionally**
+   after every entity's survivorship merge, from `CompanyResolver`/
+   `SecurityResolver`/`PersonResolver.resolve_one` — writing every field's
+   current winning value as `changed_fields`, regardless of whether those
+   values differed from what was already stored. `MergeResult`
+   (`survivorship.py`) carries no changed-flag at all; there was no
+   diffing at the write layer, only at `mdm publish`'s read layer.
+4. Why does this hit securities hardest (209,640 of 584,338 total rows)?
+   A second, independent gap: `SecurityResolver.resolve_one` called
+   `run_survivorship_for_entity` **without ever passing
+   `existing_values`** at all (unlike `CompanyResolver`/`PersonResolver`,
+   both of which call a per-resolver `_existing_golden` first) — so every
+   security's merge ran against `existing_value=None` for every field,
+   treating an already-resolved security as brand-new on every touch,
+   compounding gap #3.
+5. **Root cause:** the changelog's only real consumer
+   (`mdm publish`'s `exported_at IS NULL` filter) correctly diffs *export
+   status*, but nothing upstream diffs *content* before writing a
+   changelog row in the first place — so a security refiled across many
+   separate ownership-transaction filings (each a distinct `source_id`,
+   so `_skip_if_unchanged`'s content-hash short-circuit never fires) logs
+   a "change" every single time, even when the resolved value is
+   identical, and `mdm publish` dutifully keeps re-exporting a backlog
+   that regenerates itself instead of shrinking to near-zero.
+
+**Fix:** `_log_change`'s signature changed from `(ctx, entity_id,
+changed_fields)` to `(ctx, entity_id, existing, merge_results)` — it now
+computes `changed_fields = {f: r.winning_value for f, r in
+merge_results.items() if existing.get(f) != r.winning_value}` internally
+and returns without writing anything when that dict is empty. All three
+call sites (`company.py`, `security.py`, `person.py`) updated to pass the
+`existing`/`merge_results` dicts they already had, instead of a
+pre-flattened all-fields dict. `SecurityResolver` gained an
+`_existing_golden` staticmethod mirroring `CompanyResolver`'s/
+`PersonResolver`'s identical-shaped ones, called (and its result passed
+as `existing_values`) **before** any of `resolve_one`'s branches
+create or in-place mutate the entity's `MdmSecurity` row — capturing it
+after entity creation would have read back the row's own
+just-written values, making every brand-new security look unchanged
+against itself (caught by a first draft of this fix's own test suite,
+corrected before commit).
+
+`/gof-refactor-reviewer` was consulted before implementing (this file's
+own hard rule) — verdict: justified, since `git log` shows this exact
+"no diffing → unbounded growth" shape has already been fixed twice in
+this same file family (`7ffda2d7` skip-if-unchanged for `run_companies`,
+`091809b0` the same for `SecurityResolver`'s stage rows) — a third
+instance, not a hypothetical.
+
+Tests: `tests/mdm/test_change_log_diff.py` (new) — reproduces the exact
+live shape (3 separate ownership-transaction rows, same issuer/title,
+each with its own `source_id` so none are caught by
+`_skip_if_unchanged`, all resolving to the same entity with the same
+winning values) and asserts exactly 1 change_log row, not 3; confirmed
+via `git stash` to fail (3 rows) against the pre-fix code and pass after.
+A companion test confirms a brand-new entity's first touch is still
+logged. `tests/mdm/test_run_identity.py`'s two direct `_log_change` tests
+updated to the new signature. Full repo suite green: 3023 passed, 8
+failed (the same pre-existing, unrelated Postgres-integration gaps noted
+throughout this file), 6 skipped.
+
+**Not yet deployed as of this entry** — the prod images running
+`daily_incremental` predate this fix, same as the bulk-batching fix
+above.
+
 ## full-reconcile decommissioned entirely (2026-09-04)
 
 **`full-reconcile`** (SEC-drift detection: compare live SEC submissions
