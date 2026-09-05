@@ -377,14 +377,54 @@ class TestDiscoveryCheckpoint:
         assert claimed == []
         assert store.get_discovery_checkpoint("cik", "1")["run_id"] == "run-1"
 
+    def test_claim_skips_cik_already_succeeded_same_business_day_across_utc_midnight(
+        self, store: BookkeepingStore
+    ) -> None:
+        """Second bug found live the same evening (2026-09-04): the fix
+        above compared same-*UTC*-calendar-day, but a daily_incremental run
+        at 20:41 ET is already 00:41 UTC the *next* UTC calendar date --
+        confirmed live, this reclaimed and fully reprocessed the identical
+        8,699 CIKs a 06:36 ET run had already succeeded on hours earlier,
+        same ET business day, because the UTC-date comparison saw Sept 4 vs.
+        Sept 5 and found no match. Reproduces that exact shape: a morning ET
+        success (06:30 ET) and an evening ET claim (20:30 ET, same ET day)
+        that crosses a UTC calendar-day boundary (Aug 28 -> Aug 29 UTC) --
+        must still be blocked."""
+        morning_et = datetime(2026, 8, 28, 10, 30, 0, tzinfo=timezone.utc)  # 06:30 ET
+        store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=morning_et
+        )
+        store.finish_discovery_ciks(
+            [1],
+            discovery_source="daily_incremental",
+            run_id="run-1",
+            status="succeeded",
+            finished_at=morning_et,
+        )
+
+        evening_et_next_utc_day = datetime(2026, 8, 29, 0, 30, 0, tzinfo=timezone.utc)  # 20:30 ET, same ET day
+        claimed = store.claim_discovery_ciks(
+            [1], discovery_source="daily_incremental", run_id="run-2", claimed_at=evening_et_next_utc_day
+        )
+        assert claimed == []
+        assert store.get_discovery_checkpoint("cik", "1")["run_id"] == "run-1"
+
     def test_claim_reclaims_cik_succeeded_on_a_prior_calendar_day(
         self, store: BookkeepingStore
     ) -> None:
         """The 7-day recheck window (Ticket 45) must keep working: a CIK
-        whose last success was a prior calendar day is reclaimed normally,
-        so a late SEC daily-index republish is still caught on the next
-        day's run."""
-        yesterday = datetime(2026, 8, 27, 23, 59, 0, tzinfo=timezone.utc)
+        whose last success was a prior *business* day (US/Eastern -- see
+        _as_business_date) is reclaimed normally, so a late SEC daily-index
+        republish is still caught on the next day's run.
+
+        Deliberately spans a UTC midnight *without* crossing one in ET
+        (2026-08-28 02:30 UTC = Aug 27 22:30 ET; 2026-08-28 05:00 UTC = Aug
+        28 01:00 ET -- both UTC Aug 28, but different ET business days) --
+        this is the exact shape of the live 2026-09-04 bug (a same *UTC* day
+        that should have been blocked wasn't; here, proving the reverse
+        still works: a same UTC day that legitimately differs by ET business
+        day still reclaims)."""
+        yesterday = datetime(2026, 8, 28, 2, 30, 0, tzinfo=timezone.utc)
         store.claim_discovery_ciks(
             [1], discovery_source="daily_incremental", run_id="run-1", claimed_at=yesterday
         )
@@ -396,7 +436,7 @@ class TestDiscoveryCheckpoint:
             finished_at=yesterday,
         )
 
-        today = datetime(2026, 8, 28, 0, 5, 0, tzinfo=timezone.utc)
+        today = datetime(2026, 8, 28, 5, 0, 0, tzinfo=timezone.utc)
         claimed = store.claim_discovery_ciks(
             [1], discovery_source="daily_incremental", run_id="run-2", claimed_at=today
         )
