@@ -2227,6 +2227,72 @@ reclaims (proving the new check is scoped to `'succeeded'` only). Full
 repo suite green: 2923 passed, 6 skipped (same pre-existing, unrelated gaps
 as every prior entry in this file).
 
+**Follow-up bug found live the same evening (2026-09-04), same function:**
+a fresh `daily_incremental` execution
+(`daily-incremental-postdeploy2-1788567999`, run against the just-rebuilt
+prod images) reclaimed and fully reprocessed the identical 8,699 CIKs a
+run earlier *that same day* (`daily-incremental-resultpathfix-clean-
+1788517378`, finished 06:36 ET) had already succeeded on — the fix above
+should have blocked this.
+
+1. Symptom: live CloudWatch logs on the new run showed `sec_load_started`/
+   `silver_apply_started` with `cik_count: 8699` — the exact figure the
+   same-day fix was supposed to reduce to 0, confirmed via a direct
+   Postgres read: all 8,699 `discovery_checkpoint` rows already
+   `status='succeeded'` for today under `discovery_source='daily_incremental'`.
+2. Why did the same-day check miss it? The new run's `claimed_at` was
+   `2026-09-05T00:41:16Z` (20:41 ET) — the earlier success's `finished_at`
+   was `2026-09-04T10:36:43Z` (06:36 ET). `_as_utc_date` compared **Sept 4**
+   vs. **Sept 5** and found no match, since 8:41 PM ET is already past
+   midnight UTC.
+3. Why does that happen at 20:41 ET specifically? US/Eastern is UTC-4
+   (EDT) or UTC-5 (EST); any local time from roughly 20:00 ET onward falls
+   on the *next* UTC calendar date. The fix's own "same UTC calendar day"
+   scoping (chosen to sidestep a real, separate SQLite-tzinfo-drop issue,
+   see `_as_utc_date`'s original docstring) never accounted for this.
+4. Why wasn't this caught by the fix's own tests? Every test's timestamps
+   happened to land in UTC daytime hours (06:30/15:11 UTC, i.e. 02:30/11:11
+   ET) — none exercised a time past ~20:00 ET, so none could have
+   surfaced a UTC/ET calendar-day mismatch.
+5. **Root cause:** "same calendar day" is a business-day concept here (SEC
+   daily-index dates, the 7-day recheck window, and every human operator
+   of this pipeline all think in US/Eastern) — comparing UTC calendar
+   dates instead silently redefines "same day" to mean something different
+   for roughly a third of every 24-hour cycle (evening ET), the exact
+   window this bug reproduced in.
+
+**Fix:** `_as_utc_date` renamed to `_as_business_date` and changed to
+convert to `America/New_York` (via `pytz`, already a core dependency —
+unlike stdlib `zoneinfo`, which needs a system tz database or the separate
+`tzdata` pip package, and neither is installed in this repo's warehouse/mdm
+Docker images, confirmed via a grep of both Dockerfiles for `apt-get
+install`) before taking `.date()`, instead of returning the UTC date
+directly. The SQLite-tzinfo-drop handling the original fix needed is
+preserved (a naive value is still treated as already-UTC, not local system
+time, before converting to ET). Both call sites in `claim_discovery_ciks`
+updated; the inline comment corrected from "same UTC calendar day" to
+"same US/Eastern business day."
+
+New regression test,
+`test_claim_skips_cik_already_succeeded_same_business_day_across_utc_midnight`,
+reproduces the exact live shape (a 06:30 ET success and a 20:30 ET claim,
+same ET day, crossing a UTC calendar-day boundary) — confirmed to fail
+before the fix and pass after. The existing
+`test_claim_reclaims_cik_succeeded_on_a_prior_calendar_day` test's
+timestamps were corrected to actually cross an ET midnight boundary (its
+original 23:59/00:05 UTC pair was, in ET, the same business day both
+times — it was accidentally testing the wrong boundary and would have
+passed either way). Full repo suite green (excluding the 8 pre-existing,
+unrelated `tests/integration/test_acquisition_ledger_postgres.py` /
+`test_conflict_postgres.py` failures — a schema-drift issue against the
+local test-Postgres instance's `source_fetch_work` table, a different
+subsystem entirely, not touched by this change).
+
+**Lesson:** a "same calendar day" check needs an explicit timezone, and
+the correct one is whatever timezone the *business process* runs in, not
+UTC by default — UTC only felt safe here because the original fix's own
+tests never happened to run past 8pm ET.
+
 ## full-reconcile decommissioned entirely (2026-09-04)
 
 **`full-reconcile`** (SEC-drift detection: compare live SEC submissions

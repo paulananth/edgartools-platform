@@ -18,6 +18,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
+import pytz
 from sqlalchemy import String, case, cast, func, literal, select, update
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
@@ -103,22 +104,35 @@ class BookkeepingStore:
         for i in range(0, len(items), size):
             yield items[i : i + size]
 
-    @staticmethod
-    def _as_utc_date(value: datetime) -> date:
+    # claim_discovery_ciks' same-day dedup must match the operator's own
+    # business-day boundary, not an arbitrary UTC midnight -- confirmed live
+    # 2026-09-04: a daily_incremental run at 20:41 ET (00:41 UTC the *next*
+    # UTC calendar day) reclaimed and fully reprocessed 8,699 CIKs that had
+    # already succeeded that same ET business day at 06:36 ET, because a
+    # same-*UTC*-calendar-day comparison saw Sept 4 vs. Sept 5 and found no
+    # match. Every evening run after ~20:00 ET hits this same gap. Uses
+    # pytz (already a core dependency, unlike stdlib zoneinfo, which needs
+    # either a system tz database or the separate `tzdata` pip package --
+    # neither is installed in this repo's warehouse/mdm Docker images,
+    # confirmed via a grep of both Dockerfiles) so this works in every
+    # deployed image without adding a new dependency.
+    _BUSINESS_TZ = pytz.timezone("America/New_York")
+
+    @classmethod
+    def _as_business_date(cls, value: datetime) -> date:
         """Every caller in this codebase writes timestamps as tz-aware UTC
         (the ``datetime.now(UTC)`` convention) -- but SQLite (this store's
         test/dev dialect) has no real ``TIMESTAMP(timezone=True)`` support
         and silently drops tzinfo on round trip, unlike Postgres (prod),
-        which always returns a tz-aware value. ``.astimezone()`` on a naive
-        datetime assumes *local system time*, which would misconvert an
-        already-UTC value read back from SQLite and shift its date --
-        reproduced live in this module's own test suite. Treat a naive value
-        as already-UTC instead of guessing; only convert when a real
-        timezone is attached.
+        which always returns a tz-aware value. Treat a naive value as
+        already-UTC instead of guessing (assuming *local system time* would
+        misconvert an already-UTC value read back from SQLite and shift its
+        date -- reproduced live in this module's own test suite), then
+        convert to the US/Eastern business day.
         """
         if value.tzinfo is None:
-            return value.date()
-        return value.astimezone(timezone.utc).date()
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(cls._BUSINESS_TZ).date()
 
     # -- stg_daily_index_filing / sec_daily_index_checkpoint ----------------
 
@@ -305,7 +319,7 @@ class BookkeepingStore:
             return []
 
         scope_keys = [str(cik) for cik in deduped]
-        claimed_at_date = self._as_utc_date(claimed_at)
+        claimed_at_date = self._as_business_date(claimed_at)
         blocked: set[str] = set()
         for chunk in self._chunks(scope_keys, self._DISCOVERY_CLAIM_CHUNK_SIZE):
             stmt = select(
@@ -332,7 +346,7 @@ class BookkeepingStore:
                     and existing_run_id != run_id
                     and existing_source == discovery_source
                     and finished_at is not None
-                    and self._as_utc_date(finished_at) == claimed_at_date
+                    and self._as_business_date(finished_at) == claimed_at_date
                 ):
                     # daily_incremental follow-up (change-propagation map),
                     # confirmed live 2026-09-04: without this, a CIK that
@@ -341,9 +355,14 @@ class BookkeepingStore:
                     # the very next run, no matter how recently it finished --
                     # two same-day daily_incremental runs both claimed the
                     # identical 8,699 CIKs. Scoped to same discovery_source and
-                    # same UTC calendar day only: a different source (e.g.
-                    # bootstrap_next) is unaffected, and Ticket 45's deliberate
-                    # 7-day-recheck design is untouched for any CIK not
+                    # same US/Eastern business day only (not UTC calendar day
+                    # -- a second, distinct bug found live the same evening:
+                    # a run after ~20:00 ET falls on the *next* UTC calendar
+                    # date, so a naive UTC-date comparison missed the same-day
+                    # match it was supposed to catch; see _as_business_date):
+                    # a different source (e.g. bootstrap_next) is unaffected,
+                    # and Ticket 45's deliberate 7-day-recheck design is
+                    # untouched for any CIK not
                     # already succeeded today -- it is reclaimed normally on
                     # the next calendar day, still catching late SEC
                     # daily-index republishes exactly as before.

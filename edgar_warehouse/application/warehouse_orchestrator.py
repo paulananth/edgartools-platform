@@ -159,9 +159,24 @@ SEC_FETCH_LEASE_NAME = "sec_fetch_active"
 # (daily-incremental ~7h7m, bootstrap ~4h10m) plus the worst documented
 # related-pipeline run (13h20m, CLAUDE.md's pre-fix daily accession-expansion
 # case), leaving ~2h40m margin -- deliberately shorter than
-# IDENTITY_REFRESH_LEASE_NAME's 20h default, which was sized for a different
-# process (the 18h Identity Backstop Sweep bound).
+# IDENTITY_REFRESH_LEASE_NAME's prior 20h default, which was sized for a
+# different process (the 18h Identity Backstop Sweep bound).
 SEC_FETCH_LEASE_STALE_AFTER_SECONDS = 16 * 3600
+
+# 2026-09-04: lowered from the prior 20h default (sized for the Identity
+# Backstop Sweep's documented ~18h legitimate runtime) to 6h, after this
+# session's CIK same-day-reclaim fix and gated-acquisition-cascade findings
+# cut a normal daily_incremental run to ~2-2.5h end-to-end (down from the
+# ~7h7m baseline SEC_FETCH_LEASE_STALE_AFTER_SECONDS's own comment cites) --
+# a 6h stale-reclaim window leaves a healthy margin for 'daily' mode. This
+# is a deliberate, explicitly-accepted tradeoff for 'backstop' mode, which
+# shares this same lease/stale-timeout and may still legitimately run
+# several hours: a backstop sweep still running past hour 6 will have its
+# lease reclaimed by a newer run, same as a genuinely-stuck one. Operator
+# chose this uniform value over a daily-only 6h / backstop-still-20h split
+# after being shown that risk -- re-widen or split per-mode if backstop's
+# real runtime turns out to exceed this.
+IDENTITY_REFRESH_LEASE_STALE_AFTER_SECONDS = 6 * 3600
 
 # These four commands touch nothing but the pipeline_run_lease table (a
 # handful of rows). Routing them through the normal hydrate/merge/publish
@@ -3096,6 +3111,7 @@ def _capture_bronze_raw(
             run_id=sync_run_id,
             mode=effective_mode,
             acquired_at=now,
+            stale_after_seconds=IDENTITY_REFRESH_LEASE_STALE_AFTER_SECONDS,
         )
         held = bookkeeping.get_pipeline_run_lease(IDENTITY_REFRESH_LEASE_NAME)
         if acquired:
