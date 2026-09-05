@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy import insert, select
 from sqlalchemy.orm import Session
 
+from edgar_warehouse.mdm.bounded_fetch import bounded_source_sql
 from edgar_warehouse.mdm.database import (
     MdmAdviser,
     MdmChangeLog,
@@ -156,6 +157,33 @@ def _stage_rows(
     ]
 
 
+def _bounded_unresolved_rows(
+    silver: SilverReader,
+    base_sql: str,
+    order_by_sql: str,
+    limit: int | None,
+    existing_count: int,
+    exclude,
+) -> list[dict[str, Any]]:
+    """Shared growing-window fetch for resolve_advisers_bulk/resolve_funds_bulk
+    (fundamentals-daily-integration map, Ticket 06). Both callers had the
+    identical shape (bounded fetch + stable ORDER BY + exclude
+    already-resolved identities) inline before this extraction -- adv_bulk.py
+    has already shipped two prior bugs where a fix landed in one of these
+    two sibling functions and not the other (commits ee62a968, e6fc0626), so
+    this logic is factored once rather than risking a third divergence.
+
+    When `limit` is falsy, returns every row unfiltered and unordered --
+    the existing unbounded `mdm run --entity-type all` (no --limit) path,
+    left byte-for-byte unchanged.
+    """
+    if not limit:
+        return silver.fetch(base_sql)
+    fetch_sql = bounded_source_sql(f"{base_sql} ORDER BY {order_by_sql}", limit, existing_count)
+    candidate_rows = silver.fetch(fetch_sql)
+    return [row for row in candidate_rows if not exclude(row)]
+
+
 def resolve_advisers_bulk(
     session: Session,
     silver: SilverReader,
@@ -163,29 +191,12 @@ def resolve_advisers_bulk(
     limit: int | None = None,
 ) -> int:
     """Project the latest filing for every CRD into adviser golden records."""
-    sql = "SELECT * FROM sec_adv_filing"
-    if limit:
-        sql += f" LIMIT {int(limit)}"
-    filing_rows = silver.fetch(sql)
-    office_rows = silver.fetch(
-        "SELECT accession_number, city, state_or_country "
-        "FROM sec_adv_office WHERE is_headquarters = TRUE"
-    )
-    offices = {
-        str(row.get("accession_number")): row
-        for row in office_rows
-    }
 
     def identity(row: dict[str, Any]) -> str:
         crd = _text_id(row.get("crd_number"))
         if crd:
             return f"crd:{crd}"
         return f"accession:{row.get('accession_number')}"
-
-    rows = _latest_by_identity(filing_rows, identity)
-    if not rows:
-        session.commit()
-        return 0
 
     existing_advisers = list(session.scalars(select(MdmAdviser)))
     by_crd = {
@@ -198,6 +209,45 @@ def resolve_advisers_bulk(
         for row in existing_advisers
         if row.cik is not None and row.crd_number is None
     }
+
+    # release-readiness Ticket 100 / fundamentals-daily-integration Ticket
+    # 06: a bare "SELECT * FROM sec_adv_filing LIMIT N" has no ORDER BY and
+    # no exclusion of already-resolved CRDs, so a caller that passes the
+    # same limit on every call (daily_incremental's daily `mdm mastering
+    # --limit 100`) re-fetches the same leading rows in table-scan order
+    # forever -- new advisers beyond that window are never reached.
+    # _bounded_unresolved_rows ports the same growing-window fix already
+    # proven for run_companies (pipeline.py). A row with no crd_number
+    # (accession-fallback identity) always passes the exclusion filter --
+    # there is no cheap way to know an accession-keyed identity was already
+    # resolved without a second round trip, and occasionally re-fetching
+    # one is harmless: the _existing_source_ids check below already makes
+    # re-processing an already-seen accession a no-op.
+    filing_rows = _bounded_unresolved_rows(
+        silver,
+        "SELECT * FROM sec_adv_filing",
+        "crd_number NULLS LAST, accession_number",
+        limit,
+        len(by_crd),
+        lambda row: _text_id(row.get("crd_number")) in by_crd,
+    )
+
+    office_rows = silver.fetch(
+        "SELECT accession_number, city, state_or_country "
+        "FROM sec_adv_office WHERE is_headquarters = TRUE"
+    )
+    offices = {
+        str(row.get("accession_number")): row
+        for row in office_rows
+    }
+
+    rows = _latest_by_identity(filing_rows, identity)
+    if limit:
+        rows = rows[: int(limit)]
+    if not rows:
+        session.commit()
+        return 0
+
     companies_by_cik = {
         int(row.cik): row.entity_id
         for row in session.scalars(select(MdmCompany))
@@ -299,10 +349,6 @@ def resolve_funds_bulk(
     limit: int | None = None,
 ) -> int:
     """Project the latest filing row for every private-fund identifier."""
-    sql = "SELECT * FROM sec_adv_private_fund"
-    if limit:
-        sql += f" LIMIT {int(limit)}"
-    source_rows = silver.fetch(sql)
 
     def identity(row: dict[str, Any]) -> str:
         pfid = _text_id(row.get("private_fund_id"))
@@ -312,11 +358,6 @@ def resolve_funds_bulk(
             f"accession:{row.get('accession_number')}:"
             f"{row.get('fund_index')}"
         )
-
-    rows = _latest_by_identity(source_rows, identity)
-    if not rows:
-        session.commit()
-        return 0
 
     advisers = list(session.scalars(select(MdmAdviser)))
     adviser_by_crd = {
@@ -340,6 +381,27 @@ def resolve_funds_bulk(
         for row in existing_funds
         if row.private_fund_id is not None
     }
+
+    # Same growing-window fix as resolve_advisers_bulk above (see its
+    # comment for the full rationale) -- identity is private_fund_id here
+    # instead of crd_number, with the same accession+fund_index fallback
+    # the identity() closure already uses.
+    source_rows = _bounded_unresolved_rows(
+        silver,
+        "SELECT * FROM sec_adv_private_fund",
+        "private_fund_id NULLS LAST, accession_number, fund_index",
+        limit,
+        len(by_pfid),
+        lambda row: _text_id(row.get("private_fund_id")) in by_pfid,
+    )
+
+    rows = _latest_by_identity(source_rows, identity)
+    if limit:
+        rows = rows[: int(limit)]
+    if not rows:
+        session.commit()
+        return 0
+
     by_adviser_name = {
         (row.adviser_entity_id, row.canonical_name): row
         for row in existing_funds

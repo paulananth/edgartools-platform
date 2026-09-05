@@ -28,6 +28,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
+from edgar_warehouse.mdm.bounded_fetch import bounded_source_sql
 from edgar_warehouse.mdm.database import get_session
 from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.match import MatchAction
@@ -122,9 +123,6 @@ RELATIONSHIP_TYPES = (
     "AUDITED_BY",           # Company → AuditFirm  (10-K dei_AuditorFirmId XBRL)
     "INSTITUTIONAL_HOLDS",  # Adviser → Security   (13F holdings)
 )
-
-_RELATIONSHIP_SOURCE_LIMIT_MULTIPLIER = 50
-_RELATIONSHIP_SOURCE_LIMIT_MINIMUM = 100
 
 # INSTITUTIONAL_HOLDS reads sec_thirteenf_holding -- the largest silver table
 # (large fund managers report tens of thousands of positions per quarter) --
@@ -252,21 +250,13 @@ class MDMPipeline:
         """Append a LIMIT that grows with `existing` so the source window keeps
         advancing past already-converted rows on repeat runs.
 
-        Without `existing` in the limit, every run re-reads the same leading
-        slice of the (unordered-by-default) source query: rows already turned
-        into relationships come back as `skipped_existing` and the run never
-        reaches fresh rows further down the table — repeat invocations with the
-        same `--limit` plateau at whatever the first run produced. Growing the
-        window by `existing` guarantees it always extends past the previously
-        converted prefix into unconverted territory, given a stable ORDER BY.
+        Delegates to `bounded_fetch.bounded_source_sql` (fundamentals-daily-
+        integration map, Ticket 06) -- extracted so `adv_bulk.py`'s free
+        functions can reuse the same growing-window fix without a circular
+        import. Kept as a staticmethod here too so this class's 5 existing
+        call sites don't need to change.
         """
-        if remaining is None:
-            return sql
-        source_limit = int(existing) + max(
-            int(remaining) * _RELATIONSHIP_SOURCE_LIMIT_MULTIPLIER,
-            _RELATIONSHIP_SOURCE_LIMIT_MINIMUM,
-        )
-        return f"{sql.rstrip()} LIMIT {source_limit}"
+        return bounded_source_sql(sql, remaining, existing)
 
     def _fetch_optional_relationship_rows(
         self,
