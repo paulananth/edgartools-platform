@@ -108,6 +108,41 @@ for the pipeline it's attached to, or exists purely to check state.
 
 ## Data Point Catalog
 
+**Retention policy (applies to every table below): none.** No table or bronze
+object in this platform is ever deleted or expired by age — SEC filing
+artifacts are treated as additive and immutable once captured (confirmed
+2026-09-05: every `DELETE`/purge call site in `silver_store.py`/
+`silver_protection.py`/`bookkeeping/store.py` is a staging-table cleanup or a
+full per-CIK replace-on-resync, never a time-based expiry). So "coverage" for
+each document type below is entirely a function of how far back its loader
+reaches when it *first* captures data, not how long anything is kept
+afterward — recorded per table as "Loader / Date Range" where a loader-level
+lookback applies.
+
+### Artifact Loader Date-Range Reference
+
+One flat row per artifact/form type actually fetched, independent of which
+silver table it lands in (detail and code pointers live in the per-category
+tables further below) — kept here as the single place to scan or update when
+a loader's lookback default changes.
+
+| Artifact / form type | Loader(s) | Date range | Default |
+| --- | --- | --- | --- |
+| Filing metadata (all forms) | `daily-incremental` | Business-date range (`--start-date`/`--end-date`) | Recurring 7-day SEC-daily-index lookback, or since last checkpoint |
+| Filing metadata (all forms) | `bootstrap-next` / `bootstrap-full` / `load_history` | `--filing-lookback-years` | Code default **0** (unbounded); **`load_history`'s deployed Step Function overrides to 2 years** unless `{"filing_lookback_years": 0}` is passed explicitly |
+| Forms 3/4/5 (ownership) | artifact-parse layer (`daily-incremental`/`bootstrap-next`) | `--ownership-lookback-years` | **2 years** (`0` = full history) |
+| 8-K Item 5.02 (executive changes) | artifact-parse layer | `--item-502-lookback-years` | **2 years**, falls back to ownership setting |
+| 8-K Item 2.02 (earnings) | artifact-parse layer | none | **Unbounded** |
+| DEF 14A / DEF 14A-A / DEFA14A / PRE 14A | artifact-parse layer | none | **Unbounded** |
+| 13F-HR / 13F-HR-A (cover-page artifact) | artifact-parse layer | none | **Unbounded** |
+| ADV filings (all ADV forms) | artifact-parse layer | none | **Unbounded** |
+| 13F holdings (`sec_thirteenf_holding`) | `bootstrap-fundamentals --mode thirteenf` | none | **Unbounded** — every 13F-HR/13F-HR-A ever discovered for the CIK list |
+| Company financials (`sec_financial_fact`/`_derived`/`sec_accounting_flag`) | `bootstrap-fundamentals --mode entity-facts` | none (date); gated by parser version | **Unbounded** — SEC `companyfacts` API returns full history every call |
+| Earnings releases (`sec_earnings_release`) | `bootstrap-fundamentals --mode per-filing` | none | **Unbounded** |
+| Executive records (`sec_executive_record`) | `bootstrap-fundamentals --mode per-filing` | DEF 14A rows: none; 8-K Item 5.02 rows: hard-coded | DEF 14A: **unbounded**; Item 5.02: **2 years** |
+| ADV bulk archive (monthly IAPD dataset) | `fetch-adv-bulk` | `window_months` | **Rolling 13 months**, forward-only (already-fetched periods are no-ops) |
+| Firm roster (registered/exempt advisers) | `fetch-firm-roster` | `dataset_period` | **Newest published period only**, each run |
+
 ### Bronze and Audit Data
 
 | Object/table | Source mode | Data points |
@@ -134,28 +169,39 @@ for the pipeline it's attached to, or exists purely to check state.
 
 ### Filing Metadata and Daily Index Data
 
-| Table/output | Source mode | Data points |
-| --- | --- | --- |
-| `sec_company_filing` | Direct SEC submissions JSON | Accession number, CIK, form, filing date, report date, acceptance datetime, act, file/film number, item string, size, XBRL flags, primary document, primary document description. |
-| `stg_daily_index_filing` | Direct SEC daily index | Business date, source year/quarter, row ordinal, form, company name, CIK, filing date, file name, accession number, TXT URL, record hash, staged time. |
-| `sec_daily_index_checkpoint` | Internal daily-index control | Business date, source URL/key, expected availability, attempts, raw object id, SHA, row/distinct counts, status, error, success/finalized times. |
-| `sec_current_filing_feed` | Legacy/current feed surface if populated | Accession, CIK, form, company name, filing date, accepted time, filing/index links, summary, source URL, feed published time. |
+| Table/output | Source mode | Data points | Loader / Date Range |
+| --- | --- | --- | --- |
+| `sec_company_filing` | Direct SEC submissions JSON | Accession number, CIK, form, filing date, report date, acceptance datetime, act, file/film number, item string, size, XBRL flags, primary document, primary document description. | `daily-incremental`: driven by a business-date range (`--start-date`/`--end-date`, default a 7-day recurring SEC-daily-index lookback or since-last-checkpoint). `bootstrap-next`/`bootstrap-full`/`load_history`: `--filing-lookback-years` (code default `0` = unbounded/full history, but **`load_history`'s deployed Step Function overrides this to `2` years by default** — full history requires explicitly passing `{"filing_lookback_years": 0}`). This is the gate on which accessions even become candidates for every form type below. |
+| `stg_daily_index_filing` | Direct SEC daily index | Business date, source year/quarter, row ordinal, form, company name, CIK, filing date, file name, accession number, TXT URL, record hash, staged time. | `daily-incremental`/`load-daily-form-index-for-date`: one calendar business date per row; recurring cadence defaults to a 7-day lookback window. |
+| `sec_daily_index_checkpoint` | Internal daily-index control | Business date, source URL/key, expected availability, attempts, raw object id, SHA, row/distinct counts, status, error, success/finalized times. | Same as `stg_daily_index_filing` — one row per business date processed. |
+| `sec_current_filing_feed` | Legacy/current feed surface if populated | Accession, CIK, form, company name, filing date, accepted time, filing/index links, summary, source URL, feed published time. | No loader-level date-range control identified. |
 
 ### Filing Artifacts and Text
 
-| Table/output | Source mode | Data points |
-| --- | --- | --- |
-| `sec_filing_attachment` | edgartools filing/attachment discovery metadata | Accession number, sequence number, document name/type/description, document URL, primary flag, raw object id, sync run. |
-| Filing document bytes | Repository-owned raw SEC HTTP per canonical attachment URL | Byte-exact primary documents and attachments stored in S3 bronze by CIK/accession/section/document name. |
-| `sec_filing_text` | Local text projection | Accession, text version, source document name, text storage path, text SHA256, char count, extracted time. |
+Once an accession clears the filing-metadata gate above, whether its
+*artifact bytes* actually get fetched/parsed depends on the form-specific
+lookback below (`_configured_parser_accessions`, `warehouse_orchestrator.py`)
+— this is where the real per-form-type date range lives:
+
+| Form family | Artifact-parse lookback |
+| --- | --- |
+| Forms 3/4/5 (ownership) | `--ownership-lookback-years` / `WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS`, default **2 years** (`0` = full history). |
+| 8-K Item 5.02 (executive changes) | `--item-502-lookback-years` / `WAREHOUSE_ITEM_502_LOOKBACK_YEARS`, default **2 years**, falls back to the ownership setting if unset. |
+| 8-K Item 2.02 (earnings), DEF 14A/DEF 14A-A/DEFA14A/PRE 14A, 13F-HR/13F-HR-A, all ADV forms | **Unbounded** — no lookback filter at all once the accession passed the filing-metadata gate above. |
+
+| Table/output | Source mode | Data points | Loader / Date Range |
+| --- | --- | --- | --- |
+| `sec_filing_attachment` | edgartools filing/attachment discovery metadata | Accession number, sequence number, document name/type/description, document URL, primary flag, raw object id, sync run. | Per form family, see table above. |
+| Filing document bytes | Repository-owned raw SEC HTTP per canonical attachment URL | Byte-exact primary documents and attachments stored in S3 bronze by CIK/accession/section/document name. | Per form family, see table above. |
+| `sec_filing_text` | Local text projection | Accession, text version, source document name, text storage path, text SHA256, char count, extracted time. | Inherits its source attachment's lookback. |
 
 ### Ownership Data
 
-| Table/output | Source mode | Data points |
-| --- | --- | --- |
-| `sec_ownership_reporting_owner` | edgartools `Ownership.from_xml` over cached XML | Accession, owner index, owner CIK/name, director/officer/10-percent/other flags, officer title, parser version. |
-| `sec_ownership_non_derivative_txn` | edgartools `Ownership.from_xml` over cached XML | Accession, owner index, transaction index, security title, transaction date/code, shares, price, acquired/disposed code, shares owned after, ownership nature/directness, parser version. |
-| `sec_ownership_derivative_txn` | edgartools `Ownership.from_xml` over cached XML | Non-derivative fields plus conversion/exercise price, exercise/expiration dates, underlying security title/shares. |
+| Table/output | Source mode | Data points | Loader / Date Range |
+| --- | --- | --- | --- |
+| `sec_ownership_reporting_owner` | edgartools `Ownership.from_xml` over cached XML | Accession, owner index, owner CIK/name, director/officer/10-percent/other flags, officer title, parser version. | Forms 3/4/5 lookback, default **2 years** (see Filing Artifacts and Text above). |
+| `sec_ownership_non_derivative_txn` | edgartools `Ownership.from_xml` over cached XML | Accession, owner index, transaction index, security title, transaction date/code, shares, price, acquired/disposed code, shares owned after, ownership nature/directness, parser version. | Same, **2 years**. |
+| `sec_ownership_derivative_txn` | edgartools `Ownership.from_xml` over cached XML | Non-derivative fields plus conversion/exercise price, exercise/expiration dates, underlying security title/shares. | Same, **2 years**. |
 
 ### ADV Data
 
@@ -163,23 +209,25 @@ ADV is separate from normal EDGAR submissions. The platform expects ADV-family
 bronze artifacts to be obtained externally from IAPD/FOIA-style sources and
 placed in the configured bronze path or passed explicitly.
 
-| Table/output | Source mode | Data points |
-| --- | --- | --- |
-| `sec_adv_filing` | Operator-provided ADV bronze, local parser | Accession, CIK, form, adviser name, SEC file number, CRD number, effective date, filing status, source format, parser version. |
-| `sec_adv_office` | Operator-provided ADV bronze, local parser | Office index/name, city, state/country, country, headquarters flag. |
-| `sec_adv_disclosure_event` | Operator-provided ADV bronze, local parser | Event index, disclosure category, event date, reported flag, description. |
-| `sec_adv_private_fund` | Operator-provided ADV bronze, local parser | Fund index/name/type, jurisdiction, AUM. |
+| Table/output | Source mode | Data points | Loader / Date Range |
+| --- | --- | --- | --- |
+| `sec_adv_filing` | Operator-provided ADV bronze, local parser | Accession, CIK, form, adviser name, SEC file number, CRD number, effective date, filing status, source format, parser version. | ADV form artifact-parse is **unbounded** (no per-form lookback, see Filing Artifacts and Text above), subject to the same upstream filing-metadata gate. |
+| `sec_adv_office` | Operator-provided ADV bronze, local parser | Office index/name, city, state/country, country, headquarters flag. | Same as `sec_adv_filing`. |
+| `sec_adv_disclosure_event` | Operator-provided ADV bronze, local parser | Event index, disclosure category, event date, reported flag, description. | Same as `sec_adv_filing`. |
+| `sec_adv_private_fund` | Operator-provided ADV bronze, local parser | Fund index/name/type, jurisdiction, AUM. | Same as `sec_adv_filing`. |
+| ADV bulk archive dataset (feeds the parser above) | `fetch-adv-bulk` (IAPD monthly archive) | Monthly `YYYY-MM` dataset periods. | **Rolling 13-month window** (`window_months=13`), fetched forward-only — an already-fetched period is a no-op, so coverage only grows. |
+| Firm roster (registered/exempt adviser list) | `fetch-firm-roster` | Adviser roster snapshot per `dataset_period`. | **Newest published period only**, each run — not a rolling window. |
 
 ### Fundamentals, Financials, and 13F
 
-| Table/output | Source mode | Data points |
-| --- | --- | --- |
-| `sec_financial_fact` | Direct SEC companyfacts API, local parser | CIK, accession, fiscal year/period, period start/end, form type, XBRL concept, value, unit, decimals, segment, parser version. |
-| `sec_financial_derived` | Internal computation from financial facts | Revenue, gross profit, EBITDA, EBIT, net income, diluted EPS, assets, liabilities, equity, cash, debt, current assets/liabilities, receivables, inventory, SG&A, retained earnings, depreciation/amortization, PP&E, shares, operating cash flow, capex, free cash flow, margins, ROIC, ROE, ROA. |
-| `sec_accounting_flag` | SEC DEI facts plus internal scoring | Auditor name, PCAOB id, location, ICFR attestation, auditor changed flag, Beneish M score, Altman Z score, Piotroski F score. |
-| `sec_earnings_release` | edgartools `EarningsRelease` over cached 8-K HTML | Filing date, fiscal year/quarter, period end, GAAP revenue/net income/diluted EPS, non-GAAP presence, guidance presence. |
-| `sec_executive_record` | edgartools proxy summary compensation extraction over cached proxy HTML | Fiscal year, executive name, role, total compensation, salary, bonus, stock awards, option awards, non-equity incentive. |
-| `sec_thirteenf_holding` | edgartools 13F information table parser over cached attachment XML | Filing manager CIK, accession, holding index, period of report, CUSIP, issuer, security title/class, shares/principal held, market value, put/call, discretion, voting authority. |
+| Table/output | Source mode | Data points | Loader / Date Range |
+| --- | --- | --- | --- |
+| `sec_financial_fact` | Direct SEC companyfacts API, local parser | CIK, accession, fiscal year/period, period start/end, form type, XBRL concept, value, unit, decimals, segment, parser version. | `bootstrap-fundamentals --mode entity-facts`: **unbounded** — SEC's own `companyfacts` endpoint returns a company's entire XBRL history on every call. Gated only by `has_companyfacts_at_version` (a parser-**version** check, not a date check) — a re-fetch happens on a parser bump, not on any schedule. |
+| `sec_financial_derived` | Internal computation from financial facts | Revenue, gross profit, EBITDA, EBIT, net income, diluted EPS, assets, liabilities, equity, cash, debt, current assets/liabilities, receivables, inventory, SG&A, retained earnings, depreciation/amortization, PP&E, shares, operating cash flow, capex, free cash flow, margins, ROIC, ROE, ROA. | Derived from `sec_financial_fact` — same coverage, unbounded. |
+| `sec_accounting_flag` | SEC DEI facts plus internal scoring | Auditor name, PCAOB id, location, ICFR attestation, auditor changed flag, Beneish M score, Altman Z score, Piotroski F score. | Same as `sec_financial_fact` — unbounded. |
+| `sec_earnings_release` | edgartools `EarningsRelease` over cached 8-K HTML | Filing date, fiscal year/quarter, period end, GAAP revenue/net income/diluted EPS, non-GAAP presence, guidance presence. | `bootstrap-fundamentals --mode per-filing`, 8-K Item 2.02 rows: **unbounded**, no lookback filter. |
+| `sec_executive_record` | edgartools proxy summary compensation extraction over cached proxy HTML | Fiscal year, executive name, role, total compensation, salary, bonus, stock awards, option awards, non-equity incentive. | `bootstrap-fundamentals --mode per-filing`: DEF 14A/proxy rows are **unbounded**; 8-K Item 5.02 (executive-change) rows are hard-coded to a **2-year** lookback in this mode's own ad-hoc/non-release path (falls back to `item_502_lookback_years`'s default). |
+| `sec_thirteenf_holding` | edgartools 13F information table parser over cached attachment XML | Filing manager CIK, accession, holding index, period of report, CUSIP, issuer, security title/class, shares/principal held, market value, put/call, discretion, voting authority. | `bootstrap-fundamentals --mode thirteenf`: **unbounded** — scans every 13F-HR/13F-HR-A ever discovered for the CIK list, no date filter of any kind. |
 
 ### MDM Entities and Relationships
 
