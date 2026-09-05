@@ -1,5 +1,20 @@
 Type: grilling
-Status: claimed
+Status: resolved (2026-09-05)
+
+**Scope widened 2026-09-05** (user-directed, via a fresh `/wayfinder` invocation asking
+"how will [the fundamentals-lookback-years spec] be incorporated to daily incremental
+and load_history, every other loader will be decommissioned"): this ticket's original
+question covered only the 4 MDM-Pipeline-Machine heads. It now also covers every other
+remaining document-loading state machine besides `daily_incremental`/`load_history` —
+`bootstrap-full`, `catch-up-daily-form-index`, `load-daily-form-index-for-date`,
+`targeted-resync` — evidenced with live execution history below. Confirmed explicitly
+**out of scope** for this widening: `generation_build` (not a document loader — a
+bespoke Neo4j-Snowflake graph-generation pipeline, no shared shape with anything else),
+the seed machines/`mdm_gold`/`gold-refresh` (already decided by Ticket 07, merge/delete/
+keep-separate respectively — not yet implemented in the live deploy script, a separate
+execution gap tracked as its own follow-up, not re-litigated here), and the `drive-*`
+acquisition commands (confirmed zero executions and wired into nothing in
+`deploy-aws-application.sh` — dormant, not yet part of any decided pipeline shape).
 
 ## Question
 
@@ -129,3 +144,72 @@ not yet implemented. Full design detail and the reviewer's exact findings
 are in this session's transcript; re-derive from this note plus a fresh
 `/gof-refactor-reviewer` pass if picked up in a different session, rather
 than trusting this summary blindly.
+
+**Final resolution (2026-09-05, scope widened per this ticket's own header
+note above), both remaining MDM Pipeline Machine heads: retire, don't
+rewire.** User directed outright retirement of `silver_mdm_gold` and
+`bronze_seed_silver_gold`'s default path rather than the paused
+rewire-onto-the-new-MDM-machine design above — **which makes that entire
+paused design moot, not merely deferred.** Confirmed before accepting that:
+the one thing the paused design existed to preserve — unbounded
+(`--limit`-free) full-universe `MDMPipeline.run_all()` — is **already
+served independently** by `mdm reconcile-backstop`
+(`edgar_warehouse/mdm/reconciliation_backstop.py`, change-propagation
+Ticket 50, gated by the shared `mdm_resolution` lease so it never overlaps
+ordinary mastering). Retiring these two heads outright therefore leaves no
+capability gap; the two-optional-input-field contract change
+(`unbounded`/`resume_ledger_run_id` on the MDM machine) is no longer
+needed and should not be implemented.
+
+Live evidence for both, gathered before this decision (not assumed):
+`silver_mdm_gold` has **zero executions ever**
+(`edgartools-prod-silver-mdm-gold`, confirmed via `list-executions`).
+`bronze_seed_silver_gold`'s default path was heavily used through
+2026-08-22 (it was the actual vehicle for several incidents this repo's
+CLAUDE.md documents — the MDM Snowflake mirror gap, the shard-publish
+race) but has had **zero executions since** — coinciding with this
+session's work fully shifting onto `load_history`/`daily_incremental`.
+`bronze_seed_silver_gold`'s separate "strict release mode" branch is
+unaffected — Ticket 07 already decided that one stays untouched, no
+equivalent built elsewhere, and this resolution does not revisit it.
+
+**Full widened-scope resolution — every remaining document-loading state
+machine besides `daily_incremental`/`load_history`:**
+
+- `silver_mdm_gold` — **retire** (zero executions ever; see above).
+- `bronze_seed_silver_gold`'s default path — **retire** (superseded by
+  `load_history`; strict-release branch untouched).
+- `bootstrap-full` — **retire** (zero executions ever; functionally
+  subsumed by `load_history`'s windowed `bootstrap-next` loop, minus the
+  windowing that made `load_history` necessary in the first place).
+- `catch-up-daily-form-index` — **retire** (zero executions ever;
+  superseded by `daily_incremental`'s own `--recurring-index-lookback-days`
+  catch-up mechanism).
+- `load-daily-form-index-for-date` — **retire** (only 2 executions ever,
+  both a one-off manual backfill tied to a single past ticket's dry run;
+  user overrode this session's initial "keep as an ops tool" recommendation
+  and directed retirement).
+- `targeted-resync` — **keep**, explicitly not a "loader" in this map's
+  sense (CLAUDE.md's own docs already classify it as the single-company
+  debug/resync tool, a fundamentally different job from bulk company
+  loading) — **but with a new, real requirement surfaced during this
+  resolution**: its `cik`-scoped resync branch
+  (`warehouse_orchestrator.py`'s `targeted-resync` handler, the
+  `scope_type == "cik"` case) currently calls `_run_accession_resync` over
+  **every** accession `submissions_orchestrator` returns, with **no
+  lookback gate of any kind** — not `ownership_lookback_years`, not
+  `item_502_lookback_years`, nothing. User explicitly requires targeted-resync
+  to honor the same date gates as every bulk loader, even for a single CIK.
+  Tracked as [Ticket 10](issues/10-add-lookback-gating-to-targeted-resync.md).
+- `generation_build`, `mdm_utility`, the seed machines, `mdm_gold`,
+  `gold-refresh`/`FactPublishtoGold`, the `drive-*` acquisition commands —
+  unchanged by this resolution (see this ticket's scope-widening header
+  note above for why each is out of scope).
+
+**Not yet implemented** — retiring the 5 machines above (rollback snapshot
+then explicit delete, mirroring tickets 03/04/06's own pattern) is tracked
+as [Ticket 09](issues/09-retire-superseded-document-loading-machines.md).
+Separately, and still not implemented from Ticket 07: `mdm_gold` deletion
+and the `seed_universe`/`mdm_seed_universe` merge remain decided-but-live in
+prod — a pre-existing execution gap, not reopened or re-scoped by this
+resolution.
