@@ -237,6 +237,8 @@ WAREHOUSE_RUNTIME_MODES = {
 
 OWNERSHIP_FORMS = {"3", "3/A", "4", "4/A", "5", "5/A"}
 ADV_FORMS = {"ADV", "ADV/A", "ADV-E", "ADV-E/A", "ADV-H", "ADV-H/A", "ADV-NR", "ADV-W", "ADV-W/A"}
+PROXY_FORMS = {"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A"}
+THIRTEENF_FORMS = {"13F-HR", "13F-HR/A"}
 # Form 3/4/5 artifact + silver parse window. Historical deep Form 4 histories
 # (often thousands of accessions per heavy-insider issuer) are not useful for
 # IS_INSIDER / current insider identity; only the recent band matters. 0 =
@@ -254,6 +256,15 @@ DEFAULT_ITEM_502_LOOKBACK_YEARS = 2
 # incremental/targeted-resync are unaffected unless --filing-lookback-years
 # is passed explicitly.
 DEFAULT_FILING_LOOKBACK_YEARS = 0
+# Shared fetch/parse-eligibility default for the four fundamentals families
+# that previously had no lookback control at all: Item 2.02 (earnings) 8-Ks,
+# the DEF 14A/DEFA14A/PRE 14A proxy family, 13F-HR/-A (raw parse + the
+# derived sec_thirteenf_holding extraction), and every ADV form. Each family
+# has its own optional override falling back to this shared default --
+# narrower than the already-locked 13F (3y) / proxy (5y) Agent Decision
+# Surface windows (artifact-usefulness-timelines map), a known, accepted,
+# per-family-reversible trade-off (see .scratch/fundamentals-lookback-years/spec.md).
+DEFAULT_FUNDAMENTALS_LOOKBACK_YEARS = 2
 
 def _emit_pipeline_event(event: str, **payload: Any) -> None:
     """Emit a structured progress event for ECS/CloudWatch pipeline monitoring."""
@@ -1742,6 +1753,11 @@ def _capture_bronze_raw(
                     required_candidate_rows=required_candidate_rows,
                     ownership_lookback_years=arguments.get("ownership_lookback_years"),
                     item_502_lookback_years=arguments.get("item_502_lookback_years"),
+                    fundamentals_lookback_years=arguments.get("fundamentals_lookback_years"),
+                    item_202_lookback_years=arguments.get("item_202_lookback_years"),
+                    proxy_lookback_years=arguments.get("proxy_lookback_years"),
+                    thirteenf_lookback_years=arguments.get("thirteenf_lookback_years"),
+                    adv_lookback_years=arguments.get("adv_lookback_years"),
                     skip_ownership_forms=gated_capture_enabled,
                 )
             except Exception:
@@ -1831,6 +1847,11 @@ def _capture_bronze_raw(
             parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
             ownership_lookback_years=arguments.get("ownership_lookback_years"),
             item_502_lookback_years=arguments.get("item_502_lookback_years"),
+            fundamentals_lookback_years=arguments.get("fundamentals_lookback_years"),
+            item_202_lookback_years=arguments.get("item_202_lookback_years"),
+            proxy_lookback_years=arguments.get("proxy_lookback_years"),
+            thirteenf_lookback_years=arguments.get("thirteenf_lookback_years"),
+            adv_lookback_years=arguments.get("adv_lookback_years"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -1873,6 +1894,11 @@ def _capture_bronze_raw(
                     ownership_lookback_years=arguments.get("ownership_lookback_years"),
                     item_502_lookback_years=arguments.get("item_502_lookback_years"),
                     filing_lookback_years=arguments.get("filing_lookback_years"),
+                    fundamentals_lookback_years=arguments.get("fundamentals_lookback_years"),
+                    item_202_lookback_years=arguments.get("item_202_lookback_years"),
+                    proxy_lookback_years=arguments.get("proxy_lookback_years"),
+                    thirteenf_lookback_years=arguments.get("thirteenf_lookback_years"),
+                    adv_lookback_years=arguments.get("adv_lookback_years"),
                 )
             except Exception:
                 bookkeeping.finish_discovery_ciks(
@@ -2354,6 +2380,11 @@ def _capture_bronze_raw(
             repair_manifest_accessions=repair_accessions,
             ownership_lookback_years=arguments.get("ownership_lookback_years"),
             item_502_lookback_years=arguments.get("item_502_lookback_years"),
+            fundamentals_lookback_years=arguments.get("fundamentals_lookback_years"),
+            item_202_lookback_years=arguments.get("item_202_lookback_years"),
+            proxy_lookback_years=arguments.get("proxy_lookback_years"),
+            thirteenf_lookback_years=arguments.get("thirteenf_lookback_years"),
+            adv_lookback_years=arguments.get("adv_lookback_years"),
         )
         raw_writes.extend(result["raw_writes"])
         metrics["rows_inserted"] += result["rows_written"]
@@ -3335,6 +3366,11 @@ def _run_submissions_bronze_then_silver(
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
     filing_lookback_years: Any = None,
+    fundamentals_lookback_years: Any = None,
+    item_202_lookback_years: Any = None,
+    proxy_lookback_years: Any = None,
+    thirteenf_lookback_years: Any = None,
+    adv_lookback_years: Any = None,
     skip_ownership_forms: bool = False,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
@@ -3593,6 +3629,11 @@ def _run_submissions_bronze_then_silver(
         repair_manifest_accessions=repair_manifest_accessions,
         ownership_lookback_years=ownership_lookback_years,
         item_502_lookback_years=item_502_lookback_years,
+        fundamentals_lookback_years=fundamentals_lookback_years,
+        item_202_lookback_years=item_202_lookback_years,
+        proxy_lookback_years=proxy_lookback_years,
+        thirteenf_lookback_years=thirteenf_lookback_years,
+        adv_lookback_years=adv_lookback_years,
         skip_ownership_forms=skip_ownership_forms,
     )
     raw_writes.extend(artifact_result["raw_writes"])
@@ -3806,6 +3847,11 @@ def _run_configured_form_artifact_pipeline(
     repair_manifest_accessions: set[str] | None = None,
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
+    fundamentals_lookback_years: Any = None,
+    item_202_lookback_years: Any = None,
+    proxy_lookback_years: Any = None,
+    thirteenf_lookback_years: Any = None,
+    adv_lookback_years: Any = None,
     skip_ownership_forms: bool = False,
 ) -> dict[str, Any]:
     if release_mode and recurring_mode:
@@ -3840,6 +3886,11 @@ def _run_configured_form_artifact_pipeline(
         accession_numbers,
         ownership_lookback_years=ownership_lookback_years,
         item_502_lookback_years=item_502_lookback_years,
+        fundamentals_lookback_years=fundamentals_lookback_years,
+        item_202_lookback_years=item_202_lookback_years,
+        proxy_lookback_years=proxy_lookback_years,
+        thirteenf_lookback_years=thirteenf_lookback_years,
+        adv_lookback_years=adv_lookback_years,
         selection_metrics=selection_metrics,
         skip_ownership_forms=skip_ownership_forms,
     )
@@ -4408,6 +4459,40 @@ def _resolve_filing_lookback_years(raw: Any = None) -> int:
     )
 
 
+def _resolve_family_lookback_years(
+    raw: Any,
+    *,
+    env_name: str,
+    field_name: str,
+    default: int,
+    fallback_value: Any,
+    fallback_env_name: str,
+    fallback_resolver: Callable[[Any], int],
+) -> int:
+    """Generic per-family lookback resolver shared by every family whose
+    lookback falls back to a sibling flag when unset (Item 5.02 -> ownership;
+    Item 2.02/proxy/13F/ADV -> the shared fundamentals default) -- avoids one
+    near-identical copy of this precedence dance per family.
+
+    Precedence: explicit arg -> family env var -> fallback (arg or its own
+    env var) -> family default.
+    """
+    if raw is not None and str(raw).strip() != "":
+        return _resolve_nonneg_lookback_years(
+            raw, default=default, env_name=env_name, field_name=field_name
+        )
+    env = os.environ.get(env_name, "").strip()
+    if env:
+        return _resolve_nonneg_lookback_years(
+            None, default=default, env_name=env_name, field_name=field_name
+        )
+    if fallback_value is not None and str(fallback_value).strip() != "":
+        return fallback_resolver(fallback_value)
+    if os.environ.get(fallback_env_name, "").strip():
+        return fallback_resolver(None)
+    return default
+
+
 def _resolve_item_502_lookback_years(
     raw: Any = None,
     *,
@@ -4419,26 +4504,86 @@ def _resolve_item_502_lookback_years(
     lookback (so one CLI knob bounds both sources on the integrated load) →
     DEFAULT_ITEM_502_LOOKBACK_YEARS (2).
     """
-    if raw is not None and str(raw).strip() != "":
-        return _resolve_nonneg_lookback_years(
-            raw,
-            default=DEFAULT_ITEM_502_LOOKBACK_YEARS,
-            env_name="WAREHOUSE_ITEM_502_LOOKBACK_YEARS",
-            field_name="item_502_lookback_years",
-        )
-    env = os.environ.get("WAREHOUSE_ITEM_502_LOOKBACK_YEARS", "").strip()
-    if env:
-        return _resolve_nonneg_lookback_years(
-            None,
-            default=DEFAULT_ITEM_502_LOOKBACK_YEARS,
-            env_name="WAREHOUSE_ITEM_502_LOOKBACK_YEARS",
-            field_name="item_502_lookback_years",
-        )
-    if ownership_lookback_years is not None and str(ownership_lookback_years).strip() != "":
-        return _resolve_ownership_lookback_years(ownership_lookback_years)
-    if os.environ.get("WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS", "").strip():
-        return _resolve_ownership_lookback_years(None)
-    return DEFAULT_ITEM_502_LOOKBACK_YEARS
+    return _resolve_family_lookback_years(
+        raw,
+        env_name="WAREHOUSE_ITEM_502_LOOKBACK_YEARS",
+        field_name="item_502_lookback_years",
+        default=DEFAULT_ITEM_502_LOOKBACK_YEARS,
+        fallback_value=ownership_lookback_years,
+        fallback_env_name="WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS",
+        fallback_resolver=_resolve_ownership_lookback_years,
+    )
+
+
+def _resolve_fundamentals_lookback_years(raw: Any = None) -> int:
+    """Resolve the shared fundamentals lookback (Item 2.02/proxy/13F/ADV
+    default). Default 2; 0 disables the window (full history)."""
+    return _resolve_nonneg_lookback_years(
+        raw,
+        default=DEFAULT_FUNDAMENTALS_LOOKBACK_YEARS,
+        env_name="WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS",
+        field_name="fundamentals_lookback_years",
+    )
+
+
+def _resolve_item_202_lookback_years(
+    raw: Any = None, *, fundamentals_lookback_years: Any = None
+) -> int:
+    """Resolve Item 2.02 (earnings) 8-K lookback years."""
+    return _resolve_family_lookback_years(
+        raw,
+        env_name="WAREHOUSE_ITEM_202_LOOKBACK_YEARS",
+        field_name="item_202_lookback_years",
+        default=DEFAULT_FUNDAMENTALS_LOOKBACK_YEARS,
+        fallback_value=fundamentals_lookback_years,
+        fallback_env_name="WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS",
+        fallback_resolver=_resolve_fundamentals_lookback_years,
+    )
+
+
+def _resolve_proxy_lookback_years(
+    raw: Any = None, *, fundamentals_lookback_years: Any = None
+) -> int:
+    """Resolve DEF 14A/DEFA14A/PRE 14A proxy lookback years."""
+    return _resolve_family_lookback_years(
+        raw,
+        env_name="WAREHOUSE_PROXY_LOOKBACK_YEARS",
+        field_name="proxy_lookback_years",
+        default=DEFAULT_FUNDAMENTALS_LOOKBACK_YEARS,
+        fallback_value=fundamentals_lookback_years,
+        fallback_env_name="WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS",
+        fallback_resolver=_resolve_fundamentals_lookback_years,
+    )
+
+
+def _resolve_thirteenf_lookback_years(
+    raw: Any = None, *, fundamentals_lookback_years: Any = None
+) -> int:
+    """Resolve 13F-HR/13F-HR/A lookback years (raw parse + sec_thirteenf_holding)."""
+    return _resolve_family_lookback_years(
+        raw,
+        env_name="WAREHOUSE_THIRTEENF_LOOKBACK_YEARS",
+        field_name="thirteenf_lookback_years",
+        default=DEFAULT_FUNDAMENTALS_LOOKBACK_YEARS,
+        fallback_value=fundamentals_lookback_years,
+        fallback_env_name="WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS",
+        fallback_resolver=_resolve_fundamentals_lookback_years,
+    )
+
+
+def _resolve_adv_lookback_years(
+    raw: Any = None, *, fundamentals_lookback_years: Any = None
+) -> int:
+    """Resolve every ADV form's lookback years."""
+    return _resolve_family_lookback_years(
+        raw,
+        env_name="WAREHOUSE_ADV_LOOKBACK_YEARS",
+        field_name="adv_lookback_years",
+        default=DEFAULT_FUNDAMENTALS_LOOKBACK_YEARS,
+        fallback_value=fundamentals_lookback_years,
+        fallback_env_name="WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS",
+        fallback_resolver=_resolve_fundamentals_lookback_years,
+    )
 
 
 def _ownership_min_filing_date(
@@ -4508,6 +4653,11 @@ def _configured_parser_accessions(
     *,
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
+    fundamentals_lookback_years: Any = None,
+    item_202_lookback_years: Any = None,
+    proxy_lookback_years: Any = None,
+    thirteenf_lookback_years: Any = None,
+    adv_lookback_years: Any = None,
     as_of: date | None = None,
     selection_metrics: dict[str, Any] | None = None,
     skip_ownership_forms: bool = False,
@@ -4517,13 +4667,33 @@ def _configured_parser_accessions(
         item_502_lookback_years,
         ownership_lookback_years=ownership_lookback_years,
     )
+    item_202_years = _resolve_item_202_lookback_years(
+        item_202_lookback_years, fundamentals_lookback_years=fundamentals_lookback_years
+    )
+    proxy_years = _resolve_proxy_lookback_years(
+        proxy_lookback_years, fundamentals_lookback_years=fundamentals_lookback_years
+    )
+    thirteenf_years = _resolve_thirteenf_lookback_years(
+        thirteenf_lookback_years, fundamentals_lookback_years=fundamentals_lookback_years
+    )
+    adv_years = _resolve_adv_lookback_years(
+        adv_lookback_years, fundamentals_lookback_years=fundamentals_lookback_years
+    )
     ownership_min = _ownership_min_filing_date(ownership_years, as_of=as_of)
     item_502_min = _ownership_min_filing_date(item_502_years, as_of=as_of)
+    item_202_min = _ownership_min_filing_date(item_202_years, as_of=as_of)
+    proxy_min = _ownership_min_filing_date(proxy_years, as_of=as_of)
+    thirteenf_min = _ownership_min_filing_date(thirteenf_years, as_of=as_of)
+    adv_min = _ownership_min_filing_date(adv_years, as_of=as_of)
     selected: list[str] = []
     missing_metadata = 0
     rejected_unconfigured_form = 0
     skipped_ownership_lookback = 0
     skipped_item_502_lookback = 0
+    skipped_item_202_lookback = 0
+    skipped_proxy_lookback = 0
+    skipped_thirteenf_lookback = 0
+    skipped_adv_lookback = 0
     skipped_ownership_cutover = 0
     selected_form_counts: dict[str, int] = {}
     deduped_accessions = _dedupe_strings(accession_numbers)
@@ -4545,10 +4715,39 @@ def _configured_parser_accessions(
         ):
             skipped_ownership_lookback += 1
             continue
-        if _is_item_502_candidate_form(form, filing.get("items")) and not _ownership_within_lookback(
-            filing, min_filing_date=item_502_min
+        # A single 8-K can be tagged with both Item 5.02 and Item 2.02 --
+        # include it if it's within *either* applicable window rather than
+        # rejecting it on whichever family's check runs first (which would
+        # silently drop a filing a wider sibling window would have kept).
+        is_item_502 = _is_item_502_candidate_form(form, filing.get("items"))
+        is_item_202 = _is_item_202_candidate_form(form, filing.get("items"))
+        if is_item_502 or is_item_202:
+            within_item_502 = is_item_502 and _ownership_within_lookback(
+                filing, min_filing_date=item_502_min
+            )
+            within_item_202 = is_item_202 and _ownership_within_lookback(
+                filing, min_filing_date=item_202_min
+            )
+            if not (within_item_502 or within_item_202):
+                if is_item_502:
+                    skipped_item_502_lookback += 1
+                if is_item_202:
+                    skipped_item_202_lookback += 1
+                continue
+        if normalized in PROXY_FORMS and not _ownership_within_lookback(
+            filing, min_filing_date=proxy_min
         ):
-            skipped_item_502_lookback += 1
+            skipped_proxy_lookback += 1
+            continue
+        if normalized in THIRTEENF_FORMS and not _ownership_within_lookback(
+            filing, min_filing_date=thirteenf_min
+        ):
+            skipped_thirteenf_lookback += 1
+            continue
+        if normalized in ADV_FORMS and not _ownership_within_lookback(
+            filing, min_filing_date=adv_min
+        ):
+            skipped_adv_lookback += 1
             continue
         selected.append(accession_number)
         form_name = str(form or "").strip().upper() or "UNKNOWN"
@@ -4561,6 +4760,10 @@ def _configured_parser_accessions(
                 "configured_form_rejected_count": rejected_unconfigured_form,
                 "ownership_lookback_rejected_count": skipped_ownership_lookback,
                 "item_502_lookback_rejected_count": skipped_item_502_lookback,
+                "item_202_lookback_rejected_count": skipped_item_202_lookback,
+                "proxy_lookback_rejected_count": skipped_proxy_lookback,
+                "thirteenf_lookback_rejected_count": skipped_thirteenf_lookback,
+                "adv_lookback_rejected_count": skipped_adv_lookback,
                 "ownership_cutover_skipped_count": skipped_ownership_cutover,
                 "configured_candidate_count": len(selected),
                 "configured_form_counts": selected_form_counts,
@@ -4577,6 +4780,34 @@ def _configured_parser_accessions(
             skipped_count=skipped_ownership_lookback,
             lookback_years=ownership_years,
             min_filing_date=ownership_min.isoformat() if ownership_min else None,
+        )
+    if skipped_item_202_lookback:
+        _emit_pipeline_event(
+            "item_202_lookback_filtered",
+            skipped_count=skipped_item_202_lookback,
+            lookback_years=item_202_years,
+            min_filing_date=item_202_min.isoformat() if item_202_min else None,
+        )
+    if skipped_proxy_lookback:
+        _emit_pipeline_event(
+            "proxy_lookback_filtered",
+            skipped_count=skipped_proxy_lookback,
+            lookback_years=proxy_years,
+            min_filing_date=proxy_min.isoformat() if proxy_min else None,
+        )
+    if skipped_thirteenf_lookback:
+        _emit_pipeline_event(
+            "thirteenf_lookback_filtered",
+            skipped_count=skipped_thirteenf_lookback,
+            lookback_years=thirteenf_years,
+            min_filing_date=thirteenf_min.isoformat() if thirteenf_min else None,
+        )
+    if skipped_adv_lookback:
+        _emit_pipeline_event(
+            "adv_lookback_filtered",
+            skipped_count=skipped_adv_lookback,
+            lookback_years=adv_years,
+            min_filing_date=adv_min.isoformat() if adv_min else None,
         )
     if skipped_item_502_lookback:
         _emit_pipeline_event(
@@ -4609,7 +4840,7 @@ def _is_configured_parser_form(form_type: Any, items: Any = None) -> bool:
     normalized = str(form_type or "").strip().upper()
     if normalized in OWNERSHIP_FORMS or normalized in ADV_FORMS:
         return True
-    if normalized in {"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A", "13F-HR", "13F-HR/A"}:
+    if normalized in PROXY_FORMS or normalized in THIRTEENF_FORMS:
         return True
     if _is_item_502_candidate_form(form_type, items):
         return True

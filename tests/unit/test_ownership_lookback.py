@@ -149,6 +149,7 @@ class TestConfiguredParserAccessionsLookback:
             db,
             list(filings),
             ownership_lookback_years=2,
+            fundamentals_lookback_years=0,  # ADV's own lookback is covered by TestFundamentalsLookbackFamilies below
             as_of=as_of,
         )
         assert selected == [
@@ -248,6 +249,159 @@ class TestConfiguredParserAccessionsLookback:
         assert "form4" not in selected
         assert "form3a" not in selected
         assert "form5" not in selected
+
+    def test_dual_tagged_8k_included_if_within_either_items_window(self, monkeypatch):
+        # A single 8-K can declare both Item 5.02 and Item 2.02. It must be
+        # included if it's within *either* family's window, not rejected on
+        # whichever check happens to run first.
+        monkeypatch.delenv("WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS", raising=False)
+        monkeypatch.delenv("WAREHOUSE_ITEM_502_LOOKBACK_YEARS", raising=False)
+        as_of = date(2026, 7, 25)
+        old = date(2023, 1, 1)  # outside a 2-year window, inside a 6-year one
+        filings = {
+            "dual-item-narrow-502-wide-202": {
+                "form": "8-K",
+                "filing_date": old,
+                "items": "5.02,2.02",
+            },
+            "dual-item-both-narrow": {
+                "form": "8-K",
+                "filing_date": old,
+                "items": "5.02,2.02",
+            },
+        }
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(
+            db,
+            ["dual-item-narrow-502-wide-202"],
+            ownership_lookback_years=0,
+            item_502_lookback_years=2,
+            item_202_lookback_years=6,
+            as_of=as_of,
+        )
+        assert selected == ["dual-item-narrow-502-wide-202"]
+
+        selected_both_narrow = orch._configured_parser_accessions(
+            db,
+            ["dual-item-both-narrow"],
+            ownership_lookback_years=0,
+            item_502_lookback_years=2,
+            item_202_lookback_years=2,
+            as_of=as_of,
+        )
+        assert selected_both_narrow == []
+
+
+class TestFundamentalsLookbackFamilies:
+    """Item 2.02 earnings, DEF 14A/DEFA14A/PRE 14A proxy, 13F-HR/-A, and ADV
+    -- the four families .scratch/fundamentals-lookback-years/spec.md bounds
+    with a shared --fundamentals-lookback-years default plus four per-family
+    overrides, routed through the same _configured_parser_accessions gate
+    ownership/item-502 already use."""
+
+    def _db(self, filings: dict[str, dict]) -> MagicMock:
+        db = MagicMock()
+        db.get_filing.side_effect = lambda acc: filings.get(acc)
+        return db
+
+    def _filings(self, as_of: date) -> dict[str, dict]:
+        old = date(as_of.year - 5, as_of.month, as_of.day)
+        recent = date(as_of.year - 1, as_of.month, as_of.day)
+        return {
+            "old-earnings": {"form": "8-K", "filing_date": old, "items": "2.02"},
+            "recent-earnings": {"form": "8-K", "filing_date": recent, "items": "2.02"},
+            "old-proxy": {"form": "DEF 14A", "filing_date": old, "items": None},
+            "recent-proxy": {"form": "DEFA14A", "filing_date": recent, "items": None},
+            "old-thirteenf": {"form": "13F-HR", "filing_date": old, "items": None},
+            "recent-thirteenf": {"form": "13F-HR/A", "filing_date": recent, "items": None},
+            "old-adv": {"form": "ADV", "filing_date": old, "items": None},
+            "recent-adv": {"form": "ADV/A", "filing_date": recent, "items": None},
+        }
+
+    def test_shared_default_excludes_old_includes_recent_for_all_four_families(self):
+        as_of = date(2026, 7, 25)
+        filings = self._filings(as_of)
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(db, list(filings), as_of=as_of)
+        assert selected == [
+            "recent-earnings",
+            "recent-proxy",
+            "recent-thirteenf",
+            "recent-adv",
+        ]
+        for old in ("old-earnings", "old-proxy", "old-thirteenf", "old-adv"):
+            assert old not in selected
+
+    def test_shared_override_widens_all_four_families(self):
+        as_of = date(2026, 7, 25)
+        filings = self._filings(as_of)
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(
+            db, list(filings), fundamentals_lookback_years=6, as_of=as_of
+        )
+        assert selected == list(filings)
+
+    def test_per_family_override_widens_past_a_narrower_shared_default(self):
+        as_of = date(2026, 7, 25)
+        filings = self._filings(as_of)
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(
+            db,
+            list(filings),
+            fundamentals_lookback_years=2,
+            item_202_lookback_years=6,
+            proxy_lookback_years=6,
+            thirteenf_lookback_years=6,
+            adv_lookback_years=6,
+            as_of=as_of,
+        )
+        assert selected == list(filings)
+
+    def test_per_family_override_narrows_past_a_wider_shared_default(self):
+        # A per-family override must win in the narrowing direction too, not
+        # just the widening direction covered above.
+        as_of = date(2026, 7, 25)
+        filings = self._filings(as_of)
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(
+            db,
+            list(filings),
+            fundamentals_lookback_years=6,
+            thirteenf_lookback_years=2,
+            as_of=as_of,
+        )
+        assert "recent-thirteenf" in selected
+        assert "old-thirteenf" not in selected
+        # Untouched families still follow the wide shared default.
+        assert "old-earnings" in selected
+        assert "old-proxy" in selected
+        assert "old-adv" in selected
+
+    def test_zero_disables_shared_default_for_all_four_families(self):
+        as_of = date(2026, 7, 25)
+        filings = self._filings(as_of)
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(
+            db, list(filings), fundamentals_lookback_years=0, as_of=as_of
+        )
+        assert selected == list(filings)
+
+    def test_zero_per_family_override_disables_only_that_family(self):
+        as_of = date(2026, 7, 25)
+        filings = self._filings(as_of)
+        db = self._db(filings)
+        selected = orch._configured_parser_accessions(
+            db,
+            list(filings),
+            fundamentals_lookback_years=2,
+            thirteenf_lookback_years=0,
+            as_of=as_of,
+        )
+        assert "old-thirteenf" in selected
+        assert "recent-thirteenf" in selected
+        assert "old-earnings" not in selected
+        assert "old-proxy" not in selected
+        assert "old-adv" not in selected
 
 
 class TestParseOwnershipBronzeLookback:

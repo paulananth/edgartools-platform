@@ -132,11 +132,11 @@ a loader's lookback default changes.
 | Filing metadata (all forms) | `bootstrap-next` / `bootstrap-full` / `load_history` | `--filing-lookback-years` | Code default **0** (unbounded); **`load_history`'s deployed Step Function overrides to 2 years** unless `{"filing_lookback_years": 0}` is passed explicitly |
 | Forms 3/4/5 (ownership) | artifact-parse layer (`daily-incremental`/`bootstrap-next`) | `--ownership-lookback-years` | **2 years** (`0` = full history) |
 | 8-K Item 5.02 (executive changes) | artifact-parse layer | `--item-502-lookback-years` | **2 years**, falls back to ownership setting |
-| 8-K Item 2.02 (earnings) | artifact-parse layer | none | **Unbounded** |
-| DEF 14A / DEF 14A-A / DEFA14A / PRE 14A | artifact-parse layer | none | **Unbounded** |
-| 13F-HR / 13F-HR-A (cover-page artifact) | artifact-parse layer | none | **Unbounded** |
-| ADV filings (all ADV forms) | artifact-parse layer | none | **Unbounded** |
-| 13F holdings (`sec_thirteenf_holding`) | `bootstrap-fundamentals --mode thirteenf` | none | **Unbounded** — every 13F-HR/13F-HR-A ever discovered for the CIK list |
+| 8-K Item 2.02 (earnings) | artifact-parse layer | `--item-202-lookback-years` | **2 years** (overridable via `--item-202-lookback-years`; falls back to `--fundamentals-lookback-years`, default 2) |
+| DEF 14A / DEF 14A-A / DEFA14A / PRE 14A | artifact-parse layer | `--proxy-lookback-years` | **2 years** (overridable via `--proxy-lookback-years`; falls back to `--fundamentals-lookback-years`, default 2) |
+| 13F-HR / 13F-HR-A (cover-page artifact) | artifact-parse layer | `--thirteenf-lookback-years` | **2 years** (overridable via `--thirteenf-lookback-years`; falls back to `--fundamentals-lookback-years`, default 2) |
+| ADV filings (all ADV forms) | artifact-parse layer | `--adv-lookback-years` | **2 years** (overridable via `--adv-lookback-years`; falls back to `--fundamentals-lookback-years`, default 2) |
+| 13F holdings (`sec_thirteenf_holding`) | `bootstrap-fundamentals --mode thirteenf` | `--thirteenf-lookback-years` (inherited) | **2 years** — re-reads bronze the artifact-parse gate above already selected, so it inherits that gate's `--thirteenf-lookback-years` window; no fetch of its own |
 | Company financials (`sec_financial_fact`/`_derived`/`sec_accounting_flag`) | `bootstrap-fundamentals --mode entity-facts` | none (date); gated by parser version | **Unbounded** — SEC `companyfacts` API returns full history every call |
 | Earnings releases (`sec_earnings_release`) | `bootstrap-fundamentals --mode per-filing` | none | **Unbounded** |
 | Executive records (`sec_executive_record`) | `bootstrap-fundamentals --mode per-filing` | DEF 14A rows: none; 8-K Item 5.02 rows: hard-coded | DEF 14A: **unbounded**; Item 5.02: **2 years** |
@@ -187,7 +187,11 @@ lookback below (`_configured_parser_accessions`, `warehouse_orchestrator.py`)
 | --- | --- |
 | Forms 3/4/5 (ownership) | `--ownership-lookback-years` / `WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS`, default **2 years** (`0` = full history). |
 | 8-K Item 5.02 (executive changes) | `--item-502-lookback-years` / `WAREHOUSE_ITEM_502_LOOKBACK_YEARS`, default **2 years**, falls back to the ownership setting if unset. |
-| 8-K Item 2.02 (earnings), DEF 14A/DEF 14A-A/DEFA14A/PRE 14A, 13F-HR/13F-HR-A, all ADV forms | **Unbounded** — no lookback filter at all once the accession passed the filing-metadata gate above. |
+| _(shared default for the four rows below)_ | `--fundamentals-lookback-years` / `WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS`, default **2 years** (`0` = full history). Each family below can override this independently. |
+| 8-K Item 2.02 (earnings) | `--item-202-lookback-years` / `WAREHOUSE_ITEM_202_LOOKBACK_YEARS`, default **2 years**, falls back to `--fundamentals-lookback-years` if unset. |
+| DEF 14A/DEF 14A-A/DEFA14A/PRE 14A (proxy) | `--proxy-lookback-years` / `WAREHOUSE_PROXY_LOOKBACK_YEARS`, default **2 years**, falls back to `--fundamentals-lookback-years` if unset. |
+| 13F-HR/13F-HR-A | `--thirteenf-lookback-years` / `WAREHOUSE_THIRTEENF_LOOKBACK_YEARS`, default **2 years**, falls back to `--fundamentals-lookback-years` if unset. |
+| All ADV forms | `--adv-lookback-years` / `WAREHOUSE_ADV_LOOKBACK_YEARS`, default **2 years**, falls back to `--fundamentals-lookback-years` if unset. |
 
 | Table/output | Source mode | Data points | Loader / Date Range |
 | --- | --- | --- | --- |
@@ -211,7 +215,7 @@ placed in the configured bronze path or passed explicitly.
 
 | Table/output | Source mode | Data points | Loader / Date Range |
 | --- | --- | --- | --- |
-| `sec_adv_filing` | Operator-provided ADV bronze, local parser | Accession, CIK, form, adviser name, SEC file number, CRD number, effective date, filing status, source format, parser version. | ADV form artifact-parse is **unbounded** (no per-form lookback, see Filing Artifacts and Text above), subject to the same upstream filing-metadata gate. |
+| `sec_adv_filing` | Operator-provided ADV bronze, local parser | Accession, CIK, form, adviser name, SEC file number, CRD number, effective date, filing status, source format, parser version. | ADV form artifact-parse default **2 years** (`--adv-lookback-years`, see Filing Artifacts and Text above), subject to the same upstream filing-metadata gate. |
 | `sec_adv_office` | Operator-provided ADV bronze, local parser | Office index/name, city, state/country, country, headquarters flag. | Same as `sec_adv_filing`. |
 | `sec_adv_disclosure_event` | Operator-provided ADV bronze, local parser | Event index, disclosure category, event date, reported flag, description. | Same as `sec_adv_filing`. |
 | `sec_adv_private_fund` | Operator-provided ADV bronze, local parser | Fund index/name/type, jurisdiction, AUM. | Same as `sec_adv_filing`. |
@@ -227,7 +231,7 @@ placed in the configured bronze path or passed explicitly.
 | `sec_accounting_flag` | SEC DEI facts plus internal scoring | Auditor name, PCAOB id, location, ICFR attestation, auditor changed flag, Beneish M score, Altman Z score, Piotroski F score. | Same as `sec_financial_fact` — unbounded. |
 | `sec_earnings_release` | edgartools `EarningsRelease` over cached 8-K HTML | Filing date, fiscal year/quarter, period end, GAAP revenue/net income/diluted EPS, non-GAAP presence, guidance presence. | `bootstrap-fundamentals --mode per-filing`, 8-K Item 2.02 rows: **unbounded**, no lookback filter. |
 | `sec_executive_record` | edgartools proxy summary compensation extraction over cached proxy HTML | Fiscal year, executive name, role, total compensation, salary, bonus, stock awards, option awards, non-equity incentive. | `bootstrap-fundamentals --mode per-filing`: DEF 14A/proxy rows are **unbounded**; 8-K Item 5.02 (executive-change) rows are hard-coded to a **2-year** lookback in this mode's own ad-hoc/non-release path (falls back to `item_502_lookback_years`'s default). |
-| `sec_thirteenf_holding` | edgartools 13F information table parser over cached attachment XML | Filing manager CIK, accession, holding index, period of report, CUSIP, issuer, security title/class, shares/principal held, market value, put/call, discretion, voting authority. | `bootstrap-fundamentals --mode thirteenf`: **unbounded** — scans every 13F-HR/13F-HR-A ever discovered for the CIK list, no date filter of any kind. |
+| `sec_thirteenf_holding` | edgartools 13F information table parser over cached attachment XML | Filing manager CIK, accession, holding index, period of report, CUSIP, issuer, security title/class, shares/principal held, market value, put/call, discretion, voting authority. | `bootstrap-fundamentals --mode thirteenf`: **2 years** by default — re-reads bronze the artifact-parse gate above already selected (`--thirteenf-lookback-years`), no date filter of its own. |
 
 ### MDM Entities and Relationships
 
