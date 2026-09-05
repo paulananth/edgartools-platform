@@ -52,6 +52,8 @@ class SecurityResolver(BaseResolver):
         source_system: str,
         txn_row: dict,
         issuer_entity_id: Optional[str],
+        *,
+        reconciliation_pass: bool = False,
     ) -> ResolveOutcome:
         title = txn_row.get("security_title") or ""
         canonical = " ".join(w.capitalize() for w in title.split()) if title else ""
@@ -79,14 +81,15 @@ class SecurityResolver(BaseResolver):
         row_content_hash = content_hash(
             {"canonical_title": canonical, "issuer_entity_id": issuer_entity_id}
         )
-        skip_entity_id = self._skip_if_unchanged(ctx, source_system, source_id, row_content_hash)
-        if skip_entity_id is not None:
-            return ResolveOutcome(
-                entity_id=skip_entity_id,
-                is_new=False,
-                verdict=None,
-                action=MatchAction.SKIPPED_UNCHANGED,
-            )
+        if not reconciliation_pass:
+            skip_entity_id = self._skip_if_unchanged(ctx, source_system, source_id, row_content_hash)
+            if skip_entity_id is not None:
+                return ResolveOutcome(
+                    entity_id=skip_entity_id,
+                    is_new=False,
+                    verdict=None,
+                    action=MatchAction.SKIPPED_UNCHANGED,
+                )
 
         existing = self._existing_candidates(ctx, issuer_entity_id, canonical)
 

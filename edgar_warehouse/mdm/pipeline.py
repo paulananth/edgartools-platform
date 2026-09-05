@@ -188,6 +188,11 @@ class PipelineStats:
     sent_to_review: int = 0
     relationships_written: int = 0
     relationship_counts_by_type: dict[str, dict[str, int | None]] = field(default_factory=dict)
+    # change-propagation Ticket 49: persons re-checked because they are a
+    # direct (1-hop) relationship neighbor of a company that changed in
+    # this same run -- not the whole universe, not deferred to the MDM
+    # Reconciliation Backstop.
+    neighbor_persons_rechecked: int = 0
 
 
 def _first_per_key(rows: list[dict], key_field: str) -> dict[Any, dict]:
@@ -221,6 +226,12 @@ class MDMPipeline:
     silver: SilverReader
     engine: MDMRuleEngine = field(init=False)
     run_id: str = ""
+    # change-propagation Ticket 49: entity_ids run_companies actually
+    # changed (not skipped_unchanged) in its most recent call on this
+    # instance -- read by run_all()'s 1-hop candidate-neighbor expansion
+    # pass. Not populated by any other entity type's resolver today; see
+    # this ticket's own Answer for why the scope stops at company->person.
+    _last_run_changed_entity_ids: set = field(init=False, default_factory=set)
 
     def __post_init__(self) -> None:
         from edgar_warehouse.mdm.run_identity import normalize_or_create_run_id
@@ -309,6 +320,7 @@ class MDMPipeline:
         resume_ledger_run_id: Optional[str] = None,
         run_id: Optional[str] = None,
         bookkeeping: "BookkeepingStore",
+        reconciliation_pass: bool = False,
     ) -> int:
         """Resolve companies from silver.
 
@@ -354,8 +366,10 @@ class MDMPipeline:
             write_snapshot,
         )
 
+        self._last_run_changed_entity_ids = set()
+
         resolver = CompanyResolver()
-        ciks = self._normalize_issuer_ciks(issuer_ciks)
+        ciks = self._normalize_cik_list(issuer_ciks)
 
         explicit_resume_id = str(resume_ledger_run_id or "").strip()
         own_run_id = str(run_id or "").strip()
@@ -476,7 +490,7 @@ class MDMPipeline:
             1 if sql_engine.dialect.name == "sqlite" else _COMPANY_RESOLVE_MAX_WORKERS
         )
 
-        def _resolve_row(row: dict) -> tuple[int, bool]:
+        def _resolve_row(row: dict) -> tuple[int, bool, str]:
             worker_session = get_session(sql_engine)
             try:
                 worker_ctx = ResolverContext(
@@ -487,9 +501,16 @@ class MDMPipeline:
                 )
                 ticker = ticker_by_cik.get(row["cik"])
                 tracking = tracking_by_cik.get(row["cik"])
-                outcome = resolver.resolve_one(worker_ctx, "edgar_cik", row, ticker, tracking)
+                outcome = resolver.resolve_one(
+                    worker_ctx, "edgar_cik", row, ticker, tracking,
+                    reconciliation_pass=reconciliation_pass,
+                )
                 worker_session.commit()
-                return int(row["cik"]), outcome.action == MatchAction.SKIPPED_UNCHANGED
+                return (
+                    int(row["cik"]),
+                    outcome.action == MatchAction.SKIPPED_UNCHANGED,
+                    outcome.entity_id,
+                )
             finally:
                 worker_session.close()
 
@@ -507,11 +528,18 @@ class MDMPipeline:
             futures = [executor.submit(_resolve_row, row) for row in rows]
             try:
                 for future in as_completed(futures):
-                    resolved_cik, was_skipped = future.result()
+                    resolved_cik, was_skipped, resolved_entity_id = future.result()
                     with lock:
                         processed += 1
                         if was_skipped:
                             skipped_unchanged += 1
+                        else:
+                            # change-propagation Ticket 49: 1-hop candidate-
+                            # neighbor expansion needs to know which entities
+                            # actually changed in this run, not just how many
+                            # rows were processed -- read by run_all() after
+                            # this method returns.
+                            self._last_run_changed_entity_ids.add(resolved_entity_id)
                         if resumable:
                             pending_flush.append(resolved_cik)
                         if processed % log_interval == 0:
@@ -630,7 +658,9 @@ class MDMPipeline:
                 raise
         return processed
 
-    def run_securities(self, limit: Optional[int] = None) -> int:
+    def run_securities(
+        self, limit: Optional[int] = None, *, reconciliation_pass: bool = False
+    ) -> int:
         """Resolve ownership-transaction security titles into MDM entities.
 
         Runs on a bounded thread pool, grouped by (issuer_entity_id,
@@ -737,7 +767,10 @@ class MDMPipeline:
 
         def _process(ctx: ResolverContext, row: dict) -> None:
             issuer_entity_id = company_entity_id_by_cik.get(row.get("issuer_cik"))
-            resolver.resolve_one(ctx, "ownership_filing", row, issuer_entity_id)
+            resolver.resolve_one(
+                ctx, "ownership_filing", row, issuer_entity_id,
+                reconciliation_pass=reconciliation_pass,
+            )
 
         return self._run_grouped_concurrent(
             keyed_rows,
@@ -752,12 +785,24 @@ class MDMPipeline:
         limit: Optional[int] = None,
         *,
         issuer_ciks: Optional[Iterable[int]] = None,
+        owner_ciks: Optional[Iterable[int]] = None,
+        reconciliation_pass: bool = False,
     ) -> int:
         """Resolve Form 3/4/5 reporting owners into MDM person entities.
 
         Ticket 21: persons are the only entity load needed for IS_INSIDER —
         companies are assumed already resolved and are never re-run here.
         Optional ``issuer_ciks`` scopes to ownership rows for those issuers only.
+
+        ``owner_ciks`` (change-propagation Ticket 49) is a distinct scoping
+        dimension: re-check these exact reporting owners regardless of
+        which issuer their filing names -- the 1-hop candidate-neighbor
+        expansion pass in ``run_all()`` uses this to re-check persons
+        directly linked (via ``mdm_relationship_instance``) to a company
+        that changed in this same run, not every insider of that issuer.
+        Mutually exclusive with ``issuer_ciks`` in practice (both narrow the
+        same query with an AND, so combining them is a stricter
+        intersection, not additive -- no current caller passes both).
 
         Rows with a real ``owner_cik`` run on a bounded thread pool, grouped
         by ``owner_cik`` -- ``PersonResolver._existing_candidates`` scopes
@@ -777,7 +822,7 @@ class MDMPipeline:
         """
         ctx = self._ctx()
         resolver = PersonResolver()
-        ciks = self._normalize_issuer_ciks(issuer_ciks)
+        ciks = self._normalize_cik_list(issuer_ciks)
         # mdm-ownership-resolver-filing-join-gap ticket 01: LEFT JOIN, not INNER --
         # sec_company_filing is only populated for tracked companies' bulk-fetched
         # submission history. An ownership filing's issuer is not necessarily a
@@ -802,6 +847,11 @@ class MDMPipeline:
             placeholders = ", ".join("?" for _ in ciks)
             sql += f" AND f.cik IN ({placeholders})"
             params.extend(ciks)
+        owner_cik_list = self._normalize_cik_list(owner_ciks)
+        if owner_cik_list is not None:
+            placeholders = ", ".join("?" for _ in owner_cik_list)
+            sql += f" AND o.owner_cik IN ({placeholders})"
+            params.extend(owner_cik_list)
         if limit:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql, params or None)
@@ -815,7 +865,8 @@ class MDMPipeline:
 
         def _process(worker_ctx: ResolverContext, row: dict) -> None:
             resolver.resolve_one(worker_ctx, "ownership_filing", row,
-                                  issuer_cik=row.get("issuer_cik"))
+                                  issuer_cik=row.get("issuer_cik"),
+                                  reconciliation_pass=reconciliation_pass)
 
         keyed_rows = [(row.get("owner_cik"), row) for row in cik_rows]
         processed = self._run_grouped_concurrent(
@@ -829,7 +880,8 @@ class MDMPipeline:
         started_at = time.monotonic()
         for row in unscoped_rows:
             resolver.resolve_one(ctx, "ownership_filing", row,
-                                 issuer_cik=row.get("issuer_cik"))
+                                 issuer_cik=row.get("issuer_cik"),
+                                 reconciliation_pass=reconciliation_pass)
             processed += 1
             if processed % log_interval == 0:
                 emit_mdm_event("mdm_progress", domain="person", processed=processed, elapsed_ms=elapsed_ms(started_at))
@@ -886,7 +938,7 @@ class MDMPipeline:
         one physical connection and cannot run concurrent transactions).
         """
         requested_types = self._relationship_type_names(relationship_types)
-        ciks = self._normalize_issuer_ciks(issuer_ciks)
+        ciks = self._normalize_cik_list(issuer_ciks)
         started_at = time.monotonic()
 
         # Read-only, so safe to precompute for every type up front rather
@@ -973,12 +1025,15 @@ class MDMPipeline:
                     )
         return summary
 
-    def _normalize_issuer_ciks(
-        self, issuer_ciks: Optional[Iterable[int]]
+    def _normalize_cik_list(
+        self, ciks: Optional[Iterable[int]]
     ) -> Optional[list[int]]:
-        if issuer_ciks is None:
+        """Dedupe + sort any caller-supplied CIK list -- generic across every
+        scoping dimension that uses one (issuer_ciks, owner_ciks; change-
+        propagation Ticket 49 added the second use)."""
+        if ciks is None:
             return None
-        normalized = sorted({int(c) for c in issuer_ciks if c is not None})
+        normalized = sorted({int(c) for c in ciks if c is not None})
         return normalized or None
 
     def _derive_relationship_type(
@@ -1937,8 +1992,21 @@ class MDMPipeline:
         resume_ledger_run_id: Optional[str] = None,
         run_id: Optional[str] = None,
         bookkeeping: "BookkeepingStore",
+        reconciliation_pass: bool = False,
     ) -> PipelineStats:
         """Resolve all 5 entity types, then derive relationships.
+
+        ``reconciliation_pass`` (change-propagation Ticket 50, the MDM
+        Reconciliation Backstop) turns off every step's skip-if-unchanged
+        shortcut and routes company/security/person rescoring through
+        BaseResolver's finding-disposition logic instead of a plain merge
+        -- see reconciliation_backstop.py and resolvers/base.py's
+        ``_reconcile_against_existing`` docstring. Not threaded to
+        run_advisers/run_funds: adv_bulk.py's bulk rewrite has no
+        skip-if-unchanged shortcut and never produces a MatchVerdict at all
+        (confirmed by reading it), so there is nothing for this flag to
+        turn off there -- adding an always-inert parameter to those two
+        calls would be pure Speculative Generality.
 
         mdm-run-step-parallelism wayfinder map, ticket 02: the 5
         entity-resolution steps run as concurrent top-level futures instead
@@ -1991,15 +2059,30 @@ class MDMPipeline:
                     resume_ledger_run_id=resume_ledger_run_id,
                     run_id=run_id,
                     bookkeeping=bookkeeping,
+                    reconciliation_pass=reconciliation_pass,
                 ),
             ),
             ("advisers_processed", lambda wp: wp.run_advisers(limit=limit)),
-            ("securities_processed", lambda wp: wp.run_securities(limit=limit)),
-            ("persons_processed", lambda wp: wp.run_persons(limit=limit)),
+            (
+                "securities_processed",
+                lambda wp: wp.run_securities(limit=limit, reconciliation_pass=reconciliation_pass),
+            ),
+            (
+                "persons_processed",
+                lambda wp: wp.run_persons(limit=limit, reconciliation_pass=reconciliation_pass),
+            ),
             ("funds_processed", lambda wp: wp.run_funds(limit=limit)),
         )
 
-        def _run_step(run_fn: Callable[[MDMPipeline], int]) -> int:
+        # change-propagation Ticket 49: only run_companies tracks the
+        # entity_ids it actually changed today (see
+        # MDMPipeline._last_run_changed_entity_ids) -- _run_step returns it
+        # alongside the step's own int result so the main thread can read
+        # it after `future.result()`, the same worker-returns/main-thread-
+        # assigns pattern the `as_completed` loop below already uses for
+        # `stats`, rather than a second write path into shared state from
+        # inside the worker thread itself.
+        def _run_step(run_fn: Callable[[MDMPipeline], int]) -> tuple[int, set]:
             worker_session = get_session(sql_engine)
             try:
                 worker_pipeline = MDMPipeline(
@@ -2007,7 +2090,7 @@ class MDMPipeline:
                 )
                 result = run_fn(worker_pipeline)
                 worker_session.commit()
-                return result
+                return result, worker_pipeline._last_run_changed_entity_ids
             finally:
                 worker_session.close()
         # Not a `with ThreadPoolExecutor(...) as executor:` block deliberately:
@@ -2036,9 +2119,13 @@ class MDMPipeline:
             executor.submit(_run_step, run_fn): stat_field
             for stat_field, run_fn in step_runners
         }
+        changed_entity_ids_by_step: dict[str, set] = {}
         try:
             for future in as_completed(futures):
-                setattr(stats, futures[future], future.result())
+                stat_field = futures[future]
+                result, changed_ids = future.result()
+                setattr(stats, stat_field, result)
+                changed_entity_ids_by_step[stat_field] = changed_ids
         except Exception:
             executor.shutdown(wait=False, cancel_futures=True)
             raise
@@ -2057,11 +2144,59 @@ class MDMPipeline:
         # COMMITTED isolation (no isolation_level override in
         # database.py's get_engine()) regardless of self.session's state.
         # rollback() here is a cheap belt-and-suspenders: nothing on
-        # self.session was written in this method, so there's nothing to
-        # lose, and it makes that visibility contract explicit rather than
-        # incidental for any future caller who does write through
-        # self.session before calling run_all().
+        # self.session was written *up to this point* in this method (this
+        # claim no longer covers the whole method -- the Ticket 49 block
+        # right below this comment does write and commit through
+        # self.session via self.run_persons(); that write happens after
+        # this rollback and is unrelated to the visibility contract this
+        # comment documents, which is only about the 5 steps above), so
+        # there's nothing to lose here, and it makes that visibility
+        # contract explicit rather than incidental for any future caller
+        # who does write through self.session before this point.
         self.session.rollback()
+
+        # change-propagation Ticket 49: 1-hop candidate-neighbor expansion.
+        # find_one_hop_neighbor_entity_ids returns EVERY direct neighbor
+        # regardless of entity_type (adviser, audit_firm, parent/subsidiary
+        # company included, not just person) -- but only the person-typed
+        # ones are actually re-checked below, via the one scoped-resolve
+        # entry point (run_persons(owner_ciks=...)) this ticket built.
+        # Non-person neighbors found by the query today are silently NOT
+        # re-checked: no equivalent scoped-resolve parameter exists yet for
+        # run_advisers/run_securities/run_funds, and audit_firm entities
+        # aren't created by a standalone resolver at all. This is a real,
+        # disclosed gap (see this ticket's Answer), not an oversight papered
+        # over by the query's own broader reach. Separately: only
+        # run_companies tracks a changed-entity-id set today, so a changed
+        # adviser/security/fund/person triggers no 1-hop re-check at all,
+        # even for its person-typed neighbors -- same disclosed gap, input
+        # side. Skip-if-unchanged still applies inside the person re-check
+        # that does run: most neighbors' own source hash won't have moved,
+        # so this pass is cheap in the common case, not a second full
+        # resolution (proven in tests/mdm/test_neighbor_expansion_run_all.py).
+        changed_company_entity_ids = changed_entity_ids_by_step.get("companies_processed", set())
+        if changed_company_entity_ids:
+            from edgar_warehouse.mdm.database import MdmPerson
+            from edgar_warehouse.mdm.neighbor_expansion import find_one_hop_neighbor_entity_ids
+
+            neighbor_entity_ids = find_one_hop_neighbor_entity_ids(
+                self.session, changed_company_entity_ids
+            )
+            if neighbor_entity_ids:
+                neighbor_owner_ciks = [
+                    row[0]
+                    for row in self.session.execute(
+                        select(MdmPerson.owner_cik)
+                        .where(MdmPerson.entity_id.in_(neighbor_entity_ids))
+                        .where(MdmPerson.owner_cik.is_not(None))
+                    ).all()
+                ]
+                if neighbor_owner_ciks:
+                    stats.neighbor_persons_rechecked = self.run_persons(
+                        owner_ciks=neighbor_owner_ciks,
+                        reconciliation_pass=reconciliation_pass,
+                    )
+
         stats.relationship_counts_by_type = self.derive_relationships(target_per_type=limit)
         stats.relationships_written = sum(
             int(item["inserted"] or 0) for item in stats.relationship_counts_by_type.values()

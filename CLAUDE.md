@@ -1992,9 +1992,13 @@ cause, fix (a `BookkeepingStore.commit()` method called at
 MDM's own explicit-commit-at-caller convention rather than introducing
 engine-level autocommit), and tests:
 `.scratch/bronze-capture-oom/issues/03-bookkeeping-store-never-commits-any-write.md`.
-Deployed to prod 2026-09-01; **not yet live-verified** — needs a fresh
-`daily_incremental` run to confirm checkpoints now actually survive a
-process restart.
+Deployed to prod 2026-09-01. **Live-verified 2026-09-02**: a fresh
+`daily_incremental` execution
+(`daily-incremental-stresstest-zero-updates-1788383101`) correctly
+reported `rows_written: 0`/`rows_skipped: 9457` on `silver_apply_progress`
+for the full tracked universe — confirming checkpoints from an earlier run
+now genuinely survive a process restart, closing the gap this section's
+own prior "not yet live-verified" note left open.
 
 **Lesson:** "logged as succeeded, no error" is not evidence a database
 write is durable — the same class of gap as this file's other
@@ -2002,6 +2006,78 @@ transaction/session-commit incidents (see the Ticket 20 Source Family
 Registry and migration-011 entries above), just on a store that had never
 been exercised across a real process-restart boundary before this
 investigation.
+
+## Bookkeeping checkpoint could outrun silver publish on crash 5-whys (fixed 2026-09-02)
+
+**Problem:** found immediately after the commit fix above landed, while
+scoping unrelated work: the fix that made `BookkeepingStore` commits
+durable at all had, as a side effect, reopened a second, distinct
+data-loss window that could never occur before that fix (when nothing
+ever committed, nothing could be *prematurely* durable either).
+
+1. Symptom: `_execute_warehouse_bronze_capture`
+   (`warehouse_orchestrator.py`) called `bookkeeping.commit()` immediately
+   after `complete_sync_run`/`complete_pipeline_run`, but **before**
+   `_publish_silver_database_with_retry` (the actual silver merge/publish)
+   ran. Confirmed via direct code reading, not assumption.
+2. Why does commit-before-publish matter? `bookkeeping.commit()` durably
+   commits the *entire* shared session — every write issued anywhere in
+   the run, including any `upsert_source_checkpoint`/
+   `upsert_daily_index_checkpoint`/`upsert_company_sync_state` calls made
+   earlier (e.g. inside `_apply_submission_snapshot_to_silver`), not just
+   the two status rows the call site appears to be committing.
+3. Why is that unsafe? If silver publish then fails (a real exception, or
+   a hard OOM kill before it's ever reached — this exact task's own
+   documented shape, see "Gold-build memory / daily_incremental OOM
+   5-whys" above), a checkpoint already durably claims "content captured"
+   even though the content never reached canonical Silver.
+4. Why is that permanent, not self-healing? The next run's skip-if-
+   unchanged comparison (`main_checkpoint.get("last_sha256") ==
+   main_write_record["sha256"]`) can't distinguish "genuinely already
+   captured" from "checkpoint written, then discarded on crash" — a
+   matching hash silently skips `db.stage_submission(...)` forever, unless
+   SEC happens to re-file that exact content later.
+5. **Root cause:** the success-path commit was placed for a different,
+   legitimate reason (guarantee *some* durable run-status record survives
+   a downstream failure, per the except block's own correction logic) —
+   but a single shared session has no way to commit only the status rows
+   while leaving checkpoint rows pending; committing early for one
+   necessarily commits early for both.
+
+**Fix:** `bookkeeping.commit()` moved to fire only after silver publish
+*and* landing export have both actually succeeded — the true durability
+boundary. New `BookkeepingStore.rollback()` method
+(`edgar_warehouse/bookkeeping/store.py`). The except block now calls
+`rollback()` first (discarding everything staged this run, since nothing
+commits until after publish succeeds), then re-issues
+`start_sync_run`/`start_pipeline_run` (idempotent `INSERT ... ON CONFLICT`
+upserts, confirmed dialect-safe on both SQLite and Postgres) to recreate
+the run's row in the fresh post-rollback transaction — required because
+`complete_sync_run`/`complete_pipeline_run` are plain `UPDATE`-by-id
+statements that need the row to already exist — then records a "failed"
+status and commits once, cleanly.
+
+**Confirmed to cover every caller, not just `daily_incremental`:** the fix
+lives in the shared `_execute_warehouse_bronze_capture` function, not a
+command-specific branch. `_run_submissions_bronze_then_silver` (which
+wraps the checkpoint-writing call this bug centers on) is invoked from
+`daily-incremental`, `bootstrap-full`, `bootstrap-next`, and
+`seed-universe` — all four share the same fix with no additional wiring.
+
+Tests: `tests/bookkeeping/test_store_commit.py`'s new
+`TestRollbackDurability` proves `rollback()` genuinely discards a write
+(not just a call-shape check); `tests/unit/test_pipeline_run_tracking.py`
+gained a MagicMock call-order/count proof plus a real-`BookkeepingStore`
+integration test (`test_bronze_capture_rolls_back_a_checkpoint_write_when_silver_publish_fails`)
+that writes a real checkpoint, fails publish, and confirms — via an
+independent second session, mirroring the sibling commit-durability
+tests' own idiom — that the checkpoint does not survive. 3-axis code
+review (Standards/Spec/GoF) run before commit per this file's own hard
+rule; findings: a stale "already-durable" claim in an unrelated nearby
+comment (fixed), a missing test for the `write_landing_export`-fails path
+specifically vs. only `_publish_silver_database_with_retry`-fails (fixed),
+and this very 5-whys entry (the Standards axis flagged its absence as a
+hard violation of this file's own discipline).
 
 ## mdm_entity_backfill.py Snowflake paramstyle crash 5-whys (fixed 2026-09-02)
 

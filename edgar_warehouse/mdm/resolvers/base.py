@@ -6,12 +6,13 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm.database import (
     MdmChangeLog,
     MdmEntity,
+    MdmMatchReview,
     MdmSourceRef,
 )
 from edgar_warehouse.mdm.match import MatchAction, MatchPipeline, MatchVerdict
@@ -175,11 +176,31 @@ class BaseResolver:
         source_system: str,
         source_id: str,
         candidates: list[dict],
+        *,
+        reconciliation_mode: bool = False,
     ) -> ResolveOutcome:
-        """Run matching pipeline against candidates; return the decision."""
+        """Run matching pipeline against candidates; return the decision.
+
+        ``reconciliation_mode`` (change-propagation Ticket 50, the MDM
+        Reconciliation Backstop) is the one caller-visible behavior change
+        this ticket adds -- default False leaves every existing caller
+        (ordinary ``mdm mastering``) byte-for-byte unchanged. When True and
+        this exact ``(source_system, source_id)`` row already has a live
+        MDM entity assignment, rescoring routes through
+        ``_reconcile_against_existing`` instead of the plain create/merge
+        path below -- see that method's docstring for the finding
+        disposition. A row with no existing assignment (genuinely new,
+        even during a backstop pass) always falls through to the unchanged
+        path below.
+        """
         verdict: Optional[MatchVerdict] = None
         if ctx.pipeline is not None:
             verdict = ctx.pipeline.resolve(attrs, candidates)
+
+        if reconciliation_mode:
+            existing_entity_id = self._current_entity_id(ctx, source_system, source_id)
+            if existing_entity_id is not None:
+                return self._reconcile_against_existing(ctx, existing_entity_id, verdict)
 
         if verdict is None or verdict.action == MatchAction.QUARANTINE:
             entity = self._create_entity(
@@ -201,4 +222,129 @@ class BaseResolver:
             is_new=False,
             verdict=verdict,
             action=verdict.action,
+        )
+
+    def _current_entity_id(
+        self, ctx: ResolverContext, source_system: str, source_id: str
+    ) -> Optional[str]:
+        """The entity this exact source row is *currently* mapped to, if
+        any -- unlike ``_skip_if_unchanged``, this ignores content hash
+        entirely (Ticket 50 always rescores; it only needs to know what a
+        row is already attached to so a rescore can be compared against it).
+        """
+        stmt = select(MdmSourceRef.entity_id).where(
+            MdmSourceRef.source_system == source_system,
+            MdmSourceRef.source_id == str(source_id),
+        )
+        return ctx.session.execute(stmt).scalar_one_or_none()
+
+    def _reconcile_against_existing(
+        self,
+        ctx: ResolverContext,
+        existing_entity_id: str,
+        verdict: Optional[MatchVerdict],
+    ) -> ResolveOutcome:
+        """Ticket 50's finding disposition for a row that already has a live
+        MDM entity assignment (the "already-resolved golden records" list
+        in the design ticket this implements):
+
+          - No verdict, or the best candidate found IS the existing
+            assignment -> no-op; rescoring only reconfirmed it.
+          - AUTO_MERGE onto a *different* entity -> the two golden records
+            are the same real-world thing; merge the existing one into the
+            new candidate via the existing merge_entities machinery.
+          - REVIEW band -> insert MdmMatchReview (deduped against an
+            existing pending pair) and leave the assignment untouched until
+            a human accepts it.
+          - QUARANTINE (below review_min), regardless of what low-confidence
+            candidate it nominally prefers -> no-op. A live golden record is
+            never auto-split because a backstop score went cold. This is
+            deliberately narrower than Ticket 38's own "queue for review
+            only if it now prefers someone else" aside: FuzzyNameMatcher/
+            SplinkMatcher always attach a best-effort candidate_entity_id
+            even far below review_min (confirmed by reading match.py), so
+            honoring that aside literally would flood the review queue with
+            near-arbitrary low-confidence pairs on the very first backstop
+            run over live production data. Ticket 50's own checklist bullet
+            2 only requires review-band inserts; this implements that.
+        """
+        if verdict is None or verdict.candidate_entity_id == existing_entity_id:
+            action = verdict.action if verdict is not None else MatchAction.QUARANTINE
+            return ResolveOutcome(
+                entity_id=existing_entity_id, is_new=False, verdict=verdict, action=action
+            )
+
+        assert verdict.candidate_entity_id is not None
+        if verdict.action == MatchAction.AUTO_MERGE:
+            # The private, non-committing _merge_entities -- not the public
+            # merge_entities wrapper, which commits immediately (stewardship.py).
+            # A commit here would land a half-processed row: _stage_attrs/
+            # _register_source/survivorship in resolve_one still run after
+            # resolve_or_create returns. accept_review() (stewardship.py) uses
+            # the same private variant for the identical reason.
+            from edgar_warehouse.mdm.stewardship import _merge_entities
+
+            _merge_entities(
+                ctx.session,
+                keep=verdict.candidate_entity_id,
+                discard=existing_entity_id,
+                reason="mdm_reconciliation_backstop",
+                run_id=ctx.run_id or "",
+            )
+            return ResolveOutcome(
+                entity_id=verdict.candidate_entity_id,
+                is_new=False,
+                verdict=verdict,
+                action=verdict.action,
+            )
+
+        if verdict.action == MatchAction.REVIEW:
+            self._queue_match_review(
+                ctx,
+                candidate_entity_id=verdict.candidate_entity_id,
+                existing_entity_id=existing_entity_id,
+                verdict=verdict,
+            )
+            return ResolveOutcome(
+                entity_id=existing_entity_id, is_new=False, verdict=verdict, action=verdict.action
+            )
+
+        # QUARANTINE: never auto-split a live golden record.
+        return ResolveOutcome(
+            entity_id=existing_entity_id, is_new=False, verdict=verdict, action=verdict.action
+        )
+
+    @staticmethod
+    def _queue_match_review(
+        ctx: ResolverContext,
+        *,
+        candidate_entity_id: str,
+        existing_entity_id: str,
+        verdict: MatchVerdict,
+    ) -> None:
+        already_pending = ctx.session.execute(
+            select(MdmMatchReview.review_id).where(
+                MdmMatchReview.status == "pending",
+                or_(
+                    and_(
+                        MdmMatchReview.entity_id_a == candidate_entity_id,
+                        MdmMatchReview.entity_id_b == existing_entity_id,
+                    ),
+                    and_(
+                        MdmMatchReview.entity_id_a == existing_entity_id,
+                        MdmMatchReview.entity_id_b == candidate_entity_id,
+                    ),
+                ),
+            )
+        ).first()
+        if already_pending is not None:
+            return
+        ctx.session.add(
+            MdmMatchReview(
+                entity_id_a=candidate_entity_id,
+                entity_id_b=existing_entity_id,
+                match_score=verdict.score,
+                match_evidence=verdict.evidence,
+                status="pending",
+            )
         )

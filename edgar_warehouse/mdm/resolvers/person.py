@@ -61,6 +61,8 @@ class PersonResolver(BaseResolver):
         source_system: str,
         owner_row: dict,
         issuer_cik: Optional[int] = None,
+        *,
+        reconciliation_pass: bool = False,
     ) -> ResolveOutcome:
         owner_cik = owner_row.get("owner_cik")
         name = ctx.engine.normalize_name(owner_row.get("owner_name"))
@@ -84,20 +86,24 @@ class PersonResolver(BaseResolver):
         # match context field for owner_cik-less rows -- a row whose issuer
         # context changes between runs must still be reprocessed.
         row_content_hash = content_hash(attrs)
-        skip_entity_id = self._skip_if_unchanged(ctx, source_system, source_id, row_content_hash)
-        if skip_entity_id is not None:
-            return ResolveOutcome(
-                entity_id=skip_entity_id,
-                is_new=False,
-                verdict=None,
-                action=MatchAction.SKIPPED_UNCHANGED,
-            )
+        if not reconciliation_pass:
+            skip_entity_id = self._skip_if_unchanged(ctx, source_system, source_id, row_content_hash)
+            if skip_entity_id is not None:
+                return ResolveOutcome(
+                    entity_id=skip_entity_id,
+                    is_new=False,
+                    verdict=None,
+                    action=MatchAction.SKIPPED_UNCHANGED,
+                )
 
         candidates = self._existing_candidates(ctx, owner_cik, name)
         pipeline = ctx.pipeline or self._build_pipeline(ctx)
         ctx.pipeline = pipeline
 
-        outcome = self.resolve_or_create(ctx, attrs, source_system, source_id, candidates)
+        outcome = self.resolve_or_create(
+            ctx, attrs, source_system, source_id, candidates,
+            reconciliation_mode=reconciliation_pass,
+        )
 
         staged = {"canonical_name": name, "owner_cik": owner_cik, "primary_role": title}
         self._stage_attrs(ctx, outcome.entity_id, source_system, source_id, staged)

@@ -403,6 +403,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_exclusion_and_evidence_import_migration(engine)
         _apply_source_fetch_validators_migration(engine)
         _apply_sql_file(engine, "019_mdm_run_identity.sql")
+        _apply_sql_file(engine, "020_mdm_pipeline_lease.sql")
 
     if seed:
         with Session(engine) as session:

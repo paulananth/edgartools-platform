@@ -114,6 +114,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "017_source_exclusion_and_evidence_import.sql",
         "018_source_fetch_validators.sql",
         "019_mdm_run_identity.sql",
+        "020_mdm_pipeline_lease.sql",
     ]
 
 

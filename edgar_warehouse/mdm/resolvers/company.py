@@ -66,6 +66,8 @@ class CompanyResolver(BaseResolver):
         company_row: dict,
         ticker_row: Optional[dict] = None,
         tracking_row: Optional[dict] = None,
+        *,
+        reconciliation_pass: bool = False,
     ) -> ResolveOutcome:
         cik = int(company_row["cik"])
         name = ctx.engine.normalize_name(company_row.get("entity_name"))
@@ -97,14 +99,15 @@ class CompanyResolver(BaseResolver):
             }
         )
 
-        skip_entity_id = self._skip_if_unchanged(ctx, source_system, str(cik), row_content_hash)
-        if skip_entity_id is not None:
-            return ResolveOutcome(
-                entity_id=skip_entity_id,
-                is_new=False,
-                verdict=None,
-                action=MatchAction.SKIPPED_UNCHANGED,
-            )
+        if not reconciliation_pass:
+            skip_entity_id = self._skip_if_unchanged(ctx, source_system, str(cik), row_content_hash)
+            if skip_entity_id is not None:
+                return ResolveOutcome(
+                    entity_id=skip_entity_id,
+                    is_new=False,
+                    verdict=None,
+                    action=MatchAction.SKIPPED_UNCHANGED,
+                )
 
         attrs_for_match = {"cik": cik, "canonical_name": name}
 
@@ -113,7 +116,8 @@ class CompanyResolver(BaseResolver):
         ctx.pipeline = pipeline
 
         outcome = self.resolve_or_create(
-            ctx, attrs_for_match, source_system, str(cik), candidates
+            ctx, attrs_for_match, source_system, str(cik), candidates,
+            reconciliation_mode=reconciliation_pass,
         )
 
         parent_company_entity_id = self._parent_company_entity_id(ctx, company_row)

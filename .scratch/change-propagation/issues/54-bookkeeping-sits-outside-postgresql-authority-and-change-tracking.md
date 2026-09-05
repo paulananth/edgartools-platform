@@ -119,6 +119,50 @@ already sequenced — it just isn't finished. Concretely:
   still needs its own near-term remediation regardless of how this larger
   question resolves — it's not blocked on Ticket 27 landing.
 
+## Addendum (2026-09-02, found while resolving Ticket 55)
+
+`daily_incremental` is not the only caller writing into
+`sec_company_sync_state` outside this map's PostgreSQL authority. Warehouse
+`seed-universe` does too, via two separate code paths in
+`warehouse_orchestrator.py`: `_sync_reference_data`'s
+`bookkeeping.seed_company_sync_state_bulk(...)` (bulk-seeding tracking rows
+for every newly discovered CIK) and `_seed_silver_tracking_status(...)`
+(assigning `tracking_status="bootstrap_pending"`). See
+[Ticket 55](55-decide-whether-reference-catalog-retires-seed-universe.md)
+for the full context — `reference_catalog` (Ticket 23) does not reproduce
+either of these, same gap this ticket already names for
+`daily_incremental`. Doesn't change this ticket's recommendation, but
+whatever this ticket decides about `sec_company_sync_state`'s home now
+affects `seed-universe`'s design too, not only `daily_incremental`'s.
+
+## Correction (2026-09-02, found while scoping implementation)
+
+This ticket's "Recommendation" section claims Ticket 46's Decision 2 proof
+"has not run yet." That was stale when written (2026-09-01) — [Ticket 53](53-drive-legacy-and-gated-capture-into-parity-diff.md)
+already ran and passed it a day earlier, and [Ticket 27](27-contract-legacy-acquisition-bypasses.md)'s
+own Answer already cites it as the basis for flipping `daily-incremental`'s
+gated-capture default on: *"Ticket 10 Decision 2 for this family is the
+Ticket 53 live Apple Form 4 dual-path pass (2026-08-29, date 2026-08-27,
+CIK 320193)."* This section's recommendation to prioritize running that
+proof is void — it already ran.
+
+**Sharper, verified finding replacing it:** the `BookkeepingStore.commit()`
+fix (CLAUDE.md, deployed 2026-09-01) changes this ticket's data-loss urgency
+rather than resolving it. Checked directly
+(`warehouse_orchestrator.py:712-767`): `bookkeeping.commit()` fires
+immediately after `complete_sync_run`/`complete_pipeline_run`, by explicit
+design, "before silver publish/landing export" — `_publish_silver_database_with_retry`
+runs after that commit. The `except` block only corrects
+`complete_sync_run`/`complete_pipeline_run` back to `"failed"`; it does not
+touch checkpoint rows already committed earlier in the same transaction.
+Before the commit fix, nothing durably persisted at all, so this crash
+window couldn't bite (also why every run reprocessed the full universe —
+see CLAUDE.md's own writeup). Now that commits genuinely persist (verified
+live this session), a crash between that commit and silver publish is a
+real, newly-reachable exposure — exactly
+[bronze-capture-oom Ticket 02](../bronze-capture-oom/issues/02-checkpoint-outruns-silver-publish-on-crash.md)'s
+failure mode, now live for the first time rather than theoretical.
+
 ## Not yet decided
 
 - Whether to prioritize running Ticket 46's side-by-side proof now, given

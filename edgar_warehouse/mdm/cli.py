@@ -174,6 +174,24 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     pub_drain.set_defaults(handler=_logged_handler("publication-drain", _handle_publication_drain))
 
+    reconcile_backstop = mdm_sub.add_parser(
+        "reconcile-backstop",
+        help=(
+            "Ticket 50 (change-propagation map): the periodic full-universe MDM "
+            "Reconciliation Backstop -- MDMPipeline.run_all() across every entity "
+            "type with skip-if-unchanged off and no --limit, gated by an exclusive "
+            "lease against ordinary 'mdm mastering' resolution. Off by default; "
+            "deferring (not an error) when the lease is already held."
+        ),
+    )
+    reconcile_backstop.add_argument(
+        "--run-id", default=None,
+        help="This invocation's own physical identity, e.g. $$.Execution.Name.",
+    )
+    reconcile_backstop.set_defaults(
+        handler=_logged_handler("reconcile-backstop", _handle_reconciliation_backstop)
+    )
+
     cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
     cov.set_defaults(handler=_logged_handler("coverage-report", _handle_coverage_report))
 
@@ -947,7 +965,8 @@ def _handle_run(args) -> int:
         pipeline = MDMPipeline(session=session, silver=silver, run_id=run_id)
         resume_ledger_run_id = getattr(args, "resume_ledger_run_id", None)
         if args.entity_type == "all":
-            stats = pipeline.run_all(
+            stats = _run_all_with_ordinary_lease(
+                pipeline, session,
                 limit=args.limit, resume_ledger_run_id=resume_ledger_run_id, run_id=run_id,
                 bookkeeping=_bookkeeping_store(),
             )
@@ -978,6 +997,71 @@ def _handle_run(args) -> int:
                 f"(ignored for entity_type={args.entity_type})",
                 file=sys.stderr,
             )
+        return 0
+    finally:
+        session.close()
+
+
+def _run_all_with_ordinary_lease(pipeline, session, **run_all_kwargs):
+    """Ticket 50 (change-propagation map): acquire the shared mdm_resolution
+    lease in "ordinary" mode around the real, full-universe `mdm mastering`
+    call -- so a concurrently-running MDM Reconciliation Backstop pass
+    correctly defers around it (see reconciliation_backstop.py). Ordinary
+    resolution itself never fails closed on this lease: unlike the monthly
+    backstop, this call runs inside a bounded daily/incremental production
+    execution with no "next slot" to retry on, so it always proceeds with
+    resolution regardless of whether it wins the lease (see lease.py's
+    module docstring for the full asymmetric-overlap rationale).
+    """
+    from edgar_warehouse.mdm.lease import (
+        ORDINARY_STALE_AFTER_SECONDS,
+        acquire_mdm_pipeline_lease,
+        get_mdm_pipeline_lease,
+        release_mdm_pipeline_lease,
+    )
+
+    run_id = run_all_kwargs["run_id"]
+    acquired = acquire_mdm_pipeline_lease(
+        session, mode="ordinary", run_id=run_id,
+        stale_after_seconds=ORDINARY_STALE_AFTER_SECONDS,
+    )
+    if not acquired:
+        held = get_mdm_pipeline_lease(session)
+        emit_mdm_event(
+            "mdm_resolution_lease_conflict",
+            run_id=run_id,
+            held_by_run_id=held.run_id if held else None,
+            held_mode=held.mode if held else None,
+        )
+        return pipeline.run_all(**run_all_kwargs)
+
+    try:
+        return pipeline.run_all(**run_all_kwargs)
+    finally:
+        release_mdm_pipeline_lease(session, run_id=run_id)
+
+
+def _handle_reconciliation_backstop(args) -> int:
+    from edgar_warehouse.mdm.reconciliation_backstop import run_reconciliation_backstop
+    from edgar_warehouse.mdm.run_identity import bind_mdm_run_identity
+
+    silver, rc = _require_silver_reader(_required_tables_for_run("all"), "mdm reconcile-backstop")
+    if rc != 0:
+        return rc
+
+    run_id = bind_mdm_run_identity(getattr(args, "run_id", None))
+    session = _session()
+    try:
+        result = run_reconciliation_backstop(
+            session, silver, bookkeeping=_bookkeeping_store(), run_id=run_id,
+        )
+        if not result.ran:
+            print(
+                f"mdm reconcile-backstop: deferred (lease held by {result.held_by_run_id!r}); "
+                "retrying on the next scheduled slot"
+            )
+            return 0
+        print(json.dumps(result.stats.__dict__, indent=2, sort_keys=True))
         return 0
     finally:
         session.close()
