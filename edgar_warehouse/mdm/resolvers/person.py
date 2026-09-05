@@ -119,10 +119,7 @@ class PersonResolver(BaseResolver):
             outcome.entity_id, PERSON_FIELDS, existing_values=existing,
         )
         self._upsert_golden(ctx, outcome.entity_id, merges, owner_row.get("owner_name"), title)
-        self._log_change(
-            ctx, outcome.entity_id,
-            {k: v.winning_value for k, v in merges.items()},
-        )
+        self._log_change(ctx, outcome.entity_id, existing=existing, merge_results=merges)
         return outcome
 
     @staticmethod

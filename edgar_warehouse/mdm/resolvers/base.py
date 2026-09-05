@@ -17,7 +17,7 @@ from edgar_warehouse.mdm.database import (
 )
 from edgar_warehouse.mdm.match import MatchAction, MatchPipeline, MatchVerdict
 from edgar_warehouse.mdm.rules import MDMRuleEngine
-from edgar_warehouse.mdm.survivorship import stage_candidate
+from edgar_warehouse.mdm.survivorship import MergeResult, stage_candidate
 
 
 def content_hash(fields: dict[str, Any]) -> str:
@@ -155,8 +155,29 @@ class BaseResolver:
         self,
         ctx: ResolverContext,
         entity_id: str,
-        changed_fields: Optional[dict] = None,
+        existing: dict,
+        merge_results: dict[str, MergeResult],
     ) -> None:
+        """Write one mdm_change_log row, but only if survivorship actually
+        picked a different winning value than what's already stored.
+
+        Without this comparison, every entity a resolver touches gets a
+        fresh changelog row on every mastering pass regardless of whether
+        anything changed -- confirmed live to have accumulated 584,338
+        change_log rows (one entity alone: 40,356), which in turn made
+        every `mdm publish` re-drain a backlog that regenerates itself
+        instead of shrinking. `merge_results` carries every field's current
+        winning value unconditionally; `existing` is the entity's
+        already-stored golden-record values, so the diff belongs here.
+        """
+        changed_fields = {
+            field_name: result.winning_value
+            for field_name, result in merge_results.items()
+            if existing.get(field_name) != result.winning_value
+        }
+        if not changed_fields:
+            return
+
         from edgar_warehouse.mdm.run_identity import normalize_or_create_run_id
 
         ctx.run_id = normalize_or_create_run_id(ctx.run_id)[0]
@@ -164,7 +185,7 @@ class BaseResolver:
             MdmChangeLog(
                 entity_id=entity_id,
                 entity_type=self.entity_type,
-                changed_fields=changed_fields or {},
+                changed_fields=changed_fields,
                 run_id=ctx.run_id,
             )
         )

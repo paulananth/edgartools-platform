@@ -156,8 +156,7 @@ class CompanyResolver(BaseResolver):
         )
 
         self._upsert_golden(ctx, outcome.entity_id, cik, merge_results)
-        changed = {k: v.winning_value for k, v in merge_results.items()}
-        self._log_change(ctx, outcome.entity_id, changed_fields=changed)
+        self._log_change(ctx, outcome.entity_id, existing=existing, merge_results=merge_results)
         return outcome
 
     @staticmethod

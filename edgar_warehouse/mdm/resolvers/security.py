@@ -97,6 +97,10 @@ class SecurityResolver(BaseResolver):
             entity_id = existing[0]["entity_id"]
             is_new = False
             score = 1.0
+            # existing_golden must be captured before the in-place upgrade
+            # mutation below, or it would reflect this call's own write
+            # instead of the entity's truly-prior state -- see _log_change.
+            existing_golden = self._existing_golden(ctx, entity_id)
             # Upgrade: issuer was unknown when this security was first created but is now resolved.
             # Update in-place rather than creating a duplicate entity.
             if issuer_entity_id:
@@ -112,6 +116,7 @@ class SecurityResolver(BaseResolver):
                 entity_id = null_match[0]["entity_id"]
                 is_new = False
                 score = 1.0
+                existing_golden = self._existing_golden(ctx, entity_id)
                 sec_row = ctx.session.get(MdmSecurity, entity_id)
                 if sec_row is not None and sec_row.issuer_entity_id is None:
                     sec_row.issuer_entity_id = issuer_entity_id
@@ -122,6 +127,8 @@ class SecurityResolver(BaseResolver):
                 entity_id = ent.entity_id
                 is_new = True
                 score = 1.0
+                # Brand-new entity -- no prior golden record exists, by definition.
+                existing_golden = {}
                 ctx.session.add(MdmSecurity(
                     entity_id=entity_id,
                     issuer_entity_id=issuer_entity_id,
@@ -135,6 +142,7 @@ class SecurityResolver(BaseResolver):
             entity_id = ent.entity_id
             is_new = True
             score = 1.0
+            existing_golden = {}
             ctx.session.add(MdmSecurity(
                 entity_id=entity_id,
                 issuer_entity_id=issuer_entity_id,
@@ -153,8 +161,9 @@ class SecurityResolver(BaseResolver):
         merges = run_survivorship_for_entity(
             ctx.session, ctx.engine, self.entity_type,
             entity_id, SECURITY_FIELDS,
+            existing_values=existing_golden,
         )
-        self._log_change(ctx, entity_id, {k: v.winning_value for k, v in merges.items()})
+        self._log_change(ctx, entity_id, existing=existing_golden, merge_results=merges)
 
         return ResolveOutcome(
             entity_id=entity_id,
@@ -184,6 +193,13 @@ class SecurityResolver(BaseResolver):
             {"entity_id": s.entity_id, "canonical_title": s.canonical_title}
             for s, _ in ctx.session.execute(stmt).all()
         ]
+
+    @staticmethod
+    def _existing_golden(ctx: ResolverContext, entity_id: str) -> dict:
+        row = ctx.session.get(MdmSecurity, entity_id)
+        if not row:
+            return {}
+        return {f: getattr(row, f) for f in SECURITY_FIELDS}
 
 
 def _ownership_security_source_id(txn_row: dict) -> str:
