@@ -3447,7 +3447,7 @@ compute_windows["Catch"] = sec_fetch_task_catch()
 # and Stage1's bootstrap-next never calls _sync_reference_data itself).
 #
 # write_warehouse_mdm_gold_definition's daily_incremental branch below keeps its
-# own separate ResolveCompanyIdentityBounded/ReduceIdentityRefresh pair untouched --
+# own separate CaptureCompanyIdentityBatches/PublishCompanyIdentityUpdates pair untouched --
 # that command (compute-identity-refresh-window) and this one (compute-windows)
 # were always two distinct handlers that happened to share the ecs_state/
 # _write_cik_universe_batches helper shape, not shared state; daily_incremental's
@@ -4247,12 +4247,13 @@ def sec_fetch_task_catch():
     failure releases the lease promptly instead of leaving it held for the
     16h stale-reclaim window."""
     return [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.sec_fetch_task_error", "Next": "ReleaseSecFetchLeaseAfterFailure"}]
-# ResolveCompanyIdentityBounded: Company Identity Pipeline wayfinder map,
-# ticket 06. A strict, MaxConcurrency=1, delta-then-reduce Map --
+# CaptureCompanyIdentityBatches (formerly ResolveCompanyIdentityBounded):
+# Company Identity Pipeline wayfinder map, ticket 06. A strict,
+# MaxConcurrency=1, delta-then-reduce Map --
 # bootstrap-fundamentals --mode company-identity over explicit
 # --cik-list batches (compute-identity-refresh-window's cik_batches.jsonl),
 # each persisting only an immutable delta, merged into canonical exactly
-# once by ReduceIdentityRefresh below -- ahead of the existing
+# once by PublishCompanyIdentityUpdates below -- ahead of the existing
 # CaptureAndVerifyNewFilings/MDM chain, so company data is current before the
 # existing mdm-run(--entity-type all) resolves companies as part of its
 # sweep (run_all() calls run_companies()) -- no separate --entity-type
@@ -4431,9 +4432,9 @@ deferred = {
 
 # large, not medium (release-readiness ticket 89): a real prod run's
 # ReleaseLease OOM-killed (exit 137) on medium's 4096MB on all 4
-# attempts, right after ReduceIdentityRefresh/GoldRefresh had just made
+# attempts, right after PublishCompanyIdentityUpdates/GoldRefresh had just made
 # canonical heavier within the same run -- same root cause ticket 83
-# already fixed for ReduceIdentityRefresh above. The Catch below only
+# already fixed for PublishCompanyIdentityUpdates above. The Catch below only
 # stops that from failing an otherwise-successful gold build; it does
 # not make the release succeed, so every retry left the lease
 # permanently held with no visible error (execution still SUCCEEDED).
@@ -4482,10 +4483,10 @@ find_companies_with_new_filings = ecs_state(wh_medium_arn,
     "States.Array('compute-identity-refresh-window', '--mode', 'daily', "
     "'--lookback-days', '7', "
     "'--batch-size', '500', '--run-id', $$.Execution.Name)",
-    next_state="ResolveCompanyIdentityBounded")
+    next_state="CaptureCompanyIdentityBatches")
 find_companies_with_new_filings["ResultPath"] = None
 # ticket 86: previously uncaught -- these states, plus
-# ResolveCompanyIdentityBounded/ReduceIdentityRefresh/CaptureAndVerifyNewFilings
+# CaptureCompanyIdentityBatches/PublishCompanyIdentityUpdates/CaptureAndVerifyNewFilings
 # below, are all inside the sec_fetch_active fetch-heavy span with no
 # release-on-failure path before this fix.
 find_companies_with_new_filings["Catch"] = sec_fetch_task_catch()
@@ -4493,7 +4494,7 @@ find_companies_with_new_filings["Catch"] = sec_fetch_task_catch()
 compute_identity_backstop_universe = ecs_state(wh_medium_arn,
     "States.Array('compute-identity-refresh-window', '--mode', 'backstop', "
     "'--batch-size', '500', '--run-id', $$.Execution.Name)",
-    next_state="ResolveCompanyIdentityBounded")
+    next_state="CaptureCompanyIdentityBatches")
 compute_identity_backstop_universe["ResultPath"] = None
 compute_identity_backstop_universe["Catch"] = sec_fetch_task_catch()
 
@@ -4546,7 +4547,7 @@ stage0_company_identity_bounded = {
         "States": {"RunCompanyIdentityBatch": per_batch_company_identity},
     },
     "ResultPath": None,
-    "Next": "ReduceIdentityRefresh",
+    "Next": "PublishCompanyIdentityUpdates",
     "Catch": sec_fetch_task_catch(),
 }
 
@@ -4680,7 +4681,7 @@ ingest_firm_roster_sources["ResultPath"] = None
 # sec_fetch_active lease (release-readiness ticket 84): acquired right
 # before RefreshMode dispatch, released right before Mastering -- spans
 # every state that actually calls SEC/IAPD (identity-window compute,
-# ResolveCompanyIdentityBounded, ReduceIdentityRefresh [no SEC calls
+# CaptureCompanyIdentityBatches, PublishCompanyIdentityUpdates [no SEC calls
 # itself, but sandwiched between two fetch stages], CaptureAndVerifyNewFilings,
 # and the ADV/firm-roster fetch chain). Independent of AcquireLease/
 # ReleaseLease above -- that lease prevents overlapping daily_incremental/
@@ -4735,7 +4736,7 @@ definition = {
         "daily (index-impacted company-eligible intersection, default), both emitted by "
         "compute-identity-refresh-window -- release-readiness ticket 45/49/51, "
         "(0a) AcquireSecFetchLease -- cross-command sec_fetch_active lease (ticket 84), "
-        "(0b) ResolveCompanyIdentityBounded -- Company Identity capture, strict, runs "
+        "(0b) CaptureCompanyIdentityBatches -- Company Identity capture, strict, runs "
         "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
         "(1) bronze+silver capture, (1a) ReleaseSecFetchLease, (1b) AdvBulkFetch -- fetch-adv-bulk + "
         "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
@@ -4762,8 +4763,8 @@ definition = {
         "RefreshMode":        refresh_mode,
         "FindCompaniesWithNewFilings": find_companies_with_new_filings,
         "ComputeIdentityBackstopUniverse": compute_identity_backstop_universe,
-        "ResolveCompanyIdentityBounded": stage0_company_identity_bounded,
-        "ReduceIdentityRefresh": reduce_identity_refresh,
+        "CaptureCompanyIdentityBatches": stage0_company_identity_bounded,
+        "PublishCompanyIdentityUpdates": reduce_identity_refresh,
         "CaptureAndVerifyNewFilings": run_wh,
         "DatasetPeriodCheck":   dataset_period_check,
         "DatasetPeriodDefault": dataset_period_default,

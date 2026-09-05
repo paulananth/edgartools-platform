@@ -754,8 +754,9 @@ def _execute_warehouse_bronze_capture(
             # This pre-stage is the sole owner of the global reference snapshot
             # for daily_incremental's bounded Identity Refresh. It deliberately
             # does not publish canonical silver: the reducer
-            # (ReduceIdentityRefresh) will merge this immutable candidate with
-            # all batch deltas exactly once.
+            # (PublishCompanyIdentityUpdates, formerly ReduceIdentityRefresh)
+            # will merge this immutable candidate with all batch deltas
+            # exactly once.
             #
             # compute-windows (load_history) used to join this same branch
             # (Company Identity Hydrate Elimination map, ticket 03), but no
@@ -3406,6 +3407,22 @@ def _run_submissions_bronze_then_silver(
         cik_count=total_ciks,
         run_id=sync_run_id,
     )
+    # Bulk-prefetch (change-propagation "diff processing design" follow-up,
+    # 2026-09-04): _apply_submission_snapshot_to_silver used to read these
+    # two per-CIK, one Postgres round trip each, regardless of whether the
+    # SHA256 diff found anything changed -- see
+    # BookkeepingStore.upsert_source_checkpoints_bulk's docstring for the
+    # full measured cost (44min for 8,699 CIKs). Reading the whole run's
+    # CIK list here, up front, in 2 chunked bulk queries instead of 2N
+    # single-row ones is safe: nothing downstream in this same function (or
+    # its own caller, before daily_artifact_boundary/RunMdmChain/etc. start)
+    # reads a CIK's sec_source_checkpoint/sec_company_sync_state row back
+    # mid-run, so every snapshot can safely see the same pre-run snapshot
+    # of both tables regardless of processing order.
+    existing_states_by_cik = bookkeeping.get_company_sync_states_bulk(ciks)
+    main_checkpoints_by_cik = bookkeeping.get_source_checkpoints_bulk("submissions_main", ciks)
+    pending_source_checkpoint_rows: list[dict[str, Any]] = []
+    pending_company_sync_state_rows: list[dict[str, Any]] = []
     index = 0
     for bronze_chunk in _capture_submission_bronze_snapshots(
         context=context,
@@ -3418,6 +3435,7 @@ def _run_submissions_bronze_then_silver(
     ):
         for snapshot in bronze_chunk:
             raw_writes.extend(snapshot["raw_writes"])
+            snapshot_cik = int(snapshot["cik"])
             result = _apply_submission_snapshot_to_silver(
                 db=db,
                 bookkeeping=bookkeeping,
@@ -3427,6 +3445,8 @@ def _run_submissions_bronze_then_silver(
                 load_mode=load_mode,
                 recent_limit=recent_limit,
                 now=now,
+                existing_state=existing_states_by_cik.get(snapshot_cik),
+                main_checkpoint=main_checkpoints_by_cik.get(snapshot_cik),
                 filing_min_date=filing_min_date,
             )
             rows_written += int(result["rows_written"])
@@ -3434,6 +3454,10 @@ def _run_submissions_bronze_then_silver(
             recent_accessions.extend(result["recent_accessions"])
             pagination_accessions.extend(result["pagination_accessions"])
             filtered_by_lookback_count += int(result.get("filtered_by_lookback_count", 0) or 0)
+            if result.get("source_checkpoint_row") is not None:
+                pending_source_checkpoint_rows.append(result["source_checkpoint_row"])
+            if result.get("company_sync_state_row") is not None:
+                pending_company_sync_state_rows.append(result["company_sync_state_row"])
             index += 1
             if index == total_ciks or index % 10 == 0:
                 _emit_pipeline_event(
@@ -3444,6 +3468,22 @@ def _run_submissions_bronze_then_silver(
                     rows_written=rows_written,
                     run_id=sync_run_id,
                 )
+    # Flush the bulk-batched checkpoint/sync-state writes once for the whole
+    # CIK list, instead of 2 unbatched writes per CIK inside the loop above
+    # -- see the prefetch comment above the loop for the full writeup.
+    # Deduped by natural key, last write wins (matches what the old
+    # sequential per-CIK upserts would have done if `ciks` ever contained a
+    # duplicate) -- a single multi-row INSERT ... ON CONFLICT statement
+    # cannot target the same row twice, unlike N independent single-row
+    # upserts, so this guards a failure mode the old code never had.
+    deduped_checkpoint_rows = list(
+        {(row["source_name"], row["source_key"]): row for row in pending_source_checkpoint_rows}.values()
+    )
+    deduped_sync_state_rows = list(
+        {row["cik"]: row for row in pending_company_sync_state_rows}.values()
+    )
+    bookkeeping.upsert_source_checkpoints_bulk(deduped_checkpoint_rows)
+    bookkeeping.upsert_company_sync_states_bulk(deduped_sync_state_rows)
     # Ticket 05: count catalog network vs cache hits from write_record.cached.
     catalog_network = 0
     catalog_skips = 0
@@ -5205,13 +5245,24 @@ def _apply_submission_snapshot_to_silver(
     load_mode: str,
     recent_limit: int | None,
     now: datetime,
+    existing_state: dict[str, Any] | None,
+    main_checkpoint: dict[str, Any] | None,
     filing_min_date: date | None = None,
 ) -> dict[str, Any]:
+    """``existing_state``/``main_checkpoint`` are bulk-prefetched by the
+    caller (change-propagation "diff processing design" follow-up, found
+    live 2026-09-04) instead of read here per call -- see
+    BookkeepingStore.upsert_source_checkpoints_bulk's docstring for the full
+    root-cause writeup. This function no longer writes sec_source_checkpoint/
+    sec_company_sync_state directly either: it returns the computed rows
+    (``source_checkpoint_row``/``company_sync_state_row``) for the caller to
+    flush via the bulk upsert methods after the whole CIK batch is processed.
+    """
     raw_writes: list[dict[str, Any]] = []
     rows_written = 0
     rows_skipped = 0
     cik = int(snapshot["cik"])
-    existing_state = bookkeeping.get_company_sync_state(cik) or {"tracking_status": "bootstrap_pending"}
+    existing_state = existing_state or {"tracking_status": "bootstrap_pending"}
     main_write_record = snapshot["main_write_record"]
     main_payload = snapshot["main_payload"]
     raw_writes.append(main_write_record)
@@ -5232,7 +5283,6 @@ def _apply_submission_snapshot_to_silver(
         if force or checkpoint is None or checkpoint.get("last_sha256") != write_record["sha256"]:
             pagination_same = False
 
-    main_checkpoint = bookkeeping.get_source_checkpoint("submissions_main", f"cik:{cik}")
     main_same = (
         (not force)
         and main_checkpoint is not None
@@ -5240,20 +5290,29 @@ def _apply_submission_snapshot_to_silver(
     )
     all_same = main_same and pagination_same
 
+    main_checkpoint_row: dict[str, Any] | None = None
     for write_record in [main_write_record, *pagination_write_records]:
         source_name = write_record["source_name"]
         source_key = f"cik:{cik}" if source_name == "submissions_main" else f"file:{Path(write_record['relative_path']).name}"
-        bookkeeping.upsert_source_checkpoint(
-            {
-                "source_name": source_name,
-                "source_key": source_key,
-                "raw_object_id": write_record["sha256"],
-                "last_success_at": now,
-                "last_sha256": write_record["sha256"],
-                # Store the bronze path so future runs can read without re-downloading
-                "bronze_path": write_record.get("path", ""),
-            }
-        )
+        checkpoint_row = {
+            "source_name": source_name,
+            "source_key": source_key,
+            "raw_object_id": write_record["sha256"],
+            "last_success_at": now,
+            "last_sha256": write_record["sha256"],
+            # Store the bronze path so future runs can read without re-downloading
+            "bronze_path": write_record.get("path", ""),
+        }
+        if source_name == "submissions_main":
+            # Batched by the caller (upsert_source_checkpoints_bulk) -- see
+            # this function's docstring. Pagination checkpoints stay
+            # per-call: their file names aren't known until this snapshot's
+            # manifest is read, so they can't be bulk-prefetched the same
+            # way, and daily_incremental (the caller this batches) never
+            # sets include_pagination=True.
+            main_checkpoint_row = checkpoint_row
+        else:
+            bookkeeping.upsert_source_checkpoint(checkpoint_row)
 
     result: dict[str, Any]
     if all_same:
@@ -5339,23 +5398,23 @@ def _apply_submission_snapshot_to_silver(
     elif tracking_status not in {"active", "paused", "historical_complete", "error", "deregistered"}:
         tracking_status = "active"
 
-    bookkeeping.upsert_company_sync_state(
-        {
-            "cik": cik,
-            "tracking_status": tracking_status,
-            "bootstrap_completed_at": bootstrap_completed_at,
-            "last_main_sync_at": now,
-            "last_main_raw_object_id": main_write_record["sha256"],
-            "last_main_sha256": main_write_record["sha256"],
-            "latest_filing_date_seen": latest_filing_date,
-            "latest_acceptance_datetime_seen": latest_acceptance_datetime,
-            "pagination_files_expected": pagination_files_expected if include_pagination else 0,
-            "pagination_files_loaded": pagination_files_loaded if include_pagination else 0,
-            "pagination_completed_at": pagination_completed_at,
-            "next_sync_after": now + timedelta(days=1),
-            "last_error_message": None,
-        }
-    )
+    # Batched by the caller (upsert_company_sync_states_bulk) -- see this
+    # function's docstring.
+    company_sync_state_row = {
+        "cik": cik,
+        "tracking_status": tracking_status,
+        "bootstrap_completed_at": bootstrap_completed_at,
+        "last_main_sync_at": now,
+        "last_main_raw_object_id": main_write_record["sha256"],
+        "last_main_sha256": main_write_record["sha256"],
+        "latest_filing_date_seen": latest_filing_date,
+        "latest_acceptance_datetime_seen": latest_acceptance_datetime,
+        "pagination_files_expected": pagination_files_expected if include_pagination else 0,
+        "pagination_files_loaded": pagination_files_loaded if include_pagination else 0,
+        "pagination_completed_at": pagination_completed_at,
+        "next_sync_after": now + timedelta(days=1),
+        "last_error_message": None,
+    }
     filtered_pagination_accessions = _dedupe_strings(
         [
             row["accession_number"]
@@ -5377,6 +5436,8 @@ def _apply_submission_snapshot_to_silver(
         "recent_accessions": _dedupe_strings(result["recent_accessions"]),
         "pagination_accessions": filtered_pagination_accessions,
         "filtered_by_lookback_count": filtered_by_lookback_count,
+        "source_checkpoint_row": main_checkpoint_row,
+        "company_sync_state_row": company_sync_state_row,
     }
 
 

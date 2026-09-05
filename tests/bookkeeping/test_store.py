@@ -49,6 +49,87 @@ class TestSourceCheckpoint:
     def test_get_missing_returns_none(self, store: BookkeepingStore) -> None:
         assert store.get_source_checkpoint("nope", "nope") is None
 
+    def test_get_bulk_returns_by_cik(self, store: BookkeepingStore) -> None:
+        store.upsert_source_checkpoint(
+            {"source_name": "submissions_main", "source_key": "cik:1", "raw_object_id": "obj-1"}
+        )
+        store.upsert_source_checkpoint(
+            {"source_name": "submissions_main", "source_key": "cik:2", "raw_object_id": "obj-2"}
+        )
+        result = store.get_source_checkpoints_bulk("submissions_main", [1, 2, 3])
+        assert set(result) == {1, 2}
+        assert result[1]["raw_object_id"] == "obj-1"
+        assert result[2]["raw_object_id"] == "obj-2"
+
+    def test_get_bulk_empty_input(self, store: BookkeepingStore) -> None:
+        assert store.get_source_checkpoints_bulk("submissions_main", []) == {}
+
+    def test_upsert_bulk_then_get(self, store: BookkeepingStore) -> None:
+        store.upsert_source_checkpoints_bulk(
+            [
+                {"source_name": "submissions_main", "source_key": "cik:1", "raw_object_id": "obj-1"},
+                {"source_name": "submissions_main", "source_key": "cik:2", "raw_object_id": "obj-2"},
+            ]
+        )
+        assert store.get_source_checkpoint("submissions_main", "cik:1")["raw_object_id"] == "obj-1"
+        assert store.get_source_checkpoint("submissions_main", "cik:2")["raw_object_id"] == "obj-2"
+
+    def test_upsert_bulk_overwrites_on_conflict(self, store: BookkeepingStore) -> None:
+        store.upsert_source_checkpoints_bulk(
+            [{"source_name": "s", "source_key": "k", "raw_object_id": "first"}]
+        )
+        store.upsert_source_checkpoints_bulk(
+            [{"source_name": "s", "source_key": "k", "raw_object_id": "second"}]
+        )
+        assert store.get_source_checkpoint("s", "k")["raw_object_id"] == "second"
+
+    def test_upsert_bulk_empty_input(self, store: BookkeepingStore) -> None:
+        store.upsert_source_checkpoints_bulk([])  # must not raise
+
+    def test_bulk_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        """Regression guard for the live 2026-09-04 finding (change-
+        propagation "diff processing design" follow-up): the original
+        get_source_checkpoint/upsert_source_checkpoint pair, called once per
+        CIK inside _apply_submission_snapshot_to_silver with no batching,
+        measured 2640.99s (44m01s) of pure round-trip latency for 8,699
+        CIKs where nothing had changed -- same shape as
+        claim_discovery_ciks'/seed_company_sync_state_bulk_if_missing's own
+        prior fixes, just a third, previously-unbatched pair."""
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_COMPANY_SYNC_STATE_BULK_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))  # 250 CIKs, chunk size 10 -> 25 chunks
+            store.upsert_source_checkpoints_bulk(
+                [
+                    {"source_name": "submissions_main", "source_key": f"cik:{cik}", "raw_object_id": "x"}
+                    for cik in ciks
+                ]
+            )
+            statements.clear()
+            result = store.get_source_checkpoints_bulk("submissions_main", ciks)
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert len(result) == 250
+        # 25 chunked SELECTs -- not 250 (one round trip per CIK, what the
+        # original get_source_checkpoint-per-call loop cost).
+        assert len(statements) <= 30, (
+            f"expected ~25 batched SELECTs (25 read chunks for 250 CIKs at "
+            f"chunk size 10), got {len(statements)} -- get_source_checkpoints_bulk "
+            "may have regressed to one round trip per CIK"
+        )
+        assert len(statements) < len(ciks)
+
 
 # -- sec_company_sync_state --------------------------------------------------
 
@@ -77,6 +158,71 @@ class TestCompanySyncState:
         store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
         row = store.get_company_sync_state(1)
         assert row["last_error_message"] is None
+
+    def test_get_states_bulk_returns_by_cik(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_state({"cik": 1, "tracking_status": "active"})
+        store.upsert_company_sync_state({"cik": 2, "tracking_status": "paused"})
+        result = store.get_company_sync_states_bulk([1, 2, 3])
+        assert set(result) == {1, 2}
+        assert result[1]["tracking_status"] == "active"
+        assert result[2]["tracking_status"] == "paused"
+
+    def test_get_states_bulk_empty_input(self, store: BookkeepingStore) -> None:
+        assert store.get_company_sync_states_bulk([]) == {}
+
+    def test_upsert_states_bulk_then_get(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_states_bulk(
+            [
+                {"cik": 1, "tracking_status": "active"},
+                {"cik": 2, "tracking_status": "paused"},
+            ]
+        )
+        assert store.get_company_sync_state(1)["tracking_status"] == "active"
+        assert store.get_company_sync_state(2)["tracking_status"] == "paused"
+
+    def test_upsert_states_bulk_coalesces_non_status_fields(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_states_bulk(
+            [{"cik": 1, "tracking_status": "active", "last_main_sha256": "abc"}]
+        )
+        # Same COALESCE contract as the single-row upsert_company_sync_state:
+        # an omitted field on a later upsert must not wipe the existing value.
+        store.upsert_company_sync_states_bulk([{"cik": 1, "tracking_status": "paused"}])
+        row = store.get_company_sync_state(1)
+        assert row["last_main_sha256"] == "abc"
+        assert row["tracking_status"] == "paused"
+
+    def test_upsert_states_bulk_empty_input(self, store: BookkeepingStore) -> None:
+        store.upsert_company_sync_states_bulk([])  # must not raise
+
+    def test_states_bulk_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        """Sibling regression guard to TestSourceCheckpoint's own bulk test
+        above -- same 2026-09-04 finding, the other half of the same
+        4-round-trip-per-CIK cost inside _apply_submission_snapshot_to_silver."""
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_COMPANY_SYNC_STATE_BULK_CHUNK_SIZE", 10)
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            ciks = list(range(1, 251))
+            store.upsert_company_sync_states_bulk(
+                [{"cik": cik, "tracking_status": "active"} for cik in ciks]
+            )
+            statements.clear()
+            result = store.get_company_sync_states_bulk(ciks)
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        assert len(result) == 250
+        assert len(statements) <= 30
+        assert len(statements) < len(ciks)
 
     def test_seed_bulk_new_ciks_get_bootstrap_pending(self, store: BookkeepingStore) -> None:
         n = store.seed_company_sync_state_bulk([1, 2, 3])

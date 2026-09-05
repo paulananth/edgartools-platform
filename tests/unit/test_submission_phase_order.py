@@ -30,8 +30,43 @@ class _CachedSubmissionDb:
     def upsert_company_sync_state(self, row: dict) -> None:
         self.company_states.append(row)
 
+    def get_company_sync_states_bulk(self, ciks):
+        return {cik: {"tracking_status": self._tracking_status} for cik in ciks}
+
+    def get_source_checkpoints_bulk(self, source_name, ciks):
+        sha = "sha-main" if source_name == "submissions_main" else "sha-page"
+        return {cik: {"last_sha256": sha} for cik in ciks}
+
+    def upsert_source_checkpoints_bulk(self, rows) -> None:
+        self.source_checkpoints.extend(rows)
+
+    def upsert_company_sync_states_bulk(self, rows) -> None:
+        self.company_states.extend(rows)
+
     def stage_submission(self, **kwargs):
         raise AssertionError("cached submissions should not restage silver")
+
+
+class _BulkNoOpBookkeeping:
+    """Minimal bookkeeping stub for tests that mock
+    _apply_submission_snapshot_to_silver entirely (a bare object() used to
+    suffice, since nothing touched bookkeeping directly) -- change-
+    propagation "diff processing design" follow-up added bulk prefetch/flush
+    calls directly in _run_submissions_bronze_then_silver itself, so a
+    bookkeeping stand-in now needs these 4 methods even when the per-
+    snapshot apply logic is fully mocked out."""
+
+    def get_company_sync_states_bulk(self, ciks):
+        return {}
+
+    def get_source_checkpoints_bulk(self, source_name, ciks):
+        return {}
+
+    def upsert_source_checkpoints_bulk(self, rows) -> None:
+        pass
+
+    def upsert_company_sync_states_bulk(self, rows) -> None:
+        pass
 
 
 class _ConfiguredFormDb:
@@ -104,7 +139,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=object(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="run-1",
                 ciks=[1001, 1002, 1003],
                 include_pagination=False,
@@ -161,7 +196,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=object(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="run-1",
                 ciks=[1001, 1002],
                 include_pagination=False,
@@ -229,7 +264,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=object(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="run-1",
                 ciks=[1001],
                 include_pagination=True,
@@ -290,7 +325,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=object(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 ciks=[1001],
                 include_pagination=False,
@@ -364,7 +399,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=db,
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 ciks=[1001],
                 include_pagination=False,
@@ -413,7 +448,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             ) as artifact_pipeline,
         ):
             warehouse_orchestrator._run_submissions_bronze_then_silver(
-                context=object(), db=object(), bookkeeping=object(), sync_run_id="release", ciks=[1001],
+                context=object(), db=object(), bookkeeping=_BulkNoOpBookkeeping(), sync_run_id="release", ciks=[1001],
                 include_pagination=True, fetch_date=date(2026, 4, 25), force=False,
                 load_mode="bootstrap_batch", artifact_policy="all_attachments",
                 parser_policy="configured_forms", release_mode=True,
@@ -467,7 +502,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_submissions_bronze_then_silver(
                 context=object(),
                 db=db,
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="release",
                 ciks=[1001],
                 include_pagination=True,
@@ -552,6 +587,8 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 load_mode="bootstrap_batch",
                 recent_limit=None,
                 now=date(2026, 4, 25),
+                existing_state=db.get_company_sync_state(1001),
+                main_checkpoint=db.get_source_checkpoint("submissions_main", "cik:1001"),
             )
 
         self.assertEqual(result["recent_accessions"], ["recent-1"])
@@ -609,7 +646,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         }
 
         with patch.object(warehouse_orchestrator, "_sync_mdm_tracking_status"):
-            warehouse_orchestrator._apply_submission_snapshot_to_silver(
+            result = warehouse_orchestrator._apply_submission_snapshot_to_silver(
                 db=db,
                 bookkeeping=db,
                 sync_run_id="run-1",
@@ -618,9 +655,15 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 load_mode="bootstrap_batch",
                 recent_limit=None,
                 now=date(2026, 4, 25),
+                existing_state=db.get_company_sync_state(1001),
+                main_checkpoint=db.get_source_checkpoint("submissions_main", "cik:1001"),
             )
 
-        self.assertEqual(db.company_states[-1]["tracking_status"], "deregistered")
+        # upsert_company_sync_state is no longer called directly (change-
+        # propagation "diff processing design" follow-up) -- the caller now
+        # bulk-flushes the returned row instead, so assert on the returned
+        # row rather than db.company_states.
+        self.assertEqual(result["company_sync_state_row"]["tracking_status"], "deregistered")
 
     def test_configured_form_artifact_pipeline_filters_to_parser_forms(self) -> None:
         calls: list[tuple[str, str]] = []
@@ -640,7 +683,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="run-1",
                 accession_numbers=["ownership-1", "generic-1", "adv-1", "proxy-1",
                                    "item-502", "ambiguous-8k", "earnings-8k", "13f-1",
@@ -677,7 +720,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 accession_numbers=["ownership-1", "proxy-1"],
                 accession_boundary={"ownership-1"},
@@ -711,7 +754,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=db,
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 accession_numbers=["ownership-1", "generic-1", "13f-1"],
                 accession_boundary={"ownership-1", "generic-1", "13f-1"},
@@ -759,7 +802,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=db,
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 accession_numbers=["daily-ownership"],
                 accession_boundary={"daily-ownership"},
@@ -780,7 +823,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "ownership-1"):
                 warehouse_orchestrator._run_configured_form_artifact_pipeline(
                     context=SimpleNamespace(identity="tester@example.com"),
-                    db=_ConfiguredFormDb(), bookkeeping=object(), sync_run_id="release",
+                    db=_ConfiguredFormDb(), bookkeeping=_BulkNoOpBookkeeping(), sync_run_id="release",
                     accession_numbers=["ownership-1"],
                     artifact_policy="all_attachments", parser_policy="configured_forms",
                     force=False, release_mode=True,
@@ -802,7 +845,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -835,7 +878,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -875,7 +918,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 accession_numbers=["13f-1"],
                 accession_boundary={"13f-1"},
@@ -919,7 +962,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 accession_numbers=["13f-1"],
                 accession_boundary={"13f-1"},
@@ -955,7 +998,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="daily-run",
                 accession_numbers=["ownership-1", "proxy-1"],
                 accession_boundary={"ownership-1", "proxy-1"},
@@ -1013,7 +1056,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="batch-run",
                 accession_numbers=accessions,
                 accession_boundary=set(accessions),
@@ -1069,7 +1112,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -1110,7 +1153,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
@@ -1132,7 +1175,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 warehouse_orchestrator._run_configured_form_artifact_pipeline(
                     context=SimpleNamespace(identity="tester@example.com"),
                     db=_ConfiguredFormDb(),
-                    bookkeeping=object(),
+                    bookkeeping=_BulkNoOpBookkeeping(),
                     sync_run_id="release",
                     accession_numbers=["13f-1"],
                     artifact_policy="all_attachments",
@@ -1155,7 +1198,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                     warehouse_orchestrator._run_configured_form_artifact_pipeline(
                         context=SimpleNamespace(identity="tester@example.com"),
                         db=_ConfiguredFormDb(),
-                        bookkeeping=object(),
+                        bookkeeping=_BulkNoOpBookkeeping(),
                         sync_run_id="release",
                         accession_numbers=["ownership-1"],
                         artifact_policy=artifact_policy,
@@ -1179,7 +1222,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
                 db=_ConfiguredFormDb(),
-                bookkeeping=object(),
+                bookkeeping=_BulkNoOpBookkeeping(),
                 sync_run_id="release",
                 accession_numbers=["proxy-1"],
                 artifact_policy="all_attachments",
@@ -1242,7 +1285,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "repair manifest"):
             warehouse_orchestrator._run_configured_form_artifact_pipeline(
                 context=SimpleNamespace(identity="tester@example.com"),
-                db=_ConfiguredFormDb(), bookkeeping=object(), sync_run_id="release",
+                db=_ConfiguredFormDb(), bookkeeping=_BulkNoOpBookkeeping(), sync_run_id="release",
                 accession_numbers=["ownership-1"],
                 artifact_policy="all_attachments", parser_policy="configured_forms",
                 force=True, release_mode=True,
