@@ -2293,6 +2293,125 @@ the correct one is whatever timezone the *business process* runs in, not
 UTC by default — UTC only felt safe here because the original fix's own
 tests never happened to run past 8pm ET.
 
+## daily_incremental per-CIK checkpoint round trips, unbatched regardless of diff outcome (fixed 2026-09-04)
+
+**Problem:** live during the same-day-reclaim investigation above, a
+production run showed `_apply_submission_snapshot_to_silver`
+(`warehouse_orchestrator.py`) paying 4 unbatched Postgres round trips
+**per CIK** — `get_company_sync_state`, `get_source_checkpoint`,
+`upsert_source_checkpoint`, `upsert_company_sync_state` — regardless of
+whether its own SHA256-based `all_same` diff found anything changed.
+Measured live: 2640.99s (44m1s) for 8,699 CIKs where every single one was
+an idempotent no-op.
+
+1. Symptom: `bronze_capture_completed`/`silver_apply_completed` took
+   ~44 minutes even though `rows_written=0` for all 8,699 CIKs.
+2. Why does a confirmed-unchanged CIK still cost 4 round trips? The
+   diff (`all_same`) only gates the row **write**
+   (`db.stage_submission`) — the bookkeeping calls run unconditionally
+   before the diff is even checked.
+3. Why per-CIK instead of batched? `_apply_submission_snapshot_to_silver`
+   is called once per snapshot inside `_run_submissions_bronze_then_silver`'s
+   loop, and each call independently fetched/wrote its own two rows.
+4. Why wasn't this caught earlier? Same root shape as three other bugs
+   already fixed in this exact file — `claim_discovery_ciks`'s original
+   N+1 reclaim check, `seed_company_sync_state_bulk_if_missing`, and
+   `demote_company_sync_state_bulk` (confirmed via `git log --oneline
+   --follow -- edgar_warehouse/bookkeeping/store.py`) — the bulk-batching
+   fix pattern existed twice already in this file but was never ported to
+   this call site when it was written.
+5. **Root cause:** no caller in this path ever bulk-prefetched the two
+   lookup tables or bulk-flushed the two write tables — every consumer of
+   `BookkeepingStore` for this specific checkpoint/sync-state pair assumed
+   one CIK, one round trip, one dedup diff, all coupled together.
+
+**Fix:** four new bulk methods on `BookkeepingStore`
+(`get_company_sync_states_bulk`, `get_source_checkpoints_bulk`,
+`upsert_source_checkpoints_bulk`, `upsert_company_sync_states_bulk`),
+chunked via the existing `_chunks()`/1000-row pattern.
+`_apply_submission_snapshot_to_silver`'s signature changed to accept
+pre-fetched `existing_state`/`main_checkpoint` instead of fetching them
+itself, and it now returns the two rows it would have written
+(`source_checkpoint_row`, `company_sync_state_row`) instead of writing
+them directly — confirmed via grep this function has exactly one call
+site. `_run_submissions_bronze_then_silver` now bulk-prefetches both
+dicts once for the whole CIK list before the per-snapshot loop, collects
+the returned rows across the loop, dedupes by natural key (last-write-wins
+— Postgres rejects a multi-row `ON CONFLICT DO UPDATE` that touches the
+same key twice), and bulk-flushes both once after the loop. Pagination
+checkpoints (only used when `include_pagination=True`, which
+`daily_incremental` never sets) are deliberately left un-batched — file
+names aren't known until each snapshot's manifest is read, so they can't
+be prefetched.
+
+Tests: 12 new in `tests/bookkeeping/test_store.py` (6 per table pair,
+including a round-trip-count regression test mirroring the existing
+`test_seed_if_missing_batches_round_trips_not_one_per_cik`/
+`test_demote_bulk_batches_round_trips_not_one_per_cik` precedents).
+`tests/unit/test_submission_phase_order.py` updated for the new required
+kwargs and return-dict keys. Full repo suite green: 3023 passed, 8 failed
+(the same pre-existing, unrelated Postgres-integration gaps noted above),
+6 skipped. `/gof-refactor-reviewer` was consulted retroactively (should
+have run before editing, per this file's own hard rule — missed because
+the `/investigate` root-cause pass flowed straight into implementation);
+verdict was that the extraction is justified given this is the fourth
+occurrence of an already-twice-fixed bug shape in this same file, and no
+new durability/crash-safety risk is introduced (both old and new code
+defer these writes to the same pre-existing `bookkeeping.commit()` call
+site, well after this loop returns).
+
+**Not yet deployed as of this entry** — the prod images running
+`daily_incremental` predate this fix.
+
+## mdm_pipeline_lease migration never applied after PR #537 deploy (fixed live 2026-09-05)
+
+**Problem:** immediately after deploying fresh prod images containing PR
+#537's MDM Reconciliation Backstop work, a live `daily_incremental`
+execution's `RunMdmChain` failed 2 retries in a row (~9-10min each) at its
+`Mastering` sub-state, exhausting the child Step Functions execution's
+retries before the outer daily_incremental run had a chance to progress.
+
+1. Symptom: `psycopg2.errors.UndefinedTable: relation "mdm_pipeline_lease"
+   does not exist`, raised from inside `mdm mastering`'s own startup path.
+2. Why does a table not exist when the deployed image's code references
+   it? `mdm_pipeline_lease` is added by
+   `edgar_warehouse/mdm/migrations/020_mdm_pipeline_lease.sql`
+   (PR #537's own lease-table migration), correctly committed and
+   correctly registered in `migrations/runtime.py`.
+3. Why wasn't it applied? The migration file existing and being
+   registered only means `mdm migrate` *would* apply it — nothing runs
+   `mdm migrate` automatically after a deploy; it is always a separate,
+   manual invocation. The deploy in this session (image rebuild +
+   `deploy-aws-application.sh --enable-mdm`) never included it.
+4. Why wasn't this caught before the live run hit it? Confirmed the
+   failing ECS task's image digest matched the just-deployed image exactly
+   — this was not a stale-image issue, and not the already-fixed
+   `sec_reconcile_finding` gap (that code path is gone). It was a fresh
+   instance of the exact same class of gap this file already documents
+   multiple times (migration 011, the Ticket 20 Source Family Registry
+   entry, the original MDM Snowflake mirror schema entry): a real,
+   committed, correctly-registered migration that simply never got run
+   against the live database after being merged.
+5. **Root cause:** no forcing function ties "a new migration file merged
+   to main" to "an `mdm migrate` execution against prod" — the same root
+   cause already named in this file's other migration-gap entries, still
+   unaddressed as a systemic fix (only fixed reactively, incident by
+   incident, each time it recurs).
+
+**Fix (live, no code change):** ran `mdm migrate` via the current,
+correct `edgartools-prod-mdm-utility` state machine (`{"mode":
+"mdm_migrate"}`) — confirmed SUCCEEDED, table created. The next
+`RunMdmChain` retry got past `Mastering` cleanly and the same
+`daily_incremental` execution went on to succeed end-to-end, including
+`FactPublishtoGold`. Cost: ~25 minutes of wasted retries/backoff before
+the gap was found and fixed.
+
+**Lesson, repeated from the entries this incident echoes:** treat every
+future prod deploy that includes new migration files as incomplete until
+`mdm migrate` has been explicitly re-run against the target environment —
+"the image is current" and "the migration was applied" are two separate
+facts, and only one of them is guaranteed by a deploy script.
+
 ## full-reconcile decommissioned entirely (2026-09-04)
 
 **`full-reconcile`** (SEC-drift detection: compare live SEC submissions
@@ -2417,7 +2536,8 @@ Stage 3 — Gold refresh (single ECS task)
 ```
 
 (Elsewhere in this repo, `daily_incremental`'s own Company Identity
-capture stage -- a different, sibling state named `ResolveCompanyIdentityBounded`
+capture stage -- a different, sibling state named `CaptureCompanyIdentityBatches`
+(renamed from `ResolveCompanyIdentityBounded` for a business-readable name)
 in `write_warehouse_mdm_gold_definition` -- is unrelated to `load_history`'s
 Stage 0 above; it runs *before* bronze/silver capture in that pipeline,
 not as a seeding step. `bootstrap` shared this same state until

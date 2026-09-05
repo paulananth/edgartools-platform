@@ -230,19 +230,19 @@ def test_daily_incremental_default_path_reaches_run_warehouse_task_via_bounded_s
 ) -> None:
     """The default (no refresh_mode input) path no longer runs the
     full-universe ComputeWindows/Stage0CompanyIdentity pair -- it runs the
-    bounded FindCompaniesWithNewFilings/ResolveCompanyIdentityBounded pair
+    bounded FindCompaniesWithNewFilings/CaptureCompanyIdentityBatches pair
     instead (ticket 45/49). Backstop uses the same explicit-CIK stage with a
     complete company-eligible input."""
     order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
     assert "FindCompaniesWithNewFilings" in order
-    assert "ResolveCompanyIdentityBounded" in order
+    assert "CaptureCompanyIdentityBatches" in order
     assert "CaptureAndVerifyNewFilings" in order
-    assert order.index("FindCompaniesWithNewFilings") < order.index("ResolveCompanyIdentityBounded")
-    assert order.index("ResolveCompanyIdentityBounded") < order.index("CaptureAndVerifyNewFilings")
+    assert order.index("FindCompaniesWithNewFilings") < order.index("CaptureCompanyIdentityBatches")
+    assert order.index("CaptureCompanyIdentityBatches") < order.index("CaptureAndVerifyNewFilings")
 
 
 def test_daily_incremental_stage0_company_identity_command_shape(daily_definition: dict) -> None:
-    cmd = _command_of(daily_definition, "ResolveCompanyIdentityBounded")
+    cmd = _command_of(daily_definition, "CaptureCompanyIdentityBatches")
     assert "'bootstrap-fundamentals'" in cmd
     assert "'--mode', 'company-identity'" in cmd
     assert "'--cik-list'" in cmd
@@ -257,8 +257,8 @@ def test_daily_incremental_stage0_company_identity_is_strict_not_lenient(
     previously wedged sec_fetch_active for 16h instead of releasing it),
     but strictness is preserved -- the Catch releases the lease and then
     still fails the execution (SecFetchTaskFailed, a Fail state), it does
-    not route to ReduceIdentityRefresh or any other "proceed anyway" state."""
-    state = daily_definition["States"]["ResolveCompanyIdentityBounded"]
+    not route to PublishCompanyIdentityUpdates or any other "proceed anyway" state."""
+    state = daily_definition["States"]["CaptureCompanyIdentityBatches"]
     assert state["Type"] == "Map"
     assert state["MaxConcurrency"] == 1
     assert state["ToleratedFailurePercentage"] == 0
@@ -275,7 +275,7 @@ def test_daily_incremental_stage0_company_identity_uses_distributed_mode(
 ) -> None:
     """AWS Step Functions rejects ItemReader on an INLINE Map -- must match
     load_history's already-working DISTRIBUTED pattern (fix-pipelines 06-03)."""
-    state = daily_definition["States"]["ResolveCompanyIdentityBounded"]
+    state = daily_definition["States"]["CaptureCompanyIdentityBatches"]
     assert "ItemReader" in state
     assert state["ItemProcessor"]["ProcessorConfig"]["Mode"] == "DISTRIBUTED"
     assert state["ItemProcessor"]["ProcessorConfig"]["ExecutionType"] == "STANDARD"

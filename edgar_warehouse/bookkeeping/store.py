@@ -894,6 +894,88 @@ class BookkeepingStore:
         row = self._session.get(SecSourceCheckpoint, (source_name, source_key))
         return self._to_dict(row) if row else None
 
+    def get_source_checkpoints_bulk(
+        self, source_name: str, ciks: list[int]
+    ) -> dict[int, dict[str, Any]]:
+        """Bulk read of sec_source_checkpoint rows keyed 'cik:{cik}' (the
+        submissions_main convention -- pagination checkpoints use a
+        'file:{name}' key not known until each snapshot's manifest is read,
+        so they stay on the single-row get_source_checkpoint path above;
+        daily_incremental never uses pagination, so this doesn't matter for
+        the caller this batches). Sibling of get_company_sync_states_bulk
+        below and _DISCOVERY_CLAIM_CHUNK_SIZE/_COMPANY_SYNC_STATE_BULK_CHUNK_SIZE's
+        same fix shape -- see upsert_source_checkpoints_bulk's docstring for
+        the full root-cause writeup (change-propagation, daily_incremental
+        diff-processing follow-up).
+        """
+        deduped = list(dict.fromkeys(int(cik) for cik in ciks))
+        if not deduped:
+            return {}
+        cik_by_source_key = {f"cik:{cik}": cik for cik in deduped}
+        result: dict[int, dict[str, Any]] = {}
+        for chunk in self._chunks(list(cik_by_source_key), self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            stmt = select(SecSourceCheckpoint).where(
+                SecSourceCheckpoint.source_name == source_name,
+                SecSourceCheckpoint.source_key.in_(chunk),
+            )
+            for row in self._session.execute(stmt).scalars().all():
+                result[cik_by_source_key[row.source_key]] = self._to_dict(row)
+        return result
+
+    # release-readiness/change-propagation "diff processing design" follow-up
+    # (found live 2026-09-04, same daily_incremental investigation that fixed
+    # claim_discovery_ciks and seed_company_sync_state_bulk_if_missing above):
+    # _apply_submission_snapshot_to_silver (warehouse_orchestrator.py) paid 4
+    # unbatched Postgres round trips PER CIK -- get_company_sync_state,
+    # get_source_checkpoint, upsert_source_checkpoint, upsert_company_sync_state
+    # -- regardless of whether the SHA256 diff found anything changed. At
+    # daily_incremental's real ~8,699-CIK scale this measured 2640.99s
+    # (44m01s) of pure round-trip latency for a run that wrote zero new rows.
+    # Same "N round trips per row, no batching" shape as this file's other
+    # entries, just newly found here. Batches the two READS (this method plus
+    # get_company_sync_states_bulk below); the two WRITES batch via
+    # upsert_source_checkpoints_bulk/upsert_company_sync_states_bulk further
+    # below. The caller (_run_submissions_bronze_then_silver) now prefetches
+    # both dicts once for the whole CIK list before its per-snapshot loop,
+    # and flushes both bulk upserts once after it, instead of 4 calls inside
+    # the loop.
+    def upsert_source_checkpoints_bulk(self, rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+        insert_factory = self._insert_factory()
+        for chunk in self._chunks(rows, self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            values = [
+                {
+                    "source_name": row["source_name"],
+                    "source_key": row["source_key"],
+                    "raw_object_id": row.get("raw_object_id"),
+                    "last_success_at": row.get("last_success_at"),
+                    "last_sha256": row.get("last_sha256"),
+                    "last_etag": row.get("last_etag"),
+                    "last_modified_at": row.get("last_modified_at"),
+                    "last_acceptance_datetime_seen": row.get("last_acceptance_datetime_seen"),
+                    "last_accession_number_seen": row.get("last_accession_number_seen"),
+                    "bronze_path": row.get("bronze_path"),
+                }
+                for row in chunk
+            ]
+            stmt = insert_factory(SecSourceCheckpoint).values(values)
+            excluded = stmt.excluded
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[SecSourceCheckpoint.source_name, SecSourceCheckpoint.source_key],
+                set_={
+                    "raw_object_id": excluded.raw_object_id,
+                    "last_success_at": excluded.last_success_at,
+                    "last_sha256": excluded.last_sha256,
+                    "last_etag": excluded.last_etag,
+                    "last_modified_at": excluded.last_modified_at,
+                    "last_acceptance_datetime_seen": excluded.last_acceptance_datetime_seen,
+                    "last_accession_number_seen": excluded.last_accession_number_seen,
+                    "bronze_path": excluded.bronze_path,
+                },
+            )
+            self._session.execute(stmt)
+
     # -- sec_company_sync_state --------------------------------------------------
 
     def upsert_company_sync_state(self, row: dict[str, Any]) -> None:
@@ -954,9 +1036,87 @@ class BookkeepingStore:
         )
         self._session.execute(stmt)
 
+    # See upsert_source_checkpoints_bulk's docstring above for the full
+    # root-cause writeup this method is half of.
+    def upsert_company_sync_states_bulk(self, rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+        insert_factory = self._insert_factory()
+        for chunk in self._chunks(rows, self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            values = [
+                {
+                    "cik": row["cik"],
+                    "tracking_status": row["tracking_status"],
+                    "bootstrap_completed_at": row.get("bootstrap_completed_at"),
+                    "last_main_sync_at": row.get("last_main_sync_at"),
+                    "last_main_raw_object_id": row.get("last_main_raw_object_id"),
+                    "last_main_sha256": row.get("last_main_sha256"),
+                    "latest_filing_date_seen": self._as_date(row.get("latest_filing_date_seen")),
+                    "latest_acceptance_datetime_seen": row.get("latest_acceptance_datetime_seen"),
+                    "pagination_files_expected": row.get("pagination_files_expected"),
+                    "pagination_files_loaded": row.get("pagination_files_loaded"),
+                    "pagination_completed_at": row.get("pagination_completed_at"),
+                    "next_sync_after": row.get("next_sync_after"),
+                    "last_error_message": row.get("last_error_message"),
+                }
+                for row in chunk
+            ]
+            stmt = insert_factory(SecCompanySyncState).values(values)
+            excluded = stmt.excluded
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[SecCompanySyncState.cik],
+                set_={
+                    "tracking_status": excluded.tracking_status,
+                    "bootstrap_completed_at": func.coalesce(
+                        excluded.bootstrap_completed_at, SecCompanySyncState.bootstrap_completed_at
+                    ),
+                    "last_main_sync_at": func.coalesce(
+                        excluded.last_main_sync_at, SecCompanySyncState.last_main_sync_at
+                    ),
+                    "last_main_raw_object_id": func.coalesce(
+                        excluded.last_main_raw_object_id, SecCompanySyncState.last_main_raw_object_id
+                    ),
+                    "last_main_sha256": func.coalesce(
+                        excluded.last_main_sha256, SecCompanySyncState.last_main_sha256
+                    ),
+                    "latest_filing_date_seen": func.coalesce(
+                        excluded.latest_filing_date_seen, SecCompanySyncState.latest_filing_date_seen
+                    ),
+                    "latest_acceptance_datetime_seen": func.coalesce(
+                        excluded.latest_acceptance_datetime_seen,
+                        SecCompanySyncState.latest_acceptance_datetime_seen,
+                    ),
+                    "pagination_files_expected": func.coalesce(
+                        excluded.pagination_files_expected, SecCompanySyncState.pagination_files_expected
+                    ),
+                    "pagination_files_loaded": func.coalesce(
+                        excluded.pagination_files_loaded, SecCompanySyncState.pagination_files_loaded
+                    ),
+                    "pagination_completed_at": func.coalesce(
+                        excluded.pagination_completed_at, SecCompanySyncState.pagination_completed_at
+                    ),
+                    "next_sync_after": func.coalesce(
+                        excluded.next_sync_after, SecCompanySyncState.next_sync_after
+                    ),
+                    "last_error_message": excluded.last_error_message,
+                },
+            )
+            self._session.execute(stmt)
+
     def get_company_sync_state(self, cik: int) -> Optional[dict[str, Any]]:
         row = self._session.get(SecCompanySyncState, cik)
         return self._to_dict(row) if row else None
+
+    def get_company_sync_states_bulk(self, ciks: list[int]) -> dict[int, dict[str, Any]]:
+        deduped = list(dict.fromkeys(int(cik) for cik in ciks))
+        if not deduped:
+            return {}
+        result: dict[int, dict[str, Any]] = {}
+        for chunk in self._chunks(deduped, self._COMPANY_SYNC_STATE_BULK_CHUNK_SIZE):
+            stmt = select(SecCompanySyncState).where(SecCompanySyncState.cik.in_(chunk))
+            for row in self._session.execute(stmt).scalars().all():
+                result[row.cik] = self._to_dict(row)
+        return result
 
     def seed_company_sync_state_bulk(self, ciks: list[int]) -> int:
         deduped = list(dict.fromkeys(int(cik) for cik in ciks))

@@ -8,7 +8,7 @@ tests/architecture/test_gold_affecting_commands_task_sizing.py) and asserts:
 
 - daily_incremental's default path (no refresh_mode input, or refresh_mode
   != "backstop") routes through the new bounded FindCompaniesWithNewFilings
-  -> ResolveCompanyIdentityBounded stages, NOT the full-universe ComputeWindows
+  -> CaptureCompanyIdentityBatches stages, NOT the full-universe ComputeWindows
   path that took 10h16m alone on the first prod execution (ticket 45's
   evidence).
 - refresh_mode="backstop" routes through the same explicit-CIK batch Map as
@@ -133,11 +133,11 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
         "the generated daily refresh command must contain exactly one intrinsic "
         "constructor; duplicated fragments make the ECS override invalid"
     )
-    assert compute_window["Next"] == "ResolveCompanyIdentityBounded"
+    assert compute_window["Next"] == "CaptureCompanyIdentityBatches"
 
-    bounded_stage0 = states["ResolveCompanyIdentityBounded"]
+    bounded_stage0 = states["CaptureCompanyIdentityBatches"]
     assert bounded_stage0["Type"] == "Map"
-    assert bounded_stage0["Next"] == "ReduceIdentityRefresh"
+    assert bounded_stage0["Next"] == "PublishCompanyIdentityUpdates"
     item_reader_key = bounded_stage0["ItemReader"]["Parameters"]["Key.$"]
     assert "cik_batches.jsonl" in item_reader_key, (
         "bounded Stage0 must read the cik_list batches file (seed-universe's batch shape), "
@@ -158,7 +158,7 @@ def test_daily_incremental_default_path_is_bounded_not_full_universe(daily_incre
         "identity_refresh_run_id.$": "$$.Execution.Name",
     }
 
-    reducer = states["ReduceIdentityRefresh"]
+    reducer = states["PublishCompanyIdentityUpdates"]
     reducer_cmd = reducer["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "reduce-identity-refresh" in reducer_cmd
     assert reducer["Next"] == "CaptureAndVerifyNewFilings"
@@ -170,7 +170,7 @@ def test_reduce_identity_refresh_runs_on_the_large_task_definition(daily_increme
     protected table. Must run on large (8192MB), matching the
     gold-build-memory-reliability precedent's CaptureAndVerifyNewFilings move --
     confirmed to fail against the pre-fix wh_medium_arn wiring."""
-    reducer = daily_incremental_definition["States"]["ReduceIdentityRefresh"]
+    reducer = daily_incremental_definition["States"]["PublishCompanyIdentityUpdates"]
     assert reducer["Parameters"]["TaskDefinition"] == _FAKE_LARGE_ARN
 
 
@@ -180,14 +180,14 @@ def test_release_lease_runs_on_the_large_task_definition(daily_incremental_defin
     from marking an otherwise-successful gold build FAILED -- it does not
     make the release succeed. Confirmed live in prod (2026-08-06): a real
     run's ReleaseLease task OOM-killed (exit 137) on medium (4096MB) on
-    all 4 attempts, identically to ticket 83's ReduceIdentityRefresh
+    all 4 attempts, identically to ticket 83's PublishCompanyIdentityUpdates
     failure and for the same reason -- it hydrates the full canonical
     silver.duckdb (1.27GB and growing) for what is otherwise a single-row
-    UPDATE, right after ReduceIdentityRefresh/GoldRefresh just made
+    UPDATE, right after PublishCompanyIdentityUpdates/GoldRefresh just made
     canonical heavier within the same run. Every retry hit the Catch and
     left daily_identity_refresh permanently held with released_at NULL,
     silently -- the execution still reported SUCCEEDED. Must run on large
-    (8192MB), the same fix ticket 83 already applied to ReduceIdentityRefresh
+    (8192MB), the same fix ticket 83 already applied to PublishCompanyIdentityUpdates
     immediately above it -- confirmed to fail against the pre-fix
     wh_medium_arn wiring."""
     release_lease = daily_incremental_definition["States"]["ReleaseLease"]
@@ -218,7 +218,7 @@ def test_daily_incremental_backstop_uses_complete_company_eligible_universe(
     ]
     assert "compute-identity-refresh-window" in cmd
     assert "'--mode', 'backstop'" in cmd
-    assert compute_backstop["Next"] == "ResolveCompanyIdentityBounded"
+    assert compute_backstop["Next"] == "CaptureCompanyIdentityBatches"
 
     assert "ComputeWindows" not in states
     assert "Stage0CompanyIdentity" not in states
@@ -229,12 +229,12 @@ def test_daily_incremental_both_modes_share_explicit_cik_stage0(
 ) -> None:
     states = daily_incremental_definition["States"]
     assert states["FindCompaniesWithNewFilings"]["Next"] == (
-        "ResolveCompanyIdentityBounded"
+        "CaptureCompanyIdentityBatches"
     )
     assert states["ComputeIdentityBackstopUniverse"]["Next"] == (
-        "ResolveCompanyIdentityBounded"
+        "CaptureCompanyIdentityBatches"
     )
-    assert states["ResolveCompanyIdentityBounded"]["Next"] == "ReduceIdentityRefresh"
+    assert states["CaptureCompanyIdentityBatches"]["Next"] == "PublishCompanyIdentityUpdates"
 
 
 # ---------------------------------------------------------------------------
@@ -473,8 +473,8 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
     daily_incremental_definition,
 ) -> None:
     """release-readiness ticket 86: FindCompaniesWithNewFilings/
-    ComputeIdentityBackstopUniverse/ResolveCompanyIdentityBounded/
-    ReduceIdentityRefresh/CaptureAndVerifyNewFilings had no Catch at all -- a real
+    ComputeIdentityBackstopUniverse/CaptureCompanyIdentityBatches/
+    PublishCompanyIdentityUpdates/CaptureAndVerifyNewFilings had no Catch at all -- a real
     failure in any of them wedged sec_fetch_active for the full 16h
     stale-reclaim window. Deliberately excludes FetchAdvBulk/
     IngestFirmRosterSources etc., which already had their own Catch
@@ -486,8 +486,8 @@ def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
     for previously_uncaught_state in (
         "FindCompaniesWithNewFilings",
         "ComputeIdentityBackstopUniverse",
-        "ResolveCompanyIdentityBounded",
-        "ReduceIdentityRefresh",
+        "CaptureCompanyIdentityBatches",
+        "PublishCompanyIdentityUpdates",
         "CaptureAndVerifyNewFilings",
     ):
         assert states[previously_uncaught_state]["Catch"] == expected_catch
