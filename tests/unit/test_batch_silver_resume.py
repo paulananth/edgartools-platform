@@ -150,7 +150,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
     """End-to-end through warehouse_orchestrator._capture_bronze_raw's
     "compute-remaining-batches" branch -- exercises the real
     context.bronze_root.write_text/default_path_resolver() path convention
-    both SeedFromBronze and Clean and Merge Filings' ItemReader actually use, not just
+    both Initialize From Bronze and Clean and Merge Filings' ItemReader actually use, not just
     batch_silver_resume.py's own functions in isolation. This is what
     surfaced a real double-prefix bug during implementation (resume_prefix()
     originally re-added "warehouse/bronze/" on top of context.bronze_root.root,
@@ -183,7 +183,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
         from edgar_warehouse.application import warehouse_orchestrator as wo
 
         context = self._make_context(tmp_path)
-        # Seed the original run's manifest the same way SeedFromBronze
+        # Seed the original run's manifest the same way Initialize From Bronze
         # really does: context.bronze_root.write_text(relative_path, ...).
         original_rel = default_path_resolver().cik_universe_batches_path("original-run")
         context.bronze_root.write_text(original_rel, '{"cik_list": "1,2"}\n{"cik_list": "3"}\n')

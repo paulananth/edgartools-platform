@@ -59,7 +59,7 @@ def resume_prefix(run_id: str) -> str:
     the same way _write_cik_universe_batches does via
     context.bronze_root.write_text(relative_path, ...). A resumed run's
     ComputeRemainingBatches step reads from the same location the original
-    run's SeedFromBronze wrote to.
+    run's Initialize From Bronze wrote to.
     """
     return f"reference/cik_universe/runs/{run_id}"
 

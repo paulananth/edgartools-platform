@@ -4865,11 +4865,11 @@ graph_limit = str(mdm_graph_limit)
 # from a silver-only reprocess's shape.
 batch_size_check = {
     "Type": "Choice",
-    "Comment": "Route to SeedFromBronze directly when caller supplied batch_size; otherwise inject the default.",
+    "Comment": "Route to Initialize From Bronze directly when caller supplied batch_size; otherwise inject the default.",
     "Choices": [{
         "Variable": "$.batch_size",
         "IsPresent": True,
-        "Next": "SeedFromBronze",
+        "Next": "Initialize From Bronze",
     }],
     "Default": "BatchSizeDefault",
 }
@@ -4923,7 +4923,7 @@ resume_from_run_id_check = {
     "Comment": (
         "Route to ComputeRemainingBatches (reuse the ORIGINAL run's frozen "
         "cik_batches.jsonl, filtered to not-yet-done batches) instead of "
-        "SeedFromBronze (which would re-derive candidates from live bronze) "
+        "Initialize From Bronze (which would re-derive candidates from live bronze) "
         "when resuming a prior Clean and Merge Filings run."
     ),
     "Choices": [{
@@ -4965,7 +4965,7 @@ batch_size_default = {
     "Comment": "Inject default batch_size=100 when caller passed {} or omitted the key.",
     "Result": 100,
     "ResultPath": "$.batch_size",
-    "Next": "SeedFromBronze",
+    "Next": "Initialize From Bronze",
 }
 
 seed_from_bronze = ecs_state(wh_medium_arn,
@@ -5248,7 +5248,7 @@ definition = {
         "ComputeRemainingBatches": compute_remaining_batches,
         "BatchSizeCheck": batch_size_check,
         "BatchSizeDefault": batch_size_default,
-        "SeedFromBronze": seed_from_bronze,
+        "Initialize From Bronze": seed_from_bronze,
         "Clean and Merge Filings":  batch_map,
         "Mastering":       mdm_run,
         "Infer Relationships":  mdm_backfill,

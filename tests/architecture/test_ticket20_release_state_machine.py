@@ -173,8 +173,8 @@ def test_seed_from_bronze_and_compute_remaining_batches_preserve_resume_from_run
     Clean and Merge Filings' ItemSelector references "$.resume_from_run_id" directly
     (a JSONPath reference, not a Choice IsPresent check -- see
     ResumeFromRunIdPresenceCheck/Default above it in the state machine,
-    which guarantee the key exists by the time either SeedFromBronze or
-    ComputeRemainingBatches runs). ecs_state()'s default ResultPath
+    which guarantee the key exists by the time either Initialize From Bronze
+    or ComputeRemainingBatches runs). ecs_state()'s default ResultPath
     (omitted, meaning "$") REPLACES the entire state input with the ECS
     task's own runTask.sync output on both of these paths, discarding
     resume_from_run_id before Clean and Merge Filings ever sees it. A real
@@ -190,5 +190,5 @@ def test_seed_from_bronze_and_compute_remaining_batches_preserve_resume_from_run
     definition = _definition(tmp_path)
     states = definition["States"]
 
-    assert states["SeedFromBronze"]["ResultPath"] is None
+    assert states["Initialize From Bronze"]["ResultPath"] is None
     assert states["ComputeRemainingBatches"]["ResultPath"] is None

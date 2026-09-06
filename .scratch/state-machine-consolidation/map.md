@@ -75,6 +75,8 @@ split: this map decides, `release-readiness` tickets implement.
 
 - [Delete the orphaned edgartools-prod-mdm-gold state machine](issues/12-delete-orphaned-mdm-gold-state-machine.md) — Mechanical cleanup, resolved 2026-09-06: rollback snapshot captured, zero executions ever reconfirmed fresh, zero live code references reconfirmed, deleted live in prod. Closes the orphan Ticket 09 flagged out of its own scope.
 
+- [Rename SeedFromBronze state](issues/13-rename-seedfrombronze-state.md) — Renamed to "Initialize From Bronze" (user-confirmed), closing the last internal-state-name gap left over from the earlier BatchSilver/GoldRefresh business-name rename. Takes effect on the next ordinary redeploy of `one_click_data_refresh` -- no new AWS object needed.
+
 ## Not yet specified
 
 - Whether ticket 84/86's `sec_fetch_active` cross-command lease wiring
