@@ -13,7 +13,10 @@ class RuntimeImportTests(unittest.TestCase):
         self.assertTrue(callable(runtime.run_command))
         self.assertTrue(callable(runtime.run_seed_universe_command))
 
-    def test_silver_and_gold_shims_import_and_reexport_expected_symbols(self) -> None:
+    def test_silver_shim_imports_and_reexports_expected_symbols(self) -> None:
+        # edgar_warehouse.gold, the sibling re-export shim this test used to
+        # also cover, no longer exists -- see test_gold_shim_was_deleted in
+        # tests/architecture/test_runtime_shim.py.
         fake_duckdb = types.ModuleType("duckdb")
 
         fake_pyarrow = types.ModuleType("pyarrow")
@@ -50,19 +53,12 @@ class RuntimeImportTests(unittest.TestCase):
             for module_name in [
                 "edgar_warehouse.silver_store",
                 "edgar_warehouse.silver",
-                "edgar_warehouse.serving.source_dimensional_export",
-                "edgar_warehouse.serving.targets.snowflake",
-                "edgar_warehouse.gold",
             ]:
                 sys.modules.pop(module_name, None)
 
             silver = importlib.import_module("edgar_warehouse.silver")
-            gold = importlib.import_module("edgar_warehouse.gold")
 
         self.assertTrue(hasattr(silver, "SilverDatabase"))
-        self.assertTrue(callable(gold.build_source_export))
-        self.assertTrue(callable(gold.write_source_dimensional_export_to_serving))
-        self.assertTrue(callable(gold.write_source_dimensional_export_to_snowflake))
 
     def test_command_registry_contains_all_cli_commands(self) -> None:
         cli = importlib.import_module("edgar_warehouse.cli")

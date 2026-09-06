@@ -55,6 +55,19 @@ _DIRECT_GOLD_SILVER_TABLES = {
     "fact_accounting_flag": "sec_accounting_flag",
 }
 
+# Each of these dbt gold models ref()s silver directly, with no local
+# DuckDB builder producing it -- the only way to check "gold" is a live
+# query against the real EDGARTOOLS_GOLD Snowflake table. Names confirmed
+# against infra/snowflake/dbt/edgartools_gold/models/gold/*.sql.
+_GOLD_TABLE_SNOWFLAKE_NAMES = {
+    "sec_financial_fact": "FINANCIAL_FACTS",
+    "sec_thirteenf_holding": "INSTITUTIONAL_HOLDINGS",
+    "sec_financial_derived": "FINANCIAL_DERIVED",
+    "fact_earnings_release": "EARNINGS_RELEASES",
+    "fact_executive_record": "EXECUTIVE_RECORDS",
+    "fact_accounting_flag": "ACCOUNTING_FLAGS",
+}
+
 
 def _bookkeeping_store() -> Any:
     from edgar_warehouse.bookkeeping.database import get_engine, get_session
@@ -224,48 +237,59 @@ def _check_gold_vs_silver(
     table_counts: dict[str, int],
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    from edgar_warehouse.serving.source_dimensional_export import build_source_export
+    """Compare each direct-passthrough gold table's live row count against
+    its silver source's row count.
+
+    These dbt gold models ref() silver directly, with no local DuckDB
+    builder producing them, so the only way to check "gold" is a live
+    Snowflake query, not a local build (same connection pattern as
+    gold-verify-live's SnowflakeConnectionSettings.from_env() usage).
+    """
+    from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
 
     try:
-        gold_tables = build_source_export(db)
+        connection = SnowflakeConnectionSettings.from_env().connect()
     except Exception as exc:
-        finding = {"type": "gold_build_error", "error": str(exc)}
+        finding = {"type": "gold_connection_error", "error": str(exc)}
         findings.append(finding)
         return {"status": "failed", "tables": {}, "error": str(exc)}
 
     tables: dict[str, dict[str, Any]] = {}
-    for gold_table, silver_table in _DIRECT_GOLD_SILVER_TABLES.items():
-        if gold_table not in gold_tables:
+    try:
+        for gold_table, silver_table in _DIRECT_GOLD_SILVER_TABLES.items():
+            snowflake_table = _GOLD_TABLE_SNOWFLAKE_NAMES[gold_table]
+            try:
+                gold_rows = _fetch_gold_row_count(connection, snowflake_table)
+            except Exception as exc:
+                tables[gold_table] = {
+                    "silver_table": silver_table,
+                    "gold_table": gold_table,
+                    "status": "skipped",
+                    "reason": "gold_table_query_error",
+                    "error": str(exc),
+                }
+                continue
+            silver_rows = table_counts.get(silver_table, _count_rows(db, silver_table))
+            status = "ok" if silver_rows == gold_rows else "failed"
             tables[gold_table] = {
                 "silver_table": silver_table,
                 "gold_table": gold_table,
-                "status": "skipped",
-                "reason": "gold_table_missing",
+                "silver_rows": silver_rows,
+                "gold_rows": gold_rows,
+                "status": status,
             }
-            continue
-        silver_rows = table_counts.get(silver_table, _count_rows(db, silver_table))
-        gold_result = gold_tables[gold_table]
-        gold_rows = int(
-            gold_result.num_rows if hasattr(gold_result, "num_rows") else len(gold_result)
-        )
-        status = "ok" if silver_rows == gold_rows else "failed"
-        tables[gold_table] = {
-            "silver_table": silver_table,
-            "gold_table": gold_table,
-            "silver_rows": silver_rows,
-            "gold_rows": gold_rows,
-            "status": status,
-        }
-        if status != "ok":
-            findings.append(
-                {
-                    "type": "gold_silver_count_mismatch",
-                    "silver_table": silver_table,
-                    "gold_table": gold_table,
-                    "silver_rows": silver_rows,
-                    "gold_rows": gold_rows,
-                }
-            )
+            if status != "ok":
+                findings.append(
+                    {
+                        "type": "gold_silver_count_mismatch",
+                        "silver_table": silver_table,
+                        "gold_table": gold_table,
+                        "silver_rows": silver_rows,
+                        "gold_rows": gold_rows,
+                    }
+                )
+    finally:
+        connection.close()
 
     return {
         "status": "ok"
@@ -273,6 +297,16 @@ def _check_gold_vs_silver(
         else "failed",
         "tables": tables,
     }
+
+
+def _fetch_gold_row_count(connection: Any, table: str) -> int:
+    cursor = connection.cursor()
+    try:
+        cursor.execute(f"SELECT COUNT(*) AS row_count FROM {table}")
+        rows = cursor.fetchall()
+        return int(rows[0][0]) if rows else 0
+    finally:
+        cursor.close()
 
 
 def _build_null_ratio_report(db: Any, table_counts: dict[str, int]) -> dict[str, Any]:

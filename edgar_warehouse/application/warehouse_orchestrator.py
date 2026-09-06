@@ -659,7 +659,7 @@ def _execute_warehouse_bronze_capture(
             gold_row_counts = {}
             snowflake_export_counts = {}
             table_count = 0
-            for table_name, table in iter_source_export_tables(db):
+            for table_name, table in iter_source_export_tables():
                 table_count += 1
                 manifest_entry = write_source_export_table_manifest_entry(
                     table_name, table, context.storage_root, run_id

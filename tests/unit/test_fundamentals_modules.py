@@ -556,28 +556,11 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
             with self.subTest(table=snow_table):
                 self.assertIn(snow_table, SNOWFLAKE_EXPORT_TABLES)
 
-    def test_build_source_export_registers_fundamentals_builders(self) -> None:
-        """build_source_export()/iter_source_export_tables() must include the 6 new builders so
-        the gold-refresh loop emits PyArrow tables for them."""
-        from edgar_warehouse.serving import source_dimensional_export
-        # We need the source code, not a runtime call (gold-refresh requires
-        # a live silver connection). Check the builder registry for the
-        # registrations -- build_source_export() and iter_source_export_tables() both delegate
-        # to _source_export_table_builders().
-        import inspect
-        source = inspect.getsource(source_dimensional_export._source_export_table_builders)
-        for builder_key in (
-            "sec_financial_fact",
-            "sec_thirteenf_holding",
-            "sec_financial_derived",
-            "fact_earnings_release",
-            "fact_executive_record",
-            "fact_accounting_flag",
-        ):
-            with self.subTest(builder=builder_key):
-                self.assertIn(f'"{builder_key}"', source,
-                              f"build_source_export() must register {builder_key}")
-
+    # test_build_source_export_registers_fundamentals_builders removed: these
+    # 6 builders' dbt gold models now ref() silver directly, so
+    # build_source_export()/iter_source_export_tables() no longer register
+    # them at all. See test_validate_data_quality.py for the equivalent
+    # live-Snowflake gold-vs-silver check that replaced it.
 
 class FundamentalsSnowflakeExportTests(unittest.TestCase):
     """PR-2 invariants — Snowflake export wiring for the 6 fundamentals tables."""
