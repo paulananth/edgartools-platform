@@ -14,7 +14,11 @@ spec draws against Ticket 02's scope). ``business_keys``/``authority_column``/
 ``provenance_columns`` are taken directly from that registry rather than
 re-declared here -- it is already this repo's fail-closed source of truth
 for per-table key/provenance semantics (silver_protection.py's own docstring:
-"Fail-closed protected-table registry").
+"Fail-closed protected-table registry"). ``provenance_columns`` alone is
+**not** sufficient for this module's own cross-system semantic-content
+digest, though -- see ``_CROSS_SYSTEM_SYNC_BOOKKEEPING_EXCLUDE``/
+``_CROSS_SYSTEM_DENORMALIZED_CIK_TABLES`` below (Ticket 11, 2026-09-06) for
+the columns that registry doesn't cover and why.
 
 Parent-link declarations below are informed by
 ``edgar_warehouse/application/commands/validate_data_quality.py``'s
@@ -254,6 +258,41 @@ _TABLE_RELATIONSHIPS: dict[str, tuple[ParentLink | None, ParentLink | None, Card
 # note: "Confirmed disjoint from Ticket 02's scope").
 _EXCLUDED_FROM_TARGET_SET = frozenset({"pipeline_run_lease"})
 
+# Cross-system semantic-digest exclusions, additive to PROTECTED_TABLE_
+# REGISTRY.provenance_columns (Ticket 11 live post-cutover reconciliation,
+# 2026-09-06): that registry answers a different question -- same-key
+# conflict-authority resolution during a DuckDB candidate-into-canonical
+# merge -- and was never meant to be a complete list of columns that
+# legitimately diverge between DuckDB and Snowflake for a *cross-system*
+# comparison. This module's own docstring above documented the reuse as
+# deliberate before this gap was found; it wasn't wrong to try, it was
+# incomplete -- the exact same shape as the bug found and fixed in
+# edgar_warehouse/mdm/silver_parity.py's RESOLVER_INPUT_TABLES (Ticket 05)
+# for a narrower 6-table subset, never ported to this sibling tool. Found
+# live: 11 of 30 tables failed reconciliation's semantic_content_digest
+# check with identical key sets on both sides (zero missing/extra rows) --
+# a pure content-hash mismatch, not real data divergence.
+#
+# Sync-bookkeeping timestamps: populated in DuckDB, never carried by the
+# Snowflake landing export. `last_synced_at` is usually the table's own
+# authority_column (already excluded separately below); `first_sync_run_id`/
+# `last_sync_run_id` are not, and normalize_row() is forgiving of a column
+# name absent from a given row, so applying this set unconditionally to
+# every table is safe regardless of which sync columns a given table
+# actually has.
+_CROSS_SYSTEM_SYNC_BOOKKEEPING_EXCLUDE = frozenset({"first_sync_run_id", "last_sync_run_id"})
+
+# Snowflake-only denormalized `cik` column: 3 of the 6 ownership tables'
+# dbt models deliberately join it in from sec_company_filing (single-path-
+# per-layer map, Ticket 06) -- DuckDB's own tables never had this column at
+# all. Confirmed via the same live investigation Ticket 05 did for its own
+# narrower table set; not re-derived independently here.
+_CROSS_SYSTEM_DENORMALIZED_CIK_TABLES = frozenset({
+    "sec_ownership_non_derivative_txn",
+    "sec_ownership_derivative_txn",
+    "sec_ownership_reporting_owner",
+})
+
 
 def _build_table_contracts() -> dict[str, TableContract]:
     contracts: dict[str, TableContract] = {}
@@ -262,6 +301,9 @@ def _build_table_contracts() -> dict[str, TableContract]:
             continue
         bronze_anchor, logical_parent, cardinality = _TABLE_RELATIONSHIPS[table_name]
         exclude = set(policy.provenance_columns)
+        exclude |= _CROSS_SYSTEM_SYNC_BOOKKEEPING_EXCLUDE
+        if table_name in _CROSS_SYSTEM_DENORMALIZED_CIK_TABLES:
+            exclude.add("cik")
         if policy.authority_column:
             # The authority column itself is compared separately (it's the
             # freshness watermark this tool scopes cross-store comparison
