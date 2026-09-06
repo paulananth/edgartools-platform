@@ -60,3 +60,24 @@ standing in the way of that method's tests running under SQLite at all.
       ([Ticket 10](10-atomic-write-path-cutover.md)) — the 10 remaining
       `silver_store.py` clauses are all in the 5 content-merge methods
       named above.
+
+**Addendum (2026-09-06): this ticket's own "surviving method" premise is now
+moot.** `SilverDatabase.merge_daily_index_filings` (and its sibling
+`get_daily_index_filings`) were themselves deleted from `silver_store.py`
+this same day — Tickets 13/14's bookkeeping repointing had already moved the
+one production call site to `bookkeeping.merge_daily_index_filings(...)`
+(confirmed via `git log -L 6420,6420:edgar_warehouse/application/warehouse_orchestrator.py`,
+commit `17d99f16`, "feat(duckdb-retirement): repoint bookkeeping callers
+(Tickets 13/14) (#515)"), so the DuckDB version — including this ticket's
+own rewritten `WHERE rn = 1` clause — had zero real callers left. The
+`QUALIFY`-rewrite work above was still worth doing at the time (it made the
+method portable, which is what was asked), but the method it protected
+turned out to already be dead by the time this was discovered; deleted
+alongside 5 other second-wave dead bookkeeping methods (see
+[Ticket 09](09-complete-sqlite-test-port.md)'s own addendum for the full
+list). `tests/unit/test_daily_index_filing_merge.py` (this ticket's own
+regression-guard test file, including
+`test_merge_daily_index_filings_dedupes_same_key_rows_within_one_batch`) was
+deleted in the same pass — its real behavioral coverage already exists
+against the live `BookkeepingStore` equivalent in
+`tests/bookkeeping/test_store.py`.

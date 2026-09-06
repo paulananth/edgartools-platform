@@ -257,26 +257,39 @@ def test_daily_index_checkpoint_only_change_actually_publishes(tmp_path):
     _hydrate(context, canonical_bytes)
 
     db = SilverDatabase(_local_silver_path(context))
-    db.upsert_daily_index_checkpoint(
-        {
-            "business_date": "2026-08-21",
-            "source_name": "daily_form_index",
-            "source_key": "date:2026-08-21",
-            "source_url": "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
-            "expected_available_at": datetime.now(UTC),
-            "first_attempt_at": datetime.now(UTC),
-            "last_attempt_at": datetime.now(UTC),
-            "attempt_count": 1,
-            "raw_object_id": None,
-            "last_sha256": None,
-            "row_count": 1,
-            "distinct_cik_count": 1,
-            "distinct_accession_count": 1,
-            "status": "succeeded",
-            "error_message": None,
-            "finalized_at": datetime.now(UTC),
-            "last_success_at": datetime.now(UTC),
-        }
+    # DuckDB Retirement Cutover: SilverDatabase.upsert_daily_index_checkpoint
+    # was removed (superseded by BookkeepingStore) -- this test only ever
+    # used it as a convenient way to write a row for this publish-path test,
+    # not to test the method itself, so a raw insert is a direct substitute.
+    db._conn.execute(
+        """
+        INSERT INTO sec_daily_index_checkpoint
+            (business_date, source_name, source_key, source_url,
+             expected_available_at, first_attempt_at, last_attempt_at,
+             attempt_count, raw_object_id, last_sha256, row_count,
+             distinct_cik_count, distinct_accession_count, status,
+             error_message, finalized_at, last_success_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "2026-08-21",
+            "daily_form_index",
+            "date:2026-08-21",
+            "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.idx",
+            datetime.now(UTC),
+            datetime.now(UTC),
+            datetime.now(UTC),
+            1,
+            None,
+            None,
+            1,
+            1,
+            1,
+            "succeeded",
+            None,
+            datetime.now(UTC),
+            datetime.now(UTC),
+        ],
     )
     db.close()
 
