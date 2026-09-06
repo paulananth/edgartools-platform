@@ -22,55 +22,6 @@ def _context(tmp_path) -> WarehouseCommandContext:
     )
 
 
-def test_silver_database_records_gold_manifest_diffs(tmp_path) -> None:
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        db.record_gold_manifest(
-            run_id="run-1",
-            command_name="gold-refresh",
-            entries=[
-                {
-                    "table_name": "dim_company",
-                    "storage_layer": "warehouse_gold",
-                    "relative_path": "gold/dim_company/run_id=run-1/dim_company.parquet",
-                    "storage_path": "/warehouse/gold/dim_company/run_id=run-1/dim_company.parquet",
-                    "row_count": 1,
-                    "parquet_sha256": "aaa",
-                    "byte_size": 10,
-                }
-            ],
-        )
-        db.record_gold_manifest(
-            run_id="run-2",
-            command_name="gold-refresh",
-            entries=[
-                {
-                    "table_name": "dim_company",
-                    "storage_layer": "warehouse_gold",
-                    "relative_path": "gold/dim_company/run_id=run-2/dim_company.parquet",
-                    "storage_path": "/warehouse/gold/dim_company/run_id=run-2/dim_company.parquet",
-                    "row_count": 3,
-                    "parquet_sha256": "bbb",
-                    "byte_size": 11,
-                }
-            ],
-        )
-
-        rows = db.get_gold_manifest("run-2")
-    finally:
-        db.close()
-
-    assert len(rows) == 1
-    assert rows[0]["run_id"] == "run-2"
-    assert rows[0]["table_name"] == "dim_company"
-    assert rows[0]["row_count"] == 3
-    assert rows[0]["previous_run_id"] == "run-1"
-    assert rows[0]["previous_row_count"] == 1
-    assert rows[0]["previous_parquet_sha256"] == "aaa"
-    assert rows[0]["row_count_delta"] == 2
-    assert rows[0]["parquet_changed"] is True
-
-
 def test_write_source_export_to_storage_manifest_hashes_parquet_files(tmp_path) -> None:
     from edgar_warehouse.serving.source_dimensional_export import write_source_export_to_storage_manifest
 

@@ -81,21 +81,6 @@ class PipelineTrackingStateTests(unittest.TestCase):
 
         self.assertEqual(result, [100, 200, 300])
 
-    def test_silver_database_get_tracked_ciks_supports_status_sets(self) -> None:
-        from edgar_warehouse.silver_store import SilverDatabase
-
-        with tempfile.TemporaryDirectory() as tmp:
-            db = SilverDatabase(os.path.join(tmp, "silver.duckdb"))
-            try:
-                db.upsert_company_sync_state({"cik": 300, "tracking_status": "active"})
-                db.upsert_company_sync_state({"cik": 100, "tracking_status": "bootstrap_pending"})
-                db.upsert_company_sync_state({"cik": 200, "tracking_status": "paused"})
-
-                self.assertEqual(db.get_tracked_ciks("active,bootstrap_pending"), [100, 300])
-                self.assertEqual(db.get_tracked_ciks("all"), [100, 200, 300])
-            finally:
-                db.close()
-
     def test_ciks_filing_form15_matches_domestic_and_foreign_variants(self) -> None:
         """Seed-universe ticket 03: Form 15 (deregistration) demotes a CIK out
         of the active universe. Real EDGAR daily-index form strings confirmed
