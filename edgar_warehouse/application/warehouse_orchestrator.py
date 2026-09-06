@@ -1939,6 +1939,18 @@ def _capture_bronze_raw(
             metrics["rows_skipped"] += reference_result["rows_skipped"]
             return raw_writes, metrics
         if scope_type == "cik":
+            # state-machine-consolidation Ticket 10: filing_lookback_years
+            # (which bounds sec_company_filing discovery itself, distinct
+            # from the per-family artifact/parse lookback applied below) is
+            # deliberately NOT threaded through submissions_orchestrator
+            # here -- it has no plumbing for any lookback kwarg at all, and
+            # _resolve_filing_lookback_years's own default is already 0
+            # (full history, opt-in only), which already matches this
+            # command's chosen full-history-by-default behavior exactly.
+            # The only thing skipping this wiring gives up is an explicit
+            # --filing-lookback-years override for an advanced operator
+            # narrowing a single-company resync's own bronze discovery --
+            # left as a follow-up, not a default-behavior gap.
             result = submissions_orchestrator(
                 context=context,
                 db=db,
@@ -1955,13 +1967,31 @@ def _capture_bronze_raw(
             metrics["rows_skipped"] += result["rows_skipped"]
             _merge_capture_network_metrics(metrics, result)
             if arguments.get("include_artifacts") or arguments.get("include_text") or arguments.get("include_parsers"):
-                accessions = result["recent_accessions"]
+                # state-machine-consolidation Ticket 10: route this CIK's
+                # candidate accessions through the same shared gate every
+                # bulk loader uses, so a single-company resync honors the
+                # same lookback controls (existing and new) in one pass
+                # rather than a second, parallel lookback check.
+                selection_metrics: dict[str, Any] = {}
+                accessions = _configured_parser_accessions(
+                    db,
+                    result["recent_accessions"],
+                    ownership_lookback_years=arguments.get("ownership_lookback_years"),
+                    item_502_lookback_years=arguments.get("item_502_lookback_years"),
+                    fundamentals_lookback_years=arguments.get("fundamentals_lookback_years"),
+                    item_202_lookback_years=arguments.get("item_202_lookback_years"),
+                    proxy_lookback_years=arguments.get("proxy_lookback_years"),
+                    thirteenf_lookback_years=arguments.get("thirteenf_lookback_years"),
+                    adv_lookback_years=arguments.get("adv_lookback_years"),
+                    selection_metrics=selection_metrics,
+                )
                 total_accessions = len(accessions)
                 _emit_pipeline_event(
                     "accession_resync_started",
                     cik=_parse_cik(scope_key),
                     accession_count=total_accessions,
                     run_id=sync_run_id,
+                    **selection_metrics,
                 )
                 accession_started_at = datetime.now(UTC)
                 conflict_skipped_accessions: list[str] = []

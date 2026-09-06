@@ -8,7 +8,7 @@ already used by the daily-artifact-resume path (test_artifact_fetch_concurrency.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +39,31 @@ def _submissions_result(accessions: list[str]) -> dict:
     }
 
 
+class _FakeDb:
+    """Minimal get_filing-only stand-in for _configured_parser_accessions.
+
+    Every accession maps to a Form 4 (a configured parser form). An
+    accession with no entry in ``filing_dates`` gets no filing_date key at
+    all, so it always passes the gate's lookback check regardless of
+    window (see _ownership_within_lookback's "undated rows are rare, keep
+    them" rule) -- this is what these conflict-isolation tests use, since
+    they're about conflict handling, not lookback filtering, and every
+    accession must reach _run_accession_resync unfiltered. Shared with
+    test_targeted_resync_lookback_gating.py, which passes real
+    ``filing_dates`` to exercise genuine date-window filtering instead.
+    """
+
+    def __init__(self, filing_dates: dict[str, date] | None = None) -> None:
+        self._filing_dates = filing_dates or {}
+
+    def get_filing(self, accession_number: str) -> dict:
+        filing: dict = {"form": "4"}
+        filing_date = self._filing_dates.get(accession_number)
+        if filing_date is not None:
+            filing["filing_date"] = filing_date.isoformat()
+        return filing
+
+
 def test_immutable_object_conflict_on_one_accession_does_not_abort_the_cik_resync(
     tmp_path,
 ) -> None:
@@ -67,7 +92,7 @@ def test_immutable_object_conflict_on_one_accession_does_not_abort_the_cik_resyn
     ):
         raw_writes, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=_context(tmp_path),
-            db=object(),  # never touched directly by this command's cik-scope branch
+            db=_FakeDb(),
             bookkeeping=object(),
             command_name="targeted-resync",
             arguments={
@@ -115,7 +140,7 @@ def test_non_conflict_error_on_one_accession_still_aborts_the_whole_run(tmp_path
         try:
             warehouse_orchestrator._capture_bronze_raw(
                 context=_context(tmp_path),
-                db=object(),
+                db=_FakeDb(),
                 bookkeeping=object(),
                 command_name="targeted-resync",
                 arguments={

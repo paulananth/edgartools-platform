@@ -1,5 +1,52 @@
 Type: task
-Status: open
+Status: resolved (2026-09-06)
+
+**Resolution:** `targeted-resync`'s cik-scoped branch now filters
+`submissions_orchestrator`'s candidate accessions through
+`_configured_parser_accessions` (same gate every bulk loader uses) before
+looping `_run_accession_resync` -- both form-type eligibility and every
+per-family lookback window (ownership, item-502, item-202, proxy,
+13F, ADV) are now honored in one pass, no second/parallel lookback check.
+`edgar_warehouse/cli.py`'s `targeted-resync` subparser gained all 7
+lookback flags; `_add_fundamentals_lookback_args` gained a `default_years`
+parameter so this command can default every family to `0`/full history
+(its own debug-purpose default, confirmed via a user check-in) while every
+existing bulk-loader caller keeps its implicit 2-year default unchanged.
+Two product decisions, both confirmed via a check-in before implementing
+rather than assumed: (1) route everything through the shared gate as
+written -- a CIK-scoped resync now only ever touches configured-parser-form
+accessions (ownership/ADV/proxy/13F/item-502/202 8-K); other form types
+(10-K/10-Q/etc.) are no longer resynced via this path at all, a deliberate
+accepted capability change, not a bug; (2) full history (`0`) is the
+default for every family on this command specifically.
+
+**Deliberately not wired:** `filing_lookback_years` (bounds
+`sec_company_filing` discovery itself, a different axis than the
+per-family artifact/parse lookback this ticket's "What to build" named).
+`submissions_orchestrator` has no plumbing for any lookback kwarg at all,
+and `_resolve_filing_lookback_years`'s own default is already `0`
+(full history, opt-in-only) -- identical to what this command already
+does without any wiring. The only real gap left is an explicit
+`--filing-lookback-years` override for an advanced operator narrowing a
+single-company resync's own bronze discovery; out of this ticket's named
+scope, logged here rather than silently dropped.
+
+Tests: `tests/unit/test_targeted_resync_lookback_gating.py` (new -- proves
+out-of-window exclusion, the `0`/full-history override, the gate's own
+2-year default when a caller omits the keys entirely, and both CLI-default
+assertions) plus a regression fix to
+`tests/unit/test_targeted_resync_accession_conflict_isolation.py` (its
+`_FakeDb`, now shared by both files, needed a real `get_filing` once the
+cik branch started calling `db.get_filing` for the first time). Full
+`tests/unit` + `tests/architecture` suite green: 1564 passed, 5 skipped.
+`/gof-refactor-reviewer` consulted before editing both `cli.py` and
+`warehouse_orchestrator.py` (repo hard rule); `/code-review` (Standards,
+Spec, GoF) run before this PR -- Standards' one real finding (duplicate
+`_FakeDb` test class) fixed by consolidating into one shared, parameterized
+class; GoF found nothing to fix (the pre-existing 5-copy ownership/item-502
+argparse duplication was examined and correctly left alone -- all 4 prior
+copies were introduced together in one commit, no independent
+repeated-change evidence yet).
 
 **Spawned by:** [Ticket 08 — Decide fate of MDM Pipeline Machine heads](08-decide-fate-of-mdm-pipeline-machine-heads.md)'s widened resolution (2026-09-05).
 **Related:** [fundamentals-lookback-years spec](../../fundamentals-lookback-years/spec.md) — sequencing this ticket after that spec's implementation is a soft preference, not a hard block (see "What to build" below).
@@ -62,12 +109,12 @@ directly rather than re-implementing its logic in the test.
 
 ## Acceptance
 
-- [ ] `targeted-resync`'s cik-scoped resync respects every existing and new
+- [x] `targeted-resync`'s cik-scoped resync respects every existing and new
       lookback flag, via the single shared gate — no second, parallel
       lookback check added.
-- [ ] Full-history override (`0`) still works for debug purposes.
-- [ ] New tests pass; full `tests/unit/` suite green, no regressions.
-- [ ] `/gof-refactor-reviewer` consulted before editing
+- [x] Full-history override (`0`) still works for debug purposes.
+- [x] New tests pass; full `tests/unit/` suite green, no regressions.
+- [x] `/gof-refactor-reviewer` consulted before editing
       `warehouse_orchestrator.py` (repo hard rule).
-- [ ] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
+- [x] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
       considered ready.
