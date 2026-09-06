@@ -59,16 +59,7 @@ a full-table-scan cost on every run.
 
 ## Not yet specified
 
-- What the checkpoint/filter mechanism should actually be per type —
-  options include an accession-number or `ingested_at` high-water-mark per
-  relationship type, a dedicated checkpoint table mirroring
-  `sec_daily_index_checkpoint`'s shape, or filtering by source-row
-  timestamps already present on the underlying silver tables. Needs
-  investigation per type since source tables differ (13F holdings vs.
-  Form 3/4/5 ownership transactions vs. ADV data for MANAGES_FUND, etc.).
-- Whether all 11 types need this, or only the ones with real data-volume
-  risk (`INSTITUTIONAL_HOLDS` clearly; `HOLDS`/`COMPANY_HOLDS`/
-  `IS_INSIDER` are much smaller-volume but not yet measured).
+(none currently — both items graduated into Ticket 01 and Ticket 02 below)
 
 ## Out of scope
 
