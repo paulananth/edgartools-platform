@@ -335,3 +335,83 @@ defect, separate from the coverage gap, and it needs its own live
 `mdm verify-resolver-input-parity` re-run (not attempted in this pass) to
 confirm whether it's still reproducible now that the coverage gap is
 closed.
+
+**RE-VERIFIED 2026-09-06: still reproduces, but now fully characterized —
+a gate defect, not a data-corruption finding.** Downloaded the current
+canonical `silver.duckdb` fresh (1.79 GB, `aws s3 cp`, read-only,
+`2026-09-06 10:42` — same day, hours-fresh), pointed `MDM_SILVER_DUCKDB` at
+it directly, connected to Snowflake via the `edgartools-prod` CLI profile
+(role `EDGARTOOLS_PROD_MDM_SILVER_READER`), ran `mdm
+verify-resolver-input-parity` with no flags (all 5 entity types, default
+sample sizes).
+
+Result: `missing_keys_total: 0` on every one of the 6 sampled tables across
+all 5 entity types — the coverage gap really is closed, confirming the
+2026-09-06 resolution above holds. But every entity type still reports
+`passed: false`, with `mismatched_keys_total == keys_compared` (100% of the
+sample) on every table.
+
+Spot-checked one mismatched key per table across 3 different entity types
+by querying both readers directly (not just trusting the gate's own
+digest) — same shape every time: **every core business field is byte-
+identical; the only differences are non-resolver-relevant columns**:
+
+- `sec_company` (CIK 2488, Advanced Micro Devices): `entity_name`, `sic`,
+  `sic_description`, `state_of_incorporation`, `fiscal_year_end`, `ein`,
+  `category` all match exactly. Only `first_sync_run_id`/`last_sync_run_id`/
+  `last_synced_at` differ — populated in DuckDB, `NULL` in Snowflake. Same
+  as the original 2026-09-01 finding, now confirmed as the *only*
+  divergence class for this table (not "partly" — every sampled mismatch
+  traces to exactly these 3 columns).
+- `sec_ownership_non_derivative_txn` (accession `0000002488-26-000176`,
+  owner 1, txn 1): `security_title`, `transaction_date`,
+  `transaction_code`, `transaction_shares`, `transaction_price`,
+  `acquired_disposed_code`, `shares_owned_after`, `ownership_direct_indirect`,
+  `parser_version`, `last_sync_run_id` all match exactly. The only
+  difference: Snowflake's table carries an extra denormalized `cik` column
+  DuckDB's table doesn't have at all — a schema-shape difference, not a
+  content difference.
+- `sec_adv_filing` (accession `ADV-105958-20241218`, The Vanguard Group):
+  `adviser_name`, `sec_file_number`, `crd_number`, `effective_date`,
+  `filing_status`, `source_format`, `parser_version`, `last_sync_run_id`
+  all match exactly. The only difference: `mdm_entity_id` is populated on
+  Snowflake (`3509b990-ef67-560e-94cb-1fa99204b68a`, via the
+  mdm-ahead-of-silver backfill sweep documented in CLAUDE.md) but `NULL` on
+  DuckDB — the opposite direction from the company-table gap, but the same
+  class: a column that's expected to diverge between the two systems by
+  design, not a resolver-input-content disagreement.
+
+**Root cause of the gate's own false-mismatch signal:**
+`verify_resolver_input_parity` compares rows via
+`resolvers.base.content_hash` — a full-row SHA256 over every column,
+reused *verbatim* from its original purpose (detecting an unchanged row
+across separate `mdm mastering` invocations **within one system**, where
+the caller controls the field set and any drift is a real signal). Reusing
+it unmodified for a **cross-system** comparison means any legitimate
+schema/bookkeeping divergence between DuckDB and Snowflake — a
+provenance-only column, a denormalized convenience column, an
+already-backfilled `mdm_entity_id` — fails the hash comparison exactly
+the same as genuine content corruption would, even though the resolver
+would derive an identical result from either row. This is the same
+*shape* of defect the 2026-09-01 finding already flagged for the missing-
+row case ("the gate conflates row absent with row differs"); this is its
+sibling for the present-on-both-sides case ("the gate conflates a
+known-divergent column with actual content divergence").
+
+**Not fixed in this pass — a decision point, not resolved unilaterally.**
+Fixing the gate (e.g. an explicit non-resolver-relevant column exclusion
+list per table, mirroring `silver_protection.py`'s existing
+`provenance_columns` pattern for exactly this "expected to diverge,
+don't treat as a conflict" case) is real, scoped work, not a quick patch —
+and this ticket's own text already establishes that this gate's role is
+"an automated fail-closed assertion [that] gates a required human
+approval, neither alone," so a currently-failing gate should not be
+silently reinterpreted as passing. Given the live evidence above (zero
+missing rows, zero resolver-relevant content divergence found across 3
+independently-checked tables spanning 3 different divergence classes),
+the open decision for whoever picks this up next is: fix the gate's
+comparison to exclude these known-divergent columns and get a genuine
+`passed: true` before treating this checklist item as done, or accept this
+live evidence as sufficient sign-off as-is and proceed. Either way,
+[Ticket 10](10-atomic-write-path-cutover.md) should not be considered
+unblocked on this item until one of those two paths is deliberately chosen.
