@@ -55,7 +55,6 @@ from edgar_warehouse.application.acquisition_command_registry import (
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
-    _hydrate_silver_database_from_storage,
     _publish_silver_database_with_retry,
 )
 from edgar_warehouse.application.workflows.acquisition_run_writes import (
@@ -127,11 +126,12 @@ def run_drive_submissions_discovery(args: Any) -> int:
         else (SUBMISSIONS_COMPANY_PRODUCER_NAME, SUBMISSIONS_FILING_PRODUCER_NAME)
     )
 
-    _hydrate_silver_database_from_storage(context)
-    db = open_silver_database(context.silver_root)
-    # DuckDB Retirement Cutover Ticket 15 missed this call site: sec_company_
+    # DuckDB Retirement Cutover Ticket 10: hydration removed. sec_company_
     # sync_state (read by _resolve_ciks) lives in the Postgres-backed
-    # BookkeepingStore, not this local DuckDB `db` connection.
+    # BookkeepingStore, not this local DuckDB `db` connection (Ticket 15);
+    # canonical silver.duckdb is no longer written by any command (see
+    # _publish_silver_database_if_remote's docstring).
+    db = open_silver_database(context.silver_root)
     bookkeeping = _bookkeeping_store()
     try:
         ciks = _resolve_ciks(

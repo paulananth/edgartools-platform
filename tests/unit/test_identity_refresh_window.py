@@ -174,7 +174,6 @@ def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks
     daily-index republish is still caught, per ticket 45's second accepted gap), and
     the impacted CIKs across all of them are unioned/deduped."""
     db = MagicMock()
-    db.get_company_identity_ciks.return_value = [100, 300, 400, 500]
     bookkeeping = MagicMock()
     bookkeeping.get_tracked_ciks.return_value = [100, 200, 300, 400, 500]
     context = _context(tmp_path)
@@ -211,6 +210,11 @@ def test_compute_identity_refresh_window_unions_trailing_days_and_force_rechecks
                 },
             },
         ) as sync_ref,
+        patch.object(
+            warehouse_orchestrator,
+            "_company_identity_ciks_snowflake",
+            return_value=[100, 300, 400, 500],
+        ),
     ):
         _, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
@@ -263,7 +267,6 @@ def test_compute_identity_refresh_window_fails_closed_when_eligible_universe_emp
     """Scheduled identity must never fall back to all impacted filers when the
     company-eligibility inputs are empty."""
     db = MagicMock()
-    db.get_company_identity_ciks.return_value = []
     bookkeeping = MagicMock()
     bookkeeping.get_tracked_ciks.return_value = []
     context = _context(tmp_path)
@@ -280,6 +283,7 @@ def test_compute_identity_refresh_window_fails_closed_when_eligible_universe_emp
             "_sync_reference_data",
             return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
         ),
+        patch.object(warehouse_orchestrator, "_company_identity_ciks_snowflake", return_value=[]),
     ):
         _, metrics = warehouse_orchestrator._capture_bronze_raw(
             context=context,
@@ -304,7 +308,6 @@ def test_compute_identity_refresh_window_backstop_uses_complete_company_universe
     """Backstop mode skips daily-index discovery and writes the complete
     company-eligible active universe through the explicit-CIK batch path."""
     db = MagicMock()
-    db.get_company_identity_ciks.return_value = [100, 300]
     bookkeeping = MagicMock()
     bookkeeping.get_tracked_ciks.return_value = [100, 200, 300]
     context = _context(tmp_path)
@@ -325,6 +328,9 @@ def test_compute_identity_refresh_window_backstop_uses_complete_company_universe
                     "path": "reference/sec/company_tickers/2026/07/30/company_tickers.json",
                 },
             },
+        ),
+        patch.object(
+            warehouse_orchestrator, "_company_identity_ciks_snowflake", return_value=[100, 300]
         ),
     ):
         _, metrics = warehouse_orchestrator._capture_bronze_raw(

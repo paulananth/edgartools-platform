@@ -279,222 +279,16 @@ def test_apply_bronze_cik_limit_emits_deprecation_warning(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _publish_silver_database_if_remote
+# _publish_silver_database_if_remote / _publish_silver_database_with_retry
+#
+# DuckDB Retirement Cutover Ticket 10: both are permanent no-ops now --
+# canonical silver/sec/silver.duckdb is no longer a write target for any
+# command (every real consumer reads Snowflake or the bookkeeping Postgres
+# store instead). The merge/stage/promote/retry machinery these functions
+# used to run is retired with them; merge_candidate_into_canonical itself
+# is untouched and still covered by the tests further below in this file --
+# it simply has no caller left in the write path.
 # ---------------------------------------------------------------------------
-
-def test_publish_silver_database_returns_none_for_local_storage(tmp_path):
-    """Local storage_root → skip upload, return None."""
-    context = WarehouseCommandContext(
-        bronze_root=StorageLocation(str(tmp_path / "bronze")),
-        storage_root=StorageLocation(str(tmp_path / "warehouse")),
-        silver_root=StorageLocation(str(tmp_path / "silver")),
-        snowflake_export_root=None,
-        environment_name="test",
-        identity="dev@example.com",
-        runtime_mode="bronze_capture",
-    )
-
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _publish_silver_database_if_remote,
-    )
-    result = _publish_silver_database_if_remote(context)
-    assert result is None
-
-
-def test_publish_silver_database_uploads_to_remote(tmp_path):
-    """Remote storage_root, no canonical yet → stage+promote candidate as-is, no merge."""
-    from edgar_warehouse.infrastructure.object_storage import ObjectVersion, PromotionResult
-
-    context = WarehouseCommandContext(
-        bronze_root=StorageLocation(str(tmp_path / "bronze")),
-        storage_root=StorageLocation("s3://bucket/warehouse"),
-        silver_root=StorageLocation(str(tmp_path / "silver")),
-        snowflake_export_root=None,
-        environment_name="test",
-        identity="dev@example.com",
-        runtime_mode="bronze_capture",
-    )
-    silver_db = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    silver_db.parent.mkdir(parents=True)
-    silver_db.write_bytes(b"duckdb-data")
-
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _publish_silver_database_if_remote,
-    )
-    with (
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
-            return_value=ObjectVersion(exists=False, etag=None, version_id=None),
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="silverstage/token/silver/sec/silver.duckdb",
-        ) as mock_stage,
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
-            return_value=PromotionResult(
-                canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
-                staged_relative_path="silverstage/token/silver/sec/silver.duckdb",
-                previous_version=ObjectVersion(exists=False, etag=None, version_id=None),
-                new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
-            ),
-        ) as mock_promote,
-    ):
-        result = _publish_silver_database_if_remote(context)
-
-    assert result is not None
-    assert result["layer"] == "silver_database"
-    assert result["relative_path"] == "silver/sec/silver.duckdb"
-    assert result["size_bytes"] == len(b"duckdb-data")
-    assert result["source_version"] is None
-    assert result["canonical_version"] == "new-etag"
-    assert result["tables_merged"] == []
-    # No baseline exists: publish streams the local hydrated file directly
-    # (a Path, not a fully-buffered bytes payload) -- seed-universe-narrow-
-    # hydrate ticket 06.
-    mock_stage.assert_called_once_with("silver/sec/silver.duckdb", silver_db)
-    mock_promote.assert_called_once_with(
-        "silverstage/token/silver/sec/silver.duckdb",
-        "silver/sec/silver.duckdb",
-        expected_etag=None,
-        payload=silver_db,
-    )
-
-
-def test_publish_silver_database_raises_when_file_missing(tmp_path):
-    """Missing local silver DB → WarehouseRuntimeError (not silent data loss)."""
-    context = WarehouseCommandContext(
-        bronze_root=StorageLocation(str(tmp_path / "bronze")),
-        storage_root=StorageLocation("s3://bucket/warehouse"),
-        silver_root=StorageLocation(str(tmp_path / "silver")),
-        snowflake_export_root=None,
-        environment_name="test",
-        identity="dev@example.com",
-        runtime_mode="bronze_capture",
-    )
-
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _publish_silver_database_if_remote,
-    )
-
-    with pytest.raises(WarehouseRuntimeError, match="not found"):
-        _publish_silver_database_if_remote(context)
-
-
-def test_publish_silver_database_merges_when_canonical_already_exists(tmp_path):
-    """Remote storage_root with an existing canonical → merge, not blind overwrite."""
-    from edgar_warehouse.infrastructure.object_storage import ObjectVersion, PromotionResult
-
-    context = WarehouseCommandContext(
-        bronze_root=StorageLocation(str(tmp_path / "bronze")),
-        storage_root=StorageLocation("s3://bucket/warehouse"),
-        silver_root=StorageLocation(str(tmp_path / "silver")),
-        snowflake_export_root=None,
-        environment_name="test",
-        identity="dev@example.com",
-        runtime_mode="bronze_capture",
-    )
-    silver_db = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    silver_db.parent.mkdir(parents=True)
-    conn = duckdb.connect(str(silver_db))
-    conn.execute("CREATE TABLE sec_company (cik BIGINT PRIMARY KEY, entity_name TEXT, last_synced_at TIMESTAMPTZ)")
-    conn.execute("INSERT INTO sec_company VALUES (3, 'Gamma LLC', '2026-01-01 00:00:00')")
-    conn.close()
-
-    canonical_db = tmp_path / "canonical.duckdb"
-    conn = duckdb.connect(str(canonical_db))
-    conn.execute("CREATE TABLE sec_company (cik BIGINT PRIMARY KEY, entity_name TEXT, last_synced_at TIMESTAMPTZ)")
-    conn.execute("INSERT INTO sec_company VALUES (1, 'Alpha Corp', '2026-01-01 00:00:00')")
-    conn.close()
-    canonical_bytes = canonical_db.read_bytes()
-
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _publish_silver_database_if_remote,
-    )
-    with (
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
-            return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
-            side_effect=lambda relative_path, local_path, chunk_size=8 * 1024 * 1024: (
-                local_path.write_bytes(canonical_bytes),
-                str(local_path),
-            )[1],
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="silverstage/token/silver/sec/silver.duckdb",
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
-            return_value=PromotionResult(
-                canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
-                staged_relative_path="silverstage/token/silver/sec/silver.duckdb",
-                previous_version=ObjectVersion(exists=True, etag="old-etag", version_id=None),
-                new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
-            ),
-        ) as mock_promote,
-    ):
-        result = _publish_silver_database_if_remote(context)
-
-    assert result["tables_merged"] == ["sec_company"]
-    assert result["source_version"] == "old-etag"
-    assert result["canonical_version"] == "new-etag"
-    # The staged payload must contain BOTH the canonical-only row and the
-    # candidate-only row -- a merge, not the candidate replacing canonical.
-    staged_payload = mock_promote.call_args.args[0]
-    assert isinstance(staged_payload, str)  # staged relative path was passed through
-
-
-def test_publish_silver_database_propagates_ambiguous_conflict(tmp_path):
-    """A same-key row differing with no declared authority column aborts publication."""
-    from edgar_warehouse.infrastructure.object_storage import ObjectVersion
-    from edgar_warehouse.silver_protection import SemanticMergeConflictError
-
-    context = WarehouseCommandContext(
-        bronze_root=StorageLocation(str(tmp_path / "bronze")),
-        storage_root=StorageLocation("s3://bucket/warehouse"),
-        silver_root=StorageLocation(str(tmp_path / "silver")),
-        snowflake_export_root=None,
-        environment_name="test",
-        identity="dev@example.com",
-        runtime_mode="bronze_capture",
-    )
-    silver_db = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    silver_db.parent.mkdir(parents=True)
-    conn = duckdb.connect(str(silver_db))
-    conn.execute("CREATE TABLE sec_adv_filing (accession_number TEXT PRIMARY KEY, adviser_name TEXT)")
-    conn.execute("INSERT INTO sec_adv_filing VALUES ('acc-1', 'Adviser B')")
-    conn.close()
-
-    canonical_db = tmp_path / "canonical.duckdb"
-    conn = duckdb.connect(str(canonical_db))
-    conn.execute("CREATE TABLE sec_adv_filing (accession_number TEXT PRIMARY KEY, adviser_name TEXT)")
-    conn.execute("INSERT INTO sec_adv_filing VALUES ('acc-1', 'Adviser A')")
-    conn.close()
-    canonical_bytes = canonical_db.read_bytes()
-
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _publish_silver_database_if_remote,
-    )
-    with (
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
-            return_value=ObjectVersion(exists=True, etag="old-etag", version_id=None),
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file",
-            side_effect=lambda relative_path, local_path, chunk_size=8 * 1024 * 1024: (
-                local_path.write_bytes(canonical_bytes),
-                str(local_path),
-            )[1],
-        ),
-    ):
-        with pytest.raises(SemanticMergeConflictError):
-            _publish_silver_database_if_remote(context)
-
 
 def _publish_context(tmp_path: Path) -> WarehouseCommandContext:
     context = WarehouseCommandContext(
@@ -512,143 +306,49 @@ def _publish_context(tmp_path: Path) -> WarehouseCommandContext:
     return context
 
 
-def test_publish_silver_database_retries_on_lost_promotion_race(tmp_path, monkeypatch):
-    """Regression (2026-07-22): Ticket 20 runs concurrent Distributed Map
-    batches that all publish to the same canonical silver.duckdb.
-    PromotionConflictError's own docstring says it is retryable ("the staged
-    object is left in place ... so a caller can re-read canonical, re-merge,
-    and retry promotion"), but no caller ever did -- so the first batch to
-    publish always won and every other concurrently-finishing batch failed
-    outright, aborting the whole 0%-tolerance release even though its fetch
-    and merge work was otherwise complete. A conflict on the first attempt
-    must not be fatal if a later attempt succeeds."""
-    from edgar_warehouse.infrastructure.object_storage import (
-        ObjectVersion,
-        PromotionConflictError,
-        PromotionResult,
+@pytest.mark.parametrize("storage_root_value", [None, "s3://bucket/warehouse"])
+def test_publish_silver_database_if_remote_always_returns_none(tmp_path, storage_root_value):
+    """Local or remote storage_root, file present or missing, canonical
+    existing or not -- none of it matters anymore. No S3 call of any kind
+    (read_object_version/download_file/write_staged_bytes/promote_staged) is
+    made; this file just checks the function never reaches for any of them."""
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _publish_silver_database_if_remote,
     )
+
+    context = WarehouseCommandContext(
+        bronze_root=StorageLocation(str(tmp_path / "bronze")),
+        storage_root=StorageLocation(storage_root_value or str(tmp_path / "warehouse")),
+        silver_root=StorageLocation(str(tmp_path / "silver")),
+        snowflake_export_root=None,
+        environment_name="test",
+        identity="dev@example.com",
+        runtime_mode="bronze_capture",
+    )
+
+    with (
+        patch("edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version") as read_version,
+        patch("edgar_warehouse.infrastructure.object_storage.StorageLocation.download_file") as download,
+        patch("edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes") as stage,
+        patch("edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged") as promote,
+    ):
+        result = _publish_silver_database_if_remote(context)
+
+    assert result is None
+    read_version.assert_not_called()
+    download.assert_not_called()
+    stage.assert_not_called()
+    promote.assert_not_called()
+
+
+def test_publish_silver_database_with_retry_always_returns_none(tmp_path):
     from edgar_warehouse.application.warehouse_orchestrator import (
         _publish_silver_database_with_retry,
     )
 
-    monkeypatch.setenv("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "0.001")
     context = _publish_context(tmp_path)
-
-    call_count = {"n": 0}
-
-    def flaky_promote(staged_relative, relative_path, *, expected_etag, payload=None):
-        call_count["n"] += 1
-        if call_count["n"] == 1:
-            raise PromotionConflictError(relative_path, expected_etag, "someone-else-won", staged_relative)
-        return PromotionResult(
-            canonical_path="s3://bucket/warehouse/silver/sec/silver.duckdb",
-            staged_relative_path=staged_relative,
-            previous_version=ObjectVersion(exists=False, etag=None, version_id=None),
-            new_version=ObjectVersion(exists=True, etag="new-etag", version_id=None),
-        )
-
-    with (
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
-            return_value=ObjectVersion(exists=False, etag=None, version_id=None),
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="silverstage/token/silver/sec/silver.duckdb",
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
-            side_effect=flaky_promote,
-        ),
-    ):
-        result = _publish_silver_database_with_retry(context)
-
-    assert result is not None
-    assert result["canonical_version"] == "new-etag"
-    assert call_count["n"] == 2
-
-
-def test_publish_silver_database_default_policy_outlasts_sibling_publishers(
-    tmp_path, monkeypatch
-):
-    """Expected CAS losses must not fail a release batch after five attempts.
-
-    A long-running Ticket 20 batch lost publication to a sequence of sibling
-    batches five times and exited 2 even though its SEC work was complete.
-    The default policy must keep re-reading and re-merging until the batch gets
-    an uncontended promotion opportunity. Operators can still configure an
-    explicit finite attempt limit when they deliberately want one.
-    """
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _publish_silver_database_with_retry,
-    )
-    from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
-
-    monkeypatch.delenv("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", raising=False)
-    context = _publish_context(tmp_path)
-    call_count = {"n": 0}
-
-    def publish_after_siblings_finish(_context):
-        call_count["n"] += 1
-        if call_count["n"] <= 6:
-            raise PromotionConflictError(
-                "silver/sec/silver.duckdb",
-                f"etag-{call_count['n'] - 1}",
-                f"etag-{call_count['n']}",
-                f"silverstage/attempt-{call_count['n']}/silver/sec/silver.duckdb",
-            )
-        return {"canonical_version": "eventual-winner"}
-
-    with (
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
-            side_effect=publish_after_siblings_finish,
-        ),
-        patch("time.sleep"),
-    ):
-        result = _publish_silver_database_with_retry(context)
-
-    assert result == {"canonical_version": "eventual-winner"}
-    assert call_count["n"] == 7
-
-
-def test_publish_silver_database_retry_gives_up_after_max_attempts(tmp_path, monkeypatch):
-    from edgar_warehouse.infrastructure.object_storage import (
-        ObjectVersion,
-        PromotionConflictError,
-    )
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _publish_silver_database_with_retry,
-    )
-
-    monkeypatch.setenv("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "2")
-    monkeypatch.setenv("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "0.001")
-    context = _publish_context(tmp_path)
-
-    call_count = {"n": 0}
-
-    def always_conflicts(staged_relative, relative_path, *, expected_etag, payload=None):
-        call_count["n"] += 1
-        raise PromotionConflictError(relative_path, expected_etag, "someone-else-won", staged_relative)
-
-    with (
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.read_object_version",
-            return_value=ObjectVersion(exists=False, etag=None, version_id=None),
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.write_staged_bytes",
-            return_value="silverstage/token/silver/sec/silver.duckdb",
-        ),
-        patch(
-            "edgar_warehouse.infrastructure.object_storage.StorageLocation.promote_staged",
-            side_effect=always_conflicts,
-        ),
-    ):
-        with pytest.raises(PromotionConflictError):
-            _publish_silver_database_with_retry(context)
-
-    assert call_count["n"] == 2
+    result = _publish_silver_database_with_retry(context)
+    assert result is None
 
 
 # ---------------------------------------------------------------------------

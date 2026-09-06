@@ -294,9 +294,11 @@ def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
     """bootstrap-batch no longer branches into the shard-aware hydrate/open/
     publish path, even with remote storage and a populated cik_list -- the
     exact conditions that used to route it onto shard-{N}.duckdb. It now
-    takes the same monolith path _hydrate_silver_database_from_storage /
-    _open_silver_database / _publish_silver_database_with_retry as every
-    other command."""
+    takes the same monolith path _open_silver_database / _publish_silver_
+    database_with_retry as every other command (DuckDB Retirement Cutover
+    Ticket 10: _hydrate_silver_database_from_storage is no longer called at
+    all -- canonical silver.duckdb is no longer a write/hydrate target for
+    any command)."""
     from unittest.mock import MagicMock, patch
 
     from edgar_warehouse.application.warehouse_orchestrator import (
@@ -378,8 +380,9 @@ def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
     mock_read_manifest.assert_not_called()
     mock_hydrate_shard.assert_not_called()
     mock_publish_shard.assert_not_called()
-    # The monolith hydrate/open/publish path runs unconditionally instead.
-    mock_monolith_hydrate.assert_called_once()
+    # The monolith open/publish path runs unconditionally instead. Hydrate
+    # is never called for any command post-Ticket-10 (see the docstring above).
+    mock_monolith_hydrate.assert_not_called()
     assert mock_open_monolith.called
     mock_monolith_publish.assert_called_once()
 

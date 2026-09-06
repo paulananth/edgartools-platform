@@ -7,11 +7,12 @@ import json
 
 import pytest
 
+from unittest.mock import patch
+
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
 from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 _REGISTERED_HREF = (
@@ -69,6 +70,7 @@ def test_fetch_firm_roster_fetches_latest_period_and_writes_manifest(tmp_path, m
     monkeypatch.setattr(
         warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
+    monkeypatch.setattr(warehouse_orchestrator, "_snowflake_distinct_values", lambda table, column: set())
 
     result = warehouse_orchestrator._execute_warehouse(
         context=context,
@@ -97,25 +99,10 @@ def test_fetch_firm_roster_fetches_latest_period_and_writes_manifest(tmp_path, m
 
 
 def test_fetch_firm_roster_is_a_no_op_when_latest_period_already_ingested(tmp_path, monkeypatch) -> None:
+    # DuckDB Retirement Cutover Ticket 10: already_ingested now comes from
+    # EDGARTOOLS_SILVER via _snowflake_distinct_values, not local DuckDB --
+    # seed that instead of writing to the (now unhydrated) local file.
     context = _context(tmp_path)
-    db = SilverDatabase(_db_path(context))
-    try:
-        db.merge_adv_firm_roster([{
-            "adviser_crd_number": "1588",
-            "dataset_period": "2026-07",
-            "private_funds_reported": True,
-            "private_fund_count_7b1": 3,
-            "any_hedge_funds": True,
-            "hedge_fund_count": 3,
-            "any_pe_funds": False,
-            "pe_fund_count": None,
-            "total_gross_assets_private_funds": 709905606,
-            "private_fund_count_7b2": 0,
-            "source_sha256": "abc123",
-            "parser_version": "firm_roster_v1",
-        }], "seed-run")
-    finally:
-        db.close()
 
     def _fail_if_archive_downloaded(url: str, identity: str) -> bytes:
         if url.endswith(".zip"):
@@ -130,11 +117,15 @@ def test_fetch_firm_roster_is_a_no_op_when_latest_period_already_ingested(tmp_pa
         warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
 
-    result = warehouse_orchestrator._execute_warehouse(
-        context=context,
-        command_name="fetch-firm-roster",
-        arguments={"run_id": "test-run-2"},
-    )
+    with patch.object(
+        warehouse_orchestrator, "_snowflake_distinct_values", return_value={"2026-07"}
+    ) as snowflake_check:
+        result = warehouse_orchestrator._execute_warehouse(
+            context=context,
+            command_name="fetch-firm-roster",
+            arguments={"run_id": "test-run-2"},
+        )
+    snowflake_check.assert_called_once_with("sec_adv_firm_roster", "dataset_period")
 
     assert result["status"] == "ok"
     manifest = json.loads(
