@@ -280,3 +280,58 @@ setting the gate's own absent-vs-differs defect aside — the underlying
 `verify-silver-parity` row-count comparison independently confirms real,
 severe non-parity that no interpretation of "expected type drift" can
 explain away.
+
+**RESOLVED 2026-09-06 (coverage half only — 5-whys investigation, no code
+change needed):** the root cause was already correctly diagnosed and fixed
+by a *different* map's ticket before this one was ever re-opened —
+silver-snowflake-migration Ticket 15's `backfill-silver-landing-historical`
+command (`edgar_warehouse/silver_landing_historical_backfill.py`, merged
+`ebeb81bc`/`2a6836fe`, both on `main` as of 2026-09-01).
+
+5-whys: (1) Snowflake silver near-empty for every ADV/13F/ownership/
+fundamentals table → (2) `@track_landing_rows`/`@track_landing_row` (the
+only way a row reaches the Snowflake landing zone) only fires when its
+owning `merge_*`/`upsert_*` method actually *executes* → (3) most of those
+methods are themselves gated by this repo's own SEC-data-idempotency
+policy (skip already-captured artifacts by default) → (4) the bulk of
+this historical content was captured into DuckDB *before* the landing-zone
+write path existed, so ordinary incremental runs never re-trigger those
+methods for it → (5) root cause: the landing-zone buffer is deliberately
+per-run-only ("exactly the rows a command parses and hands to
+`SilverDatabase` *this run*" — its own module docstring), with no
+retroactive backfill of pre-existing DuckDB content, and no such backfill
+had been built for anything beyond `sec_company`/its 3 siblings until
+Ticket 15.
+
+Confirmed live 2026-09-06 (fresh verification, not just re-reading the
+ticket): `backfill-silver-landing-historical` already ran successfully in
+prod (`run_id=ticket15-historical-backfill-2`, completed
+2026-09-01T13:13:11Z, confirmed via CloudWatch
+`silver_landing_historical_backfill_completed` event) and its recorded
+`source_counts`/`landing_export_counts` match this ticket's own DuckDB
+figures exactly (e.g. `sec_thirteenf_holding: 6,799,919`,
+`sec_ownership_non_derivative_txn: 78,096`, `sec_financial_fact: 434,805`).
+A live Snowflake query today confirms every one of those rows made it all
+the way through `LOAD_SILVER_LANDING_TASK` (`state: started`, confirmed via
+`SHOW TASKS`) and dbt's silver collapse into `EDGARTOOLS_SILVER` itself —
+current live counts *meet or exceed* the backfill's own DuckDB-read source
+counts for every table that had real content (e.g. `SEC_THIRTEENF_HOLDING`
+6,799,919 exact match; `SEC_ADV_FILING` 61,223 vs. 58,599, `SEC_COMPANY`
+60,537 vs. 52,778 — higher because ordinary incremental writes have kept
+adding rows since). The ~9 tables still at 0 live today (`sec_accounting_flag`,
+`sec_adv_disclosure_event`, `sec_auditor_report_evidence`,
+`sec_current_filing_feed`, `sec_filing_text`, `sec_guidance_fact`,
+`sec_guidance_fact_reject`, `sec_pcaob_firm_identity`,
+`sec_subsidiary_evidence`) are exactly this ticket's own "(11 more tables)
+| 0 | 0 | n/a (both empty)" row — confirmed via the backfill's own
+`source_counts` output that DuckDB itself had 0 rows for these too as of
+2026-09-01, so this was never part of the coverage gap.
+
+**Still open, NOT resolved by this**: the row-level *content*-parity
+finding for `company`/`person`/`security` entity types
+(`mismatched_keys` even on rows present on both sides) — this ticket's own
+text already flagged that as likely snapshot skew or a gate sampling
+defect, separate from the coverage gap, and it needs its own live
+`mdm verify-resolver-input-parity` re-run (not attempted in this pass) to
+confirm whether it's still reproducible now that the coverage gap is
+closed.
