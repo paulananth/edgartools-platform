@@ -1539,7 +1539,7 @@ def _publish_shard_if_remote_with_retry(
 
     Regression (silver-snowflake-migration map, 2026-08-19): the CIK-sharded
     architecture's shard count (4) is fixed independently of
-    ``bronze_seed_silver_gold``'s ``Clean and Merge Filings`` (formerly BatchSilver) Distributed Map
+    ``one_click_data_refresh``'s ``Clean and Merge Filings`` (formerly BatchSilver) Distributed Map
     concurrency (``MaxConcurrency: 20``), so multiple concurrent Map items
     routinely land on the same shard index -- contradicting this function's
     former docstring claim that "each shard is owned by exactly one writer."
@@ -6202,7 +6202,7 @@ def _read_bronze_by_glob_if_present(
     `aws s3 sync`). Without this, _read_bronze_if_cached's checkpoint-only lookup
     always misses on a fresh silver database, forcing a redundant SEC API call even
     though the bronze file is already sitting in storage — defeating the purpose of
-    seed-bronze-batches / bronze_seed_silver_gold ("zero new SEC calls").
+    seed-bronze-batches / one_click_data_refresh ("zero new SEC calls").
     Returns None when no match exists or the matched file can't be read.
     """
     matches = bronze_root.find_existing(relative_glob)

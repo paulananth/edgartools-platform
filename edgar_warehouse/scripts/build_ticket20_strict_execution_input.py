@@ -2,7 +2,7 @@
 
 Reads optional freeze metadata from a candidate manifest (local or s3://),
 validates agent-window eligibility when --preflight is set, and writes the
-exact input shape expected by edgartools-*-bronze-seed-silver-gold in
+exact input shape expected by edgartools-*-one-click-data-refresh in
 release_mode.
 
 Example::

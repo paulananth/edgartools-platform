@@ -11,7 +11,7 @@ DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 
 def _definition(tmp_path: Path) -> dict:
     text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
-    start = text.index("write_bronze_seed_silver_gold_definition() {\n")
+    start = text.index("write_one_click_data_refresh_definition() {\n")
     end = text.index("\nPY\n}\n", start) + len("\nPY\n}\n")
     function_path = tmp_path / "function.sh"
     function_path.write_text(text[start:end], encoding="utf-8")
@@ -29,7 +29,7 @@ def _definition(tmp_path: Path) -> dict:
         "MDM_GRAPH_LIMIT=100\n"
         f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
         f'source "{function_path}"\n'
-        f'write_bronze_seed_silver_gold_definition "{output_path}" '
+        f'write_one_click_data_refresh_definition "{output_path}" '
         '"arn:warehouse-medium" "arn:mdm-small" "arn:mdm-medium" "arn:warehouse-large"\n',
         encoding="utf-8",
     )
@@ -173,12 +173,12 @@ def test_seed_from_bronze_and_compute_remaining_batches_preserve_resume_from_run
     Clean and Merge Filings' ItemSelector references "$.resume_from_run_id" directly
     (a JSONPath reference, not a Choice IsPresent check -- see
     ResumeFromRunIdPresenceCheck/Default above it in the state machine,
-    which guarantee the key exists by the time either SeedFromBronze or
-    ComputeRemainingBatches runs). ecs_state()'s default ResultPath
+    which guarantee the key exists by the time either Initialize From Bronze
+    or ComputeRemainingBatches runs). ecs_state()'s default ResultPath
     (omitted, meaning "$") REPLACES the entire state input with the ECS
     task's own runTask.sync output on both of these paths, discarding
     resume_from_run_id before Clean and Merge Filings ever sees it. A real
-    bronze_seed_silver_gold execution failed on exactly this
+    one_click_data_refresh execution failed on exactly this
     (States.ItemReaderFailed: "$.resume_from_run_id ... could not be
     found") the first time this code path actually ran end-to-end,
     because nothing asserted it. Both states must set ResultPath: None to
@@ -190,5 +190,5 @@ def test_seed_from_bronze_and_compute_remaining_batches_preserve_resume_from_run
     definition = _definition(tmp_path)
     states = definition["States"]
 
-    assert states["SeedFromBronze"]["ResultPath"] is None
+    assert states["Initialize From Bronze"]["ResultPath"] is None
     assert states["ComputeRemainingBatches"]["ResultPath"] is None

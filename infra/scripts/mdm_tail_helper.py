@@ -13,8 +13,8 @@ dicts into the correct, data-architecture-mandated order
 state (state-name business-readability rename, 2026-09-06: GoldRefresh ->
 "Publish Business Data") -- nothing more. Of the 4 MDM Pipeline Machines
 this was originally shared by (ownership_mdm_gold, silver_mdm_gold,
-bronze_seed_silver_gold's default path, residual_holds_graph), only
-bronze_seed_silver_gold still passes gold_state -- ownership_mdm_gold and
+one_click_data_refresh's default path, residual_holds_graph), only
+one_click_data_refresh still passes gold_state -- ownership_mdm_gold and
 silver_mdm_gold are since retired (tickets 08/09), and residual_holds_graph
 always called this with gold_state=None (see its own "No GoldRefresh here"
 comment at its call site) --

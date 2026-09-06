@@ -2,7 +2,7 @@
 
 Fails closed unless the freeze carries locked agent ``coverage_by_document_type``
 windows and every candidate sits inside those windows. Use this after building
-a new agent-window freeze and **before** starting ``bronze_seed_silver_gold``
+a new agent-window freeze and **before** starting ``one_click_data_refresh``
 in ``release_mode``.
 
 Legacy 2013-era freezes without a type map exit non-zero (not GO).

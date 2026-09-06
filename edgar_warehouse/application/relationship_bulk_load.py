@@ -860,7 +860,7 @@ def build_ticket20_strict_execution_input(
     fingerprint: str | None = None,
     ticket: int = 20,
 ) -> dict[str, object]:
-    """Build Step Functions input for bronze_seed_silver_gold release_mode.
+    """Build Step Functions input for one_click_data_refresh release_mode.
 
     Keys are bucket-relative (as required by the state machine ItemReader /
     StrictManifestCheck). Attestations must include all five named roles.
@@ -882,7 +882,7 @@ def build_ticket20_strict_execution_input(
         "attestations": bound,
         "ticket": int(ticket),
         "trigger": "operator",
-        "workflow": "bronze_seed_silver_gold",
+        "workflow": "one_click_data_refresh",
     }
     if watermark is not None:
         wm = watermark.isoformat() if isinstance(watermark, date) else str(watermark)

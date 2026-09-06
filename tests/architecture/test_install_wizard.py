@@ -52,7 +52,7 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Snowflake: loader read grants on silver",
     "Snowflake: Streamlit dashboard",
     "AWS/silver: seed-universe (full/unscoped)",
-    "AWS: bronze_seed_silver_gold (one-click data refresh)",
+    "AWS: one_click_data_refresh",
     "Snowflake: standalone gold-refresh",
     "MDM + graph: connectivity, migrations, sync, verification",
     "MDM + graph: AWS MDM E2E/status checks",
@@ -846,7 +846,7 @@ def test_stages_run_in_provision_deploy_early_data_late_data_order(
     provision{TF state, Neo4j, passive infra, access roles, native-pull
     foundation, Postgres/graph prereqs} -> deploy{ECR publish, ECS task defs,
     MDM export targets, dbt gold, loader role ownership, Streamlit dashboard}
-    -> early-data{seed-universe} -> late-data{bronze_seed_silver_gold,
+    -> early-data{seed-universe} -> late-data{one_click_data_refresh,
     standalone gold-refresh, MDM+graph connectivity/sync/verify, MDM+graph
     E2E checks, bounded smoke}.
     """

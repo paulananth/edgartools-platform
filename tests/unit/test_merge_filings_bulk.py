@@ -1,7 +1,7 @@
 """Regression tests for merge_filings' bulk-upsert conversion.
 
 merge_filings used to run one execute() per row in a Python loop -- the
-dominant cost (~93% of per-batch time, measured live) of bronze_seed_silver_gold's
+dominant cost (~93% of per-batch time, measured live) of one_click_data_refresh's
 Clean and Merge Filings (formerly BatchSilver) stage when staging a CIK's full filing history. Converted to use
 the same staged-bulk pattern already proven by merge_financial_facts. These
 tests pin down the exact upsert semantics the row-by-row version had: mutable

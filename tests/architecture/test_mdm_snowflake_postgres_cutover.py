@@ -93,21 +93,21 @@ def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -
     # reprocessing Map used this same command shape, minus
     # --resume-ledger-run-id) was retired outright by state-machine-
     # consolidation ticket 09 (2026-09-05: zero executions ever) -- this
-    # test now covers bronze_seed_silver_gold's own Clean and Merge Filings
+    # test now covers one_click_data_refresh's own Clean and Merge Filings
     # only, since that machine's default path was confirmed NOT dead
     # (install.sh's documented cold-start/recovery procedure depends on it)
     # and deferred, untouched.
 
-    # bronze_seed_silver_gold's own Clean and Merge Filings -- ticket 02 threads
+    # one_click_data_refresh's own Clean and Merge Filings -- ticket 02 threads
     # --resume-ledger-run-id through so a resumed run's done markers land
     # under the original run's namespace, not this fresh execution's own.
-    bronze_seed_silver_gold_expected = (
+    one_click_data_refresh_expected = (
         "States.Array('bootstrap-batch', '--cik-list', $.cik_list, "
         "'--artifact-policy', 'skip', '--parser-policy', 'skip', "
         "'--run-id', $$.Execution.Name, "
         "'--resume-ledger-run-id', $.resume_from_run_id)"
     )
-    assert text.count(bronze_seed_silver_gold_expected) == 1
+    assert text.count(one_click_data_refresh_expected) == 1
 
 
 def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
