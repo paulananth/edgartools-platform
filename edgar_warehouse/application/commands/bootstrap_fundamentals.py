@@ -116,22 +116,15 @@ def execute(args: Any) -> int:
     started_at = datetime.now(UTC)
     context = _build_silver_context(identity=identity, silver_root_override=silver_root_override)
 
-    from edgar_warehouse.application.warehouse_orchestrator import (
-        _hydrate_silver_database_from_storage,
-    )
     from edgar_warehouse.silver_support.session import open_silver_database
     try:
-        # company-identity with an explicit --cik-list never reads the tracked
-        # universe from `db` (see _resolve_fundamentals_ciks below), so hydrating
-        # the full canonical DB first only bloats the local working copy: the
-        # publish step downstream treats that whole file as the merge candidate,
-        # and a full-size candidate defeats merge_candidate_into_canonical's
-        # bounded-candidate assumption (observed: OOM on a 2M+-row canonical).
-        # Skipping hydrate here keeps the candidate scoped to the CIKs actually
-        # touched by this run. The windowed case (no --cik-list) still hydrates,
-        # since it resolves its CIK batch from db.get_tracked_ciks().
-        if not (mode == "company-identity" and raw_cik_list):
-            _hydrate_silver_database_from_storage(context)
+        # DuckDB Retirement Cutover Ticket 10: hydration removed entirely.
+        # _resolve_fundamentals_ciks (both the --cik-list and windowed cases)
+        # already reads bookkeeping.get_tracked_ciks() -- Postgres, not this
+        # local `db` -- since Ticket 14 repointed it; canonical silver.duckdb
+        # is no longer written by any command (see
+        # _publish_silver_database_if_remote's docstring), so there is
+        # nothing left to hydrate from.
         db = open_silver_database(context.silver_root)
     except Exception as exc:
         _err(f"Failed to open silver database: {exc}")

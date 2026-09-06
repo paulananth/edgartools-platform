@@ -541,13 +541,29 @@ def _execute_warehouse_bronze_capture(
     # promote of one shared silver.duckdb. That contention no longer applies --
     # bootstrap-batch's real write target is the Snowflake landing zone
     # (append-only, one Parquet file per run, no shared mutable object), so
-    # every command now hydrates/opens the same monolith silver database. The
+    # every command now opens the same monolith silver database (see Ticket
+    # 10's note immediately below for why "hydrates" no longer applies). The
     # shared shard-file infrastructure itself (_read_shard_manifest,
     # _hydrate_shard_for_window, open_silver_shard, _publish_shard_if_remote)
     # is left in place -- load_history's read path and the mdm-ahead-of-silver
     # backfill sweep still call it directly; see
     # .scratch/duckdb-retirement/issues/04-decide-bootstrap-batch-sharding-fate.md.
-    _hydrate_silver_database_from_storage(context)
+    #
+    # DuckDB Retirement Cutover Ticket 10: hydration removed. Canonical
+    # silver/sec/silver.duckdb is no longer written by any command (see
+    # _publish_silver_database_if_remote's docstring), so every caller in
+    # this function operates on a fresh, empty local DuckDB scratch store --
+    # confirmed safe for every read this function itself performs: each one
+    # is satisfied by writes made earlier in this same run
+    # (_configured_parser_accessions reads db.get_filing rows staged moments
+    # earlier by submissions_orchestrator; fetch_filing_artifacts's cache-hit
+    # check falls through to its own bronze-key S3 LIST fallback when the
+    # local row is absent, per the bronze-recovery fix). Reads that did
+    # genuinely depend on historical local content
+    # (SilverDatabase.get_company_identity_ciks, the fetch-adv-bulk/
+    # fetch-firm-roster already_ingested checks) were repointed at
+    # EDGARTOOLS_SILVER via SnowflakeSilverReader in this same ticket --
+    # see _company_identity_ciks_snowflake/_snowflake_distinct_values.
     scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
     db = _open_silver_database(context.silver_root, landing_export=landing_export)
     db_closed = False
@@ -1101,140 +1117,33 @@ def _streaming_md5_hexdigest(path: Path, chunk_size: int = 8 * 1024 * 1024) -> s
 
 
 def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
-    """Merge the local silver candidate into canonical and publish it, safely.
+    """Permanent no-op: DuckDB Retirement Cutover Ticket 10 retired canonical
+    ``silver/sec/silver.duckdb`` as a write target.
 
-    Ordinary publication is monotonic and concurrency-safe (ARTF-01/ARTF-02):
-    the candidate is merged into a fresh local copy of canonical (never
-    overwriting it directly) via ``merge_candidate_into_canonical`` --
-    unclassified tables, dropped/retyped columns, and ambiguous same-key
-    conflicts all fail closed -- then the merged result is uploaded to an
-    immutable staging key and promoted onto the canonical key only if
-    canonical's version/ETag has not changed since it was read at the start
-    of this call. A concurrent writer between those two points raises
-    ``PromotionConflictError`` (retryable; the staged object is preserved)
-    instead of silently last-writer-wins. There is no ``--force`` parameter
-    on this path -- it cannot bypass the merge or the concurrency check.
+    The production write path no longer merges/promotes a local candidate
+    into canonical silver.duckdb -- every real consumer (MDM's reader, gold's
+    dbt builders, the 11 bookkeeping tables, all five acquisition-family
+    ``*_silver_acceptance.py`` modules) reads Snowflake (``EDGARTOOLS_SILVER``)
+    or the bookkeeping Postgres store instead (Tickets 02-08), so there is
+    nothing left to publish this candidate into. Every one of this
+    function's ~15 call sites already handles a ``None`` return -- it is
+    exactly the pre-cutover ``not context.storage_root.is_remote`` local-
+    testing path this replaces -- so no call site needed editing beyond
+    removing its paired ``_hydrate_silver_database_from_storage`` call.
 
-    Skip-if-unchanged (release-readiness ticket 79): before any of the above,
-    a cheap local-only check compares the candidate's current
-    ``compute_silver_fingerprint`` against the one snapshotted right after
-    hydration. If they're identical -- same table set, same protected-table
-    content -- nothing this process wrote can differ from canonical, so the
-    whole download/copy2/merge/upload/promote cycle is skipped: it would
-    provably produce a no-op. Fingerprint comparison is local-only (no S3
-    calls), so it costs nothing close to what it replaces. If the sidecar is
-    missing (hydration didn't run, or wrote nothing) the check is skipped and
-    behavior is unchanged -- absence never causes a skip, only presence of a
-    provably-matching fingerprint does.
+    Kept as a named function (not deleted) since ``_publish_silver_database_
+    with_retry`` and every one of this function's own callers still call it
+    by name -- rewiring or deleting them is Ticket 12's sweep, not this
+    ticket's. ``merge_candidate_into_canonical`` is now dead from this call
+    site (its only other caller, ``_publish_shard_if_remote``, already had
+    zero real callers before this ticket -- see CLAUDE.md's shard-publish
+    5-whys). ``compute_silver_fingerprint``/the fingerprint-sidecar helpers
+    are NOT dead: ``_hydrate_silver_database_from_storage`` still calls them,
+    and that function itself is still called from the four read-only
+    reconciliation tools this ticket deliberately leaves alone (see the
+    ticket file's own note on those).
     """
-    if not context.storage_root.is_remote:
-        return None
-    source_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    if not source_path.exists():
-        raise WarehouseRuntimeError(f"Silver DuckDB file was not found: {source_path}")
-    relative_path = "silver/sec/silver.duckdb"
-
-    hydration_fingerprint = _read_fingerprint_sidecar(source_path)
-    current_fingerprint: dict[str, Any] | None = None
-    if hydration_fingerprint is not None:
-        try:
-            current_fingerprint = compute_silver_fingerprint(source_path)
-        except Exception:
-            # Fail-open, matching hydration's own handling: a fingerprint
-            # failure here must never block publication -- fall through to
-            # the full, always-correct merge path instead.
-            current_fingerprint = None
-        if current_fingerprint is not None and current_fingerprint == hydration_fingerprint:
-            _emit_pipeline_event(
-                "silver_publish_skipped_noop",
-                relative_path=relative_path,
-                protected_tables=sorted(current_fingerprint["protected"]) if current_fingerprint else [],
-            )
-            return {
-                "layer": "silver_database",
-                "path": context.storage_root.join(relative_path),
-                "relative_path": relative_path,
-                "size_bytes": source_path.stat().st_size,
-                "source_version": None,
-                "staged_checksum": None,
-                "canonical_version": None,
-                "tables_merged": [],
-                "skipped": True,
-            }
-
-    # Scoped merge (seed-universe OOM root cause, found live 2026-08-22): when
-    # the whole-file fingerprints above differ (so the skip-if-unchanged
-    # short-circuit didn't apply), diff them per protected table instead of
-    # falling through to a full-scope merge across every table in the file.
-    # A command that only wrote e.g. sec_company_ticker still hydrates the
-    # *entire* canonical locally (every other command needs that), so its
-    # candidate always contains every table -- without this, merging it
-    # drags every unrelated table (ownership transactions, 13F holdings,
-    # financial facts, ...) through a real compare/merge pass regardless of
-    # whether this process ever touched them. Safe by construction: a table
-    # is only ever excluded from the merge when its (row_count, content_hash)
-    # is byte-for-byte identical to what hydration captured, so excluding it
-    # can never drop a real write -- see merge_candidate_into_canonical's own
-    # only_tables docstring. Only computed when both fingerprints are
-    # available (hydration_fingerprint is None or current_fingerprint failed
-    # to compute both fall back to only_tables=None, i.e. the original
-    # always-correct full-scope behavior, unchanged).
-    changed_tables: frozenset[str] | None = None
-    if hydration_fingerprint is not None and current_fingerprint is not None:
-        hydration_protected = hydration_fingerprint.get("protected", {})
-        current_protected = current_fingerprint.get("protected", {})
-        changed_tables = frozenset(
-            table_name
-            for table_name in set(hydration_protected) | set(current_protected)
-            if hydration_protected.get(table_name) != current_protected.get(table_name)
-        )
-
-    baseline = context.storage_root.read_object_version(relative_path)
-    tables_merged: tuple[str, ...] = ()
-
-    # File-transfer streaming (seed-universe-narrow-hydrate ticket 06): a
-    # canonical silver.duckdb is a whole-database file, not per-table slices,
-    # so even with the table-scoped merge above, the transfer of the merged
-    # *result* is still O(file size). This used to buffer the whole file
-    # into memory three times over (canonical re-download, merged-file read
-    # for upload, promote_staged's own internal re-read of what it just
-    # uploaded) -- the exact boundary that OOM'd a live seed-universe task
-    # immediately after the table-scoping merge above had already completed
-    # cleanly. `download_file`/`stage_and_promote`(payload=Path) stream
-    # instead of buffering, and passing the local `Path` straight through to
-    # `stage_and_promote` lets `promote_staged` reuse it directly instead of
-    # re-downloading the object this same call just uploaded.
-    if baseline.exists:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            canonical_local = Path(tmp_dir) / "canonical.duckdb"
-            context.storage_root.download_file(relative_path, canonical_local)
-            merged_local = Path(tmp_dir) / "merged.duckdb"
-            merge_result = merge_candidate_into_canonical(
-                source_path, canonical_local, merged_local, only_tables=changed_tables
-            )
-            tables_merged = merge_result.tables_merged
-            size_bytes = merged_local.stat().st_size
-            staged_checksum = _streaming_md5_hexdigest(merged_local)
-            promotion = context.storage_root.stage_and_promote(
-                relative_path, merged_local, expected_etag=baseline.etag
-            )
-    else:
-        size_bytes = source_path.stat().st_size
-        staged_checksum = _streaming_md5_hexdigest(source_path)
-        promotion = context.storage_root.stage_and_promote(
-            relative_path, source_path, expected_etag=baseline.etag
-        )
-
-    return {
-        "layer": "silver_database",
-        "path": promotion.canonical_path,
-        "relative_path": relative_path,
-        "size_bytes": size_bytes,
-        "source_version": baseline.etag,
-        "staged_checksum": staged_checksum,
-        "canonical_version": promotion.new_version.etag,
-        "tables_merged": list(tables_merged),
-    }
+    return None
 
 
 def _publish_silver_database_with_retry(context: WarehouseCommandContext) -> dict[str, Any] | None:
@@ -2720,13 +2629,9 @@ def _capture_bronze_raw(
         # report zero private funds would read as "not yet ingested" and get
         # harmlessly re-fetched/re-ingested (merge is idempotent) -- never a
         # silent skip of real work.
-        already_ingested = {
-            str(row["source_dataset_period"])
-            for row in db.fetch(
-                "SELECT DISTINCT source_dataset_period FROM sec_adv_private_fund "
-                "WHERE source_dataset_period IS NOT NULL"
-            )
-        }
+        already_ingested = _snowflake_distinct_values(
+            "sec_adv_private_fund", "source_dataset_period"
+        )
 
         def _fetch_metadata() -> bytes:
             return fetch_reports_metadata_bytes(context.identity)
@@ -2779,13 +2684,9 @@ def _capture_bronze_raw(
         # source_dataset_period -- see the fetch-adv-bulk block above),
         # sec_adv_firm_roster's dataset_period is its own real business-key
         # column (ticket 01), so this reads it directly.
-        already_ingested = {
-            str(row["dataset_period"])
-            for row in db.fetch(
-                "SELECT DISTINCT dataset_period FROM sec_adv_firm_roster "
-                "WHERE dataset_period IS NOT NULL"
-            )
-        }
+        already_ingested = _snowflake_distinct_values(
+            "sec_adv_firm_roster", "dataset_period"
+        )
 
         def _fetch_listing() -> bytes:
             return fetch_listing_bytes(context.identity)
@@ -3089,9 +2990,7 @@ def _capture_bronze_raw(
         metrics["rows_inserted"] += reference_result["rows_written"]
         metrics["rows_skipped"] += reference_result["rows_skipped"]
         tracked_active_ciks = bookkeeping.get_tracked_ciks("active")
-        company_eligible_ciks = db.get_company_identity_ciks(
-            "active", bookkeeping=bookkeeping
-        )
+        company_eligible_ciks = _company_identity_ciks_snowflake(set(tracked_active_ciks))
         if refresh_mode == "backstop":
             input_cik_count = len(tracked_active_ciks)
             selected_ciks = company_eligible_ciks
@@ -6791,6 +6690,65 @@ def _require_cik_list(raw_ciks: Any, command_name: str) -> list[int]:
 
 def _parse_cik(value: Any) -> int:
     return parse_cik(value)
+
+
+def _company_identity_ciks_snowflake(tracked_ciks: set[int]) -> list[int]:
+    """Snowflake-backed replacement for SilverDatabase.get_company_identity_ciks.
+
+    DuckDB Retirement Cutover Ticket 10: the production write path no longer
+    hydrates local DuckDB silver, so this eligibility check (an entity must be
+    operating or present in the canonical company_tickers snapshot) reads
+    EDGARTOOLS_SILVER directly instead, mirroring MDM's reader cutover
+    (Ticket 05, edgar_warehouse/silver_support/snowflake_reader.py). Same
+    SQL/UNION shape SilverDatabase.get_company_identity_ciks used against
+    local DuckDB -- that method is now dead code, left for Ticket 12's sweep.
+    """
+    if not tracked_ciks:
+        return []
+    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+    cik_list = list(tracked_ciks)
+    placeholders = ", ".join("?" for _ in cik_list)
+    reader = SnowflakeSilverReader.connect()
+    try:
+        rows = reader.fetch(
+            f"""
+            SELECT DISTINCT company.cik AS cik
+            FROM sec_company AS company
+            WHERE LOWER(TRIM(COALESCE(company.entity_type, ''))) = 'operating'
+              AND company.cik IN ({placeholders})
+            UNION
+            SELECT DISTINCT ticker.cik AS cik
+            FROM sec_company_ticker AS ticker
+            WHERE ticker.source_name = 'company_tickers'
+              AND ticker.cik IN ({placeholders})
+            """,
+            cik_list + cik_list,
+        )
+    finally:
+        reader.close()
+    eligible_ciks = {int(row["cik"]) for row in rows}
+    return sorted(tracked_ciks & eligible_ciks)
+
+
+def _snowflake_distinct_values(table: str, column: str) -> set[str]:
+    """Distinct non-null values of one column, read from EDGARTOOLS_SILVER.
+
+    DuckDB Retirement Cutover Ticket 10: replaces a local-DuckDB
+    ``db.fetch("SELECT DISTINCT <column> FROM <table> WHERE <column> IS NOT
+    NULL")`` idempotency check (fetch-adv-bulk's source_dataset_period,
+    fetch-firm-roster's dataset_period) now that the write path no longer
+    hydrates local DuckDB silver. ``table``/``column`` are always internal
+    string literals at the two call sites, never user input.
+    """
+    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+    reader = SnowflakeSilverReader.connect()
+    try:
+        rows = reader.fetch(f"SELECT DISTINCT {column} FROM {table} WHERE {column} IS NOT NULL")
+    finally:
+        reader.close()
+    return {str(row[column.lower()]) for row in rows}
 
 
 def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:

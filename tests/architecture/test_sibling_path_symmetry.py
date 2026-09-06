@@ -105,6 +105,16 @@ class PublishRetrySiblingSymmetryTests(unittest.TestCase):
             "siblings together, not just one.",
         )
 
+    @unittest.skip(
+        "DuckDB Retirement Cutover Ticket 10 made _publish_silver_database_if_remote "
+        "a permanent no-op -- canonical silver.duckdb is no longer a write target for "
+        "any command, so the monolith path no longer calls merge_candidate_into_canonical "
+        "at all, and there is no live sibling left for this symmetry check to protect "
+        "(same shape as test_monolith_and_shard_retry_wrappers_reference_the_same_env_vars "
+        "above, skipped for the identical reason by Ticket 06). Delete this test alongside "
+        "the dead _publish_shard_if_remote/merge_candidate_into_canonical-in-monolith code "
+        "in Ticket 12, not before."
+    )
     def test_monolith_and_shard_publish_both_merge_via_merge_candidate_into_canonical(
         self,
     ) -> None:

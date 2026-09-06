@@ -6,11 +6,12 @@ import hashlib
 import json
 from datetime import UTC, date, datetime
 
+from unittest.mock import patch
+
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.application.adv_bulk_fetch import rolling_window_periods
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
 from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 _METADATA_JSON = json.dumps({
@@ -71,6 +72,7 @@ def test_fetch_adv_bulk_fetches_missing_period_and_writes_manifest(tmp_path, mon
     monkeypatch.setattr(
         warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
+    monkeypatch.setattr(warehouse_orchestrator, "_snowflake_distinct_values", lambda table, column: set())
 
     result = warehouse_orchestrator._execute_warehouse(
         context=context,
@@ -102,21 +104,12 @@ def test_fetch_adv_bulk_is_a_no_op_when_window_fully_ingested(tmp_path, monkeypa
     # Mirrors ticket 04's real finding in prod: once the full 13-month
     # rolling window is already in silver, a rerun must make zero network
     # calls, not just skip a single period.
+    #
+    # DuckDB Retirement Cutover Ticket 10: already_ingested now comes from
+    # EDGARTOOLS_SILVER via _snowflake_distinct_values, not local DuckDB --
+    # seed that instead of writing to the (now unhydrated) local file.
     context = _context(tmp_path)
-    db = SilverDatabase(_db_path(context))
-    try:
-        for index, period in enumerate(rolling_window_periods(date(2026, 6, 15))):
-            db._conn.execute(
-                "INSERT INTO sec_adv_private_fund "
-                "(accession_number, fund_index, filing_id, adviser_crd_number, "
-                " private_fund_id, schedule_section, reporting_role, filing_action, "
-                " fund_name, source_dataset_period, parser_version, last_sync_run_id) "
-                "VALUES (?, 1, ?, '801-1', ?, '7B1', 'detailed_reporter', 'current_compilation', "
-                " 'Test Fund', ?, 'iapd_bulk_v1', 'seed-run')",
-                [f"iapd-adv:{index}", str(index), f"805-{index}", period],
-            )
-    finally:
-        db.close()
+    already_ingested = set(rolling_window_periods(date(2026, 6, 15)))
 
     def _fail_if_called(url: str, identity: str) -> bytes:
         raise AssertionError(f"unexpected network call to {url}")
@@ -134,11 +127,15 @@ def test_fetch_adv_bulk_is_a_no_op_when_window_fully_ingested(tmp_path, monkeypa
         warehouse_orchestrator, "_bookkeeping_store", lambda: bookkeeping_fixture()
     )
 
-    result = warehouse_orchestrator._execute_warehouse(
-        context=context,
-        command_name="fetch-adv-bulk",
-        arguments={"run_id": "test-run-2"},
-    )
+    with patch.object(
+        warehouse_orchestrator, "_snowflake_distinct_values", return_value=already_ingested
+    ) as snowflake_check:
+        result = warehouse_orchestrator._execute_warehouse(
+            context=context,
+            command_name="fetch-adv-bulk",
+            arguments={"run_id": "test-run-2"},
+        )
+    snowflake_check.assert_called_once_with("sec_adv_private_fund", "source_dataset_period")
 
     assert result["status"] == "ok"
     manifest = json.loads(

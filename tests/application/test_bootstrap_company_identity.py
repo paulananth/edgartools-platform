@@ -129,13 +129,10 @@ def test_company_identity_mode_rejects_release_mode() -> None:
 def test_company_identity_with_explicit_cik_list_skips_full_hydrate(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An explicit --cik-list never reads db.get_tracked_ciks(), so hydrating the
-    full canonical DB into the local working copy first only bloats the
-    candidate that _publish_silver_database_if_remote later merges -- a
-    full-size candidate defeats merge_candidate_into_canonical's bounded-
-    candidate assumption (observed in production: OOM against a 2M+-row
-    canonical). Skipping hydrate here keeps the candidate scoped to the CIKs
-    this run actually touches.
+    """An explicit --cik-list never reads db.get_tracked_ciks(), and (DuckDB
+    Retirement Cutover Ticket 10) canonical silver.duckdb is no longer a
+    write/hydrate target for any command at all -- see
+    _publish_silver_database_if_remote's docstring.
     """
     storage_root = tmp_path / "warehouse"
     monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
@@ -167,13 +164,17 @@ def test_company_identity_with_explicit_cik_list_skips_full_hydrate(
     assert hydrate_calls == []
 
 
-def test_company_identity_without_cik_list_still_hydrates(
+def test_company_identity_without_cik_list_also_skips_hydrate(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Without an explicit --cik-list (the windowed Step Functions Map case),
-    _resolve_fundamentals_ciks falls back to db.get_tracked_ciks() -- which
-    requires the tracked universe Branch A already wrote into canonical, so
-    hydrate must still run here.
+    _resolve_fundamentals_ciks falls back to bookkeeping.get_tracked_ciks()
+    -- Postgres, not this local DuckDB `db` connection (DuckDB Retirement
+    Cutover Ticket 14 repointed it there). DuckDB Retirement Cutover Ticket
+    10 then removed hydration for this call site entirely: there is no
+    local-DB dependency left to justify it, and canonical silver.duckdb is
+    no longer a write target for any command (see
+    _publish_silver_database_if_remote's docstring).
     """
     storage_root = tmp_path / "warehouse"
     monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
@@ -182,14 +183,10 @@ def test_company_identity_without_cik_list_still_hydrates(
     monkeypatch.delenv("WAREHOUSE_SILVER_ROOT", raising=False)
 
     hydrate_calls: list[object] = []
-    original_hydrate = warehouse_orchestrator._hydrate_silver_database_from_storage
-
-    def _tracking_hydrate(context):
-        hydrate_calls.append(context)
-        return original_hydrate(context)
-
     monkeypatch.setattr(
-        warehouse_orchestrator, "_hydrate_silver_database_from_storage", _tracking_hydrate
+        warehouse_orchestrator,
+        "_hydrate_silver_database_from_storage",
+        lambda context: hydrate_calls.append(context),
     )
 
     args = SimpleNamespace(
@@ -205,4 +202,4 @@ def test_company_identity_without_cik_list_still_hydrates(
     )
 
     bootstrap_fundamentals.execute(args)
-    assert len(hydrate_calls) == 1
+    assert hydrate_calls == []

@@ -83,7 +83,6 @@ from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
     _emit_pipeline_event,
-    _hydrate_silver_database_from_storage,
     _publish_silver_database_with_retry,
 )
 from edgar_warehouse.application.workflows.acquisition_run_writes import (
@@ -427,7 +426,10 @@ def _run_daily_index_driven_discovery(
     lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
     registry_version = getattr(args, "registry_version", None) or default_registry_version
 
-    _hydrate_silver_database_from_storage(context)
+    # DuckDB Retirement Cutover Ticket 10: hydration removed. finalize_filing_
+    # artifact_candidate's write-then-read-back of sec_raw_object is satisfied
+    # by this run's own writes; canonical silver.duckdb is no longer written
+    # by any command (see _publish_silver_database_if_remote's docstring).
     db = open_silver_database(context.silver_root)
     bookkeeping = _bookkeeping_store()
     try:

@@ -49,7 +49,6 @@ from edgar_warehouse.application.acquisition_command_registry import (
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
-    _hydrate_silver_database_from_storage,
     _publish_silver_database_with_retry,
 )
 from edgar_warehouse.application.workflows.acquisition_run_writes import (
@@ -100,7 +99,9 @@ def run_drive_adv_bulk_dataset_discovery(args: Any) -> int:
     from edgar_warehouse.application.adv_bulk_fetch import fetch_reports_metadata_bytes
     from edgar_warehouse.application.firm_roster_fetch import fetch_listing_bytes
 
-    _hydrate_silver_database_from_storage(context)
+    # DuckDB Retirement Cutover Ticket 10: hydration removed. Canonical
+    # silver.duckdb is no longer written by any command (see
+    # _publish_silver_database_if_remote's docstring).
     db = open_silver_database(context.silver_root)
     try:
         manifest = build_adv_bulk_dataset_manifest(
