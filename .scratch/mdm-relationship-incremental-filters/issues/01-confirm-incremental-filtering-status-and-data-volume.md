@@ -1,5 +1,5 @@
 Type: research
-Status: open
+Status: claimed
 
 **Spawned by:** the map's own charting session — 2 of 11 `_derive_*` types were confirmed live in code (`_derive_institutional_holds`, `_derive_holds`), the other 9 were presumed to share the same `_bounded_relationship_sql` write-count-bound-not-recency shape but never individually checked.
 
