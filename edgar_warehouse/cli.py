@@ -123,6 +123,75 @@ def _add_common_bootstrap_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_fundamentals_lookback_args(parser: argparse.ArgumentParser) -> None:
+    """Shared lookback flags for the four previously-unbounded fundamentals
+    families: Item 2.02 (earnings) 8-Ks, the DEF 14A/DEFA14A/PRE 14A proxy
+    family, 13F-HR/-A (raw parse + the derived sec_thirteenf_holding
+    extraction), and every ADV form. Each per-family override falls back to
+    --fundamentals-lookback-years when unset, mirroring
+    --item-502-lookback-years's existing fallback-to-ownership shape.
+    """
+    parser.add_argument(
+        "--fundamentals-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Shared default years of history to fetch/parse for Item 2.02 "
+            "earnings 8-Ks, the DEF 14A/DEFA14A/PRE 14A proxy family, "
+            "13F-HR/-A, and all ADV forms (default: 2). Overridable per "
+            "family with --item-202-lookback-years/--proxy-lookback-years/"
+            "--thirteenf-lookback-years/--adv-lookback-years. Use 0 for "
+            "full history. Also settable via WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS."
+        ),
+    )
+    parser.add_argument(
+        "--item-202-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Item 2.02 (earnings) 8-K history to fetch/parse "
+            "(default: --fundamentals-lookback-years). Use 0 for full "
+            "history. Also settable via WAREHOUSE_ITEM_202_LOOKBACK_YEARS."
+        ),
+    )
+    parser.add_argument(
+        "--proxy-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of DEF 14A/DEFA14A/PRE 14A proxy history to fetch/parse "
+            "(default: --fundamentals-lookback-years). Use 0 for full "
+            "history. Also settable via WAREHOUSE_PROXY_LOOKBACK_YEARS."
+        ),
+    )
+    parser.add_argument(
+        "--thirteenf-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of 13F-HR/13F-HR/A history to fetch/parse, including the "
+            "derived sec_thirteenf_holding extraction (default: "
+            "--fundamentals-lookback-years). Use 0 for full history. Also "
+            "settable via WAREHOUSE_THIRTEENF_LOOKBACK_YEARS."
+        ),
+    )
+    parser.add_argument(
+        "--adv-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of ADV-family filing history to fetch/parse (default: "
+            "--fundamentals-lookback-years). Use 0 for full history. Also "
+            "settable via WAREHOUSE_ADV_LOOKBACK_YEARS."
+        ),
+    )
+
+
 def _add_run_id_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--run-id",
@@ -530,6 +599,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Load full filing history for tracked companies.",
     )
     _add_common_bootstrap_args(bootstrap_full)
+    _add_fundamentals_lookback_args(bootstrap_full)
     _add_run_id_arg(bootstrap_full)
     bootstrap_full.set_defaults(handler=_handle_bootstrap_full)
 
@@ -627,6 +697,7 @@ def build_parser() -> argparse.ArgumentParser:
             "OWNERSHIP_FORMS again."
         ),
     )
+    _add_fundamentals_lookback_args(daily_incremental)
     _add_run_id_arg(daily_incremental)
     daily_incremental.set_defaults(
         handler=_handle_daily_incremental,
@@ -1213,6 +1284,7 @@ def build_parser() -> argparse.ArgumentParser:
             "same ledger instead of starting a fresh, empty one."
         ),
     )
+    _add_fundamentals_lookback_args(bootstrap_batch)
     _add_run_id_arg(bootstrap_batch)
     bootstrap_batch.set_defaults(handler=_handle_bootstrap_batch)
 
@@ -1419,6 +1491,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="0-based offset into the ordered CIK list for windowed chunking",
     )
+    _add_fundamentals_lookback_args(bootstrap_next)
     _add_run_id_arg(bootstrap_next)
     bootstrap_next.set_defaults(handler=_handle_bootstrap_next)
 
