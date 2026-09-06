@@ -2123,6 +2123,17 @@ class TestRelationshipDerivationPlateauFix:
         compute a strictly larger source LIMIT than the first -- proving the
         fetch window grows with the live relationship count rather than
         re-issuing the same bounded query and plateauing on skipped_existing.
+
+        Also covers EMPLOYED_BY's second source, sec_employment_event: it
+        must receive the identical growing-window LIMIT as
+        sec_executive_record, not the pre-fix hardcoded `remaining=None`
+        (an always-unbounded full table scan on every call, regardless of
+        the method's own budget -- found live during mdm-relationship-
+        incremental-filters Ticket 01). No sec_employment_event fixture
+        rows are needed to prove this: the LIMIT is emitted from the SQL
+        text itself before any fixture matching happens, so an empty
+        result set for that table doesn't affect this assertion or any of
+        the `inserted`/`existing` counts above.
         """
         exec_row = lambda accession, year, name, role: {
             "cik": 910001, "accession_number": accession, "fiscal_year": year,
@@ -2147,8 +2158,11 @@ class TestRelationshipDerivationPlateauFix:
         assert second["EMPLOYED_BY"]["existing"] == 2
         assert second["EMPLOYED_BY"]["inserted"] == 0  # both already converted -- idempotent
 
-        assert len(silver.limits) == 2, "expected exactly one bounded fetch per run"
-        first_limit, second_limit = silver.limits
+        assert len(silver.limits) == 4, (
+            "expected two bounded fetches per run -- sec_executive_record and "
+            "sec_employment_event, once EMPLOYED_BY's event sub-query is bounded too"
+        )
+        first_exec_limit, first_event_limit, second_exec_limit, second_event_limit = silver.limits
         existing_at_run2 = second["EMPLOYED_BY"]["existing"]
         remaining_at_run2 = 5 - existing_at_run2
 
@@ -2160,18 +2174,32 @@ class TestRelationshipDerivationPlateauFix:
         # The precise invariant that distinguishes fixed vs. broken: the second
         # LIMIT must equal existing + max(remaining * 50, 100) -- i.e. it must
         # include the live `existing` addend. A bare assertion that
-        # `second_limit > existing` is NOT sufficient to catch the regression
+        # `second_exec_limit > existing` is NOT sufficient to catch the regression
         # here: at this fixture's scale the pre-fix flat limit
         # (max(remaining*50, 100) == 150) already exceeds existing (2), so a
         # looser check would pass against the broken code too (false
         # confidence). The exact value 152 only comes out of existing(2) +
         # max(3*50, 100); the pre-fix formula would emit 150.
         expected_limit = existing_at_run2 + max(remaining_at_run2 * 50, 100)
-        assert second_limit == expected_limit == 152, (
-            f"second-run LIMIT ({second_limit}) != existing + windowed-remaining "
-            f"({expected_limit}) -- the `existing` addend is missing from the "
-            f"emitted LIMIT, so a stable-order rescan would plateau on the same "
+        assert second_exec_limit == expected_limit == 152, (
+            f"second-run sec_executive_record LIMIT ({second_exec_limit}) != existing + "
+            f"windowed-remaining ({expected_limit}) -- the `existing` addend is missing "
+            f"from the emitted LIMIT, so a stable-order rescan would plateau on the same "
             f"leading slice instead of advancing past converted rows"
+        )
+
+        # The bug this test was extended to catch: sec_employment_event must
+        # get the SAME formula, not a hardcoded unbounded scan. Before the
+        # fix, this sub-query emitted no LIMIT clause at all, so it would
+        # never appear in silver.limits -- the len(silver.limits) == 4
+        # assertion above already fails first in that case; this assertion
+        # additionally locks in that the value itself matches its sibling
+        # query exactly, not just "some" limit.
+        assert second_event_limit == expected_limit == 152, (
+            f"EMPLOYED_BY's sec_employment_event sub-query LIMIT ({second_event_limit}) "
+            f"!= the same growing-window formula ({expected_limit}) used by "
+            f"sec_executive_record -- the event sub-query must not silently do a full "
+            f"unbounded scan while its sibling query is properly bounded"
         )
 
 
