@@ -86,26 +86,55 @@ check would go silently empty, not error" mechanism spelled out.
 
 **Blocked by:** 02, 03, 04, 05, 06 (all resolved)
 
-**Status:** ready-for-agent
+**Status:** resolved (2026-09-06)
 
-- [ ] The 23 orphaned DuckDB-coupled builder functions and their
+- [x] The 23 orphaned DuckDB-coupled builder functions and their
       `_source_export_table_builders()` entries are deleted
-- [ ] `build_earnings_calendar_table_from_rows`,
+- [x] `build_earnings_calendar_table_from_rows`,
       `build_consensus_estimates_table_from_rows`,
       `build_transcript_events_table_from_rows`, the 5 Ticket-06
       Snowflake-reading builders, and `build_ticker_reference_table` all
       still exist and are unmodified
-- [ ] `_source_export_table_builders`/`iter_source_export_tables`/
+- [x] `_source_export_table_builders`/`iter_source_export_tables`/
       `build_source_export` no longer take a `conn`/`db` argument; the
       `warehouse_orchestrator.py` call site is updated to match
-- [ ] `validate_data_quality.py`'s `_check_gold_vs_silver` validates
+- [x] `validate_data_quality.py`'s `_check_gold_vs_silver` validates
       against live Snowflake `EDGARTOOLS_GOLD` tables directly, not
       `build_source_export()`'s output
-- [ ] The dead `build_gold`-re-exporting shim `edgar_warehouse/gold.py` is
+- [x] The dead `build_gold`-re-exporting shim `edgar_warehouse/gold.py` is
       deleted (confirmed zero importers repo-wide; note
       `application/workflows/serving_publish.py`, named in this ticket's
       original text, no longer exists at all — already gone, nothing to do
       there)
-- [ ] No remaining `import duckdb` reference anywhere in
+- [x] No remaining `import duckdb` reference anywhere in
       `edgar_warehouse/serving/`
-- [ ] Full test suite green
+- [x] Full test suite green
+
+## Answer
+
+Implemented on branch `claude/retire-orphaned-source-export-builders`
+([PR #550](https://github.com/paulananth/edgartools-platform/pull/550)).
+All 6 checklist items above confirmed. Also swept the file for helpers that
+became fully orphaned as a direct consequence of the 23 deletions
+(`_det_key`, `_form_family`, `_fetch_rows`, `_clean_text`,
+`_normalized_text`, the four natural-key builders, `_arrow`,
+`_TXN_CODE_DESCRIPTIONS`, plus the now-unused `math`/`timedelta`/
+`get_connection` imports) — verified via grep line-range analysis that
+each had zero remaining callers outside the deleted region before removing
+it; `/gof-refactor-reviewer`'s one flagged double-check (`_empty`/`_arrow`
+have generic names) caught that `_empty` is still called internally by
+`_table_from_records` and must NOT be deleted — confirmed and kept.
+
+Deleted two test files that exclusively tested deleted builders
+(`test_source_dimensional_export_financial_fact.py`,
+`_financial_derived.py`) and rewrote `test_source_dimensional_export_
+streaming.py` for the 5-table Snowflake-only registry. `/code-review`'s
+three axes (Standards/Spec/GoF) all ran clean after one round of comment
+fixes (Standards flagged several comments citing ticket numbers instead of
+durable invariants, per CLAUDE.md's own rule — fixed before commit).
+
+Full suite green: 3104 passed, 6 skipped, excluding 8 pre-existing
+unrelated Postgres-integration failures already documented in CLAUDE.md.
+This closes the last blocker in the `dbt-gold-silver-rewiring` map's own
+7-ticket chain and (per the `duckdb-retirement` map's own note) was also
+one of `duckdb-retirement-cutover` Ticket 10's blocking dependencies.
