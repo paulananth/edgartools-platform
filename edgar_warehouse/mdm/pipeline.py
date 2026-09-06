@@ -2831,9 +2831,10 @@ class MDMPipeline:
         """
         event_rows = self._fetch_optional_relationship_rows(
             event_sql,
-            None,
+            remaining,
             rel_type_name="EMPLOYED_BY",
             source_table="sec_employment_event",
+            existing=existing,
         )
         # Bulk-prefetch company lookups only (this loop's version open/close
         # sequencing genuinely depends on processing event_rows in the
@@ -2947,6 +2948,8 @@ class MDMPipeline:
                 inserted += 1
             else:
                 skipped_existing += 1
+            if remaining is not None and inserted >= remaining:
+                break
 
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
