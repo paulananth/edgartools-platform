@@ -25,7 +25,10 @@ uv run python scripts/ops/aws_cost_optimizer.py \
 
 S3 filing keys contain CIK and accession but not form or Item 5.02 identity.
 The optimizer therefore requires an accession authority derived from canonical
-Snowflake Silver. It applies these source windows:
+Snowflake Silver. Company forms come from `SEC_COMPANY_FILING`; ADV forms come
+from their independent authority, `SEC_ADV_FILING`, using `effective_date` and
+CRD/file identity to protect the current filing. It applies these source
+windows:
 
 | Artifact | Retention |
 | --- | ---: |

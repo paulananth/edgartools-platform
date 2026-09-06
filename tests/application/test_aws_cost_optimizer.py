@@ -391,6 +391,33 @@ def test_cost_findings_rank_s3_and_fargate_and_apply_thresholds() -> None:
     assert findings[0].drift_percent == pytest.approx(140.0)
 
 
+def test_cost_findings_exclude_non_optimizable_tax_line() -> None:
+    findings = build_cost_findings(
+        previous_month={"Tax": 0.0, "Amazon Simple Storage Service": 1.0},
+        latest_month={"Tax": 10.0, "Amazon Simple Storage Service": 2.0},
+        policy=CostPolicy(minimum_monthly_savings_usd=1.0, drift_percent=20.0),
+    )
+
+    assert [finding.service for finding in findings] == [
+        "Amazon Simple Storage Service"
+    ]
+
+
+def test_retention_authority_uses_canonical_adv_filing_table() -> None:
+    sql = (
+        REPO_ROOT
+        / "infra"
+        / "snowflake"
+        / "sql"
+        / "operations"
+        / "aws_cost_retention_authority.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "EDGARTOOLS_SILVER.SEC_ADV_FILING" in sql
+    assert "effective_date AS filing_date" in sql
+    assert "crd_number" in sql
+
+
 def test_cost_drift_threshold_does_not_require_one_dollar_increase() -> None:
     findings = build_cost_findings(
         previous_month={"AWS Key Management Service": 0.10},

@@ -29,7 +29,9 @@ Implementation contract:
   years. Report current runtime drift rather than silently adopting narrower
   runtime defaults.
 - Build an Accession Retention Authority because the existing S3 key does not
-  encode form/item type. Use the maximum applicable consumer cutoff.
+  encode form/item type. Use `SEC_COMPANY_FILING` for company forms and the
+  independent `SEC_ADV_FILING` authority for ADV. Use the maximum applicable
+  consumer cutoff.
 - Select the complete registered-document/text bundle and exact
   current/noncurrent VersionIds. Never target a partial, unmatched, unexpired,
   or unplanned version. Preflight rejects drift; a version written after

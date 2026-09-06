@@ -6,19 +6,41 @@
 -- Bronze filing/text object key. COMPLETE is false when an attachment lacks a
 -- raw-object registration; the retention planner rejects incomplete bundles.
 
-WITH filing AS (
+WITH company_filing AS (
   SELECT
     accession_number,
     cik,
     form,
     filing_date,
     REGEXP_LIKE(COALESCE(items, ''), '(^|[, ]+)5\\.02([, ]+|$)') AS item_502,
+    FALSE AS retain_current
+  FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_COMPANY_FILING
+  WHERE form NOT IN ('ADV', 'ADV/A')
+),
+adv_filing AS (
+  SELECT
+    accession_number,
+    cik,
+    form,
+    effective_date AS filing_date,
+    FALSE AS item_502,
     form IN ('ADV', 'ADV/A')
       AND ROW_NUMBER() OVER (
-        PARTITION BY cik, IFF(form IN ('ADV', 'ADV/A'), 'ADV', form)
-        ORDER BY filing_date DESC, accession_number DESC
+        PARTITION BY COALESCE(
+          NULLIF(crd_number, ''),
+          NULLIF(sec_file_number, ''),
+          TO_VARCHAR(cik),
+          accession_number
+        )
+        ORDER BY effective_date DESC, accession_number DESC
       ) = 1 AS retain_current
-  FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_COMPANY_FILING
+  FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_ADV_FILING
+  WHERE effective_date IS NOT NULL
+),
+filing AS (
+  SELECT * FROM company_filing
+  UNION ALL
+  SELECT * FROM adv_filing
 ),
 raw_objects AS (
   SELECT DISTINCT

@@ -18,6 +18,7 @@ from typing import Any
 S3_SERVICE = "Amazon Simple Storage Service"
 ECS_SERVICE = "Amazon Elastic Container Service"
 S3_STANDARD_US_EAST_1_USD_PER_GB_MONTH = 0.023
+NON_OPTIMIZABLE_BILLING_LINES = frozenset({"Tax"})
 
 FORM_RETENTION_YEARS: dict[str, int] = {
     "13F-HR": 3,
@@ -134,6 +135,8 @@ def build_cost_findings(
     """Return material closed-month drift findings, with S3/Fargate first."""
     findings: list[CostFinding] = []
     for service, latest in latest_month.items():
+        if service in NON_OPTIMIZABLE_BILLING_LINES:
+            continue
         previous = float(previous_month.get(service, 0.0))
         latest = float(latest)
         increase = latest - previous
