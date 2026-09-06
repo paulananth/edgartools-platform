@@ -7,7 +7,7 @@ write durable markers under::
 
 This operator tool reads the frozen ``candidate_batches.jsonl`` plus those
 markers and writes a new JSONL containing only unfinished batches. Point the
-next ``bronze_seed_silver_gold`` strict execution's ``candidate_batches_key``
+next ``one_click_data_refresh`` strict execution's ``candidate_batches_key``
 at that remaining file (keep the same ``candidate_manifest_key``).
 
 **P3:** do not redrive a failed Step Functions execution after deploying a new

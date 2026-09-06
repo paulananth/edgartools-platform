@@ -1,4 +1,4 @@
-"""Live monitor for a bronze-seed-silver-gold release execution.
+"""Live monitor for a one-click-data-refresh release execution.
 
 Prints immediate feedback for every step as it happens: state transitions,
 Distributed Map batch progress (the strict Map's per-batch work is invisible
@@ -25,7 +25,7 @@ import subprocess
 import sys
 import time
 
-STATE_MACHINE_BASENAME = "bronze-seed-silver-gold"
+STATE_MACHINE_BASENAME = "one-click-data-refresh"
 TERMINAL_STATUSES = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
 
 # Event types worth a line of output; everything else (lambda scheduling

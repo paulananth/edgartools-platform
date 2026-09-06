@@ -4727,7 +4727,7 @@ release_lease_after_sec_fetch_defer = ecs_state(wh_medium_arn,
 # SecFetchDeferred just before this state runs) as the execution's final
 # output, instead of this task's own raw ecs:runTask.sync response
 # silently replacing the whole $ (the exact landmine
-# write_bronze_seed_silver_gold_definition's seed_from_bronze comment
+# write_one_click_data_refresh_definition's seed_from_bronze comment
 # documents for the identical ecs_state() default).
 release_lease_after_sec_fetch_defer["ResultPath"] = None
 release_lease_after_sec_fetch_defer["Catch"] = [{
@@ -4807,7 +4807,7 @@ PY
 # a silver-only reprocess of an already-bootstrapped environment, this does NOT depend
 # on silver DuckDB's own bookkeeping tables (sec_company_sync_state), which are empty
 # in that scenario. No execution input required.
-write_bronze_seed_silver_gold_definition() {
+write_one_click_data_refresh_definition() {
   local output_file="$1"
   local wh_task_medium_arn="$2"  # warehouse medium (seed-bronze-batches, bootstrap-batch)
   local mdm_task_small_arn="$3"  # mdm small   (mdm reconcile)
@@ -4972,7 +4972,7 @@ seed_from_bronze = ecs_state(wh_medium_arn,
     "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', States.Format('{}', $.batch_size))",
     next_state="Clean and Merge Filings", retry_secs=60)
 # Bug found live 2026-08-18 (install-sh-provision-deploy-data Ticket 04
-# follow-up, root-caused via 5-whys against a real bronze_seed_silver_gold
+# follow-up, root-caused via 5-whys against a real one_click_data_refresh
 # execution failure): ecs_state()'s default ResultPath ("$", i.e. omitted)
 # replaces the ENTIRE state input with the ECS task's own runTask.sync
 # output, discarding resume_from_run_id (and batch_size) that
@@ -5004,7 +5004,7 @@ compute_remaining_batches.pop("Retry", None)
 # fail identically once it reached Clean and Merge Filings.
 compute_remaining_batches["ResultPath"] = None
 
-# INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls and must not
+# INVARIANT: one_click_data_refresh must make ZERO SEC API calls and must not
 # fan out parser work inside each Clean and Merge Filings chunk. --artifact-policy skip
 # prevents ownership XML fetches; --parser-policy skip prevents each chunk from
 # re-parsing the full configured-form corpus. Parse cached artifacts later
@@ -5100,7 +5100,7 @@ strict_batch_map = {
     "Next": "StrictMastering",
 }
 
-# INVARIANT: No --limit on MDM commands here. bronze_seed_silver_gold is always a full
+# INVARIANT: No --limit on MDM commands here. one_click_data_refresh is always a full
 # bulk run (all CIKs found in bronze), not an incremental daily update.
 #
 # --run-id / --resume-ledger-run-id (pipeline-resumability ticket 02):
@@ -5743,18 +5743,19 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  # bronze_seed_silver_gold: one-click cold-start/recovery from an existing bronze
+  # one_click_data_refresh (formerly bronze_seed_silver_gold, renamed
+  # 2026-09-06): one-click cold-start/recovery from an existing bronze
   # snapshot (e.g. copied in from another environment) through silver → MDM → Neo4j →
   # Snowflake. Unlike a silver-only reprocess, does not depend on silver already
   # knowing about the CIKs — discovers them directly from S3 bronze.
   # (silver_mdm_gold, the dedicated silver-only-reprocess machine, was retired
   # state-machine-consolidation ticket 09, 2026-09-05: zero executions ever.)
-  bronze_seed_silver_gold_file="$(json_file sfn-bronze-seed-silver-gold)"
-  write_bronze_seed_silver_gold_definition "$bronze_seed_silver_gold_file" \
+  one_click_data_refresh_file="$(json_file sfn-one-click-data-refresh)"
+  write_one_click_data_refresh_definition "$one_click_data_refresh_file" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
-  bronze_seed_silver_gold_arn="$(upsert_state_machine bronze_seed_silver_gold "$bronze_seed_silver_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
+  one_click_data_refresh_arn="$(upsert_state_machine one_click_data_refresh "$one_click_data_refresh_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
   printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "bronze_seed_silver_gold" "$bronze_seed_silver_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
+  python3 - "one_click_data_refresh" "$one_click_data_refresh_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
 import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY

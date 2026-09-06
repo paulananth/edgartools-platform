@@ -1151,7 +1151,7 @@ def build_parser() -> argparse.ArgumentParser:
         "seed-bronze-batches",
         help=(
             "Write a CIK batch file by listing CIKs that actually have bronze data "
-            "in S3, with zero SEC calls. Used by bronze_seed_silver_gold to stand up "
+            "in S3, with zero SEC calls. Used by one_click_data_refresh to stand up "
             "silver/MDM/gold from an existing bronze snapshot (e.g. one copied in "
             "from another environment) without re-fetching from SEC."
         ),

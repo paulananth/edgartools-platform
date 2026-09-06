@@ -1,6 +1,6 @@
 """Regression test: the DuckDB silver reader must fall back to a monolith
 silver.duckdb when no shard manifest exists yet (first-load recovery via
-bronze_seed_silver_gold), instead of failing with "cannot open
+one_click_data_refresh), instead of failing with "cannot open
 MDM_SILVER_DUCKDB -- shard-manifest.json".
 
 DuckDB Retirement Cutover Ticket 05: this mechanic lives in

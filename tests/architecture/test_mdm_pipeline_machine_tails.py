@@ -2,7 +2,7 @@
 
 state-machine-consolidation wayfinder map, ticket 02: after the "one shared
 tail" premise turned out wrong (6 genuinely distinct tail shapes across
-mdm_gold/ownership_mdm_gold/silver_mdm_gold/bronze_seed_silver_gold/
+mdm_gold/ownership_mdm_gold/silver_mdm_gold/one_click_data_refresh/
 residual_holds_graph -- see the ticket's addendum), the revised scope wires
 each machine's own Publish/Publish Relationships/Reconcile(/"Publish Business
 Data") states through
@@ -15,9 +15,9 @@ redundant with the new single MDM machine); ownership_mdm_gold retired
 separately (own ticket, predates this file's last update); silver_mdm_gold
 retired by ticket 09 (2026-09-05: zero executions ever -- deleted outright,
 not modified, so it has no tests here anymore). Ticket 09 also confirmed
-bronze_seed_silver_gold's default path is NOT dead (install.sh's documented
+one_click_data_refresh's default path is NOT dead (install.sh's documented
 cold-start/recovery procedure depends on it) -- deferred, untouched. Only 2
-machines still use wire_mdm_tail() as-is: bronze_seed_silver_gold's default
+machines still use wire_mdm_tail() as-is: one_click_data_refresh's default
 path (this file) and residual_holds_graph (its own test file).
 
 These tests generate the real JSON by sourcing the actual bash functions,
@@ -38,7 +38,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 
-_START_MARKER = "write_bronze_seed_silver_gold_definition() {\n"
+_START_MARKER = "write_one_click_data_refresh_definition() {\n"
 _END_MARKER = "\nwrite_generation_build_definition() {"
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
@@ -93,12 +93,12 @@ def tmp_root() -> Path:
 
 
 @pytest.fixture(scope="module")
-def bronze_seed_silver_gold(tmp_root: Path) -> dict:
-    return _generate("write_bronze_seed_silver_gold_definition", tmp_root, "bronze_seed_silver_gold")
+def one_click_data_refresh(tmp_root: Path) -> dict:
+    return _generate("write_one_click_data_refresh_definition", tmp_root, "one_click_data_refresh")
 
 
-def test_bronze_seed_silver_gold_default_tail_ordering(bronze_seed_silver_gold: dict) -> None:
-    s = bronze_seed_silver_gold["States"]
+def test_one_click_data_refresh_default_tail_ordering(one_click_data_refresh: dict) -> None:
+    s = one_click_data_refresh["States"]
     assert s["Infer Relationships"]["Next"] == "Publish"
     assert s["Publish"]["Next"] == "Publish Relationships"
     assert s["Publish Relationships"]["Next"] == "Reconcile"
@@ -107,14 +107,14 @@ def test_bronze_seed_silver_gold_default_tail_ordering(bronze_seed_silver_gold: 
     assert s["Reconcile"].get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Publish Business Data"}]
 
 
-def test_bronze_seed_silver_gold_strict_branch_untouched(bronze_seed_silver_gold: dict) -> None:
+def test_one_click_data_refresh_strict_branch_untouched(one_click_data_refresh: dict) -> None:
     # The Ticket-20 "strict" release-mode branch is a completely separate
     # 6-state graph with no equivalent elsewhere -- it must survive the
     # wire_mdm_tail refactor of the *default* tail exactly as before, with
     # its own independent Export->Sync->SyncIdempotency->VerifyCandidate->
     # Verify->"Strict Publish Business Data" chain still wired by hand
     # (nothing to deduplicate, since it has no sibling).
-    s = bronze_seed_silver_gold["States"]
+    s = one_click_data_refresh["States"]
     for name in (
         "StrictPublish", "Strict Publish Relationships", "Strict Publish Relationships Idempotency",
         "Strict Reconcile Candidate", "StrictReconcile", "Strict Publish Business Data",
@@ -125,7 +125,7 @@ def test_bronze_seed_silver_gold_strict_branch_untouched(bronze_seed_silver_gold
     assert s["Strict Publish Business Data"]["End"] is True
 
 
-def test_no_shared_state_names_between_default_and_strict_paths(bronze_seed_silver_gold: dict) -> None:
-    s = bronze_seed_silver_gold["States"]
+def test_no_shared_state_names_between_default_and_strict_paths(one_click_data_refresh: dict) -> None:
+    s = one_click_data_refresh["States"]
     assert "Publish" in s and "StrictPublish" in s
     assert s["Publish"] != s["StrictPublish"]

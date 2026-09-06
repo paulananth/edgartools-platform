@@ -42,7 +42,7 @@ infrastructure → AWS access roles/policies → ECR image publish → ECS task
 definitions/Step Functions → Snowflake native-pull foundation → an
 unscoped `seed-universe` run → Snowflake MDM export targets → dbt gold →
 Snowflake loader role ownership → Streamlit dashboard → Snowflake Postgres
-/ graph prerequisites → `bronze_seed_silver_gold` → standalone gold-refresh
+/ graph prerequisites → `one_click_data_refresh` → standalone gold-refresh
 (with an automated `gold-verify-live` row-count gate) → MDM+graph
 connectivity/sync/verification → AWS MDM E2E checks → a bounded data
 smoke test. Run `bash infra/scripts/install.sh plan --env-name <slug>

@@ -154,7 +154,7 @@ class LoaderIdempotencyTests(unittest.TestCase):
         """A fresh silver DB (no checkpoint for this CIK) must still find bronze that
         already exists in storage from another environment's run (e.g. synced via
         `aws s3 sync`), rather than re-fetching from SEC. Regression test for the bug
-        where bronze_seed_silver_gold made thousands of live SEC calls despite the
+        where one_click_data_refresh made thousands of live SEC calls despite the
         CIKs already having bronze in S3."""
         cik = 320193
         payload = b'{"cik": "0000320193", "filings": {"recent": {}}}'

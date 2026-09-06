@@ -758,7 +758,7 @@ def _duckdb_silver_reader():
         try:
             local_paths = _hydrate_all_shards(context)
         except (FileNotFoundError, OSError):
-            # First-load recovery (bronze_seed_silver_gold) may have written a
+            # First-load recovery (one_click_data_refresh) may have written a
             # monolith silver.duckdb before any shard manifest exists -- mirror
             # bootstrap-batch's shard_manifest_missing_monolith_fallback path
             # (warehouse_orchestrator.py) instead of failing the MDM read.

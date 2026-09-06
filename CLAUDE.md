@@ -2644,7 +2644,7 @@ bronze machine, `BatchSilver` Map at `MaxConcurrency=3` via
 consolidation wayfinder map, ticket 09, 2026-09-05: zero executions ever) —
 both code and the live AWS object are gone; see the "Key invariants" section
 below for the full retirement note. The genuinely-parallel batch pipelines
-remaining in prod are `bronze_seed_silver_gold`'s own two `bootstrap-batch`
+remaining in prod are `one_click_data_refresh`'s own two `bootstrap-batch`
 Maps (hardcoded `MaxConcurrency` of 20 and 2, not env-controlled) — see that
 machine's own entry further below. Both reprocess already-loaded bronze (no
 new SEC submissions fetched) and are unrelated to `load_history`'s own
@@ -2781,13 +2781,13 @@ this section used to document, `BatchSilver` Map at `MaxConcurrency=3` via
 consolidation wayfinder map, ticket 09, 2026-09-05: zero executions ever) —
 deleted, not modified. `BOOTSTRAP_BATCH_CONCURRENCY` had exactly one real
 consumer (that machine's `BatchSilver` Map); the other two `bootstrap-batch`
-callers inside `write_bronze_seed_silver_gold_definition` received the env
+callers inside `write_one_click_data_refresh_definition` received the env
 var but never read it (their `MaxConcurrency` was always hardcoded — 20 for
 the "first-load recovery" Map, 2 for the Ticket 20 strict candidate-manifest
 Map). With its one real consumer gone, the env var/CLI flag were removed
 entirely from `deploy-aws-application.sh`, not left as dead plumbing.
 
-Neither `bronze_seed_silver_gold`'s two `bootstrap-batch` Maps nor
+Neither `one_click_data_refresh`'s two `bootstrap-batch` Maps nor
 `load_history` (which runs `bootstrap-next`, a different command, per
 window at `MaxConcurrency=1`) were ever controlled by this env var — their
 `MaxConcurrency` values are unaffected by its removal. The old standalone
@@ -2800,7 +2800,7 @@ note above and state-machine-consolidation wayfinder map ticket 03).
 - `gold-refresh` must be in `SOURCE_EXPORT_COMMANDS` — it is the sole gold builder in the phased pipeline
 - `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
   `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
-- `bronze_seed_silver_gold`'s two `bootstrap-batch` Maps must keep passing `--artifact-policy skip`
+- `one_click_data_refresh`'s two `bootstrap-batch` Maps must keep passing `--artifact-policy skip`
   where documented above — without it the pipeline makes thousands of SEC API calls (fetching
   ownership XMLs) even though the purpose of that path is to reprocess already-loaded bronze
   with zero SEC calls. 5-why root cause: the artifact pipeline is a separate SEC fetch pass;
