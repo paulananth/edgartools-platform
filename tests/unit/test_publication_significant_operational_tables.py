@@ -95,12 +95,12 @@ def test_fingerprint_still_ignores_pipeline_run_only_change(tmp_path: Path) -> N
     baseline = compute_silver_fingerprint(db_path)
 
     db = SilverDatabase(str(db_path))
-    db.start_pipeline_run(
-        {
-            "pipeline_run_id": "run-1",
-            "command_name": "gold-refresh",
-            "runtime_mode": "bronze_capture",
-        }
+    db._conn.execute(
+        """
+        INSERT INTO pipeline_run (pipeline_run_id, command_name, runtime_mode, started_at, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        ["run-1", "gold-refresh", "bronze_capture", datetime.now(UTC), "running"],
     )
     db.close()
 
@@ -191,12 +191,12 @@ def test_merge_still_ignores_pipeline_run_content(tmp_path: Path) -> None:
 
     candidate_path = tmp_path / "candidate.duckdb"
     candidate_db = SilverDatabase(str(candidate_path))
-    candidate_db.start_pipeline_run(
-        {
-            "pipeline_run_id": "run-1",
-            "command_name": "gold-refresh",
-            "runtime_mode": "bronze_capture",
-        }
+    candidate_db._conn.execute(
+        """
+        INSERT INTO pipeline_run (pipeline_run_id, command_name, runtime_mode, started_at, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        ["run-1", "gold-refresh", "bronze_capture", datetime.now(UTC), "running"],
     )
     candidate_db.close()
 

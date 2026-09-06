@@ -11,6 +11,7 @@ not a mocked-away no-op.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -174,12 +175,12 @@ def test_excluded_table_only_change_is_still_skipped(tmp_path):
     _hydrate(context, canonical_bytes)
 
     db = SilverDatabase(_local_silver_path(context))
-    db.start_pipeline_run(
-        {
-            "pipeline_run_id": "run-1",
-            "command_name": "gold-refresh",
-            "runtime_mode": "bronze_capture",
-        }
+    db._conn.execute(
+        """
+        INSERT INTO pipeline_run (pipeline_run_id, command_name, runtime_mode, started_at, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        ["run-1", "gold-refresh", "bronze_capture", datetime.now(UTC), "running"],
     )
     db.close()
 

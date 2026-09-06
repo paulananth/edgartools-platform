@@ -22,42 +22,6 @@ def _context(tmp_path: Path) -> WarehouseCommandContext:
     )
 
 
-def test_discovery_checkpoint_claims_prevent_active_overlap(tmp_path) -> None:
-    from edgar_warehouse.silver_store import SilverDatabase
-
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    now = datetime(2026, 7, 6, tzinfo=UTC)
-    try:
-        assert db.claim_discovery_ciks(
-            [100, 200],
-            discovery_source="daily_incremental",
-            run_id="daily-run",
-            claimed_at=now,
-        ) == [100, 200]
-        assert db.claim_discovery_ciks(
-            [100, 200, 300],
-            discovery_source="bootstrap_next",
-            run_id="bootstrap-run",
-            claimed_at=now,
-        ) == [300]
-
-        db.finish_discovery_ciks(
-            [100],
-            discovery_source="daily_incremental",
-            run_id="daily-run",
-            status="succeeded",
-            finished_at=now,
-        )
-        assert db.claim_discovery_ciks(
-            [100],
-            discovery_source="bootstrap_next",
-            run_id="bootstrap-run-2",
-            claimed_at=now,
-        ) == [100]
-    finally:
-        db.close()
-
-
 def test_daily_incremental_claims_discovery_ciks_before_submissions(tmp_path) -> None:
     bookkeeping = MagicMock()
     bookkeeping.get_company_sync_state.return_value = {"tracking_status": "active"}

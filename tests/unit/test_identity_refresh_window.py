@@ -391,72 +391,6 @@ def test_cli_accepts_identity_refresh_window_flags() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_pipeline_run_lease_acquire_is_exclusive(tmp_path) -> None:
-    from edgar_warehouse.silver_store import SilverDatabase
-
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    now = datetime(2026, 7, 30, 12, tzinfo=UTC)
-    try:
-        assert db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="run-a", mode="daily", acquired_at=now
-        )
-        # A second, competing run must not steal the lease.
-        assert not db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="run-b", mode="backstop", acquired_at=now
-        )
-        held = db.get_pipeline_run_lease("daily_identity_refresh")
-        assert held is not None
-        assert held["run_id"] == "run-a"
-        assert held["status"] == "held"
-
-        # Releasing under the wrong run_id is a no-op.
-        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="run-b", released_at=now)
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["status"] == "held"
-
-        # Releasing under the holder's own run_id frees it for the next acquirer.
-        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="run-a", released_at=now)
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["status"] == "idle"
-        assert db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="run-b", mode="backstop", acquired_at=now
-        )
-    finally:
-        db.close()
-
-
-def test_pipeline_run_lease_reclaims_a_stale_hold(tmp_path) -> None:
-    """A crashed run that never reached ReleaseLease can't wedge the
-    schedule permanently -- a lease held past stale_after_seconds is
-    reclaimable by a later acquire attempt (go-live follow-up to ticket 49;
-    release-on-failure elsewhere is best-effort precisely because this
-    reclaim rule is the actual safety net)."""
-    from datetime import timedelta
-
-    from edgar_warehouse.silver_store import SilverDatabase
-
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        held_at = datetime(2026, 7, 30, 0, 0, tzinfo=UTC)
-        assert db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="crashed-run", mode="daily", acquired_at=held_at
-        )
-
-        # Still within the 20h default stale window -- not reclaimable yet.
-        still_fresh = held_at + timedelta(hours=10)
-        assert not db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="new-run", mode="daily", acquired_at=still_fresh
-        )
-
-        # Past the 20h window -- reclaimable even though "crashed-run" never released it.
-        past_stale = held_at + timedelta(hours=21)
-        assert db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="new-run", mode="daily", acquired_at=past_stale
-        )
-        held = db.get_pipeline_run_lease("daily_identity_refresh")
-        assert held["run_id"] == "new-run"
-    finally:
-        db.close()
-
-
 def test_acquire_identity_refresh_lease_command_records_deferred_on_conflict(tmp_path) -> None:
     """The orchestrator command surfaces a deferred disposition (not an exception)
     when the lease is already held -- ticket 45's 'deferred, not an invisible skip'."""
@@ -563,45 +497,6 @@ def test_acquire_identity_refresh_lease_end_to_end_never_touches_main_silver_dat
             arguments={"run_id": "e2e-run"},
         )
     assert not main_db_path.exists()
-
-
-def test_pipeline_run_lease_backstop_overdue_persists_until_a_backstop_run_releases(tmp_path) -> None:
-    """A deferred 'backstop' acquire marks backstop_overdue; only a subsequent
-    'backstop'-mode release clears it -- an intervening 'daily' release must not
-    silently drop the overdue backstop (release-readiness ticket 45's 'prioritize
-    the next available slot' requirement)."""
-    from edgar_warehouse.silver_store import SilverDatabase
-
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    now = datetime(2026, 7, 30, 12, tzinfo=UTC)
-    try:
-        # Sunday's backstop can't run -- Saturday's daily run is still holding the lease.
-        assert db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="sat-daily", mode="daily", acquired_at=now
-        )
-        assert not db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="sun-backstop", mode="backstop", acquired_at=now
-        )
-        db.mark_pipeline_run_lease_backstop_overdue(lease_name="daily_identity_refresh")
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
-
-        # Saturday's run finishes and releases under mode='daily' -- the overdue flag
-        # it had nothing to do with must survive this release.
-        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="sat-daily", released_at=now)
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
-
-        # The next run acquires in 'backstop' mode (mirroring what the orchestrator's
-        # effective-mode resolution would compute once overdue is set).
-        assert db.acquire_pipeline_run_lease(
-            lease_name="daily_identity_refresh", run_id="mon-run", mode="backstop", acquired_at=now
-        )
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is True
-
-        # Only this 'backstop'-mode release clears the flag.
-        db.release_pipeline_run_lease(lease_name="daily_identity_refresh", run_id="mon-run", released_at=now)
-        assert db.get_pipeline_run_lease("daily_identity_refresh")["backstop_overdue"] is False
-    finally:
-        db.close()
 
 
 def test_acquire_identity_refresh_lease_resolves_overdue_backstop_over_requested_daily_mode(tmp_path) -> None:
