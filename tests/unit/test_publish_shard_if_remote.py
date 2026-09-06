@@ -4,7 +4,7 @@ blind overwrite with no version check at all -- fixed via the shared
 stage_and_promote primitive, see test_object_storage_stage_and_promote.py
 for that primitive's own correctness tests), its merge-on-conflict retry
 wrapper, and its skip-if-unchanged fast path (silver-snowflake-migration
-map, 2026-08-19 fix): multiple concurrent BatchSilver Map items can land on
+map, 2026-08-19 fix): multiple concurrent Clean and Merge Filings (formerly BatchSilver) Map items can land on
 the same shard index (4 shards, MaxConcurrency 20), so a lost promotion
 race is an expected, retryable event here -- not the "exactly one writer"
 invariant violation the function's docstring used to claim. Three real prod
@@ -15,7 +15,7 @@ bootstrap-batch's medium (4096MB) profile OOMing on this same shard size
 (~823MB) even under the old no-merge code -- the skip-if-unchanged fast
 path (ported from _publish_silver_database_if_remote's ticket-79 pattern)
 avoids paying the new merge machinery's added memory cost on the dominant
-no-op case (most BatchSilver batches during a reprocessing pass write zero
+no-op case (most Clean and Merge Filings batches during a reprocessing pass write zero
 new rows).
 """
 from __future__ import annotations
@@ -261,7 +261,7 @@ def test_retry_is_unbounded_by_default(tmp_path, monkeypatch):
 
 def test_concurrent_shard_writers_retry_preserves_both_writers_data(tmp_path, monkeypatch):
     """End-to-end regression for the actual Stage-14 failure shape: two
-    BatchSilver Map items partitioned onto the same shard both hydrate from
+    Clean and Merge Filings Map items partitioned onto the same shard both hydrate from
     the same starting canonical, then race to publish. The first publish
     succeeds outright; the second must lose the ETag race, retry, re-merge
     against the first writer's now-current canonical, and land both

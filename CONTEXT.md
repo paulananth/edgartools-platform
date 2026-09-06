@@ -501,7 +501,7 @@ _Avoid_: Grouping with the MDM Utility Machine as "standalone" or "single-stage"
 _Avoid_: Grouping with Single-Command Workflow Machine or Warehouse Pipeline Machine as if it shares their shape; `bootstrap_batched` (deleted, zero executions ever, superseded by this machine's sequential-windowed design)
 
 **MDM Tail Sequencing Skeleton**:
-The minimal, order-enforcing extraction from an MDM Pipeline Machine's tail — a shared helper that wires already-built `Publish`/`"Publish Relationships"`/`Reconcile` state dicts (renamed from `MdmExport`/`MdmSync`/`MdmVerify` by mdm-stage-renaming ticket 01) into the correct order (Publish before Publish Relationships, per `docs/data-architecture.md` Issue 3) and optionally appends `GoldRefresh`. Deliberately does not standardize each state's command flags, Catch clauses, or retry policy — those remain caller-owned, next to the comments explaining why they differ.
+The minimal, order-enforcing extraction from an MDM Pipeline Machine's tail — a shared helper that wires already-built `Publish`/`"Publish Relationships"`/`Reconcile` state dicts (renamed from `MdmExport`/`MdmSync`/`MdmVerify` by mdm-stage-renaming ticket 01) into the correct order (Publish before Publish Relationships, per `docs/data-architecture.md` Issue 3) and optionally appends `"Publish Business Data"` (renamed from `GoldRefresh`, 2026-09-06 business-readability rename). Deliberately does not standardize each state's command flags, Catch clauses, or retry policy — those remain caller-owned, next to the comments explaining why they differ.
 _Avoid_: A full unified "shared tail" abstraction covering flags/Catch/retry — rejected because the 5 MDM Pipeline Machines' tails are six genuinely distinct shapes, not one shape with parameters
 
 ### Production release readiness
@@ -559,8 +559,8 @@ The authoritative roster of identities allowed to attest release roles and seal 
 _Avoid_: Self-authorized signer, manifest-local trust list, unpinned approver roster
 
 **Full-Chain Launch Pass**:
-A release-candidate production execution in which every required workflow stage succeeds, including BatchSilver, MDM processing, MDM export, graph synchronization and verification, and gold refresh.
-_Avoid_: BatchSilver-only pass, accepted downstream failure
+A release-candidate production execution in which every required workflow stage succeeds, including Clean and Merge Filings (renamed from BatchSilver, 2026-09-06), MDM processing, MDM export, graph synchronization and verification, and gold refresh.
+_Avoid_: Clean and Merge Filings-only pass, accepted downstream failure
 
 **MdmExport Entitlement Preflight**:
 A mandatory, fail-closed check immediately before every MDM export, also independently runnable by operators, that non-mutatively proves the deployed MDM runtime can use its injected production secret to reach the approved Snowflake target, match its expected execution context, run its warehouse, find all export targets with compatible schemas, and hold every effective privilege required by the export.
@@ -583,19 +583,19 @@ Release-candidate proof that bronze inputs reconcile to complete, uniquely ident
 _Avoid_: Clean-log check, map-success count
 
 **Publish Contention Safety**:
-Direct proof that concurrently processed BatchSilver work cannot lose an update because every overlapping publisher either writes a distinct immutable object or uses a guard that rejects stale publication; successful tasks, clean logs, and lucky final counts are insufficient substitutes.
+Direct proof that concurrently processed Clean and Merge Filings work cannot lose an update because every overlapping publisher either writes a distinct immutable object or uses a guard that rejects stale publication; successful tasks, clean logs, and lucky final counts are insufficient substitutes.
 _Avoid_: No-lock-errors inference, last-writer-wins upload, reconciliation-only concurrency PASS
 
 **Table-Specific Reconciliation**:
-Data Integrity Gate proof that each silver table touched by BatchSilver satisfies its own bronze-to-silver key expectations, declared primary-key uniqueness, required-parent integrity, and canonical semantic-content digest, including explicit legitimate-zero outcomes for optional and one-to-many parsers.
+Data Integrity Gate proof that each silver table touched by Clean and Merge Filings satisfies its own bronze-to-silver key expectations, declared primary-key uniqueness, required-parent integrity, and canonical semantic-content digest, including explicit legitimate-zero outcomes for optional and one-to-many parsers.
 _Avoid_: Filing-count-only completeness, aggregate row-count equality, unexplained missing child rows
 
 **Bounded Idempotency Rerun**:
-A deterministic 16-batch, four-wave BatchSilver rerun at MaxConcurrency=4 against the unchanged Release Data Watermark, selected across routing bands, volume, boundary, parser, no-op, and guarded-publication cases to prove stable primary-key sets and semantic content without new bronze capture.
+A deterministic 16-batch, four-wave Clean and Merge Filings rerun at MaxConcurrency=4 against the unchanged Release Data Watermark, selected across routing bands, volume, boundary, parser, no-op, and guarded-publication cases to prove stable primary-key sets and semantic content without new bronze capture.
 _Avoid_: Full rerun by default, hand-picked happy path, different-watermark comparison
 
 **MaxConcurrency4 Data Integrity Evidence**:
-The single deterministic, secret-safe artifact that binds a MaxConcurrency=4 BatchSilver execution to its Release Candidate and watermark and records every Map, table reconciliation, publication safety, no-refetch, observability, and bounded-rerun hard check without skipped results.
+The single deterministic, secret-safe artifact that binds a MaxConcurrency=4 Clean and Merge Filings execution to its Release Candidate and watermark and records every Map, table reconciliation, publication safety, no-refetch, observability, and bounded-rerun hard check without skipped results.
 _Avoid_: CloudWatch transcript, prose checklist, split unbound reports
 
 **Historical Reconstructed Integrity Result**:

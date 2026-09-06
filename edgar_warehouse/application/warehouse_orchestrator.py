@@ -1357,7 +1357,7 @@ def _hydrate_shard_for_window(
 
     # Snapshot the hydration-time fingerprint (release-readiness ticket 79's
     # skip-if-unchanged optimization, ported here 2026-08-19): most
-    # BatchSilver batches during a reprocessing pass write zero new rows
+    # "Clean and Merge Filings" (formerly BatchSilver) batches during a reprocessing pass write zero new rows
     # (already-captured bronze, nothing to add), and _publish_shard_if_remote
     # now merges via merge_candidate_into_canonical on every publish with an
     # existing baseline -- a real memory/network cost bootstrap-batch's
@@ -1539,7 +1539,7 @@ def _publish_shard_if_remote_with_retry(
 
     Regression (silver-snowflake-migration map, 2026-08-19): the CIK-sharded
     architecture's shard count (4) is fixed independently of
-    ``bronze_seed_silver_gold``'s ``BatchSilver`` Distributed Map
+    ``bronze_seed_silver_gold``'s ``Clean and Merge Filings`` (formerly BatchSilver) Distributed Map
     concurrency (``MaxConcurrency: 20``), so multiple concurrent Map items
     routinely land on the same shard index -- contradicting this function's
     former docstring claim that "each shard is owned by exactly one writer."
@@ -2226,7 +2226,7 @@ def _capture_bronze_raw(
 
     if command_name == "compute-remaining-batches":
         # pipeline-resumability ticket 02: automatic resume-batch filtering
-        # for the default (non-release_mode) BatchSilver path, ahead of the
+        # for the default (non-release_mode) "Clean and Merge Filings" (formerly BatchSilver) path, ahead of the
         # Map so already-done batches never launch a Fargate task just to
         # self-skip. Reuses the frozen original run's cik_batches.jsonl
         # (never regenerated -- the candidate set a resume may use) plus its
@@ -4280,7 +4280,7 @@ def _run_configured_form_artifact_pipeline(
                 ) from exc
         # P2: mid-pass progress so operators can see resume/cache work without
         # waiting for the whole batch to finish (start/complete-only was silent
-        # for multi-hour StrictBatchSilver loops).
+        # for multi-hour "Strict Clean and Merge Filings" (formerly StrictBatchSilver) loops).
         if accession_index % progress_every == 0 or accession_index == len(selected_accessions):
             _emit_pipeline_event(
                 "filing_artifact_pipeline_progress",

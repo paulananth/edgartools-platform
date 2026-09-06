@@ -9,10 +9,15 @@ not the whole tail's flags/Catch/retry shape -- those genuinely differ per
 MDM Pipeline Machine (see the ticket's addendum) and stay caller-owned.
 This wires already-built Publish/"Publish Relationships"/Reconcile state
 dicts into the correct, data-architecture-mandated order
-(docs/data-architecture.md Issue 3) and optionally appends GoldRefresh --
-nothing more. Still used by the 4 MDM Pipeline Machines whose fate ticket
-07 left open (ownership_mdm_gold, silver_mdm_gold,
-bronze_seed_silver_gold's default path, residual_holds_graph) --
+(docs/data-architecture.md Issue 3) and optionally appends the final gold
+state (state-name business-readability rename, 2026-09-06: GoldRefresh ->
+"Publish Business Data") -- nothing more. Of the 4 MDM Pipeline Machines
+this was originally shared by (ownership_mdm_gold, silver_mdm_gold,
+bronze_seed_silver_gold's default path, residual_holds_graph), only
+bronze_seed_silver_gold still passes gold_state -- ownership_mdm_gold and
+silver_mdm_gold are since retired (tickets 08/09), and residual_holds_graph
+always called this with gold_state=None (see its own "No GoldRefresh here"
+comment at its call site) --
 unaffected by ticket 07's own machine (below), which folded a superset of
 this same tail (plus Mastering and BackpropagateIdsToSilver) into a real,
 separately-deployed nested machine instead of code-level sharing, for
@@ -80,7 +85,7 @@ def call_mdm_machine(state_machine_arn, next_state=None, is_end=False, retry_sec
 
 
 def wire_mdm_tail(export_state, sync_state, verify_state, gold_state=None):
-    """Chain Publish -> Publish Relationships -> Reconcile (-> GoldRefresh).
+    """Chain Publish -> Publish Relationships -> Reconcile (-> Publish Business Data).
 
     Each *_state argument is a fully-built ASL Task state dict (its own
     command expression, task-definition ARN, Retry, and Catch already
@@ -107,12 +112,12 @@ def wire_mdm_tail(export_state, sync_state, verify_state, gold_state=None):
 
     if gold_state is not None:
         verify_state.pop("End", None)
-        verify_state["Next"] = "GoldRefresh"
+        verify_state["Next"] = "Publish Business Data"
         gold_state = dict(gold_state)
         gold_state.pop("Next", None)
         gold_state["End"] = True
         states["Reconcile"] = verify_state
-        states["GoldRefresh"] = gold_state
+        states["Publish Business Data"] = gold_state
     else:
         verify_state.pop("Next", None)
         verify_state["End"] = True

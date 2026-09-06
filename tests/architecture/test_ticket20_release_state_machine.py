@@ -52,7 +52,7 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert (
         states["ResumeFromRunIdCheck"]["Choices"][0]["Next"] == "ComputeRemainingBatches"
     )
-    assert states["ComputeRemainingBatches"]["Next"] == "BatchSilver"
+    assert states["ComputeRemainingBatches"]["Next"] == "Clean and Merge Filings"
     assert "Retry" not in states["ComputeRemainingBatches"]
     clauses = states["StrictManifestCheck"]["Choices"][0]["And"]
     required_inputs = {
@@ -71,7 +71,7 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
         assert {"Variable": variable, "IsString": True} in clauses
         assert {"Not": {"Variable": variable, "StringEquals": ""}} in clauses
     assert not any(clause.get("StringMatches") == "?*" for clause in clauses)
-    strict_map = states["StrictBatchSilver"]
+    strict_map = states["Strict Clean and Merge Filings"]
     # Lowered 4->2 2026-07-22: every concurrently-finishing batch publishes to
     # the same canonical silver.duckdb via an ETag-guarded promote, so N-way
     # concurrency is an N-way race on that one object -- production hit this
@@ -94,7 +94,7 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     # PR #139: strict Ticket 20 fails closed on graph parity -- none of the
     # graph-publishing chain (sync/verify-candidate/activate/final-verify)
     # may have a Catch, or a bad candidate/activation could silently fall
-    # through to StrictGoldRefresh instead of failing the execution.
+    # through to "Strict Publish Business Data" instead of failing the execution.
     assert "Catch" not in states["Strict Publish Relationships"]
     assert "Catch" not in states["Strict Publish Relationships Idempotency"]
     assert "Catch" not in states["Strict Reconcile Candidate"]
@@ -111,7 +111,7 @@ def test_strict_ticket20_path_generates_valid_fail_closed_definition(tmp_path: P
     assert states["Strict Publish Relationships Idempotency"]["Next"] == "Strict Reconcile Candidate"
     assert states["Strict Reconcile Candidate"]["Next"] == "StrictMdmActivate"
     assert states["StrictMdmActivate"]["Next"] == "StrictReconcile"
-    assert states["StrictReconcile"]["Next"] == "StrictGoldRefresh"
+    assert states["StrictReconcile"]["Next"] == "Strict Publish Business Data"
 
     insider_cmd = states["StrictInsiderCoverage"]["Parameters"]["Overrides"][
         "ContainerOverrides"
@@ -170,14 +170,14 @@ def test_seed_from_bronze_and_compute_remaining_batches_preserve_resume_from_run
 ) -> None:
     """Regression test for a live production failure (2026-08-18).
 
-    BatchSilver's ItemSelector references "$.resume_from_run_id" directly
+    Clean and Merge Filings' ItemSelector references "$.resume_from_run_id" directly
     (a JSONPath reference, not a Choice IsPresent check -- see
     ResumeFromRunIdPresenceCheck/Default above it in the state machine,
     which guarantee the key exists by the time either SeedFromBronze or
     ComputeRemainingBatches runs). ecs_state()'s default ResultPath
     (omitted, meaning "$") REPLACES the entire state input with the ECS
     task's own runTask.sync output on both of these paths, discarding
-    resume_from_run_id before BatchSilver ever sees it. A real
+    resume_from_run_id before Clean and Merge Filings ever sees it. A real
     bronze_seed_silver_gold execution failed on exactly this
     (States.ItemReaderFailed: "$.resume_from_run_id ... could not be
     found") the first time this code path actually ran end-to-end,

@@ -1803,7 +1803,7 @@ class SilverDatabase:
         rows (first-load recovery stages a company's entire "recent" + all
         pagination-file filings at once, not just a day's worth). The previous
         row-by-row execute() loop was the dominant cost of bronze_seed_silver_gold's
-        BatchSilver stage (~93% of per-batch time, measured live) -- per-statement
+        Clean and Merge Filings stage (~93% of per-batch time, measured live) -- per-statement
         parse/plan/exec overhead repeated per row against a growing table, not
         anything sharding would fix. _merge_rows_bulk (already used by
         merge_financial_facts/merge_financial_derived) stages all rows in one

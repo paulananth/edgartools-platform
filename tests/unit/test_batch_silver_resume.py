@@ -1,9 +1,9 @@
-"""pipeline-resumability ticket 02: default-path BatchSilver resume markers.
+"""pipeline-resumability ticket 02: default-path Clean and Merge Filings (formerly BatchSilver) resume markers.
 
 Covers edgar_warehouse.application.batch_silver_resume -- the weaker-guarantee
 sibling of relationship_bulk_load.py's Ticket-20 P0 batch_identity_for_ciks/
 build_remaining_cik_batches machinery, applied to the default (non-
-release_mode) BatchSilver path instead of the strict/release path.
+release_mode) Clean and Merge Filings path instead of the strict/release path.
 """
 from __future__ import annotations
 
@@ -150,7 +150,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
     """End-to-end through warehouse_orchestrator._capture_bronze_raw's
     "compute-remaining-batches" branch -- exercises the real
     context.bronze_root.write_text/default_path_resolver() path convention
-    both SeedFromBronze and BatchSilver's ItemReader actually use, not just
+    both SeedFromBronze and Clean and Merge Filings' ItemReader actually use, not just
     batch_silver_resume.py's own functions in isolation. This is what
     surfaced a real double-prefix bug during implementation (resume_prefix()
     originally re-added "warehouse/bronze/" on top of context.bronze_root.root,
@@ -204,7 +204,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
         assert metrics["remaining_batch_count"] == 1
         assert metrics["resume_ledger_run_id"] == "original-run"
 
-        # BatchSilver's ItemReader always reads runs/{$$.Execution.Name}/
+        # Clean and Merge Filings' ItemReader always reads runs/{$$.Execution.Name}/
         # cik_batches.jsonl -- confirm this handler populated exactly that
         # path (not the original run's path, a copy/filter under the NEW
         # execution name) with only the not-yet-done batch.

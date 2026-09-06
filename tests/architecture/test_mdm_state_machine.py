@@ -118,7 +118,7 @@ def test_tail_order_is_mastering_through_reconcile(mdm_definition: dict) -> None
 
 
 def test_ends_at_reconcile_gold_refresh_is_not_part_of_this_machine(mdm_definition: dict) -> None:
-    assert "GoldRefresh" not in mdm_definition["States"]
+    assert "Publish Business Data" not in mdm_definition["States"]
     assert "FactPublishtoGold" not in mdm_definition["States"]
     assert mdm_definition["States"]["Reconcile"]["End"] is True
 

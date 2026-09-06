@@ -1,4 +1,5 @@
-"""Durable, run-scoped recovery contract for default-path BatchSilver batches.
+"""Durable, run-scoped recovery contract for default-path "Clean and Merge
+Filings" (formerly BatchSilver) batches.
 
 Reuses relationship_bulk_load.py's content-derived batch identity and
 low-level marker path/listing helpers (release_mode-agnostic), but writes a
@@ -48,7 +49,7 @@ class ResumeRunNotFoundError(WarehouseRuntimeError):
 
 def resume_prefix(run_id: str) -> str:
     """Relative prefix (under WAREHOUSE_BRONZE_ROOT / context.bronze_root)
-    for one BatchSilver run's manifest and markers.
+    for one Clean and Merge Filings run's manifest and markers.
 
     Matches default_path_resolver().cik_universe_batches_path()'s own
     relative_path convention exactly ("reference/cik_universe/runs/{run_id}/
@@ -116,7 +117,7 @@ def compute_remaining_batches(
     bronze_root: str,
     resume_ledger_run_id: str,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Fail-closed remaining-batch computation for BatchSilver resume.
+    """Fail-closed remaining-batch computation for Clean and Merge Filings resume.
 
     Reads the ORIGINAL run's frozen cik_batches.jsonl (never regenerated --
     the candidate set a resume may use) plus its accumulated done markers,

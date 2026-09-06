@@ -1,7 +1,7 @@
 """pipeline-resumability ticket 02: Mastering's company-step resume support.
 
 A one-time CIK snapshot (the frozen candidate set -- mirrors
-batch_silver_resume.py's philosophy for BatchSilver: never re-derive from
+batch_silver_resume.py's philosophy for "Clean and Merge Filings" (formerly BatchSilver): never re-derive from
 live sec_company on resume) plus batched succeeded-CIK outcome flushes.
 Batching (rather than one marker per CIK, matching
 edgar_warehouse.application.daily_artifact_resume's/batch_silver_resume's

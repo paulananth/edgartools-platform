@@ -1210,7 +1210,7 @@ def validate_and_rebind_done_batch_ledger(
 
 
 def batch_identity_for_ciks(ciks: Iterable[int | str]) -> str:
-    """Stable 16-hex identity for one StrictBatchSilver CIK batch."""
+    """Stable 16-hex identity for one Strict Clean and Merge Filings CIK batch."""
     normalized = sorted(str(int(cik)) for cik in ciks)
     return hashlib.sha256(",".join(normalized).encode("utf-8")).hexdigest()[:16]
 

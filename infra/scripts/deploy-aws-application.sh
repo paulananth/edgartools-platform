@@ -4861,7 +4861,7 @@ graph_limit = str(mdm_graph_limit)
 
 # seed-bronze-batches lists CIKs straight from S3 bronze (submissions/sec/cik={cik}/...) —
 # no SEC API calls, no dependency on silver's own bookkeeping tables. Writes the same
-# cik_batches.jsonl format bootstrap-batch expects, so BatchSilver below is unchanged
+# cik_batches.jsonl format bootstrap-batch expects, so Clean and Merge Filings below is unchanged
 # from a silver-only reprocess's shape.
 batch_size_check = {
     "Type": "Choice",
@@ -4893,7 +4893,7 @@ def non_empty_string_clauses(variable):
     ]
 
 # pipeline-resumability ticket 02: resume_from_run_id must be normalized to
-# always-present before BatchSilver's Map runs its ItemSelector (below), which
+# always-present before Clean and Merge Filings' Map runs its ItemSelector (below), which
 # references $.resume_from_run_id directly -- a Choice IsPresent check
 # tolerates a missing key, but a direct JSONPath reference inside an
 # ItemSelector does not (States.Runtime error), so every branch converges
@@ -4924,7 +4924,7 @@ resume_from_run_id_check = {
         "Route to ComputeRemainingBatches (reuse the ORIGINAL run's frozen "
         "cik_batches.jsonl, filtered to not-yet-done batches) instead of "
         "SeedFromBronze (which would re-derive candidates from live bronze) "
-        "when resuming a prior BatchSilver run."
+        "when resuming a prior Clean and Merge Filings run."
     ),
     "Choices": [{
         "And": non_empty_string_clauses("$.resume_from_run_id"),
@@ -4949,7 +4949,7 @@ strict_manifest_check = {
                 "$.attestations.release_owner",
             )
         ), []),
-        "Next": "StrictBatchSilver",
+        "Next": "Strict Clean and Merge Filings",
     }],
     "Default": "StrictInputMissing",
 }
@@ -4970,13 +4970,13 @@ batch_size_default = {
 
 seed_from_bronze = ecs_state(wh_medium_arn,
     "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, '--batch-size', States.Format('{}', $.batch_size))",
-    next_state="BatchSilver", retry_secs=60)
+    next_state="Clean and Merge Filings", retry_secs=60)
 # Bug found live 2026-08-18 (install-sh-provision-deploy-data Ticket 04
 # follow-up, root-caused via 5-whys against a real bronze_seed_silver_gold
 # execution failure): ecs_state()'s default ResultPath ("$", i.e. omitted)
 # replaces the ENTIRE state input with the ECS task's own runTask.sync
 # output, discarding resume_from_run_id (and batch_size) that
-# ResumeFromRunIdPresenceCheck/Default injected upstream -- so BatchSilver's
+# ResumeFromRunIdPresenceCheck/Default injected upstream -- so Clean and Merge Filings'
 # ItemSelector ("resume_from_run_id.$": "$.resume_from_run_id") failed with
 # States.ItemReaderFailed on every fresh (non-resumed) execution, 100% of
 # the time, confirmed live. Every other "do work but preserve $ for a
@@ -4989,7 +4989,7 @@ seed_from_bronze["ResultPath"] = None
 # pipeline-resumability ticket 02: reuses the ORIGINAL run's frozen
 # cik_batches.jsonl (never regenerated from live bronze on resume) plus its
 # accumulated default_batch_done markers, and writes the filtered remainder
-# to THIS execution's own cik_batches.jsonl path -- so BatchSilver's
+# to THIS execution's own cik_batches.jsonl path -- so Clean and Merge Filings'
 # ItemReader below needs no branching, it always reads from
 # runs/{$$.Execution.Name}/cik_batches.jsonl regardless of which state
 # populated it. No Retry: a bad/missing --resume-ledger-run-id pointer is a
@@ -4998,14 +4998,14 @@ seed_from_bronze["ResultPath"] = None
 # non-transient input errors.
 compute_remaining_batches = ecs_state(wh_medium_arn,
     "States.Array('compute-remaining-batches', '--resume-ledger-run-id', $.resume_from_run_id, '--run-id', $$.Execution.Name)",
-    next_state="BatchSilver", retry_secs=60)
+    next_state="Clean and Merge Filings", retry_secs=60)
 compute_remaining_batches.pop("Retry", None)
 # Same bug, same fix, resume path: without this, a RESUMED execution would
-# fail identically once it reached BatchSilver.
+# fail identically once it reached Clean and Merge Filings.
 compute_remaining_batches["ResultPath"] = None
 
 # INVARIANT: bronze_seed_silver_gold must make ZERO SEC API calls and must not
-# fan out parser work inside each BatchSilver chunk. --artifact-policy skip
+# fan out parser work inside each Clean and Merge Filings chunk. --artifact-policy skip
 # prevents ownership XML fetches; --parser-policy skip prevents each chunk from
 # re-parsing the full configured-form corpus. Parse cached artifacts later
 # through a targeted operator run if ownership tables need refresh.
@@ -5014,16 +5014,16 @@ compute_remaining_batches["ResultPath"] = None
 # ticket 12 addendum): the OOM history that previously justified wh_large_arn here
 # (exit 137 on medium's 4096MB once the canonical DB passed ~1GB) predates sharding
 # (ticket 11) -- it was measured against the whole ~1.6GB+ monolithic canonical file,
-# not a single shard. Post-sharding each BatchSilver task loads exactly one shard
+# not a single shard. Post-sharding each Clean and Merge Filings task loads exactly one shard
 # (80-800MB range), and ticket 13's live Container Insights measurement on wh_large_arn
 # confirmed real peak memory of only 765MB/8192MB (~9%) -- comfortably inside medium's
 # 4096MB. The real constraint turned out to be the AWS account's Fargate On-Demand vCPU
 # quota (30 vCPU, confirmed via service-quotas), not memory: MaxConcurrency=16 on
 # wh_large_arn (2 vCPU/task) demanded 32 vCPU and failed the whole execution via
-# ECS.AmazonECSException after 216/680 batches succeeded (BatchSilver's
+# ECS.AmazonECSException after 216/680 batches succeeded (Clean and Merge Filings'
 # ToleratedFailurePercentage=0 cascades one quota failure into aborting every other
 # in-flight task). Switching to wh_medium_arn (1 vCPU/task) at MaxConcurrency=20 stays
-# at 20 vCPU, well under the 30 vCPU quota, and completed 680/680 BatchSilver batches
+# at 20 vCPU, well under the 30 vCPU quota, and completed 680/680 Clean and Merge Filings batches
 # with 0 failures (bronze-seed-silver-gold-medium-20-retry-1786214600) at ~4.6s/batch --
 # faster than the large/MaxConcurrency=16 run's 7.5s/batch before it hit the quota wall,
 # despite medium's 1 vCPU ceiling sitting below wh_large_arn's measured ~1.5 vCPU-
@@ -5036,7 +5036,7 @@ batch = ecs_state(wh_medium_arn,
 batch_map = {
     "Type": "Map",
     "MaxConcurrency": 20,
-    "Comment": "First-load recovery from cached bronze. Raised 4->20 2026-08-08 (pipeline-throughput-architecture ticket 12 addendum), moving the task profile from wh_large_arn (2 vCPU) to wh_medium_arn (1 vCPU) in the same change to stay under the account's 30 vCPU Fargate quota (20x1=20 vCPU vs the quota-failing 16x2=32 vCPU attempt on large -- see the ecs_state comment above for the full evidence). Shard-aware batch scheduling (seed-bronze-batches writes cik_batches.jsonl round-robin interleaved across the 4 CIK-range shards, falling back to plain ascending order if no shard manifest exists -- see _write_cik_universe_batches/_shard_partition_ciks in warehouse_orchestrator.py) means concurrent Map slots cycle across only 4 distinct shard files regardless of MaxConcurrency, so multiple slots do land on the same shard file at MaxConcurrency=20 -- this was the exact scenario ticket 12 originally predicted would cause PromotionConflictError contention, but the live medium-20 run completed 680/680 BatchSilver batches with 0 failures and 0 conflicts, empirically refuting that concern (real task-lifecycle jitter staggers same-shard publish windows enough in practice). History: 4 (shard-count-matched, non-contending baseline, validated 2026-08-08), briefly tested at 16 on wh_large_arn same day (crashed on the 30 vCPU account quota at 216/680), then 20 on wh_medium_arn (this value, validated 680/680 clean).",
+    "Comment": "First-load recovery from cached bronze. Raised 4->20 2026-08-08 (pipeline-throughput-architecture ticket 12 addendum), moving the task profile from wh_large_arn (2 vCPU) to wh_medium_arn (1 vCPU) in the same change to stay under the account's 30 vCPU Fargate quota (20x1=20 vCPU vs the quota-failing 16x2=32 vCPU attempt on large -- see the ecs_state comment above for the full evidence). Shard-aware batch scheduling (seed-bronze-batches writes cik_batches.jsonl round-robin interleaved across the 4 CIK-range shards, falling back to plain ascending order if no shard manifest exists -- see _write_cik_universe_batches/_shard_partition_ciks in warehouse_orchestrator.py) means concurrent Map slots cycle across only 4 distinct shard files regardless of MaxConcurrency, so multiple slots do land on the same shard file at MaxConcurrency=20 -- this was the exact scenario ticket 12 originally predicted would cause PromotionConflictError contention, but the live medium-20 run completed 680/680 Clean and Merge Filings batches with 0 failures and 0 conflicts, empirically refuting that concern (real task-lifecycle jitter staggers same-shard publish windows enough in practice). History: 4 (shard-count-matched, non-contending baseline, validated 2026-08-08), briefly tested at 16 on wh_large_arn same day (crashed on the 30 vCPU account quota at 216/680), then 20 on wh_medium_arn (this value, validated 680/680 clean).",
     "ToleratedFailurePercentage": 0,
     "ItemReader": {
         "Resource": "arn:aws:states:::s3:getObject",
@@ -5105,8 +5105,8 @@ strict_batch_map = {
 #
 # --run-id / --resume-ledger-run-id (pipeline-resumability ticket 02):
 # resume_from_run_id is guaranteed present by this point
-# (resume_from_run_id_presence_check/_default above run before BatchSilver,
-# and Mastering inherits $ unmodified -- BatchSilver's Map has ResultPath:
+# (resume_from_run_id_presence_check/_default above run before Clean and Merge Filings,
+# and Mastering inherits $ unmodified -- Clean and Merge Filings' Map has ResultPath:
 # None). --run-id is this execution's own identity (mirrors bootstrap-
 # batch's identical two-flag shape): when resume_from_run_id is empty
 # (fresh run), run_companies uses --run-id as the snapshot/outcome
@@ -5119,7 +5119,7 @@ mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'infer-relationshi
 mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True)
 mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish-relationships')", is_end=True)
 mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True)
-mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
+mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Publish Business Data"}]
 # verify-graph is validation-only per docs/data-architecture.md: it reports
 # parity but must never block gold-refresh, so a verify failure falls through.
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
@@ -5131,7 +5131,7 @@ gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id
 mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
 
 # Ticket 21 chain (release_mode):
-#   StrictBatchSilver -> StrictMastering -> Backfill -> Idempotency
+#   Strict Clean and Merge Filings -> StrictMastering -> Backfill -> Idempotency
 #   -> StrictInsiderCoverage -> Reconcile (binds insider_coverage into PASS evidence)
 #   -> Export -> Sync -> VerifyCandidate -> Activate -> Verify -> Gold
 #
@@ -5205,7 +5205,7 @@ strict_mdm_verify_candidate = ecs_state(mdm_small_arn,
 strict_mdm_activate = ecs_state(mdm_small_arn,
     "States.Array('mdm', 'graph-activate', '--generation-id', $$.Execution.Name)",
     next_state="StrictReconcile")
-strict_mdm_verify = ecs_state(mdm_small_arn, "States.Array('mdm', 'reconcile')", next_state="StrictGoldRefresh")
+strict_mdm_verify = ecs_state(mdm_small_arn, "States.Array('mdm', 'reconcile')", next_state="Strict Publish Business Data")
 strict_gold = ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
 definition = {
@@ -5219,7 +5219,7 @@ definition = {
         "Trigger with: {} or {\"batch_size\": 100}. "
         "pipeline-resumability ticket 02: pass {\"resume_from_run_id\": \"<prior "
         "execution name>\"} to resume a stopped/failed run instead of a full "
-        "restart -- BatchSilver skips already-done batches (default_batch_done "
+        "restart -- Clean and Merge Filings skips already-done batches (default_batch_done "
         "markers) and Mastering's company step skips already-resolved CIKs "
         "(company_done markers), both keyed under the original run's namespace. "
         "Fails closed if the pointed-at run has no frozen manifest/snapshot."
@@ -5229,7 +5229,7 @@ definition = {
         "ReleaseModeCheck": release_mode_check,
         "StrictManifestCheck": strict_manifest_check,
         "StrictInputMissing": strict_input_missing,
-        "StrictBatchSilver": strict_batch_map,
+        "Strict Clean and Merge Filings": strict_batch_map,
         "StrictMastering": strict_mdm_run,
         "Strict Infer Relationships": strict_mdm_backfill,
         "StrictMdmIdempotency": strict_mdm_idempotency,
@@ -5241,7 +5241,7 @@ definition = {
         "Strict Reconcile Candidate": strict_mdm_verify_candidate,
         "StrictMdmActivate": strict_mdm_activate,
         "StrictReconcile": strict_mdm_verify,
-        "StrictGoldRefresh": strict_gold,
+        "Strict Publish Business Data": strict_gold,
         "ResumeFromRunIdPresenceCheck": resume_from_run_id_presence_check,
         "ResumeFromRunIdDefault": resume_from_run_id_default,
         "ResumeFromRunIdCheck": resume_from_run_id_check,
@@ -5249,7 +5249,7 @@ definition = {
         "BatchSizeCheck": batch_size_check,
         "BatchSizeDefault": batch_size_default,
         "SeedFromBronze": seed_from_bronze,
-        "BatchSilver":  batch_map,
+        "Clean and Merge Filings":  batch_map,
         "Mastering":       mdm_run,
         "Infer Relationships":  mdm_backfill,
         **mdm_tail,
@@ -5700,7 +5700,7 @@ definition = {
         # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is
         # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
         # map, ticket 02) — see infra/scripts/mdm_tail_helper.py. No
-        # GoldRefresh here: this machine does not claim Ticket 20 GO.
+        # "Publish Business Data" (final gold-refresh) state here: this machine does not claim Ticket 20 GO.
         **wire_mdm_tail(
             ecs_state(mdm_large_arn, "States.Array('mdm', 'publish')", is_end=True),
             # Full-graph materialization (not residual types only). A type-filtered

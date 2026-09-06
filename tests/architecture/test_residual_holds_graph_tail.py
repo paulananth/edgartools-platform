@@ -1,7 +1,7 @@
-"""Structural checks on residual_holds_graph's tail (no GoldRefresh).
+"""Structural checks on residual_holds_graph's tail (no "Publish Business Data").
 
 state-machine-consolidation wayfinder map, ticket 02: residual_holds_graph
-is the one MDM Pipeline Machine with no GoldRefresh at all (it does not
+is the one MDM Pipeline Machine with no "Publish Business Data" (gold-refresh) state at all (it does not
 claim Ticket 20 GO) and its own generation-scoped Publish Relationships/Reconcile flags
 (--generation-id, --skip-native-app). This is the
 highest-risk of the three inline (non-function) MDM Pipeline Machine
@@ -81,7 +81,7 @@ def test_tail_ordering_with_no_gold_refresh(definition: dict) -> None:
     assert s["Publish Relationships"]["Next"] == "Reconcile"
     assert s["Reconcile"]["End"] is True
     assert "Next" not in s["Reconcile"]
-    assert "GoldRefresh" not in s
+    assert "Publish Business Data" not in s
 
 
 def test_sync_carries_generation_id_without_a_completeness_cap(definition: dict) -> None:
