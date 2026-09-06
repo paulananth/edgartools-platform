@@ -123,23 +123,39 @@ def _add_common_bootstrap_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_fundamentals_lookback_args(parser: argparse.ArgumentParser) -> None:
+def _add_fundamentals_lookback_args(
+    parser: argparse.ArgumentParser, *, default_years: int | None = None
+) -> None:
     """Shared lookback flags for the four previously-unbounded fundamentals
     families: Item 2.02 (earnings) 8-Ks, the DEF 14A/DEFA14A/PRE 14A proxy
     family, 13F-HR/-A (raw parse + the derived sec_thirteenf_holding
     extraction), and every ADV form. Each per-family override falls back to
     --fundamentals-lookback-years when unset, mirroring
     --item-502-lookback-years's existing fallback-to-ownership shape.
+
+    default_years overrides only the shared --fundamentals-lookback-years
+    flag's own CLI default (bulk loaders keep the implicit 2-year default by
+    passing nothing; targeted-resync passes 0 for its full-history-by-default
+    debug purpose) -- the four per-family flags always default to None
+    (unset), since their help text describes a fallback relationship to
+    --fundamentals-lookback-years, not a literal number, and stays accurate
+    regardless of what that shared flag's own default is.
     """
+    if default_years is None:
+        default_phrase = "default: 2"
+    elif default_years == 0:
+        default_phrase = "default: 0, full history"
+    else:
+        default_phrase = f"default: {default_years}"
     parser.add_argument(
         "--fundamentals-lookback-years",
         type=int,
-        default=None,
+        default=default_years,
         metavar="N",
         help=(
             "Shared default years of history to fetch/parse for Item 2.02 "
             "earnings 8-Ks, the DEF 14A/DEFA14A/PRE 14A proxy family, "
-            "13F-HR/-A, and all ADV forms (default: 2). Overridable per "
+            f"13F-HR/-A, and all ADV forms ({default_phrase}). Overridable per "
             "family with --item-202-lookback-years/--proxy-lookback-years/"
             "--thirteenf-lookback-years/--adv-lookback-years. Use 0 for "
             "full history. Also settable via WAREHOUSE_FUNDAMENTALS_LOOKBACK_YEARS."
@@ -1057,6 +1073,38 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Deprecated no-op; targeted resync skips already loaded SEC files by default",
     )
+    # state-machine-consolidation Ticket 10: targeted-resync's cik-scoped
+    # accession selection now routes through the same _configured_parser_
+    # accessions gate every bulk loader uses (edgar_warehouse/application/
+    # warehouse_orchestrator.py). Unlike bulk loaders, this command defaults
+    # to full history (0) for every family -- a developer resyncing one
+    # company to investigate an issue usually wants everything; explicit
+    # per-family overrides still bound an individual family's window.
+    targeted_resync.add_argument(
+        "--ownership-lookback-years",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Years of Form 3/4/5 history to fetch/parse (default: 0, full "
+            "history -- unlike bulk loaders' 2-year default). Also bounds "
+            "Item 5.02 8-K selection unless --item-502-lookback-years is "
+            "set. Also settable via WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
+        ),
+    )
+    targeted_resync.add_argument(
+        "--item-502-lookback-years",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Years of Item 5.02 8-K history to fetch/parse (default: "
+            "--ownership-lookback-years, itself full history by default for "
+            "this command). Use 0 for full history. Also settable via "
+            "WAREHOUSE_ITEM_502_LOOKBACK_YEARS."
+        ),
+    )
+    _add_fundamentals_lookback_args(targeted_resync, default_years=0)
     _add_run_id_arg(targeted_resync)
     targeted_resync.set_defaults(handler=_handle_targeted_resync)
 
