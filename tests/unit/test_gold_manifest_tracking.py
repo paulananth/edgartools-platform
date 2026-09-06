@@ -270,6 +270,8 @@ def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path)
             arguments={"run_id": "default-publication-run"},
         )
 
-    iter_gold.assert_called_once_with(fake_db)
+    # iter_source_export_tables() takes no db/conn argument -- every
+    # remaining builder reads Snowflake directly.
+    iter_gold.assert_called_once_with()
     assert result["gold_row_counts"] == {}
     assert result["snowflake_export_manifest"] is not None

@@ -7,18 +7,27 @@ from unittest.mock import MagicMock, patch
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.silver_store import SilverDatabase
-from tests.unit._fake_snowflake import (
-    EMPTY_ORPHAN_EVIDENCE_TABLE_DATA,
-    FakeSnowflakeConnectionSettings,
-)
+from tests.unit._fake_snowflake import FakeSnowflakeConnectionSettings
 
-# validate_data_quality() calls build_source_export(), which includes 5 builders that
-# read Snowflake's EDGARTOOLS_SILVER directly instead of the local DuckDB
-# fixture (dbt-gold-silver-rewiring map, Ticket 06) -- patch their connection
-# so these tests don't attempt a real Snowflake connection.
-_patch_silver_connection = patch(
-    "edgar_warehouse.mdm.export.silver_connection_settings",
-    return_value=FakeSnowflakeConnectionSettings(EMPTY_ORPHAN_EVIDENCE_TABLE_DATA),
+# validate_data_quality()'s gold_vs_silver check (dbt-gold-silver-rewiring
+# Ticket 07) queries live EDGARTOOLS_GOLD row counts via
+# SnowflakeConnectionSettings.from_env() instead of materializing the now
+# -deleted local DuckDB builders -- patch it so these tests don't attempt a
+# real Snowflake connection. Every table defaults to 0 rows so tests that
+# don't care about this specific check get a stable "silver_rows ==
+# gold_rows == 0" result; the one test that does care overrides it below.
+_EMPTY_GOLD_TABLE_ROW_COUNTS: dict[str, tuple[list[str], list[tuple]]] = {
+    "FINANCIAL_FACTS": (["row_count"], [(0,)]),
+    "INSTITUTIONAL_HOLDINGS": (["row_count"], [(0,)]),
+    "FINANCIAL_DERIVED": (["row_count"], [(0,)]),
+    "EARNINGS_RELEASES": (["row_count"], [(0,)]),
+    "EXECUTIVE_RECORDS": (["row_count"], [(0,)]),
+    "ACCOUNTING_FLAGS": (["row_count"], [(0,)]),
+}
+
+_patch_gold_connection = patch(
+    "edgar_warehouse.mdm.export.SnowflakeConnectionSettings.from_env",
+    return_value=FakeSnowflakeConnectionSettings(_EMPTY_GOLD_TABLE_ROW_COUNTS),
 )
 
 
@@ -107,7 +116,7 @@ def test_validate_data_quality_flags_row_count_regressions(tmp_path) -> None:
         metrics={"silver_table_counts": {"sec_company": 2}},
     )
 
-    with _patch_silver_connection, _patch_bookkeeping_store(bookkeeping):
+    with _patch_gold_connection, _patch_bookkeeping_store(bookkeeping):
         report = validate_data_quality(context=context)
 
     assert report["checks"]["row_count_monotonic"]["status"] == "failed"
@@ -139,7 +148,7 @@ def test_validate_data_quality_flags_foreign_key_orphans(tmp_path) -> None:
 
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_recent_successful_pipeline_runs.return_value = []
-    with _patch_silver_connection, _patch_bookkeeping_store(fake_bookkeeping):
+    with _patch_gold_connection, _patch_bookkeeping_store(fake_bookkeeping):
         report = validate_data_quality(context=context)
 
     assert report["status"] == "failed"
@@ -178,7 +187,13 @@ def test_validate_data_quality_compares_direct_gold_and_silver_counts(tmp_path) 
 
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_recent_successful_pipeline_runs.return_value = []
-    with _patch_silver_connection, _patch_bookkeeping_store(fake_bookkeeping):
+    financial_facts_has_one_row = patch(
+        "edgar_warehouse.mdm.export.SnowflakeConnectionSettings.from_env",
+        return_value=FakeSnowflakeConnectionSettings(
+            {**_EMPTY_GOLD_TABLE_ROW_COUNTS, "FINANCIAL_FACTS": (["row_count"], [(1,)])}
+        ),
+    )
+    with financial_facts_has_one_row, _patch_bookkeeping_store(fake_bookkeeping):
         report = validate_data_quality(context=context)
 
     comparison = report["checks"]["gold_vs_silver"]["tables"]["sec_financial_fact"]
@@ -210,7 +225,7 @@ def test_validate_data_quality_reports_null_ratios(tmp_path) -> None:
 
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_recent_successful_pipeline_runs.return_value = []
-    with _patch_silver_connection, _patch_bookkeeping_store(fake_bookkeeping):
+    with _patch_gold_connection, _patch_bookkeeping_store(fake_bookkeeping):
         report = validate_data_quality(context=context)
 
     entity_type_ratio = report["checks"]["null_ratios"]["tables"]["sec_company"]["columns"][

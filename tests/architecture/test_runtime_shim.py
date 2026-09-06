@@ -19,10 +19,9 @@ class CompatibilityShimTests(unittest.TestCase):
         self.assertNotIn("class SilverDatabase", content)
         self.assertNotIn("CREATE TABLE IF NOT EXISTS", content)
 
-    def test_gold_is_thin_compatibility_shim(self) -> None:
+    def test_gold_shim_was_deleted(self) -> None:
+        # edgar_warehouse/gold.py has zero importers repo-wide -- deleted
+        # outright rather than kept as a thin shim with nothing left to
+        # re-export a meaningful public surface for.
         gold_path = Path(__file__).resolve().parents[2] / "edgar_warehouse" / "gold.py"
-        content = gold_path.read_text()
-        self.assertIn("serving.source_dimensional_export", content)
-        self.assertIn("serving.targets.snowflake", content)
-        self.assertNotIn("def build_source_export", content)
-        self.assertNotIn("pq.write_table", content)
+        self.assertFalse(gold_path.exists())
