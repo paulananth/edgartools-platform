@@ -1,10 +1,24 @@
 """Verifies write_single_workflow_definition's sec_fetch_active lease wiring
 (release-readiness ticket 84, implementing ticket 80's Phase 1 primitive)
-for bootstrap_full and targeted_resync -- the two SEC-fetching commands
-among the 6 workflows sharing this function that need the cross-command
-lease. load_daily_form_index_for_date, catch_up_daily_form_index,
-gold_refresh, and seed_universe stay unwrapped. (full_reconcile was a
-seventh member of this set until it was decommissioned entirely.)
+for targeted_resync -- the sole SEC-fetching command remaining among the
+2 workflows sharing this function (targeted_resync, gold_refresh) that
+need the cross-command lease. gold_refresh stays unwrapped.
+
+(full_reconcile was a member of this set until it was decommissioned
+entirely. bootstrap_full was the other SEC-fetching member -- also lease-
+wrapped -- until state-machine-consolidation ticket 09 (2026-09-05) retired
+its standalone Step Functions wrapper; its CLI command remains valid for
+direct/manual ECS invocation, just no longer wrapped in this automated
+lease. load_daily_form_index_for_date and catch_up_daily_form_index were
+never-wrapped members of this same set until that same ticket retired
+their standalone wrappers too.)
+
+This file's own test bodies still exercise write_single_workflow_definition()
+directly with hand-picked example commands (bootstrap-full/targeted-resync/
+gold-refresh), independent of which workflow names the deploy script's own
+loop currently passes through it -- those examples remain valid regardless
+of ticket 09's retirements, since they only prove the shared function's own
+wiring logic, not the loop's current membership.
 
 Generates the real write_single_workflow_definition() state machine JSON
 (same driver mechanism as test_daily_identity_refresh_state_machine.py).
@@ -98,7 +112,7 @@ def targeted_resync_definition() -> dict:
 
 @pytest.fixture(scope="module")
 def unwrapped_definition() -> dict:
-    """gold_refresh (a stand-in for the 5 non-SEC-fetching workflows in the
+    """gold_refresh (the sole non-SEC-fetching workflow remaining in the
     loop) must be completely untouched -- wrap_with_sec_fetch_lease=""."""
     return _generate_definition(
         default_command="States.Array('gold-refresh', '--run-id', $$.Execution.Name)",
@@ -255,7 +269,7 @@ def test_sec_fetch_lease_read_result_key_matches_the_real_path_resolver(
 
 
 def test_unwrapped_workflow_has_no_sec_fetch_lease_states(unwrapped_definition) -> None:
-    """gold_refresh (representing the 5 non-SEC-fetching workflows in the
+    """gold_refresh (the sole non-SEC-fetching workflow remaining in the
     loop) must be byte-for-byte the original shape -- no lease states leak
     in when wrap_with_sec_fetch_lease is empty."""
     assert unwrapped_definition["StartAt"] == "RunWarehouseTask"

@@ -1,4 +1,4 @@
-"""Structural checks on the remaining 4 MDM Pipeline Machines' shared-tail wiring.
+"""Structural checks on the remaining MDM Pipeline Machines' shared-tail wiring.
 
 state-machine-consolidation wayfinder map, ticket 02: after the "one shared
 tail" premise turned out wrong (6 genuinely distinct tail shapes across
@@ -10,10 +10,14 @@ mdm_tail_helper.py) instead of hand-typed Next pointers, while every flag/
 Catch/retry-count difference stays exactly as it was.
 
 mdm_gold retired by ticket 07 (deleted outright -- it had no head, fully
-redundant with the new single MDM machine); the remaining 4
-(ownership_mdm_gold, silver_mdm_gold, bronze_seed_silver_gold's default
-path, residual_holds_graph) still use wire_mdm_tail() as-is, their fate
-left open in ticket 08.
+redundant with the new single MDM machine); ownership_mdm_gold retired
+separately (own ticket, predates this file's last update); silver_mdm_gold
+retired by ticket 09 (2026-09-05: zero executions ever -- deleted outright,
+not modified, so it has no tests here anymore). Ticket 09 also confirmed
+bronze_seed_silver_gold's default path is NOT dead (install.sh's documented
+cold-start/recovery procedure depends on it) -- deferred, untouched. Only 2
+machines still use wire_mdm_tail() as-is: bronze_seed_silver_gold's default
+path (this file) and residual_holds_graph (its own test file).
 
 These tests generate the real JSON by sourcing the actual bash functions,
 mirroring test_load_history_state_machine.py's approach. Network-free: no
@@ -33,7 +37,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-aws-application.sh"
 
-_START_MARKER = "write_silver_mdm_gold_definition() {\n"
+_START_MARKER = "write_bronze_seed_silver_gold_definition() {\n"
 _END_MARKER = "\nwrite_generation_build_definition() {"
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
@@ -62,7 +66,6 @@ def _generate(fn_call: str, tmp_root: Path, name: str) -> dict:
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"
             'BRONZE_BUCKET_NAME="fake-bronze"\n'
             'WAREHOUSE_BUCKET_NAME="fake-warehouse"\n'
-            "BOOTSTRAP_BATCH_CONCURRENCY=3\n"
             "MDM_RUN_LIMIT=100\n"
             "MDM_GRAPH_LIMIT=200\n"
             f'SCRIPT_DIR="{(REPO_ROOT / "infra" / "scripts").as_posix()}"\n'
@@ -89,40 +92,8 @@ def tmp_root() -> Path:
 
 
 @pytest.fixture(scope="module")
-def silver_mdm_gold(tmp_root: Path) -> dict:
-    return _generate("write_silver_mdm_gold_definition", tmp_root, "silver_mdm_gold")
-
-
-@pytest.fixture(scope="module")
 def bronze_seed_silver_gold(tmp_root: Path) -> dict:
     return _generate("write_bronze_seed_silver_gold_definition", tmp_root, "bronze_seed_silver_gold")
-
-
-def test_silver_mdm_gold_tail_ordering(silver_mdm_gold: dict) -> None:
-    s = silver_mdm_gold["States"]
-    assert s["Infer Relationships"]["Next"] == "Publish"
-    assert s["Publish"]["Next"] == "Publish Relationships"
-    assert s["Publish Relationships"]["Next"] == "Reconcile"
-    assert s["Reconcile"]["Next"] == "GoldRefresh"
-    assert s["GoldRefresh"]["End"] is True
-
-
-def test_silver_mdm_gold_verify_catch_fallthrough_preserved(silver_mdm_gold: dict) -> None:
-    # verify-graph must never block gold-refresh (docs/data-architecture.md)
-    # -- this is exactly the kind of caller-owned behavior wire_mdm_tail is
-    # deliberately blind to and must not strip.
-    verify = silver_mdm_gold["States"]["Reconcile"]
-    assert verify.get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
-
-
-def test_silver_mdm_gold_no_limit_flag_on_mdm_commands(silver_mdm_gold: dict) -> None:
-    # INVARIANT (see the generator's own comment): a full bulk re-run must
-    # never carry MDM_RUN_LIMIT/MDM_GRAPH_LIMIT, even though those env vars
-    # were set non-zero in this test's driver.
-    s = silver_mdm_gold["States"]
-    for state_name in ("Mastering", "Infer Relationships", "Publish Relationships"):
-        command = s[state_name]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
-        assert "--limit" not in command, f"{state_name} must not carry --limit: {command}"
 
 
 def test_bronze_seed_silver_gold_default_tail_ordering(bronze_seed_silver_gold: dict) -> None:

@@ -1,0 +1,48 @@
+{
+  "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate.",
+  "StartAt": "RunWarehouseTask",
+  "States": {
+    "RunWarehouseTask": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-small:264",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('load-daily-form-index-for-date', $.target_date, '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true
+    }
+  }
+}
+

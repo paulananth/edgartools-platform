@@ -1,0 +1,315 @@
+{
+  "Comment": "Run an EdgarTools warehouse workflow on ECS Fargate with an optional cik_list override, gated by the cross-command sec_fetch_active lease.",
+  "StartAt": "AcquireSecFetchLease",
+  "States": {
+    "AcquireSecFetchLease": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:263",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('acquire-sec-fetch-lease', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "Next": "ReadSecFetchLeaseResult",
+      "ResultPath": null
+    },
+    "ReadSecFetchLeaseResult": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket": "edgartools-prod-bronze-690839588395",
+        "Key.$": "States.Format('warehouse/bronze/reference/sec_fetch_lease/runs/{}/lease_result.json', $$.Execution.Name)"
+      },
+      "ResultSelector": {
+        "parsed.$": "States.StringToJson($.Body)"
+      },
+      "ResultPath": "$.sec_fetch_lease_check",
+      "Next": "SecFetchLeaseAcquiredCheck"
+    },
+    "SecFetchLeaseAcquiredCheck": {
+      "Type": "Choice",
+      "Comment": "lease_result.json (not a plain ecs:runTask.sync field) is the source of truth for whether this run holds the shared cross-command sec_fetch_active lease.",
+      "Choices": [
+        {
+          "Variable": "$.sec_fetch_lease_check.parsed.lease_acquired",
+          "BooleanEquals": true,
+          "Next": "HasCikListOverride"
+        }
+      ],
+      "Default": "SecFetchDeferred"
+    },
+    "SecFetchDeferred": {
+      "Type": "Pass",
+      "Comment": "sec_fetch_active lease already held by another SEC-fetching command -- an explicit disposition, not an invisible skip. No SEC-fetch work started this run (release-readiness ticket 84).",
+      "Parameters": {
+        "disposition": "sec_fetch_deferred",
+        "sec_fetch_lease_check.$": "$.sec_fetch_lease_check.parsed"
+      },
+      "ResultPath": "$.sec_fetch_deferred_summary",
+      "End": true
+    },
+    "ReleaseSecFetchLease": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:263",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "End": true,
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "ReleaseSecFetchLeaseFailedNonFatal"
+        }
+      ]
+    },
+    "ReleaseSecFetchLeaseFailedNonFatal": {
+      "Type": "Pass",
+      "Comment": "Release is best-effort -- a failure here must not mark an otherwise-successful run FAILED. The 16h stale-lease reclaim in acquire_pipeline_run_lease is the actual safety net for a wedged sec_fetch_active lease.",
+      "End": true
+    },
+    "ReleaseSecFetchLeaseAfterFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:263",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('release-sec-fetch-lease', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 30,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "Next": "SecFetchTaskFailed",
+      "ResultPath": null,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": null,
+          "Next": "SecFetchTaskFailed"
+        }
+      ]
+    },
+    "SecFetchTaskFailed": {
+      "Type": "Fail",
+      "ErrorPath": "$.sec_fetch_task_error.Error",
+      "CausePath": "$.sec_fetch_task_error.Cause"
+    },
+    "HasCikListOverride": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.cik_list",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.cik_list",
+              "IsString": true
+            }
+          ],
+          "Next": "RunWarehouseTaskWithCikList"
+        }
+      ],
+      "Default": "RunWarehouseTaskDefault"
+    },
+    "RunWarehouseTaskDefault": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:263",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('bootstrap-full', '--run-id', $$.Execution.Name)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "Next": "ReleaseSecFetchLease",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    },
+    "RunWarehouseTaskWithCikList": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
+      "Parameters": {
+        "LaunchType": "FARGATE",
+        "Cluster": "arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse",
+        "TaskDefinition": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:263",
+        "PropagateTags": "TASK_DEFINITION",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0f7de61f13ba27744"
+            ],
+            "Subnets": [
+              "subnet-09dfb6a34597e8ed3",
+              "subnet-0606a828b86737ac6"
+            ]
+          }
+        },
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "edgar-warehouse",
+              "Command.$": "States.Array('bootstrap-full', '--run-id', $$.Execution.Name, '--cik-list', $.cik_list)"
+            }
+          ]
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 60,
+          "BackoffRate": 2.0,
+          "MaxAttempts": 2
+        }
+      ],
+      "Next": "ReleaseSecFetchLease",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.sec_fetch_task_error",
+          "Next": "ReleaseSecFetchLeaseAfterFailure"
+        }
+      ]
+    }
+  }
+}
+

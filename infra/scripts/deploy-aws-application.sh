@@ -63,7 +63,6 @@ Options:
   --dockerfile <path>               Dockerfile path. Default: repo root Dockerfile.
   --warehouse-runtime-mode <mode>   bronze_capture or infrastructure_validation. Default: bronze_capture.
   --warehouse-bronze-cik-limit <n>  Optional WAREHOUSE_BRONZE_CIK_LIMIT.
-  --bootstrap-batch-concurrency <n> Distributed Map bootstrap concurrency. Default: 10.
   --enable-mdm                      Deploy MDM ECS task definitions and state machines; fail if MDM secret ARNs are missing.
   --skip-mdm                        Do not deploy MDM ECS task definitions or state machines.
   --mdm-image-ref <ref>             Existing MDM image ref. Required when MDM is
@@ -270,7 +269,6 @@ BUILD_CONTEXT=""
 DOCKERFILE_PATH=""
 WAREHOUSE_RUNTIME_MODE="bronze_capture"
 WAREHOUSE_BRONZE_CIK_LIMIT=""
-BOOTSTRAP_BATCH_CONCURRENCY=3
 MDM_DEPLOYMENT_MODE="auto"
 MDM_DATABASE_SOURCE=""
 MDM_ECR_REPOSITORY_URL=""
@@ -336,7 +334,6 @@ while [[ $# -gt 0 ]]; do
     --dockerfile) DOCKERFILE_PATH="${2:?}"; shift 2 ;;
     --warehouse-runtime-mode) WAREHOUSE_RUNTIME_MODE="${2:?}"; shift 2 ;;
     --warehouse-bronze-cik-limit) WAREHOUSE_BRONZE_CIK_LIMIT="${2:?}"; shift 2 ;;
-    --bootstrap-batch-concurrency) BOOTSTRAP_BATCH_CONCURRENCY="${2:?}"; shift 2 ;;
     --enable-mdm) MDM_DEPLOYMENT_MODE="enabled"; shift ;;
     --skip-mdm) MDM_DEPLOYMENT_MODE="disabled"; shift ;;
     --mdm-database-source) MDM_DATABASE_SOURCE="${2:?}"; shift 2 ;;
@@ -411,7 +408,6 @@ if is_empty "$RUNNER_ROLE_NAME_PREFIX"; then
 fi
 [[ "$WAREHOUSE_RUNTIME_MODE" == "bronze_capture" || "$WAREHOUSE_RUNTIME_MODE" == "infrastructure_validation" ]] || fail "--warehouse-runtime-mode must be bronze_capture or infrastructure_validation"
 [[ "$PUSH_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || fail "--push-attempts must be a positive integer"
-[[ "$BOOTSTRAP_BATCH_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--bootstrap-batch-concurrency must be a positive integer"
 [[ "$MDM_RUN_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-run-limit must be a non-negative integer"
 [[ "$MDM_GRAPH_LIMIT" =~ ^[0-9]+$ ]] || fail "--mdm-graph-limit must be a non-negative integer"
 [[ "$MDM_GENERATION_PARTITION_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] || fail "--mdm-generation-partition-concurrency must be a positive integer"
@@ -1770,8 +1766,8 @@ task_definition_for_mdm_workflow() {
 # 04-retire-workflow-profile-dead-cases.md): workflow_profile() no longer
 # holds an independent case statement -- it's a thin pass-through that
 # translates its callers' underscore-style workflow names (e.g.
-# "bootstrap_full") to command_task_profile()'s hyphenated CLI command names
-# (e.g. "bootstrap-full") and delegates entirely. Its former case statement
+# "targeted_resync") to command_task_profile()'s hyphenated CLI command names
+# (e.g. "targeted-resync") and delegates entirely. Its former case statement
 # (including "daily_incremental"/"bootstrap", which were always dead code --
 # see command_task_profile()'s comment below) is retired; there is now
 # exactly one place task-profile resolution logic lives.
@@ -1791,10 +1787,19 @@ workflow_profile() {
 # (hyphenated), not workflow_profile()'s underscore-workflow-name spelling.
 command_task_profile() {
   case "$1" in
+    # load-daily-form-index-for-date and catch-up-daily-form-index removed
+    # (state-machine-consolidation wayfinder map, ticket 09, 2026-09-05):
+    # their standalone Step Functions wrappers are retired, and nothing else
+    # in this script calls command_task_profile() with these names. Their
+    # CLI commands remain valid for direct/manual ECS invocation without
+    # this lookup. bootstrap-full's standalone wrapper was retired the same
+    # ticket, but its case arm here stays -- it's a SOURCE_EXPORT_COMMANDS
+    # member (edgar_warehouse/application/warehouse_orchestrator.py) that
+    # still builds gold/Snowflake export in-process on direct invocation,
+    # and tests/architecture/test_source_export_commands_task_sizing.py
+    # resolves its task memory through this exact function.
     bootstrap-full) printf '%s\n' "large" ;;
     targeted-resync) printf '%s\n' "large" ;;
-    load-daily-form-index-for-date) printf '%s\n' "small" ;;
-    catch-up-daily-form-index) printf '%s\n' "small" ;;
     gold-refresh) printf '%s\n' "large" ;;
     # seed-universe: reached both via the standalone seed_universe workflow
     # (workflow_profile()'s pass-through) and, as of ticket 07, directly from
@@ -1823,9 +1828,11 @@ command_task_profile() {
     seed-universe) printf '%s\n' "medium" ;;
     # daily-incremental: never actually dispatched through
     # workflow_profile()'s pass-through above (its real caller loop only
-    # iterates bootstrap_full/targeted_resync/
-    # load_daily_form_index_for_date/catch_up_daily_form_index/
-    # gold_refresh/seed_universe). Its real resolved profile instead comes
+    # iterates targeted_resync/gold_refresh as of state-machine-consolidation
+    # ticket 09, 2026-09-05 -- bootstrap_full/load_daily_form_index_for_date/
+    # catch_up_daily_form_index's standalone machines were retired that
+    # ticket; seed_universe left even earlier, ticket 07). Its real resolved
+    # profile instead comes
     # from write_warehouse_mdm_gold_definition's CaptureAndVerifyNewFilings step
     # (ticket 02), which calls command_task_profile() directly with this
     # same name -- so this case arm exists for completeness/direct callers
@@ -1855,12 +1862,13 @@ command_task_profile() {
 workflow_command_expression() {
   case "$1" in
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name)" ;;
-    bootstrap_full) printf '%s\n' "States.Array('bootstrap-full', '--run-id', \$\$.Execution.Name)" ;;
     targeted_resync) printf '%s\n' "States.Array('targeted-resync', '--scope-type', \$.scope_type, '--scope-key', \$.scope_key, '--run-id', \$\$.Execution.Name)" ;;
-    load_daily_form_index_for_date) printf '%s\n' "States.Array('load-daily-form-index-for-date', \$.target_date, '--run-id', \$\$.Execution.Name)" ;;
-    catch_up_daily_form_index) printf '%s\n' "States.Array('catch-up-daily-form-index', '--run-id', \$\$.Execution.Name)" ;;
     gold_refresh) printf '%s\n' "States.Array('gold-refresh', '--run-id', \$\$.Execution.Name)" ;;
     seed_universe) printf '%s\n' "States.Array('seed-universe', '--run-id', \$\$.Execution.Name)" ;;
+    # bootstrap_full, load_daily_form_index_for_date, and
+    # catch_up_daily_form_index removed (state-machine-consolidation
+    # wayfinder map, ticket 09, 2026-09-05) along with their standalone
+    # Step Functions wrappers.
     *) fail "unknown workflow: $1" ;;
   esac
 }
@@ -1868,7 +1876,8 @@ workflow_command_expression() {
 workflow_cik_command_expression() {
   case "$1" in
     daily_incremental) printf '%s\n' "States.Array('daily-incremental', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
-    bootstrap_full) printf '%s\n' "States.Array('bootstrap-full', '--run-id', \$\$.Execution.Name, '--cik-list', \$.cik_list)" ;;
+    # bootstrap_full removed (state-machine-consolidation wayfinder map,
+    # ticket 09, 2026-09-05) along with its standalone Step Functions wrapper.
     *) return 0 ;;
   esac
 }
@@ -2076,9 +2085,11 @@ def build_sec_fetch_lease_states(acquired_next_state):
     fetch-heavy phase -- no MDM/gold follow-up exists in this state machine
     shape) behind the shared lease, and releases it right before the
     execution ends. No operator-alert notification, unlike daily_incremental's
-    identity-refresh lease -- these are operator-triggered ad-hoc runs
-    (bootstrap_full, targeted_resync): the operator running one is already
-    watching it.
+    identity-refresh lease -- this is an operator-triggered ad-hoc run
+    (targeted_resync, the sole remaining member of this loop that needs the
+    lease as of state-machine-consolidation ticket 09, 2026-09-05 --
+    bootstrap_full was the other member until its standalone machine was
+    retired): the operator running one is already watching it.
     """
     def lease_task_state(command_expression, next_state=None, is_end=False):
         s = run_task_state(command_expression, next_state=next_state, is_end=is_end)
@@ -2905,7 +2916,7 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 
 # No sec_fetch_active lease -- matches the predecessor standalone
 # seed_universe machine, which was deliberately never wrapped (it doesn't
-# call SEC at meaningful volume; see the bootstrap_full/targeted_resync-only
+# call SEC at meaningful volume; see the targeted_resync-only
 # wrap_with_sec_fetch_lease logic elsewhere in this script).
 seed_universe = ecs_state(wh_medium_arn,
     "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
@@ -3068,8 +3079,8 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 
 def build_sec_fetch_lease_states(acquired_next_state, released_next_state):
     """Cross-command sec_fetch_active lease (release-readiness ticket 84):
-    load_history is operator-triggered and ad-hoc (like bootstrap_full/
-    targeted_resync, unlike the scheduled daily_incremental),
+    load_history is operator-triggered and ad-hoc (like targeted_resync,
+    unlike the scheduled daily_incremental),
     so no operator-alert notification on defer -- the operator triggering it
     is already watching the run. load_history was restructured from the
     original parallel bootstrap-batch xN Map into a sequential
@@ -4788,157 +4799,14 @@ pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", en
 PY
 }
 
-# Re-process pipeline for already-loaded bronze:
-#   seed-silver-batches → parallel bootstrap-batch (uses cached bronze) → MDM chain → gold-refresh.
-# Use when bronze is already in S3 but silver/MDM/Neo4j/Snowflake need refreshing.
-# Accepts optional input: {"tracking_status_filter": "all|active|bootstrap_pending"}
-write_silver_mdm_gold_definition() {
-  local output_file="$1"
-  local wh_task_medium_arn="$2"  # warehouse medium (seed-silver-batches, bootstrap-batch)
-  local mdm_task_small_arn="$3"  # mdm small   (mdm reconcile)
-  local mdm_task_medium_arn="$4" # mdm medium  (mdm mastering, backfill, sync)
-  local wh_task_large_arn="$5"   # warehouse large (gold-refresh)
-
-  python3 - "$output_file" "$CLUSTER_ARN" \
-    "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
-    "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
-import json, pathlib, sys
-
-(output_file, cluster_arn,
- wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
- container_name, bronze_bucket_name, subnet_json, security_group_json,
- batch_concurrency, mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
-sys.path.insert(0, script_dir)
-from mdm_tail_helper import wire_mdm_tail
-
-subnets = json.loads(subnet_json)
-security_groups = json.loads(security_group_json)
-
-def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
-    s = {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::ecs:runTask.sync",
-        "Parameters": {
-            "LaunchType": "FARGATE",
-            "Cluster": cluster_arn,
-            "TaskDefinition": task_def_arn,
-            "PropagateTags": "TASK_DEFINITION",
-            "NetworkConfiguration": {"AwsvpcConfiguration": {
-                "AssignPublicIp": "ENABLED",
-                "SecurityGroups": security_groups,
-                "Subnets": subnets,
-            }},
-            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
-        },
-        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
-                   "BackoffRate": 2.0, "MaxAttempts": 3}],
-    }
-    if is_end:
-        s["End"] = True
-    else:
-        s["Next"] = next_state
-    return s
-
-mdm_limit   = str(mdm_run_limit)
-graph_limit = str(mdm_graph_limit)
-
-# seed-silver-batches reads CIKs from silver DuckDB (no SEC API calls) and writes the same
-# cik_batches.jsonl format that bootstrap-batch expects. tracking_status_filter is passed
-# from the SM execution input (default "all" when not provided in trigger input).
-seed = ecs_state(wh_medium_arn,
-    "States.Array('seed-silver-batches', '--run-id', $$.Execution.Name, '--tracking-status-filter', $.tracking_status_filter)",
-    next_state="BatchSilver", retry_secs=60)
-
-# INVARIANT: silver_mdm_gold must make ZERO SEC API calls and must not fan out
-# parser work inside each BatchSilver chunk. --artifact-policy skip prevents
-# ownership XML fetches; --parser-policy skip prevents each chunk from
-# re-parsing the full configured-form corpus. Run artifact fetch/parse as a
-# separate targeted pipeline after silver_mdm_gold completes when ownership
-# artifacts are needed.
-batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'skip', '--parser-policy', 'skip', '--run-id', $$.Execution.Name)",
-    is_end=True)
-
-batch_map = {
-    "Type": "Map",
-    "MaxConcurrency": int(batch_concurrency),
-    "Comment": "Re-process silver + artifacts from cached bronze. Submissions not re-downloaded.",
-    "ToleratedFailurePercentage": 0,
-    "ItemReader": {
-        "Resource": "arn:aws:states:::s3:getObject",
-        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-        "Parameters": {
-            "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_batches.jsonl', $$.Execution.Name)",
-        },
-    },
-    "ItemProcessor": {
-        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-        "StartAt": "RunBatch",
-        "States": {"RunBatch": batch},
-    },
-    "ResultPath": None,
-    "Next": "Mastering",
-}
-
-# INVARIANT: No --limit on MDM commands here. silver_mdm_gold is always a full bulk
-# re-run (all companies in silver), not an incremental daily update. A hard limit would
-# silently leave the majority of companies unprocessed in MDM and Neo4j.
-# MDM_RUN_LIMIT (incremental default 100) is intentionally NOT used here.
-mdm_run      = ecs_state(mdm_medium_arn, "States.Array('mdm', 'mastering', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="Infer Relationships")
-mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'infer-relationships', '--run-id', $$.Execution.Name)", next_state="Publish")
-mdm_export   = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", is_end=True)
-mdm_sync     = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish-relationships')", is_end=True)
-mdm_verify   = ecs_state(mdm_small_arn,  "States.Array('mdm', 'reconcile')", is_end=True)
-mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
-# verify-graph is validation-only per docs/data-architecture.md: it reports
-# parity but must never block gold-refresh, so a verify failure falls through.
-gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
-# Publish-before-Publish Relationships ordering (data-architecture Issue 3) is enforced
-# by wire_mdm_tail (state-machine-consolidation wayfinder map, ticket 02) —
-# see infra/scripts/mdm_tail_helper.py.
-mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
-
-# wh_large_arn, not wh_medium_arn -- same seed-universe OOM fixed in
-# write_load_history_definition (2026-08-09, task #35's live exit-137 on
-# wh_medium_arn); identical command, identical unconditional full-canonical-
-# silver.duckdb hydrate, so this state machine is equally exposed.
-seed_universe = ecs_state(wh_large_arn,
-    "States.Array('seed-universe', '--run-id', $$.Execution.Name)",
-    next_state="SeedSilverBatches", retry_secs=60)
-
-definition = {
-    "Comment": (
-        "Re-process pipeline for already-loaded bronze: "
-        "(0) seed universe (enrol any bootstrap_pending CIKs), "
-        "(1) seed batch file from silver DuckDB (no SEC downloads), "
-        "(2) parallel bootstrap-batch uses bronze SHA256 cache for submissions + runs artifact pipeline, "
-        "(3) MDM entity resolution + Neo4j sync, "
-        "(4) gold build + Snowflake export manifest. "
-        "Trigger with: {} or {\"tracking_status_filter\": \"active|bootstrap_pending\"}"
-    ),
-    "StartAt": "SeedUniverse",
-    "States": {
-        "SeedUniverse":     seed_universe,
-        "SeedSilverBatches": seed,
-        "BatchSilver":  batch_map,
-        "Mastering":       mdm_run,
-        "Infer Relationships":  mdm_backfill,
-        **mdm_tail,
-    },
-}
-pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
-PY
-}
-
 # One-click cold-start/recovery pipeline for an existing bronze snapshot:
 #   seed-bronze-batches (lists CIKs from S3 bronze directly) → sequential bootstrap-batch
 #   (uses cached bronze, zero SEC calls) → MDM chain → gold-refresh.
 # Use when an environment's bronze was copied in from elsewhere (e.g. dev → prod via
 # `aws s3 sync`) and silver/MDM/Neo4j/Snowflake have never been built from it — unlike
-# silver_mdm_gold, this does NOT depend on silver DuckDB's own bookkeeping tables
-# (sec_company_sync_state), which are empty in that scenario. No execution input required.
+# a silver-only reprocess of an already-bootstrapped environment, this does NOT depend
+# on silver DuckDB's own bookkeeping tables (sec_company_sync_state), which are empty
+# in that scenario. No execution input required.
 write_bronze_seed_silver_gold_definition() {
   local output_file="$1"
   local wh_task_medium_arn="$2"  # warehouse medium (seed-bronze-batches, bootstrap-batch)
@@ -4950,13 +4818,13 @@ write_bronze_seed_silver_gold_definition() {
     "$wh_task_medium_arn" "$mdm_task_small_arn" "$mdm_task_medium_arn" "$wh_task_large_arn" \
     "edgar-warehouse" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" \
-    "$BOOTSTRAP_BATCH_CONCURRENCY" "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
+    "$MDM_RUN_LIMIT" "$MDM_GRAPH_LIMIT" "$SCRIPT_DIR" <<'PY'
 import json, pathlib, sys
 
 (output_file, cluster_arn,
  wh_medium_arn, mdm_small_arn, mdm_medium_arn, wh_large_arn,
  container_name, bronze_bucket_name, warehouse_bucket_name, subnet_json, security_group_json,
- batch_concurrency, mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
+ mdm_run_limit, mdm_graph_limit, script_dir) = sys.argv[1:]
 sys.path.insert(0, script_dir)
 from mdm_tail_helper import wire_mdm_tail
 
@@ -4994,7 +4862,7 @@ graph_limit = str(mdm_graph_limit)
 # seed-bronze-batches lists CIKs straight from S3 bronze (submissions/sec/cik={cik}/...) —
 # no SEC API calls, no dependency on silver's own bookkeeping tables. Writes the same
 # cik_batches.jsonl format bootstrap-batch expects, so BatchSilver below is unchanged
-# from silver_mdm_gold's.
+# from a silver-only reprocess's shape.
 batch_size_check = {
     "Type": "Choice",
     "Comment": "Route to SeedFromBronze directly when caller supplied batch_size; otherwise inject the default.",
@@ -5630,19 +5498,24 @@ first_workflow=true
 # wayfinder map, ticket 07) -- merged with mdm_seed_universe into the
 # single "seed" machine (write_seed_definition), registered in the
 # DEPLOY_MDM block below since it now needs the MDM machine's ARN.
-for workflow in bootstrap_full targeted_resync load_daily_form_index_for_date catch_up_daily_form_index gold_refresh; do
+# bootstrap_full, load_daily_form_index_for_date, and catch_up_daily_form_index
+# removed from this loop (state-machine-consolidation wayfinder map, ticket 09,
+# 2026-09-05) -- their standalone Step Functions wrappers had zero (or, for
+# load_daily_form_index_for_date, near-zero dry-run-only) executions ever;
+# their underlying CLI commands remain valid for direct/manual ECS invocation.
+for workflow in targeted_resync gold_refresh; do
   profile="$(workflow_profile "$workflow")"
   task_definition_arn="$(task_definition_for_profile "$profile")"
   command_expression="$(workflow_command_expression "$workflow")"
   cik_command_expression="$(workflow_cik_command_expression "$workflow")"
   definition_file="$(json_file "sfn-${workflow}")"
   # sec_fetch_active cross-command lease (release-readiness ticket 84):
-  # only bootstrap_full and targeted_resync are among the 5 SEC-fetching
-  # commands (CLAUDE.md's Phased Pipeline scope);
-  # load_daily_form_index_for_date, catch_up_daily_form_index, gold_refresh,
-  # and seed_universe don't call SEC at meaningful volume and stay unwrapped.
+  # targeted_resync is the sole remaining SEC-fetching command in this loop
+  # (CLAUDE.md's Phased Pipeline scope); gold_refresh doesn't call SEC at
+  # meaningful volume and stays unwrapped. (bootstrap_full was this lease's
+  # other member until its standalone machine was retired, ticket 09.)
   wrap_with_sec_fetch_lease=""
-  if [[ "$workflow" == "bootstrap_full" || "$workflow" == "targeted_resync" ]]; then
+  if [[ "$workflow" == "targeted_resync" ]]; then
     wrap_with_sec_fetch_lease="true"
   fi
   write_single_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$cik_command_expression" \
@@ -5870,21 +5743,12 @@ import json, sys
 print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
 PY
 
-  # silver_mdm_gold: re-process already-loaded bronze through silver → MDM → Neo4j → Snowflake.
-  silver_mdm_gold_file="$(json_file sfn-silver-mdm-gold)"
-  write_silver_mdm_gold_definition "$silver_mdm_gold_file" \
-    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
-  silver_mdm_gold_arn="$(upsert_state_machine silver_mdm_gold "$silver_mdm_gold_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "silver_mdm_gold" "$silver_mdm_gold_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
   # bronze_seed_silver_gold: one-click cold-start/recovery from an existing bronze
   # snapshot (e.g. copied in from another environment) through silver → MDM → Neo4j →
-  # Snowflake. Unlike silver_mdm_gold, does not depend on silver already knowing about
-  # the CIKs — discovers them directly from S3 bronze.
+  # Snowflake. Unlike a silver-only reprocess, does not depend on silver already
+  # knowing about the CIKs — discovers them directly from S3 bronze.
+  # (silver_mdm_gold, the dedicated silver-only-reprocess machine, was retired
+  # state-machine-consolidation ticket 09, 2026-09-05: zero executions ever.)
   bronze_seed_silver_gold_file="$(json_file sfn-bronze-seed-silver-gold)"
   write_bronze_seed_silver_gold_definition "$bronze_seed_silver_gold_file" \
     "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
