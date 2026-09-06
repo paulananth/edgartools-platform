@@ -2805,6 +2805,27 @@ note above and state-machine-consolidation wayfinder map ticket 03).
   ownership XMLs) even though the purpose of that path is to reprocess already-loaded bronze
   with zero SEC calls. 5-why root cause: the artifact pipeline is a separate SEC fetch pass;
   "no SEC calls" must be encoded as a flag, not assumed from the pipeline name.
+- **Do not manually kick off `one_click_data_refresh`'s default path
+  (`{"batch_size": 100, "release_mode": false}`) while `daily_incremental` is
+  running.** Confirmed live 2026-09-06: a manual run
+  (`one-click-data-refresh-verify-1788697757`, 08:29-10:41 ET) overlapped
+  almost exactly with that day's scheduled `daily_incremental` run
+  (`edgartools-prod-daily-incremental-refresh`, `cron(0 12 ? * MON-SAT *)` =
+  8am ET, ran 08:00-10:44 ET) and failed with
+  `States.ExceedToleratedFailureThreshold` — both failed Map items crashed
+  with `s3fs.utils.FileExpired` on the canonical `silver.duckdb` object,
+  meaning some writer replaced it mid-download of another reader's hydrate
+  step. This mitigation is **partial, not a full fix**: a 7-day CloudWatch
+  log sweep found the same `FileExpired` signature recurring across ~38
+  distinct ECS tasks within that one run alone, a rate at least as
+  consistent with `one_click_data_refresh`'s own 20 concurrent
+  `bootstrap-batch` workers racing each other's hydrate/publish cycles as
+  with `daily_incremental`'s overlap — the two weren't distinguished by this
+  investigation. Avoiding the overlap removes one contributing writer but
+  may not eliminate the race. See
+  `.scratch/state-machine-consolidation/issues/11-decide-bronze-seed-silver-gold-default-path-fate.md`
+  and `.scratch/state-machine-consolidation/issues/14-fix-monolith-silver-hydrate-fileexpired-race.md`
+  for the full evidence and open follow-up.
 
 Key import pattern (do not change without checking the edgartools changelog):
 
