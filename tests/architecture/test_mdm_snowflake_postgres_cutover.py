@@ -89,15 +89,13 @@ def test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism() 
 
 def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -> None:
     text = _read(DEPLOY_SCRIPT)
-    # silver_mdm_gold's BatchSilver reprocessing Map -- unaffected by
-    # pipeline-resumability ticket 02, which scopes resume to
-    # bronze_seed_silver_gold only.
-    silver_mdm_gold_expected = (
-        "States.Array('bootstrap-batch', '--cik-list', $.cik_list, "
-        "'--artifact-policy', 'skip', '--parser-policy', 'skip', "
-        "'--run-id', $$.Execution.Name)"
-    )
-    assert text.count(silver_mdm_gold_expected) == 1
+    # silver_mdm_gold (whose BatchSilver reprocessing Map used this same
+    # command shape, minus --resume-ledger-run-id) was retired outright by
+    # state-machine-consolidation ticket 09 (2026-09-05: zero executions
+    # ever) -- this test now covers bronze_seed_silver_gold's own BatchSilver
+    # only, since that machine's default path was confirmed NOT dead
+    # (install.sh's documented cold-start/recovery procedure depends on it)
+    # and deferred, untouched.
 
     # bronze_seed_silver_gold's own BatchSilver -- ticket 02 threads
     # --resume-ledger-run-id through so a resumed run's done markers land

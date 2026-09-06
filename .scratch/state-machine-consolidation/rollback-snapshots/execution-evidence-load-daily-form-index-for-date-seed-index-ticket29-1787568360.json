@@ -1,0 +1,19 @@
+{
+    "executionArn": "arn:aws:states:us-east-1:690839588395:execution:edgartools-prod-load-daily-form-index-for-date:seed-index-ticket29-1787568360",
+    "stateMachineArn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-load-daily-form-index-for-date",
+    "name": "seed-index-ticket29-1787568360",
+    "status": "SUCCEEDED",
+    "startDate": "2026-08-24T06:46:02.511000-04:00",
+    "stopDate": "2026-08-24T06:48:03.465000-04:00",
+    "input": "{\"target_date\": \"2026-08-21\"}",
+    "inputDetails": {
+        "included": true
+    },
+    "output": "{\"Attachments\":[{\"Details\":[{\"Name\":\"subnetId\",\"Value\":\"subnet-0606a828b86737ac6\"},{\"Name\":\"networkInterfaceId\",\"Value\":\"eni-0cc7e753cedd77291\"},{\"Name\":\"macAddress\",\"Value\":\"12:9e:75:ec:c9:e3\"},{\"Name\":\"privateDnsName\",\"Value\":\"ip-10-30-1-166.ec2.internal\"},{\"Name\":\"privateIPv4Address\",\"Value\":\"10.30.1.166\"}],\"Id\":\"3ac9b1ae-f03f-47aa-b1c4-0ef8bf7e2c7e\",\"Status\":\"DELETED\",\"Type\":\"eni\"}],\"Attributes\":[{\"Name\":\"ecs.cpu-architecture\",\"Value\":\"x86_64\"}],\"AvailabilityZone\":\"us-east-1b\",\"ClusterArn\":\"arn:aws:ecs:us-east-1:690839588395:cluster/edgartools-prod-warehouse\",\"Connectivity\":\"CONNECTED\",\"ConnectivityAt\":1787568368398,\"Containers\":[{\"ContainerArn\":\"arn:aws:ecs:us-east-1:690839588395:container/edgartools-prod-warehouse/17557776b84e47c6872bf07de0d9bfa5/e0ef648f-0f41-4fdd-b6fc-59c4ba3787ca\",\"Cpu\":\"0\",\"ExitCode\":0,\"GpuIds\":[],\"Image\":\"690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:0fbb4645870db50e9801e1eb86e59c0634f6fc4c0f259264eb4f373b3ebeedc0\",\"ImageDigest\":\"sha256:0fbb4645870db50e9801e1eb86e59c0634f6fc4c0f259264eb4f373b3ebeedc0\",\"LastStatus\":\"STOPPED\",\"ManagedAgents\":[],\"Name\":\"edgar-warehouse\",\"NetworkBindings\":[],\"NetworkInterfaces\":[{\"AttachmentId\":\"3ac9b1ae-f03f-47aa-b1c4-0ef8bf7e2c7e\",\"PrivateIpv4Address\":\"10.30.1.166\"}],\"RuntimeId\":\"17557776b84e47c6872bf07de0d9bfa5-3843856496\",\"TaskArn\":\"arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/17557776b84e47c6872bf07de0d9bfa5\"}],\"Cpu\":\"512\",\"CreatedAt\":1787568363347,\"DesiredStatus\":\"STOPPED\",\"EnableExecuteCommand\":false,\"EphemeralStorage\":{\"SizeInGiB\":20},\"ExecutionStoppedAt\":1787568457067,\"Group\":\"family:edgartools-prod-small\",\"InferenceAccelerators\":[],\"LastStatus\":\"STOPPED\",\"LaunchType\":\"FARGATE\",\"Memory\":\"1024\",\"Overrides\":{\"ContainerOverrides\":[{\"Command\":[\"load-daily-form-index-for-date\",\"2026-08-21\",\"--run-id\",\"seed-index-ticket29-1787568360\"],\"Environment\":[],\"EnvironmentFiles\":[],\"Name\":\"edgar-warehouse\",\"ResourceRequirements\":[]}],\"InferenceAcceleratorOverrides\":[]},\"PlatformVersion\":\"1.4.0\",\"PullStartedAt\":1787568376431,\"PullStoppedAt\":1787568389763,\"StartedAt\":1787568389847,\"StartedBy\":\"AWS Step Functions\",\"StopCode\":\"EssentialContainerExited\",\"StoppedAt\":1787568482226,\"StoppedReason\":\"Essential container in task exited\",\"StoppingAt\":1787568467104,\"Tags\":[],\"TaskArn\":\"arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/17557776b84e47c6872bf07de0d9bfa5\",\"TaskDefinitionArn\":\"arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-small:219\",\"Version\":5}",
+    "outputDetails": {
+        "included": true
+    },
+    "redriveCount": 0,
+    "redriveStatus": "NOT_REDRIVABLE",
+    "redriveStatusReason": "Execution is SUCCEEDED and cannot be redriven"
+}

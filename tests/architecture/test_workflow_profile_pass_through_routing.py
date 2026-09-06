@@ -85,10 +85,7 @@ def _run_workflow_profile(
 @pytest.mark.parametrize(
     ("workflow_name", "expected_profile"),
     [
-        ("bootstrap_full", "large"),
         ("targeted_resync", "large"),
-        ("load_daily_form_index_for_date", "small"),
-        ("catch_up_daily_form_index", "small"),
         ("gold_refresh", "large"),
         ("seed_universe", "medium"),
     ],
@@ -107,8 +104,8 @@ def test_workflow_profile_uses_real_command_task_profile_result(
 @pytest.mark.parametrize(
     ("workflow_name", "real_command_name"),
     [
-        ("bootstrap_full", "bootstrap-full"),
-        ("load_daily_form_index_for_date", "load-daily-form-index-for-date"),
+        ("targeted_resync", "targeted-resync"),
+        ("gold_refresh", "gold-refresh"),
         ("seed_universe", "seed-universe"),
     ],
 )
@@ -142,8 +139,8 @@ def test_workflow_profile_genuinely_routes_through_command_task_profile(
 @pytest.mark.parametrize(
     ("workflow_name", "real_command_name"),
     [
-        ("bootstrap_full", "bootstrap-full"),
-        ("catch_up_daily_form_index", "catch-up-daily-form-index"),
+        ("targeted_resync", "targeted-resync"),
+        ("gold_refresh", "gold-refresh"),
     ],
 )
 def test_workflow_profile_translates_underscores_to_the_exact_hyphenated_command_name(

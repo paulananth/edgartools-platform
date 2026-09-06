@@ -2638,12 +2638,17 @@ map, ticket 03)** — it was never part of `load_history`'s call graph, had
 to fix a `silver.duckdb` consistency race inherent to
 `bootstrap_batched`'s concurrent-writer/`cik_batches.jsonl` architecture.
 
-There is a genuinely-parallel batch pipeline in prod:
-`edgartools-prod-silver-mdm-gold` (`BatchSilver` Map, `MaxConcurrency=3`,
-runs `bootstrap-batch --artifact-policy skip`) — this is what the
-`BOOTSTRAP_BATCH_CONCURRENCY`/`bootstrap-batch` invariants below actually
-govern. It reprocesses already-loaded bronze (no new SEC submissions
-fetched) and is unrelated to `load_history`'s own bootstrap Stage.
+`edgartools-prod-silver-mdm-gold` (the standalone re-process-already-loaded-
+bronze machine, `BatchSilver` Map at `MaxConcurrency=3` via
+`BOOTSTRAP_BATCH_CONCURRENCY`) was retired outright (state-machine-
+consolidation wayfinder map, ticket 09, 2026-09-05: zero executions ever) —
+both code and the live AWS object are gone; see the "Key invariants" section
+below for the full retirement note. The genuinely-parallel batch pipelines
+remaining in prod are `bronze_seed_silver_gold`'s own two `bootstrap-batch`
+Maps (hardcoded `MaxConcurrency` of 20 and 2, not env-controlled) — see that
+machine's own entry further below. Both reprocess already-loaded bronze (no
+new SEC submissions fetched) and are unrelated to `load_history`'s own
+bootstrap Stage.
 
 **Graph storage (read this before assuming "Neo4j" means an external service):**
 As of the `neo4j-snowflake` workstream (v1.3, completed 2026-06-12), graph data lives
@@ -2770,77 +2775,36 @@ reachability to the current Snowflake-hosted instance has not been re-verified.)
 
 **Key invariants (do not break):**
 
-The `bootstrap-batch`/`BOOTSTRAP_BATCH_CONCURRENCY` bullets below govern
-`edgartools-prod-silver-mdm-gold` (`BatchSilver` Map, confirmed live at
-`MaxConcurrency=3`, runs `bootstrap-batch --artifact-policy skip`) — the
-standalone `edgartools-prod-bootstrap-batched` machine that used to also
-run `bootstrap-batch` was deleted (zero executions ever; superseded by
+`silver_mdm_gold` (the standalone re-process-already-loaded-bronze machine
+this section used to document, `BatchSilver` Map at `MaxConcurrency=3` via
+`BOOTSTRAP_BATCH_CONCURRENCY`) was retired outright (state-machine-
+consolidation wayfinder map, ticket 09, 2026-09-05: zero executions ever) —
+deleted, not modified. `BOOTSTRAP_BATCH_CONCURRENCY` had exactly one real
+consumer (that machine's `BatchSilver` Map); the other two `bootstrap-batch`
+callers inside `write_bronze_seed_silver_gold_definition` received the env
+var but never read it (their `MaxConcurrency` was always hardcoded — 20 for
+the "first-load recovery" Map, 2 for the Ticket 20 strict candidate-manifest
+Map). With its one real consumer gone, the env var/CLI flag were removed
+entirely from `deploy-aws-application.sh`, not left as dead plumbing.
+
+Neither `bronze_seed_silver_gold`'s two `bootstrap-batch` Maps nor
+`load_history` (which runs `bootstrap-next`, a different command, per
+window at `MaxConcurrency=1`) were ever controlled by this env var — their
+`MaxConcurrency` values are unaffected by its removal. The old standalone
+`edgartools-prod-bootstrap-batched` machine (also ran `bootstrap-batch`) was
+separately deleted earlier (zero executions ever; superseded by
 `load_history`'s sequential-windowed design — see the "Phased Pipeline"
 note above and state-machine-consolidation wayfinder map ticket 03).
-Neither `silver_mdm_gold` nor `bootstrap-batch` is `load_history`, which
-runs `bootstrap-next` (a different command) per window at
-`MaxConcurrency=1` and is not controlled by `BOOTSTRAP_BATCH_CONCURRENCY`
-at all.
 
 - `bootstrap-batch` must NOT be in `SOURCE_EXPORT_COMMANDS` (renamed from `GOLD_AFFECTING_COMMANDS`, single-path-per-layer map — the commands it gates build a source-layer export, not gold) — enforced in `warehouse_orchestrator.py:85`
 - `gold-refresh` must be in `SOURCE_EXPORT_COMMANDS` — it is the sole gold builder in the phased pipeline
 - `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
   `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
-- `silver_mdm_gold` map MUST pass `--artifact-policy skip` to `bootstrap-batch` — without it
-  the pipeline makes thousands of SEC API calls (fetching ownership XMLs) even though the
-  purpose of this pipeline is to reprocess already-loaded bronze with zero SEC calls.
-  5-why root cause: the artifact pipeline is a separate SEC fetch pass; "no SEC calls" must
-  be encoded as a flag, not assumed from the pipeline name.
-- `BOOTSTRAP_BATCH_CONCURRENCY` — verified via `deploy-aws-application.sh` that this env var
-  is unpacked into, and its `MaxConcurrency` actually read by, only ONE of `bootstrap-batch`'s
-  three ECS/Step-Functions callers: `write_silver_mdm_gold_definition`'s `BatchSilver` Map
-  (`silver_mdm_gold`, `--artifact-policy skip`, confirmed live `MaxConcurrency=3`). The other
-  two — both inside `write_bronze_seed_silver_gold_definition` — receive the same
-  `$BOOTSTRAP_BATCH_CONCURRENCY` positional argument but never reference it; their
-  `MaxConcurrency` is hardcoded in the JSON template instead: the "first-load recovery from
-  cached bronze" Map (`--artifact-policy skip` too) at 20, and the Ticket 20 strict
-  candidate-manifest Map (`--artifact-policy all_attachments`, real SEC fetches) at 2. Do not
-  assume changing this env var affects either of those.
-
-  **Recommended range for the one caller it does govern: keep it at or below the current
-  default of 3** — do not raise it toward the old **2–5** guidance's upper end, and do not
-  raise it toward Fargate's vCPU ceiling either (see below). DuckDB Retirement Cutover
-  Ticket 06 retired `bootstrap-batch`'s CIK-sharded hydrate/publish mechanism
-  (`open_silver_shard`/`_hydrate_shard_for_window`/`_publish_shard_if_remote_with_retry` —
-  every writer now hydrates/opens/publishes the same monolith silver database, like every
-  other command). The old **2–5** range's own documented rationale (SEC rate limiting) never
-  actually applied to this specific caller — it always runs `--artifact-policy skip`, zero
-  SEC calls — so retiring the shard mechanism doesn't free up that headroom because that
-  headroom was never real for this caller in the first place. What retiring the shard
-  mechanism *does* change, and makes strictly worse: every `BatchSilver` batch that finishes
-  concurrently now merges into and publishes the exact same canonical `silver.duckdb` object
-  via one ETag-guarded promote, instead of being spread across 4 separate shard files (each
-  batch previously had roughly a 1-in-4 chance of colliding with another concurrent batch;
-  now every batch collides with every other concurrent batch on the same object). This isn't
-  theoretical — `write_bronze_seed_silver_gold_definition`'s own `strict_batch_map` (a
-  *different* `bootstrap-batch` caller, but writing the identical monolith object via the
-  identical `_publish_silver_database_with_retry`/ETag-promote mechanism) documents exactly
-  this failure mode in production: "production hit this repeatedly at MaxConcurrency=4
-  (PromotionConflictError aborting an otherwise-complete batch)," which is why it was lowered
-  4→2 on 2026-07-22, still below `silver_mdm_gold`'s current default of 3. The retry wrapper
-  (`_publish_silver_database_with_retry`) makes a lost race retryable rather than fatal, but
-  each retry re-runs the full merge — not free, and evidence from a comparable monolith-write
-  caller suggests conflicts start becoming *frequent*, not rare, right around where this
-  caller's current default already sits.
-
-  Separately, and only as an upper theoretical bound, **not** the actual binding constraint:
-  this Map's task profile is `medium` (`register_task_definition medium 1024 4096` — 1024 CPU
-  units = 1 vCPU/task), and the account's Fargate On-Demand vCPU quota is confirmed live
-  (`aws service-quotas get-service-quota --service-code fargate --quota-code L-3032A538`,
-  2026-08-31) at 30 vCPU, giving a hard ceiling of 30 concurrent `medium` tasks if this one Map
-  had the entire account's Fargate quota to itself (it doesn't; other pipelines share it, and
-  the "first-load recovery" Map above already runs at MaxConcurrency=20 on this same profile).
-  Snowflake landing-zone ingestion throughput under many concurrent small Parquet writes has
-  also not been measured. Neither number is the reason to hold the line at 3, though — the
-  monolith promotion-conflict evidence above is. Raising this value is deferred
-  implementation-time work for an operator, and should not be attempted without first either
-  re-measuring monolith-object promotion-conflict frequency at higher concurrency directly, or
-  reintroducing some form of writer partitioning for this specific Map.
+- `bronze_seed_silver_gold`'s two `bootstrap-batch` Maps must keep passing `--artifact-policy skip`
+  where documented above — without it the pipeline makes thousands of SEC API calls (fetching
+  ownership XMLs) even though the purpose of that path is to reprocess already-loaded bronze
+  with zero SEC calls. 5-why root cause: the artifact pipeline is a separate SEC fetch pass;
+  "no SEC calls" must be encoded as a flag, not assumed from the pipeline name.
 
 Key import pattern (do not change without checking the edgartools changelog):
 

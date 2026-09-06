@@ -17,16 +17,20 @@ here through its *real* dispatch path, not a re-implementation -- mirroring
 tests/architecture/test_source_export_commands_task_sizing.py's technique
 (that file covers the SOURCE_EXPORT_COMMANDS subset only; this one covers
 the full set any of the three mechanisms answers for, including
-load-daily-form-index-for-date / catch-up-daily-form-index / seed-universe,
-which aren't gold-affecting but are still resolved via workflow_profile()
-today):
+seed-universe, which isn't gold-affecting but is still resolved via
+workflow_profile() today):
 
-1. ``bootstrap-full``, ``targeted-resync``,
-   ``load-daily-form-index-for-date``, ``catch-up-daily-form-index``,
-   ``gold-refresh``, ``seed-universe``: workflow_profile()'s case statement,
-   invoked directly (the real bash function). (``full-reconcile`` was a
-   member of this set until it was decommissioned entirely -- zero
-   executions ever, no schedule, no live caller of its CLI command left.)
+1. ``targeted-resync``, ``gold-refresh``, ``seed-universe``:
+   workflow_profile()'s case statement, invoked directly (the real bash
+   function). (``full-reconcile`` was a member of this set until it was
+   decommissioned entirely -- zero executions ever, no schedule, no live
+   caller of its CLI command left. ``bootstrap-full``,
+   ``load-daily-form-index-for-date``, and ``catch-up-daily-form-index``
+   were members until state-machine-consolidation ticket 09 (2026-09-05)
+   retired their standalone Step Functions wrappers -- confirmed-unused
+   (zero, or dry-run-only, executions ever); their CLI commands remain
+   valid for direct/manual ECS invocation, just no longer resolved via
+   workflow_profile() or command_task_profile() at all.)
 2. ``daily-incremental``: workflow_profile() has a case for this, but it's
    DEAD CODE -- workflow_profile() is never called with this name anywhere
    in the script (see that function's own comment). Its actual
@@ -77,9 +81,8 @@ UPDATE (2026-08-19, ticket 05 landed):
 test_source_export_commands_task_sizing.py's own three-mechanism
 reverse-engineering is now retired -- it asserts against
 ``command_task_profile()`` directly for its SOURCE_EXPORT_COMMANDS subset.
-This file still covers the full _ALL_COMMANDS set (including
-load-daily-form-index-for-date / catch-up-daily-form-index / seed-universe,
-which aren't gold-affecting and so fall outside that file's scope) and still
+This file still covers the full _ALL_COMMANDS set (including seed-universe,
+which isn't gold-affecting and so falls outside that file's scope) and still
 regenerates real ASL for paths 2/3 rather than calling
 ``command_task_profile()`` a second time under a different name, so the two
 files are not yet fully redundant -- left as two files, not folded into one,
@@ -102,11 +105,16 @@ pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not a
 
 # Every command currently resolved by any of the three legacy mechanisms
 # command_task_profile() is meant to replace (see module docstring).
+# bootstrap-full, load-daily-form-index-for-date, and catch-up-daily-form-index
+# removed (state-machine-consolidation wayfinder map, ticket 09, 2026-09-05):
+# their standalone Step Functions wrappers were retired (confirmed-unused --
+# zero, or for load-daily-form-index-for-date, dry-run-only executions ever),
+# and their command_task_profile() case arms removed along with them since
+# nothing else in the deploy script calls command_task_profile() with these
+# names. Their underlying CLI commands remain valid for direct/manual ECS
+# invocation, just without this automated lookup.
 _ALL_COMMANDS = {
-    "bootstrap-full",
     "targeted-resync",
-    "load-daily-form-index-for-date",
-    "catch-up-daily-form-index",
     "gold-refresh",
     "seed-universe",
     "daily-incremental",
