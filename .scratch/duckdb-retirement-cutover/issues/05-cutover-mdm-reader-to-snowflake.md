@@ -21,7 +21,8 @@ independently per resolver run and aren't expected to be byte-identical).
 
 **Blocked by:** None — can start immediately.
 
-**Status:** code complete (2026-08-31); one live-verification step still open
+**Status:** resolved (2026-09-06) — see the final re-verification entry at
+the bottom of this file for the closing evidence
 
 - [x] All 6 call sites of `ShardedSilverReader` now use the new
       Snowflake-backed `SilverReader` implementation. Scope discovery: much
@@ -415,3 +416,48 @@ comparison to exclude these known-divergent columns and get a genuine
 live evidence as sufficient sign-off as-is and proceed. Either way,
 [Ticket 10](10-atomic-write-path-cutover.md) should not be considered
 unblocked on this item until one of those two paths is deliberately chosen.
+
+**RESOLVED 2026-09-06: fixed the gate itself, then re-verified live —
+genuine `passed: true` on all 5 entity types.** `RESOLVER_INPUT_TABLES`
+(`edgar_warehouse/mdm/silver_parity.py`) widened its per-table tuples from
+`(table, key_columns)` to `(table, key_columns, exclude_columns)`, listing
+exactly the columns confirmed live to legitimately diverge between DuckDB
+and Snowflake for each table (sync-bookkeeping timestamps, asynchronously-
+backfilled `mdm_entity_id`, and — for the ownership-adjacent tables — an
+extra denormalized `cik` column Snowflake's dbt model joins in by design,
+Ticket 06). Deliberately a new, purpose-built exclusion set rather than
+reusing `silver_protection.py`'s `PROTECTED_TABLE_REGISTRY.provenance_columns`
+(consulted `/gof-refactor-reviewer` first, confirmed this call): that
+registry answers a different question (same-key conflict-authority
+resolution during a DuckDB candidate-into-canonical merge) and doesn't even
+cover `first_sync_run_id`/`last_synced_at` or the `cik` case, so reusing it
+would have left the exact gap this fix closes. Excluded columns are
+stripped from both sides' row dicts before hashing, so an extra column
+present on only one side doesn't cause a key-set mismatch either — a
+genuine content difference on any other column still fails loud (locked in
+by new regression tests proving both directions).
+
+**A second live re-verification pass caught a real gap in the first
+fix**: the initial exclusion list only covered the 2 ownership *transaction*
+tables' `cik` join, missing that `sec_ownership_reporting_owner` (the
+`person` entity type's resolver-input table) has the exact same Ticket 06
+dbt-join shape — confirmed via its own dbt model file, same "materializes
+the issuer's cik" comment. Re-running the live gate after the first fix
+showed `person` still failing 100%; diffing one row directly confirmed the
+same schema-shape (not content) difference; added `cik` to that table's
+exclusion set. This is exactly why "manually spot-check 3 tables, assume
+the rest are the same shape" needed a full live re-run afterward rather
+than being trusted on partial evidence.
+
+Final live verification (2026-09-06, fresh `silver.duckdb` download,
+`edgartools-prod` Snowflake connection): `mdm verify-resolver-input-parity`
+exits 0, `"passed": true` for every one of `adviser`/`company`/`fund`/
+`person`/`security`. Full repo test suite green (3092 passed, 6 skipped, 8
+pre-existing/unrelated Postgres-integration failures unchanged) plus 6 new
+tests in `tests/unit/test_resolver_input_parity.py` covering: known-
+divergent columns don't cause a false mismatch (company, and both
+ownership-adjacent shapes), and a genuine content difference on a
+non-excluded column still fails (same 3 shapes). mypy clean.
+
+[Ticket 10](10-atomic-write-path-cutover.md) can now be considered
+genuinely unblocked on this item.

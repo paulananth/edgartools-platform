@@ -158,6 +158,198 @@ class TestVerifyResolverInputParityMismatch:
         assert not table.matches  # still fails overall -- missingness is not silently waved through
 
 
+class TestVerifyResolverInputParityExcludedColumns:
+    """2026-09-06 fix: known-divergent columns must not cause a false
+    mismatch, but a real content difference on any other column must still
+    fail loud. Live evidence: every one of the 6 RESOLVER_INPUT_TABLES
+    reported 100% mismatch despite every core business field being
+    byte-identical, purely because sync-bookkeeping timestamps,
+    asynchronously-backfilled mdm_entity_id, and (for the ownership txn
+    tables) an extra Snowflake-only denormalized cik column were included
+    in the comparison."""
+
+    def test_sync_bookkeeping_and_mdm_entity_id_differences_do_not_fail_company(self) -> None:
+        duckdb_rows = [
+            {
+                "cik": 2488,
+                "entity_name": "ADVANCED MICRO DEVICES INC",
+                "first_sync_run_id": "run-1",
+                "last_sync_run_id": "run-9",
+                "last_synced_at": "2026-07-23T20:48:30",
+                "mdm_entity_id": None,
+            }
+        ]
+        snowflake_rows = [
+            {
+                "cik": 2488,
+                "entity_name": "ADVANCED MICRO DEVICES INC",
+                "first_sync_run_id": None,
+                "last_sync_run_id": None,
+                "last_synced_at": None,
+                "mdm_entity_id": "3509b990-ef67-560e-94cb-1fa99204b68a",
+            }
+        ]
+        duckdb_reader = _FakeReader({"sec_company": duckdb_rows})
+        snowflake_reader = _FakeReader({"sec_company": snowflake_rows})
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["company"]
+        )
+
+        assert result["company"].passed
+        assert result["company"].tables[0].mismatched_keys == []
+
+    def test_real_business_field_difference_on_company_still_fails(self) -> None:
+        """Excluding known-divergent columns must not swallow a genuine
+        content difference on a business column."""
+        duckdb_rows = [
+            {
+                "cik": 2488,
+                "entity_name": "ADVANCED MICRO DEVICES INC",
+                "first_sync_run_id": "run-1",
+                "last_sync_run_id": "run-9",
+                "last_synced_at": "2026-07-23T20:48:30",
+                "mdm_entity_id": None,
+            }
+        ]
+        snowflake_rows = [
+            {
+                "cik": 2488,
+                "entity_name": "DRIFTED NAME INC",  # real content difference
+                "first_sync_run_id": None,
+                "last_sync_run_id": None,
+                "last_synced_at": None,
+                "mdm_entity_id": "3509b990-ef67-560e-94cb-1fa99204b68a",
+            }
+        ]
+        duckdb_reader = _FakeReader({"sec_company": duckdb_rows})
+        snowflake_reader = _FakeReader({"sec_company": snowflake_rows})
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["company"]
+        )
+
+        assert not result["company"].passed
+        assert result["company"].tables[0].mismatched_keys == [(2488,)]
+
+    def test_ownership_txn_extra_snowflake_only_cik_column_does_not_fail(self) -> None:
+        """sec_ownership_non_derivative_txn/sec_ownership_derivative_txn:
+        Snowflake's dbt model joins in `cik` from sec_company_filing
+        (Ticket 06) -- DuckDB's own table never has this column at all."""
+        key_row = {
+            "accession_number": "0000002488-26-000176",
+            "owner_index": 1,
+            "txn_index": 1,
+            "transaction_shares": 7261,
+            "last_sync_run_id": "ticket46-verify4",
+            "mdm_entity_id": None,
+        }
+        duckdb_reader = _FakeReader(
+            {
+                "sec_ownership_non_derivative_txn": [dict(key_row)],
+                "sec_ownership_derivative_txn": [],
+            }
+        )
+        snowflake_row = dict(key_row)
+        snowflake_row["cik"] = 2488  # extra, Snowflake-only column
+        snowflake_row["last_sync_run_id"] = "different-run-id"
+        snowflake_reader = _FakeReader(
+            {
+                "sec_ownership_non_derivative_txn": [snowflake_row],
+                "sec_ownership_derivative_txn": [],
+            }
+        )
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["security"]
+        )
+
+        non_derivative = next(
+            t for t in result["security"].tables if t.table == "sec_ownership_non_derivative_txn"
+        )
+        assert non_derivative.mismatched_keys == []
+
+    def test_real_content_difference_on_ownership_txn_still_fails(self) -> None:
+        key_row = {
+            "accession_number": "0000002488-26-000176",
+            "owner_index": 1,
+            "txn_index": 1,
+            "transaction_shares": 7261,
+            "last_sync_run_id": "ticket46-verify4",
+            "mdm_entity_id": None,
+        }
+        duckdb_reader = _FakeReader(
+            {
+                "sec_ownership_non_derivative_txn": [dict(key_row)],
+                "sec_ownership_derivative_txn": [],
+            }
+        )
+        snowflake_row = dict(key_row)
+        snowflake_row["cik"] = 2488
+        snowflake_row["transaction_shares"] = 9999  # real content difference
+        snowflake_reader = _FakeReader(
+            {
+                "sec_ownership_non_derivative_txn": [snowflake_row],
+                "sec_ownership_derivative_txn": [],
+            }
+        )
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["security"]
+        )
+
+        non_derivative = next(
+            t for t in result["security"].tables if t.table == "sec_ownership_non_derivative_txn"
+        )
+        assert non_derivative.mismatched_keys == [("0000002488-26-000176", 1, 1)]
+
+    def test_reporting_owner_extra_snowflake_only_cik_column_does_not_fail(self) -> None:
+        """sec_ownership_reporting_owner: same Ticket 06 cik-join pattern as
+        the ownership txn tables -- found live 2026-09-06 re-verifying this
+        fix's own first pass, which had only checked the two txn tables and
+        missed this third table sharing the identical dbt model shape."""
+        key_row = {
+            "accession_number": "0000002488-26-000176",
+            "owner_index": 1,
+            "owner_name": "Forrest Eugene Norrod",
+            "last_sync_run_id": "ticket46-verify4",
+            "mdm_entity_id": None,
+        }
+        duckdb_reader = _FakeReader({"sec_ownership_reporting_owner": [dict(key_row)]})
+        snowflake_row = dict(key_row)
+        snowflake_row["cik"] = 2488  # extra, Snowflake-only column
+        snowflake_row["last_sync_run_id"] = "different-run-id"
+        snowflake_reader = _FakeReader({"sec_ownership_reporting_owner": [snowflake_row]})
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["person"]
+        )
+
+        assert result["person"].passed
+        assert result["person"].tables[0].mismatched_keys == []
+
+    def test_real_content_difference_on_reporting_owner_still_fails(self) -> None:
+        key_row = {
+            "accession_number": "0000002488-26-000176",
+            "owner_index": 1,
+            "owner_name": "Forrest Eugene Norrod",
+            "last_sync_run_id": "ticket46-verify4",
+            "mdm_entity_id": None,
+        }
+        duckdb_reader = _FakeReader({"sec_ownership_reporting_owner": [dict(key_row)]})
+        snowflake_row = dict(key_row)
+        snowflake_row["cik"] = 2488
+        snowflake_row["owner_name"] = "Drifted Name"  # real content difference
+        snowflake_reader = _FakeReader({"sec_ownership_reporting_owner": [snowflake_row]})
+
+        result = verify_resolver_input_parity(
+            duckdb_reader, snowflake_reader, entity_types=["person"]
+        )
+
+        assert not result["person"].passed
+        assert result["person"].tables[0].mismatched_keys == [("0000002488-26-000176", 1)]
+
+
 class TestVerifyResolverInputParityTypeCoercion:
     def test_decimal_vs_int_type_drift_is_caught_not_normalized_away(self) -> None:
         """Advisor-flagged failure mode: Snowflake's connector returns Decimal

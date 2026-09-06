@@ -208,14 +208,80 @@ def verify_silver_parity(duckdb_reader: Any, snowflake_reader: Any) -> SilverPar
 # primary key), not one resolver's specific SELECT projection -- a stronger
 # and more general proof than matching a single query's column list, and
 # one that stays valid if a resolver's projection changes later.
-RESOLVER_INPUT_TABLES: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
-    "company": (("sec_company", ("cik",)),),
-    "adviser": (("sec_adv_filing", ("accession_number",)),),
-    "fund": (("sec_adv_private_fund", ("accession_number", "fund_index")),),
-    "person": (("sec_ownership_reporting_owner", ("accession_number", "owner_index")),),
+#
+# The third tuple element, exclude_columns, lists columns known to legitimately
+# diverge between DuckDB and Snowflake for that specific table by design --
+# found live 2026-09-06, re-verifying this exact gate after the coverage gap
+# it originally flagged (see this file's history) was independently closed:
+# every one of these 6 tables reported 100% mismatch on every sampled row, but
+# manually diffing rows via both readers directly found every core business
+# field byte-identical -- only these columns differed:
+#   - last_sync_run_id/first_sync_run_id/last_synced_at: sync-bookkeeping
+#     timestamps, populated in DuckDB but NULL on Snowflake's landing-export-
+#     derived table (the landing export never carries these -- see
+#     silver_landing_export.py's own docstring).
+#   - mdm_entity_id: asynchronously backfilled by a separate sweep
+#     (mdm-ahead-of-silver map) -- can be populated on one side and not the
+#     other purely depending on when each side's backfill last ran, not a
+#     resolver-input disagreement. Same asymmetric-backfill fact
+#     silver_protection.py's PROTECTED_TABLE_REGISTRY already documents for
+#     sec_company's mdm_entity_id via its own provenance_columns field --
+#     NOT reused here on purpose: that registry answers a different question
+#     (same-key conflict-authority resolution during a DuckDB candidate-into-
+#     canonical merge), and doesn't even cover first_sync_run_id/last_synced_at
+#     or the cik case below, so pulling from it here would leave the exact
+#     gap this fix closes.
+#   - cik on sec_ownership_non_derivative_txn/sec_ownership_derivative_txn/
+#     sec_ownership_reporting_owner: each one's Snowflake dbt model joins
+#     this in from sec_company_filing by design (infra/snowflake/dbt/
+#     edgartools_gold/models/silver/*.sql, Ticket 06 -- "materializes the
+#     issuer's cik here ... so downstream consumers don't each have to
+#     independently know this table needs an accession-number join") --
+#     DuckDB's own tables never had this column at all, so it's a
+#     schema-shape difference, not a content difference. sec_adv_filing and
+#     sec_adv_private_fund do NOT need this exclusion -- confirmed via their
+#     own dbt models, neither adds a cik/company_filing join at all.
+# A column NOT in this list still participates in the comparison exactly as
+# before -- a genuine content difference on any other column must still fail
+# loud. Excluded columns are stripped from BOTH sides' row dicts before
+# hashing, so an extra column present only on one side (the cik case) doesn't
+# cause a key-set mismatch either.
+RESOLVER_INPUT_TABLES: dict[str, tuple[tuple[str, tuple[str, ...], frozenset[str]], ...]] = {
+    "company": (
+        (
+            "sec_company",
+            ("cik",),
+            frozenset({"first_sync_run_id", "last_sync_run_id", "last_synced_at", "mdm_entity_id"}),
+        ),
+    ),
+    "adviser": (
+        ("sec_adv_filing", ("accession_number",), frozenset({"last_sync_run_id", "mdm_entity_id"})),
+    ),
+    "fund": (
+        (
+            "sec_adv_private_fund",
+            ("accession_number", "fund_index"),
+            frozenset({"last_sync_run_id", "mdm_entity_id"}),
+        ),
+    ),
+    "person": (
+        (
+            "sec_ownership_reporting_owner",
+            ("accession_number", "owner_index"),
+            frozenset({"last_sync_run_id", "mdm_entity_id", "cik"}),
+        ),
+    ),
     "security": (
-        ("sec_ownership_non_derivative_txn", ("accession_number", "owner_index", "txn_index")),
-        ("sec_ownership_derivative_txn", ("accession_number", "owner_index", "txn_index")),
+        (
+            "sec_ownership_non_derivative_txn",
+            ("accession_number", "owner_index", "txn_index"),
+            frozenset({"last_sync_run_id", "mdm_entity_id", "cik"}),
+        ),
+        (
+            "sec_ownership_derivative_txn",
+            ("accession_number", "owner_index", "txn_index"),
+            frozenset({"last_sync_run_id", "mdm_entity_id", "cik"}),
+        ),
     ),
 }
 
@@ -347,6 +413,10 @@ def verify_resolver_input_parity(
     same hash function MDM's own ``_skip_if_unchanged`` already depends on
     for stability, so a type-coercion drift here would be a real, not a
     cosmetic, cross-backend difference).
+
+    Each ``RESOLVER_INPUT_TABLES`` entry's ``exclude_columns`` (its third
+    tuple element) is stripped from both sides' row dicts before hashing --
+    see that constant's own comment for exactly which columns and why.
     """
     from edgar_warehouse.mdm.resolvers.base import content_hash
 
@@ -354,7 +424,7 @@ def verify_resolver_input_parity(
     out: dict[str, ResolverInputParityResult] = {}
     for entity_type in types:
         table_results: list[RowParityResult] = []
-        for table, key_columns in RESOLVER_INPUT_TABLES[entity_type]:
+        for table, key_columns, exclude_columns in RESOLVER_INPUT_TABLES[entity_type]:
             limit = large_table_sample_size if table in _LARGE_RESOLVER_INPUT_TABLES else sample_size
             try:
                 keys = _sample_keys(duckdb_reader, table, key_columns, limit=limit)
@@ -378,7 +448,11 @@ def verify_resolver_input_parity(
                 if duckdb_row is None or snowflake_row is None:
                     missing.append(key)
                     continue
-                if content_hash(duckdb_row) != content_hash(snowflake_row):
+                duckdb_comparable = {k: v for k, v in duckdb_row.items() if k not in exclude_columns}
+                snowflake_comparable = {
+                    k: v for k, v in snowflake_row.items() if k not in exclude_columns
+                }
+                if content_hash(duckdb_comparable) != content_hash(snowflake_comparable):
                     mismatched.append(key)
 
             table_results.append(
