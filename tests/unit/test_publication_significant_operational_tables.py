@@ -41,6 +41,47 @@ from edgar_warehouse.silver_protection import (
 from edgar_warehouse.silver_store import SilverDatabase
 
 
+def _insert_checkpoint_row(db: SilverDatabase, row: dict) -> None:
+    """Raw-SQL insert for sec_daily_index_checkpoint fixture setup.
+
+    DuckDB Retirement Cutover: SilverDatabase.upsert_daily_index_checkpoint
+    was removed (superseded by BookkeepingStore) -- these tests only ever
+    used it as a convenient way to write a row for DuckDB-merge-mechanics
+    tests (compute_silver_fingerprint/merge_candidate_into_canonical), not
+    to test the method itself, so a raw insert is a direct substitute.
+    """
+    db._conn.execute(
+        """
+        INSERT INTO sec_daily_index_checkpoint
+            (business_date, source_name, source_key, source_url,
+             expected_available_at, first_attempt_at, last_attempt_at,
+             attempt_count, raw_object_id, last_sha256, row_count,
+             distinct_cik_count, distinct_accession_count, status,
+             error_message, finalized_at, last_success_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            row["business_date"],
+            row.get("source_name", "daily_form_index"),
+            row["source_key"],
+            row["source_url"],
+            row["expected_available_at"],
+            row.get("first_attempt_at"),
+            row.get("last_attempt_at"),
+            row.get("attempt_count", 1),
+            row.get("raw_object_id"),
+            row.get("last_sha256"),
+            row.get("row_count"),
+            row.get("distinct_cik_count"),
+            row.get("distinct_accession_count"),
+            row.get("status", "pending"),
+            row.get("error_message"),
+            row.get("finalized_at"),
+            row.get("last_success_at"),
+        ],
+    )
+
+
 def _checkpoint_row(business_date: str) -> dict:
     return {
         "business_date": business_date,
@@ -77,7 +118,7 @@ def test_fingerprint_detects_a_daily_index_checkpoint_only_change(tmp_path: Path
     baseline = compute_silver_fingerprint(db_path)
 
     db = SilverDatabase(str(db_path))
-    db.upsert_daily_index_checkpoint(_checkpoint_row("2026-08-21"))
+    _insert_checkpoint_row(db, _checkpoint_row("2026-08-21"))
     db.close()
 
     after = compute_silver_fingerprint(db_path)
@@ -118,7 +159,7 @@ def test_merge_copies_checkpoint_only_candidate_content_into_canonical(tmp_path:
 
     candidate_path = tmp_path / "candidate.duckdb"
     candidate_db = SilverDatabase(str(candidate_path))
-    candidate_db.upsert_daily_index_checkpoint(_checkpoint_row("2026-08-21"))
+    _insert_checkpoint_row(candidate_db, _checkpoint_row("2026-08-21"))
     candidate_db.close()
 
     output_path = tmp_path / "merged.duckdb"
@@ -144,7 +185,7 @@ def test_merge_only_tables_scoping_still_applies_to_significant_tables(tmp_path:
 
     candidate_path = tmp_path / "candidate.duckdb"
     candidate_db = SilverDatabase(str(candidate_path))
-    candidate_db.upsert_daily_index_checkpoint(_checkpoint_row("2026-08-21"))
+    _insert_checkpoint_row(candidate_db, _checkpoint_row("2026-08-21"))
     candidate_db.close()
 
     output_path = tmp_path / "merged.duckdb"
@@ -171,7 +212,7 @@ def test_merge_fails_closed_on_a_column_set_mismatch(tmp_path: Path) -> None:
 
     candidate_path = tmp_path / "candidate.duckdb"
     candidate_db = SilverDatabase(str(candidate_path))
-    candidate_db.upsert_daily_index_checkpoint(_checkpoint_row("2026-08-21"))
+    _insert_checkpoint_row(candidate_db, _checkpoint_row("2026-08-21"))
     candidate_db._conn.execute(
         "ALTER TABLE sec_daily_index_checkpoint ADD COLUMN extra_column TEXT"
     )
