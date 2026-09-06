@@ -188,8 +188,6 @@ def test_terraform_moves_mdm_secret_containers_to_runtime_module() -> None:
         moves = _read(REPO_ROOT / "infra" / "terraform" / "accounts" / env / "mdm_secret_moves.tf")
         assert "module.mdm[0].aws_secretsmanager_secret.postgres_dsn" in moves
         assert "module.runtime.aws_secretsmanager_secret.mdm_postgres_dsn" in moves
-        assert "module.mdm[0].aws_secretsmanager_secret.api_keys" in moves
-        assert "module.runtime.aws_secretsmanager_secret.mdm_api_keys" in moves
         assert "module.mdm[0].aws_secretsmanager_secret.snowflake" in moves
         assert "module.runtime.aws_secretsmanager_secret.mdm_snowflake" in moves
 
@@ -204,19 +202,18 @@ def test_terraform_account_roots_no_longer_provision_mdm_rds() -> None:
     assert not any("mdm_database" in str(path) for path in terraform_paths)
 
 
-def test_runtime_module_owns_all_mdm_secret_outputs() -> None:
+def test_runtime_module_owns_only_active_mdm_secret_outputs() -> None:
     main = _read(REPO_ROOT / "infra" / "terraform" / "modules" / "warehouse_runtime" / "main.tf")
     outputs = _read(REPO_ROOT / "infra" / "terraform" / "modules" / "warehouse_runtime" / "outputs.tf")
 
-    for name in ("mdm_postgres_dsn", "mdm_neo4j", "mdm_api_keys", "mdm_snowflake"):
+    for name in ("mdm_postgres_dsn", "mdm_snowflake"):
         assert f'resource "aws_secretsmanager_secret" "{name}"' in main
-    for output in (
-        "mdm_postgres_dsn_secret_arn",
-        "mdm_neo4j_secret_arn",
-        "mdm_api_keys_secret_arn",
-        "mdm_snowflake_secret_arn",
-    ):
+    for output in ("mdm_postgres_dsn_secret_arn", "mdm_snowflake_secret_arn"):
         assert f'output "{output}"' in outputs
+    for retired in ("mdm_neo4j", "mdm_api_keys"):
+        assert f'resource "aws_secretsmanager_secret" "{retired}"' not in main
+        assert f"from = aws_secretsmanager_secret.{retired}" in main
+        assert f'output "{retired}_secret_arn"' not in outputs
 
 
 def test_audit_dsn_validation_fails_for_non_snowflake_postgres_host() -> None:

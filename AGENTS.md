@@ -208,7 +208,8 @@ Important differences:
   - `sec_platform_runner_execution`
   - `sec_platform_runner_task`
   - `sec_platform_runner_step_functions`
-- Do not create runner access keys. `edgartools-<env>-runner-credentials` is a legacy empty container only.
+- Do not create runner access keys. Runtime and deployment use IAM roles; the former
+  `edgartools-<env>-runner-credentials` empty container is retired.
 
 ## AWS Infra Flow
 
@@ -385,9 +386,11 @@ aws stepfunctions start-execution \
 MDM runtime writes use Snowflake Postgres through `MDM_DATABASE_URL`. AWS Terraform manages only empty Secrets Manager containers:
 
 - `edgartools-<env>/mdm/postgres_dsn`
-- `edgartools-<env>/mdm/neo4j`
-- `edgartools-<env>/mdm/api_keys`
 - `edgartools-<env>/mdm/snowflake`
+
+The unused, never-populated `mdm/neo4j` and `mdm/api_keys` containers are
+retired. Use `scripts/ops/delete_unused_aws_secrets.py` for reviewed cleanup;
+its apply mode requires reconciled Terraform state and live no-use evidence.
 
 Populate the MDM PostgreSQL DSN with the Snowflake Postgres `application` role DSN:
 

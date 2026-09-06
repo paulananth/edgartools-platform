@@ -34,8 +34,6 @@ BOOTSTRAP_BOOKKEEPING_POSTGRES = REPO_ROOT / "infra" / "scripts" / "bootstrap-bo
 EXPECTED_NAMES = {
     "mdm/postgres_dsn",
     "mdm/snowflake",
-    "mdm/neo4j",
-    "mdm/api_keys",
     "dbt/snowflake",
     "bookkeeping/postgres_dsn",
 }
@@ -51,7 +49,7 @@ def test_manifest_is_valid_json_with_a_secrets_list():
     assert manifest["secrets"]
 
 
-def test_manifest_declares_exactly_the_six_known_secrets():
+def test_manifest_declares_exactly_the_four_active_namespaced_secrets():
     manifest = _load_manifest()
     names = {entry["name"] for entry in manifest["secrets"]}
     assert names == EXPECTED_NAMES
@@ -87,11 +85,11 @@ def test_dbt_snowflake_entry_now_has_a_populating_script_but_still_no_terraform_
     assert entry["populated_in_prod"] is True
 
 
-def test_mdm_neo4j_and_api_keys_are_declared_never_populated():
+def test_retired_empty_secrets_are_not_active_manifest_dependencies():
     manifest = _load_manifest()
-    by_name = {e["name"]: e for e in manifest["secrets"]}
-    assert by_name["mdm/neo4j"]["populated_in_prod"] is False
-    assert by_name["mdm/api_keys"]["populated_in_prod"] is False
+    names = {entry["name"] for entry in manifest["secrets"]}
+    assert "mdm/neo4j" not in names
+    assert "mdm/api_keys" not in names
 
 
 def test_mdm_postgres_dsn_and_mdm_snowflake_have_real_populating_scripts():

@@ -83,11 +83,6 @@ output "snowflake_export_kms_key_arn" {
   value       = module.storage.snowflake_export_kms_key_arn
 }
 
-output "runner_credentials_secret_arn" {
-  description = "Prod legacy empty operator credential container ARN. Normal AWS runtime uses sec_platform_runner service roles without access keys."
-  value       = module.runtime.runner_credentials_secret_arn
-}
-
 output "mdm_postgres_dsn_secret_arn" {
   description = "Prod empty Secrets Manager container ARN for the operator-populated Snowflake Postgres MDM DSN."
   value       = module.runtime.mdm_postgres_dsn_secret_arn
@@ -96,16 +91,6 @@ output "mdm_postgres_dsn_secret_arn" {
 output "bookkeeping_postgres_dsn_secret_arn" {
   description = "Prod empty Secrets Manager container ARN for the operator-populated bookkeeping store Postgres DSN."
   value       = module.runtime.bookkeeping_postgres_dsn_secret_arn
-}
-
-output "mdm_neo4j_secret_arn" {
-  description = "Prod empty Secrets Manager container ARN for operator-populated Neo4j connection details."
-  value       = module.runtime.mdm_neo4j_secret_arn
-}
-
-output "mdm_api_keys_secret_arn" {
-  description = "Prod empty Secrets Manager container ARN for operator-populated MDM API keys."
-  value       = module.runtime.mdm_api_keys_secret_arn
 }
 
 output "mdm_snowflake_secret_arn" {

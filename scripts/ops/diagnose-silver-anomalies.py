@@ -3,8 +3,8 @@ Diagnose three known silver-layer anomalies against a local silver.duckdb.
 
   Bug 1 — ISSUED_BY unlinked securities
     Checks whether remaining unlinked Security nodes are blocked by a --limit
-    cap or by a missing issuer in MDM.  Requires Neo4j (reads NEO4J_SECRET_JSON
-    or fetches from Secrets Manager).
+    cap or by a missing issuer in MDM. Legacy external-Neo4j inspection runs
+    only when NEO4J_SECRET_JSON is supplied explicitly.
 
   Bug 2 — Parse run count anomaly (405 k vs 24 k raw objects)
     Classifies the 390 k failed ownership_v1 parse runs: orphaned (accession
@@ -38,7 +38,6 @@ import argparse
 import json
 import logging
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -64,22 +63,6 @@ def warn(msg: str) -> None:
     print(f"  [!]  {msg}", file=sys.stderr)
 
 
-def aws_secret(name: str, region: str) -> dict:
-    result = subprocess.run(
-        ["aws", "secretsmanager", "get-secret-value",
-         "--region", region, "--secret-id", name,
-         "--query", "SecretString", "--output", "text"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"Could not fetch secret {name!r}: {result.stderr.strip()[:120]}")
-    raw = result.stdout.strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {"raw": raw}
-
-
 # ── Bug 1 — ISSUED_BY unlinked securities ─────────────────────────────────────
 
 def bug1_issued_by(env: str, region: str) -> None:
@@ -87,22 +70,15 @@ def bug1_issued_by(env: str, region: str) -> None:
     print()
     print("  Checking Neo4j for Security nodes without ISSUED_BY edges ...")
 
-    # Prefer env var set by caller; fall back to Secrets Manager
     secret_json = os.environ.get("NEO4J_SECRET_JSON", "")
-    if secret_json:
-        try:
-            secret = json.loads(secret_json)
-        except json.JSONDecodeError:
-            warn("NEO4J_SECRET_JSON is set but not valid JSON — trying Secrets Manager")
-            secret_json = ""
-
     if not secret_json:
-        try:
-            secret = aws_secret(f"edgartools-{env}/mdm/neo4j", region)
-        except RuntimeError as e:
-            warn(str(e))
-            warn("Skipping Bug 1 — set NEO4J_SECRET_JSON or ensure AWS creds are valid")
-            return
+        warn("Skipping Bug 1 — external Neo4j is retired; set NEO4J_SECRET_JSON for a legacy target")
+        return
+    try:
+        secret = json.loads(secret_json)
+    except json.JSONDecodeError:
+        warn("NEO4J_SECRET_JSON is not valid JSON — skipping Bug 1")
+        return
 
     uri      = secret.get("uri", "")
     user     = secret.get("user", "")

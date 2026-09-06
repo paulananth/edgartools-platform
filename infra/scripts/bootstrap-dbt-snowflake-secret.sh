@@ -2,8 +2,8 @@
 # bootstrap-dbt-snowflake-secret.sh
 #
 # Writes the dbt/snowflake Secrets Manager secret. Terraform has no resource
-# for this one -- unlike mdm/postgres_dsn, mdm/snowflake, mdm/neo4j, and
-# mdm/api_keys (see secrets-manifest.json), dbt/snowflake was populated
+# for this one -- unlike active mdm/postgres_dsn and mdm/snowflake entries
+# (see secrets-manifest.json), dbt/snowflake was populated
 # in prod via an undocumented manual step with no reproducible path anywhere
 # in this repo. This script closes that gap.
 #

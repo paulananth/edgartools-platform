@@ -60,14 +60,17 @@ modules/
    and `terraform apply` with the same admin profile.
 6. Populate runtime secrets out-of-band if an operator workflow needs them:
    - `edgartools-<env>-edgar-identity`
-   - `edgartools-<env>-runner-credentials` only as a legacy compatibility
-     container for non-runtime operator credentials
-   - `edgartools-<env>/mdm/*` for MDM runtime DSNs and graph/export settings
+   - `edgartools-<env>/mdm/postgres_dsn` for the operational store
+   - `edgartools-<env>/mdm/snowflake` for graph/export settings
 7. Deploy active AWS application components from the operator script:
    `bash infra/scripts/deploy-aws-application.sh --env dev --aws-profile sec_platform_deployer --aws-account-id 690839588395 --build-image`.
 
 AWS Terraform no longer accepts warehouse image, workflow schedule, app command,
 Snowflake trust principal, IAM role, or EDGAR identity value inputs.
+The former runner-credentials, MDM Neo4j, and MDM API-key empty containers are
+removed from Terraform state without destroying them. Schedule their recoverable
+deletion only with `scripts/ops/delete_unused_aws_secrets.py` after applying this
+root and its matching access root.
 
 ## Snowflake Apply
 

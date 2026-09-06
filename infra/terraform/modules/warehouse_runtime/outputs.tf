@@ -38,11 +38,6 @@ output "log_group_name" {
   value       = aws_cloudwatch_log_group.ecs.name
 }
 
-output "runner_credentials_secret_arn" {
-  description = "Secrets Manager ARN for a legacy empty operator credential container. Normal AWS runtime uses sec_platform_runner service roles without access keys."
-  value       = aws_secretsmanager_secret.runner_credentials.arn
-}
-
 output "mdm_postgres_dsn_secret_arn" {
   description = "Secrets Manager ARN for the operator-populated Snowflake Postgres MDM DSN."
   value       = aws_secretsmanager_secret.mdm_postgres_dsn.arn
@@ -51,16 +46,6 @@ output "mdm_postgres_dsn_secret_arn" {
 output "bookkeeping_postgres_dsn_secret_arn" {
   description = "Secrets Manager ARN for the operator-populated bookkeeping store Postgres DSN."
   value       = aws_secretsmanager_secret.bookkeeping_postgres_dsn.arn
-}
-
-output "mdm_neo4j_secret_arn" {
-  description = "Secrets Manager ARN for operator-populated Neo4j connection details."
-  value       = aws_secretsmanager_secret.mdm_neo4j.arn
-}
-
-output "mdm_api_keys_secret_arn" {
-  description = "Secrets Manager ARN for operator-populated MDM API keys."
-  value       = aws_secretsmanager_secret.mdm_api_keys.arn
 }
 
 output "mdm_snowflake_secret_arn" {

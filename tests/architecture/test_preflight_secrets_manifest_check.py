@@ -78,8 +78,6 @@ ALL_POPULATED = {
     "edgartools-prod-edgar-identity": POPULATED,
     "mdm/postgres_dsn": POPULATED,
     "mdm/snowflake": POPULATED,
-    "mdm/neo4j": EMPTY_CONTAINER,
-    "mdm/api_keys": EMPTY_CONTAINER,
     "dbt/snowflake": POPULATED,
 }
 
@@ -107,11 +105,8 @@ def test_all_manifest_secrets_populated_or_correctly_empty_passes(tmp_path):
     assert "PASS: secret has a value: edgartools-prod/mdm/postgres_dsn" in combined
     assert "PASS: secret container exists: edgartools-prod/mdm/snowflake" in combined
     assert "PASS: secret has a value: edgartools-prod/mdm/snowflake" in combined
-    assert "PASS: secret container exists: edgartools-prod/mdm/neo4j" in combined
-    assert "PASS: secret container exists: edgartools-prod/mdm/api_keys" in combined
-    # Never-populated secrets are never checked for a value -- only existence.
-    assert "secret has a value: edgartools-prod/mdm/neo4j" not in combined
-    assert "secret has a value: edgartools-prod/mdm/api_keys" not in combined
+    assert "mdm/neo4j" not in combined
+    assert "mdm/api_keys" not in combined
     assert "PASS: secret container exists: edgartools-prod/dbt/snowflake" in combined
     assert "PASS: secret has a value: edgartools-prod/dbt/snowflake" in combined
     assert "PASS: secret container exists: edgartools-prod-edgar-identity" in combined
@@ -136,17 +131,6 @@ def test_container_exists_but_never_populated_fails_for_a_populated_in_prod_secr
     assert result.returncode == 1
     assert "PASS: secret container exists: edgartools-prod/dbt/snowflake" in (result.stdout + result.stderr)
     assert "FAIL: secret container exists but has never been populated: edgartools-prod/dbt/snowflake" in result.stderr
-
-
-def test_mdm_neo4j_missing_the_container_entirely_still_fails(tmp_path):
-    """Never-populated doesn't mean never-checked -- the Terraform-created
-    container must still exist even if nothing has been written to it.
-    """
-    responses = dict(ALL_POPULATED)
-    responses["mdm/neo4j"] = None
-    result = _run(tmp_path, responses)
-    assert result.returncode == 1
-    assert "FAIL: missing secret container: edgartools-prod/mdm/neo4j" in result.stderr
 
 
 def test_never_calls_get_secret_value(tmp_path):

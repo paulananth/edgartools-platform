@@ -18,13 +18,12 @@
 #
 # What it does:
 #   1. bootstrap              — fetch recent SEC filings for active universe → bronze + silver
-#   2. mdm mastering → backfill-relationships → sync-graph (Neo4j) → verify-graph
+#   2. mdm mastering → backfill-relationships → Snowflake graph publication
 #   3. gold-refresh           — builds all gold tables + Snowflake export manifest
 #
 # Secrets required in AWS Secrets Manager before running:
 #   edgartools-dev-edgar-identity   SEC API User-Agent email (plain string)
 #   edgartools-dev/mdm/postgres_dsn MDM Postgres connection string
-#   edgartools-dev/mdm/neo4j        {"uri":"...","user":"...","password":"..."}
 
 set -euo pipefail
 
@@ -33,7 +32,6 @@ NAME_PREFIX="edgartools-dev"
 
 EDGAR_IDENTITY_SECRET="${NAME_PREFIX}-edgar-identity"
 POSTGRES_DSN_SECRET="${NAME_PREFIX}/mdm/postgres_dsn"
-NEO4J_SECRET="${NAME_PREFIX}/mdm/neo4j"
 
 AWS_PROFILE_NAME=""
 WINDOW_SIZE=500
@@ -143,36 +141,6 @@ else
   # Show host only, not the password
   PG_HOST=$(echo "$PG_VAL" | sed 's|.*@||' | sed 's|/.*||')
   printf "OK (host: %s)\n" "$PG_HOST"
-fi
-
-# 4. Neo4j secret — needed by mdm-sync-graph (stage 3)
-printf "  Neo4j            ... "
-NEO4J_VAL=$(aws_cli secretsmanager get-secret-value \
-  --secret-id "$NEO4J_SECRET" \
-  --query 'SecretString' --output text 2>/dev/null || true)
-
-if [[ -z "$NEO4J_VAL" || "$NEO4J_VAL" == "None" ]]; then
-  printf "MISSING\n"
-  echo "  ERROR: secret '$NEO4J_SECRET' is empty." >&2
-  echo "  Fix:   aws --region $REGION secretsmanager put-secret-value \\" >&2
-  echo "           --secret-id $NEO4J_SECRET \\" >&2
-  echo "           --secret-string '{\"uri\":\"neo4j+s://<id>.databases.neo4j.io\",\"user\":\"<user>\",\"password\":\"<pass>\"}'" >&2
-  echo "  See:   docs/neo4j.md" >&2
-  PREFLIGHT_ERRORS=$(( PREFLIGHT_ERRORS + 1 ))
-else
-  NEO4J_MISSING_KEYS=()
-  for key in uri user password; do
-    echo "$NEO4J_VAL" | grep -q "\"$key\"" || NEO4J_MISSING_KEYS+=("$key")
-  done
-  if [[ ${#NEO4J_MISSING_KEYS[@]} -gt 0 ]]; then
-    printf "INVALID\n"
-    echo "  ERROR: Neo4j secret missing keys: ${NEO4J_MISSING_KEYS[*]}" >&2
-    echo "  Expected: {\"uri\":\"...\",\"user\":\"...\",\"password\":\"...\"}" >&2
-    PREFLIGHT_ERRORS=$(( PREFLIGHT_ERRORS + 1 ))
-  else
-    NEO4J_HOST=$(echo "$NEO4J_VAL" | grep -o '"uri":"[^"]*"' | sed 's/"uri":"//;s/"//')
-    printf "OK (%s)\n" "$NEO4J_HOST"
-  fi
 fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

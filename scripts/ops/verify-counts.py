@@ -224,10 +224,14 @@ def verify_mdm(env: str, region: str) -> None:
 # ── Neo4j ─────────────────────────────────────────────────────────────────────
 def verify_neo4j(env: str, region: str) -> None:
     hr("NEO4J GRAPH")
+    secret_json = os.environ.get("NEO4J_SECRET_JSON", "")
+    if not secret_json:
+        warn("external Neo4j is retired; set NEO4J_SECRET_JSON for a legacy target")
+        return
     try:
-        secret = aws_secret(f"edgartools-{env}/mdm/neo4j", region)
-    except RuntimeError as e:
-        warn(str(e))
+        secret = json.loads(secret_json)
+    except json.JSONDecodeError:
+        warn("NEO4J_SECRET_JSON is not valid JSON")
         return
 
     uri      = secret.get("uri", "")

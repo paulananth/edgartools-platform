@@ -287,10 +287,31 @@ aws secretsmanager put-secret-value \
   --secret-string "Your Name your@email.com"
 ```
 
-The `edgartools-prod-runner-credentials` secret is a legacy empty container for
-backward-compatible operator storage only. Do not create runner access keys for
-normal runtime or deployment; runtime uses the `sec_platform_runner_*` service
-roles, and deployment uses `sec_platform_deployer`.
+The former `edgartools-prod-runner-credentials` empty container is retired. Do
+not create runner access keys: runtime uses the `sec_platform_runner_*` service
+roles, and deployment uses `sec_platform_deployer`. Reviewed cleanup uses
+`scripts/ops/delete_unused_aws_secrets.py`, which schedules a 30-day recoverable
+deletion only after Terraform state and live-reference checks pass.
+
+After applying the passive-infrastructure and matching access roots, review the
+live deletion plan:
+
+```bash
+uv run python scripts/ops/delete_unused_aws_secrets.py \
+  --environment prod \
+  --profile aws-admin-prod \
+  --region us-east-1 \
+  --expected-account-id 690839588395 \
+  --secret-id edgartools-prod-runner-credentials \
+  --secret-id edgartools-prod/mdm/api_keys \
+  --secret-id edgartools-prod/mdm/neo4j
+```
+
+Apply the same command with `--apply --confirm-delete-unused-secrets`. The
+script refuses populated, accessed, referenced, replicated, rotating,
+resource-policy-bound, or Terraform-managed secrets. Restore a scheduled
+deletion during its 30-day recovery window with `aws secretsmanager
+restore-secret --secret-id <name>`.
 
 ---
 
@@ -912,9 +933,8 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   `edgartools-prod-edgar-identity` (see Step 2).
 - **Do not create runner access keys.** The AWS access root creates
   `sec_platform_runner_execution`, `sec_platform_runner_task`, and
-  `sec_platform_runner_step_functions` service roles. The
-  `edgartools-prod-runner-credentials` secret is retained only as a legacy
-  compatibility container for non-runtime operator storage.
+  `sec_platform_runner_step_functions` service roles. The former
+  `edgartools-prod-runner-credentials` empty container is retired.
 - **Capture `snowflake_manifest_sns_topic_arn`** from provisioning outputs — the bootstrap
   script needs it to subscribe Snowflake's Snowpipe to the SNS topic.
 - **`accounts/prod` has `prevent_destroy` on the bronze bucket.** `terraform destroy` will
