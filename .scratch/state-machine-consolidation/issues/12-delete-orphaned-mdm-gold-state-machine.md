@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-09-06)
 
 **Spawned by:** [Ticket 09 — Retire superseded document-loading machines](09-retire-superseded-document-loading-machines.md), noted out of that ticket's own scope: `edgartools-prod-mdm-gold` is a live AWS orphan — confirmed zero executions and zero remaining code references (its writer function and dispatch were already removed by an earlier ticket), but the deployed AWS state machine object itself was never deleted.
 
@@ -17,4 +17,12 @@ Not a decision — mechanical cleanup, mirroring the rollback-snapshot-then-expl
 
 ## Answer
 
-_(pending)_
+Deleted live, 2026-09-06: rollback snapshot captured
+(`.scratch/state-machine-consolidation/rollback-snapshots/mdm-gold-pre-delete-2026-09-06.json`),
+a fresh `list-executions` check reconfirmed zero executions ever (not just
+Ticket 09's earlier evidence), zero live code references reconfirmed (every
+`mdm_gold`-substring hit in the repo is either the unrelated
+`write_warehouse_mdm_gold_definition` function or an already-retired
+sibling), `edgartools-prod-mdm-gold` deleted (`DELETING` -> gone), and
+CONTEXT.md's MDM Pipeline Machine `_Avoid_` note updated to reflect the
+cleanup instead of flagging it as outstanding.
