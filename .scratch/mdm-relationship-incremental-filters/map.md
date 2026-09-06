@@ -25,26 +25,11 @@ a full-table-scan cost on every run.
   to close, and ticket 08 stayed with the conservative answer (leave all 4
   relationship types operator-triggered-only) specifically because of it —
   see that ticket's Answer once resolved for the full reasoning.
-- Confirmed live in code (not measured in prod) for 2 of 11 types:
-  - `_derive_institutional_holds` (`pipeline.py:3017`): joins the full
-    `sec_thirteenf_holding` table (CIK-range batched only for OOM
-    avoidance, not incrementality). Own docstring: "bounded today only
-    because this type currently has 0 active rows in prod, not because
-    the code path is actually safe at scale." Source table has 6.8M rows
-    (`EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_THIRTEENF_HOLDING`, CLAUDE.md).
-  - `_derive_holds` (`pipeline.py:1180`): same shape against
-    `sec_ownership_non_derivative_txn`/`sec_ownership_derivative_txn` —
-    `self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))`,
-    where the bound is on write count (`remaining`/`existing` = current
-    active-relationship count vs. `target_per_type`), not on which source
-    rows are new.
-  - The other 9 (`_derive_is_insider`, `_derive_company_holds`,
-    `_derive_is_entity_of`, `_derive_has_parent_company`,
-    `_derive_is_person_of`, `_derive_manages_fund`(`_batch`),
-    `_derive_issued_by`, `_derive_employed_by`, `_derive_audited_by`) were
-    not individually re-checked this session — presumed same shape given
-    they share `_bounded_relationship_sql`'s pattern, but confirm each
-    before assuming.
+- Real per-type filtering shape, row counts, and available timestamp/
+  versioning columns for all 11 types: see Ticket 01's resolution above
+  and `research/01-incremental-filtering-status.md` — four genuinely
+  distinct shapes exist, not the single presumed one this section
+  originally described (now superseded, not restated here).
 - Existing incremental/diff precedent elsewhere in the platform worth
   modeling this on: `sec_daily_index_checkpoint` (daily-index-driven
   discovery, CLAUDE.md's "SEC data idempotency" section) and the
@@ -55,7 +40,7 @@ a full-table-scan cost on every run.
 
 ## Decisions so far
 
-(none yet)
+- [Confirm incremental-filtering status and data volume](issues/01-confirm-incremental-filtering-status-and-data-volume.md) — Read all 11 `_derive_*` methods directly rather than extrapolating from the 2 previously-confirmed ones. Found **four distinct filtering shapes, not the presumed one**: (1) growing-window bounded `_bounded_relationship_sql` LIMIT (5 of 11 types, fully or partially); (2) CIK/CRD-range batched full scan, count-bounded only across the whole batch loop (INSTITUTIONAL_HOLDS, and newly-found MANAGES_FUND); (3) fully unbounded MDM-Postgres scan with no SQL LIMIT at all, Python `break` only (IS_ENTITY_OF, IS_PERSON_OF, ISSUED_BY, plus fallback/prefetch paths inside MANAGES_FUND and HAS_PARENT_COMPANY) — these 4+ types don't read a silver table at all, previously unflagged; (4) an always-unbounded secondary sub-query hardcoded `remaining=None` inside EMPLOYED_BY. Also found live: HAS_PARENT_COMPANY's and AUDITED_BY's "bounded" primary paths currently process 0 rows in prod (empty source tables), so their real behavior today is their fallback branch. Full per-type row-count/timestamp-column inventory: `research/01-incremental-filtering-status.md`.
 
 ## Not yet specified
 
