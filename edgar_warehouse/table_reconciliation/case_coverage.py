@@ -4,7 +4,8 @@ decision names ("routing-band, volume, boundary, parser, no-op, and
 guarded-publication cases," mirroring the existing MaxConcurrency4 Data
 Integrity Evidence precedent's case-selection shape).
 
-Those six categories were coined for a *same-store* BatchSilver rerun
+Those six categories were coined for a *same-store* Clean and Merge Filings
+(formerly BatchSilver) rerun
 (different concurrent writers racing one shared DuckDB object). This tool
 compares two different stores (DuckDB canonical vs. Snowflake
 ``EDGARTOOLS_SILVER``), so two of the six categories do not carry over
@@ -37,7 +38,8 @@ plainly which ones transfer and which do not, and why.
   should reproduce identical digests. ``report.py``'s ``--compare-to``
   flag makes this checkable directly (two real invocations, not simulated)
   rather than asserted.
-- **guarded_publication**: **does not transfer**. It named BatchSilver's
+- **guarded_publication**: **does not transfer**. It named Clean and Merge
+  Filings' (formerly BatchSilver)
   shared-object ETag-guarded promotion race (concurrent writers contending
   for one S3 object) -- a write-path concurrency concern with no analogue
   in a read-only, single-writer-per-store comparison. Declared here as

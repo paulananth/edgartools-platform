@@ -4,7 +4,8 @@ state-machine-consolidation wayfinder map, ticket 02: after the "one shared
 tail" premise turned out wrong (6 genuinely distinct tail shapes across
 mdm_gold/ownership_mdm_gold/silver_mdm_gold/bronze_seed_silver_gold/
 residual_holds_graph -- see the ticket's addendum), the revised scope wires
-each machine's own Publish/Publish Relationships/Reconcile(/GoldRefresh) states through
+each machine's own Publish/Publish Relationships/Reconcile(/"Publish Business
+Data") states through
 the shared wire_mdm_tail() sequencing skeleton (infra/scripts/
 mdm_tail_helper.py) instead of hand-typed Next pointers, while every flag/
 Catch/retry-count difference stays exactly as it was.
@@ -101,9 +102,9 @@ def test_bronze_seed_silver_gold_default_tail_ordering(bronze_seed_silver_gold: 
     assert s["Infer Relationships"]["Next"] == "Publish"
     assert s["Publish"]["Next"] == "Publish Relationships"
     assert s["Publish Relationships"]["Next"] == "Reconcile"
-    assert s["Reconcile"]["Next"] == "GoldRefresh"
-    assert s["GoldRefresh"]["End"] is True
-    assert s["Reconcile"].get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "GoldRefresh"}]
+    assert s["Reconcile"]["Next"] == "Publish Business Data"
+    assert s["Publish Business Data"]["End"] is True
+    assert s["Reconcile"].get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Publish Business Data"}]
 
 
 def test_bronze_seed_silver_gold_strict_branch_untouched(bronze_seed_silver_gold: dict) -> None:
@@ -111,17 +112,17 @@ def test_bronze_seed_silver_gold_strict_branch_untouched(bronze_seed_silver_gold
     # 6-state graph with no equivalent elsewhere -- it must survive the
     # wire_mdm_tail refactor of the *default* tail exactly as before, with
     # its own independent Export->Sync->SyncIdempotency->VerifyCandidate->
-    # Verify->GoldRefresh chain still wired by hand (nothing to deduplicate,
-    # since it has no sibling).
+    # Verify->"Strict Publish Business Data" chain still wired by hand
+    # (nothing to deduplicate, since it has no sibling).
     s = bronze_seed_silver_gold["States"]
     for name in (
         "StrictPublish", "Strict Publish Relationships", "Strict Publish Relationships Idempotency",
-        "Strict Reconcile Candidate", "StrictReconcile", "StrictGoldRefresh",
+        "Strict Reconcile Candidate", "StrictReconcile", "Strict Publish Business Data",
     ):
         assert name in s, f"missing strict-mode state: {name}"
     assert s["StrictPublish"]["Next"] == "Strict Publish Relationships"
-    assert s["StrictReconcile"]["Next"] == "StrictGoldRefresh"
-    assert s["StrictGoldRefresh"]["End"] is True
+    assert s["StrictReconcile"]["Next"] == "Strict Publish Business Data"
+    assert s["Strict Publish Business Data"]["End"] is True
 
 
 def test_no_shared_state_names_between_default_and_strict_paths(bronze_seed_silver_gold: dict) -> None:

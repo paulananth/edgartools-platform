@@ -3,7 +3,7 @@ call_mdm_machine().
 
 state-machine-consolidation wayfinder map, ticket 02 (wire_mdm_tail) and
 ticket 07 (call_mdm_machine): wire_mdm_tail tests the ordering guarantee in
-isolation -- Export->Sync->Verify(->GoldRefresh) -- without any of the
+isolation -- Export->Sync->Verify(->"Publish Business Data") -- without any of the
 ASL/ECS plumbing the real deploy script wraps around each state, since
 wire_mdm_tail is deliberately blind to what's inside each state dict.
 call_mdm_machine tests the nested-execution Task shape, in particular the
@@ -38,15 +38,15 @@ def test_wires_export_sync_verify_in_order_with_gold_refresh():
         gold_state=_task_state(),
     )
 
-    assert set(result) == {"Publish", "Publish Relationships", "Reconcile", "GoldRefresh"}
+    assert set(result) == {"Publish", "Publish Relationships", "Reconcile", "Publish Business Data"}
     assert result["Publish"]["Next"] == "Publish Relationships"
     assert result["Publish Relationships"]["Next"] == "Reconcile"
-    assert result["Reconcile"]["Next"] == "GoldRefresh"
-    assert result["GoldRefresh"]["End"] is True
+    assert result["Reconcile"]["Next"] == "Publish Business Data"
+    assert result["Publish Business Data"]["End"] is True
     assert "End" not in result["Publish"]
     assert "End" not in result["Publish Relationships"]
     assert "End" not in result["Reconcile"]
-    assert "Next" not in result["GoldRefresh"]
+    assert "Next" not in result["Publish Business Data"]
 
 
 def test_wires_export_sync_verify_without_gold_refresh():
@@ -65,7 +65,7 @@ def test_preserves_caller_supplied_flags_and_catch():
         "TaskDefinition": "arn:mdm-large",
         "Overrides": {"ContainerOverrides": [{"Command.$": "States.Array('mdm', 'publish-relationships', '--generation-id', $$.Execution.Name)"}]},
     })
-    verify = _task_state(Catch=[{"ErrorEquals": ["States.ALL"], "Next": "GoldRefresh"}])
+    verify = _task_state(Catch=[{"ErrorEquals": ["States.ALL"], "Next": "Publish Business Data"}])
 
     result = wire_mdm_tail(export, sync, verify, gold_state=_task_state())
 
@@ -73,7 +73,7 @@ def test_preserves_caller_supplied_flags_and_catch():
     # only ever touches Next/End.
     assert result["Publish Relationships"]["Parameters"]["TaskDefinition"] == "arn:mdm-large"
     assert "generation-id" in result["Publish Relationships"]["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
-    assert result["Reconcile"]["Catch"] == [{"ErrorEquals": ["States.ALL"], "Next": "GoldRefresh"}]
+    assert result["Reconcile"]["Catch"] == [{"ErrorEquals": ["States.ALL"], "Next": "Publish Business Data"}]
 
 
 def test_overwrites_pre_set_next_or_end_on_export_and_sync():
@@ -106,9 +106,9 @@ def test_does_not_mutate_input_dicts():
 def test_gold_refresh_only_appended_when_gold_state_is_not_none(gold_state):
     result = wire_mdm_tail(_task_state(), _task_state(), _task_state(), gold_state=gold_state)
     if gold_state is None:
-        assert "GoldRefresh" not in result
+        assert "Publish Business Data" not in result
     else:
-        assert "GoldRefresh" in result
+        assert "Publish Business Data" in result
 
 
 class TestCallMdmMachine:

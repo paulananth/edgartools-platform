@@ -83,21 +83,22 @@ def test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism() 
     assert '"MaxConcurrency": 20' in text
     assert "First-load recovery from cached bronze. Raised 4->20 2026-08-08" in text
     assert "30 vCPU Fargate quota" in text
-    assert "680/680 BatchSilver batches with 0 failures" in text
+    assert "680/680 Clean and Merge Filings batches with 0 failures" in text
     assert "sequential bootstrap-batch uses bronze SHA256 cache" in text
 
 
 def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -> None:
     text = _read(DEPLOY_SCRIPT)
-    # silver_mdm_gold (whose BatchSilver reprocessing Map used this same
-    # command shape, minus --resume-ledger-run-id) was retired outright by
-    # state-machine-consolidation ticket 09 (2026-09-05: zero executions
-    # ever) -- this test now covers bronze_seed_silver_gold's own BatchSilver
+    # silver_mdm_gold (whose BatchSilver, now "Clean and Merge Filings",
+    # reprocessing Map used this same command shape, minus
+    # --resume-ledger-run-id) was retired outright by state-machine-
+    # consolidation ticket 09 (2026-09-05: zero executions ever) -- this
+    # test now covers bronze_seed_silver_gold's own Clean and Merge Filings
     # only, since that machine's default path was confirmed NOT dead
     # (install.sh's documented cold-start/recovery procedure depends on it)
     # and deferred, untouched.
 
-    # bronze_seed_silver_gold's own BatchSilver -- ticket 02 threads
+    # bronze_seed_silver_gold's own Clean and Merge Filings -- ticket 02 threads
     # --resume-ledger-run-id through so a resumed run's done markers land
     # under the original run's namespace, not this fresh execution's own.
     bronze_seed_silver_gold_expected = (
@@ -110,7 +111,7 @@ def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -
 
 
 def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
-    """pipeline-resumability ticket 02: automatic resume for BatchSilver + Mastering."""
+    """pipeline-resumability ticket 02: automatic resume for Clean and Merge Filings + Mastering."""
     text = _read(DEPLOY_SCRIPT)
 
     assert '"Default": "ResumeFromRunIdPresenceCheck"' in text
@@ -135,7 +136,7 @@ def test_bronze_seed_exposes_fail_closed_ticket20_release_path() -> None:
     text = _read(DEPLOY_SCRIPT)
 
     assert '"StartAt": "ReleaseModeCheck"' in text
-    assert '"StrictBatchSilver": strict_batch_map' in text
+    assert '"Strict Clean and Merge Filings": strict_batch_map' in text
     assert '"MaxConcurrency": 2' in text
     assert "'--release-mode', '--candidate-manifest'" in text
     assert "'reconcile-relationship-release'" in text

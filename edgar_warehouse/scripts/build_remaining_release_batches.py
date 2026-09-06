@@ -1,4 +1,4 @@
-"""Build remaining StrictBatchSilver CIK batches for Ticket 20 P0 resume.
+"""Build remaining Strict Clean and Merge Filings CIK batches for Ticket 20 P0 resume.
 
 After a fail-closed map failure (or any partial success), successful batches
 write durable markers under::
