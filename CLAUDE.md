@@ -2498,6 +2498,86 @@ throughout this file), 6 skipped.
 `daily_incremental` predate this fix, same as the bulk-batching fix
 above.
 
+## verify-resolver-input-parity 100% false-positive mismatch 5-whys (resolved 2026-09-06)
+
+**Problem:** re-verifying duckdb-retirement-cutover Ticket 05's own correctness
+gate (`edgar-warehouse mdm verify-resolver-input-parity`) live against a
+fresh `silver.duckdb` and the current `EDGARTOOLS_SILVER` reported 100%
+mismatch on every sampled row across all 6 `RESOLVER_INPUT_TABLES` tables
+and all 5 entity types — despite Ticket 05's coverage gap (a separate,
+already-fixed issue) being confirmed closed.
+
+1. Symptom: `mismatched_keys_total == keys_compared` on `sec_company`,
+   `sec_adv_filing`, `sec_adv_private_fund`, `sec_ownership_reporting_owner`,
+   `sec_ownership_non_derivative_txn`, `sec_ownership_derivative_txn` — every
+   single sampled key, not a scattered few.
+2. Why report every row as mismatched? `verify_resolver_input_parity`
+   (`edgar_warehouse/mdm/silver_parity.py`) compares rows via a full-row
+   SHA256 (`resolvers.base.content_hash`), reused verbatim from a different,
+   within-one-system use case (detecting an unchanged row across separate
+   `mdm mastering` invocations, where the caller controls the field set and
+   any drift is a real signal).
+3. Why does a full-row hash fail here specifically? Manually diffing one
+   mismatched row per table directly against both readers found every core
+   business field byte-identical — the hash was catching columns that
+   legitimately diverge between the two systems by design, not real content
+   drift.
+4. Why do those columns diverge by design? Three independent, already-known
+   facts, none of them bugs on their own: (a) sync-bookkeeping timestamps
+   (`last_sync_run_id`/`first_sync_run_id`/`last_synced_at`) are populated in
+   DuckDB but never carried by the Snowflake landing export; (b)
+   `mdm_entity_id` is asynchronously backfilled by a separate sweep
+   (mdm-ahead-of-silver map) and can be populated on one side and not the
+   other purely by backfill timing; (c) 3 of the 6 tables
+   (`sec_ownership_non_derivative_txn`, `sec_ownership_derivative_txn`,
+   `sec_ownership_reporting_owner`) have a Snowflake-only denormalized `cik`
+   column their own dbt models deliberately join in from
+   `sec_company_filing` (single-path-per-layer map, Ticket 06) — DuckDB's own
+   tables never had this column at all.
+5. **Root cause:** the gate compared whole rows with no concept of "this
+   column is expected to differ across storage backends" — a cross-system
+   equivalence check needs that concept even though a within-one-system
+   unchanged-row check (the hash function's original purpose) never did.
+
+**Fix:** `RESOLVER_INPUT_TABLES` widened each table's tuple from
+`(table, key_columns)` to `(table, key_columns, exclude_columns)` — a
+per-table `frozenset` of exactly the columns confirmed live to legitimately
+diverge. Excluded columns are stripped from **both** sides' row dicts before
+hashing, so an extra column present on only one side (the `cik` case)
+doesn't cause a key-set mismatch either; anything not in the list still
+participates in the comparison exactly as before, so a genuine content
+difference on any other column still fails loud. Deliberately a new,
+purpose-built set rather than reusing `silver_protection.py`'s
+`PROTECTED_TABLE_REGISTRY.provenance_columns` (consulted
+`/gof-refactor-reviewer` first) — that registry answers a different
+question (same-key conflict-authority resolution during a DuckDB
+candidate-into-canonical merge) and doesn't even cover
+`first_sync_run_id`/`last_synced_at` or the `cik` case, so reusing it would
+have left the exact gap this fix closes.
+
+**A first-pass fix caught its own gap on re-verification**: the initial
+exclusion list only covered the 2 ownership *transaction* tables' `cik`
+join, missing that `sec_ownership_reporting_owner` (the `person` entity
+type's resolver-input table) has the identical Ticket 06 dbt-join shape —
+confirmed via its own dbt model file. A second live re-run after the first
+fix showed `person` still failing 100%; the same one-row-diff technique
+found the same schema-shape (not content) difference, and the fix was
+extended to cover it. Lesson (same shape as this file's other "manually
+spot-check a few, assume the rest are the same" traps): a live re-run after
+a fix is not optional even when the fix looks structurally complete —
+partial manual verification missed a table the automated live gate caught
+immediately.
+
+Final live verification: `mdm verify-resolver-input-parity` exits 0,
+`"passed": true` for every one of `adviser`/`company`/`fund`/`person`/
+`security`. Tests: 6 new in `tests/unit/test_resolver_input_parity.py`,
+each excluded-column case paired with a "real difference still fails"
+counterpart (proving the exclusion doesn't swallow genuine corruption).
+Full repo suite green (3092 passed, 6 skipped, only the pre-existing
+unrelated Postgres-integration failures documented elsewhere in this file).
+Full write-up:
+`.scratch/duckdb-retirement-cutover/issues/05-cutover-mdm-reader-to-snowflake.md`.
+
 ## full-reconcile decommissioned entirely (2026-09-04)
 
 **`full-reconcile`** (SEC-drift detection: compare live SEC submissions
