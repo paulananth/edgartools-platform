@@ -2652,6 +2652,90 @@ import-collection errors in `tests/mdm/test_api.py`/
 this change). `CONTEXT.md`'s Single-Command Workflow Machine entry updated
 to 6 machines.
 
+## Filing-text extraction silently corrupted by hidden iXBRL content 5-whys (fixed 2026-09-07)
+
+**Problem:** investigating release-readiness Ticket 101 (automating
+`sec_filing_text` capture, currently 0 rows in prod — see that ticket for
+the full automation design) surfaced that the *existing* extraction logic
+itself, unused in any automated pipeline so far, was already broken for
+the majority of what it would ever be asked to produce.
+
+1. Symptom: fetched 21 real 10-K/10-K405/10KSB/10KSB40 filings live from
+   SEC spanning 1997-2026 and ran `filing_text_projection._normalize_text`
+   (the real extraction function) against each. All 5 modern (2025-2026)
+   filings produced text starting with raw XBRL metadata instead of
+   readable prose — e.g. `weav-20251231 | 0001609151 | false | 2025 | FY |
+   P5Y | 1 | 1 | iso4217:USD | xbrli:shares | ...` — while all 16
+   pre-iXBRL filings (1997-2011) extracted cleanly.
+2. Why only modern filings? SEC has mandated iXBRL (Inline XBRL) tagging
+   for all filers since ~2019 — pre-2019 filings have no iXBRL markup at
+   all, so this is a real, sharp dividing line, not random variance.
+3. Why does iXBRL tagging produce garbage text? Modern filings embed an
+   `<ix:header>` element (containing `<ix:hidden>`, non-rendered XBRL
+   facts, plus `<ix:references>`/`<ix:resources>` taxonomy metadata, per
+   the iXBRL 1.1 spec), confirmed live to be nested inside a
+   `display:none`-styled `<div>` in the sampled filing — both invisible in
+   a browser.
+4. Why does `_normalize_text` extract invisible content? It calls
+   `BeautifulSoup.get_text("\n")` directly with no pre-processing —
+   BeautifulSoup has no CSS engine (doesn't know `display:none` means
+   "don't render") and no XBRL-tag awareness (doesn't know `<ix:header>`
+   is machine-only metadata), so it walks and extracts every text node in
+   document order regardless of visibility or semantic role.
+5. **Root cause:** SEC's iXBRL convention places `<ix:header>` early in
+   document order, so the invisible-content problem isn't just "some
+   noise mixed in somewhere" — it contaminates the *start* of every
+   modern filing's extracted text, exactly where a consumer would read
+   first for business-description/risk-factors/MD&A content. Since
+   `sec_filing_text` had zero real callers until this investigation (only
+   `targeted-resync --include-text`, run 4 times ever, none of them
+   10-K/10-KSB accessions), this defect had never been observed in
+   practice — it was latent in code nobody had exercised at scale yet, not
+   a regression.
+
+**Fix:** `_strip_hidden_ixbrl_content(soup)` (`edgar_warehouse/
+filing_text_projection.py`) removes every `<ix:header>` element and any
+element whose inline `style` attribute matches `display\s*:\s*none`
+(case/whitespace-insensitive regex, not a bare substring check — a naive
+substring match would false-positive on a real style like
+`border-style:none;display:block`, confirmed against a real legacy filing
+that uses `DISPLAY: inline`/`DISPLAY: block` extensively), called before
+`get_text()` inside `_normalize_text`'s `.htm`/`.html` branch only (the
+`.xml` and raw-decode branches have no equivalent concept). `/gof-
+refactor-reviewer` consulted before implementing per this file's own hard
+rule (verdict: healthy as-is, proceed inline, no structural change
+needed — the file has 5 commits total and this exact function had never
+been touched before).
+
+Validated the fix generalizes, not just the one sampled filing: re-ran
+against a broader, more diverse live sample (45 real filings across
+10-K/10-K/A/10-K405/10-K405/A/10KSB/10KSB40/10KSB/A/10KSB40/A/10-KT/
+10-KT/A, 1997-2026) — zero residual XBRL-noise heads, 44/45 succeeded
+(the one failure was a transient SEC read-timeout fetching live for this
+test, not a parsing defect — production reads cached bronze content, not
+live SEC, so this doesn't recur the same way there). Confirmed no-op on
+pre-iXBRL filings using a real captured fragment (not hand-rolled HTML —
+this defect's shape, and the false-positive-guard risk, are both
+convention-specific enough that a synthetic fixture could accidentally
+not reproduce them).
+
+Tests: `tests/unit/test_filing_text_normalize_ixbrl.py` (4 cases) — the
+real contamination-removed case and the real legacy no-op case both use
+fragments captured verbatim from real filings (accessions
+`0001609151-26-000016` and `0001144204-11-054283` respectively), plus two
+synthetic cases for the regex's own case/whitespace and false-positive
+robustness. Confirmed to fail without the fix (verified by temporarily
+disabling the strip call) and pass with it. Full repo suite green: 3093
+passed, 7 skipped, only the 8 pre-existing, already-documented unrelated
+`tests/integration/test_acquisition_ledger_postgres.py`/
+`test_conflict_postgres.py` failures (schema drift against the local
+test-Postgres instance, noted elsewhere in this file, untouched by this
+change).
+
+**Not yet deployed** — this fix is one resolved sub-question of Ticket
+101, which is not yet implemented/deployed as a whole; no image rebuild
+has happened for this change.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
