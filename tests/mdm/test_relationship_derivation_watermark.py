@@ -200,6 +200,99 @@ class TestInstitutionalHoldsWatermark:
         assert backstop_summary["INSTITUTIONAL_HOLDS"]["skipped_existing"] == 1
 
 
+class TestInstitutionalHoldsDeactivation:
+    """INSTITUTIONAL_HOLDS deactivation (mdm-relationship-incremental-filters
+    Ticket 04, advisor item 3): a two-phase cross-period CUSIP-set diff --
+    the watermark answers *which* manager changed, but the diff itself
+    re-queries that manager's full latest-period holdings unwatermarked."""
+
+    def test_security_dropped_from_next_13f_gets_closed(self, session, tmp_path):
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        t1 = datetime(2024, 4, 1, tzinfo=timezone.utc)
+        _seed_thirteenf_holding(
+            db, cik=2001, accession_number="q1-a", cusip="037833100",
+            ingested_at=t1, period_of_report="2024-03-31",
+        )
+        _seed_thirteenf_holding(
+            db, cik=2001, accession_number="q1-b", cusip="594918104",
+            ingested_at=t1, period_of_report="2024-03-31",
+        )
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        first = pipeline.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert first["INSTITUTIONAL_HOLDS"]["inserted"] == 2
+
+        # Q2's 13F only re-reports the first CUSIP -- the second was sold.
+        db2 = SilverDatabase(str(silver_path))
+        t2 = datetime(2024, 7, 1, tzinfo=timezone.utc)
+        _seed_thirteenf_holding(
+            db2, cik=2001, accession_number="q2-a", cusip="037833100",
+            ingested_at=t2, period_of_report="2024-06-30",
+        )
+        db2.close()
+
+        pipeline2 = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        second = pipeline2.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        # Each quarter's 13F is its own point-in-time fact: the still-held
+        # cusip's Q1 version is rolled forward (closed, cleanly, no
+        # quarantine -- see _deactivate_institutional_holds_for_changed_
+        # managers' own docstring for the conflict this guards against) and
+        # a genuinely new Q2 version opens for it; the dropped cusip's Q1
+        # version is simply closed with nothing to replace it.
+        assert second["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance, MdmSecurity
+        session.expire_all()
+        rows = session.execute(select(MdmRelationshipInstance)).scalars().all()
+        assert len(rows) == 3
+        held_versions = [
+            r for r in rows
+            if session.get(MdmSecurity, r.target_entity_id).cusip == "037833100"
+        ]
+        dropped_versions = [
+            r for r in rows
+            if session.get(MdmSecurity, r.target_entity_id).cusip == "594918104"
+        ]
+        assert len(held_versions) == 2  # Q1 (closed) + Q2 (open)
+        assert len(dropped_versions) == 1  # Q1 only, now closed
+        held_open = [v for v in held_versions if v.valid_to_date is None]
+        held_closed = [v for v in held_versions if v.valid_to_date is not None]
+        assert len(held_open) == 1
+        assert held_open[0].quarantined is False
+        assert held_open[0].superseded_by_version_id is None
+        assert held_closed[0].valid_to_date == date(2024, 6, 30)
+        assert dropped_versions[0].valid_to_date == date(2024, 6, 30)
+
+    def test_unchanged_manager_is_never_rechecked(self, session, tmp_path):
+        """A manager with nothing new this run must be left untouched --
+        re-diffing it anyway would defeat the point of watermarking."""
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        t1 = datetime(2024, 4, 1, tzinfo=timezone.utc)
+        _seed_thirteenf_holding(
+            db, cik=2002, accession_number="only-filing", cusip="037833100",
+            ingested_at=t1, period_of_report="2024-03-31",
+        )
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        pipeline.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+
+        # No new silver data at all -- a rerun must not touch anything,
+        # even though this manager's only holding predates "today".
+        pipeline2 = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        second = pipeline2.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert second["INSTITUTIONAL_HOLDS"]["inserted"] == 0
+
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance
+        session.expire_all()
+        rows = session.execute(select(MdmRelationshipInstance)).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].valid_to_date is None
+
+
 class TestHoldsWatermark:
     """HOLDS: no genuine ingested_at on either txn table -- accession_number
     watermark (Ticket 01/02's natural-ordering-key decision)."""

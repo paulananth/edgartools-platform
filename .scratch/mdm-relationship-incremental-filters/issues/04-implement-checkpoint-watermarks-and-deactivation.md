@@ -119,27 +119,66 @@ branch, per this repo's usual "each unrelated change gets its own branch" rule).
   sold then re-acquired) by closing on the zero row and letting
   `ensure_relationship`'s own existing-version handling open a fresh version
   on the later non-zero row, rather than assuming monotonic decline.
+  **Real bug found and fixed via this fix's own test suite:** the per-pair
+  "currently open version" index (`current_by_pair`) was originally a
+  one-time snapshot taken before the batch's row loop — stale the moment an
+  earlier row in the *same* batch opens or closes a version, since
+  `ensure_relationship`'s own separate, live-tracked cache disagreed with it
+  by the time a later row in the same batch reacquired the same security,
+  and quarantined the reacquisition as a false conflict against the
+  snapshot's now-stale "still open" original. Fixed by mutating
+  `current_by_pair` live as the batch progresses (cleared on close, appended
+  on a genuinely-open new insert). Reproduced via
+  `test_reacquisition_after_disposal_opens_a_new_version` (quarantined
+  before the fix, clean after).
 - **`INSTITUTIONAL_HOLDS`:** two-phase cross-period diff, mirroring
   `_derive_manages_fund_batch`'s **already-existing** (and previously
   unnoticed by this map) `close_relationship_version`-based expected-targets
-  comparison almost verbatim. Phase 1 (watermark-filtered): identify which
-  managers (CIKs) have newly-watermarked 13F rows this run. Phase 2 (**not**
-  watermark-filtered — advisor's item 3): for each such manager, re-query that
-  manager's single latest true `(cik, period_of_report)` (reusing the
-  existing `amendment_type = 'restatement'` exclusion already in
+  comparison, widened one step further (see the real bug below). Phase 1
+  (watermark-filtered): identify which managers (CIKs) have newly-watermarked
+  13F rows this run. Phase 2 (**not** watermark-filtered — advisor's item 3):
+  for each such manager, re-query that manager's single latest true
+  `(cik, period_of_report)` (reusing the existing
+  `amendment_type = 'restatement'` exclusion already in
   `_derive_institutional_holds`'s `base_sql`) with no watermark bound at all,
-  collect its full CUSIP set, and close any of that manager's currently-active
-  `INSTITUTIONAL_HOLDS` relationships whose security isn't in that set. Using
-  the watermark-filtered rows' own CUSIP set for the diff (instead of a fresh
-  full re-query) would silently treat any security whose holding row happened
-  to fall before the watermark boundary as "no longer held," even though the
-  manager's real current 13F still reports it.
+  collect its full CUSIP set. Using the watermark-filtered rows' own CUSIP set
+  for the diff (instead of a fresh full re-query) would silently treat any
+  security whose holding row happened to fall before the watermark boundary
+  as "no longer held," even though the manager's real current 13F still
+  reports it.
+- **Real, pre-existing bug found and fixed via this fix's own test suite,
+  not by inspection:** the naive version of the diff above — close only
+  versions whose security *isn't* in the latest CUSIP set — quarantines
+  every *still-held* security's next quarter. Each 13F quarter is its own
+  point-in-time fact (a different `quarter_end`/`shares_held`/`market_value`
+  every time, even for an unchanged holding), and nothing previously closed
+  a security's prior-quarter version before writing a new one for the same
+  (adviser, security) pair — `ensure_relationship`'s own conflict check
+  then sees two overlapping `[valid_from, None)` windows with different
+  properties and quarantines the new one. This is a pre-existing gap
+  (reproducible even pre-Ticket-04, whenever two quarters for the same
+  manager landed in one unwatermarked scan), not something this ticket's
+  watermarking introduced — it just became far more likely to trigger, since
+  watermarking naturally splits a manager's quarters across separate
+  `derive_relationships()` calls. **Fixed** by closing *every* open version
+  reporting an older period for a changed manager (not only absent-security
+  ones) at the new latest-period boundary, before the insert loop runs — a
+  still-held security's prior version closes cleanly and the insert loop's
+  later `ensure_relationship` call opens a clean new version for it (no
+  overlap: the closed version's `valid_to` now equals the new version's
+  `valid_from`, and interval overlap is strictly half-open). A version
+  already at the latest period is skipped (nothing to roll forward).
+  Reproduced live via
+  `test_security_dropped_from_next_13f_gets_closed` (failed with
+  `quarantined: true` before the fix, clean after).
 
 ### Sequencing
 
 Two commits, in order: (1) checkpoint table + migration +
-`reconciliation_pass` threading + watermark wiring for the 6 types, (2)
-deactivation for all three in-scope types. Not combined into one commit —
+`reconciliation_pass` threading + watermark wiring for the 6 types plus
+`HOLDS`/`COMPANY_HOLDS` deactivation, (2) `INSTITUTIONAL_HOLDS`
+deactivation (the harder, two-phase cross-period diff, including the
+still-held-security quarantine fix above). Not combined into one commit —
 the deactivation logic reads the watermark's "which managers changed" output,
 so debugging both halves at once against each other was avoidable risk for no
 benefit; also, the watermark half alone is what answers the user's original

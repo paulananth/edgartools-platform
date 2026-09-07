@@ -3662,6 +3662,156 @@ class MDMPipeline:
 
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
+    def _current_institutional_cusip_set(
+        self, cik: int
+    ) -> Optional[tuple[date, set[str]]]:
+        """The single latest true 13F period's full CUSIP set for one
+        manager CIK -- deliberately unwatermarked (mdm-relationship-
+        incremental-filters Ticket 04's deactivation half, advisor item 3):
+        using only the watermark-filtered rows already fetched for this
+        batch would treat any security whose holding row happened to fall
+        before the watermark boundary as "no longer held," even though the
+        manager's real current 13F still reports it. Reuses the identical
+        amendment-exclusion shape ``_derive_institutional_holds``'s own
+        ``base_sql``/``bounds_sql`` already apply, so "the manager's true
+        latest holdings" means the same thing in both places.
+
+        Returns None when this manager has no effective holdings at all
+        (every filing superseded by a later restatement, or genuinely none
+        exist) -- the caller must then treat every one of this manager's
+        currently-open relationships as no-longer-held, not "nothing to
+        compare against."
+        """
+        amendment_exclusion = """
+            NOT EXISTS (
+                SELECT 1 FROM sec_thirteenf_filing later
+                WHERE later.cik = f.cik
+                  AND later.period_of_report = f.period_of_report
+                  AND later.amendment_type = 'restatement'
+                  AND (later.filing_date, later.accession_number) >
+                      (f.filing_date, f.accession_number)
+            )
+        """
+        period_rows = self.silver.fetch(
+            f"""
+            SELECT MAX(f.period_of_report) AS latest_period
+            FROM sec_thirteenf_holding h
+            JOIN sec_thirteenf_filing f ON f.accession_number = h.accession_number
+            WHERE h.cusip IS NOT NULL AND f.cik = ?
+              AND {amendment_exclusion}
+            """,
+            params=[cik],
+        )
+        latest_period_raw = period_rows[0].get("latest_period") if period_rows else None
+        if latest_period_raw is None:
+            return None
+        # Bind the second query with the *raw* value the first query
+        # returned, not a locally-normalized one -- the two queries must
+        # agree on what "this period" looks like on the wire, whatever
+        # type the backend natively returns it as (a real DuckDB/Snowflake
+        # DATE column round-trips a `date` object fine either way, but
+        # normalizing before the second bind risks a silent type mismatch
+        # against whatever comparison the backend actually performs).
+        cusip_rows = self.silver.fetch(
+            f"""
+            SELECT DISTINCT h.cusip
+            FROM sec_thirteenf_holding h
+            JOIN sec_thirteenf_filing f ON f.accession_number = h.accession_number
+            WHERE h.cusip IS NOT NULL AND f.cik = ? AND f.period_of_report = ?
+              AND {amendment_exclusion}
+            """,
+            params=[cik, latest_period_raw],
+        )
+        latest_period = latest_period_raw
+        if not isinstance(latest_period, date):
+            latest_period = date.fromisoformat(str(latest_period)[:10])
+        return latest_period, {row["cusip"] for row in cusip_rows if row.get("cusip")}
+
+    def _security_cusips_by_entity_id(self, entity_ids: Iterable[str]) -> dict[str, str]:
+        ids = {eid for eid in entity_ids if eid is not None}
+        if not ids:
+            return {}
+        from edgar_warehouse.mdm.database import MdmSecurity
+
+        rows = self.session.execute(
+            select(MdmSecurity.entity_id, MdmSecurity.cusip).where(
+                MdmSecurity.entity_id.in_(ids), MdmSecurity.cusip.isnot(None)
+            )
+        ).all()
+        return {entity_id: cusip for entity_id, cusip in rows}
+
+    def _deactivate_institutional_holds_for_changed_managers(
+        self,
+        sync_engine: GraphSyncEngine,
+        changed_ciks: set,
+        adviser_id_by_cik: dict[int, Optional[str]],
+    ) -> None:
+        """Roll a changed manager's currently-open INSTITUTIONAL_HOLDS
+        versions forward to its latest true 13F period -- only for managers
+        whose CIK had a genuinely new watermarked row in this batch
+        (``changed_ciks``, already computed by the caller from the same
+        watermark-filtered fetch that drives the insert loop). A manager
+        with nothing new this run is left untouched: its last-known-active
+        set is still accurate, and re-checking it anyway would defeat the
+        entire point of watermarking in the first place.
+
+        Closes *every* open version still reporting an older period, not
+        only ones whose security dropped out of the latest set. A security
+        the manager still holds gets a version per quarter (each quarter's
+        13F is its own point-in-time fact, with its own quarter_end/
+        shares_held/market_value properties) -- found live via this fix's
+        own test suite: leaving a still-held security's prior-quarter
+        version open while the insert loop below writes a new one for the
+        same (adviser, security) pair with different properties and an
+        overlapping [valid_from, None) window makes ensure_relationship's
+        own conflict check treat consecutive quarters of the same holding
+        as a genuine conflict and quarantine the new version. Closing here
+        first means the insert loop's later ensure_relationship call for a
+        still-held security finds no overlap (this version's valid_to now
+        equals the new version's valid_from, and interval overlap is
+        strictly half-open) and opens a clean new version instead. A
+        version already at the latest period is left alone (nothing to
+        roll forward -- e.g. a same-period rerun with no new data).
+
+        Mirrors _derive_manages_fund_batch's already-existing (previously
+        unnoticed on this map) expected-targets-diff-and-close pattern,
+        widened to close every stale version rather than only absent ones.
+        """
+        from edgar_warehouse.mdm.graph import close_relationship_version
+
+        current_by_adviser: dict[str, list] = {}
+        for current in sync_engine.current_relationships("INSTITUTIONAL_HOLDS"):
+            if current.valid_to_date is None:
+                current_by_adviser.setdefault(current.source_entity_id, []).append(current)
+
+        for cik in changed_ciks:
+            adviser_id = adviser_id_by_cik.get(cik)
+            if adviser_id is None:
+                continue
+            open_versions = current_by_adviser.get(adviser_id, [])
+            if not open_versions:
+                continue
+            latest = self._current_institutional_cusip_set(cik)
+            effective_from = latest[0] if latest is not None else date.today()
+            expected_cusips = latest[1] if latest is not None else set()
+            target_ids = {v.target_entity_id for v in open_versions}
+            cusip_by_target = self._security_cusips_by_entity_id(target_ids)
+            for version in open_versions:
+                current_quarter_end = (version.properties or {}).get("quarter_end")
+                if current_quarter_end == str(effective_from):
+                    continue
+                target_cusip = cusip_by_target.get(version.target_entity_id)
+                still_held = target_cusip is not None and target_cusip in expected_cusips
+                close_relationship_version(self.session, version.instance_id, effective_from)
+                print(json.dumps({
+                    "event": "mdm_relationship_deactivated",
+                    "rel_type": "INSTITUTIONAL_HOLDS",
+                    "reason": "rolled_forward_still_held" if still_held else "not_in_latest_13f",
+                    "source_entity_id": adviser_id,
+                    "target_entity_id": version.target_entity_id,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }), file=sys.stderr, flush=True)
+
     def _derive_institutional_holds(
         self,
         sync_engine: GraphSyncEngine,
@@ -3857,6 +4007,9 @@ class MDMPipeline:
             "INSTITUTIONAL_HOLDS", defer_flush=True, source_entity_ids=batch_adviser_ids,
         )
         try:
+            self._deactivate_institutional_holds_for_changed_managers(
+                sync_engine, batch_cik_set, adviser_id_by_cik,
+            )
             for row in batch_rows:
                 batch_watermark = self._track_watermark(
                     batch_watermark, row.get("ingested_at")
