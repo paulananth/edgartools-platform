@@ -12,11 +12,27 @@ Examples:
   uv run python scripts/ops/aws_cost_optimizer.py --profile sec_platform_deployer retention-apply \
     --plan retention-plan.json \
     --plan-hash <sha256> --confirm-delete-expired-s3 --evidence-dir evidence/
+
+  uv run python scripts/ops/aws_cost_optimizer.py filing-text-retention-plan \
+    --expected-account-id 690839588395 --prior-manifest prior.json \
+    --current-manifest current.json --output filing-text-plan.json
+
+  # Run retirement first. Apply is a separate invocation after canonical
+  # SEC_FILING_TEXT no longer exposes the retired identities.
+  uv run --extra snowflake python scripts/ops/aws_cost_optimizer.py \
+    filing-text-retention-retire --plan filing-text-plan.json \
+    --plan-hash <sha256> --confirm-retire-filing-text --evidence-dir evidence/
+  uv run --extra snowflake python scripts/ops/aws_cost_optimizer.py \
+    filing-text-retention-apply --plan filing-text-plan.json \
+    --plan-hash <sha256> --retirement-evidence evidence/retirement-evidence.json \
+    --latest-manifest latest-successful-sweep.json \
+    --confirm-delete-derived-filing-text --evidence-dir evidence/
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from collections import Counter, defaultdict
@@ -36,6 +52,12 @@ from edgar_warehouse.application.aws_cost_optimizer import (
     effective_retention_deadline,
     validate_s3_retention_plan_for_apply,
     verify_plan_hash,
+)
+from edgar_warehouse.application.filing_text_retention import (
+    build_filing_text_retention_plan,
+    filing_text_storage_identity,
+    validate_filing_text_retention_plan_for_apply,
+    validate_filing_text_sweep_manifest,
 )
 
 
@@ -82,6 +104,99 @@ class AwsCli:
         return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
+class SnowflakeFilingTextRetirement:
+    """Snowflake adapter for append-only retirement and canonical verification."""
+
+    def __init__(self, connection: Any) -> None:
+        self._connection = connection
+
+    @classmethod
+    def from_environment(cls) -> SnowflakeFilingTextRetirement:
+        from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
+
+        return cls(SnowflakeConnectionSettings.from_env().connect())
+
+    def record_retirements(
+        self, business_keys: tuple[str, ...], *, cause_reference: str
+    ) -> None:
+        if not business_keys:
+            return
+        cursor = self._connection.cursor()
+        try:
+            cursor.executemany(
+                """
+                INSERT INTO EDGARTOOLS_SILVER_LANDING.SILVER_LANDING_RETIREMENT
+                    (source_family, target_table, business_key, cause_reference, retired_at)
+                SELECT %s, %s, %s, %s, CURRENT_TIMESTAMP()
+                """,
+                [
+                    (
+                        "filing_text_retention",
+                        "sec_filing_text",
+                        business_key,
+                        cause_reference,
+                    )
+                    for business_key in business_keys
+                ],
+            )
+            self._connection.commit()
+        finally:
+            cursor.close()
+
+    def recorded_business_keys(
+        self, business_keys: tuple[str, ...], *, cause_reference: str
+    ) -> set[str]:
+        return self._select_business_keys(
+            business_keys,
+            """
+            SELECT DISTINCT business_key
+            FROM EDGARTOOLS_SILVER_LANDING.SILVER_LANDING_RETIREMENT
+            WHERE source_family = %s
+              AND target_table = %s
+              AND cause_reference = %s
+              AND business_key IN ({placeholders})
+            """,
+            ("filing_text_retention", "sec_filing_text", cause_reference),
+        )
+
+    def active_business_keys(self, business_keys: tuple[str, ...]) -> set[str]:
+        return self._select_business_keys(
+            business_keys,
+            """
+            SELECT DISTINCT CONCAT_WS('|', accession_number, text_version) AS business_key
+            FROM EDGARTOOLS_SILVER.SEC_FILING_TEXT
+            WHERE CONCAT_WS('|', accession_number, text_version) IN ({placeholders})
+            """,
+            (),
+        )
+
+    def _select_business_keys(
+        self,
+        business_keys: tuple[str, ...],
+        sql_template: str,
+        leading_params: tuple[str, ...],
+    ) -> set[str]:
+        found: set[str] = set()
+        for start in range(0, len(business_keys), 500):
+            batch = business_keys[start : start + 500]
+            if not batch:
+                continue
+            placeholders = ", ".join("%s" for _ in batch)
+            cursor = self._connection.cursor()
+            try:
+                cursor.execute(
+                    sql_template.format(placeholders=placeholders),
+                    [*leading_params, *batch],
+                )
+                found.update(str(row[0]) for row in cursor.fetchall())
+            finally:
+                cursor.close()
+        return found
+
+    def close(self) -> None:
+        self._connection.close()
+
+
 def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
@@ -112,6 +227,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     plan.add_argument("--max-authorities", type=_positive_int, default=1000)
     plan.add_argument("--output", type=Path, required=True)
+
+    filing_text_plan = subparsers.add_parser(
+        "filing-text-retention-plan",
+        help="plan exact derived filing-text versions from two successful sweep manifests",
+    )
+    filing_text_plan.add_argument("--expected-account-id", required=True)
+    filing_text_plan.add_argument("--prior-manifest", type=Path, required=True)
+    filing_text_plan.add_argument("--current-manifest", type=Path, required=True)
+    filing_text_plan.add_argument("--output", type=Path, required=True)
+
+    filing_text_retire = subparsers.add_parser(
+        "filing-text-retention-retire",
+        help="record and verify Silver retirement for one reviewed derived-text plan",
+    )
+    filing_text_retire.add_argument("--plan", type=Path, required=True)
+    filing_text_retire.add_argument("--plan-hash", required=True)
+    filing_text_retire.add_argument(
+        "--confirm-retire-filing-text", action="store_true"
+    )
+    filing_text_retire.add_argument("--evidence-dir", type=Path, required=True)
+
+    filing_text_apply = subparsers.add_parser(
+        "filing-text-retention-apply",
+        help="verify canonical Silver retirement then delete exact derived-text versions",
+    )
+    filing_text_apply.add_argument("--plan", type=Path, required=True)
+    filing_text_apply.add_argument("--plan-hash", required=True)
+    filing_text_apply.add_argument(
+        "--retirement-evidence", type=Path, required=True
+    )
+    filing_text_apply.add_argument("--latest-manifest", type=Path, required=True)
+    filing_text_apply.add_argument(
+        "--confirm-delete-derived-filing-text", action="store_true"
+    )
+    filing_text_apply.add_argument("--evidence-dir", type=Path, required=True)
 
     apply = subparsers.add_parser(
         "retention-apply", help="revalidate and delete one reviewed exact-VersionId plan"
@@ -645,6 +795,41 @@ def collect_versions(
     return versions
 
 
+def collect_filing_text_versions(
+    cli: AwsCli,
+    *,
+    manifest: Mapping[str, Any],
+    account_id: str,
+) -> list[ObjectVersion]:
+    """Inventory every exact derived-text key in a complete sweep manifest."""
+    validate_filing_text_sweep_manifest(manifest)
+    versions: list[ObjectVersion] = []
+    seen: set[tuple[str, str]] = set()
+    for row in manifest["not_required"]:
+        bucket, key = filing_text_storage_identity(
+            row, expected_account_id=account_id
+        )
+        if (bucket, key) in seen:
+            continue
+        seen.add((bucket, key))
+        payload = cli.read(
+            "s3api",
+            "list-object-versions",
+            "--bucket",
+            bucket,
+            "--prefix",
+            key,
+            "--max-keys",
+            "1000",
+        )
+        versions.extend(
+            version
+            for version in _normalize_versions(payload, bucket=bucket, prefix=key)
+            if version.key == key
+        )
+    return versions
+
+
 def select_expired_authorities(
     authorities: Iterable[AccessionAuthority],
     *,
@@ -653,19 +838,19 @@ def select_expired_authorities(
 ) -> list[AccessionAuthority]:
     rows = list(authorities)
     accession_counts = Counter(row.accession_number for row in rows)
-    selected = [
-        authority
-        for authority in rows
-        if accession_counts[authority.accession_number] == 1
-        and effective_retention_deadline(authority) is not None
-        and as_of > effective_retention_deadline(authority)
-    ]
-    selected.sort(
-        key=lambda authority: (
-            effective_retention_deadline(authority),
-            authority.accession_number,
-        )
+    selected_with_deadlines: list[tuple[date, AccessionAuthority]] = []
+    for authority in rows:
+        deadline = effective_retention_deadline(authority)
+        if (
+            accession_counts[authority.accession_number] == 1
+            and deadline is not None
+            and as_of > deadline
+        ):
+            selected_with_deadlines.append((deadline, authority))
+    selected_with_deadlines.sort(
+        key=lambda item: (item[0], item[1].accession_number)
     )
+    selected = [authority for _deadline, authority in selected_with_deadlines]
     return selected[:limit]
 
 
@@ -682,6 +867,327 @@ def _version_identity(
         version.is_latest,
         version.storage_class,
     )
+
+
+def _hashed_evidence(payload: Mapping[str, Any]) -> dict[str, Any]:
+    evidence = dict(payload)
+    evidence.pop("evidence_hash", None)
+    encoded = json.dumps(
+        evidence, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return {**evidence, "evidence_hash": hashlib.sha256(encoded).hexdigest()}
+
+
+def retire_filing_text_plan(
+    silver: Any,
+    *,
+    plan: Mapping[str, Any],
+    expected_hash: str,
+    evidence_dir: Path,
+) -> dict[str, Any]:
+    """Record and read back Silver retirements; S3 remains untouched."""
+    if plan.get("plan_hash") != expected_hash:
+        raise ValueError("reviewed --plan-hash does not match plan.plan_hash")
+    validate_filing_text_retention_plan_for_apply(plan)
+    business_keys = tuple(
+        sorted(str(target["business_key"]) for target in plan.get("targets") or [])
+    )
+    cause_reference = f"filing-text-retention:{expected_hash}"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    (evidence_dir / "reviewed-plan.json").write_text(
+        json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    silver.record_retirements(business_keys, cause_reference=cause_reference)
+    recorded = silver.recorded_business_keys(
+        business_keys, cause_reference=cause_reference
+    )
+    missing = sorted(set(business_keys) - set(recorded))
+    result = _hashed_evidence(
+        {
+            "schema_version": 1,
+            "kind": "filing_text_retirement_evidence",
+            "plan_hash": expected_hash,
+            "cause_reference": cause_reference,
+            "business_keys": list(business_keys),
+            "recorded_business_keys": sorted(recorded),
+            "retirement_recorded": not missing,
+            "missing_business_keys": missing,
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    (evidence_dir / "retirement-evidence.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if missing:
+        raise RuntimeError(
+            "Silver retirement read-back is incomplete; refusing derived-text deletion"
+        )
+    return result
+
+
+def _verify_retirement_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    plan_hash: str,
+    business_keys: tuple[str, ...],
+) -> None:
+    expected = _hashed_evidence(evidence)["evidence_hash"]
+    if evidence.get("evidence_hash") != expected:
+        raise ValueError("filing-text retirement evidence hash mismatch")
+    if (
+        evidence.get("kind") != "filing_text_retirement_evidence"
+        or evidence.get("plan_hash") != plan_hash
+        or evidence.get("retirement_recorded") is not True
+        or tuple(evidence.get("business_keys") or ()) != business_keys
+        or tuple(evidence.get("recorded_business_keys") or ()) != business_keys
+    ):
+        raise ValueError("filing-text retirement evidence does not match reviewed plan")
+
+
+def _verify_latest_filing_text_manifest(
+    latest_manifest: Mapping[str, Any], *, plan: Mapping[str, Any]
+) -> str:
+    latest_at = validate_filing_text_sweep_manifest(latest_manifest)
+    planned_through = datetime.fromisoformat(str(plan["observed_through"]))
+    if latest_at < planned_through:
+        raise RuntimeError(
+            "latest successful sweep predates the reviewed filing-text plan"
+        )
+    if (
+        latest_at == planned_through
+        and latest_manifest.get("manifest_hash") != plan.get("current_manifest_hash")
+    ):
+        raise RuntimeError(
+            "latest successful sweep conflicts with the reviewed filing-text plan"
+        )
+    latest_not_required = {
+        (str(row["accession_number"]), str(row["text_version"])): row
+        for row in latest_manifest["not_required"]
+    }
+    for target in plan.get("targets") or []:
+        identity = (str(target["accession_number"]), str(target["text_version"]))
+        observed = latest_not_required.get(identity)
+        if observed is None or any(
+            observed.get(field) != target.get(field)
+            for field in (
+                "text_storage_path",
+                "text_sha256",
+                "not_required_since",
+            )
+        ):
+            raise RuntimeError(
+                "latest successful sweep no longer proves every reviewed identity "
+                "continuously not required"
+            )
+    return str(latest_manifest["manifest_hash"])
+
+
+def apply_filing_text_plan(
+    cli: AwsCli,
+    silver: Any,
+    *,
+    plan: Mapping[str, Any],
+    expected_hash: str,
+    latest_manifest: Mapping[str, Any],
+    retirement_evidence: Mapping[str, Any],
+    evidence_dir: Path,
+) -> dict[str, Any]:
+    """Verify canonical Silver retirement before any exact S3 deletion."""
+    verify_plan_hash(plan, expected_hash)
+    if plan.get("plan_hash") != expected_hash:
+        raise ValueError("reviewed --plan-hash does not match plan.plan_hash")
+    planned = list(validate_filing_text_retention_plan_for_apply(plan))
+    account_id = str(plan.get("expected_account_id") or "")
+    require_account(cli, account_id)
+    business_keys = tuple(
+        sorted(str(target["business_key"]) for target in plan.get("targets") or [])
+    )
+    _verify_retirement_evidence(
+        retirement_evidence,
+        plan_hash=expected_hash,
+        business_keys=business_keys,
+    )
+    latest_manifest_hash = _verify_latest_filing_text_manifest(
+        latest_manifest, plan=plan
+    )
+    active = sorted(silver.active_business_keys(business_keys))
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    verification = _hashed_evidence(
+        {
+            "schema_version": 1,
+            "kind": "filing_text_silver_retirement_verification",
+            "plan_hash": expected_hash,
+            "latest_manifest_hash": latest_manifest_hash,
+            "business_keys": list(business_keys),
+            "active_business_keys": active,
+            "verified_at": datetime.now(UTC).isoformat(),
+            "complete": not active,
+        }
+    )
+    (evidence_dir / "silver-retirement-verification.json").write_text(
+        json.dumps(verification, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if active:
+        raise RuntimeError(
+            "derived filing text is still active in canonical Silver; refusing S3 deletion"
+        )
+
+    (evidence_dir / "reviewed-plan.json").write_text(
+        json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (evidence_dir / "retirement-evidence.json").write_text(
+        json.dumps(retirement_evidence, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    objects = sorted({(version.bucket, version.key) for version in planned})
+
+    def inventory() -> list[ObjectVersion]:
+        observed: list[ObjectVersion] = []
+        for bucket, key in objects:
+            payload = cli.read(
+                "s3api",
+                "list-object-versions",
+                "--bucket",
+                bucket,
+                "--prefix",
+                key,
+                "--max-keys",
+                "1000",
+            )
+            observed.extend(
+                version
+                for version in _normalize_versions(
+                    payload, bucket=bucket, prefix=key
+                )
+                if version.key == key
+            )
+        return observed
+
+    current = inventory()
+    preflight_complete = {
+        _version_identity(version) for version in current
+    } == {_version_identity(version) for version in planned}
+    preflight = _hashed_evidence(
+        {
+            "schema_version": 1,
+            "kind": "filing_text_s3_preflight",
+            "plan_hash": expected_hash,
+            "complete": preflight_complete,
+            "observed_versions": [version.__dict__ for version in current],
+            "verified_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    (evidence_dir / "s3-preflight.json").write_text(
+        json.dumps(preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if not preflight_complete:
+        raise RuntimeError(
+            "derived filing-text S3 version state changed since planning; refusing deletion"
+        )
+
+    by_bucket: dict[str, list[ObjectVersion]] = defaultdict(list)
+    for version in planned:
+        by_bucket[version.bucket].append(version)
+    responses: list[dict[str, Any]] = []
+    delete_errors: list[dict[str, Any]] = []
+    batch_number = 0
+    deletion_failed = False
+    for bucket, bucket_versions in sorted(by_bucket.items()):
+        for start in range(0, len(bucket_versions), 1000):
+            batch_number += 1
+            batch = bucket_versions[start : start + 1000]
+            payload = {
+                "Objects": [
+                    {"Key": version.key, "VersionId": version.version_id}
+                    for version in batch
+                ],
+                "Quiet": False,
+            }
+            batch_file = evidence_dir / f"delete-batch-{batch_number:04d}.json"
+            batch_file.write_text(
+                json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            response = cli.delete_versions(bucket=bucket, batch_file=batch_file)
+            responses.append({"bucket": bucket, "response": response})
+            response_evidence = _hashed_evidence(
+                {
+                    "schema_version": 1,
+                    "kind": "filing_text_s3_delete_response",
+                    "plan_hash": expected_hash,
+                    "batch_number": batch_number,
+                    "bucket": bucket,
+                    "response": response,
+                    "recorded_at": datetime.now(UTC).isoformat(),
+                }
+            )
+            (evidence_dir / f"delete-response-{batch_number:04d}.json").write_text(
+                json.dumps(response_evidence, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            if response.get("Errors"):
+                delete_errors.extend(response["Errors"])
+                deletion_failed = True
+                break
+        if deletion_failed:
+            break
+
+    remaining = inventory()
+    planned_ids = {
+        (version.bucket, version.key, version.version_id) for version in planned
+    }
+    remaining_planned = [
+        version
+        for version in remaining
+        if (version.bucket, version.key, version.version_id) in planned_ids
+    ]
+    concurrent = [
+        version
+        for version in remaining
+        if (version.bucket, version.key, version.version_id) not in planned_ids
+    ]
+    deleted_ids = {
+        (response["bucket"], str(deleted["Key"]), str(deleted["VersionId"]))
+        for response in responses
+        for deleted in response["response"].get("Deleted") or []
+    }
+    deleted_versions = [
+        version
+        for version in planned
+        if (version.bucket, version.key, version.version_id) in deleted_ids
+    ]
+    result = _hashed_evidence(
+        {
+            "schema_version": 1,
+            "kind": "filing_text_post_delete_evidence",
+            "plan_hash": expected_hash,
+            "deleted_versions": len(deleted_versions),
+            "deleted_bytes": sum(version.size_bytes for version in deleted_versions),
+            "delete_errors": delete_errors,
+            "complete": not delete_errors and not remaining_planned and not concurrent,
+            "remaining_planned_versions": [
+                version.__dict__ for version in remaining_planned
+            ],
+            "concurrent_versions": [version.__dict__ for version in concurrent],
+            "responses": responses,
+            "verified_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    (evidence_dir / "post-delete-result.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if delete_errors:
+        raise RuntimeError(
+            f"S3 returned derived filing-text deletion errors: {delete_errors}"
+        )
+    if remaining_planned:
+        raise RuntimeError(
+            "post-delete verification found derived filing-text VersionIds still present"
+        )
+    if concurrent:
+        raise RuntimeError(
+            "post-delete verification found concurrent derived filing-text versions"
+        )
+    return result
 
 
 def apply_retention_plan(
@@ -838,6 +1344,90 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(json.dumps(plan.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(json.dumps({"output": str(args.output), "plan_hash": plan.plan_hash, "bundles": len(plan.bundles), "versions": plan.total_versions, "bytes": plan.total_bytes, "projected_standard_storage_savings_usd_month": plan.projected_standard_storage_savings_usd_month, "unmatched": len(plan.unmatched)}, sort_keys=True))
         return 0
+    if args.command == "filing-text-retention-plan":
+        require_account(cli, args.expected_account_id)
+        prior_manifest = json.loads(args.prior_manifest.read_text(encoding="utf-8"))
+        current_manifest = json.loads(
+            args.current_manifest.read_text(encoding="utf-8")
+        )
+        versions = collect_filing_text_versions(
+            cli,
+            manifest=current_manifest,
+            account_id=args.expected_account_id,
+        )
+        plan = build_filing_text_retention_plan(
+            prior_manifest=prior_manifest,
+            current_manifest=current_manifest,
+            versions=versions,
+            expected_account_id=args.expected_account_id,
+        )
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(
+            json.dumps(
+                {
+                    "output": str(args.output),
+                    "plan_hash": plan["plan_hash"],
+                    "targets": len(plan["targets"]),
+                    "versions": plan["total_versions"],
+                    "bytes": plan["total_bytes"],
+                    "blocked": len(plan["blocked"]),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command == "filing-text-retention-retire":
+        if not args.confirm_retire_filing_text:
+            raise SystemExit(
+                "filing-text-retention-retire requires --confirm-retire-filing-text"
+            )
+        plan = json.loads(args.plan.read_text(encoding="utf-8"))
+        require_account(cli, str(plan.get("expected_account_id") or ""))
+        silver = SnowflakeFilingTextRetirement.from_environment()
+        try:
+            result = retire_filing_text_plan(
+                silver,
+                plan=plan,
+                expected_hash=args.plan_hash,
+                evidence_dir=args.evidence_dir,
+            )
+        finally:
+            silver.close()
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    if args.command == "filing-text-retention-apply":
+        if not args.confirm_delete_derived_filing_text:
+            raise SystemExit(
+                "filing-text-retention-apply requires "
+                "--confirm-delete-derived-filing-text"
+            )
+        plan = json.loads(args.plan.read_text(encoding="utf-8"))
+        retirement_evidence = json.loads(
+            args.retirement_evidence.read_text(encoding="utf-8")
+        )
+        latest_manifest = json.loads(
+            args.latest_manifest.read_text(encoding="utf-8")
+        )
+        silver = SnowflakeFilingTextRetirement.from_environment()
+        try:
+            result = apply_filing_text_plan(
+                cli,
+                silver,
+                plan=plan,
+                expected_hash=args.plan_hash,
+                latest_manifest=latest_manifest,
+                retirement_evidence=retirement_evidence,
+                evidence_dir=args.evidence_dir,
+            )
+        finally:
+            silver.close()
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    if args.command != "retention-apply":
+        raise AssertionError(f"unhandled command {args.command!r}")
     if not args.confirm_delete_expired_s3:
         raise SystemExit("retention-apply requires --confirm-delete-expired-s3")
     plan = json.loads(args.plan.read_text(encoding="utf-8"))

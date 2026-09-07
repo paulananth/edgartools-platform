@@ -13,11 +13,14 @@ call-time `from X import Y` actually resolves against.
 """
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 from edgar_warehouse.filing_text_sweep import run_filing_text_sweep
+from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
 class _StubSnowflakeReader:
@@ -38,10 +41,31 @@ class _StubSnowflakeReader:
         self.queries.append(sql)
         if "PARTITION BY cik" in sql and "sec_company_ticker" in sql:
             return self._required_rows
-        if "SELECT DISTINCT accession_number" in sql and "sec_filing_text" in sql:
-            return [{"accession_number": acc} for acc in self._processed_accessions]
         if "SELECT DISTINCT f.cik, sft.accession_number" in sql:
-            return self._all_processed_rows
+            rows = list(self._all_processed_rows)
+            represented = {row["accession_number"] for row in rows}
+            required_ciks = {
+                row["accession_number"]: row["cik"] for row in self._required_rows
+            }
+            rows.extend(
+                {
+                    "cik": required_ciks[accession],
+                    "accession_number": accession,
+                }
+                for accession in sorted(self._processed_accessions - represented)
+            )
+            return [
+                {
+                    "text_version": "generic_text_v1",
+                    "text_storage_path": (
+                        "s3://edgartools-prod-warehouse-690839588395/warehouse/text/sec/"
+                        f"cik={row['cik']}/accession={row['accession_number']}/generic_text_v1.txt"
+                    ),
+                    "text_sha256": "a" * 64,
+                    **row,
+                }
+                for row in rows
+            ]
         raise AssertionError(f"unexpected query in test: {sql}")
 
     def close(self) -> None:
@@ -70,6 +94,82 @@ def _patched(reader: _StubSnowflakeReader, submissions_mock: MagicMock, extract_
 
 
 class TestRunFilingTextSweep:
+    def test_persists_complete_exact_identity_retention_manifest(
+        self, tmp_path
+    ) -> None:
+        current = "0000910001-26-000001"
+        old = "0000910001-24-000001"
+        reader = _StubSnowflakeReader(
+            required_rows=[_row(910001, current)],
+            processed_accessions={current},
+            all_processed_rows=[
+                {"cik": 910001, "accession_number": current},
+                {"cik": 910001, "accession_number": old},
+            ],
+        )
+        context = SimpleNamespace(storage_root=StorageLocation(str(tmp_path)))
+
+        p1, p2, p3 = _patched(reader, MagicMock(), MagicMock())
+        with p1, p2, p3:
+            _raw_writes, metrics = run_filing_text_sweep(
+                context=context,
+                db=MagicMock(),
+                bookkeeping=MagicMock(),
+                sync_run_id="run-manifest",
+                now=datetime(2026, 9, 7, 12, 0, tzinfo=UTC),
+            )
+
+        manifest_path = (
+            tmp_path
+            / "artifacts"
+            / "filing_text_retention"
+            / "observed_date=2026-09-07"
+            / "run_id=run-manifest"
+            / "manifest.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert manifest["status"] == "succeeded"
+        assert manifest["run_id"] == "run-manifest"
+        assert manifest["required"] == [
+            {"accession_number": current, "text_version": "generic_text_v1"}
+        ]
+        assert {row["accession_number"] for row in manifest["not_required"]} == {old}
+        assert manifest["counts"] == {
+            "not_required": 1,
+            "processed": 2,
+            "required": 1,
+            "unclassified": 0,
+        }
+        assert len(manifest["manifest_hash"]) == 64
+        assert len(manifest["snowflake_publication_identity"]) == 64
+        assert metrics["retention_manifest_path"] == str(manifest_path)
+
+        p1, p2, p3 = _patched(reader, MagicMock(), MagicMock())
+        with p1, p2, p3:
+            run_filing_text_sweep(
+                context=context,
+                db=MagicMock(),
+                bookkeeping=MagicMock(),
+                sync_run_id="run-manifest-next",
+                now=datetime(2026, 10, 8, 12, 0, tzinfo=UTC),
+            )
+
+        next_manifest_path = (
+            tmp_path
+            / "artifacts"
+            / "filing_text_retention"
+            / "observed_date=2026-10-08"
+            / "run_id=run-manifest-next"
+            / "manifest.json"
+        )
+        next_manifest = json.loads(next_manifest_path.read_text(encoding="utf-8"))
+        assert next_manifest["previous_manifest_hash"] == manifest["manifest_hash"]
+        assert next_manifest["previous_run_id"] == "run-manifest"
+        assert (
+            next_manifest["not_required"][0]["not_required_since"]
+            == "2026-09-07T12:00:00Z"
+        )
+
     def test_required_and_unprocessed_cik_gets_extracted(self) -> None:
         reader = _StubSnowflakeReader(
             required_rows=[_row(910001, "0000910001-26-000001")],
@@ -83,7 +183,7 @@ class TestRunFilingTextSweep:
 
         p1, p2, p3 = _patched(reader, submissions_mock, extract_mock)
         with p1, p2, p3:
-            raw_writes, metrics = run_filing_text_sweep(
+            _raw_writes, metrics = run_filing_text_sweep(
                 context=MagicMock(), db=db, bookkeeping=MagicMock(),
                 sync_run_id="run-1", now=datetime.now(UTC),
             )
@@ -106,7 +206,7 @@ class TestRunFilingTextSweep:
 
         p1, p2, p3 = _patched(reader, submissions_mock, extract_mock)
         with p1, p2, p3:
-            raw_writes, metrics = run_filing_text_sweep(
+            _raw_writes, metrics = run_filing_text_sweep(
                 context=MagicMock(), db=MagicMock(), bookkeeping=MagicMock(),
                 sync_run_id="run-1", now=datetime.now(UTC),
             )
@@ -128,7 +228,7 @@ class TestRunFilingTextSweep:
 
         p1, p2, p3 = _patched(reader, submissions_mock, extract_mock)
         with p1, p2, p3:
-            raw_writes, metrics = run_filing_text_sweep(
+            _raw_writes, metrics = run_filing_text_sweep(
                 context=MagicMock(), db=db, bookkeeping=MagicMock(),
                 sync_run_id="run-1", now=datetime.now(UTC),
             )
@@ -156,7 +256,7 @@ class TestRunFilingTextSweep:
 
         p1, p2, p3 = _patched(reader, submissions_mock, extract_mock)
         with p1, p2, p3:
-            raw_writes, metrics = run_filing_text_sweep(
+            _raw_writes, metrics = run_filing_text_sweep(
                 context=MagicMock(), db=db, bookkeeping=MagicMock(),
                 sync_run_id="run-1", now=datetime.now(UTC),
             )
@@ -183,7 +283,7 @@ class TestRunFilingTextSweep:
 
         p1, p2, p3 = _patched(reader, submissions_mock, extract_mock)
         with p1, p2, p3:
-            raw_writes, metrics = run_filing_text_sweep(
+            _raw_writes, metrics = run_filing_text_sweep(
                 context=MagicMock(), db=db, bookkeeping=MagicMock(),
                 sync_run_id="run-1", now=datetime.now(UTC), limit=1,
             )
@@ -209,7 +309,7 @@ class TestRunFilingTextSweep:
 
         p1, p2, p3 = _patched(reader, submissions_mock, extract_mock)
         with p1, p2, p3:
-            raw_writes, metrics = run_filing_text_sweep(
+            _raw_writes, metrics = run_filing_text_sweep(
                 context=MagicMock(), db=MagicMock(), bookkeeping=MagicMock(),
                 sync_run_id="run-1", now=datetime.now(UTC),
             )

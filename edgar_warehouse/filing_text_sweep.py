@@ -1,7 +1,7 @@
 """release-readiness Ticket 101: ledger-driven sweep that keeps
 ``sec_filing_text`` current for genuine periodic-reporting companies, and
-surfaces (without deleting) any already-extracted text whose CIK no
-longer qualifies.
+surfaces (without deleting) every already-extracted exact text identity that
+is no longer required.
 
 Resolved via `/grilling` (2026-09-07, see
 `.scratch/release-readiness/issues/101-automate-filing-text-capture-end-to-end.md`):
@@ -46,28 +46,60 @@ CIK universe, the same "one bad row shouldn't fail the batch" reasoning
 already applied elsewhere in this pipeline (e.g. `_run_accession_resync`'s
 immutable-object-conflict isolation).
 
-Any CIK with an existing ``sec_filing_text`` row that is NOT in
-``required`` (aged out past 2 years, lost its ticker, or turns out to be
-an individual per Ticket 01's ongoing cleanup) is emitted as a structured
-cleanup-candidate event -- identify only, never delete, matching this
-repo's established Ticket 70/71 split between "decide/report" and
-"actually remove."
+Any known ``(accession_number, text_version)`` with an existing
+``sec_filing_text`` row that is NOT in the exact required set is emitted as a
+structured cleanup-candidate event. This includes an older projection for a
+CIK whose newer filing is required. Unknown text versions are classified but
+blocked. The sweep also writes a complete immutable retention manifest;
+deletion remains a separately reviewed cost-optimizer operation.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Any, Iterable, Optional
+import json
+from datetime import UTC, datetime
+from typing import Any
 
 _PERIODIC_FORMS = ("10-K", "10-K405", "10KSB", "10KSB40")
 _TEXT_VERSION = "generic_text_v1"
 _REQUIRED_RECENCY_YEARS = 2
-_CHUNK_SIZE = 1000
 
 
-def _chunks(items: list[Any], size: int) -> Iterable[list[Any]]:
-    for start in range(0, len(items), size):
-        yield items[start : start + size]
+def _latest_previous_manifest(
+    storage_root: Any, *, run_id: str, observed_at: datetime
+) -> dict[str, Any] | None:
+    """Load the immediately preceding immutable observation, if one exists."""
+    from edgar_warehouse.infrastructure.object_storage import read_bytes
+
+    observed_at_utc = (
+        observed_at.replace(tzinfo=UTC)
+        if observed_at.tzinfo is None
+        else observed_at.astimezone(UTC)
+    )
+    candidates: list[tuple[datetime, str, dict[str, Any]]] = []
+    for path in storage_root.find_existing(
+        "artifacts/filing_text_retention/observed_date=*/run_id=*/manifest.json"
+    ):
+        manifest = json.loads(read_bytes(path))
+        if manifest.get("run_id") == run_id:
+            continue
+        raw_observed_at = str(manifest.get("observed_at") or "")
+        try:
+            candidate_at = datetime.fromisoformat(raw_observed_at)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"invalid prior filing-text retention manifest at {path}"
+            ) from exc
+        if candidate_at.tzinfo is None:
+            raise RuntimeError(
+                f"prior filing-text retention manifest has no timezone at {path}"
+            )
+        candidate_at = candidate_at.astimezone(UTC)
+        if candidate_at < observed_at_utc:
+            candidates.append((candidate_at, path, manifest))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda candidate: (candidate[0], candidate[1]))[2]
 
 
 def _required_ciks(reader: Any) -> list[dict[str, Any]]:
@@ -102,39 +134,26 @@ def _required_ciks(reader: Any) -> list[dict[str, Any]]:
     ]
 
 
-def _already_processed_accessions(reader: Any, accession_numbers: list[str]) -> set[str]:
-    processed: set[str] = set()
-    for chunk in _chunks(accession_numbers, _CHUNK_SIZE):
-        if not chunk:
-            continue
-        placeholders = ", ".join("?" for _ in chunk)
-        rows = reader.fetch(
-            f"""
-            SELECT DISTINCT accession_number
-            FROM sec_filing_text
-            WHERE text_version = ?
-              AND accession_number IN ({placeholders})
-            """,
-            [_TEXT_VERSION, *chunk],
-        )
-        for row in rows:
-            processed.add(str(row["accession_number"]))
-    return processed
-
-
-def _processed_ciks_with_owning_cik(reader: Any) -> list[dict[str, Any]]:
-    """Every (cik, accession_number) pair with an existing sec_filing_text row,
-    joined back to its owning CIK -- used to find cleanup candidates."""
+def _processed_filing_text(reader: Any) -> list[dict[str, Any]]:
+    """Return every exact filing-text identity and its derived object evidence."""
     rows = reader.fetch(
         """
-        SELECT DISTINCT f.cik, sft.accession_number
+        SELECT DISTINCT f.cik, sft.accession_number, sft.text_version,
+                        sft.text_storage_path, sft.text_sha256
         FROM sec_filing_text sft
-        JOIN sec_company_filing f ON f.accession_number = sft.accession_number
-        WHERE sft.text_version = ?
-        """,
-        [_TEXT_VERSION],
+        LEFT JOIN sec_company_filing f ON f.accession_number = sft.accession_number
+        """
     )
-    return [{"cik": int(row["cik"]), "accession_number": str(row["accession_number"])} for row in rows]
+    return [
+        {
+            "cik": int(row["cik"]) if row.get("cik") is not None else None,
+            "accession_number": str(row["accession_number"]),
+            "text_version": str(row["text_version"]),
+            "text_storage_path": str(row.get("text_storage_path") or ""),
+            "text_sha256": str(row.get("text_sha256") or ""),
+        }
+        for row in rows
+    ]
 
 
 def run_filing_text_sweep(
@@ -144,13 +163,15 @@ def run_filing_text_sweep(
     bookkeeping: Any,
     sync_run_id: str,
     now: datetime,
-    limit: Optional[int] = None,
+    limit: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     from edgar_warehouse.application.warehouse_orchestrator import (
         _emit_pipeline_event,
         submissions_orchestrator,
     )
-    from edgar_warehouse.infrastructure.filing_artifact_service import extract_filing_text
+    from edgar_warehouse.infrastructure.filing_artifact_service import (
+        extract_filing_text,
+    )
     from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 
     raw_writes: list[dict[str, Any]] = []
@@ -165,12 +186,23 @@ def run_filing_text_sweep(
     reader = SnowflakeSilverReader.connect()
     try:
         required = _required_ciks(reader)
-        accession_numbers = [row["accession_number"] for row in required]
-        processed_accessions = _already_processed_accessions(reader, accession_numbers)
-        required_ciks = {row["cik"] for row in required}
-
+        processed_rows = _processed_filing_text(reader)
+        required_identities = {
+            (row["accession_number"], _TEXT_VERSION) for row in required
+        }
+        processed_accessions = {
+            row["accession_number"]
+            for row in processed_rows
+            if row["text_version"] == _TEXT_VERSION
+            and (row["accession_number"], row["text_version"])
+            in required_identities
+        }
         cleanup_candidates = [
-            row for row in _processed_ciks_with_owning_cik(reader) if row["cik"] not in required_ciks
+            row
+            for row in processed_rows
+            if row["text_version"] == _TEXT_VERSION
+            and (row["accession_number"], row["text_version"])
+            not in required_identities
         ]
     finally:
         reader.close()
@@ -270,5 +302,41 @@ def run_filing_text_sweep(
         rows_skipped=metrics["rows_skipped"],
         cik_error_count=metrics["cik_error_count"],
     )
+
+    from edgar_warehouse.application.filing_text_retention import (
+        build_filing_text_sweep_manifest,
+        filing_text_sweep_manifest_bytes,
+        filing_text_sweep_manifest_path,
+    )
+
+    retention_status = (
+        "succeeded"
+        if metrics["cik_error_count"] == 0 and metrics["rows_skipped"] == 0
+        else "incomplete"
+    )
+    manifest = build_filing_text_sweep_manifest(
+        run_id=sync_run_id,
+        observed_at=now,
+        required_rows=[
+            {**row, "text_version": _TEXT_VERSION} for row in required
+        ],
+        processed_rows=processed_rows,
+        status=retention_status,
+        previous_manifest=_latest_previous_manifest(
+            context.storage_root,
+            run_id=sync_run_id,
+            observed_at=now,
+        ),
+    )
+    manifest_relative_path = filing_text_sweep_manifest_path(
+        run_id=sync_run_id, observed_at=now
+    )
+    manifest_path = context.storage_root.write_immutable_bytes(
+        manifest_relative_path,
+        filing_text_sweep_manifest_bytes(manifest),
+    )
+    metrics["retention_manifest_path"] = manifest_path
+    metrics["retention_manifest_hash"] = manifest["manifest_hash"]
+    metrics["retention_manifest_status"] = retention_status
 
     return raw_writes, metrics

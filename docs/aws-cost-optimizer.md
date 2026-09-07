@@ -115,6 +115,66 @@ uv run python scripts/ops/aws_cost_optimizer.py \
   --evidence-dir /tmp/s3-retention-evidence
 ```
 
+## Derived filing-text retention
+
+`sweep-filing-text` remains unable to delete anything. Each run writes a
+complete immutable manifest under
+`warehouse/artifacts/filing_text_retention/observed_date=<date>/run_id=<run>/`.
+The manifest links to the immediately preceding observation and carries the
+start of each uninterrupted exact `(accession_number, text_version)`
+not-required streak. An incomplete predecessor resets that streak.
+
+After two consecutive successful observations and at least 30 continuous days,
+download the two manifests explicitly and create a reviewable plan. Planning
+inventories only the exact derived warehouse text key; Bronze filing documents,
+attachments, text evidence, and every version of those objects are outside this
+command's accepted path scope.
+
+```bash
+uv run python scripts/ops/aws_cost_optimizer.py \
+  --profile sec_platform_deployer \
+  filing-text-retention-plan \
+  --expected-account-id 690839588395 \
+  --prior-manifest /tmp/filing-text-prior.json \
+  --current-manifest /tmp/filing-text-current.json \
+  --output /tmp/filing-text-plan.json
+```
+
+Retirement and deletion are intentionally separate invocations. First connect
+with a Snowflake identity that has `SELECT, INSERT` on
+`EDGARTOOLS_SILVER_LANDING.SILVER_LANDING_RETIREMENT`, record the exact Silver
+business keys, and retain its read-back evidence. Then wait for canonical
+Silver to collapse those rows, download the latest successful sweep manifest,
+and apply. Apply refuses a newly required or drifted identity, an active
+canonical Silver row, or any S3 version state different from the reviewed plan.
+
+```bash
+PLAN_HASH="$(jq -r .plan_hash /tmp/filing-text-plan.json)"
+
+uv run --extra snowflake python scripts/ops/aws_cost_optimizer.py \
+  --profile sec_platform_deployer \
+  filing-text-retention-retire \
+  --plan /tmp/filing-text-plan.json \
+  --plan-hash "$PLAN_HASH" \
+  --confirm-retire-filing-text \
+  --evidence-dir /tmp/filing-text-retirement
+
+uv run --extra snowflake python scripts/ops/aws_cost_optimizer.py \
+  --profile sec_platform_deployer \
+  filing-text-retention-apply \
+  --plan /tmp/filing-text-plan.json \
+  --plan-hash "$PLAN_HASH" \
+  --retirement-evidence /tmp/filing-text-retirement/retirement-evidence.json \
+  --latest-manifest /tmp/filing-text-latest.json \
+  --confirm-delete-derived-filing-text \
+  --evidence-dir /tmp/filing-text-apply
+```
+
+The apply evidence includes the reviewed plan, retirement proof, current
+Silver verification, exact S3 preflight, every delete response, and post-delete
+inventory. If the identity becomes required later, normal text extraction
+rebuilds it from the retained immutable Bronze primary document.
+
 ## Weekly GitHub Actions configuration
 
 `.github/workflows/aws-cost-optimizer.yml` runs Sundays at 08:17 UTC and can be

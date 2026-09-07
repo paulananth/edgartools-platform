@@ -1,7 +1,7 @@
 # Implement Guarded Derived Filing-Text Retention
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 08
 
 ## Question
