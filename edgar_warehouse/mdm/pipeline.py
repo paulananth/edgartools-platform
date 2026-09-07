@@ -40,7 +40,10 @@ from edgar_warehouse.mdm.resolvers import (
 )
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.rules import MDMRuleEngine
-from edgar_warehouse.mdm.sql_fragments import prefer_non_owner_cik_qualify
+from edgar_warehouse.mdm.sql_fragments import (
+    exclude_individual_reporting_owners_sql,
+    prefer_non_owner_cik_qualify,
+)
 
 if TYPE_CHECKING:
     from edgar_warehouse.bookkeeping.store import BookkeepingStore
@@ -395,7 +398,13 @@ class MDMPipeline:
                 except ResumeRunNotFoundError:
                     # First attempt under this run_id: query live, freeze the
                     # candidate set now so any later resume reuses it verbatim.
-                    snapshot_rows = self.silver.fetch("SELECT cik FROM sec_company")
+                    # mdm-company-person-contamination ticket 01: exclude
+                    # individual reporting owners so a frozen resume
+                    # snapshot doesn't bake bogus person-as-company
+                    # candidates into every later resumed attempt.
+                    snapshot_rows = self.silver.fetch(
+                        f"SELECT cik FROM sec_company WHERE {exclude_individual_reporting_owners_sql()}"
+                    )
                     snapshot_ciks = [int(row["cik"]) for row in snapshot_rows]
                     write_snapshot(
                         bronze_root=bronze_root, run_id=effective_run_id, ciks=snapshot_ciks
@@ -404,13 +413,20 @@ class MDMPipeline:
             if remaining_ciks:
                 placeholders = ", ".join("?" for _ in remaining_ciks)
                 rows = self.silver.fetch(
-                    f"SELECT * FROM sec_company WHERE cik IN ({placeholders})", remaining_ciks
+                    f"SELECT * FROM sec_company WHERE cik IN ({placeholders}) "
+                    f"AND {exclude_individual_reporting_owners_sql()}",
+                    remaining_ciks,
                 )
             else:
                 rows = []
         elif ciks is not None:
-            sql = "SELECT * FROM sec_company WHERE cik IN ({})".format(
-                ", ".join("?" for _ in ciks)
+            # mdm-company-person-contamination ticket 01: a caller-supplied
+            # CIK is expected to be a real issuer (e.g. Ticket 21's
+            # missing-issuer-shell path), but nothing upstream guarantees
+            # that -- excluding individual reporting owners here protects
+            # against creating a bogus company entity if one slips through.
+            sql = "SELECT * FROM sec_company WHERE cik IN ({}) AND {}".format(
+                ", ".join("?" for _ in ciks), exclude_individual_reporting_owners_sql()
             )
             if limit:
                 sql += f" LIMIT {int(limit)}"
@@ -438,14 +454,18 @@ class MDMPipeline:
             # on repeat calls instead of plateauing.
             already_resolved = self._company_cik_set()
             fetch_sql = self._bounded_relationship_sql(
-                "SELECT * FROM sec_company ORDER BY cik", limit, len(already_resolved)
+                f"SELECT * FROM sec_company WHERE {exclude_individual_reporting_owners_sql()} "
+                "ORDER BY cik",
+                limit, len(already_resolved),
             )
             candidate_rows = self.silver.fetch(fetch_sql)
             rows = [
                 row for row in candidate_rows if row["cik"] not in already_resolved
             ][: int(limit)]
         else:
-            rows = self.silver.fetch("SELECT * FROM sec_company")
+            rows = self.silver.fetch(
+                f"SELECT * FROM sec_company WHERE {exclude_individual_reporting_owners_sql()}"
+            )
 
         ticker_rows = self.silver.fetch(
             "SELECT cik, ticker, exchange FROM sec_company_ticker "
