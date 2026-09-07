@@ -51,6 +51,55 @@ def test_authority_column_excluded_from_semantic_digest_when_declared():
     assert "mdm_entity_id" in company.semantic_exclude_columns
 
 
+def test_sync_bookkeeping_columns_excluded_from_every_tables_semantic_digest():
+    """Ticket 11 (2026-09-06): first_sync_run_id/last_sync_run_id are never
+    carried by the Snowflake landing export -- PROTECTED_TABLE_REGISTRY's
+    provenance_columns alone doesn't cover them (that registry answers a
+    different question), so every table's semantic_exclude_columns must
+    include both regardless of whether the registry's own provenance_columns
+    happens to. Live evidence: 11 of 30 tables failed reconciliation on a
+    pure content-hash mismatch with identical key sets on both sides before
+    this fix."""
+    for table_name, contract in TABLE_CONTRACTS.items():
+        assert "first_sync_run_id" in contract.semantic_exclude_columns, table_name
+        assert "last_sync_run_id" in contract.semantic_exclude_columns, table_name
+
+
+def test_denormalized_cik_excluded_for_the_three_ownership_join_tables():
+    """Ticket 11 (2026-09-06): 3 of the 6 ownership tables' dbt models
+    deliberately join a Snowflake-only `cik` column in from
+    sec_company_filing (Ticket 06) -- DuckDB's own tables never had it."""
+    for table_name in (
+        "sec_ownership_non_derivative_txn",
+        "sec_ownership_derivative_txn",
+        "sec_ownership_reporting_owner",
+    ):
+        assert "cik" in TABLE_CONTRACTS[table_name].semantic_exclude_columns, table_name
+
+
+def test_denormalized_cik_fix_does_not_widen_beyond_the_three_ownership_tables():
+    """The fix itself only ever adds `cik` for the three tables above --
+    any other table's `cik` membership (e.g. sec_raw_object, which already
+    declares `cik` in PROTECTED_TABLE_REGISTRY.provenance_columns for an
+    unrelated reason) must come from the registry, not from this fix,
+    proving the fix doesn't over-widen to hide a real future `cik`
+    discrepancy elsewhere."""
+    from edgar_warehouse.silver_protection import PROTECTED_TABLE_REGISTRY
+    from edgar_warehouse.table_reconciliation.contracts import (
+        _CROSS_SYSTEM_DENORMALIZED_CIK_TABLES,
+    )
+
+    for table_name, contract in TABLE_CONTRACTS.items():
+        if table_name in _CROSS_SYSTEM_DENORMALIZED_CIK_TABLES:
+            continue
+        policy = PROTECTED_TABLE_REGISTRY[table_name]
+        if "cik" in contract.semantic_exclude_columns:
+            assert "cik" in policy.provenance_columns, (
+                f"{table_name} excludes cik but isn't in the registry's own "
+                "provenance_columns -- the fix widened beyond its intended scope"
+            )
+
+
 def test_no_table_declares_itself_as_its_own_parent():
     for table_name, contract in TABLE_CONTRACTS.items():
         if contract.bronze_anchor is not None:
