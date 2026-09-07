@@ -293,6 +293,107 @@ class TestInstitutionalHoldsDeactivation:
         assert rows[0].valid_to_date is None
 
 
+class TestIsInsiderWatermark:
+    """IS_INSIDER: same accession_number watermark shape as HOLDS, over
+    sec_ownership_reporting_owner joined to sec_company_filing directly (no
+    transaction tables involved) -- had no coverage in this file at all
+    until the Spec code-review axis flagged the missing reconciliation_pass
+    regression test for this type (mdm-relationship-incremental-filters
+    Ticket 04)."""
+
+    @staticmethod
+    def _ensure_mdm_entities(session: Session, *, owner_cik: int, issuer_cik: int) -> None:
+        existing_person = session.execute(
+            select(MdmPerson).where(MdmPerson.owner_cik == owner_cik)
+        ).scalar_one_or_none()
+        if existing_person is None:
+            person_id = _add_entity(session, "person")
+            session.add(MdmPerson(entity_id=person_id, owner_cik=owner_cik, canonical_name=f"Owner {owner_cik}"))
+        existing_company = session.execute(
+            select(MdmCompany).where(MdmCompany.cik == issuer_cik)
+        ).scalar_one_or_none()
+        if existing_company is None:
+            company_id = _add_entity(session, "company")
+            session.add(MdmCompany(entity_id=company_id, cik=issuer_cik, canonical_name=f"Issuer {issuer_cik}"))
+        session.commit()
+
+    @staticmethod
+    def _seed_insider_row(
+        db: SilverDatabase,
+        *,
+        accession_number: str,
+        owner_cik: int,
+        issuer_cik: int,
+        report_date: str = "2024-01-01",
+    ) -> None:
+        db._conn.execute(
+            "INSERT OR REPLACE INTO sec_company (cik, entity_name) VALUES (?, ?)",
+            [issuer_cik, f"Issuer {issuer_cik}"],
+        )
+        db._conn.execute(
+            """
+            INSERT INTO sec_company_filing (accession_number, cik, form, filing_date, report_date)
+            VALUES (?, ?, '4', ?, ?)
+            """,
+            [accession_number, issuer_cik, report_date, report_date],
+        )
+        db._conn.execute(
+            """
+            INSERT INTO sec_ownership_reporting_owner
+                (accession_number, owner_index, owner_cik, owner_name, is_director, is_officer)
+            VALUES (?, 1, ?, ?, TRUE, FALSE)
+            """,
+            [accession_number, owner_cik, f"Owner {owner_cik}"],
+        )
+
+    def test_watermark_scopes_to_new_accessions_only(self, session, tmp_path):
+        self._ensure_mdm_entities(session, owner_cik=7001, issuer_cik=3001)
+        self._ensure_mdm_entities(session, owner_cik=7002, issuer_cik=3001)
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        self._seed_insider_row(db, accession_number="0000000001-24-000001", owner_cik=7001, issuer_cik=3001)
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        first = pipeline.derive_relationships(relationship_types=["IS_INSIDER"])
+        assert first["IS_INSIDER"]["inserted"] == 1
+        checkpoint = _checkpoint(session, "IS_INSIDER")
+        assert checkpoint.watermark_column == "accession_number"
+        assert checkpoint.watermark_value == "0000000001-24-000001"
+
+        db2 = SilverDatabase(str(silver_path))
+        self._seed_insider_row(db2, accession_number="0000000002-24-000001", owner_cik=7002, issuer_cik=3001)
+        db2.close()
+
+        pipeline2 = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        second = pipeline2.derive_relationships(relationship_types=["IS_INSIDER"])
+        assert second["IS_INSIDER"]["inserted"] == 1
+        assert second["IS_INSIDER"]["existing"] == 1
+        assert _checkpoint(session, "IS_INSIDER").watermark_value == "0000000002-24-000001"
+
+    def test_reconciliation_pass_bypasses_the_watermark(self, session, tmp_path):
+        self._ensure_mdm_entities(session, owner_cik=7001, issuer_cik=3001)
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        self._seed_insider_row(db, accession_number="0000000001-24-000001", owner_cik=7001, issuer_cik=3001)
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        pipeline.derive_relationships(relationship_types=["IS_INSIDER"])
+        assert _checkpoint(session, "IS_INSIDER") is not None
+
+        ordinary = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        ordinary_summary = ordinary.derive_relationships(relationship_types=["IS_INSIDER"])
+        assert ordinary_summary["IS_INSIDER"]["inserted"] == 0
+
+        backstop = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        backstop_summary = backstop.derive_relationships(
+            relationship_types=["IS_INSIDER"], reconciliation_pass=True
+        )
+        assert backstop_summary["IS_INSIDER"]["total"] == 1
+        assert backstop_summary["IS_INSIDER"]["skipped_existing"] == 1
+
+
 class TestHoldsWatermark:
     """HOLDS: no genuine ingested_at on either txn table -- accession_number
     watermark (Ticket 01/02's natural-ordering-key decision)."""
@@ -431,6 +532,28 @@ class TestHoldsWatermark:
         assert second["HOLDS"]["inserted"] == 1
         assert _checkpoint(session, "HOLDS").watermark_value == "0000000002-24-000001"
 
+    def test_reconciliation_pass_bypasses_the_watermark(self, session, tmp_path):
+        self._ensure_mdm_entities(session, owner_cik=2001, issuer_cik=3001)
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        self._seed_holds_row(db, accession_number="0000000001-24-000001", owner_cik=2001, issuer_cik=3001)
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        pipeline.derive_relationships(relationship_types=["HOLDS"])
+        assert _checkpoint(session, "HOLDS") is not None
+
+        ordinary = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        ordinary_summary = ordinary.derive_relationships(relationship_types=["HOLDS"])
+        assert ordinary_summary["HOLDS"]["inserted"] == 0
+
+        backstop = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        backstop_summary = backstop.derive_relationships(
+            relationship_types=["HOLDS"], reconciliation_pass=True
+        )
+        assert backstop_summary["HOLDS"]["total"] == 1
+        assert backstop_summary["HOLDS"]["skipped_existing"] == 1
+
 
 class TestHoldsDeactivation:
     """HOLDS deactivation (mdm-relationship-incremental-filters Ticket 04,
@@ -536,6 +659,163 @@ class TestHoldsDeactivation:
         assert open_versions[0].superseded_by_version_id is None
 
 
+class TestCompanyHoldsWatermark:
+    """COMPANY_HOLDS: same source tables and accession_number watermark
+    shape as HOLDS, but the owner_cik must resolve to an MdmCompany rather
+    than a person -- structurally identical derive path to HOLDS'
+    (_derive_company_holds mirrors _derive_holds almost verbatim), but
+    never exercised by a dedicated test until the Spec code-review axis
+    flagged the gap (mdm-relationship-incremental-filters Ticket 04)."""
+
+    @staticmethod
+    def _ensure_mdm_entities(session: Session, *, owner_cik: int, issuer_cik: int) -> None:
+        """Both owner and issuer must resolve as MdmCompany (unlike HOLDS,
+        whose owner is a person) -- _company_cik_set() is what
+        _derive_company_holds uses to require a corporate owner."""
+        existing_owner = session.execute(
+            select(MdmCompany).where(MdmCompany.cik == owner_cik)
+        ).scalar_one_or_none()
+        if existing_owner is None:
+            owner_company_id = _add_entity(session, "company")
+            session.add(MdmCompany(entity_id=owner_company_id, cik=owner_cik, canonical_name=f"Owner Co {owner_cik}"))
+        existing_issuer = session.execute(
+            select(MdmCompany).where(MdmCompany.cik == issuer_cik)
+        ).scalar_one_or_none()
+        if existing_issuer is None:
+            issuer_company_id = _add_entity(session, "company")
+            session.add(MdmCompany(entity_id=issuer_company_id, cik=issuer_cik, canonical_name=f"Issuer {issuer_cik}"))
+        else:
+            issuer_company_id = existing_issuer.entity_id
+        existing_security = session.execute(
+            select(MdmSecurity).where(
+                MdmSecurity.canonical_title == "Common Stock",
+                MdmSecurity.issuer_entity_id == issuer_company_id,
+            )
+        ).scalar_one_or_none()
+        if existing_security is None:
+            security_id = _add_entity(session, "security")
+            session.add(MdmSecurity(
+                entity_id=security_id, issuer_entity_id=issuer_company_id, canonical_title="Common Stock",
+            ))
+        session.commit()
+
+    def test_watermark_scopes_to_new_accessions_only(self, session, tmp_path):
+        self._ensure_mdm_entities(session, owner_cik=6001, issuer_cik=3001)
+        self._ensure_mdm_entities(session, owner_cik=6002, issuer_cik=3001)
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        TestHoldsWatermark._seed_holds_row(db, accession_number="0000000001-24-000001", owner_cik=6001, issuer_cik=3001)
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        first = pipeline.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+        assert first["COMPANY_HOLDS"]["inserted"] == 1
+        checkpoint = _checkpoint(session, "COMPANY_HOLDS")
+        assert checkpoint.watermark_column == "accession_number"
+        assert checkpoint.watermark_value == "0000000001-24-000001"
+
+        db2 = SilverDatabase(str(silver_path))
+        TestHoldsWatermark._seed_holds_row(db2, accession_number="0000000002-24-000001", owner_cik=6002, issuer_cik=3001)
+        db2.close()
+
+        pipeline2 = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        second = pipeline2.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+        assert second["COMPANY_HOLDS"]["inserted"] == 1
+        assert second["COMPANY_HOLDS"]["existing"] == 1
+        assert _checkpoint(session, "COMPANY_HOLDS").watermark_value == "0000000002-24-000001"
+
+    def test_reconciliation_pass_bypasses_the_watermark(self, session, tmp_path):
+        self._ensure_mdm_entities(session, owner_cik=6001, issuer_cik=3001)
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        TestHoldsWatermark._seed_holds_row(db, accession_number="0000000001-24-000001", owner_cik=6001, issuer_cik=3001)
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        pipeline.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+        assert _checkpoint(session, "COMPANY_HOLDS") is not None
+
+        ordinary = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        ordinary_summary = ordinary.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+        assert ordinary_summary["COMPANY_HOLDS"]["inserted"] == 0
+
+        backstop = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        backstop_summary = backstop.derive_relationships(
+            relationship_types=["COMPANY_HOLDS"], reconciliation_pass=True
+        )
+        assert backstop_summary["COMPANY_HOLDS"]["total"] == 1
+        assert backstop_summary["COMPANY_HOLDS"]["skipped_existing"] == 1
+
+
+class TestCompanyHoldsDeactivation:
+    """COMPANY_HOLDS deactivation: same in-row zero-shares signal as HOLDS,
+    via the shared _deactivate_if_zero_shares helper -- exercised directly
+    since the code path (unlike HOLDS') had no dedicated test at all."""
+
+    def test_zero_shares_closes_the_open_version_and_inserts_nothing(self, session, tmp_path):
+        TestCompanyHoldsWatermark._ensure_mdm_entities(session, owner_cik=6001, issuer_cik=3001)
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        TestHoldsWatermark._seed_holds_row(
+            db, accession_number="0000000001-24-000001", owner_cik=6001, issuer_cik=3001,
+            transaction_date="2024-01-01", shares_owned_after=100,
+        )
+        db.close()
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        opened = pipeline.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+        assert opened["COMPANY_HOLDS"]["inserted"] == 1
+
+        db2 = SilverDatabase(str(silver_path))
+        TestHoldsWatermark._seed_holds_row(
+            db2, accession_number="0000000002-24-000001", owner_cik=6001, issuer_cik=3001,
+            transaction_date="2024-06-01", shares_owned_after=0,
+        )
+        db2.close()
+        pipeline2 = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        closed = pipeline2.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+        assert closed["COMPANY_HOLDS"]["inserted"] == 0
+
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance
+        session.expire_all()
+        rows = session.execute(select(MdmRelationshipInstance)).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].valid_to_date == date(2024, 6, 1)
+
+    def test_reacquisition_after_disposal_opens_a_new_version(self, session, tmp_path):
+        TestCompanyHoldsWatermark._ensure_mdm_entities(session, owner_cik=6001, issuer_cik=3001)
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        TestHoldsWatermark._seed_holds_row(
+            db, accession_number="0000000001-24-000001", owner_cik=6001, issuer_cik=3001,
+            transaction_date="2024-01-01", shares_owned_after=100,
+        )
+        TestHoldsWatermark._seed_holds_row(
+            db, accession_number="0000000002-24-000001", owner_cik=6001, issuer_cik=3001,
+            transaction_date="2024-06-01", shares_owned_after=0,
+        )
+        TestHoldsWatermark._seed_holds_row(
+            db, accession_number="0000000003-24-000001", owner_cik=6001, issuer_cik=3001,
+            transaction_date="2024-09-01", shares_owned_after=50,
+        )
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        summary = pipeline.derive_relationships(relationship_types=["COMPANY_HOLDS"])
+        assert summary["COMPANY_HOLDS"]["inserted"] == 2
+
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance
+        rows = session.execute(select(MdmRelationshipInstance)).scalars().all()
+        assert len(rows) == 2
+        closed = [r for r in rows if r.valid_to_date is not None]
+        open_versions = [r for r in rows if r.valid_to_date is None]
+        assert len(closed) == 1
+        assert len(open_versions) == 1
+        assert closed[0].valid_to_date == date(2024, 6, 1)
+        assert open_versions[0].valid_from_date == date(2024, 9, 1)
+        assert open_versions[0].quarantined is False
+        assert open_versions[0].superseded_by_version_id is None
+
+
 class TestEmployedByDualCheckpoint:
     """EMPLOYED_BY's two independent source tables need two independent
     checkpoints -- one shared watermark value can't represent both."""
@@ -573,6 +853,42 @@ class TestEmployedByDualCheckpoint:
         # checkpoint must stay unset (nothing to advance to), independent of
         # the exec checkpoint that did advance.
         assert event_checkpoint is None
+
+    def test_reconciliation_pass_bypasses_the_watermark(self, session, tmp_path):
+        company_id = _add_entity(session, "company")
+        session.add(MdmCompany(entity_id=company_id, cik=4002, canonical_name="Employer Co 2"))
+        session.commit()
+
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        db._conn.execute(
+            "INSERT OR REPLACE INTO sec_company (cik, entity_name) VALUES (?, ?)",
+            [4002, "Employer Co 2"],
+        )
+        db._conn.execute(
+            """
+            INSERT INTO sec_executive_record
+                (cik, accession_number, fiscal_year, exec_name, exec_role, ingested_at)
+            VALUES (4002, 'proxy-2', 2024, 'John Smith', 'CFO', ?)
+            """,
+            [datetime(2024, 1, 1, tzinfo=timezone.utc)],
+        )
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        pipeline.derive_relationships(relationship_types=["EMPLOYED_BY"])
+        assert _checkpoint(session, "EMPLOYED_BY:exec") is not None
+
+        ordinary = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        ordinary_summary = ordinary.derive_relationships(relationship_types=["EMPLOYED_BY"])
+        assert ordinary_summary["EMPLOYED_BY"]["inserted"] == 0
+
+        backstop = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        backstop_summary = backstop.derive_relationships(
+            relationship_types=["EMPLOYED_BY"], reconciliation_pass=True
+        )
+        assert backstop_summary["EMPLOYED_BY"]["total"] == 1
+        assert backstop_summary["EMPLOYED_BY"]["skipped_existing"] == 1
 
 
 class TestManagesFundWatermark:
@@ -633,3 +949,50 @@ class TestManagesFundWatermark:
         assert second["MANAGES_FUND"]["inserted"] == 0
         assert second["MANAGES_FUND"]["existing"] == 1
         assert _checkpoint(session, "MANAGES_FUND").watermark_value == "iapd-adv:100"
+
+    def test_reconciliation_pass_bypasses_the_watermark(self, session, tmp_path):
+        adviser_id = _add_entity(session, "adviser")
+        session.add(MdmAdviser(
+            entity_id=adviser_id, cik=5002, crd_number="555002", canonical_name="Adviser 555002",
+        ))
+        fund_id = _add_entity(session, "fund")
+        session.add(MdmFund(
+            entity_id=fund_id, adviser_entity_id=adviser_id, private_fund_id="fund-2",
+            canonical_name="Fund Two",
+        ))
+        session.commit()
+
+        silver_path = tmp_path / "silver.duckdb"
+        db = SilverDatabase(str(silver_path))
+        db._conn.execute(
+            """
+            INSERT INTO sec_adv_filing
+                (accession_number, crd_number, effective_date, filing_action)
+            VALUES ('iapd-adv:200', '555002', '2024-01-01', 'annual_amendment')
+            """
+        )
+        db._conn.execute(
+            """
+            INSERT INTO sec_adv_private_fund
+                (accession_number, fund_index, filing_id, adviser_crd_number, private_fund_id,
+                 schedule_section, reporting_role, effective_date, filing_action)
+            VALUES ('iapd-adv:200', 1, '200', '555002', 'fund-2', '7B1',
+                    'detailed_reporter', '2024-01-01', 'annual_amendment')
+            """
+        )
+        db.close()
+
+        pipeline = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        pipeline.derive_relationships(relationship_types=["MANAGES_FUND"])
+        assert _checkpoint(session, "MANAGES_FUND") is not None
+
+        ordinary = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        ordinary_summary = ordinary.derive_relationships(relationship_types=["MANAGES_FUND"])
+        assert ordinary_summary["MANAGES_FUND"]["inserted"] == 0
+
+        backstop = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path)))
+        backstop_summary = backstop.derive_relationships(
+            relationship_types=["MANAGES_FUND"], reconciliation_pass=True
+        )
+        assert backstop_summary["MANAGES_FUND"]["total"] == 1
+        assert backstop_summary["MANAGES_FUND"]["skipped_existing"] == 1

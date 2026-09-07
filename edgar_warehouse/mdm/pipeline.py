@@ -346,29 +346,48 @@ class MDMPipeline:
         )
 
     @staticmethod
-    def _current_open_versions_by_pair(
-        sync_engine: GraphSyncEngine, rel_type_name: str
-    ) -> dict[tuple[str, str], list]:
-        """Index this type's currently-primed active versions by
-        (source_entity_id, target_entity_id), keeping only genuinely still-
-        open ones (``valid_to_date is None``).
+    def _index_open_relationship_versions(
+        sync_engine: GraphSyncEngine,
+        rel_type_name: str,
+        key_fn: Callable[[Any], Any],
+    ) -> dict[Any, list]:
+        """Index this type's currently-primed active versions by whatever
+        key ``key_fn`` derives from each version, keeping only genuinely
+        still-open ones (``valid_to_date is None``).
 
         ``current_relationships()`` itself does not filter on
         ``valid_to_date`` (it means "not deleted/superseded/quarantined",
         not "not yet closed") -- every caller that needs "still open" has
-        to filter for it explicitly, the same way
-        ``_derive_manages_fund_batch`` already does inline. Call only after
-        priming (mdm-relationship-incremental-filters Ticket 04's
-        deactivation half), so this reflects exactly the batch's own
-        already-loaded, correctly-scoped cache.
+        to filter for it explicitly. Shared by every deactivation path
+        (HOLDS/COMPANY_HOLDS keyed by (source, target) pair,
+        MANAGES_FUND/INSTITUTIONAL_HOLDS keyed by adviser source id alone)
+        so the open-version filter can't silently diverge between them the
+        way it once did here (mdm-relationship-incremental-filters Ticket
+        04's GoF review: two independent inline copies of this same loop
+        had already disagreed on when the filter applied). Call only after
+        priming, so this reflects exactly the batch's own already-loaded,
+        correctly-scoped cache.
         """
-        by_pair: dict[tuple[str, str], list] = {}
+        by_key: dict[Any, list] = {}
         for current in sync_engine.current_relationships(rel_type_name):
             if current.valid_to_date is None:
-                by_pair.setdefault(
-                    (current.source_entity_id, current.target_entity_id), []
-                ).append(current)
-        return by_pair
+                by_key.setdefault(key_fn(current), []).append(current)
+        return by_key
+
+    @classmethod
+    def _current_open_versions_by_pair(
+        cls, sync_engine: GraphSyncEngine, rel_type_name: str
+    ) -> dict[tuple[str, str], list]:
+        """Index this type's currently-primed active versions by
+        (source_entity_id, target_entity_id) -- see
+        ``_index_open_relationship_versions`` for the shared filtering
+        contract. Used by HOLDS/COMPANY_HOLDS, whose deactivation is
+        pair-scoped (one security per adviser/company)."""
+        return cls._index_open_relationship_versions(
+            sync_engine,
+            rel_type_name,
+            key_fn=lambda current: (current.source_entity_id, current.target_entity_id),
+        )
 
     def _deactivate_if_zero_shares(
         self,
@@ -2250,9 +2269,9 @@ class MDMPipeline:
                     batch_watermark, filing.get("accession_number")
                 )
 
-            current_by_adviser: dict[str, list] = {}
-            for current in sync_engine.current_relationships("MANAGES_FUND"):
-                current_by_adviser.setdefault(current.source_entity_id, []).append(current)
+            current_by_adviser = self._index_open_relationship_versions(
+                sync_engine, "MANAGES_FUND", key_fn=lambda current: current.source_entity_id,
+            )
 
             latest_by_crd: dict[str, dict] = {}
             if filing_rows:
@@ -2298,10 +2317,7 @@ class MDMPipeline:
                     expected_targets = expected_targets_by_adviser.get(adviser_id, set())
                     current_versions = current_by_adviser.get(adviser_id, [])
                     for current in current_versions:
-                        if (
-                            current.valid_to_date is None
-                            and current.target_entity_id not in expected_targets
-                        ):
+                        if current.target_entity_id not in expected_targets:
                             close_relationship_version(
                                 self.session, current.instance_id, effective
                             )
@@ -3779,10 +3795,9 @@ class MDMPipeline:
         """
         from edgar_warehouse.mdm.graph import close_relationship_version
 
-        current_by_adviser: dict[str, list] = {}
-        for current in sync_engine.current_relationships("INSTITUTIONAL_HOLDS"):
-            if current.valid_to_date is None:
-                current_by_adviser.setdefault(current.source_entity_id, []).append(current)
+        current_by_adviser = self._index_open_relationship_versions(
+            sync_engine, "INSTITUTIONAL_HOLDS", key_fn=lambda current: current.source_entity_id,
+        )
 
         for cik in changed_ciks:
             adviser_id = adviser_id_by_cik.get(cik)
