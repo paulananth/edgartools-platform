@@ -73,7 +73,7 @@ def _chunks(items: list[Any], size: int) -> Iterable[list[Any]]:
 def _required_ciks(reader: Any) -> list[dict[str, Any]]:
     """Return one row per required CIK: cik, latest qualifying accession_number,
     latest filing_date. See module docstring for the ``required`` definition."""
-    forms_list = ", ".join(f"'{form}'" for form in _PERIODIC_FORMS)
+    placeholders = ", ".join("?" for _ in _PERIODIC_FORMS)
     rows = reader.fetch(
         f"""
         WITH periodic AS (
@@ -82,22 +82,24 @@ def _required_ciks(reader: Any) -> list[dict[str, Any]]:
                        PARTITION BY cik ORDER BY filing_date DESC, accession_number DESC
                    ) AS rn
             FROM sec_company_filing
-            WHERE form IN ({forms_list})
+            WHERE form IN ({placeholders})
         )
         SELECT cik, accession_number, filing_date
         FROM periodic
         WHERE rn = 1
           AND filing_date >= DATEADD(year, -{_REQUIRED_RECENCY_YEARS}, CURRENT_DATE())
           AND cik IN (SELECT DISTINCT cik FROM sec_company_ticker)
-        """
+        """,
+        list(_PERIODIC_FORMS),
     )
-    normalized = []
-    for row in rows:
-        cik = row.get("CIK", row.get("cik"))
-        accession_number = row.get("ACCESSION_NUMBER", row.get("accession_number"))
-        filing_date = row.get("FILING_DATE", row.get("filing_date"))
-        normalized.append({"cik": int(cik), "accession_number": str(accession_number), "filing_date": filing_date})
-    return normalized
+    return [
+        {
+            "cik": int(row["cik"]),
+            "accession_number": str(row["accession_number"]),
+            "filing_date": row["filing_date"],
+        }
+        for row in rows
+    ]
 
 
 def _already_processed_accessions(reader: Any, accession_numbers: list[str]) -> set[str]:
@@ -105,17 +107,18 @@ def _already_processed_accessions(reader: Any, accession_numbers: list[str]) -> 
     for chunk in _chunks(accession_numbers, _CHUNK_SIZE):
         if not chunk:
             continue
-        placeholders = ", ".join(f"'{acc}'" for acc in chunk)
+        placeholders = ", ".join("?" for _ in chunk)
         rows = reader.fetch(
             f"""
             SELECT DISTINCT accession_number
             FROM sec_filing_text
-            WHERE text_version = '{_TEXT_VERSION}'
+            WHERE text_version = ?
               AND accession_number IN ({placeholders})
-            """
+            """,
+            [_TEXT_VERSION, *chunk],
         )
         for row in rows:
-            processed.add(str(row.get("ACCESSION_NUMBER", row.get("accession_number"))))
+            processed.add(str(row["accession_number"]))
     return processed
 
 
@@ -123,19 +126,15 @@ def _processed_ciks_with_owning_cik(reader: Any) -> list[dict[str, Any]]:
     """Every (cik, accession_number) pair with an existing sec_filing_text row,
     joined back to its owning CIK -- used to find cleanup candidates."""
     rows = reader.fetch(
-        f"""
+        """
         SELECT DISTINCT f.cik, sft.accession_number
         FROM sec_filing_text sft
         JOIN sec_company_filing f ON f.accession_number = sft.accession_number
-        WHERE sft.text_version = '{_TEXT_VERSION}'
-        """
+        WHERE sft.text_version = ?
+        """,
+        [_TEXT_VERSION],
     )
-    normalized = []
-    for row in rows:
-        cik = row.get("CIK", row.get("cik"))
-        accession_number = row.get("ACCESSION_NUMBER", row.get("accession_number"))
-        normalized.append({"cik": int(cik), "accession_number": str(accession_number)})
-    return normalized
+    return [{"cik": int(row["cik"]), "accession_number": str(row["accession_number"])} for row in rows]
 
 
 def run_filing_text_sweep(

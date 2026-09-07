@@ -4139,9 +4139,12 @@ if workflow_name == "daily_incremental":
     )
 # release-readiness Ticket 101: keeps sec_filing_text current for genuine
 # periodic-reporting companies -- resolved via /grilling as a background
-# sweep folded into daily_incremental, running right after
-# CaptureAndVerifyNewFilings (the silver-publish step) and before MDM
-# resolution, since text extraction is neither an MDM nor gold concern.
+# sweep folded into daily_incremental, running after the whole
+# CaptureAndVerifyNewFilings/ADV-bulk/FirmRoster chain releases the
+# sec_fetch_active lease (see build_sec_fetch_lease_states below -- that is
+# the actual splice point, not immediately after CaptureAndVerifyNewFilings
+# itself) and before MDM resolution, since text extraction is neither an
+# MDM nor gold concern.
 # Uses wh_large_arn directly (not command_task_profile(), unlike
 # run_wh/gold above) because this command has exactly one call site --
 # there is no second caller this could silently diverge from yet, the
