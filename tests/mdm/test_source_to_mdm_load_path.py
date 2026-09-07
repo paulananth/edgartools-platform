@@ -233,6 +233,18 @@ def _create_silver_fixture(path: str) -> None:
         "VALUES (?, ?, ?, ?, ?)",
         ["0001234567-24-000001", 910001, "4", "2024-01-15", "2024-01-14"],
     )
+    # mdm-company-person-contamination ticket 01: a real company's OWN
+    # filing history always includes at least one non-ownership form (a
+    # 10-K, registration statement, etc.) -- without this row, "Issuer
+    # Corp"'s entire sec_company_filing history was just the single Form 4
+    # above, indistinguishable from an individual reporting owner's own
+    # history and wrongly excluded by run_companies()'s new
+    # exclude_individual_reporting_owners_sql() filter.
+    con.execute(
+        "INSERT INTO sec_company_filing (accession_number, cik, form, filing_date, report_date) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ["0001234567-24-000002", 910001, "10-K", "2024-03-01", "2023-12-31"],
+    )
 
     # ADV domain (adviser)
     con.execute(
