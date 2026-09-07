@@ -103,6 +103,7 @@ def extract_text_for_accession(
     db.upsert_filing_text(row)
     return row
 
+
 _DISPLAY_NONE_RE = re.compile(r"display\s*:\s*none", re.IGNORECASE)
 
 
