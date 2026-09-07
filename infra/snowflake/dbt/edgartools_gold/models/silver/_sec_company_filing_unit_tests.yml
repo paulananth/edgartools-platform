@@ -1,0 +1,152 @@
+version: 2
+
+# duckdb-retirement-cutover Ticket 16 (2026-09-06): proves the model widens
+# uniformly to (accession_number, cik) for every multi-CIK accession -- no
+# issuer-preference winner-picking. See the model's own header comment for
+# why an earlier issuer-preference design was abandoned (disproven live
+# against real ownership-filing accessions).
+unit_tests:
+  - name: sec_company_filing_single_cik_accession_unaffected
+    description: >
+      The common case -- one CIK associated with an accession -- is kept
+      unconditionally, unchanged from before this ticket.
+    model: sec_company_filing
+    given:
+      - input: source('edgartools_silver_landing', 'SEC_COMPANY_FILING')
+        rows:
+          - accession_number: "TEST-SINGLE-0000001"
+            cik: 100001
+            act: "34"
+            file_number: "001-10001"
+            film_number: "26100001"
+            items: "5.02"
+            parse_sequence: 1
+      - input: source('edgartools_silver_landing', 'SILVER_LANDING_RETIREMENT')
+        rows:
+          - target_table: 'no_such_table_never_matches'
+            business_key: 'unused'
+            parse_sequence: 0
+    expect:
+      rows:
+        - accession_number: "TEST-SINGLE-0000001"
+          cik: 100001
+          file_number: "001-10001"
+
+  - name: sec_company_filing_ownership_case_widens_to_both_rows
+    description: >
+      Two CIKs share an accession (an ownership Form 4 pattern): the
+      individual reporting owner's own submissions entry carries a NULL
+      file_number, the issuer's carries a real one. Both rows survive --
+      no attempt is made to guess which CIK is the issuer here; that
+      disambiguation is pushed downstream to MDM's own join sites.
+    model: sec_company_filing
+    given:
+      - input: source('edgartools_silver_landing', 'SEC_COMPANY_FILING')
+        rows:
+          - accession_number: "TEST-OWNERSHIP-0000002"
+            cik: 200002
+            act: null
+            file_number: null
+            film_number: null
+            items: null
+            parse_sequence: 1
+          - accession_number: "TEST-OWNERSHIP-0000002"
+            cik: 200001
+            act: "34"
+            file_number: "001-20001"
+            film_number: "26200001"
+            items: null
+            parse_sequence: 2
+      - input: source('edgartools_silver_landing', 'SILVER_LANDING_RETIREMENT')
+        rows:
+          - target_table: 'no_such_table_never_matches'
+            business_key: 'unused'
+            parse_sequence: 0
+    expect:
+      rows:
+        - accession_number: "TEST-OWNERSHIP-0000002"
+          cik: 200001
+          file_number: "001-20001"
+        - accession_number: "TEST-OWNERSHIP-0000002"
+          cik: 200002
+          file_number: null
+
+  - name: sec_company_filing_coregistrant_case_widens_to_both_rows
+    description: >
+      Two CIKs share an accession and BOTH carry a real, non-null
+      file_number (a genuine co-registrant shelf-debt filing) -- both rows
+      survive, same widening as the ownership case above.
+    model: sec_company_filing
+    given:
+      - input: source('edgartools_silver_landing', 'SEC_COMPANY_FILING')
+        rows:
+          - accession_number: "TEST-COREG-0000003"
+            cik: 300001
+            act: "33"
+            file_number: "333-30001"
+            film_number: "26300001"
+            items: null
+            parse_sequence: 1
+          - accession_number: "TEST-COREG-0000003"
+            cik: 300002
+            act: "33"
+            file_number: "333-30001-01"
+            film_number: "26300002"
+            items: null
+            parse_sequence: 2
+      - input: source('edgartools_silver_landing', 'SILVER_LANDING_RETIREMENT')
+        rows:
+          - target_table: 'no_such_table_never_matches'
+            business_key: 'unused'
+            parse_sequence: 0
+    expect:
+      rows:
+        - accession_number: "TEST-COREG-0000003"
+          cik: 300001
+          file_number: "333-30001"
+        - accession_number: "TEST-COREG-0000003"
+          cik: 300002
+          file_number: "333-30001-01"
+
+  - name: sec_company_filing_mutable_fields_shared_across_widened_rows
+    description: >
+      last_seen's mutable filing-level fields (form, filing_date, etc.) are
+      scoped to accession_number alone and joined back -- both widened rows
+      for one accession see the same, single, most-recent values.
+    model: sec_company_filing
+    given:
+      - input: source('edgartools_silver_landing', 'SEC_COMPANY_FILING')
+        rows:
+          - accession_number: "TEST-MUTABLE-0000004"
+            cik: 400001
+            act: "34"
+            file_number: "001-40001"
+            film_number: "26400001"
+            items: null
+            form: "4"
+            filing_date: "2026-01-01"
+            parse_sequence: 1
+          - accession_number: "TEST-MUTABLE-0000004"
+            cik: 400002
+            act: null
+            file_number: null
+            film_number: null
+            items: null
+            form: "4"
+            filing_date: "2026-01-01"
+            parse_sequence: 2
+      - input: source('edgartools_silver_landing', 'SILVER_LANDING_RETIREMENT')
+        rows:
+          - target_table: 'no_such_table_never_matches'
+            business_key: 'unused'
+            parse_sequence: 0
+    expect:
+      rows:
+        - accession_number: "TEST-MUTABLE-0000004"
+          cik: 400001
+          form: "4"
+          filing_date: "2026-01-01"
+        - accession_number: "TEST-MUTABLE-0000004"
+          cik: 400002
+          form: "4"
+          filing_date: "2026-01-01"

@@ -2,9 +2,9 @@ version: 2
 
 # dbt-gold-silver-rewiring map, Ticket 01 (.scratch/dbt-gold-silver-rewiring/
 # issues/01-establish-snowflake-native-surrogate-keys.md): proves the
-# surrogate_key() macro is deterministic (same accession_number -> same
+# surrogate_key() macro is deterministic (same key inputs -> same
 # filing_key, always) and independent of every other column on the row.
-# Expected filing_key values below are BITAND(HASH(accession_number),
+# Expected filing_key values below are BITAND(HASH(accession_number, cik),
 # 9223372036854775807)::BIGINT, computed live against Snowflake -- not
 # guessed, since Snowflake's HASH() has no reference implementation to
 # compute offline against.
@@ -12,17 +12,32 @@ version: 2
 # Ticket 03 updated given.input to ref('sec_company_filing') (the model's
 # new source) and added filing_date (now required -- date_key derives from
 # it) and fact_key to the expected output: fact_key and filing_key use the
-# identical surrogate_key(['accession_number']) call in the rewired model,
-# so they must come out numerically equal, matching
-# _build_fact_filing_activity's original behavior (both derived from
-# hash(accession_number)).
+# identical surrogate_key(['accession_number', 'cik']) call in the rewired
+# model, so they must come out numerically equal, matching
+# _build_fact_filing_activity's original behavior (both derived from the
+# same hash).
+#
+# duckdb-retirement-cutover Ticket 16 widened the key from
+# accession_number alone to (accession_number, cik): sec_company_filing can
+# now legitimately hold 2 rows for one accession_number (a genuine
+# co-registrant shelf-debt filing, e.g. a bank holding company and its own
+# wholly-owned finance subsidiary jointly registering guaranteed notes) --
+# a key derived from accession_number alone would collide across those two
+# real, distinct rows. This test's fixture was rewritten from "two rows
+# sharing an accession_number get the identical key" (no longer true, and
+# was itself an accidental repro of the exact bug this ticket fixed) to
+# what's actually invariant now: same (accession_number, cik) -> same key
+# regardless of other columns; different cik on the same accession_number
+# -> a genuinely different key.
 unit_tests:
-  - name: filing_activity_filing_key_is_deterministic_per_accession
+  - name: filing_activity_filing_key_is_deterministic_per_accession_and_cik
     description: >
-      Two rows sharing the same accession_number (but differing on every
-      other column) get the identical filing_key and fact_key (the two use
-      the same derivation); a different accession_number gets different
-      keys.
+      Two rows sharing the same (accession_number, cik) but differing on
+      every other column get the identical filing_key and fact_key (the
+      two use the same derivation); a different cik on the same
+      accession_number -- the co-registrant case -- gets a genuinely
+      different key, not the same one; a different accession_number gets a
+      different key too.
     model: filing_activity
     given:
       - input: ref('sec_company_filing')
@@ -32,9 +47,13 @@ unit_tests:
             form: "10-K"
             filing_date: "2026-01-15"
           - accession_number: "0001111111-26-000001"
-            cik: 789019
+            cik: 320193
             form: "10-K/A"
             filing_date: "2026-02-01"
+          - accession_number: "0001111111-26-000001"
+            cik: 789019
+            form: "10-K"
+            filing_date: "2026-01-15"
           - accession_number: "0002222222-26-000002"
             cik: 320193
             form: "8-K"
@@ -42,11 +61,18 @@ unit_tests:
     expect:
       rows:
         - accession_number: "0001111111-26-000001"
-          filing_key: 5518306488236362277
-          fact_key: 5518306488236362277
+          cik: 320193
+          filing_key: 4486425677435242539
+          fact_key: 4486425677435242539
         - accession_number: "0001111111-26-000001"
-          filing_key: 5518306488236362277
-          fact_key: 5518306488236362277
+          cik: 320193
+          filing_key: 4486425677435242539
+          fact_key: 4486425677435242539
+        - accession_number: "0001111111-26-000001"
+          cik: 789019
+          filing_key: 2850991019856959111
+          fact_key: 2850991019856959111
         - accession_number: "0002222222-26-000002"
-          filing_key: 3991365530149477314
-          fact_key: 3991365530149477314
+          cik: 320193
+          filing_key: 4327546746931280671
+          fact_key: 4327546746931280671

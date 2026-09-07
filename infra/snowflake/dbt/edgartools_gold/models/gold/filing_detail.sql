@@ -8,10 +8,15 @@
 -- confirmed live that Snowflake's HASH(NULL) returns a real, nonzero value
 -- (unlike DuckDB's, which the original code relied on propagating to
 -- NULL) -- COALESCE would never have fired.
+--
+-- filing_key widened to hash(accession_number, cik) (duckdb-retirement-
+-- cutover Ticket 16): sec_company_filing can now legitimately hold 2 rows
+-- for one accession_number (a genuine co-registrant shelf-debt filing) --
+-- a hash of accession_number alone would collide across those rows.
 {{ gold_model_config('FILING_DETAIL') }}
 
 select
-  {{ surrogate_key(['accession_number']) }} as filing_key,
+  {{ surrogate_key(['accession_number', 'cik']) }} as filing_key,
   accession_number,
   cik,
   cik as company_key,

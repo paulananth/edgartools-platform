@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Iterable, Mapping
 
+from edgar_warehouse.mdm.sql_fragments import prefer_non_owner_cik_qualify
+
 
 PROXY_FORMS = frozenset({"DEF 14A", "DEF 14A/A", "DEFA14A", "PRE 14A"})
 THIRTEENF_FORMS = frozenset({"13F-HR", "13F-HR/A"})
@@ -1493,18 +1495,34 @@ def insider_inventory(db, ciks: Iterable[int] | None = None,
     where = ""
     params: list[int] = []
     if cik_list:
-        where = f"WHERE f.cik IN ({', '.join('?' * len(cik_list))})"
+        where = f"WHERE issuer_cik IN ({', '.join('?' * len(cik_list))})"
         params = cik_list
+    # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+    # now widens to one row per (accession_number, cik) for a multi-CIK
+    # accession -- without the inner QUALIFY below, a widened accession
+    # would match twice (issuer's cik, and the reporting owner's own cik),
+    # producing a bogus "insider of themselves" observation. The QUALIFY
+    # prefers a candidate whose cik is NOT this row's own owner_cik,
+    # falling back to whatever single match exists when that's the only
+    # candidate.
     rows = db.fetch(
         f"""
-        SELECT o.owner_cik, o.owner_name, f.cik AS issuer_cik,
-               MAX(CASE WHEN o.is_director THEN 1 ELSE 0 END) AS is_director,
-               MAX(CASE WHEN o.is_officer THEN 1 ELSE 0 END) AS is_officer,
-               MAX(CASE WHEN o.is_ten_percent_owner THEN 1 ELSE 0 END) AS is_ten_percent_owner
-        FROM sec_ownership_reporting_owner o
-        JOIN sec_company_filing f ON o.accession_number = f.accession_number
+        SELECT owner_cik, owner_name, issuer_cik,
+               MAX(is_director) AS is_director,
+               MAX(is_officer) AS is_officer,
+               MAX(is_ten_percent_owner) AS is_ten_percent_owner
+        FROM (
+            SELECT o.accession_number, o.owner_index, o.owner_cik, o.owner_name,
+                   CASE WHEN o.is_director THEN 1 ELSE 0 END AS is_director,
+                   CASE WHEN o.is_officer THEN 1 ELSE 0 END AS is_officer,
+                   CASE WHEN o.is_ten_percent_owner THEN 1 ELSE 0 END AS is_ten_percent_owner,
+                   f.cik AS issuer_cik
+            FROM sec_ownership_reporting_owner o
+            JOIN sec_company_filing f ON o.accession_number = f.accession_number
+            {prefer_non_owner_cik_qualify("o.accession_number, o.owner_index")}
+        ) resolved
         {where}
-        GROUP BY o.owner_cik, o.owner_name, f.cik
+        GROUP BY owner_cik, owner_name, issuer_cik
         """,
         params,
     )

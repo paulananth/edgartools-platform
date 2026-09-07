@@ -5,12 +5,45 @@
 
 {{ silver_model_config('SEC_COMPANY_FILING') }}
 
--- First-insert-wins (cik, act, file_number, film_number, items) from the earliest parse;
--- last-write-wins (form, filing_date, report_date, acceptance_datetime, size, is_xbrl, is_inline_xbrl, primary_document, primary_doc_desc, last_sync_run_id, last_synced_at) from the latest parse -- matches
--- silver_store.py's merge_filings two-pass upsert exactly: its UPDATE SET clause covers
--- exactly the last-write-wins columns above (mutable); cik/act/file_number/film_number/items
--- are never in that UPDATE SET (immutable, first-insert-wins).
-with first_seen as (
+-- duckdb-retirement-cutover Ticket 16 (2026-09-06): SEC associates one
+-- accession_number with 2+ CIKs in two real patterns, found live via a
+-- cross-store reconciliation gate that this table's old accession_number-
+-- only collapse could not distinguish:
+--   (a) ordinary Form 3/4/5/144 ownership filings, listed under both the
+--       issuer's own CIK and the individual reporting owner's CIK.
+--       ~70% of the originally-mismatched population, ~2.3% of all rows.
+--   (b) genuine co-registrant shelf-debt filings (e.g. a bank holding
+--       company and its own wholly-owned finance subsidiary jointly
+--       registering guaranteed notes under one accession).
+--       ~27.5% of the mismatched population, ~0.9% of all rows.
+--
+-- An earlier version of this model tried to pick a single "issuer" winner
+-- for pattern (a) using file_number nullness (exactly one associated CIK
+-- non-null => keep that one). Live validation against real accessions
+-- (JPMorgan/co-registrant, Revvity/Michas, Penske/Davis) disproved this:
+-- the file_number-bearing row was the individual reporting owner's in both
+-- tested ownership cases, not the issuer's -- SEC's own per-filer
+-- submissions feed populates file_number inconsistently across a shared
+-- accession's associated CIKs, uncorrelated with which CIK is the issuer.
+-- No reliable per-row signal for "is this the issuer" was found (entity-
+-- name-in-sec_company was tried too: individuals get sec_company rows just
+-- like companies do). Rather than guess, this model now widens
+-- unconditionally for every multi-CIK accession -- both patterns (a) and
+-- (b) alike -- and pushes issuer disambiguation downstream to MDM's own
+-- join sites, which already have a reliable signal available: the CIK
+-- that is NOT the ownership row's own owner_cik. See mdm/pipeline.py etc.
+--
+-- This table's grain is therefore (accession_number, cik) uniformly (not
+-- accession_number alone) -- filing_activity.sql/filing_detail.sql widen
+-- their own surrogate keys to (accession_number, cik) to match, since a
+-- hash of accession_number alone would otherwise collide across a widened
+-- accession's rows.
+--
+-- per_cik: one row per (accession_number, cik) -- mirrors each associated
+-- CIK's own submissions-feed listing of this filing. First-insert-wins
+-- exactly as before (matches silver_store.py's merge_filings two-pass
+-- upsert), just no longer collapsing across CIKs at this step.
+with per_cik as (
     select
     accession_number,
     cik,
@@ -19,7 +52,7 @@ with first_seen as (
     film_number,
     items
     from {{ source('edgartools_silver_landing', 'SEC_COMPANY_FILING') }}
-    qualify row_number() over (partition by accession_number order by parse_sequence asc) = 1
+    qualify row_number() over (partition by accession_number, cik order by parse_sequence asc) = 1
 ),
 last_seen as (
     select
@@ -57,6 +90,6 @@ select
     l.primary_doc_desc,
     l.last_sync_run_id,
     l.last_synced_at
-from first_seen f
+from per_cik f
 join last_seen l
     on f.accession_number = l.accession_number
