@@ -43,6 +43,7 @@ from edgar_warehouse.mdm.resolvers import (
     SecurityResolver,
 )
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
+from edgar_warehouse.mdm.resolvers.security import _ownership_security_source_id
 from edgar_warehouse.mdm.rules import MDMRuleEngine
 from edgar_warehouse.mdm.sql_fragments import (
     exclude_individual_reporting_owners_sql,
@@ -147,6 +148,12 @@ _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE = 1000
 # oversized adviser's batch is bounded by that adviser's own relationship
 # count, not the whole universe's.
 _MANAGES_FUND_CRD_BATCH_SIZE = 1000
+
+# mdm-run-throughput Ticket 03: _prefetch_source_refs' WHERE source_id IN (...)
+# chunk size -- a single unchunked IN() for a full-universe run_companies batch
+# (~73,691 rows observed live) would exceed Postgres's per-query bind-parameter
+# ceiling (the wire protocol's parameter count is a 2-byte field, ~65,535 max).
+_SOURCE_REF_PREFETCH_BATCH_SIZE = 1000
 
 # INSTITUTIONAL_HOLDS priming an adviser at a time within its existing
 # CIK-range batches (mdm-oom-institutional-holds-guard fix) -- the same
@@ -678,6 +685,17 @@ class MDMPipeline:
         tracking_rows = bookkeeping.get_all_company_sync_states()
         tracking_by_cik = {row["cik"]: row for row in tracking_rows}
 
+        # mdm-run-throughput Ticket 03: one bulk mdm_source_ref prefetch for
+        # the whole batch instead of BaseResolver._skip_if_unchanged's default
+        # one-SELECT-per-row -- skipped entirely under reconciliation_pass,
+        # since _skip_if_unchanged is never consulted in that mode anyway.
+        prefetched_source_refs = (
+            None if reconciliation_pass
+            else self._prefetch_source_refs(
+                "edgar_cik", (CompanyResolver._source_id(row) for row in rows)
+            )
+        )
+
         rule_engine = self.engine
         sql_engine = self.session.get_bind()
         silver = self.silver
@@ -712,6 +730,7 @@ class MDMPipeline:
                     engine=rule_engine,
                     silver=silver,
                     run_id=pipeline_run_id,
+                    prefetched_source_refs=prefetched_source_refs,
                 )
                 ticker = ticker_by_cik.get(row["cik"])
                 tracking = tracking_by_cik.get(row["cik"])
@@ -799,6 +818,7 @@ class MDMPipeline:
         domain: str,
         max_workers: int,
         log_interval: int,
+        prefetched_source_refs: Optional[dict[str, tuple[Optional[str], str]]] = None,
     ) -> int:
         """Partition rows into groups by their caller-supplied key; each
         group's rows resolve sequentially on one worker (its own session),
@@ -816,6 +836,13 @@ class MDMPipeline:
         ``self.session`` from a worker thread -- Session objects are not
         thread-safe) and its SQLite StaticPool guard (worker sessions can't
         get genuine connection concurrency there, so cap at 1).
+
+        ``prefetched_source_refs`` (mdm-run-throughput Ticket 03), when
+        given, is threaded onto every worker's ``ResolverContext`` so
+        ``BaseResolver._skip_if_unchanged`` does a dict lookup instead of a
+        fresh Postgres round trip per row -- built once by the caller,
+        before any worker thread starts, from the full row set this call
+        will process.
         """
         groups: dict[Any, list[dict]] = defaultdict(list)
         for key, row in keyed_rows:
@@ -842,6 +869,7 @@ class MDMPipeline:
                     engine=rule_engine,
                     silver=silver,
                     run_id=pipeline_run_id,
+                    prefetched_source_refs=prefetched_source_refs,
                 )
                 for row in group_rows:
                     process_row_fn(worker_ctx, row)
@@ -1009,12 +1037,23 @@ class MDMPipeline:
                 reconciliation_pass=reconciliation_pass,
             )
 
+        # mdm-run-throughput Ticket 03: bulk mdm_source_ref prefetch for the
+        # whole batch instead of one SELECT per row (see run_companies' own
+        # comment on this same fix for the full rationale).
+        prefetched_source_refs = (
+            None if reconciliation_pass
+            else self._prefetch_source_refs(
+                "ownership_filing", (SecurityResolver._source_id(row) for row in rows)
+            )
+        )
+
         return self._run_grouped_concurrent(
             keyed_rows,
             _process,
             domain="security",
             max_workers=_SECURITY_RESOLVE_MAX_WORKERS,
             log_interval=_progress_log_interval(len(rows)),
+            prefetched_source_refs=prefetched_source_refs,
         )
 
     def run_persons(
@@ -1057,7 +1096,6 @@ class MDMPipeline:
         CIK-scoped batch has fully committed, so the full-table scan sees a
         stable, complete snapshot instead of racing in-flight writes.
         """
-        ctx = self._ctx()
         resolver = PersonResolver()
         ciks = self._normalize_cik_list(issuer_ciks)
         # mdm-ownership-resolver-filing-join-gap ticket 01: LEFT JOIN, not INNER --
@@ -1107,6 +1145,19 @@ class MDMPipeline:
 
         log_interval = _progress_log_interval(len(rows))
 
+        # mdm-run-throughput Ticket 03: bulk mdm_source_ref prefetch covering
+        # every eligible row (both the grouped-concurrent cik_rows path and
+        # the sequential unscoped_rows loop below) -- one query for the
+        # whole batch instead of one SELECT per row (see run_companies' own
+        # comment on this same fix for the full rationale).
+        prefetched_source_refs = (
+            None if reconciliation_pass
+            else self._prefetch_source_refs(
+                "ownership_filing",
+                (PersonResolver._source_id(row) for row in eligible_rows),
+            )
+        )
+
         def _process(worker_ctx: ResolverContext, row: dict) -> None:
             resolver.resolve_one(worker_ctx, "ownership_filing", row,
                                   issuer_cik=row.get("issuer_cik"),
@@ -1119,8 +1170,16 @@ class MDMPipeline:
             domain="person",
             max_workers=_PERSON_RESOLVE_MAX_WORKERS,
             log_interval=log_interval,
+            prefetched_source_refs=prefetched_source_refs,
         )
 
+        ctx = ResolverContext(
+            session=self.session,
+            engine=self.engine,
+            silver=self.silver,
+            run_id=self.run_id,
+            prefetched_source_refs=prefetched_source_refs,
+        )
         started_at = time.monotonic()
         for row in unscoped_rows:
             resolver.resolve_one(ctx, "ownership_filing", row,
@@ -2769,6 +2828,41 @@ class MDMPipeline:
         ).all()
         return {int(cik): entity_id for cik, entity_id in rows}
 
+    def _prefetch_source_refs(
+        self, source_system: str, source_ids: Iterable[str]
+    ) -> dict[str, tuple[Optional[str], str]]:
+        """Bulk mdm_source_ref prefetch for BaseResolver._skip_if_unchanged
+        (mdm-run-throughput Ticket 03) -- one query for the whole batch
+        instead of that method's default one-SELECT-per-row. Returns
+        {source_id: (source_content_hash, entity_id)}, primitive values
+        only (never ORM instances bound to this main-thread session), so
+        the result is safe to hand to every worker's ResolverContext and
+        read concurrently. Callers build this once, before dispatching any
+        worker thread, using each resolver's own ``_source_id`` static
+        method so the key derivation can never drift from what
+        ``resolve_one`` computes for the same row.
+        """
+        from edgar_warehouse.mdm.database import MdmSourceRef
+        ids = list({str(sid) for sid in source_ids})
+        if not ids:
+            return {}
+        prefetched: dict[str, tuple[Optional[str], str]] = {}
+        for start in range(0, len(ids), _SOURCE_REF_PREFETCH_BATCH_SIZE):
+            batch_ids = ids[start:start + _SOURCE_REF_PREFETCH_BATCH_SIZE]
+            rows = self.session.execute(
+                select(
+                    MdmSourceRef.source_id,
+                    MdmSourceRef.source_content_hash,
+                    MdmSourceRef.entity_id,
+                ).where(
+                    MdmSourceRef.source_system == source_system,
+                    MdmSourceRef.source_id.in_(batch_ids),
+                )
+            ).all()
+            for row in rows:
+                prefetched[row.source_id] = (row.source_content_hash, row.entity_id)
+        return prefetched
+
     def _person_entity_id(self, owner_cik, owner_name) -> Optional[str]:
         from edgar_warehouse.mdm.database import MdmPerson
         from sqlalchemy import select
@@ -4134,15 +4228,6 @@ class MDMPipeline:
         if hasattr(value, "__float__") and value.__class__.__module__ == "decimal":
             return float(value)
         return value
-
-
-def _ownership_security_source_id(txn_row: dict) -> str:
-    accession = txn_row.get("accession_number")
-    owner_index = txn_row.get("owner_index")
-    txn_index = txn_row.get("txn_index")
-    if txn_row.get("is_derivative"):
-        return f"{accession}:derivative:{owner_index}:{txn_index}"
-    return f"{accession}:{owner_index}:{txn_index}"
 
 
 def verify_insider_coverage(pipeline: "MDMPipeline", ciks=None) -> dict:

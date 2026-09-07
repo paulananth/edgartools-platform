@@ -49,6 +49,16 @@ class ResolverContext:
     # One-time warning markers, keyed by an arbitrary id (e.g. "company.parent_cik_source"),
     # so resolvers can flag a structural data gap once per run instead of once per row.
     warned: set = field(default_factory=set)
+    # mdm-run-throughput Ticket 03: a single-batch, main-thread-built prefetch
+    # of mdm_source_ref rows for _skip_if_unchanged, keyed by source_id ->
+    # (source_content_hash, entity_id). Holds only primitive values (never
+    # ORM instances bound to another session), so it's safe to build once
+    # per resolver batch and share read-only across every worker session
+    # constructed for that batch. None (the default) preserves the original
+    # one-SELECT-per-row fallback in _skip_if_unchanged -- callers that don't
+    # build one (tests, any future resolver that doesn't opt in) see no
+    # behavior change.
+    prefetched_source_refs: Optional[dict[str, tuple[Optional[str], str]]] = None
 
 
 @dataclass
@@ -117,7 +127,22 @@ class BaseResolver:
         never matches a real hash -- callers opt in per source_system by
         computing and passing a hash; nothing changes for callers that
         don't.
+
+        mdm-run-throughput Ticket 03: when ``ctx.prefetched_source_refs`` is
+        populated, this is a dict lookup instead of a fresh Postgres round
+        trip -- the caller (``run_companies``/``run_persons``/
+        ``run_securities``) built it once for the whole batch before
+        dispatching any worker threads. Falls back to the original
+        per-row query when unset, so nothing changes for a caller that
+        hasn't opted in.
         """
+        if ctx.prefetched_source_refs is not None:
+            entry = ctx.prefetched_source_refs.get(str(source_id))
+            if entry is None:
+                return None
+            stored_hash, entity_id = entry
+            return entity_id if stored_hash == content_hash_value else None
+
         stmt = select(MdmSourceRef).where(
             MdmSourceRef.source_system == source_system,
             MdmSourceRef.source_id == str(source_id),
