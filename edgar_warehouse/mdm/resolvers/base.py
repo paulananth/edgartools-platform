@@ -50,15 +50,20 @@ class ResolverContext:
     # so resolvers can flag a structural data gap once per run instead of once per row.
     warned: set = field(default_factory=set)
     # mdm-run-throughput Ticket 03: a single-batch, main-thread-built prefetch
-    # of mdm_source_ref rows for _skip_if_unchanged, keyed by source_id ->
-    # (source_content_hash, entity_id). Holds only primitive values (never
-    # ORM instances bound to another session), so it's safe to build once
-    # per resolver batch and share read-only across every worker session
-    # constructed for that batch. None (the default) preserves the original
-    # one-SELECT-per-row fallback in _skip_if_unchanged -- callers that don't
-    # build one (tests, any future resolver that doesn't opt in) see no
-    # behavior change.
-    prefetched_source_refs: Optional[dict[str, tuple[Optional[str], str]]] = None
+    # of mdm_source_ref rows for _skip_if_unchanged, keyed by
+    # (source_system, source_id) -> (source_content_hash, entity_id). Keyed
+    # on the pair, not source_id alone, even though every current caller
+    # only ever builds one dict per single source_system per batch -- a
+    # source_id-only key would silently ignore source_system on this fast
+    # path (a real, flagged-in-review latent trap: nothing today shares one
+    # dict across mixed source_systems, but nothing enforced it either).
+    # Holds only primitive values (never ORM instances bound to another
+    # session), so it's safe to build once per resolver batch and share
+    # read-only across every worker session constructed for that batch.
+    # None (the default) preserves the original one-SELECT-per-row fallback
+    # in _skip_if_unchanged -- callers that don't build one (tests, any
+    # future resolver that doesn't opt in) see no behavior change.
+    prefetched_source_refs: Optional[dict[tuple[str, str], tuple[Optional[str], str]]] = None
 
 
 @dataclass
@@ -137,7 +142,7 @@ class BaseResolver:
         hasn't opted in.
         """
         if ctx.prefetched_source_refs is not None:
-            entry = ctx.prefetched_source_refs.get(str(source_id))
+            entry = ctx.prefetched_source_refs.get((source_system, str(source_id)))
             if entry is None:
                 return None
             stored_hash, entity_id = entry

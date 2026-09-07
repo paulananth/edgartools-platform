@@ -252,12 +252,17 @@ class MDMPipeline:
         self.run_id = normalize_or_create_run_id(self.run_id)[0]
         self.engine = MDMRuleEngine.load(self.session)
 
-    def _ctx(self) -> ResolverContext:
+    def _ctx(
+        self,
+        *,
+        prefetched_source_refs: Optional[dict[tuple[str, str], tuple[Optional[str], str]]] = None,
+    ) -> ResolverContext:
         return ResolverContext(
             session=self.session,
             engine=self.engine,
             silver=self.silver,
             run_id=self.run_id,
+            prefetched_source_refs=prefetched_source_refs,
         )
 
     @staticmethod
@@ -818,7 +823,7 @@ class MDMPipeline:
         domain: str,
         max_workers: int,
         log_interval: int,
-        prefetched_source_refs: Optional[dict[str, tuple[Optional[str], str]]] = None,
+        prefetched_source_refs: Optional[dict[tuple[str, str], tuple[Optional[str], str]]] = None,
     ) -> int:
         """Partition rows into groups by their caller-supplied key; each
         group's rows resolve sequentially on one worker (its own session),
@@ -1173,13 +1178,7 @@ class MDMPipeline:
             prefetched_source_refs=prefetched_source_refs,
         )
 
-        ctx = ResolverContext(
-            session=self.session,
-            engine=self.engine,
-            silver=self.silver,
-            run_id=self.run_id,
-            prefetched_source_refs=prefetched_source_refs,
-        )
+        ctx = self._ctx(prefetched_source_refs=prefetched_source_refs)
         started_at = time.monotonic()
         for row in unscoped_rows:
             resolver.resolve_one(ctx, "ownership_filing", row,
@@ -2830,15 +2829,20 @@ class MDMPipeline:
 
     def _prefetch_source_refs(
         self, source_system: str, source_ids: Iterable[str]
-    ) -> dict[str, tuple[Optional[str], str]]:
+    ) -> dict[tuple[str, str], tuple[Optional[str], str]]:
         """Bulk mdm_source_ref prefetch for BaseResolver._skip_if_unchanged
         (mdm-run-throughput Ticket 03) -- one query for the whole batch
         instead of that method's default one-SELECT-per-row. Returns
-        {source_id: (source_content_hash, entity_id)}, primitive values
-        only (never ORM instances bound to this main-thread session), so
-        the result is safe to hand to every worker's ResolverContext and
-        read concurrently. Callers build this once, before dispatching any
-        worker thread, using each resolver's own ``_source_id`` static
+        {(source_system, source_id): (source_content_hash, entity_id)},
+        primitive values only (never ORM instances bound to this
+        main-thread session), so the result is safe to hand to every
+        worker's ResolverContext and read concurrently. Keyed on the pair,
+        not source_id alone -- _skip_if_unchanged's fast path has no other
+        way to honor a source_system it's still passed, and every current
+        caller only ever prefetches one source_system per call anyway, so
+        this costs nothing today and closes a latent trap for a future
+        caller that doesn't. Callers build this once, before dispatching
+        any worker thread, using each resolver's own ``_source_id`` static
         method so the key derivation can never drift from what
         ``resolve_one`` computes for the same row.
         """
@@ -2846,7 +2850,7 @@ class MDMPipeline:
         ids = list({str(sid) for sid in source_ids})
         if not ids:
             return {}
-        prefetched: dict[str, tuple[Optional[str], str]] = {}
+        prefetched: dict[tuple[str, str], tuple[Optional[str], str]] = {}
         for start in range(0, len(ids), _SOURCE_REF_PREFETCH_BATCH_SIZE):
             batch_ids = ids[start:start + _SOURCE_REF_PREFETCH_BATCH_SIZE]
             rows = self.session.execute(
@@ -2860,7 +2864,7 @@ class MDMPipeline:
                 )
             ).all()
             for row in rows:
-                prefetched[row.source_id] = (row.source_content_hash, row.entity_id)
+                prefetched[(source_system, row.source_id)] = (row.source_content_hash, row.entity_id)
         return prefetched
 
     def _person_entity_id(self, owner_cik, owner_name) -> Optional[str]:

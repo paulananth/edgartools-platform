@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (2026-09-07)
 
 **Spawned by:** live observation during the mdm-relationship-incremental-filters
 Ticket 04 post-deploy verification run (`mdm-mastering-postwatermark-verify-1788817350`,
@@ -83,5 +83,59 @@ by `(operation, tables.0)`:
   concurrency, or does it mostly reduce Postgres-side connection/round-trip load
   (a real but different cost — worth knowing before committing to the batching design).
 
-Not yet implemented, not yet designed in detail — this ticket is the open question,
-not a locked decision.
+## Answer
+
+Implemented on `claude/mdm-skip-if-unchanged-batch` (commit `37c44e1d`).
+
+**Batching key (question 1):** each resolver (`CompanyResolver`/`PersonResolver`/
+`SecurityResolver`) got a `_source_id` static method, extracted from what was
+previously an inline expression inside `resolve_one` -- the exact same expression,
+just named and callable from outside the method. `MDMPipeline._prefetch_source_refs`
+calls each resolver's own `_source_id` over the batch's rows before dispatching any
+worker thread, so the prefetch's keys can never silently drift from what `resolve_one`
+computes for the same row (a real risk flagged by `/gof-refactor-reviewer` before
+writing any code — see the commit message). Chunked at 1000 ids per `IN()` clause
+(`_SOURCE_REF_PREFETCH_BATCH_SIZE`) — a single unchunked query for `run_companies`'
+observed ~73,691-row full-universe batch would exceed Postgres's per-query
+bind-parameter ceiling.
+
+**Concurrency interaction (question 2):** verified, not assumed, per the ticket's own
+ask. The prefetch dict holds only primitive values (`(source_content_hash, entity_id)`
+tuples, never `MdmSourceRef` ORM instances bound to the main-thread session it was
+built on), built once before any worker thread starts, then threaded read-only into
+every worker's own `ResolverContext` (`_resolve_row`/`_run_grouped_concurrent`'s
+`_process_group`) — no worker ever mutates it or touches `self.session` for it.
+Bundled onto `ResolverContext` itself (an optional `prefetched_source_refs` field)
+rather than threaded as a new parameter through the three `resolve_one` signatures —
+`/gof-refactor-reviewer`'s recommendation, since `ResolverContext` already exists
+specifically to carry this exact shape of worker-scoped, read-only, built-once state.
+Keyed on `(source_system, source_id)`, not `source_id` alone — the Spec review caught
+that a source_id-only key would let `_skip_if_unchanged`'s fast path silently ignore
+the `source_system` parameter it still accepts; every current caller only ever
+prefetches one source_system per batch, so this was not an active bug, but nothing
+enforced it either, and the pair-key closes the latent trap outright.
+
+**Whether the win is worth it (question 3) — NOT independently measured, and this is
+a real, acknowledged gap, not a silent skip.** This ticket's own text asked for real
+wall-clock numbers before committing to the batching design, matching this map's
+standing "real measurements, not estimates" preference. What shipped instead is
+structural: 17 tests in `tests/mdm/test_skip_if_unchanged_bulk_prefetch.py`, including
+round-trip-*count* regression guards proving `run_companies`/`run_persons`/
+`run_securities`' `mdm_source_ref` SELECT count stays flat as row count grows (3 vs.
+25 companies, 2 vs. 20 owners, 2 vs. 20 securities) instead of scaling with N. That
+proves the round-trip *count* reduction is real and permanent; it does not prove a
+materially faster wall-clock `mdm mastering` run at 16-way concurrency in live prod,
+which is what the question actually asked. Getting that number requires a live
+before/after comparison against real production Postgres (the same ~68ms
+cross-region round-trip this map's own root-cause note already measured) — a fresh
+deploy plus a full-universe `mdm mastering` run, which this session did not do.
+**Follow-up needed:** capture a live wall-clock company/person/security-resolution
+duration on the next prod deploy that includes this fix, and compare against the
+2026-09-07 pre-fix baseline already on record (company resolution: 37.7 min for
+73,691 rows, then 29.5 min on a rerun with more cached state) to confirm the
+round-trip-count win actually translates into materially faster real-world runs, not
+just fewer Postgres connections held open.
+
+Tests: `tests/mdm/test_skip_if_unchanged_bulk_prefetch.py` (17 cases). Full `tests/mdm/`
+suite (664+ tests) and full repo suite green, no behavior change for any caller that
+doesn't opt in.

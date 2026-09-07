@@ -97,8 +97,8 @@ class TestPrefetchSourceRefs:
 
         result = pipeline._prefetch_source_refs("edgar_cik", ["123", "999"])
 
-        assert result == {"123": ("abc123", entity_id.entity_id)}
-        assert "999" not in result
+        assert result == {("edgar_cik", "123"): ("abc123", entity_id.entity_id)}
+        assert ("edgar_cik", "999") not in result
 
     def test_filters_by_source_system(self) -> None:
         """A source_id shared across two source_systems must not leak the
@@ -144,9 +144,9 @@ class TestPrefetchSourceRefs:
             session, lambda: pipeline._prefetch_source_refs("edgar_cik", source_ids)
         )
 
-        assert set(result.keys()) == set(source_ids)
+        assert set(result.keys()) == {("edgar_cik", sid) for sid in source_ids}
         for sid in source_ids:
-            assert result[sid][0] == f"hash-{sid}"
+            assert result[("edgar_cik", sid)][0] == f"hash-{sid}"
         # 5 ids at chunk size 2 -> 3 chunks (2, 2, 1), not 1 and not 5.
         assert len(statements) == 3, statements
 
@@ -158,7 +158,7 @@ class TestSkipIfUnchangedUsesPrefetch:
             session=session,
             engine=MDMRuleEngine(session),
             silver=None,
-            prefetched_source_refs={"123": ("matching-hash", "entity-abc")},
+            prefetched_source_refs={("edgar_cik", "123"): ("matching-hash", "entity-abc")},
         )
         resolver = CompanyResolver()
 
@@ -177,7 +177,7 @@ class TestSkipIfUnchangedUsesPrefetch:
             session=session,
             engine=MDMRuleEngine(session),
             silver=None,
-            prefetched_source_refs={"123": ("stored-hash", "entity-abc")},
+            prefetched_source_refs={("edgar_cik", "123"): ("stored-hash", "entity-abc")},
         )
         resolver = CompanyResolver()
 
@@ -199,6 +199,23 @@ class TestSkipIfUnchangedUsesPrefetch:
         resolver = CompanyResolver()
 
         result = resolver._skip_if_unchanged(ctx, "edgar_cik", "not-in-the-dict", "any-hash")
+
+        assert result is None
+
+    def test_same_source_id_under_a_different_source_system_does_not_cross_match(self) -> None:
+        """The prefetch key is (source_system, source_id), not source_id
+        alone -- a dict entry for one source_system must never satisfy a
+        lookup for the same source_id under a different source_system."""
+        session = _seeded_sqlite_session(static_pool=True)
+        ctx = ResolverContext(
+            session=session,
+            engine=MDMRuleEngine(session),
+            silver=None,
+            prefetched_source_refs={("ownership_filing", "123"): ("matching-hash", "entity-abc")},
+        )
+        resolver = CompanyResolver()
+
+        result = resolver._skip_if_unchanged(ctx, "edgar_cik", "123", "matching-hash")
 
         assert result is None
 
