@@ -676,6 +676,36 @@ class MdmPipelineLease(Base):
     )
 
 
+class MdmRelationshipDerivationCheckpoint(Base):
+    """High-water-mark checkpoint for MDMPipeline.derive_relationships()'s
+    per-type incremental source filter (mdm-relationship-incremental-filters
+    wayfinder map, Ticket 04).
+
+    One row per relationship type, keyed by ``checkpoint_key`` -- normally
+    just the bare ``rel_type_name``, except for a type with more than one
+    independent source table (``EMPLOYED_BY``'s ``sec_executive_record`` /
+    ``sec_employment_event`` pair today), which needs one row per sub-source
+    since a single watermark value can't represent two independently-
+    advancing tables. ``watermark_value`` is TEXT for both watermark kinds
+    used today (an accession-number string and an ISO8601 timestamp) since
+    both compare correctly with a plain lexicographic ``>`` -- avoids a
+    polymorphic-value-type table for what is otherwise a single comparable
+    scalar per row.
+
+    No row for a given key means "never checkpointed" -- every reader must
+    treat that as "scan everything," not "scan nothing" (see pipeline.py's
+    ``_relationship_watermark``).
+    """
+
+    __tablename__ = "mdm_relationship_derivation_checkpoint"
+
+    checkpoint_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    rel_type_name: Mapped[str] = mapped_column(Text, nullable=False)
+    watermark_column: Mapped[str] = mapped_column(Text, nullable=False)
+    watermark_value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[object] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+
 # ---------------------------------------------------------------------------
 # GRAPH REGISTRY TABLES
 # ---------------------------------------------------------------------------

@@ -33,6 +33,10 @@ from edgar_warehouse.mdm.database import get_session
 from edgar_warehouse.mdm.graph import GraphSyncEngine
 from edgar_warehouse.mdm.match import MatchAction
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
+from edgar_warehouse.mdm.relationship_checkpoint import (
+    advance_relationship_watermark,
+    get_relationship_watermark,
+)
 from edgar_warehouse.mdm.resolvers import (
     CompanyResolver,
     PersonResolver,
@@ -262,6 +266,183 @@ class MDMPipeline:
         """
         return bounded_source_sql(sql, remaining, existing)
 
+    def _relationship_watermark(
+        self, checkpoint_key: str, *, reconciliation_pass: bool
+    ) -> Optional[str]:
+        """This key's current derivation checkpoint, or None to scan everything.
+
+        Always None during a reconciliation pass (change-propagation Ticket
+        50's monthly full-universe backstop, ``MDMPipeline.run_all(...,
+        reconciliation_pass=True)``) -- that pass exists specifically to
+        retry rows an earlier incremental run skipped for a transient reason
+        (its person/company entity not yet resolved that run), and a
+        watermark filter would silently defeat it by re-applying the exact
+        same "new since last time" boundary the ordinary path already used.
+        """
+        if reconciliation_pass:
+            return None
+        return get_relationship_watermark(self.session, checkpoint_key)
+
+    @staticmethod
+    def _track_watermark(current: Optional[str], candidate: Any) -> Optional[str]:
+        """Fold one more processed row's watermark column value into the
+        running high-water mark for this batch -- plain lexicographic max,
+        valid for both watermark kinds in use (fixed-width accession-number
+        strings and ISO8601 timestamps both sort correctly this way, per
+        this platform's established SEC-data-immutability invariant).
+        ``candidate`` may be a real ``datetime`` (an ``ingested_at`` column
+        read back from silver) -- normalized via ``isoformat()`` rather than
+        plain ``str()``, whose space-separated default format would not
+        lexicographically compare correctly against a stored ISO8601 value.
+        """
+        if candidate is None:
+            return current
+        if hasattr(candidate, "isoformat"):
+            candidate_str = candidate.isoformat()
+        else:
+            candidate_str = candidate if isinstance(candidate, str) else str(candidate)
+        if current is None or candidate_str > current:
+            return candidate_str
+        return current
+
+    @staticmethod
+    def _watermark_bind_value(watermark_column: str, watermark: Optional[str]) -> Any:
+        """Convert a stored TEXT watermark back to the bind-param type its
+        source column actually needs. An ISO8601 string round-trips fine as
+        a bind param against an ``accession_number`` TEXT column, but a
+        TIMESTAMPTZ column (``ingested_at``) needs a real ``datetime``
+        object for correct parameter binding across this platform's two
+        possible silver-read backends (DuckDB, Snowflake) -- passing the
+        stored string as-is risks each backend's driver interpreting it
+        differently (or rejecting it outright) in a ``>`` comparison
+        against a genuinely-typed timestamp column.
+        """
+        if watermark is None:
+            return None
+        if watermark_column == "ingested_at":
+            return datetime.fromisoformat(watermark)
+        return watermark
+
+    def _advance_relationship_watermark(
+        self,
+        checkpoint_key: str,
+        *,
+        rel_type_name: str,
+        watermark_column: str,
+        watermark_value: Optional[str],
+    ) -> None:
+        """Advance this key's checkpoint to ``watermark_value``, a no-op if
+        None (nothing new was processed). Only ever called with the
+        high-water mark of rows actually iterated this call -- never the
+        max of a fetched window a ``remaining`` budget truncated short of
+        iterating, so a bounded (``target_per_type``-driven) call can never
+        skip the unprocessed remainder of its own fetch on the next run."""
+        advance_relationship_watermark(
+            self.session,
+            checkpoint_key,
+            rel_type_name=rel_type_name,
+            watermark_column=watermark_column,
+            watermark_value=watermark_value,
+        )
+
+    @staticmethod
+    def _current_open_versions_by_pair(
+        sync_engine: GraphSyncEngine, rel_type_name: str
+    ) -> dict[tuple[str, str], list]:
+        """Index this type's currently-primed active versions by
+        (source_entity_id, target_entity_id), keeping only genuinely still-
+        open ones (``valid_to_date is None``).
+
+        ``current_relationships()`` itself does not filter on
+        ``valid_to_date`` (it means "not deleted/superseded/quarantined",
+        not "not yet closed") -- every caller that needs "still open" has
+        to filter for it explicitly, the same way
+        ``_derive_manages_fund_batch`` already does inline. Call only after
+        priming (mdm-relationship-incremental-filters Ticket 04's
+        deactivation half), so this reflects exactly the batch's own
+        already-loaded, correctly-scoped cache.
+        """
+        by_pair: dict[tuple[str, str], list] = {}
+        for current in sync_engine.current_relationships(rel_type_name):
+            if current.valid_to_date is None:
+                by_pair.setdefault(
+                    (current.source_entity_id, current.target_entity_id), []
+                ).append(current)
+        return by_pair
+
+    def _deactivate_if_zero_shares(
+        self,
+        rel_type_name: str,
+        current_by_pair: dict[tuple[str, str], list],
+        source_entity_id: str,
+        target_entity_id: str,
+        shares_owned_after: Any,
+        effective_from: Any,
+    ) -> bool:
+        """HOLDS/COMPANY_HOLDS deactivation (mdm-relationship-incremental-
+        filters Ticket 04, same-day grilling exchange): a transaction row
+        reporting zero shares means the position was fully disposed, not
+        merely reduced -- close whatever open version currently represents
+        it instead of inserting a zero-value "holding" version.
+
+        Guards ``shares_owned_after is None`` explicitly -- the column is
+        nullable and a NULL (unknown) share count must never be treated as
+        a real zero. Returns whether this row was handled as a
+        deactivation (the caller must ``continue`` without also calling
+        ``ensure_relationship`` for it) -- False for every other row,
+        including a genuine zero with nothing currently open to close (a
+        no-op close, not an error: the position may have already been
+        closed by an earlier row, or never opened at all in this MDM
+        instance).
+
+        A later re-acquisition (a subsequent row for the same pair with
+        non-zero shares, possibly still within this same batch) must open a
+        fresh version rather than being silently absorbed or quarantined
+        against the now-closed one -- ``current_by_pair`` is therefore
+        mutated here (the closed pair's entry is cleared) and by the
+        caller after each successful ``ensure_relationship`` insert (see
+        ``_derive_holds``/``_derive_company_holds``), instead of read once
+        from a snapshot taken before the batch started. Confirmed live via
+        this fix's own regression test: without that mutation,
+        ``ensure_relationship``'s own internal current-version lookup
+        (which *does* stay live across the whole batch, unlike a
+        snapshot) still sees the closed row as open and quarantines the
+        reacquisition as a false conflict.
+        """
+        if shares_owned_after is None or float(shares_owned_after) != 0:
+            return False
+        from edgar_warehouse.mdm.graph import close_relationship_version
+
+        key = (source_entity_id, target_entity_id)
+        for current in current_by_pair.get(key, []):
+            close_relationship_version(self.session, current.instance_id, effective_from)
+            print(json.dumps({
+                "event": "mdm_relationship_deactivated",
+                "rel_type": rel_type_name,
+                "reason": "zero_shares",
+                "source_entity_id": source_entity_id,
+                "target_entity_id": target_entity_id,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }), file=sys.stderr, flush=True)
+        current_by_pair[key] = []
+        return True
+
+    @staticmethod
+    def _track_open_version(
+        current_by_pair: dict[tuple[str, str], list],
+        source_entity_id: str,
+        target_entity_id: str,
+        relationship: Any,
+        created: bool,
+    ) -> None:
+        """Keep ``current_by_pair`` live across a batch: record a freshly
+        created, genuinely-open version so a later row in the same batch
+        (e.g. a disposal) finds it without re-scanning the whole type."""
+        if created and relationship.valid_to_date is None and not relationship.quarantined:
+            current_by_pair.setdefault(
+                (source_entity_id, target_entity_id), []
+            ).append(relationship)
+
     def _fetch_optional_relationship_rows(
         self,
         sql: str,
@@ -270,9 +451,12 @@ class MDMPipeline:
         rel_type_name: str,
         source_table: str | tuple[str, ...],
         existing: int = 0,
+        params: Optional[list[Any]] = None,
     ) -> list[dict]:
         try:
-            return self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))
+            return self.silver.fetch(
+                self._bounded_relationship_sql(sql, remaining, existing), params
+            )
         except Exception as exc:
             missing_table = self._find_missing_source_table(exc, source_table)
             if missing_table is None:
@@ -949,6 +1133,7 @@ class MDMPipeline:
         target_per_type: Optional[int] = None,
         relationship_types: Optional[Iterable[str]] = None,
         issuer_ciks: Optional[Iterable[int]] = None,
+        reconciliation_pass: bool = False,
     ) -> dict[str, dict[str, int | None]]:
         """Create relationship instances until each requested type reaches target_per_type.
 
@@ -959,6 +1144,17 @@ class MDMPipeline:
         ``issuer_ciks`` scopes ownership-sourced types (IS_INSIDER, HOLDS,
         COMPANY_HOLDS) to Form 3/4/5 rows for those issuers only — Ticket 21
         insider smoke does not re-walk the full universe.
+
+        ``reconciliation_pass`` (mirrors ``run_all``'s own flag, change-
+        propagation Ticket 50's MDM Reconciliation Backstop): forces every
+        watermarked ``_derive_*`` method (mdm-relationship-incremental-
+        filters Ticket 04) to ignore its checkpoint and scan its full source
+        again, exactly as every type did before that ticket. Without this,
+        the monthly full-universe backstop would silently inherit the same
+        "only rows new since last time" boundary the ordinary path uses, and
+        could never retry a row an earlier run skipped for a transient
+        reason (its person/company entity not yet resolved that run) --
+        defeating the backstop's whole purpose.
 
         Each relationship type resolves on its own worker thread and its own
         SQLAlchemy session (bounded by ``_RELATIONSHIP_DERIVE_MAX_WORKERS``),
@@ -1017,7 +1213,8 @@ class MDMPipeline:
                     worker_session, run_id=pipeline_run_id
                 )
                 result = worker_pipeline._derive_relationship_type(
-                    worker_sync_engine, rel_type_name, remaining, issuer_ciks=ciks
+                    worker_sync_engine, rel_type_name, remaining, issuer_ciks=ciks,
+                    reconciliation_pass=reconciliation_pass,
                 )
                 worker_session.commit()
                 return result
@@ -1084,6 +1281,7 @@ class MDMPipeline:
         remaining: Optional[int],
         *,
         issuer_ciks: Optional[list[int]] = None,
+        reconciliation_pass: bool = False,
     ) -> tuple[int, int, int, int, int]:
         # Prime + defer-flush once per type here, for every type uniformly,
         # rather than leaving each _derive_* method to opt in individually
@@ -1105,11 +1303,18 @@ class MDMPipeline:
             sync_engine.prime_relationship_type(rel_type_name, defer_flush=True)
         try:
             if rel_type_name == "IS_INSIDER":
-                return self._derive_is_insider(sync_engine, remaining, issuer_ciks=issuer_ciks)
+                return self._derive_is_insider(
+                    sync_engine, remaining, issuer_ciks=issuer_ciks,
+                    reconciliation_pass=reconciliation_pass,
+                )
             if rel_type_name == "HOLDS":
-                return self._derive_holds(sync_engine, remaining)
+                return self._derive_holds(
+                    sync_engine, remaining, reconciliation_pass=reconciliation_pass
+                )
             if rel_type_name == "COMPANY_HOLDS":
-                return self._derive_company_holds(sync_engine, remaining)
+                return self._derive_company_holds(
+                    sync_engine, remaining, reconciliation_pass=reconciliation_pass
+                )
             if rel_type_name == "ISSUED_BY":
                 return self._derive_issued_by(sync_engine, remaining)
             if rel_type_name == "IS_ENTITY_OF":
@@ -1117,15 +1322,21 @@ class MDMPipeline:
             if rel_type_name == "HAS_PARENT_COMPANY":
                 return self._derive_has_parent_company(sync_engine, remaining)
             if rel_type_name == "MANAGES_FUND":
-                return self._derive_manages_fund(sync_engine, remaining)
+                return self._derive_manages_fund(
+                    sync_engine, remaining, reconciliation_pass=reconciliation_pass
+                )
             if rel_type_name == "IS_PERSON_OF":
                 return self._derive_is_person_of(sync_engine, remaining)
             if rel_type_name == "EMPLOYED_BY":
-                return self._derive_employed_by(sync_engine, remaining)
+                return self._derive_employed_by(
+                    sync_engine, remaining, reconciliation_pass=reconciliation_pass
+                )
             if rel_type_name == "AUDITED_BY":
                 return self._derive_audited_by(sync_engine, remaining)
             if rel_type_name == "INSTITUTIONAL_HOLDS":
-                return self._derive_institutional_holds(sync_engine, remaining)
+                return self._derive_institutional_holds(
+                    sync_engine, remaining, reconciliation_pass=reconciliation_pass
+                )
             raise KeyError(f"Unknown relationship type '{rel_type_name}'")
         finally:
             sync_engine.flush_pending()
@@ -1136,11 +1347,20 @@ class MDMPipeline:
         remaining: Optional[int],
         *,
         issuer_ciks: Optional[list[int]] = None,
+        reconciliation_pass: bool = False,
     ) -> tuple[int, int, int, int, int]:
         """Derive IS_INSIDER from Form 3/4/5 reporting owners.
 
         Does not create or refresh company entities — issuer CIKs must already
         resolve in MDM (Ticket 21: companies do not change on an insider load).
+
+        mdm-relationship-incremental-filters Ticket 04: watermarked on
+        ``accession_number`` (no genuine ``ingested_at`` on either source
+        table -- Ticket 01's inventory), skipped entirely for an
+        issuer_ciks-scoped call for the same reason the growing-window LIMIT
+        already skips its own short-circuit SQL there -- a targeted resync
+        wants that issuer's full history rescanned, not whatever the global
+        watermark says.
         """
         # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
         # now widens to one row per (accession_number, cik) for a multi-CIK
@@ -1162,10 +1382,18 @@ class MDMPipeline:
             JOIN sec_company_filing f ON o.accession_number = f.accession_number
         """
         params: list[Any] = []
+        watermark: Optional[str] = None
         if issuer_ciks is not None:
             placeholders = ", ".join("?" for _ in issuer_ciks)
             sql += f" WHERE f.cik IN ({placeholders})"
             params.extend(issuer_ciks)
+        else:
+            watermark = self._relationship_watermark(
+                "IS_INSIDER", reconciliation_pass=reconciliation_pass
+            )
+            if watermark is not None:
+                sql += " WHERE o.accession_number > ?"
+                params.append(watermark)
         sql += prefer_non_owner_cik_qualify("o.accession_number, o.owner_index")
         sql += " ORDER BY o.accession_number, o.owner_index"
         company_ciks = self._company_cik_set()
@@ -1182,8 +1410,9 @@ class MDMPipeline:
             fetch_params: list[Any] | None = params
         else:
             fetch_sql = self._bounded_relationship_sql(sql, remaining, existing)
-            fetch_params = None
+            fetch_params = params or None
         rows = self.silver.fetch(fetch_sql, fetch_params)
+        last_watermark: Optional[str] = None
         # Bulk-prefetch owner_cik -> entity_id once for the whole batch
         # instead of a fresh per-row MdmPerson round-trip inside
         # _person_entity_id for every row (same rationale as
@@ -1224,6 +1453,10 @@ class MDMPipeline:
         )
         try:
             for row, person_id in zip(rows, resolved_person_ids):
+                if issuer_ciks is None:
+                    last_watermark = self._track_watermark(
+                        last_watermark, row.get("accession_number")
+                    )
                 owner_cik = row.get("owner_cik")
                 if owner_cik in company_ciks:
                     skipped_corporate += 1
@@ -1283,9 +1516,22 @@ class MDMPipeline:
                     break
         finally:
             sync_engine.unprime_relationship_type("IS_INSIDER")
+        if issuer_ciks is None:
+            self._advance_relationship_watermark(
+                "IS_INSIDER",
+                rel_type_name="IS_INSIDER",
+                watermark_column="accession_number",
+                watermark_value=last_watermark,
+            )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+    def _derive_holds(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        *,
+        reconciliation_pass: bool = False,
+    ) -> tuple[int, int, int, int, int]:
         # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
         # now widens to one row per (accession_number, cik) for a multi-CIK
         # accession -- the QUALIFY in each branch below prefers a candidate
@@ -1295,6 +1541,15 @@ class MDMPipeline:
         txn_qualify = prefer_non_owner_cik_qualify(
             "t.accession_number, t.owner_index, t.txn_index"
         )
+        # mdm-relationship-incremental-filters Ticket 04: no genuine
+        # ingested_at on either txn table (Ticket 01's inventory), so
+        # accession_number is the watermark column. Both UNION ALL branches
+        # need their own copy of the clause (and their own bound param) --
+        # it's two independent sub-selects, not one query.
+        watermark = self._relationship_watermark(
+            "HOLDS", reconciliation_pass=reconciliation_pass
+        )
+        watermark_clause = " AND t.accession_number > ?" if watermark is not None else ""
         sql = f"""
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
@@ -1313,6 +1568,7 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {watermark_clause}
             {txn_qualify}
             UNION ALL
             SELECT t.accession_number, t.owner_index, t.txn_index,
@@ -1332,12 +1588,16 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {watermark_clause}
             {txn_qualify}
             ORDER BY accession_number, owner_index, txn_index
         """
         company_ciks = self._company_cik_set()
         existing = self._relationship_count("HOLDS")
-        rows = self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))
+        watermark_params = [watermark, watermark] if watermark is not None else []
+        fetch_sql = self._bounded_relationship_sql(sql, remaining, existing)
+        rows = self.silver.fetch(fetch_sql, params=watermark_params or None)
+        last_watermark: Optional[str] = None
         # Bulk-prefetch issuer_cik -> entity_id once for the whole batch
         # instead of a fresh per-row round-trip inside _security_entity_id's
         # issuer fallback lookup for every row (see _derive_company_holds
@@ -1372,8 +1632,16 @@ class MDMPipeline:
         sync_engine.prime_relationship_type(
             "HOLDS", defer_flush=True, source_entity_ids=batch_source_ids,
         )
+        # mdm-relationship-incremental-filters Ticket 04 (deactivation half):
+        # indexed once per batch, scoped to exactly what was just primed
+        # above -- same rationale as _derive_manages_fund_batch's
+        # current_by_adviser index.
+        current_by_pair = self._current_open_versions_by_pair(sync_engine, "HOLDS")
         try:
             for row, person_id in zip(rows, resolved_person_ids):
+                last_watermark = self._track_watermark(
+                    last_watermark, row.get("accession_number")
+                )
                 owner_cik = row.get("owner_cik")
                 if owner_cik in company_ciks:
                     skipped_corporate += 1
@@ -1408,6 +1676,11 @@ class MDMPipeline:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }), file=sys.stderr, flush=True)
                     continue
+                if self._deactivate_if_zero_shares(
+                    "HOLDS", current_by_pair, person_id, security_id,
+                    row.get("shares_owned_after"), row.get("transaction_date"),
+                ):
+                    continue
                 properties = {
                     "shares_owned": self._json_property(row.get("shares_owned_after")),
                     "direct_indirect": row.get("ownership_direct_indirect"),
@@ -1428,6 +1701,7 @@ class MDMPipeline:
                     source_system="ownership_filing",
                     source_accession=row.get("accession_number"),
                 )
+                self._track_open_version(current_by_pair, person_id, security_id, _rel, created)
                 if created:
                     inserted += 1
                 else:
@@ -1444,9 +1718,21 @@ class MDMPipeline:
                     break
         finally:
             sync_engine.unprime_relationship_type("HOLDS")
+        self._advance_relationship_watermark(
+            "HOLDS",
+            rel_type_name="HOLDS",
+            watermark_column="accession_number",
+            watermark_value=last_watermark,
+        )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_company_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+    def _derive_company_holds(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        *,
+        reconciliation_pass: bool = False,
+    ) -> tuple[int, int, int, int, int]:
         # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
         # now widens to one row per (accession_number, cik) for a multi-CIK
         # accession -- the QUALIFY in each branch below prefers a candidate
@@ -1456,6 +1742,10 @@ class MDMPipeline:
         txn_qualify = prefer_non_owner_cik_qualify(
             "t.accession_number, t.owner_index, t.txn_index"
         )
+        watermark = self._relationship_watermark(
+            "COMPANY_HOLDS", reconciliation_pass=reconciliation_pass
+        )
+        watermark_clause = " AND t.accession_number > ?" if watermark is not None else ""
         sql = f"""
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
@@ -1474,6 +1764,7 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {watermark_clause}
             {txn_qualify}
             UNION ALL
             SELECT t.accession_number, t.owner_index, t.txn_index,
@@ -1493,12 +1784,16 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {watermark_clause}
             {txn_qualify}
             ORDER BY accession_number, owner_index, txn_index
         """
         company_ciks = self._company_cik_set()
         existing = self._relationship_count("COMPANY_HOLDS")
-        rows = self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))
+        watermark_params = [watermark, watermark] if watermark is not None else []
+        fetch_sql = self._bounded_relationship_sql(sql, remaining, existing)
+        rows = self.silver.fetch(fetch_sql, params=watermark_params or None)
+        last_watermark: Optional[str] = None
         # Bulk-prefetch owner_cik/issuer_cik -> entity_id once for the whole
         # batch instead of a fresh per-row round-trip for each (both the
         # top-level owner lookup below and _security_entity_id's own issuer
@@ -1535,8 +1830,12 @@ class MDMPipeline:
         sync_engine.prime_relationship_type(
             "COMPANY_HOLDS", defer_flush=True, source_entity_ids=batch_source_ids,
         )
+        current_by_pair = self._current_open_versions_by_pair(sync_engine, "COMPANY_HOLDS")
         try:
             for row, company_id in zip(rows, resolved_company_ids):
+                last_watermark = self._track_watermark(
+                    last_watermark, row.get("accession_number")
+                )
                 owner_cik = row.get("owner_cik")
                 if owner_cik not in company_ciks:
                     # skipped_corporate here means non-corporate owner (inverse of
@@ -1558,6 +1857,11 @@ class MDMPipeline:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }), file=sys.stderr, flush=True)
                     continue
+                if self._deactivate_if_zero_shares(
+                    "COMPANY_HOLDS", current_by_pair, company_id, security_id,
+                    row.get("shares_owned_after"), row.get("transaction_date"),
+                ):
+                    continue
                 properties = {
                     "shares_owned": self._json_property(row.get("shares_owned_after")),
                     "direct_indirect": row.get("ownership_direct_indirect"),
@@ -1578,6 +1882,7 @@ class MDMPipeline:
                     source_system="ownership_filing",
                     source_accession=row.get("accession_number"),
                 )
+                self._track_open_version(current_by_pair, company_id, security_id, _rel, created)
                 if created:
                     inserted += 1
                 else:
@@ -1586,6 +1891,12 @@ class MDMPipeline:
                     break
         finally:
             sync_engine.unprime_relationship_type("COMPANY_HOLDS")
+        self._advance_relationship_watermark(
+            "COMPANY_HOLDS",
+            rel_type_name="COMPANY_HOLDS",
+            watermark_column="accession_number",
+            watermark_value=last_watermark,
+        )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_is_entity_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -1758,7 +2069,13 @@ class MDMPipeline:
                 break
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_manages_fund(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
+    def _derive_manages_fund(
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        *,
+        reconciliation_pass: bool = False,
+    ) -> tuple[int, int, int, int, int]:
         """Derive MANAGES_FUND edges, batched by adviser CRD (mdm-oom-manages-fund fix).
 
         Prior version primed the WHOLE type unconditionally (every active
@@ -1837,6 +2154,19 @@ class MDMPipeline:
             sync_engine.flush_pending()
             return inserted, 0, 0, 0, skipped_existing
 
+        # mdm-relationship-incremental-filters Ticket 04: no genuine
+        # ingested_at on either silver source table (Ticket 01's inventory),
+        # so accession_number is the watermark column -- same as HOLDS/
+        # COMPANY_HOLDS/IS_INSIDER. `watermark_state` is a single-item
+        # mutable holder rather than a return-tuple change: this batch
+        # helper has exactly one call site (below), so widening its return
+        # type would touch nothing else, but a holder avoids restructuring
+        # the existing `for i, value in enumerate(batch_result)` totals loop.
+        watermark = self._relationship_watermark(
+            "MANAGES_FUND", reconciliation_pass=reconciliation_pass
+        )
+        watermark_state: dict[str, Optional[str]] = {"value": None}
+
         totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
         sorted_crds = sorted(adviser_ids_by_crd.keys())
         for start in range(0, len(sorted_crds), _MANAGES_FUND_CRD_BATCH_SIZE):
@@ -1846,11 +2176,18 @@ class MDMPipeline:
                 break
             batch_result = self._derive_manages_fund_batch(
                 sync_engine, batch_remaining, batch_crds, adviser_ids_by_crd, fund_ids_by_pfid,
+                watermark=watermark, watermark_state=watermark_state,
             )
             for i, value in enumerate(batch_result):
                 totals[i] += value
             if remaining is not None and totals[0] >= remaining:
                 break
+        self._advance_relationship_watermark(
+            "MANAGES_FUND",
+            rel_type_name="MANAGES_FUND",
+            watermark_column="accession_number",
+            watermark_value=watermark_state["value"],
+        )
         return tuple(totals)
 
     def _derive_manages_fund_batch(
@@ -1860,6 +2197,9 @@ class MDMPipeline:
         batch_crds: list[str],
         adviser_ids_by_crd: dict[str, str],
         fund_ids_by_pfid: dict[str, str],
+        *,
+        watermark: Optional[str] = None,
+        watermark_state: Optional[dict[str, Optional[str]]] = None,
     ) -> tuple[int, int, int, int, int]:
         inserted = 0
         skipped_corporate = 0
@@ -1875,14 +2215,17 @@ class MDMPipeline:
         )
         try:
             placeholders = ", ".join(["?"] * len(batch_crds))
+            watermark_clause = " AND accession_number > ?" if watermark is not None else ""
+            watermark_param = [watermark] if watermark is not None else []
             filing_rows = self.silver.fetch(
                 f"""
                 SELECT accession_number, crd_number, effective_date, filing_action
                 FROM sec_adv_filing
                 WHERE crd_number IN ({placeholders})
+                {watermark_clause}
                 ORDER BY crd_number, effective_date, accession_number
                 """,
-                params=list(batch_crds),
+                params=list(batch_crds) + watermark_param,
             )
             source_rows = self.silver.fetch(
                 f"""
@@ -1891,10 +2234,21 @@ class MDMPipeline:
                        filing_action, source_sha256
                 FROM sec_adv_private_fund
                 WHERE adviser_crd_number IN ({placeholders}) AND private_fund_id IS NOT NULL
+                {watermark_clause}
                 ORDER BY filing_id, private_fund_id, schedule_section
                 """,
-                params=list(batch_crds),
+                params=list(batch_crds) + watermark_param,
             )
+            # filing_rows always gets fully consumed below (the deactivation
+            # diff isn't gated by `remaining`), so every row's accession
+            # number is safe to fold into the batch watermark unconditionally
+            # -- unlike source_rows, tracked incrementally in the insert loop
+            # below since that loop can break early on `remaining`.
+            batch_watermark: Optional[str] = None
+            for filing in filing_rows:
+                batch_watermark = self._track_watermark(
+                    batch_watermark, filing.get("accession_number")
+                )
 
             current_by_adviser: dict[str, list] = {}
             for current in sync_engine.current_relationships("MANAGES_FUND"):
@@ -1952,6 +2306,9 @@ class MDMPipeline:
                                 self.session, current.instance_id, effective
                             )
             for row in source_rows:
+                batch_watermark = self._track_watermark(
+                    batch_watermark, row.get("accession_number")
+                )
                 adviser_id = adviser_ids_by_crd.get(str(row.get("adviser_crd_number")))
                 fund_id = fund_ids_by_pfid.get(str(row.get("private_fund_id")))
                 if adviser_id is None:
@@ -1983,6 +2340,10 @@ class MDMPipeline:
             sync_engine.flush_pending()
         finally:
             sync_engine.unprime_relationship_type("MANAGES_FUND")
+        if watermark_state is not None:
+            watermark_state["value"] = self._track_watermark(
+                watermark_state["value"], batch_watermark
+            )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_issued_by(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
@@ -2295,7 +2656,9 @@ class MDMPipeline:
                         reconciliation_pass=reconciliation_pass,
                     )
 
-        stats.relationship_counts_by_type = self.derive_relationships(target_per_type=limit)
+        stats.relationship_counts_by_type = self.derive_relationships(
+            target_per_type=limit, reconciliation_pass=reconciliation_pass
+        )
         stats.relationships_written = sum(
             int(item["inserted"] or 0) for item in stats.relationship_counts_by_type.values()
         )
@@ -2822,7 +3185,11 @@ class MDMPipeline:
     # ── New derivation methods ────────────────────────────────────────────────
 
     def _derive_employed_by(
-        self, sync_engine: GraphSyncEngine, remaining: Optional[int]
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        *,
+        reconciliation_pass: bool = False,
     ) -> tuple[int, int, int, int, int]:
         """Derive EMPLOYED_BY edges from sec_executive_record (DEF 14A proxy filings).
 
@@ -2832,15 +3199,30 @@ class MDMPipeline:
 
         Dedup key: (source_entity_id, target_entity_id, fiscal_year).
         One EMPLOYED_BY edge per person-company-year combination.
+
+        mdm-relationship-incremental-filters Ticket 04: watermarked on the
+        real ``ingested_at`` column both source tables carry (Ticket 01's
+        inventory) -- two independent checkpoints
+        (``EMPLOYED_BY:exec``/``EMPLOYED_BY:event``), not one, since this
+        method's two source tables (``sec_executive_record``,
+        ``sec_employment_event``) advance independently and a single
+        watermark value can't represent both.
         """
+        exec_watermark = self._relationship_watermark(
+            "EMPLOYED_BY:exec", reconciliation_pass=reconciliation_pass
+        )
         sql = """
             SELECT cik, accession_number, fiscal_year, exec_name, exec_role,
                    total_comp, base_salary, bonus, stock_awards,
-                   option_awards, non_equity_incentive
+                   option_awards, non_equity_incentive, ingested_at
             FROM sec_executive_record
             WHERE exec_name IS NOT NULL
-            ORDER BY cik, fiscal_year, accession_number, exec_name
         """
+        exec_params: list[Any] = []
+        if exec_watermark is not None:
+            sql += " AND ingested_at > ?"
+            exec_params.append(self._watermark_bind_value("ingested_at", exec_watermark))
+        sql += " ORDER BY cik, fiscal_year, accession_number, exec_name"
         existing = self._relationship_count("EMPLOYED_BY")
         inserted = 0
         skipped_corporate = 0
@@ -2854,7 +3236,9 @@ class MDMPipeline:
             rel_type_name="EMPLOYED_BY",
             source_table="sec_executive_record",
             existing=existing,
+            params=exec_params or None,
         )
+        last_exec_watermark: Optional[str] = None
         # Bulk-prefetch cik -> entity_id once for the whole batch instead of
         # a fresh per-row round-trip -- same rationale as the other
         # deriver methods (a company reports many executives across many
@@ -2864,6 +3248,9 @@ class MDMPipeline:
         exec_ciks = {row.get("cik") for row in exec_rows if row.get("cik") is not None}
         company_id_by_cik = self._company_entity_ids(exec_ciks)
         for row in exec_rows:
+            last_exec_watermark = self._track_watermark(
+                last_exec_watermark, row.get("ingested_at")
+            )
             cik = row.get("cik")
             exec_name = row.get("exec_name") or ""
             accession_number = row.get("accession_number") or ""
@@ -2928,22 +3315,38 @@ class MDMPipeline:
             if remaining is not None and inserted >= remaining:
                 break
 
+        self._advance_relationship_watermark(
+            "EMPLOYED_BY:exec",
+            rel_type_name="EMPLOYED_BY",
+            watermark_column="ingested_at",
+            watermark_value=last_exec_watermark,
+        )
+
         # Item 5.02 events are applied after proxy baselines in effective-date
         # order. Appointments open a version; role changes close the prior open
         # version before opening the replacement; departures only close.
+        event_watermark = self._relationship_watermark(
+            "EMPLOYED_BY:event", reconciliation_pass=reconciliation_pass
+        )
         event_sql = """
             SELECT accession_number, cik, event_type, person_name, exec_role,
-                   previous_role, compensation_amount, effective_date
+                   previous_role, compensation_amount, effective_date, ingested_at
             FROM sec_employment_event
-            ORDER BY effective_date, accession_number, event_index
         """
+        event_params: list[Any] = []
+        if event_watermark is not None:
+            event_sql += " WHERE ingested_at > ?"
+            event_params.append(self._watermark_bind_value("ingested_at", event_watermark))
+        event_sql += " ORDER BY effective_date, accession_number, event_index"
         event_rows = self._fetch_optional_relationship_rows(
             event_sql,
             remaining,
             rel_type_name="EMPLOYED_BY",
             source_table="sec_employment_event",
             existing=existing,
+            params=event_params or None,
         )
+        last_event_watermark: Optional[str] = None
         # Bulk-prefetch company lookups only (this loop's version open/close
         # sequencing genuinely depends on processing event_rows in the
         # already-materialized effective_date order above -- that ordering
@@ -2951,6 +3354,9 @@ class MDMPipeline:
         event_ciks = {event.get("cik") for event in event_rows if event.get("cik") is not None}
         event_company_id_by_cik = self._company_entity_ids(event_ciks)
         for event in event_rows:
+            last_event_watermark = self._track_watermark(
+                last_event_watermark, event.get("ingested_at")
+            )
             cik = event.get("cik")
             accession_number = event.get("accession_number") or ""
             person_name = event.get("person_name") or ""
@@ -3059,6 +3465,12 @@ class MDMPipeline:
             if remaining is not None and inserted >= remaining:
                 break
 
+        self._advance_relationship_watermark(
+            "EMPLOYED_BY:event",
+            rel_type_name="EMPLOYED_BY",
+            watermark_column="ingested_at",
+            watermark_value=last_event_watermark,
+        )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _current_employment_versions(self, person_id: str, company_id: str):
@@ -3251,7 +3663,11 @@ class MDMPipeline:
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_institutional_holds(
-        self, sync_engine: GraphSyncEngine, remaining: Optional[int]
+        self,
+        sync_engine: GraphSyncEngine,
+        remaining: Optional[int],
+        *,
+        reconciliation_pass: bool = False,
     ) -> tuple[int, int, int, int, int]:
         """Derive INSTITUTIONAL_HOLDS edges from sec_thirteenf_holding (13F-HR filings).
 
@@ -3293,10 +3709,19 @@ class MDMPipeline:
         the next CIK range — the same per-batch bound MANAGES_FUND's CRD
         batching applies, keyed by CIK range instead of CRD.
         """
-        base_sql = """
+        # mdm-relationship-incremental-filters Ticket 04: sec_thirteenf_holding
+        # has a genuine ingested_at TIMESTAMPTZ column (Ticket 01's
+        # inventory) -- the watermark clause is embedded here, before the
+        # per-batch `AND h.cik BETWEEN ? AND ?` is appended below, so its
+        # bind param must come first in each batch call's params list.
+        watermark = self._relationship_watermark(
+            "INSTITUTIONAL_HOLDS", reconciliation_pass=reconciliation_pass
+        )
+        watermark_clause = " AND h.ingested_at > ?" if watermark is not None else ""
+        base_sql = f"""
             SELECT h.cik, h.accession_number, h.period_of_report, h.cusip,
                    h.issuer_name, h.security_title, h.shares_held, h.market_value,
-                   h.put_call, h.discretion_type, h.security_class
+                   h.put_call, h.discretion_type, h.security_class, h.ingested_at
             FROM sec_thirteenf_holding h
             JOIN sec_thirteenf_filing f ON f.accession_number = h.accession_number
             WHERE h.cusip IS NOT NULL
@@ -3308,6 +3733,7 @@ class MDMPipeline:
                     AND (later.filing_date, later.accession_number) >
                         (f.filing_date, f.accession_number)
               )
+            {watermark_clause}
         """
         bounds_sql = """
             SELECT MIN(cik) AS min_cik, MAX(cik) AS max_cik
@@ -3365,6 +3791,8 @@ class MDMPipeline:
         # small even though INSTITUTIONAL_HOLDS priming below is now
         # batch-scoped.
         adviser_id_by_cik: dict[int, Optional[str]] = {}
+        watermark_bind = self._watermark_bind_value("ingested_at", watermark)
+        watermark_state: dict[str, Optional[str]] = {"value": None}
 
         totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
         cik_lo = min_cik
@@ -3375,6 +3803,7 @@ class MDMPipeline:
                 break
             batch_result = self._derive_institutional_holds_batch(
                 sync_engine, batch_remaining, batch_sql, cik_lo, cik_hi, adviser_id_by_cik,
+                watermark_bind=watermark_bind, watermark_state=watermark_state,
             )
             for i, value in enumerate(batch_result):
                 totals[i] += value
@@ -3382,6 +3811,12 @@ class MDMPipeline:
                 break
             cik_lo = cik_hi + 1
 
+        self._advance_relationship_watermark(
+            "INSTITUTIONAL_HOLDS",
+            rel_type_name="INSTITUTIONAL_HOLDS",
+            watermark_column="ingested_at",
+            watermark_value=watermark_state["value"],
+        )
         return tuple(totals)
 
     def _derive_institutional_holds_batch(
@@ -3392,6 +3827,9 @@ class MDMPipeline:
         cik_lo: int,
         cik_hi: int,
         adviser_id_by_cik: dict[int, Optional[str]],
+        *,
+        watermark_bind: Any = None,
+        watermark_state: Optional[dict[str, Optional[str]]] = None,
     ) -> tuple[int, int, int, int, int]:
         inserted = 0
         skipped_corporate = 0
@@ -3399,7 +3837,9 @@ class MDMPipeline:
         skipped_unresolved_target = 0
         skipped_existing = 0
 
-        batch_rows = self.silver.fetch(batch_sql, params=[cik_lo, cik_hi])
+        batch_params = [watermark_bind, cik_lo, cik_hi] if watermark_bind is not None else [cik_lo, cik_hi]
+        batch_rows = self.silver.fetch(batch_sql, params=batch_params)
+        batch_watermark: Optional[str] = None
 
         # Resolve this batch's advisers first (reusing the cross-batch cache)
         # so priming can be scoped to exactly the source entities this batch
@@ -3418,6 +3858,9 @@ class MDMPipeline:
         )
         try:
             for row in batch_rows:
+                batch_watermark = self._track_watermark(
+                    batch_watermark, row.get("ingested_at")
+                )
                 cik = row.get("cik")
                 cusip = row.get("cusip") or ""
                 accession_number = row.get("accession_number") or ""
@@ -3488,6 +3931,10 @@ class MDMPipeline:
         finally:
             sync_engine.unprime_relationship_type("INSTITUTIONAL_HOLDS")
 
+        if watermark_state is not None:
+            watermark_state["value"] = self._track_watermark(
+                watermark_state["value"], batch_watermark
+            )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _adviser_company_pairs(self):
