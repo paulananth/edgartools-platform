@@ -36,7 +36,7 @@ def _extract_function_source() -> str:
     return text[start:end]
 
 
-def _generate() -> dict:
+def _generate(mdm_run_limit: int = 100) -> dict:
     fn_source = _extract_function_source()
 
     tmp_root = REPO_ROOT / ".pytest_cache" / "mdm_sm_test"
@@ -54,7 +54,7 @@ def _generate() -> dict:
             'CLUSTER_ARN="arn:aws:ecs:us-east-1:000000000000:cluster/fake-cluster"\n'
             "PUBLIC_SUBNET_IDS_JSON='[\"subnet-aaaa\",\"subnet-bbbb\"]'\n"
             "SECURITY_GROUP_IDS_JSON='[\"sg-cccc\"]'\n"
-            "MDM_RUN_LIMIT=100\n"
+            f"MDM_RUN_LIMIT={mdm_run_limit}\n"
             "MDM_GRAPH_LIMIT=200\n"
             f'source "{fn_file.as_posix()}"\n'
             f'write_mdm_definition "{out_file.as_posix()}" "arn:mdm-small" "arn:mdm-medium" "arn:wh-medium"\n',
@@ -128,6 +128,35 @@ def test_mastering_uses_entity_type_all(mdm_definition: dict) -> None:
     --entity-type all call already resolves companies as part of its sweep
     (run_all() calls run_companies())."""
     command = _command_of(mdm_definition, "Mastering")
+    assert "'--entity-type', 'all'" in command
+
+
+def test_mastering_includes_limit_when_mdm_run_limit_is_positive() -> None:
+    """An operator-supplied positive MDM_RUN_LIMIT still bounds Mastering
+    (e.g. a deliberate smoke test) -- unchanged behavior from before the
+    diagnosing-bugs session's default-to-unbounded change below."""
+    definition = _generate(mdm_run_limit=50)
+    command = _command_of(definition, "Mastering")
+    assert "'--limit', '50'" in command
+
+
+def test_mastering_omits_limit_when_mdm_run_limit_is_zero() -> None:
+    """diagnosing-bugs session, 2026-09-07: MDM_RUN_LIMIT's default moved
+    100 -> 0 (operator decision -- MDM mastering must capture all changes,
+    no daily cap; see the deploy script's own comment on MDM_RUN_LIMIT).
+    daily_incremental's nested Mastering step previously capped resolution
+    at 100 entities per type per day, far below real daily ownership-
+    filing volume -- live evidence: mdm_source_ref showed 21,650
+    ownership_filing rows resolved on one day, then only ~511 more across
+    the next 18 days, then 40,900 in a single unbounded catch-up run. A
+    zero limit must omit --limit entirely (mdm mastering's own --limit
+    defaults to None/unbounded only when the flag is absent -- explicitly
+    passing '--limit 0' is NOT equivalent; see bounded_source_sql's
+    growing-window formula, which still applies a floor window for a
+    non-None remaining including 0)."""
+    definition = _generate(mdm_run_limit=0)
+    command = _command_of(definition, "Mastering")
+    assert "--limit" not in command, command
     assert "'--entity-type', 'all'" in command
 
 

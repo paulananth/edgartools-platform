@@ -276,7 +276,14 @@ MDM_POSTGRES_DSN_SECRET_ARN=""
 MDM_SNOWFLAKE_SECRET_ARN=""
 BOOKKEEPING_POSTGRES_DSN_SECRET_ARN=""
 MDM_SILVER_DUCKDB=""
-MDM_RUN_LIMIT=100
+# diagnosing-bugs session, 2026-09-07: was 100 (a daily cap on how many
+# entities per type daily_incremental's nested Mastering step resolves).
+# Operator decision: MDM mastering must capture all changes -- 0 means
+# unbounded (write_mdm_definition's own Mastering state and
+# mdm_workflow_command_expression's "mdm_run" case both omit --limit
+# entirely when this is 0; a positive override remains available via
+# --mdm-run-limit for an operator who explicitly wants a bounded run).
+MDM_RUN_LIMIT=0
 MDM_GRAPH_LIMIT=200
 MDM_SEED_UNIVERSE_TRACKING_STATUS="bootstrap_pending"
 MDM_GRAPH_RULE_VERSION="v1"
@@ -2764,9 +2771,26 @@ def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=
 # found" -- an uncatchable States.Runtime error (Catch: States.ALL does
 # not intercept it), so it silently exhausted this chain's own Retry and
 # failed the whole execution rather than degrading gracefully.
-mastering = ecs_state(mdm_medium_arn,
-    f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $.run_id)",
-    next_state="BackpropagateIdsToSilver")
+# diagnosing-bugs session, 2026-09-07: MDM_RUN_LIMIT=100 (the prior
+# unconditional default) let daily_incremental's nested Mastering step
+# resolve at most 100 entities per type per day -- far below the real
+# daily volume of new ownership filings across the tracked universe.
+# Live evidence: mdm_source_ref showed 21,650 ownership_filing rows
+# resolved on 2026-08-19, then only ~511 more across the next 18 days,
+# then 40,900 in one unbounded catch-up run -- a backlog no daily-bounded
+# cadence could have prevented. Operator decision: MDM mastering must
+# capture all changes, no daily cap. Mirrors
+# mdm_workflow_command_expression()'s existing "mdm_run" case (the
+# standalone mdm-utility machine) exactly: MDM_RUN_LIMIT=0 means
+# unbounded (omit --limit entirely), a positive value still caps it for
+# an operator who explicitly wants that (e.g. a bounded manual smoke
+# test) -- this was already the pattern for the *other* machine; this
+# chain's own Mastering state had simply never been ported to match it.
+if int(mdm_limit) > 0:
+    mastering_cmd = f"States.Array('mdm', 'mastering', '--entity-type', 'all', '--limit', '{mdm_limit}', '--run-id', $.run_id)"
+else:
+    mastering_cmd = "States.Array('mdm', 'mastering', '--entity-type', 'all', '--run-id', $.run_id)"
+mastering = ecs_state(mdm_medium_arn, mastering_cmd, next_state="BackpropagateIdsToSilver")
 
 backpropagate_ids_to_silver = ecs_state(wh_medium_arn,
     "States.Array('backfill-mdm-entity-ids', '--run-id', $.run_id)",
