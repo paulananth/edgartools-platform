@@ -29,6 +29,12 @@
 - **Artifact Retention Class** — a bucket/prefix pattern plus artifact type,
   date basis, minimum retention period, terminal disposition, and required
   protection checks.
+- **Derived Filing Text** — a rebuildable normalized-text projection identified
+  by filing accession and interpretation version and produced from retained
+  Bronze filing evidence. It is not source evidence.
+- **Retirable Derived Filing Text** — a Derived Filing Text identity outside
+  the authoritative required set that has satisfied its deletion-eligibility
+  boundary. This status never applies to the underlying Bronze evidence.
 - **Safety finding** — missing or conflicting evidence that could make a
   remediation unsafe. Safety findings are always reported, even below the
   monetary threshold.
@@ -50,6 +56,11 @@
 - An S3 deletion candidate must identify the exact retention class, date basis,
   accession authority, complete expected bundle, and VersionIds. Unmatched
   objects degrade to `insufficient_evidence` until they can be classified.
+- Derived filing-text deletion authority is exact-accession/version scoped. It
+  requires two consecutive complete successful sweep manifests spanning at
+  least 30 days, a hash-bound exact-VersionId plan, verified Silver retirement
+  before deletion, and durable post-delete evidence. It cannot authorize a
+  Bronze deletion.
 
 ## Explicit non-goals
 

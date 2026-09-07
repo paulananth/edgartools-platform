@@ -84,6 +84,10 @@ hash-bound deletion of exact expired versions under settled year/day rules.
 - [Decide the S3 Deletion Boundary](issues/07-decide-s3-deletion-boundary.md)
   — Classified complete filing bundles expire at canonical 2/3/5-year cutoffs;
   apply requires an unchanged reviewed plan and exact object versions.
+- [Decide Whether Filing-Text Sweep Can Authorize Derived-Text Deletion](issues/08-decide-sweep-filing-text-derived-text-deletion-authority.md)
+  — Derived-text authority is exact-accession/version only, requires two
+  successful observations plus 30 days, and uses immutable manifests with
+  Silver-first retirement before reviewed exact-version deletion.
 
 ## Not yet specified
 
