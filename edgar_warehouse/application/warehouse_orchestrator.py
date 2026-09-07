@@ -1544,6 +1544,26 @@ def _capture_bronze_raw(
     raw_writes: list[dict[str, Any]] = []
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
 
+    if command_name == "sweep-filing-text":
+        # release-readiness Ticket 101: unlike backfill-mdm-entity-ids/
+        # backfill-silver-landing-historical (dispatched even earlier, before
+        # db/bookkeeping exist -- see _execute_warehouse_bronze_capture),
+        # this sweep needs the normal per-run db/bookkeeping/landing_export
+        # this function already receives, since it stages real filing
+        # metadata and extracts real text through them. See
+        # edgar_warehouse/filing_text_sweep.py's module docstring for the
+        # full required/processed design.
+        from edgar_warehouse.filing_text_sweep import run_filing_text_sweep
+
+        return run_filing_text_sweep(
+            context=context,
+            db=db,
+            bookkeeping=bookkeeping,
+            sync_run_id=sync_run_id,
+            now=now,
+            limit=arguments.get("limit"),
+        )
+
     if arguments.get("include_reference_refresh"):
         reference_result = _sync_reference_data(
             context=context,
@@ -7183,6 +7203,12 @@ def _resolve_scope(
     if command_name == "backfill-silver-landing-historical":
         # silver-snowflake-migration map, Ticket 15: one-time full-universe
         # seed; no meaningful CIK range/date/etc scope to report.
+        return {}
+
+    if command_name == "sweep-filing-text":
+        # release-readiness Ticket 101: required/processed CIKs are computed
+        # fresh from Snowflake every sweep; no meaningful CIK range/date/etc
+        # scope to report ahead of time.
         return {}
 
     if command_name == "fetch-adv-bulk":

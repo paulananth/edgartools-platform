@@ -460,13 +460,19 @@ def test_daily_incremental_releases_sec_fetch_lease_before_mdm_run(
     release = states["ReleaseSecFetchLease"]
     cmd = release["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
     assert "release-sec-fetch-lease" in cmd
-    assert release["Next"] == "RunMdmChain"
+    # release-readiness Ticket 101: SweepFilingText is now a real intermediate
+    # hop between lease release and Mastering, not a direct link -- known,
+    # accepted tradeoff that this sweep's own SEC fetches run outside the
+    # cross-command sec_fetch_active lease's coverage window (see the
+    # sec_fetch_lease_states call site in deploy-aws-application.sh).
+    assert release["Next"] == "SweepFilingText"
+    assert states["SweepFilingText"]["Next"] == "RunMdmChain"
     assert release["Catch"] == [
         {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLeaseFailedNonFatal"}
     ]
 
     fallback = states["ReleaseSecFetchLeaseFailedNonFatal"]
-    assert fallback["Next"] == "RunMdmChain"
+    assert fallback["Next"] == "SweepFilingText"
 
 
 def test_daily_incremental_previously_uncaught_states_release_lease_on_failure(
