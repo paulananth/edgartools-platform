@@ -103,10 +103,34 @@ def extract_text_for_accession(
     db.upsert_filing_text(row)
     return row
 
+_DISPLAY_NONE_RE = re.compile(r"display\s*:\s*none", re.IGNORECASE)
+
+
+def _strip_hidden_ixbrl_content(soup: BeautifulSoup) -> None:
+    """Remove non-rendered iXBRL machinery before text extraction.
+
+    Modern (iXBRL-mandated since ~2019) EDGAR filings embed an
+    <ix:header> element (<ix:hidden> non-rendered XBRL facts plus
+    <ix:references>/<ix:resources> taxonomy metadata, per the iXBRL 1.1
+    spec) that browsers never display but BeautifulSoup.get_text() has
+    no CSS engine or XBRL-tag awareness to skip. Confirmed live against
+    real SEC filings (release-readiness Ticket 101): this contaminates
+    the start of every modern filing's extracted text with taxonomy
+    URLs/unit codes instead of business-description prose, since SEC's
+    convention places <ix:header> early in document order. Pre-iXBRL
+    filings have no such elements, so this is a no-op for them.
+    """
+    for tag in soup.find_all("ix:header"):
+        tag.decompose()
+    for tag in soup.find_all(style=lambda value: bool(value) and _DISPLAY_NONE_RE.search(value)):
+        tag.decompose()
+
+
 def _normalize_text(*, payload: bytes, source_document_name: str) -> str:
     suffix = Path(source_document_name).suffix.lower()
     if suffix in {".htm", ".html"}:
         soup = BeautifulSoup(payload.decode("utf-8", errors="replace"), "html.parser")
+        _strip_hidden_ixbrl_content(soup)
         text = soup.get_text("\n")
     elif suffix == ".xml":
         soup = BeautifulSoup(payload.decode("utf-8", errors="replace"), "xml")
