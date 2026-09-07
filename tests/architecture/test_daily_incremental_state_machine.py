@@ -449,7 +449,8 @@ def test_fetch_adv_bulk_and_ingest_adv_bulk_sources_catch_falls_through_to_mdm_r
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "SweepFilingText"
+    assert daily_definition["States"]["SweepFilingText"]["Next"] == "RunMdmChain"
 
 
 def test_fetch_and_ingest_adv_bulk_states_preserve_sm_input_via_result_path_null(
@@ -537,7 +538,8 @@ def test_fetch_and_ingest_firm_roster_catch_falls_through_to_mdm_run(
         assert state.get("Catch") == [
             {"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}
         ], f"{state_name} missing lenient Catch-to-ReleaseSecFetchLease"
-    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
+    assert daily_definition["States"]["ReleaseSecFetchLease"]["Next"] == "SweepFilingText"
+    assert daily_definition["States"]["SweepFilingText"]["Next"] == "RunMdmChain"
 
 
 
@@ -599,5 +601,30 @@ def test_sec_fetch_lease_still_releases_into_mdm_run_unaffected(daily_definition
     SeedUniverse/CaptureAndVerifyNewFilings) is untouched by the entity-backfill sweep
     simplification -- it still releases right before Mastering."""
     states = daily_definition["States"]
-    assert states["ReleaseSecFetchLease"]["Next"] == "RunMdmChain"
+    assert states["ReleaseSecFetchLease"]["Next"] == "SweepFilingText"
+    assert states["SweepFilingText"]["Next"] == "RunMdmChain"
     assert states["AcquireSecFetchLease"]["Next"] == "ReadSecFetchLeaseResult"
+
+
+def test_sweep_filing_text_command_shape_and_profile(daily_definition: dict) -> None:
+    """release-readiness Ticket 101: SweepFilingText must actually be
+    reachable (caught live in this session -- an earlier draft set the
+    ecs_state() call's own next_state param, which CaptureAndVerifyNewFilings's
+    real downstream ADV/FirmRoster routing silently overrides, leaving the
+    state defined but unreachable) and run the right command on a profile
+    that matches targeted-resync's own choice for the same shape of work."""
+    states = daily_definition["States"]
+    assert "SweepFilingText" in states
+    assert _command_of(daily_definition, "SweepFilingText") == (
+        "States.Array('sweep-filing-text', '--run-id', $$.Execution.Name)"
+    )
+    assert states["SweepFilingText"]["Parameters"]["TaskDefinition"] == "arn:wh-large"
+
+    order = _linear_order(daily_definition)
+    # Reachable from StartAt via at least one real path -- IngestFirmRosterSources
+    # -> ReleaseSecFetchLease -> SweepFilingText -> RunMdmChain is the happy path;
+    # _linear_order only follows plain "Next" (no Choice branching), so walk from
+    # ReleaseSecFetchLease specifically rather than asserting it's in the full
+    # StartAt-rooted trace.
+    assert states["ReleaseSecFetchLease"]["Next"] == "SweepFilingText"
+    assert states["SweepFilingText"]["Next"] == "RunMdmChain"

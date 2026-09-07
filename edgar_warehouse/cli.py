@@ -311,6 +311,10 @@ def _handle_backfill_silver_landing_historical(args: argparse.Namespace) -> int:
     return run_command("backfill-silver-landing-historical", args)
 
 
+def _handle_sweep_filing_text(args: argparse.Namespace) -> int:
+    return run_command("sweep-filing-text", args)
+
+
 def _bookkeeping_store():
     from edgar_warehouse.bookkeeping.database import get_engine, get_session
     from edgar_warehouse.bookkeeping.store import BookkeepingStore
@@ -1574,6 +1578,24 @@ def build_parser() -> argparse.ArgumentParser:
     backfill_silver_landing_historical.set_defaults(
         handler=_handle_backfill_silver_landing_historical
     )
+
+    sweep_filing_text = subparsers.add_parser(
+        "sweep-filing-text",
+        help="release-readiness Ticket 101: extract sec_filing_text for every genuine "
+             "periodic-reporting company (real 10-K/10-K405/10KSB/10KSB40 filing within the "
+             "trailing 2 years, real ticker) not yet processed, and report (never delete) "
+             "already-extracted text whose CIK no longer qualifies. Computed fresh every run "
+             "-- see edgar_warehouse/filing_text_sweep.py.",
+    )
+    sweep_filing_text.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cap the number of required-and-unprocessed CIKs extracted this run "
+             "(default: unbounded -- process every pending CIK).",
+    )
+    _add_run_id_arg(sweep_filing_text)
+    sweep_filing_text.set_defaults(handler=_handle_sweep_filing_text)
 
     compare_filing_artifact_capture = subparsers.add_parser(
         "compare-filing-artifact-capture",

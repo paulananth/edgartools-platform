@@ -49,6 +49,12 @@ _DEFAULT_MANIFEST_COMMANDS = frozenset(
         "bootstrap-next",
         "daily-incremental",
         "targeted-resync",
+        # release-readiness Ticket 101: writes real bronze (submissions_orchestrator's
+        # SEC fetch + extract_filing_text's self-heal artifact fetch) and real silver
+        # (staged filing metadata + sec_filing_text rows) per required-and-unprocessed
+        # CIK -- same shape as targeted-resync, not backfill-mdm-entity-ids's
+        # Snowflake-only, no-bronze/silver-write case.
+        "sweep-filing-text",
     }
 )
 _REFERENCE_SOURCES = frozenset({"company_tickers", "company_tickers_exchange"})

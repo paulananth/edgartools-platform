@@ -4137,6 +4137,21 @@ if workflow_name == "daily_incremental":
         "States.Array('daily-incremental', '--recurring-index-lookback-days', '7', "
         "'--run-id', $$.Execution.Name)"
     )
+# release-readiness Ticket 101: keeps sec_filing_text current for genuine
+# periodic-reporting companies -- resolved via /grilling as a background
+# sweep folded into daily_incremental, running right after
+# CaptureAndVerifyNewFilings (the silver-publish step) and before MDM
+# resolution, since text extraction is neither an MDM nor gold concern.
+# Uses wh_large_arn directly (not command_task_profile(), unlike
+# run_wh/gold above) because this command has exactly one call site --
+# there is no second caller this could silently diverge from yet, the
+# concern that mechanism guards against elsewhere in this file. Large
+# chosen to match targeted-resync's own profile for the same shape of
+# work (per-CIK submissions fetch + bronze artifact self-heal fetch),
+# just looped across potentially many CIKs in one task instead of one.
+sweep_filing_text = ecs_state(wh_large_arn,
+    "States.Array('sweep-filing-text', '--run-id', $$.Execution.Name)",
+    next_state="RunMdmChain")
 # Mastering, BackpropagateIdsToSilver (renamed from BackfillMdmEntityIds --
 # mdm-ahead-of-silver map, Phase B wiring, ticket 06), Infer Relationships,
 # Publish, Publish Relationships, and Reconcile now all live in the single
@@ -4722,7 +4737,18 @@ ingest_firm_roster_sources["ResultPath"] = None
 # ReleaseLease above -- that lease prevents overlapping daily_incremental/
 # backstop runs of THIS command; this one prevents concurrent SEC/IAPD
 # traffic ACROSS the 5 different SEC-fetching commands.
-sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "RunMdmChain")
+# release-readiness Ticket 101: ReleaseSecFetchLease's own Next now points at
+# SweepFilingText (inserted between it and RunMdmChain) instead of RunMdmChain
+# directly -- see sweep_filing_text's definition below for why this splice
+# point was chosen over inserting earlier in the ADV/FirmRoster chain (single
+# edit point vs. rewiring every Catch clause that also converges on
+# ReleaseSecFetchLease). Known, accepted limitation: this means
+# sweep-filing-text's own real SEC fetches run AFTER the cross-command
+# sec_fetch_active lease (ticket 84) is released, not while it's held --
+# unlike every other SEC-fetching command in this chain. Not resolved in
+# this pass; flagged for a follow-up decision rather than rewiring the
+# lease's acquire/release boundary under time pressure.
+sec_fetch_lease_states = build_sec_fetch_lease_states("RefreshMode", "SweepFilingText")
 
 # Lease-leak bug found live 2026-09-03 (via /diagnosing-bugs): unlike
 # write_single_workflow_definition's/write_load_history_definition's own
@@ -4777,6 +4803,9 @@ definition = {
         "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
         "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
         "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
+        "(1c) SweepFilingText -- release-readiness ticket 101: extracts sec_filing_text for "
+        "required-and-unprocessed periodic-reporting companies, reports (never deletes) "
+        "cleanup candidates, "
         "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
         "Snowflake export manifest."
     ),
@@ -4801,6 +4830,7 @@ definition = {
         "CaptureCompanyIdentityBatches": stage0_company_identity_bounded,
         "PublishCompanyIdentityUpdates": reduce_identity_refresh,
         "CaptureAndVerifyNewFilings": run_wh,
+        "SweepFilingText":     sweep_filing_text,
         "DatasetPeriodCheck":   dataset_period_check,
         "DatasetPeriodDefault": dataset_period_default,
         "ForceCheck":           force_check,
