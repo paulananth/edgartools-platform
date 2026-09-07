@@ -25,26 +25,11 @@ a full-table-scan cost on every run.
   to close, and ticket 08 stayed with the conservative answer (leave all 4
   relationship types operator-triggered-only) specifically because of it —
   see that ticket's Answer once resolved for the full reasoning.
-- Confirmed live in code (not measured in prod) for 2 of 11 types:
-  - `_derive_institutional_holds` (`pipeline.py:3017`): joins the full
-    `sec_thirteenf_holding` table (CIK-range batched only for OOM
-    avoidance, not incrementality). Own docstring: "bounded today only
-    because this type currently has 0 active rows in prod, not because
-    the code path is actually safe at scale." Source table has 6.8M rows
-    (`EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_THIRTEENF_HOLDING`, CLAUDE.md).
-  - `_derive_holds` (`pipeline.py:1180`): same shape against
-    `sec_ownership_non_derivative_txn`/`sec_ownership_derivative_txn` —
-    `self.silver.fetch(self._bounded_relationship_sql(sql, remaining, existing))`,
-    where the bound is on write count (`remaining`/`existing` = current
-    active-relationship count vs. `target_per_type`), not on which source
-    rows are new.
-  - The other 9 (`_derive_is_insider`, `_derive_company_holds`,
-    `_derive_is_entity_of`, `_derive_has_parent_company`,
-    `_derive_is_person_of`, `_derive_manages_fund`(`_batch`),
-    `_derive_issued_by`, `_derive_employed_by`, `_derive_audited_by`) were
-    not individually re-checked this session — presumed same shape given
-    they share `_bounded_relationship_sql`'s pattern, but confirm each
-    before assuming.
+- Real per-type filtering shape, row counts, and available timestamp/
+  versioning columns for all 11 types: see Ticket 01's resolution above
+  and `research/01-incremental-filtering-status.md` — four genuinely
+  distinct shapes exist, not the single presumed one this section
+  originally described (now superseded, not restated here).
 - Existing incremental/diff precedent elsewhere in the platform worth
   modeling this on: `sec_daily_index_checkpoint` (daily-index-driven
   discovery, CLAUDE.md's "SEC data idempotency" section) and the
@@ -55,11 +40,18 @@ a full-table-scan cost on every run.
 
 ## Decisions so far
 
-(none yet)
+- [Confirm incremental-filtering status and data volume](issues/01-confirm-incremental-filtering-status-and-data-volume.md) — Read all 11 `_derive_*` methods directly rather than extrapolating from the 2 previously-confirmed ones. Found **four distinct filtering shapes, not the presumed one**: (1) growing-window bounded `_bounded_relationship_sql` LIMIT (5 of 11 types, fully or partially); (2) CIK/CRD-range batched full scan, count-bounded only across the whole batch loop (INSTITUTIONAL_HOLDS, and newly-found MANAGES_FUND); (3) fully unbounded MDM-Postgres scan with no SQL LIMIT at all, Python `break` only (IS_ENTITY_OF, IS_PERSON_OF, ISSUED_BY, plus fallback/prefetch paths inside MANAGES_FUND and HAS_PARENT_COMPANY) — these 4+ types don't read a silver table at all, previously unflagged; (4) an always-unbounded secondary sub-query hardcoded `remaining=None` inside EMPLOYED_BY. Also found live: HAS_PARENT_COMPANY's and AUDITED_BY's "bounded" primary paths currently process 0 rows in prod (empty source tables), so their real behavior today is their fallback branch. Full per-type row-count/timestamp-column inventory: `research/01-incremental-filtering-status.md`.
+- [Investigate empty HAS_PARENT_COMPANY/AUDITED_BY source tables](issues/03-investigate-empty-has-parent-company-audited-by-source-tables.md) — **Real, close-to-shippable gap found for two of the three tables.** `sec_subsidiary_evidence`/`sec_auditor_report_evidence` (HAS_PARENT_COMPANY's and AUDITED_BY's primary sources) have real, tested parsers wired into `ingest-relationship-sources`' dispatch, but **no code anywhere ever produces a manifest entry of the required `kind`** — the only large-scale candidate-discovery pipeline that ever ran in prod (`relationship_bulk_load.py`, Ticket 20's 2026-07-25 technical PASS) covers only `thirteenf`/`proxy`/`item_502_8k`, zero subsidiary/auditor/PCAOB coverage. Confirmed independently by release-readiness Ticket 35 (zero `HAS_PARENT_COMPANY`/`AUDITED_BY` graph edges in any of 14 tracked generations, ever). The parser/write half is done; only a discovery/fetch step is missing. `sec_accounting_flag` (AUDITED_BY's fallback), by contrast, is a confirmed structural SEC-API limitation (companyfacts never surfaces the 4 auditor-DEI XBRL concepts, for any filer — verified twice independently) with its own already-open decision ticket (release-readiness Ticket 92), not a wiring gap. Full detail: `research/03-empty-source-tables-investigation.md`.
+- [Decide which types need filtering and mechanism](issues/02-decide-which-types-need-filtering-and-mechanism.md) — Locked design: extend the growing-window LIMIT fix to the bounded (Shape 1) types too, not just the batched ones (both have the same "always re-scans from the start" problem, just differently visible); watermark column is real `ingested_at` where it exists, else the natural accession-number ordering key (relying on the platform's SEC-data-immutability invariant); one dedicated checkpoint table (`mdm_relationship_derivation_checkpoint`-shaped, mirroring `sec_daily_index_checkpoint`); scoped to the 7 types with real non-zero data today (`IS_INSIDER`, `HOLDS`, `COMPANY_HOLDS`, `INSTITUTIONAL_HOLDS`, `MANAGES_FUND`, `EMPLOYED_BY`, `ISSUED_BY`) — the zero-row types deferred pending their own upstream gaps. Design only, not yet implemented — see ticket for the follow-up-execution-ticket note.
+- [Implement checkpoint, watermarks, and deactivation](issues/04-implement-checkpoint-watermarks-and-deactivation.md) — Implemented Ticket 02's design for 6 of the 7 scoped types (`ISSUED_BY` deferred: no valid watermark column exists on MDM's own `mdm_security`/`mdm_entity` tables without a schema change, and its ~3K-row scale means there's no real performance problem to solve there anyway). Found and fixed a critical gap Ticket 02 didn't anticipate: the MDM Reconciliation Backstop's monthly full-universe pass would have silently inherited the same watermark filter and permanently lost any row skipped for a transient reason (entity not yet resolved) — `reconciliation_pass` now bypasses every watermark. Also implemented a new deactivation mechanism (separately scoped in a same-day grilling exchange, not part of Ticket 02's original decision) for `HOLDS`/`COMPANY_HOLDS` (in-row `shares_owned_after == 0`) and `INSTITUTIONAL_HOLDS` (two-phase cross-period CUSIP-set diff, mirroring `_derive_manages_fund_batch`'s already-existing, previously-unnoticed `close_relationship_version` pattern).
 
 ## Not yet specified
 
-(none currently — both items graduated into Ticket 01 and Ticket 02 below)
+- `ISSUED_BY`'s own watermark, if ever justified — would need a new
+  dedicated timestamp column (e.g. `mdm_security.issuer_linked_at`), not one
+  of the existing SCD2 `valid_from`/`valid_to` columns (neither is bumped on
+  an issuer-link write today). Not worth building without a concrete
+  performance problem at this table's current ~3K-row scale.
 
 ## Out of scope
 

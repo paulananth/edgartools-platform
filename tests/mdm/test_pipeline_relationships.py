@@ -89,6 +89,27 @@ class StubSilver:
             if not ciks:
                 return [{"min_cik": None, "max_cik": None}]
             return [{"min_cik": min(ciks), "max_cik": max(ciks)}]
+        if "MAX(f.period_of_report)" in sql and params:
+            # INSTITUTIONAL_HOLDS deactivation's own latest-period lookup
+            # (mdm-relationship-incremental-filters Ticket 04) -- scoped to
+            # exactly one manager CIK (params[0]), never parsed out of the
+            # SQL text, mirroring the MIN/MAX(cik) case above.
+            cik = params[0]
+            periods = [
+                r["period_of_report"] for r in matched
+                if r.get("cik") == cik and r.get("period_of_report") is not None
+            ]
+            return [{"latest_period": max(periods) if periods else None}]
+        if "DISTINCT h.cusip" in sql and params:
+            # Same ticket's follow-up cusip-set lookup, scoped to
+            # (cik, period_of_report) -- params[0], params[1].
+            cik, period = params[0], params[1]
+            cusips = {
+                r["cusip"] for r in matched
+                if r.get("cik") == cik and r.get("period_of_report") == period
+                and r.get("cusip")
+            }
+            return [{"cusip": cusip} for cusip in cusips]
         if params and "BETWEEN" in sql.upper():
             lo, hi = params[0], params[1]
             matched = [r for r in matched if r.get("cik") is not None and lo <= r["cik"] <= hi]
