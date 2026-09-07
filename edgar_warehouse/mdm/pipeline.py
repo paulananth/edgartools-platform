@@ -150,10 +150,18 @@ _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE = 1000
 _MANAGES_FUND_CRD_BATCH_SIZE = 1000
 
 # mdm-run-throughput Ticket 03: _prefetch_source_refs' WHERE source_id IN (...)
-# chunk size -- a single unchunked IN() for a full-universe run_companies batch
-# (~73,691 rows observed live) would exceed Postgres's per-query bind-parameter
-# ceiling (the wire protocol's parameter count is a 2-byte field, ~65,535 max).
-_SOURCE_REF_PREFETCH_BATCH_SIZE = 1000
+# chunk size. NOTE: an earlier version of this comment claimed a Postgres
+# "~65,535 bind-parameter" ceiling motivated this -- empirically disproven
+# (2026-09-07): psycopg2 (this stack's driver) mogrifies IN() parameters into
+# literal SQL text client-side rather than using the true wire-protocol Bind
+# message, so there is no such ceiling here at all -- verified live against a
+# real Postgres instance with SQLAlchemy's identical select().where(.in_())
+# pattern at up to 1,000,000 ids in one query, no error. This constant exists
+# only to bound per-query SQL-text size and client-side memory, not to dodge
+# a hard limit -- 20,000 keeps a full-universe run_companies batch
+# (~73,691 rows observed live) to 4 queries instead of 74, with generous
+# headroom below any real resource concern at this scale.
+_SOURCE_REF_PREFETCH_BATCH_SIZE = 20000
 
 # INSTITUTIONAL_HOLDS priming an adviser at a time within its existing
 # CIK-range batches (mdm-oom-institutional-holds-guard fix) -- the same
