@@ -77,6 +77,8 @@ split: this map decides, `release-readiness` tickets implement.
 
 - [Rename SeedFromBronze state](issues/13-rename-seedfrombronze-state.md) — Renamed to "Initialize From Bronze" (user-confirmed), closing the last internal-state-name gap left over from the earlier BatchSilver/GoldRefresh business-name rename. Takes effect on the next ordinary redeploy of `one_click_data_refresh` -- no new AWS object needed.
 
+- [Fix the monolith silver hydrate FileExpired race](issues/14-fix-monolith-silver-hydrate-fileexpired-race.md) — No fix needed: dominant cause was self-collision among `one_click_data_refresh`'s own 20 concurrent workers (evidenced by 20 evenly-spaced FileExpired clusters, several simultaneous), not primarily `daily_incremental` overlap (though that overlap was real and total). Already structurally eliminated as a side effect of duckdb-retirement-cutover Ticket 10, deployed to prod several hours after the crash — every writer to canonical `silver/sec/silver.duckdb` (the monolith path and the identity-refresh reducer's independent second write path) is now a permanent no-op, so the object never changes mid-read. Does not resolve Ticket 11's broader retire/keep/redesign question or explain the machine's other historical failures.
+
 ## Not yet specified
 
 - Whether ticket 84/86's `sec_fetch_active` cross-command lease wiring
