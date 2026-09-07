@@ -55,6 +55,14 @@ class PersonResolver(BaseResolver):
             )
         return MatchPipeline(matchers=matchers)
 
+    @staticmethod
+    def _source_id(owner_row: dict) -> str:
+        """Single source of truth for this resolver's mdm_source_ref key --
+        called both by resolve_one and by MDMPipeline.run_persons' bulk
+        skip-if-unchanged prefetch (mdm-run-throughput Ticket 03), so the
+        two can never silently drift apart."""
+        return f"{owner_row['accession_number']}:{owner_row.get('owner_index')}"
+
     def resolve_one(
         self,
         ctx: ResolverContext,
@@ -73,7 +81,7 @@ class PersonResolver(BaseResolver):
             "issuer_cik": issuer_cik,
             "primary_role": title,
         }
-        source_id = f"{owner_row['accession_number']}:{owner_row.get('owner_index')}"
+        source_id = self._source_id(owner_row)
 
         # mdm-resolver-skip-unchanged map, Ticket 02: run_persons() has no
         # resumable ledger (unlike run_companies()), so a restarted `mdm mastering`

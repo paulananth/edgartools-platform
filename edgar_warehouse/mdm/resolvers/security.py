@@ -46,6 +46,14 @@ class SecurityResolver(BaseResolver):
         if self.domain_fields is None:
             self.domain_fields = list(SECURITY_FIELDS)
 
+    @staticmethod
+    def _source_id(txn_row: dict) -> str:
+        """Single source of truth for this resolver's mdm_source_ref key --
+        called both by resolve_one and by MDMPipeline.run_securities'/
+        _security_entity_id's bulk skip-if-unchanged prefetch (mdm-run-
+        throughput Ticket 03), so the two can never silently drift apart."""
+        return txn_row.get("source_id") or _ownership_security_source_id(txn_row)
+
     def resolve_one(
         self,
         ctx: ResolverContext,
@@ -58,7 +66,7 @@ class SecurityResolver(BaseResolver):
         title = txn_row.get("security_title") or ""
         canonical = " ".join(w.capitalize() for w in title.split()) if title else ""
         sec_type = _infer_type(canonical)
-        source_id = txn_row.get("source_id") or _ownership_security_source_id(txn_row)
+        source_id = self._source_id(txn_row)
 
         # 2026-08-21 throughput investigation: run_securities() has no
         # resumable ledger (unlike run_companies(), ticket 7ffda2d7), so a

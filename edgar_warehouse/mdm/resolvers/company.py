@@ -59,6 +59,14 @@ class CompanyResolver(BaseResolver):
             ]
         )
 
+    @staticmethod
+    def _source_id(company_row: dict) -> str:
+        """Single source of truth for this resolver's mdm_source_ref key --
+        called both by resolve_one and by MDMPipeline.run_companies' bulk
+        skip-if-unchanged prefetch (mdm-run-throughput Ticket 03), so the
+        two can never silently drift apart."""
+        return str(int(company_row["cik"]))
+
     def resolve_one(
         self,
         ctx: ResolverContext,
@@ -100,7 +108,9 @@ class CompanyResolver(BaseResolver):
         )
 
         if not reconciliation_pass:
-            skip_entity_id = self._skip_if_unchanged(ctx, source_system, str(cik), row_content_hash)
+            skip_entity_id = self._skip_if_unchanged(
+                ctx, source_system, self._source_id(company_row), row_content_hash
+            )
             if skip_entity_id is not None:
                 return ResolveOutcome(
                     entity_id=skip_entity_id,
