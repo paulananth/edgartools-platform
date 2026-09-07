@@ -40,6 +40,7 @@ from edgar_warehouse.mdm.resolvers import (
 )
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.rules import MDMRuleEngine
+from edgar_warehouse.mdm.sql_fragments import prefer_non_owner_cik_qualify
 
 if TYPE_CHECKING:
     from edgar_warehouse.bookkeeping.store import BookkeepingStore
@@ -694,18 +695,41 @@ class MDMPipeline:
         # bootstrapped), so an INNER JOIN here silently and permanently drops those
         # rows from every future run. issuer_cik is genuinely optional downstream --
         # SecurityResolver already has a NULL-issuer-scoped matching path.
-        sql = """
-            SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
+        #
+        # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+        # now widens to one row per (accession_number, cik) for a multi-CIK
+        # accession (ownership filings list both the issuer's and the
+        # reporting owner's own CIK). Without the reporting-owner join and
+        # QUALIFY below, a widened accession would match twice here -- once
+        # correctly to the issuer's CIK, once to the reporting owner's own
+        # CIK (self-referential, wrong). The QUALIFY prefers a candidate
+        # whose cik is NOT the row's own owner_cik, falling back to whatever
+        # single match exists (including the owner's own row) when that's
+        # the only candidate, so no previously-working single-match case
+        # regresses to NULL.
+        txn_qualify = prefer_non_owner_cik_qualify(
+            "t.accession_number, t.owner_index, t.txn_index"
+        )
+        sql = f"""
+            SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, f.cik AS issuer_cik, FALSE AS is_derivative
             FROM sec_ownership_non_derivative_txn t
+            LEFT JOIN sec_ownership_reporting_owner o
+              ON t.accession_number = o.accession_number
+             AND t.owner_index = o.owner_index
             LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {txn_qualify}
             UNION ALL
-            SELECT DISTINCT t.accession_number, t.owner_index, t.txn_index,
+            SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, f.cik AS issuer_cik, TRUE AS is_derivative
             FROM sec_ownership_derivative_txn t
+            LEFT JOIN sec_ownership_reporting_owner o
+              ON t.accession_number = o.accession_number
+             AND t.owner_index = o.owner_index
             LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {txn_qualify}
         """
         if limit:
             sql += f" LIMIT {int(limit)}"
@@ -824,8 +848,14 @@ class MDMPipeline:
         # f.cik is NULL for an unmatched row, and NULL never satisfies `IN (...)`,
         # so a caller-scoped run still excludes untracked issuers as intended; only
         # the unscoped (issuer_ciks=None) default run picks them up.
+        # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+        # now widens to one row per (accession_number, cik) for a multi-CIK
+        # accession -- the QUALIFY below prefers the candidate whose cik is
+        # NOT this row's own owner_cik (excluding the reporting owner's own
+        # self-referential row), falling back to whatever single match
+        # exists when that's the only candidate.
         sql = """
-            SELECT DISTINCT o.owner_cik, o.owner_name, o.officer_title,
+            SELECT o.owner_cik, o.owner_name, o.officer_title,
                    o.is_director, o.is_officer, o.is_ten_percent_owner, o.is_other,
                    o.accession_number, o.owner_index, f.cik AS issuer_cik
             FROM sec_ownership_reporting_owner o
@@ -842,6 +872,7 @@ class MDMPipeline:
             placeholders = ", ".join("?" for _ in owner_cik_list)
             sql += f" AND o.owner_cik IN ({placeholders})"
             params.extend(owner_cik_list)
+        sql += prefer_non_owner_cik_qualify("o.accession_number, o.owner_index")
         if limit:
             sql += f" LIMIT {int(limit)}"
         rows = self.silver.fetch(sql, params or None)
@@ -1091,6 +1122,17 @@ class MDMPipeline:
         Does not create or refresh company entities — issuer CIKs must already
         resolve in MDM (Ticket 21: companies do not change on an insider load).
         """
+        # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+        # now widens to one row per (accession_number, cik) for a multi-CIK
+        # accession (ownership filings list both the issuer's and the
+        # reporting owner's own CIK). Without the QUALIFY below, a widened
+        # accession would match twice here -- once correctly to the
+        # issuer's CIK, once to the reporting owner's own CIK, which would
+        # create a self-referential "insider of themselves" IS_INSIDER edge.
+        # The QUALIFY prefers a candidate whose cik is NOT this row's own
+        # owner_cik, falling back to whatever single match exists when
+        # that's the only candidate, so no previously-working single-match
+        # case regresses.
         sql = """
             SELECT o.accession_number, o.owner_index, o.owner_cik, o.owner_name,
                    o.is_director, o.is_officer, o.is_ten_percent_owner, o.is_other,
@@ -1104,6 +1146,7 @@ class MDMPipeline:
             placeholders = ", ".join("?" for _ in issuer_ciks)
             sql += f" WHERE f.cik IN ({placeholders})"
             params.extend(issuer_ciks)
+        sql += prefer_non_owner_cik_qualify("o.accession_number, o.owner_index")
         sql += " ORDER BY o.accession_number, o.owner_index"
         company_ciks = self._company_cik_set()
         existing = self._relationship_count("IS_INSIDER")
@@ -1223,7 +1266,16 @@ class MDMPipeline:
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
-        sql = """
+        # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+        # now widens to one row per (accession_number, cik) for a multi-CIK
+        # accession -- the QUALIFY in each branch below prefers a candidate
+        # whose cik is NOT this row's own owner_cik (excluding the reporting
+        # owner's own self-referential row), falling back to whatever single
+        # match exists when that's the only candidate.
+        txn_qualify = prefer_non_owner_cik_qualify(
+            "t.accession_number, t.owner_index, t.txn_index"
+        )
+        sql = f"""
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
                    t.ownership_direct_indirect,
@@ -1241,6 +1293,7 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {txn_qualify}
             UNION ALL
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
@@ -1259,6 +1312,7 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {txn_qualify}
             ORDER BY accession_number, owner_index, txn_index
         """
         company_ciks = self._company_cik_set()
@@ -1373,7 +1427,16 @@ class MDMPipeline:
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_company_holds(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
-        sql = """
+        # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+        # now widens to one row per (accession_number, cik) for a multi-CIK
+        # accession -- the QUALIFY in each branch below prefers a candidate
+        # whose cik is NOT this row's own owner_cik (excluding the holding
+        # company's own self-referential row), falling back to whatever
+        # single match exists when that's the only candidate.
+        txn_qualify = prefer_non_owner_cik_qualify(
+            "t.accession_number, t.owner_index, t.txn_index"
+        )
+        sql = f"""
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
                    t.ownership_direct_indirect,
@@ -1391,6 +1454,7 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {txn_qualify}
             UNION ALL
             SELECT t.accession_number, t.owner_index, t.txn_index,
                    t.security_title, t.transaction_date, t.shares_owned_after,
@@ -1409,6 +1473,7 @@ class MDMPipeline:
              AND t.owner_index = o.owner_index
             JOIN sec_company_filing f ON t.accession_number = f.accession_number
             WHERE t.security_title IS NOT NULL
+            {txn_qualify}
             ORDER BY accession_number, owner_index, txn_index
         """
         company_ciks = self._company_cik_set()
@@ -1939,16 +2004,39 @@ class MDMPipeline:
         def _canonical(raw: str) -> str:
             return " ".join(w.capitalize() for w in (raw or "").split())
 
-        sql = """
-            SELECT DISTINCT t.security_title, f.cik AS issuer_cik
-            FROM   sec_ownership_non_derivative_txn t
-            JOIN   sec_company_filing f ON f.accession_number = t.accession_number
-            WHERE  t.security_title IS NOT NULL
-            UNION
-            SELECT DISTINCT t.security_title, f.cik AS issuer_cik
-            FROM   sec_ownership_derivative_txn t
-            JOIN   sec_company_filing f ON f.accession_number = t.accession_number
-            WHERE  t.security_title IS NOT NULL
+        # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+        # now widens to one row per (accession_number, cik) for a multi-CIK
+        # accession -- without the reporting-owner join and QUALIFY below, a
+        # widened accession would match twice here (issuer's cik, and the
+        # reporting owner's own cik), producing a bogus (title, owner_cik)
+        # "issuer" pair. The QUALIFY prefers a candidate whose cik is NOT
+        # the row's own owner_cik, falling back to whatever single match
+        # exists when that's the only candidate.
+        txn_qualify = prefer_non_owner_cik_qualify(
+            "t.accession_number, t.owner_index, t.txn_index"
+        )
+        sql = f"""
+            SELECT DISTINCT security_title, issuer_cik FROM (
+                SELECT t.accession_number, t.owner_index, t.txn_index,
+                       t.security_title, f.cik AS issuer_cik
+                FROM   sec_ownership_non_derivative_txn t
+                JOIN   sec_ownership_reporting_owner o
+                  ON   t.accession_number = o.accession_number
+                 AND   t.owner_index = o.owner_index
+                JOIN   sec_company_filing f ON f.accession_number = t.accession_number
+                WHERE  t.security_title IS NOT NULL
+                {txn_qualify}
+                UNION ALL
+                SELECT t.accession_number, t.owner_index, t.txn_index,
+                       t.security_title, f.cik AS issuer_cik
+                FROM   sec_ownership_derivative_txn t
+                JOIN   sec_ownership_reporting_owner o
+                  ON   t.accession_number = o.accession_number
+                 AND   t.owner_index = o.owner_index
+                JOIN   sec_company_filing f ON f.accession_number = t.accession_number
+                WHERE  t.security_title IS NOT NULL
+                {txn_qualify}
+            )
         """
         rows = self.silver.fetch(sql)
 

@@ -86,9 +86,19 @@ def compute_coverage(
     # XBRL-sourced securities (sec_financial_fact) are deferred to Phase 6.
     # LEFT JOIN, not INNER (mdm-ownership-resolver-filing-join-gap ticket 01)
     # -- same reasoning as persons above.
+    #
+    # duckdb-retirement-cutover Ticket 16 (2026-09-06): sec_company_filing
+    # now widens to one row per (accession_number, cik) for a multi-CIK
+    # accession -- since f's columns aren't projected here (this only
+    # counts distinct txns, not issuer identity), a widened accession would
+    # otherwise inflate the count via duplicate joined rows per txn. The
+    # outer COUNT(*) over a SELECT DISTINCT (portable across both DuckDB
+    # and Snowflake -- neither accepts a multi-column COUNT(DISTINCT ...)
+    # the same way) collapses those duplicates back to one row per txn,
+    # matching run_securities' own per-txn QUALIFY dedup.
     # ------------------------------------------------------------------
     security_silver = _silver(
-        "SELECT COUNT(*) AS n FROM ("
+        "SELECT COUNT(*) AS n FROM (SELECT DISTINCT accession_number, owner_index, txn_index FROM ("
         "  SELECT t.accession_number, t.owner_index, t.txn_index"
         "  FROM sec_ownership_non_derivative_txn t"
         "  LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number"
@@ -98,7 +108,7 @@ def compute_coverage(
         "  FROM sec_ownership_derivative_txn t"
         "  LEFT JOIN sec_company_filing f ON t.accession_number = f.accession_number"
         "  WHERE t.security_title IS NOT NULL"
-        ")"
+        "))"
     )
     security_mdm = _mdm_count(MdmSecurity)
 

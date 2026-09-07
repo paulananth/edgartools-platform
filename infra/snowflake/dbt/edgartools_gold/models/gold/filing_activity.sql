@@ -7,9 +7,19 @@
 -- instead of the Python-builder-populated EDGARTOOLS_SOURCE mirror. Every
 -- other key column is now derived here too, matching
 -- _build_fact_filing_activity (gold_models.py) exactly:
---   fact_key   = hash(accession_number)      -- same formula as filing_key,
+--   fact_key   = hash(accession_number, cik) -- same formula as filing_key,
 --                                                so the two are numerically
---                                                equal, as they were before
+--                                                equal, as they were before.
+--                                                Widened to include cik
+--                                                (duckdb-retirement-cutover
+--                                                Ticket 16): sec_company_filing
+--                                                can now legitimately hold 2
+--                                                rows for one accession_number
+--                                                (a genuine co-registrant
+--                                                shelf-debt filing) -- a
+--                                                hash of accession_number
+--                                                alone would collide across
+--                                                those rows.
 --   company_key = cik (identity, not a hash)
 --   date_key    = YYYYMMDD integer of filing_date (date_key() macro, not a
 --                 hash)
@@ -20,9 +30,9 @@
 --                 (unlike DuckDB's, which the original code relied on
 --                 propagating to NULL) -- COALESCE would never have fired
 select
-  {{ surrogate_key(['accession_number']) }} as fact_key,
+  {{ surrogate_key(['accession_number', 'cik']) }} as fact_key,
   cik as company_key,
-  {{ surrogate_key(['accession_number']) }} as filing_key,
+  {{ surrogate_key(['accession_number', 'cik']) }} as filing_key,
   {{ date_key('filing_date') }} as date_key,
   case when form is null then 0 else {{ surrogate_key(['form']) }} end as form_key,
   accession_number,
