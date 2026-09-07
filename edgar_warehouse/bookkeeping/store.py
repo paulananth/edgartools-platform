@@ -426,25 +426,44 @@ class BookkeepingStore:
         status: str,
         finished_at: datetime,
     ) -> None:
-        seen: set[int] = set()
+        """Mark each CIK's discovery_checkpoint row settled (succeeded/failed).
+
+        Batched (confirmed live 2026-09-07): this method's sibling directly
+        above, claim_discovery_ciks, had this exact one-row-per-round-trip
+        shape and was already fixed (see that method's own class-level
+        comment) -- finish_discovery_ciks was missed at the time. Confirmed
+        live via CloudWatch on a real daily_incremental execution: 10,517
+        CIKs, one INSERT...ON CONFLICT DO UPDATE round trip each, produced a
+        10.4-minute silent gap in the logs between this call and the next
+        logged stage, at ~59ms/round trip -- squarely the same cost shape
+        already diagnosed and fixed for claim_discovery_ciks. No per-CIK
+        failure isolation is needed here (unlike the ledger's per-candidate
+        Fetch Decisions elsewhere in this pipeline): this call's own caller
+        already treats the whole batch as one atomic unit -- its except
+        block marks every selected CIK "failed" together on any exception,
+        never a subset -- so a single bulk statement per chunk changes
+        round-trip count only, not failure semantics.
+        """
+        deduped = list(dict.fromkeys(int(cik) for cik in ciks))
+        if not deduped:
+            return
         insert_factory = self._insert_factory()
-        for raw_cik in ciks:
-            cik = int(raw_cik)
-            if cik in seen:
-                continue
-            seen.add(cik)
-            scope_key = str(cik)
-            stmt = insert_factory(DiscoveryCheckpoint).values(
-                scope_type="cik",
-                scope_key=scope_key,
-                discovery_source=discovery_source,
-                status=status,
-                run_id=run_id,
-                claimed_at=finished_at,
-                finished_at=finished_at,
-                updated_at=finished_at,
-                metadata_json=None,
-            )
+        for chunk in self._chunks(deduped, self._DISCOVERY_CLAIM_CHUNK_SIZE):
+            values = [
+                {
+                    "scope_type": "cik",
+                    "scope_key": str(cik),
+                    "discovery_source": discovery_source,
+                    "status": status,
+                    "run_id": run_id,
+                    "claimed_at": finished_at,
+                    "finished_at": finished_at,
+                    "updated_at": finished_at,
+                    "metadata_json": None,
+                }
+                for cik in chunk
+            ]
+            stmt = insert_factory(DiscoveryCheckpoint).values(values)
             excluded = stmt.excluded
             stmt = stmt.on_conflict_do_update(
                 index_elements=[DiscoveryCheckpoint.scope_type, DiscoveryCheckpoint.scope_key],
