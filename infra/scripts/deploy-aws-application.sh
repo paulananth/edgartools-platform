@@ -83,7 +83,7 @@ Options:
                                     warehouse profile. Default: resolved by name
                                     (<prefix>/bookkeeping/postgres_dsn), same as the MDM DSN.
   --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
-  --mdm-run-limit <n>               Default limit for mdm mastering state machine. Default: 100; 0 means no default limit.
+  --mdm-run-limit <n>               Default limit for mdm mastering state machine. Default: 0 (unbounded); a positive value bounds it.
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
                                     tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
