@@ -91,6 +91,74 @@ class AwsCli:
             f"file://{batch_file}",
         )
 
+    def put_evidence(self, *, bucket: str, key: str, source: Path) -> dict[str, Any]:
+        expected_prefix = (
+            "warehouse/release/aws-cost-optimizer/filing-text-retention/"
+        )
+        if not bucket.startswith("edgartools-prod-warehouse-") or not key.startswith(
+            expected_prefix
+        ):
+            raise ValueError("filing-text evidence target is outside the protected prefix")
+        self.guard.require_s3_evidence_write("s3api", "put-object")
+        return self._run(
+            "s3api",
+            "put-object",
+            "--bucket",
+            bucket,
+            "--key",
+            key,
+            "--body",
+            str(source),
+        )
+
+    def acquire_filing_text_lock(
+        self, *, account_id: str, owner: str, evidence_dir: Path
+    ) -> dict[str, str]:
+        bucket = f"edgartools-prod-warehouse-{account_id}"
+        key = "warehouse/release/filing-text-retention/mutation.lock"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        request = evidence_dir / "mutation-lock-request.json"
+        request.write_text(
+            json.dumps(
+                {"owner": owner, "acquired_at": datetime.now(UTC).isoformat()},
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.guard.require_s3_lock_operation("s3api", "put-object")
+        response = self._run(
+            "s3api",
+            "put-object",
+            "--bucket",
+            bucket,
+            "--key",
+            key,
+            "--body",
+            str(request),
+            "--content-type",
+            "application/json",
+            "--if-none-match",
+            "*",
+        )
+        version_id = str(response.get("VersionId") or "")
+        if not version_id:
+            raise RuntimeError("filing-text mutation lock did not return a VersionId")
+        return {"bucket": bucket, "key": key, "version_id": version_id}
+
+    def release_filing_text_lock(self, lock: Mapping[str, str]) -> None:
+        self.guard.require_s3_lock_operation("s3api", "delete-object")
+        self._run(
+            "s3api",
+            "delete-object",
+            "--bucket",
+            lock["bucket"],
+            "--key",
+            lock["key"],
+            "--version-id",
+            lock["version_id"],
+        )
+
     def _run(self, service: str, operation: str, *arguments: str) -> dict[str, Any]:
         result = subprocess.run(
             [*self._base(), service, operation, *arguments],
@@ -166,6 +234,35 @@ class SnowflakeFilingTextRetirement:
             SELECT DISTINCT CONCAT_WS('|', accession_number, text_version) AS business_key
             FROM EDGARTOOLS_SILVER.SEC_FILING_TEXT
             WHERE CONCAT_WS('|', accession_number, text_version) IN ({placeholders})
+            """,
+            (),
+        )
+
+    def required_business_keys(self, business_keys: tuple[str, ...]) -> set[str]:
+        """Read the live exact periodic-filing requirement, independent of text rows."""
+        return self._select_business_keys(
+            business_keys,
+            """
+            WITH periodic AS (
+                SELECT cik, accession_number, filing_date,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY cik
+                           ORDER BY filing_date DESC, accession_number DESC
+                       ) AS rn
+                FROM EDGARTOOLS_SILVER.SEC_COMPANY_FILING
+                WHERE form IN ('10-K', '10-K405', '10KSB', '10KSB40')
+            )
+            SELECT DISTINCT CONCAT_WS('|', accession_number, 'generic_text_v1')
+                AS business_key
+            FROM periodic
+            WHERE rn = 1
+              AND filing_date >= DATEADD(year, -2, CURRENT_DATE())
+              AND cik IN (
+                  SELECT DISTINCT cik
+                  FROM EDGARTOOLS_SILVER.SEC_COMPANY_TICKER
+              )
+              AND CONCAT_WS('|', accession_number, 'generic_text_v1')
+                  IN ({placeholders})
             """,
             (),
         )
@@ -878,7 +975,47 @@ def _hashed_evidence(payload: Mapping[str, Any]) -> dict[str, Any]:
     return {**evidence, "evidence_hash": hashlib.sha256(encoded).hexdigest()}
 
 
+def filing_text_evidence_location(plan: Mapping[str, Any]) -> tuple[str, str]:
+    account_id = str(plan.get("expected_account_id") or "")
+    plan_hash = str(plan.get("plan_hash") or "")
+    if not account_id.isdigit() or len(account_id) != 12 or len(plan_hash) != 64:
+        raise ValueError("filing-text evidence requires a valid account and plan hash")
+    return (
+        f"edgartools-prod-warehouse-{account_id}",
+        (
+            "warehouse/release/aws-cost-optimizer/filing-text-retention/"
+            f"plan_hash={plan_hash}"
+        ),
+    )
+
+
+def _publish_evidence_file(
+    cli: Any, *, plan: Mapping[str, Any], source: Path
+) -> str:
+    bucket, prefix = filing_text_evidence_location(plan)
+    key = f"{prefix}/{source.name}"
+    cli.put_evidence(bucket=bucket, key=key, source=source)
+    return f"s3://{bucket}/{key}"
+
+
+def _write_and_publish_evidence(
+    cli: Any,
+    *,
+    plan: Mapping[str, Any],
+    evidence_dir: Path,
+    name: str,
+    payload: Mapping[str, Any],
+) -> Path:
+    destination = evidence_dir / name
+    destination.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    _publish_evidence_file(cli, plan=plan, source=destination)
+    return destination
+
+
 def retire_filing_text_plan(
+    cli: Any,
     silver: Any,
     *,
     plan: Mapping[str, Any],
@@ -894,8 +1031,12 @@ def retire_filing_text_plan(
     )
     cause_reference = f"filing-text-retention:{expected_hash}"
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    (evidence_dir / "reviewed-plan.json").write_text(
-        json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="reviewed-plan.json",
+        payload=plan,
     )
     silver.record_retirements(business_keys, cause_reference=cause_reference)
     recorded = silver.recorded_business_keys(
@@ -915,8 +1056,12 @@ def retire_filing_text_plan(
             "recorded_at": datetime.now(UTC).isoformat(),
         }
     )
-    (evidence_dir / "retirement-evidence.json").write_text(
-        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="retirement-evidence.json",
+        payload=result,
     )
     if missing:
         raise RuntimeError(
@@ -992,6 +1137,41 @@ def apply_filing_text_plan(
     retirement_evidence: Mapping[str, Any],
     evidence_dir: Path,
 ) -> dict[str, Any]:
+    """Hold the shared mutation fence throughout verification and deletion."""
+    verify_plan_hash(plan, expected_hash)
+    if plan.get("plan_hash") != expected_hash:
+        raise ValueError("reviewed --plan-hash does not match plan.plan_hash")
+    account_id = str(plan.get("expected_account_id") or "")
+    require_account(cli, account_id)
+    lock = cli.acquire_filing_text_lock(
+        account_id=account_id,
+        owner=f"filing-text-retention:{expected_hash}",
+        evidence_dir=evidence_dir,
+    )
+    try:
+        return _apply_filing_text_plan_locked(
+            cli,
+            silver,
+            plan=plan,
+            expected_hash=expected_hash,
+            latest_manifest=latest_manifest,
+            retirement_evidence=retirement_evidence,
+            evidence_dir=evidence_dir,
+        )
+    finally:
+        cli.release_filing_text_lock(lock)
+
+
+def _apply_filing_text_plan_locked(
+    cli: AwsCli,
+    silver: Any,
+    *,
+    plan: Mapping[str, Any],
+    expected_hash: str,
+    latest_manifest: Mapping[str, Any],
+    retirement_evidence: Mapping[str, Any],
+    evidence_dir: Path,
+) -> dict[str, Any]:
     """Verify canonical Silver retirement before any exact S3 deletion."""
     verify_plan_hash(plan, expected_hash)
     if plan.get("plan_hash") != expected_hash:
@@ -1010,8 +1190,30 @@ def apply_filing_text_plan(
     latest_manifest_hash = _verify_latest_filing_text_manifest(
         latest_manifest, plan=plan
     )
-    active = sorted(silver.active_business_keys(business_keys))
     evidence_dir.mkdir(parents=True, exist_ok=True)
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="reviewed-plan.json",
+        payload=plan,
+    )
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="retirement-evidence.json",
+        payload=retirement_evidence,
+    )
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="latest-manifest.json",
+        payload=latest_manifest,
+    )
+    required = sorted(silver.required_business_keys(business_keys))
+    active = sorted(silver.active_business_keys(business_keys))
     verification = _hashed_evidence(
         {
             "schema_version": 1,
@@ -1019,26 +1221,29 @@ def apply_filing_text_plan(
             "plan_hash": expected_hash,
             "latest_manifest_hash": latest_manifest_hash,
             "business_keys": list(business_keys),
+            "required_business_keys": required,
             "active_business_keys": active,
             "verified_at": datetime.now(UTC).isoformat(),
-            "complete": not active,
+            "complete": not required and not active,
         }
     )
-    (evidence_dir / "silver-retirement-verification.json").write_text(
-        json.dumps(verification, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="silver-retirement-verification.json",
+        payload=verification,
     )
+    if required:
+        raise RuntimeError(
+            "derived filing text is currently required in live Silver; "
+            "refusing S3 deletion"
+        )
     if active:
         raise RuntimeError(
             "derived filing text is still active in canonical Silver; refusing S3 deletion"
         )
 
-    (evidence_dir / "reviewed-plan.json").write_text(
-        json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    (evidence_dir / "retirement-evidence.json").write_text(
-        json.dumps(retirement_evidence, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
     objects = sorted({(version.bucket, version.key) for version in planned})
 
     def inventory() -> list[ObjectVersion]:
@@ -1077,8 +1282,12 @@ def apply_filing_text_plan(
             "verified_at": datetime.now(UTC).isoformat(),
         }
     )
-    (evidence_dir / "s3-preflight.json").write_text(
-        json.dumps(preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="s3-preflight.json",
+        payload=preflight,
     )
     if not preflight_complete:
         raise RuntimeError(
@@ -1120,9 +1329,12 @@ def apply_filing_text_plan(
                     "recorded_at": datetime.now(UTC).isoformat(),
                 }
             )
-            (evidence_dir / f"delete-response-{batch_number:04d}.json").write_text(
-                json.dumps(response_evidence, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
+            _write_and_publish_evidence(
+                cli,
+                plan=plan,
+                evidence_dir=evidence_dir,
+                name=f"delete-response-{batch_number:04d}.json",
+                payload=response_evidence,
             )
             if response.get("Errors"):
                 delete_errors.extend(response["Errors"])
@@ -1172,8 +1384,12 @@ def apply_filing_text_plan(
             "verified_at": datetime.now(UTC).isoformat(),
         }
     )
-    (evidence_dir / "post-delete-result.json").write_text(
-        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_and_publish_evidence(
+        cli,
+        plan=plan,
+        evidence_dir=evidence_dir,
+        name="post-delete-result.json",
+        payload=result,
     )
     if delete_errors:
         raise RuntimeError(
@@ -1389,6 +1605,7 @@ def main(argv: list[str] | None = None) -> int:
         silver = SnowflakeFilingTextRetirement.from_environment()
         try:
             result = retire_filing_text_plan(
+                cli,
                 silver,
                 plan=plan,
                 expected_hash=args.plan_hash,

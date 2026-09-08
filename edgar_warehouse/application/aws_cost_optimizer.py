@@ -541,6 +541,8 @@ class AwsOperationGuard:
         }
     )
     S3_DELETE = ("s3api", "delete-objects")
+    S3_EVIDENCE_WRITE = ("s3api", "put-object")
+    S3_LOCK_RELEASE = ("s3api", "delete-object")
 
     def require_read(self, service: str, operation: str) -> None:
         if (service, operation) not in self.READ_ONLY:
@@ -551,3 +553,14 @@ class AwsOperationGuard:
     def require_s3_delete(self, service: str, operation: str) -> None:
         if (service, operation) != self.S3_DELETE:
             raise ValueError("retention apply permits only exact S3 version deletion")
+
+    def require_s3_evidence_write(self, service: str, operation: str) -> None:
+        if (service, operation) != self.S3_EVIDENCE_WRITE:
+            raise ValueError("retention evidence permits only exact S3 object writes")
+
+    def require_s3_lock_operation(self, service: str, operation: str) -> None:
+        if (service, operation) not in {
+            self.S3_EVIDENCE_WRITE,
+            self.S3_LOCK_RELEASE,
+        }:
+            raise ValueError("filing-text lock permits only conditional put and release")

@@ -375,10 +375,6 @@ def build_filing_text_retention_plan(
             "filing-text retention observations are out of order"
         )
     observation_span = current_at - prior_at
-    if observation_span < timedelta(days=MINIMUM_NOT_REQUIRED_DAYS):
-        raise WarehouseRuntimeError(
-            "filing-text retention observations span fewer than 30 days"
-        )
     if prior_manifest.get("run_id") == current_manifest.get("run_id"):
         raise WarehouseRuntimeError(
             "filing-text retention observations must come from distinct runs"
@@ -533,9 +529,9 @@ def validate_filing_text_retention_plan_for_apply(
     observed_from = _parse_observed_at(plan.get("observed_from"))
     observed_through = _parse_observed_at(plan.get("observed_through"))
     span = observed_through - observed_from
-    if span < timedelta(days=MINIMUM_NOT_REQUIRED_DAYS):
+    if span <= timedelta(0):
         raise WarehouseRuntimeError(
-            "filing-text retention plan lacks the 30-day observation span"
+            "filing-text retention plan observations are out of order"
         )
     if plan.get("observation_days") != span.days:
         raise WarehouseRuntimeError(

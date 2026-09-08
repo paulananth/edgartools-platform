@@ -366,6 +366,11 @@ def test_aws_operation_guard_separates_audit_reads_from_s3_apply() -> None:
     guard.require_s3_delete("s3api", "delete-objects")
     with pytest.raises(ValueError, match="only exact S3 version deletion"):
         guard.require_s3_delete("ecs", "stop-task")
+    guard.require_s3_evidence_write("s3api", "put-object")
+    guard.require_s3_lock_operation("s3api", "put-object")
+    guard.require_s3_lock_operation("s3api", "delete-object")
+    with pytest.raises(ValueError, match="conditional put and release"):
+        guard.require_s3_lock_operation("s3api", "delete-objects")
 
 
 def test_cost_findings_rank_s3_and_fargate_and_apply_thresholds() -> None:

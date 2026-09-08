@@ -35,6 +35,19 @@ TEXT_KEY = (
 TEXT_URI = f"s3://edgartools-prod-warehouse-{ACCOUNT_ID}/{TEXT_KEY}"
 
 
+class _EvidenceCli:
+    def put_evidence(self, *, bucket: str, key: str, source: Path) -> dict:
+        return {"VersionId": "evidence-version"}
+
+    def acquire_filing_text_lock(
+        self, *, account_id: str, owner: str, evidence_dir: Path
+    ) -> dict[str, str]:
+        return {"bucket": "warehouse", "key": "lock", "version_id": "lock-1"}
+
+    def release_filing_text_lock(self, lock: dict[str, str]) -> None:
+        pass
+
+
 def _manifest(
     run_id: str,
     observed_at: datetime,
@@ -85,13 +98,23 @@ def _version() -> ObjectVersion:
     )
 
 
-def _plan() -> dict:
-    prior = _manifest("sweep-prior", datetime(2026, 8, 1, tzinfo=UTC))
+def _eligible_manifests() -> tuple[dict, dict]:
+    anchor = _manifest("sweep-anchor", datetime(2026, 8, 1, tzinfo=UTC))
+    prior = _manifest(
+        "sweep-prior",
+        datetime(2026, 8, 31, tzinfo=UTC),
+        previous_manifest=anchor,
+    )
     current = _manifest(
         "sweep-current",
         datetime(2026, 9, 1, tzinfo=UTC),
         previous_manifest=prior,
     )
+    return prior, current
+
+
+def _plan() -> dict:
+    prior, current = _eligible_manifests()
     return build_filing_text_retention_plan(
         prior_manifest=prior,
         current_manifest=current,
@@ -100,13 +123,45 @@ def _plan() -> dict:
     )
 
 
-def test_plan_binds_two_observations_to_exact_warehouse_text_version() -> None:
-    prior = _manifest("sweep-prior", datetime(2026, 8, 1, tzinfo=UTC))
-    current = _manifest(
-        "sweep-current",
-        datetime(2026, 9, 1, tzinfo=UTC),
-        previous_manifest=prior,
+def test_evidence_location_is_protected_and_plan_bound() -> None:
+    plan = _plan()
+
+    bucket, prefix = filing_text_retention_cli.filing_text_evidence_location(plan)
+
+    assert bucket == f"edgartools-prod-warehouse-{ACCOUNT_ID}"
+    assert prefix == (
+        "warehouse/release/aws-cost-optimizer/filing-text-retention/"
+        f"plan_hash={plan['plan_hash']}"
     )
+
+
+def test_aws_cli_lock_uses_one_exact_versioned_warehouse_object(
+    tmp_path: Path, monkeypatch
+) -> None:
+    cli = filing_text_retention_cli.AwsCli(profile=None, region="us-east-1")
+    calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+    def fake_run(service: str, operation: str, *arguments: str) -> dict:
+        calls.append((service, operation, arguments))
+        return {"VersionId": "lock-version-1"} if operation == "put-object" else {}
+
+    monkeypatch.setattr(cli, "_run", fake_run)
+    lock = cli.acquire_filing_text_lock(
+        account_id=ACCOUNT_ID,
+        owner="filing-text-retention:plan",
+        evidence_dir=tmp_path,
+    )
+    cli.release_filing_text_lock(lock)
+
+    assert calls[0][:2] == ("s3api", "put-object")
+    assert "--if-none-match" in calls[0][2]
+    assert "warehouse/release/filing-text-retention/mutation.lock" in calls[0][2]
+    assert calls[1][:2] == ("s3api", "delete-object")
+    assert calls[1][2][-2:] == ("--version-id", "lock-version-1")
+
+
+def test_plan_binds_two_observations_to_exact_warehouse_text_version() -> None:
+    prior, current = _eligible_manifests()
 
     plan = build_filing_text_retention_plan(
         prior_manifest=prior,
@@ -117,16 +172,16 @@ def test_plan_binds_two_observations_to_exact_warehouse_text_version() -> None:
 
     assert plan["prior_manifest_hash"] == prior["manifest_hash"]
     assert plan["current_manifest_hash"] == current["manifest_hash"]
-    assert plan["observation_days"] == 31
+    assert plan["observation_days"] == 1
     assert current["previous_manifest_hash"] == prior["manifest_hash"]
-    assert current["not_required"][0]["not_required_since"] == prior["observed_at"]
+    assert current["not_required"][0]["not_required_since"] == "2026-08-01T00:00:00Z"
     assert plan["targets"] == [
         {
             "accession_number": ACCESSION,
             "text_version": TEXT_VERSION,
             "text_storage_path": TEXT_URI,
             "text_sha256": "a" * 64,
-            "not_required_since": prior["observed_at"],
+            "not_required_since": "2026-08-01T00:00:00Z",
             "continuous_days": 31,
             "business_key": f"{ACCESSION}|{TEXT_VERSION}",
             "versions": [_version().__dict__],
@@ -199,17 +254,20 @@ def test_plan_rejects_incomplete_or_too_recent_sweep_evidence() -> None:
     recent_prior = _manifest(
         "sweep-prior", datetime(2026, 8, 15, tzinfo=UTC)
     )
-    with pytest.raises(RuntimeError, match="fewer than 30 days"):
-        build_filing_text_retention_plan(
-            prior_manifest=recent_prior,
-            current_manifest=_manifest(
-                "sweep-current",
-                datetime(2026, 9, 1, tzinfo=UTC),
-                previous_manifest=recent_prior,
-            ),
-            versions=[_version()],
-            expected_account_id=ACCOUNT_ID,
-        )
+    too_recent = build_filing_text_retention_plan(
+        prior_manifest=recent_prior,
+        current_manifest=_manifest(
+            "sweep-current",
+            datetime(2026, 9, 1, tzinfo=UTC),
+            previous_manifest=recent_prior,
+        ),
+        versions=[],
+        expected_account_id=ACCOUNT_ID,
+    )
+    assert too_recent["targets"] == []
+    assert too_recent["blocked"] == [
+        f"{ACCESSION}|{TEXT_VERSION}: continuously not required for fewer than 30 days"
+    ]
 
 
 def test_plan_blocks_unknown_text_versions() -> None:
@@ -385,6 +443,12 @@ def test_retire_phase_records_and_verifies_silver_retirement_evidence(
     tmp_path: Path,
 ) -> None:
     calls: list[str] = []
+    uploaded: list[str] = []
+
+    class EvidenceCli(_EvidenceCli):
+        def put_evidence(self, *, bucket: str, key: str, source: Path) -> dict:
+            uploaded.append(key.rsplit("/", 1)[-1])
+            return {"VersionId": f"evidence-{len(uploaded)}"}
 
     class FakeSilver:
         def record_retirements(
@@ -402,6 +466,7 @@ def test_retire_phase_records_and_verifies_silver_retirement_evidence(
 
     plan = _plan()
     result = filing_text_retention_cli.retire_filing_text_plan(
+        EvidenceCli(),
         FakeSilver(),
         plan=plan,
         expected_hash=plan["plan_hash"],
@@ -412,6 +477,7 @@ def test_retire_phase_records_and_verifies_silver_retirement_evidence(
     assert result["retirement_recorded"] is True
     assert len(result["evidence_hash"]) == 64
     assert (tmp_path / "retirement-evidence.json").exists()
+    assert uploaded == ["reviewed-plan.json", "retirement-evidence.json"]
 
 
 def test_apply_refuses_s3_delete_while_silver_identity_is_still_active(
@@ -427,6 +493,7 @@ def test_apply_refuses_s3_delete_while_silver_identity_is_still_active(
             return set(business_keys)
 
     retirement = filing_text_retention_cli.retire_filing_text_plan(
+        _EvidenceCli(),
         RetirementRecorder(),
         plan=plan,
         expected_hash=plan["plan_hash"],
@@ -434,10 +501,16 @@ def test_apply_refuses_s3_delete_while_silver_identity_is_still_active(
     )
 
     class ActiveSilver:
+        def required_business_keys(self, business_keys):
+            return set()
+
         def active_business_keys(self, business_keys):
             return set(business_keys)
 
-    class NoDeleteCli:
+    class NoDeleteCli(_EvidenceCli):
+        def put_evidence(self, *, bucket: str, key: str, source: Path) -> dict:
+            return {"VersionId": "evidence-version"}
+
         def read(self, service: str, operation: str, *arguments: str) -> dict:
             if (service, operation) == ("sts", "get-caller-identity"):
                 return {"Account": ACCOUNT_ID}
@@ -452,13 +525,7 @@ def test_apply_refuses_s3_delete_while_silver_identity_is_still_active(
             ActiveSilver(),
             plan=plan,
             expected_hash=plan["plan_hash"],
-            latest_manifest=_manifest(
-                "sweep-current",
-                datetime(2026, 9, 1, tzinfo=UTC),
-                previous_manifest=_manifest(
-                    "sweep-prior", datetime(2026, 8, 1, tzinfo=UTC)
-                ),
-            ),
+            latest_manifest=_eligible_manifests()[1],
             retirement_evidence=retirement,
             evidence_dir=tmp_path / "apply",
         )
@@ -469,6 +536,7 @@ def test_apply_deletes_exact_version_only_after_silver_is_verified_retired(
 ) -> None:
     plan = _plan()
     events: list[str] = []
+    uploaded: list[str] = []
 
     class RetirementRecorder:
         def record_retirements(self, business_keys, *, cause_reference) -> None:
@@ -478,6 +546,7 @@ def test_apply_deletes_exact_version_only_after_silver_is_verified_retired(
             return set(business_keys)
 
     retirement = filing_text_retention_cli.retire_filing_text_plan(
+        _EvidenceCli(),
         RetirementRecorder(),
         plan=plan,
         expected_hash=plan["plan_hash"],
@@ -485,13 +554,27 @@ def test_apply_deletes_exact_version_only_after_silver_is_verified_retired(
     )
 
     class RetiredSilver:
+        def required_business_keys(self, business_keys):
+            return set()
+
         def active_business_keys(self, business_keys):
             events.append("verify-silver")
             return set()
 
-    class FakeCli:
+    class FakeCli(_EvidenceCli):
         def __init__(self) -> None:
             self.list_calls = 0
+
+        def acquire_filing_text_lock(
+            self, *, account_id: str, owner: str, evidence_dir: Path
+        ) -> dict[str, str]:
+            events.append("acquire-lock")
+            return super().acquire_filing_text_lock(
+                account_id=account_id, owner=owner, evidence_dir=evidence_dir
+            )
+
+        def release_filing_text_lock(self, lock: dict[str, str]) -> None:
+            events.append("release-lock")
 
         def read(self, service: str, operation: str, *arguments: str) -> dict:
             if (service, operation) == ("sts", "get-caller-identity"):
@@ -513,6 +596,10 @@ def test_apply_deletes_exact_version_only_after_silver_is_verified_retired(
                 }
             return {"IsTruncated": False, "Versions": []}
 
+        def put_evidence(self, *, bucket: str, key: str, source: Path) -> dict:
+            uploaded.append(key.rsplit("/", 1)[-1])
+            return {"VersionId": f"evidence-{len(uploaded)}"}
+
         def delete_versions(self, *, bucket: str, batch_file: Path) -> dict:
             events.append("delete-s3")
             assert bucket == f"edgartools-prod-warehouse-{ACCOUNT_ID}"
@@ -524,24 +611,34 @@ def test_apply_deletes_exact_version_only_after_silver_is_verified_retired(
         RetiredSilver(),
         plan=plan,
         expected_hash=plan["plan_hash"],
-        latest_manifest=_manifest(
-            "sweep-current",
-            datetime(2026, 9, 1, tzinfo=UTC),
-            previous_manifest=_manifest(
-                "sweep-prior", datetime(2026, 8, 1, tzinfo=UTC)
-            ),
-        ),
+        latest_manifest=_eligible_manifests()[1],
         retirement_evidence=retirement,
         evidence_dir=tmp_path / "apply",
     )
 
-    assert events == ["verify-silver", "list-s3", "delete-s3", "list-s3"]
+    assert events == [
+        "acquire-lock",
+        "verify-silver",
+        "list-s3",
+        "delete-s3",
+        "list-s3",
+        "release-lock",
+    ]
     assert result["complete"] is True
     assert result["deleted_versions"] == 1
     assert (tmp_path / "apply" / "post-delete-result.json").exists()
+    assert {
+        "reviewed-plan.json",
+        "retirement-evidence.json",
+        "latest-manifest.json",
+        "silver-retirement-verification.json",
+        "s3-preflight.json",
+        "delete-response-0001.json",
+        "post-delete-result.json",
+    }.issubset(uploaded)
 
 
-def test_apply_refuses_newly_required_identity_before_reading_s3(
+def test_apply_refuses_live_new_requirement_before_reading_s3(
     tmp_path: Path,
 ) -> None:
     plan = _plan()
@@ -554,53 +651,35 @@ def test_apply_refuses_newly_required_identity_before_reading_s3(
             return set(business_keys)
 
     retirement = filing_text_retention_cli.retire_filing_text_plan(
+        _EvidenceCli(),
         RetirementRecorder(),
         plan=plan,
         expected_hash=plan["plan_hash"],
         evidence_dir=tmp_path / "retire",
     )
-    current = _manifest(
-        "sweep-current",
-        datetime(2026, 9, 1, tzinfo=UTC),
-        previous_manifest=_manifest(
-            "sweep-prior", datetime(2026, 8, 1, tzinfo=UTC)
-        ),
-    )
-    latest = build_filing_text_sweep_manifest(
-        run_id="sweep-latest",
-        observed_at=datetime(2026, 9, 2, tzinfo=UTC),
-        required_rows=[
-            {"accession_number": ACCESSION, "text_version": TEXT_VERSION}
-        ],
-        processed_rows=[
-            {
-                "accession_number": ACCESSION,
-                "text_version": TEXT_VERSION,
-                "text_storage_path": TEXT_URI,
-                "text_sha256": "a" * 64,
-            }
-        ],
-        status="succeeded",
-        previous_manifest=current,
-    )
+    class NewlyRequiredSilver:
+        def required_business_keys(self, business_keys):
+            return set(business_keys)
 
-    class RetiredSilver:
         def active_business_keys(self, business_keys):
             return set()
 
-    class NoS3Cli:
+    class NoS3Cli(_EvidenceCli):
+        def put_evidence(self, *, bucket: str, key: str, source: Path) -> dict:
+            return {"VersionId": "evidence-version"}
+
         def read(self, service: str, operation: str, *arguments: str) -> dict:
             if (service, operation) == ("sts", "get-caller-identity"):
                 return {"Account": ACCOUNT_ID}
             raise AssertionError("S3 must not be read after a new requirement")
 
-    with pytest.raises(RuntimeError, match="latest successful sweep"):
+    with pytest.raises(RuntimeError, match="currently required in live Silver"):
         filing_text_retention_cli.apply_filing_text_plan(
             NoS3Cli(),
-            RetiredSilver(),
+            NewlyRequiredSilver(),
             plan=plan,
             expected_hash=plan["plan_hash"],
-            latest_manifest=latest,
+            latest_manifest=_eligible_manifests()[1],
             retirement_evidence=retirement,
             evidence_dir=tmp_path / "apply",
         )
@@ -617,6 +696,7 @@ def test_apply_persists_delete_error_and_post_delete_evidence(tmp_path: Path) ->
             return set(business_keys)
 
     retirement = filing_text_retention_cli.retire_filing_text_plan(
+        _EvidenceCli(),
         RetirementRecorder(),
         plan=plan,
         expected_hash=plan["plan_hash"],
@@ -624,10 +704,16 @@ def test_apply_persists_delete_error_and_post_delete_evidence(tmp_path: Path) ->
     )
 
     class RetiredSilver:
+        def required_business_keys(self, business_keys):
+            return set()
+
         def active_business_keys(self, business_keys):
             return set()
 
-    class ErrorCli:
+    class ErrorCli(_EvidenceCli):
+        def put_evidence(self, *, bucket: str, key: str, source: Path) -> dict:
+            return {"VersionId": "evidence-version"}
+
         def read(self, service: str, operation: str, *arguments: str) -> dict:
             if (service, operation) == ("sts", "get-caller-identity"):
                 return {"Account": ACCOUNT_ID}
@@ -654,13 +740,7 @@ def test_apply_persists_delete_error_and_post_delete_evidence(tmp_path: Path) ->
             RetiredSilver(),
             plan=plan,
             expected_hash=plan["plan_hash"],
-            latest_manifest=_manifest(
-                "sweep-current",
-                datetime(2026, 9, 1, tzinfo=UTC),
-                previous_manifest=_manifest(
-                    "sweep-prior", datetime(2026, 8, 1, tzinfo=UTC)
-                ),
-            ),
+            latest_manifest=_eligible_manifests()[1],
             retirement_evidence=retirement,
             evidence_dir=apply_dir,
         )
@@ -721,10 +801,12 @@ def test_snowflake_retirement_adapter_uses_landing_record_then_canonical_read() 
     assert adapter.recorded_business_keys(
         (business_key,), cause_reference="filing-text-retention:plan-hash"
     ) == {business_key}
+    assert adapter.required_business_keys((business_key,)) == set()
     assert adapter.active_business_keys((business_key,)) == set()
     assert connection.committed is True
     assert "INSERT INTO EDGARTOOLS_SILVER_LANDING.SILVER_LANDING_RETIREMENT" in statements[0]
     assert any("FROM EDGARTOOLS_SILVER.SEC_FILING_TEXT" in sql for sql in statements)
+    assert any("FROM EDGARTOOLS_SILVER.SEC_COMPANY_FILING" in sql for sql in statements)
 
 
 def test_cli_requires_separate_retire_and_derived_delete_confirmations() -> None:

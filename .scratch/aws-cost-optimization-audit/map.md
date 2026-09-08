@@ -88,6 +88,10 @@ hash-bound deletion of exact expired versions under settled year/day rules.
   — Derived-text authority is exact-accession/version only, requires two
   successful observations plus 30 days, and uses immutable manifests with
   Silver-first retirement before reviewed exact-version deletion.
+- [Implement Guarded Derived Filing-Text Retention](issues/09-implement-guarded-derived-filing-text-retention.md)
+  — Consecutive immutable manifests carry the 30-day streak; apply rechecks
+  live Silver under a shared writer lock and durably records every gate before
+  exact derived-text VersionId deletion, while Bronze remains untouchable.
 
 ## Not yet specified
 
