@@ -266,6 +266,11 @@ resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
         Resource = "${var.warehouse_bucket_arn}/*"
       },
       {
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObjectVersion"]
+        Resource = "${var.warehouse_bucket_arn}/warehouse/release/filing-text-retention/mutation.lock"
+      },
+      {
         Effect = "Allow"
         Action = [
           "s3:GetObject",

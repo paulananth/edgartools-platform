@@ -29,7 +29,10 @@ Implementation must be test-first and preserve these gates:
 
 Implemented test-first. `sweep-filing-text` now publishes complete immutable,
 predecessor-linked manifests whose exact not-required identities carry their
-continuous streak start. The cost optimizer builds a hash-bound plan from two
+continuous streak start. Each manifest's required and processed sets come from
+one post-projection Snowflake snapshot and bind its real query ID plus content
+hash; an extracted row that is not yet visible in canonical Snowflake makes the
+manifest incomplete. The cost optimizer builds a hash-bound plan from two
 consecutive successful observations, records and verifies Silver retirement,
 rechecks the live canonical required set, verifies the latest manifest and
 exact S3 version inventory, and deletes only the reviewed derived-text
@@ -37,14 +40,15 @@ exact S3 version inventory, and deletes only the reviewed derived-text
 
 Retirement and apply publish evidence to the protected warehouse release
 prefix before deletion. Apply holds a shared versioned S3 mutation lock that
-filing-text projection writers also honor. Unknown versions, incomplete or
+filing-text projection writers also honor, and both runtime and operator IAM
+release only that exact lock VersionId. Unknown versions, incomplete or
 discontinuous observations, identity drift, a newly required identity, active
 Silver rows, evidence-publication failure, and S3 version drift all fail
 closed. Bronze paths are outside the accepted target grammar.
 
 Verification after rebasing onto current `origin/main` and rebuilding the
-environment: 56 focused tests pass; Ruff, targeted Pyright, and diff checks
-pass. The full suite
+environment: 71 focused and architecture tests pass; Ruff, targeted Pyright,
+Terraform formatting, and diff checks pass. The full suite
 completed with 3197 passed, 7 skipped, and 8 pre-existing PostgreSQL integration
 failures caused by the current test database lacking
 `source_fetch_work.captured_etag`; this branch does not touch that schema or

@@ -41,7 +41,8 @@ Two Snowflake-specific behaviors this module exists to paper over:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 
 class _ConnectionSettings(Protocol):
@@ -111,7 +112,7 @@ class SnowflakeSilverReader:
     def connect(
         cls,
         settings_factory: Callable[[], _ConnectionSettings] = _mdm_silver_reader_settings,
-    ) -> "SnowflakeSilverReader":
+    ) -> SnowflakeSilverReader:
         """Build a settings object via ``settings_factory`` and connect,
         with the module-global ``paramstyle`` scoped to ``"qmark"`` for
         exactly the ``connect()`` call (see module docstring, point 2, and
@@ -125,6 +126,21 @@ class SnowflakeSilverReader:
             cursor.execute(sql, params or [])
             columns = [description[0].lower() for description in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+
+    def fetch_with_query_id(
+        self, sql: str, params: list | None = None
+    ) -> tuple[list[dict], str]:
+        """Return one atomic result set with its Snowflake query identity."""
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(sql, params or [])
+            query_id = str(getattr(cursor, "sfqid", "") or "").strip()
+            if not query_id:
+                raise RuntimeError("Snowflake query did not return a query ID")
+            columns = [description[0].lower() for description in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()], query_id
         finally:
             cursor.close()
 

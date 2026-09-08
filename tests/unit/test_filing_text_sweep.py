@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -30,43 +31,68 @@ class _StubSnowflakeReader:
     a real WHERE-clause bug (unlike the richer filtering StubSilver
     deliberately can't validate for run_companies())."""
 
-    def __init__(self, required_rows: list[dict], processed_accessions: set[str], all_processed_rows: list[dict]):
+    def __init__(
+        self,
+        required_rows: list[dict],
+        processed_accessions: set[str],
+        all_processed_rows: list[dict],
+        *,
+        published_after_sweep_rows: list[dict] | None = None,
+    ):
         self._required_rows = required_rows
         self._processed_accessions = processed_accessions
         self._all_processed_rows = all_processed_rows
+        self._published_after_sweep_rows = published_after_sweep_rows
         self.closed = False
         self.queries: list[str] = []
+        self.snapshot_calls = 0
 
-    def fetch(self, sql: str, params: list | None = None) -> list[dict]:
+    def fetch_with_query_id(
+        self, sql: str, params: list | None = None
+    ) -> tuple[list[dict], str]:
         self.queries.append(sql)
-        if "PARTITION BY cik" in sql and "sec_company_ticker" in sql:
-            return self._required_rows
-        if "SELECT DISTINCT f.cik, sft.accession_number" in sql:
-            rows = list(self._all_processed_rows)
-            represented = {row["accession_number"] for row in rows}
-            required_ciks = {
-                row["accession_number"]: row["cik"] for row in self._required_rows
+        assert "retention_set" in sql
+        self.snapshot_calls += 1
+        all_processed = self._all_processed_rows
+        if self.snapshot_calls > 1 and self._published_after_sweep_rows is not None:
+            all_processed = self._published_after_sweep_rows
+        rows = list(all_processed)
+        represented = {row["accession_number"] for row in rows}
+        required_ciks = {
+            row["accession_number"]: row["cik"] for row in self._required_rows
+        }
+        rows.extend(
+            {
+                "cik": required_ciks[accession],
+                "accession_number": accession,
             }
-            rows.extend(
-                {
-                    "cik": required_ciks[accession],
-                    "accession_number": accession,
-                }
-                for accession in sorted(self._processed_accessions - represented)
-            )
-            return [
-                {
-                    "text_version": "generic_text_v1",
-                    "text_storage_path": (
-                        "s3://edgartools-prod-warehouse-690839588395/warehouse/text/sec/"
-                        f"cik={row['cik']}/accession={row['accession_number']}/generic_text_v1.txt"
-                    ),
-                    "text_sha256": "a" * 64,
-                    **row,
-                }
-                for row in rows
-            ]
-        raise AssertionError(f"unexpected query in test: {sql}")
+            for accession in sorted(self._processed_accessions - represented)
+        )
+        required = [
+            {
+                "retention_set": "required",
+                "text_version": "generic_text_v1",
+                "text_storage_path": None,
+                "text_sha256": None,
+                **row,
+            }
+            for row in self._required_rows
+        ]
+        processed = [
+            {
+                "retention_set": "processed",
+                "text_version": "generic_text_v1",
+                "text_storage_path": (
+                    "s3://edgartools-prod-warehouse-690839588395/warehouse/text/sec/"
+                    f"cik={row['cik']}/accession={row['accession_number']}/generic_text_v1.txt"
+                ),
+                "text_sha256": "a" * 64,
+                "filing_date": None,
+                **row,
+            }
+            for row in rows
+        ]
+        return required + processed, f"query-snapshot-{self.snapshot_calls}"
 
     def close(self) -> None:
         self.closed = True
@@ -141,7 +167,11 @@ class TestRunFilingTextSweep:
             "unclassified": 0,
         }
         assert len(manifest["manifest_hash"]) == 64
-        assert len(manifest["snowflake_publication_identity"]) == 64
+        assert manifest["snowflake_publication_identity"] == {
+            "query_id": "query-snapshot-2",
+            "snapshot_hash": manifest["set_hashes"]["snowflake_snapshot"],
+        }
+        assert reader.snapshot_calls == 2
         assert metrics["retention_manifest_path"] == str(manifest_path)
 
         p1, p2, p3 = _patched(reader, MagicMock(), MagicMock())
@@ -194,6 +224,80 @@ class TestRunFilingTextSweep:
         assert submissions_mock.call_args.kwargs["cik"] == 910001
         extract_mock.assert_called_once()
         assert extract_mock.call_args.kwargs["accession_number"] == "0000910001-26-000001"
+
+    def test_manifest_uses_authoritative_post_projection_snowflake_snapshot(
+        self, tmp_path
+    ) -> None:
+        current = "0000910001-26-000001"
+        reader = _StubSnowflakeReader(
+            required_rows=[_row(910001, current)],
+            processed_accessions=set(),
+            all_processed_rows=[],
+            published_after_sweep_rows=[
+                {"cik": 910001, "accession_number": current}
+            ],
+        )
+        db = MagicMock()
+        db.get_filing.return_value = {"cik": 910001}
+        context = SimpleNamespace(storage_root=StorageLocation(str(tmp_path)))
+
+        p1, p2, p3 = _patched(
+            reader,
+            MagicMock(return_value={"raw_writes": []}),
+            MagicMock(return_value={"accession_number": current}),
+        )
+        with p1, p2, p3:
+            _raw_writes, metrics = run_filing_text_sweep(
+                context=context,
+                db=db,
+                bookkeeping=MagicMock(),
+                sync_run_id="run-published",
+                now=datetime(2026, 9, 7, 12, 0, tzinfo=UTC),
+            )
+
+        manifest = json.loads(
+            Path(metrics["retention_manifest_path"]).read_text(encoding="utf-8")
+        )
+        assert manifest["status"] == "succeeded"
+        assert {row["accession_number"] for row in manifest["processed"]} == {
+            current
+        }
+        assert manifest["snowflake_publication_identity"]["query_id"] == (
+            "query-snapshot-2"
+        )
+
+    def test_manifest_is_incomplete_until_extracted_row_is_visible_in_snowflake(
+        self, tmp_path
+    ) -> None:
+        current = "0000910001-26-000001"
+        reader = _StubSnowflakeReader(
+            required_rows=[_row(910001, current)],
+            processed_accessions=set(),
+            all_processed_rows=[],
+        )
+        db = MagicMock()
+        db.get_filing.return_value = {"cik": 910001}
+        context = SimpleNamespace(storage_root=StorageLocation(str(tmp_path)))
+
+        p1, p2, p3 = _patched(
+            reader,
+            MagicMock(return_value={"raw_writes": []}),
+            MagicMock(return_value={"accession_number": current}),
+        )
+        with p1, p2, p3:
+            _raw_writes, metrics = run_filing_text_sweep(
+                context=context,
+                db=db,
+                bookkeeping=MagicMock(),
+                sync_run_id="run-not-yet-published",
+                now=datetime(2026, 9, 7, 12, 0, tzinfo=UTC),
+            )
+
+        manifest = json.loads(
+            Path(metrics["retention_manifest_path"]).read_text(encoding="utf-8")
+        )
+        assert manifest["status"] == "incomplete"
+        assert metrics["retention_unpublished_required_count"] == 1
 
     def test_already_processed_accession_is_skipped(self) -> None:
         reader = _StubSnowflakeReader(

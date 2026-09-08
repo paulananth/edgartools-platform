@@ -122,7 +122,12 @@ complete immutable manifest under
 `warehouse/artifacts/filing_text_retention/observed_date=<date>/run_id=<run>/`.
 The manifest links to the immediately preceding observation and carries the
 start of each uninterrupted exact `(accession_number, text_version)`
-not-required streak. An incomplete predecessor resets that streak.
+not-required streak. Required and processed identities come from one atomic
+Snowflake query result and the manifest binds both its query ID and content
+hash. The sweep re-queries after projection work; if any current required
+identity is not yet visible in canonical Snowflake, it writes an incomplete
+manifest that cannot advance retention. An incomplete predecessor resets the
+streak.
 
 After two consecutive successful daily observations and at least 30 continuous
 days in the manifest-carried not-required streak, download the two consecutive
@@ -153,9 +158,12 @@ version state different from the reviewed plan.
 
 Use a protected retention-operator profile for apply. It needs
 `s3:ListBucketVersions` and `s3:DeleteObjectVersion` only for the exact derived
-filing-text prefix, plus `s3:GetObject`, `s3:PutObject`, and `s3:DeleteObject`
-for the lock and durable evidence under `warehouse/release/`. The ordinary
-deployer profile is suitable only when it has those separately reviewed grants.
+filing-text prefix, `s3:DeleteObjectVersion` only for the exact
+`warehouse/release/filing-text-retention/mutation.lock` key, and
+`s3:GetObject`/`s3:PutObject` for the durable evidence and lock under
+`warehouse/release/`. Key-only `s3:DeleteObject` is not the lock-release
+authority. The ordinary deployer profile is suitable only when it has those
+separately reviewed grants.
 
 ```bash
 PLAN_HASH="$(jq -r .plan_hash /tmp/filing-text-plan.json)"

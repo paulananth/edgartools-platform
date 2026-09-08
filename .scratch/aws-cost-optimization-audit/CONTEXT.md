@@ -57,10 +57,10 @@
   accession authority, complete expected bundle, and VersionIds. Unmatched
   objects degrade to `insufficient_evidence` until they can be classified.
 - Derived filing-text deletion authority is exact-accession/version scoped. It
-  requires two consecutive complete successful sweep manifests spanning at
-  least 30 days, a hash-bound exact-VersionId plan, verified Silver retirement
-  before deletion, and durable post-delete evidence. It cannot authorize a
-  Bronze deletion.
+  requires two consecutive complete successful sweep manifests plus a
+  manifest-carried uninterrupted not-required streak of at least 30 days, a
+  hash-bound exact-VersionId plan, verified Silver retirement before deletion,
+  and durable post-delete evidence. It cannot authorize a Bronze deletion.
 
 ## Explicit non-goals
 

@@ -102,11 +102,12 @@ def _latest_previous_manifest(
     return max(candidates, key=lambda candidate: (candidate[0], candidate[1]))[2]
 
 
-def _required_ciks(reader: Any) -> list[dict[str, Any]]:
-    """Return one row per required CIK: cik, latest qualifying accession_number,
-    latest filing_date. See module docstring for the ``required`` definition."""
+def _filing_text_snapshot(
+    reader: Any,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+    """Read required and processed identities in one query-bound snapshot."""
     placeholders = ", ".join("?" for _ in _PERIODIC_FORMS)
-    rows = reader.fetch(
+    rows, query_id = reader.fetch_with_query_id(
         f"""
         WITH periodic AS (
             SELECT cik, accession_number, filing_date,
@@ -115,36 +116,58 @@ def _required_ciks(reader: Any) -> list[dict[str, Any]]:
                    ) AS rn
             FROM sec_company_filing
             WHERE form IN ({placeholders})
+        ), required AS (
+            SELECT cik, accession_number, filing_date
+            FROM periodic
+            WHERE rn = 1
+              AND filing_date >= DATEADD(
+                  year, -{_REQUIRED_RECENCY_YEARS}, CURRENT_DATE()
+              )
+              AND cik IN (SELECT DISTINCT cik FROM sec_company_ticker)
         )
-        SELECT cik, accession_number, filing_date
-        FROM periodic
-        WHERE rn = 1
-          AND filing_date >= DATEADD(year, -{_REQUIRED_RECENCY_YEARS}, CURRENT_DATE())
-          AND cik IN (SELECT DISTINCT cik FROM sec_company_ticker)
+        SELECT 'required' AS retention_set,
+               cik,
+               accession_number,
+               filing_date,
+               '{_TEXT_VERSION}' AS text_version,
+               CAST(NULL AS VARCHAR) AS text_storage_path,
+               CAST(NULL AS VARCHAR) AS text_sha256
+        FROM required
+        UNION ALL
+        SELECT DISTINCT 'processed' AS retention_set,
+               f.cik,
+               sft.accession_number,
+               CAST(NULL AS DATE) AS filing_date,
+               sft.text_version,
+               sft.text_storage_path,
+               sft.text_sha256
+        FROM sec_filing_text sft
+        LEFT JOIN sec_company_filing f
+          ON f.accession_number = sft.accession_number
         """,
         list(_PERIODIC_FORMS),
     )
-    return [
+    unknown_sets = sorted(
+        {
+            str(row.get("retention_set") or "")
+            for row in rows
+            if row.get("retention_set") not in {"required", "processed"}
+        }
+    )
+    if unknown_sets:
+        raise RuntimeError(
+            f"Snowflake filing-text snapshot has unknown sets: {unknown_sets!r}"
+        )
+    required = [
         {
             "cik": int(row["cik"]),
             "accession_number": str(row["accession_number"]),
             "filing_date": row["filing_date"],
         }
         for row in rows
+        if row["retention_set"] == "required"
     ]
-
-
-def _processed_filing_text(reader: Any) -> list[dict[str, Any]]:
-    """Return every exact filing-text identity and its derived object evidence."""
-    rows = reader.fetch(
-        """
-        SELECT DISTINCT f.cik, sft.accession_number, sft.text_version,
-                        sft.text_storage_path, sft.text_sha256
-        FROM sec_filing_text sft
-        LEFT JOIN sec_company_filing f ON f.accession_number = sft.accession_number
-        """
-    )
-    return [
+    processed = [
         {
             "cik": int(row["cik"]) if row.get("cik") is not None else None,
             "accession_number": str(row["accession_number"]),
@@ -153,7 +176,9 @@ def _processed_filing_text(reader: Any) -> list[dict[str, Any]]:
             "text_sha256": str(row.get("text_sha256") or ""),
         }
         for row in rows
+        if row["retention_set"] == "processed"
     ]
+    return required, processed, query_id
 
 
 def run_filing_text_sweep(
@@ -185,8 +210,7 @@ def run_filing_text_sweep(
 
     reader = SnowflakeSilverReader.connect()
     try:
-        required = _required_ciks(reader)
-        processed_rows = _processed_filing_text(reader)
+        required, processed_rows, _initial_query_id = _filing_text_snapshot(reader)
         required_identities = {
             (row["accession_number"], _TEXT_VERSION) for row in required
         }
@@ -294,13 +318,39 @@ def run_filing_text_sweep(
             continue
 
     _emit_pipeline_event(
-        "filing_text_sweep_completed",
+        "filing_text_sweep_projection_completed",
         run_id=sync_run_id,
         required_count=len(required),
         pending_count=len(pending),
         rows_inserted=metrics["rows_inserted"],
         rows_skipped=metrics["rows_skipped"],
         cik_error_count=metrics["cik_error_count"],
+    )
+
+    final_reader = SnowflakeSilverReader.connect()
+    try:
+        final_required, final_processed_rows, final_query_id = (
+            _filing_text_snapshot(final_reader)
+        )
+    finally:
+        final_reader.close()
+    final_required_identities = {
+        (row["accession_number"], _TEXT_VERSION) for row in final_required
+    }
+    final_processed_identities = {
+        (row["accession_number"], row["text_version"])
+        for row in final_processed_rows
+    }
+    unpublished_required = sorted(
+        final_required_identities - final_processed_identities
+    )
+    metrics["retention_unpublished_required_count"] = len(unpublished_required)
+    metrics["cleanup_candidate_count"] = sum(
+        1
+        for row in final_processed_rows
+        if row["text_version"] == _TEXT_VERSION
+        and (row["accession_number"], row["text_version"])
+        not in final_required_identities
     )
 
     from edgar_warehouse.application.filing_text_retention import (
@@ -311,16 +361,19 @@ def run_filing_text_sweep(
 
     retention_status = (
         "succeeded"
-        if metrics["cik_error_count"] == 0 and metrics["rows_skipped"] == 0
+        if metrics["cik_error_count"] == 0
+        and metrics["rows_skipped"] == 0
+        and not unpublished_required
         else "incomplete"
     )
     manifest = build_filing_text_sweep_manifest(
         run_id=sync_run_id,
         observed_at=now,
+        snowflake_query_id=final_query_id,
         required_rows=[
-            {**row, "text_version": _TEXT_VERSION} for row in required
+            {**row, "text_version": _TEXT_VERSION} for row in final_required
         ],
-        processed_rows=processed_rows,
+        processed_rows=final_processed_rows,
         status=retention_status,
         previous_manifest=_latest_previous_manifest(
             context.storage_root,
@@ -338,5 +391,18 @@ def run_filing_text_sweep(
     metrics["retention_manifest_path"] = manifest_path
     metrics["retention_manifest_hash"] = manifest["manifest_hash"]
     metrics["retention_manifest_status"] = retention_status
+
+    _emit_pipeline_event(
+        "filing_text_sweep_completed",
+        run_id=sync_run_id,
+        required_count=len(final_required),
+        pending_count=len(pending),
+        rows_inserted=metrics["rows_inserted"],
+        rows_skipped=metrics["rows_skipped"],
+        cik_error_count=metrics["cik_error_count"],
+        retention_manifest_status=retention_status,
+        retention_unpublished_required_count=len(unpublished_required),
+        snowflake_query_id=final_query_id,
+    )
 
     return raw_writes, metrics

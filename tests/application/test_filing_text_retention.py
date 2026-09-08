@@ -57,6 +57,7 @@ def _manifest(
     return build_filing_text_sweep_manifest(
         run_id=run_id,
         observed_at=observed_at,
+        snowflake_query_id=f"query-{run_id}",
         required_rows=[
             {
                 "accession_number": "0000910001-26-000001",
@@ -80,6 +81,7 @@ def _empty_manifest(run_id: str, observed_at: datetime) -> dict:
     return build_filing_text_sweep_manifest(
         run_id=run_id,
         observed_at=observed_at,
+        snowflake_query_id=f"query-{run_id}",
         required_rows=[],
         processed_rows=[],
         status="succeeded",
@@ -237,6 +239,7 @@ def test_plan_rejects_incomplete_or_too_recent_sweep_evidence() -> None:
     incomplete = build_filing_text_sweep_manifest(
         run_id="sweep-incomplete",
         observed_at=datetime(2026, 9, 1, tzinfo=UTC),
+        snowflake_query_id="query-sweep-incomplete",
         required_rows=[],
         processed_rows=[],
         status="incomplete",
@@ -286,6 +289,7 @@ def test_plan_blocks_unknown_text_versions() -> None:
     prior = build_filing_text_sweep_manifest(
         run_id="sweep-prior",
         observed_at=datetime(2026, 8, 1, tzinfo=UTC),
+        snowflake_query_id="query-sweep-prior",
         required_rows=[],
         processed_rows=processed,
         status="succeeded",
@@ -293,6 +297,7 @@ def test_plan_blocks_unknown_text_versions() -> None:
     current = build_filing_text_sweep_manifest(
         run_id="sweep-current",
         observed_at=datetime(2026, 9, 1, tzinfo=UTC),
+        snowflake_query_id="query-sweep-current",
         required_rows=[],
         processed_rows=processed,
         status="succeeded",
@@ -317,6 +322,7 @@ def test_plan_blocks_derived_object_drift_between_observations() -> None:
     current = build_filing_text_sweep_manifest(
         run_id="sweep-current",
         observed_at=datetime(2026, 9, 1, tzinfo=UTC),
+        snowflake_query_id="query-sweep-current",
         required_rows=[],
         processed_rows=[
             {

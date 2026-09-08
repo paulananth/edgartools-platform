@@ -45,6 +45,7 @@ def build_filing_text_sweep_manifest(
     *,
     run_id: str,
     observed_at: datetime,
+    snowflake_query_id: str,
     required_rows: Sequence[Mapping[str, Any]],
     processed_rows: Sequence[Mapping[str, Any]],
     status: str,
@@ -53,6 +54,11 @@ def build_filing_text_sweep_manifest(
     """Build a complete, deterministic observation of derived-text necessity."""
     if not run_id.strip():
         raise WarehouseRuntimeError("filing-text retention manifest requires run_id")
+    snowflake_query_id = snowflake_query_id.strip()
+    if not snowflake_query_id:
+        raise WarehouseRuntimeError(
+            "filing-text retention manifest requires a Snowflake query ID"
+        )
     if status not in {"succeeded", "incomplete"}:
         raise WarehouseRuntimeError("filing-text retention manifest has invalid status")
 
@@ -133,9 +139,14 @@ def build_filing_text_sweep_manifest(
         "unclassified": unclassified,
     }
     set_hashes = {name: _sha256(rows) for name, rows in sets.items()}
-    publication_identity = _sha256(
+    snapshot_hash = _sha256(
         {"required": required, "processed": processed}
     )
+    set_hashes["snowflake_snapshot"] = snapshot_hash
+    publication_identity = {
+        "query_id": snowflake_query_id,
+        "snapshot_hash": snapshot_hash,
+    }
     manifest: dict[str, Any] = {
         "schema_version": SWEEP_MANIFEST_SCHEMA_VERSION,
         "kind": "filing_text_sweep",
@@ -305,10 +316,18 @@ def _validate_filing_text_sweep_manifest(
         raise WarehouseRuntimeError(
             "filing-text retention manifest unclassified set is incomplete"
         )
-    expected_publication = _sha256(
+    expected_snapshot_hash = _sha256(
         {"required": sets["required"], "processed": sets["processed"]}
     )
-    if manifest.get("snowflake_publication_identity") != expected_publication:
+    publication = manifest.get("snowflake_publication_identity")
+    if (
+        not isinstance(publication, Mapping)
+        or set(publication) != {"query_id", "snapshot_hash"}
+        or not str(publication.get("query_id") or "").strip()
+        or publication.get("snapshot_hash") != expected_snapshot_hash
+        or manifest.get("set_hashes", {}).get("snowflake_snapshot")
+        != expected_snapshot_hash
+    ):
         raise WarehouseRuntimeError(
             "filing-text retention Snowflake publication identity mismatch"
         )
