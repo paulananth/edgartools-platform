@@ -2301,6 +2301,12 @@ class MDMPipeline:
             )
             for i, value in enumerate(batch_result):
                 totals[i] += value
+            # mdm-run-throughput Ticket 06: same periodic-commit shape as
+            # _derive_institutional_holds' CIK-range loop above -- commit at
+            # this already-existing CRD-batch boundary (the batch has already
+            # flush_pending()'d/unprime_relationship_type()'d internally),
+            # not just once at the end of the whole MANAGES_FUND type.
+            self.session.commit()
             if remaining is not None and totals[0] >= remaining:
                 break
         self._advance_relationship_watermark(
@@ -4114,6 +4120,20 @@ class MDMPipeline:
             )
             for i, value in enumerate(batch_result):
                 totals[i] += value
+            # mdm-run-throughput Ticket 06: commit at this already-existing
+            # CIK-range batch boundary, not just once at the very end of the
+            # whole type (derive_relationships'/_derive_one's single final
+            # commit). By this point the batch has already flush_pending()'d
+            # and unprime_relationship_type()'d internally (see
+            # _derive_institutional_holds_batch's own finally block), so
+            # nothing is left half-written and the next batch's own
+            # prime_relationship_type re-primes fresh from this committed
+            # state -- same shape as Ticket 04's periodic commit for
+            # _run_grouped_concurrent's oversized groups, applied here
+            # because INSTITUTIONAL_HOLDS derives from sec_thirteenf_holding
+            # (6.8M rows in prod, the largest table in the system) and was
+            # observed live sitting on one uncommitted transaction for 3h24min+.
+            self.session.commit()
             if remaining is not None and totals[0] >= remaining:
                 break
             cik_lo = cik_hi + 1
