@@ -588,3 +588,153 @@ class TestRunPersonsPartialFailure:
         ):
             with pytest.raises(RuntimeError, match="boom"):
                 pipeline.run_persons()
+
+
+class TestGroupedConcurrentPeriodicCommit:
+    """mdm-run-throughput Ticket 04: _run_grouped_concurrent's per-group
+    worker must commit periodically within an oversized group's row loop,
+    not only once at the very end -- see the ticket for the live production
+    incident (one security-title group ran 20+ minutes with zero committed,
+    externally-visible progress, then lost all of it when interrupted).
+
+    Deliberately uses ``commit_interval``, NOT ``log_interval`` -- a first
+    version of this fix reused ``log_interval`` for both progress-log
+    cadence and the per-group commit checkpoint, which `/gof-refactor-
+    reviewer` caught as a real bug: ``log_interval`` scales with the WHOLE
+    domain's row count (tens of thousands+ in a real run_securities call),
+    so a single group would need to be over 1/8 of the entire domain before
+    ever triggering a periodic commit -- meaning the fix would likely never
+    have engaged for the realistic oversized-group sizes (a few thousand
+    rows) that caused the incident. ``commit_interval`` is now its own
+    parameter, independent of domain size (see ``_GROUP_COMMIT_INTERVAL``).
+    """
+
+    @staticmethod
+    def _process(ctx, row):
+        # Any real query/write is enough to open a genuine DBAPI transaction,
+        # so session.commit() below performs a real commit this test can
+        # observe -- a no-op process function wouldn't necessarily start one.
+        from sqlalchemy import text
+        ctx.session.execute(text("SELECT 1"))
+
+    def _count_commits(self, session) -> list[int]:
+        commit_count = [0]
+
+        def _on_commit(_conn):
+            commit_count[0] += 1
+
+        event.listen(session.get_bind(), "commit", _on_commit)
+        return commit_count
+
+    def test_commits_periodically_within_an_oversized_group_not_only_at_the_end(self):
+        session = _seeded_sqlite_session(static_pool=True)
+        pipeline = MDMPipeline(session=session, silver=StubSilver({}))
+        commit_count = self._count_commits(session)
+
+        keyed_rows = [("only-group", {"n": i}) for i in range(25)]
+        pipeline._run_grouped_concurrent(
+            keyed_rows, self._process, domain="test", max_workers=4,
+            log_interval=1000, commit_interval=10,
+        )
+
+        # 25 rows, commit_interval=10: periodic commits after row 10 and row
+        # 20, plus the existing final commit after row 25 -- 3 total, not 1.
+        assert commit_count[0] == 3
+
+    def test_trailing_partial_batch_still_gets_a_final_commit(self):
+        """23 rows (not an exact multiple of commit_interval=10) must still
+        commit its last 3 rows -- the final commit after the loop is not
+        removed by adding periodic commits, only supplemented."""
+        session = _seeded_sqlite_session(static_pool=True)
+        pipeline = MDMPipeline(session=session, silver=StubSilver({}))
+        commit_count = self._count_commits(session)
+
+        keyed_rows = [("only-group", {"n": i}) for i in range(23)]
+        pipeline._run_grouped_concurrent(
+            keyed_rows, self._process, domain="test", max_workers=4,
+            log_interval=1000, commit_interval=10,
+        )
+
+        # Periodic commits after row 10 and row 20, plus a final commit for
+        # the trailing 3 rows (21, 22, 23) -- 3 total.
+        assert commit_count[0] == 3
+
+    def test_a_small_group_under_the_interval_only_commits_once_at_the_end(self):
+        """Regression guard: a group smaller than commit_interval must
+        behave exactly as before this fix -- a single commit, not a
+        spurious extra one."""
+        session = _seeded_sqlite_session(static_pool=True)
+        pipeline = MDMPipeline(session=session, silver=StubSilver({}))
+        commit_count = self._count_commits(session)
+
+        keyed_rows = [("only-group", {"n": i}) for i in range(5)]
+        pipeline._run_grouped_concurrent(
+            keyed_rows, self._process, domain="test", max_workers=4,
+            log_interval=1000, commit_interval=10,
+        )
+
+        assert commit_count[0] == 1
+
+    def test_multiple_groups_each_get_their_own_periodic_commit_cadence(self):
+        """The per-group local counter must reset for each group -- two
+        15-row groups at commit_interval=10 should each commit twice (once
+        periodic, once final), not share one running counter across
+        groups."""
+        session = _seeded_sqlite_session(static_pool=True)
+        pipeline = MDMPipeline(session=session, silver=StubSilver({}))
+        commit_count = self._count_commits(session)
+
+        keyed_rows = [("group-a", {"n": i}) for i in range(15)] + [
+            ("group-b", {"n": i}) for i in range(15)
+        ]
+        # SQLite forces max_workers down to 1 internally (see
+        # _run_grouped_concurrent's own dialect guard), so both groups
+        # process sequentially on this test regardless of max_workers here.
+        pipeline._run_grouped_concurrent(
+            keyed_rows, self._process, domain="test", max_workers=4,
+            log_interval=1000, commit_interval=10,
+        )
+
+        # Each group: periodic commit at row 10, final commit at row 15 -- 2
+        # commits per group, 4 total across both groups.
+        assert commit_count[0] == 4
+
+    def test_commit_interval_is_independent_of_a_large_domain_scaled_log_interval(self):
+        """The exact regression this fix's own review caught: a group of
+        30 rows must still get a periodic commit even when log_interval is
+        set to a huge, domain-scaled value (as it genuinely is in a real
+        run_securities call against a large universe) -- proving
+        commit_interval no longer derives from or is capped by log_interval
+        in any way."""
+        session = _seeded_sqlite_session(static_pool=True)
+        pipeline = MDMPipeline(session=session, silver=StubSilver({}))
+        commit_count = self._count_commits(session)
+
+        keyed_rows = [("only-group", {"n": i}) for i in range(30)]
+        pipeline._run_grouped_concurrent(
+            keyed_rows, self._process, domain="test", max_workers=4,
+            # A real _progress_log_interval(len(rows)) for a 500,000-row
+            # domain would be 62,500 -- far larger than any single group.
+            log_interval=62500,
+            commit_interval=10,
+        )
+
+        # If commit_interval had (incorrectly) derived from log_interval,
+        # zero periodic commits would fire for a 30-row group. With the two
+        # decoupled: periodic commits at row 10 and row 20, plus the final
+        # commit at row 30 -- 3 total.
+        assert commit_count[0] == 3
+
+    def test_default_commit_interval_used_when_caller_does_not_override_it(self):
+        """run_securities/run_persons don't pass commit_interval explicitly
+        -- confirms the module default (_GROUP_COMMIT_INTERVAL) is what
+        actually governs them, and is a real, usable value (not, say, a
+        placeholder that would never fire for any real group size)."""
+        from edgar_warehouse.mdm.pipeline import _GROUP_COMMIT_INTERVAL
+
+        assert _GROUP_COMMIT_INTERVAL > 0
+        assert _GROUP_COMMIT_INTERVAL < 100_000, (
+            "a real observed live oversized security-title group topped out "
+            "around 5,000 rows -- a commit_interval default at or above "
+            "100,000 would still never fire for any realistic group"
+        )

@@ -2736,6 +2736,115 @@ change).
 101, which is not yet implemented/deployed as a whole; no image rebuild
 has happened for this change.
 
+## _run_grouped_concurrent single end-of-group commit 5-whys (fixed 2026-09-07, verification pending)
+
+**Problem:** live during mdm-run-throughput Ticket 03's own verification run
+(`mdm-mastering-batchfix-verify-1788823225`), the security domain wrote 2,404
+rows across 226 distinct entities to `mdm_entity_attribute_stage` in a healthy
+4-minute burst, then **all writes stopped completely** for the remaining ~23
+minutes until the run was manually stopped — while CloudWatch showed
+continuing SQL activity the entire time.
+
+1. Symptom: a live CloudWatch query for the entity showing a frozen candidate
+   count (2753, unchanged for 22+ minutes) looked like a stuck reprocessing
+   loop on one specific entity. Directly querying MDM Postgres disproved this
+   first theory: that exact entity received **zero writes** during the run's
+   entire window — its data was stale, from an unrelated earlier run. The
+   real stuck entity was never identified by ID; only its effect was.
+2. Why did writes stop but SQL activity continue? `run_survivorship_for_entity`
+   (called only from `resolve_one` in `company.py`/`security.py`/`person.py`,
+   confirmed via `grep`, no other caller exists) issues a `SELECT` of all
+   current candidates for one `(entity_id, field_name)` plus an `UPDATE` of
+   the winning row's `was_selected` flag — and that `UPDATE` never touches
+   `loaded_at`, so it's invisible to a query watching for new writes even
+   while genuinely running.
+3. Why was `_stage_attrs` (which DOES touch `loaded_at`) not producing any
+   visible writes either, if `resolve_one` was still executing? Because
+   `MDMPipeline._run_grouped_concurrent`'s per-group worker
+   (`_process_group`) called `worker_session.commit()` exactly **once**,
+   after its entire `for row in group_rows:` loop finished — not
+   periodically. Every write inside a still-running group's transaction,
+   including earlier rows' `_stage_attrs` calls, stays invisible to any
+   other session until that whole group finally commits.
+4. Why does one group take that long? Rows are grouped by
+   `canonical_title`/`owner_cik` so that same-title/same-CIK rows never race
+   on the same underlying entity (`_run_grouped_concurrent`'s own documented
+   safety invariant) — but nothing bounds how large one group can get. One
+   hyper-popular security's title, with a large number of genuinely distinct
+   ownership-transaction rows, can end up entirely on one worker thread with
+   no checkpoint until it finishes.
+5. **Root cause:** `_process_group` mirrors `run_companies`' `_resolve_row`,
+   which commits once per submitted unit of work — correct there because one
+   row IS run_companies' whole unit of work. `_run_grouped_concurrent`
+   generalized that pattern to security/person, whose unit of work is an
+   entire GROUP, unboundedly large. The same pattern that's correct for
+   company became a real gap here: one oversized group runs invisibly for as
+   long as it takes, and if interrupted (a deploy, a timeout, or an operator
+   stopping the execution — exactly what happened here), 100% of its
+   progress is lost. Same recurring shape this file already documents twice
+   (`MANAGES_FUND` CRD-batching, `INSTITUTIONAL_HOLDS` adviser-batching) —
+   "one outlier entity overwhelms an unbounded unit of work" — though
+   distinguished from those: this is a write-side durability/visibility
+   problem, not the read-side memory problem those two fixed
+   (`/gof-refactor-reviewer` confirmed these are different costs and the fix
+   should not reuse their read-batching pattern).
+
+**Fix:** `_process_group` now tracks a local, per-group row counter (separate
+from the existing shared/locked `processed` counter used only for
+progress-log cadence) and calls `worker_session.commit()` every
+`commit_interval` rows within the loop, in addition to the existing final
+commit after the loop. Reviewed via `/gof-refactor-reviewer` before writing
+any code (this file's own hard rule): confirmed periodic commit within the
+same sequential loop is correct (sub-chunking a group into separately-
+submitted concurrent pieces would violate the same-group-must-stay-
+sequential invariant), and confirmed no SQLAlchemy post-commit object-
+expiration risk (nothing in `resolve_one`/`run_survivorship_for_entity`/
+`_stage_attrs` holds an ORM object reference across row iterations).
+
+**A second `/gof-refactor-reviewer` pass, run against the actual diff before
+commit (not just the pre-code design consult above), caught a real bug in
+the first version of this fix:** it reused `log_interval` — the SAME value
+passed in for progress-log cadence — as the per-group commit threshold too.
+`log_interval` is `_progress_log_interval(len(rows))`, scaled from the
+ENTIRE domain's row count (confirmed live: `run_securities`' security domain
+was still processing 71,253+ rows and counting), not any single group's
+size. A single group would need to exceed 1/8 of the whole domain before
+ever triggering a periodic commit — observed live group sizes top out
+around 5,000 rows, so the original fix would likely never have engaged for
+the exact incident it was built to fix. Corrected: a genuinely separate
+module constant, `_GROUP_COMMIT_INTERVAL` (env: `MDM_GROUP_COMMIT_INTERVAL`,
+default 1000, NOT derived from or scaled by domain size), threaded through
+as `_run_grouped_concurrent`'s new `commit_interval` parameter (defaults to
+`_GROUP_COMMIT_INTERVAL`, so existing callers need no changes). `log_interval`
+now governs progress-log cadence only, exactly as before this fix.
+
+Tests: 6 in `tests/mdm/test_run_securities_persons_concurrency.py`'s
+`TestGroupedConcurrentPeriodicCommit` — periodic commit within an oversized
+group, a trailing partial batch still gets its final commit, a small group
+under the interval is unchanged (regression guard), each group's local
+counter resets independently rather than sharing one running total, the
+second review's own regression guard (commit_interval still fires for a
+30-row group even when log_interval is set to a real domain-scaled 62,500,
+proving genuine decoupling), and a sanity check that `_GROUP_COMMIT_INTERVAL`'s
+default is small enough to ever fire for a realistic group size. Full
+`tests/mdm/` suite (687 tests) and full repo suite green.
+
+**Lesson:** the pre-code `/gof-refactor-reviewer` consult (this file's own
+hard rule) caught the right *architectural* shape, but a second pass against
+the actual diff — not just the plan — caught a real, live-production-
+relevant defect in the concrete numbers the plan didn't specify closely
+enough to catch. Both passes earned their keep; neither would have caught
+what the other found.
+
+**Not yet verified against live production data** — per this session's own
+"real measurements, not estimates" standing preference
+([mdm-run-throughput map](.scratch/mdm-run-throughput/map.md)), this fix
+still needs a real prod run against the same class of oversized security
+group that surfaced the gap, confirming commits now checkpoint visibly
+mid-group instead of only being provable in unit tests. See
+[Ticket 04](.scratch/mdm-run-throughput/issues/04-run-grouped-concurrent-single-end-of-group-commit.md)
+for status.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
