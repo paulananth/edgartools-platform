@@ -115,14 +115,17 @@ class StubSilver:
             lo, hi = params[0], params[1]
             matched = [r for r in matched if r.get("cik") is not None and lo <= r["cik"] <= hi]
         elif params and " IN (" in sql.upper():
-            # MANAGES_FUND CRD-batch scoping (mdm-oom-manages-fund fix):
-            # filter by whichever CRD-shaped field the matched rows carry --
+            # MANAGES_FUND CRD-batch scoping (mdm-oom-manages-fund fix), or
+            # IS_INSIDER's issuer_ciks-scoped targeted resync (Ticket 21) --
+            # filter by whichever ID-shaped field the matched rows carry --
             # never parsed out of the SQL text, mirroring the BETWEEN case
             # above so batching tests can assert bound-param usage too.
+            # issuer_cik is checked last since it only ever applies to rows
+            # with no CRD field at all (a MANAGES_FUND row never carries it).
             wanted = {str(p) for p in params}
             matched = [
                 r for r in matched
-                if str(r.get("crd_number", r.get("adviser_crd_number", ""))) in wanted
+                if str(r.get("crd_number", r.get("adviser_crd_number", r.get("issuer_cik", "")))) in wanted
             ]
         return matched
 
@@ -2518,6 +2521,174 @@ class TestManagesFundResumableCursor:
         assert checkpoint_after.cursor_value == crds[2], (
             "a reconciliation pass must not disturb the ordinary pass's in-progress cursor"
         )
+
+
+class TestIsInsiderDeactivation:
+    """mdm-relationship-versioning-gap Ticket 02: a role/title change for
+    an already-known (person, issuer) pair must close the prior open
+    version instead of colliding with it as an unresolvable same-source
+    conflict."""
+
+    def _seed_pair(self, session: Session) -> tuple[str, str]:
+        person_id = _add_entity(session, "person")
+        company_id = _add_entity(session, "company")
+        session.add(MdmPerson(entity_id=person_id, owner_cik=910102, canonical_name="Reporting Person"))
+        session.add(MdmCompany(entity_id=company_id, cik=910001, canonical_name="Issuer Corp"))
+        session.commit()
+        return person_id, company_id
+
+    @staticmethod
+    def _owner_row(
+        *, accession_number: str, period_of_report: date,
+        is_director: bool = False, is_officer: bool = False, officer_title: Optional[str] = None,
+    ) -> dict:
+        return {
+            "accession_number": accession_number, "owner_index": 0,
+            "owner_cik": 910102, "owner_name": "Reporting Person",
+            "is_director": is_director, "is_officer": is_officer,
+            "is_ten_percent_owner": False, "is_other": False,
+            "officer_title": officer_title,
+            "issuer_cik": 910001, "period_of_report": period_of_report,
+        }
+
+    def test_role_change_closes_prior_open_version_and_opens_new_one(self, session):
+        self._seed_pair(session)
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+            ),
+            self._owner_row(
+                accession_number="0002", period_of_report=date(2025, 10, 8), is_director=True,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+
+        summary = pipe.derive_relationships(relationship_types=["IS_INSIDER"])
+        assert summary["IS_INSIDER"]["inserted"] == 2
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ))
+        assert len(all_rows) == 2
+        closed = [r for r in all_rows if r.valid_to_date is not None]
+        open_versions = [r for r in all_rows if r.valid_to_date is None]
+        assert len(closed) == 1
+        assert len(open_versions) == 1
+        assert closed[0].properties == {"role": "officer", "title": ""}
+        assert closed[0].valid_to_date == date(2025, 10, 8)
+        assert open_versions[0].properties == {"role": "director", "title": ""}
+        # The whole point of this fix: the newer, more accurate role must
+        # actually be visible as current -- not quarantined or superseded.
+        assert open_versions[0].quarantined is False
+        assert open_versions[0].superseded_by_version_id is None
+
+    def test_identical_role_refiled_leaves_prior_version_open_and_does_not_close(self, session):
+        """A re-filing that reports the SAME role/title at a later date is
+        not a role change -- ensure_relationship's own identical-properties
+        handling applies (no conflict), and this fix must not close
+        anything just because the dates differ."""
+        self._seed_pair(session)
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+                officer_title="CFO",
+            ),
+            self._owner_row(
+                accession_number="0002", period_of_report=date(2025, 10, 8), is_officer=True,
+                officer_title="CFO",
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+
+        pipe.derive_relationships(relationship_types=["IS_INSIDER"])
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ))
+        # Both rows carry identical properties -- nothing here should ever
+        # be closed by this fix; whether ensure_relationship treats the
+        # second as a fresh open version or merges it is out of this
+        # fix's scope, but no row may have a valid_to_date set.
+        assert all(r.valid_to_date is None for r in all_rows)
+
+    def test_reprocessing_an_older_row_does_not_close_a_newer_open_version(self, session):
+        """The chronological guard: reprocessing a row with an OLDER
+        period_of_report than the currently open version (e.g. a
+        full-history issuer_ciks resync revisiting historical filings, or
+        an out-of-order late-filed amendment) must never close the newer,
+        already-correct version using a stale date."""
+        person_id, company_id = self._seed_pair(session)
+        # Insert the NEWER (director) version directly, as if an earlier
+        # run had already correctly derived and left it open.
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance as MRI
+        from edgar_warehouse.mdm.database import relationship_logical_id
+        rel_type_id = session.execute(
+            select(MdmRelationshipType.rel_type_id).where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ).scalar_one()
+        existing = MRI(
+            relationship_id=relationship_logical_id(rel_type_id, person_id, company_id),
+            rel_type_id=rel_type_id,
+            source_entity_id=person_id,
+            target_entity_id=company_id,
+            properties={"role": "director", "title": ""},
+            effective_from=date(2025, 10, 8),
+            valid_from_date=date(2025, 10, 8),
+            valid_to_date=None,
+            source_system="ownership_filing",
+            source_accession="0002",
+        )
+        session.add(existing)
+        session.commit()
+
+        # Now reprocess an OLDER officer row for the same pair (as a
+        # full-history resync would).
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+        pipe.derive_relationships(relationship_types=["IS_INSIDER"], issuer_ciks=[910001])
+
+        session.expire_all()
+        director_row = session.get(MRI, existing.instance_id)
+        assert director_row.valid_to_date is None, (
+            "the newer, already-open director version must not be closed by "
+            "reprocessing an older, already-superseded officer row"
+        )
+        assert director_row.properties == {"role": "director", "title": ""}
+
+    def test_issuer_ciks_scoped_resync_also_closes_on_role_change(self, session):
+        """Deactivation must apply in the issuer_ciks-scoped targeted-resync
+        branch too, not just the ordinary incremental path."""
+        self._seed_pair(session)
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+            ),
+            self._owner_row(
+                accession_number="0002", period_of_report=date(2025, 10, 8), is_director=True,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+
+        pipe.derive_relationships(relationship_types=["IS_INSIDER"], issuer_ciks=[910001])
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ))
+        closed = [r for r in all_rows if r.valid_to_date is not None]
+        open_versions = [r for r in all_rows if r.valid_to_date is None]
+        assert len(closed) == 1
+        assert len(open_versions) == 1
+        assert open_versions[0].properties == {"role": "director", "title": ""}
+        assert open_versions[0].quarantined is False
 
 
 # ---------------------------------------------------------------------------

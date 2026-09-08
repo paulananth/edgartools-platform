@@ -592,6 +592,70 @@ class MDMPipeline:
         current_by_pair[key] = []
         return True
 
+    def _deactivate_if_properties_changed(
+        self,
+        rel_type_name: str,
+        current_by_pair: dict[tuple[str, str], list],
+        source_entity_id: str,
+        target_entity_id: str,
+        new_properties: dict,
+        effective_from: Any,
+    ) -> None:
+        """IS_INSIDER deactivation (mdm-relationship-versioning-gap Ticket
+        02; designed for reuse by EMPLOYED_BY too, per Ticket 03, but not
+        yet wired there): a Form 3/4/5 filing reporting a DIFFERENT
+        role/title for an already-known (person, issuer) pair is a
+        point-in-time snapshot of current status, not an additive fact --
+        close whatever open version currently represents the pair before
+        the caller inserts the new one, instead of colliding with it as an
+        unresolvable same-source conflict.
+
+        Uses the exact same discriminator (``properties != new_properties``)
+        ``ensure_relationship``'s own conflict check uses, so this closing
+        logic and that conflict logic never disagree about what counts as
+        "different." Unlike ``_deactivate_if_zero_shares``, this never
+        signals the caller to skip ``ensure_relationship`` -- a role/title
+        change is a new fact to represent, not a disposal, so the caller
+        always still inserts the new version afterward regardless of what
+        happens here.
+
+        Only closes a candidate when the new row's ``effective_from`` can
+        be positively confirmed at or after that candidate's own
+        ``valid_from_date`` -- any ambiguity (either date missing) defaults
+        to leaving it open. This is what makes reprocessing an OLDER row
+        safe: a late-filed amendment with an earlier period_of_report, or
+        a full-history resync/reconciliation pass revisiting historical
+        rows after a newer version is already open, can never close a
+        newer, already-correct version using a stale date. A skipped
+        candidate is left exactly as-is; the stale row falls through to
+        ``ensure_relationship``'s own conflict machinery instead, which
+        correctly quarantines/resolves it against the still-open newer
+        version rather than corrupting it.
+        """
+        from edgar_warehouse.mdm.graph import close_relationship_version
+
+        key = (source_entity_id, target_entity_id)
+        still_open = []
+        for current in current_by_pair.get(key, []):
+            confirmed_after = (
+                effective_from is not None
+                and current.valid_from_date is not None
+                and effective_from >= current.valid_from_date
+            )
+            if (current.properties or {}) == new_properties or not confirmed_after:
+                still_open.append(current)
+                continue
+            close_relationship_version(self.session, current.instance_id, effective_from)
+            print(json.dumps({
+                "event": "mdm_relationship_deactivated",
+                "rel_type": rel_type_name,
+                "reason": "properties_changed",
+                "source_entity_id": source_entity_id,
+                "target_entity_id": target_entity_id,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }), file=sys.stderr, flush=True)
+        current_by_pair[key] = still_open
+
     @staticmethod
     def _track_open_version(
         current_by_pair: dict[tuple[str, str], list],
@@ -1685,6 +1749,16 @@ class MDMPipeline:
         sync_engine.prime_relationship_type(
             "IS_INSIDER", defer_flush=True, source_entity_ids=batch_source_ids,
         )
+        # mdm-relationship-versioning-gap Ticket 02: a role/title change for
+        # an already-known (person, issuer) pair must close the prior open
+        # version instead of colliding with it as a same-source conflict --
+        # see _deactivate_if_properties_changed. Applies in both branches
+        # (ordinary incremental and issuer_ciks-scoped targeted resync): a
+        # role change matters regardless of which code path triggered the
+        # derivation, and the resync branch's full-history rescan is exactly
+        # the case _deactivate_if_properties_changed's chronological guard
+        # protects.
+        current_by_pair = self._current_open_versions_by_pair(sync_engine, "IS_INSIDER")
         try:
             for row, person_id in zip(rows, resolved_person_ids):
                 if issuer_ciks is None:
@@ -1725,15 +1799,21 @@ class MDMPipeline:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }), file=sys.stderr, flush=True)
                     continue
+                properties = {"role": _derive_role(row), "title": row.get("officer_title") or ""}
+                self._deactivate_if_properties_changed(
+                    "IS_INSIDER", current_by_pair, person_id, issuer_id,
+                    properties, row.get("period_of_report"),
+                )
                 _rel, created = sync_engine.ensure_relationship(
                     rel_type_name="IS_INSIDER",
                     source_entity_id=person_id,
                     target_entity_id=issuer_id,
-                    properties={"role": _derive_role(row), "title": row.get("officer_title") or ""},
+                    properties=properties,
                     effective_from=row.get("period_of_report"),
                     source_system="ownership_filing",
                     source_accession=row.get("accession_number"),
                 )
+                self._track_open_version(current_by_pair, person_id, issuer_id, _rel, created)
                 if created:
                     inserted += 1
                 else:

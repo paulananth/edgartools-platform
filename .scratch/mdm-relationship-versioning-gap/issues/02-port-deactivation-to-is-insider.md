@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved
 
 Blocked by: 01
 
@@ -41,4 +41,72 @@ actually sound before modeling this one on them.
 
 ## Answer
 
-(not yet resolved)
+Chose the ticket's leading candidate: always close the prior open version
+for a (person, issuer) pair whenever a new filing reports different
+properties (role, title) for it, since a Form 3/4/5 amendment is a
+point-in-time snapshot of current status, not an additive fact.
+
+**Implementation.** New instance method,
+`_deactivate_if_properties_changed` (`edgar_warehouse/mdm/pipeline.py`),
+mirroring the existing HOLDS/COMPANY_HOLDS zero-shares-close pattern's
+shape (`_current_open_versions_by_pair`/`_track_open_version`, the same
+shared infrastructure, unmodified) but with a different trigger and
+contract: closes a candidate when its properties differ from the new
+row's, using the *exact* discriminator `ensure_relationship`'s own
+conflict check uses (`properties != new_properties`) so the two pieces of
+logic never disagree about what counts as "different." Unlike the
+zero-shares helper, this never signals the caller to skip
+`ensure_relationship` — a role change is a new fact to represent, not a
+disposal, so the new version is always still inserted afterward. Wired
+into `_derive_is_insider` in both branches (ordinary incremental and the
+`issuer_ciks`-scoped targeted-resync path) — a role change matters
+regardless of which code path triggered the derivation.
+
+**Real correctness gap found during the `/gof-refactor-reviewer` design
+consult** (not present in the original candidate design, incorporated
+before any code was written): nothing in the naive design accounted for
+*chronological order*. Reprocessing an older row while a newer version is
+already open — a late-filed amendment with an earlier `period_of_report`,
+or exactly the `issuer_ciks`-scoped branch's own full-history rescan
+revisiting historical filings — could incorrectly close the newer,
+already-correct version using the stale row's earlier date. Fixed by only
+closing a candidate when the new row's `effective_from` can be
+*positively confirmed* at or after the candidate's own `valid_from_date`;
+any ambiguity (either date missing) defaults to leaving it open, letting
+the stale row fall through to `ensure_relationship`'s own conflict
+machinery instead.
+
+Tests: 4 new in `tests/mdm/test_pipeline_relationships.py`
+(`TestIsInsiderDeactivation`) — a role change closes the prior version and
+opens a new, non-quarantined one (the traced officer→director example
+this ticket exists for); an identical re-filing at a later date leaves
+everything open (control, proving the fix doesn't over-trigger); the
+chronological guard itself (reprocessing an older row never closes an
+already-open newer version); and the `issuer_ciks`-scoped resync branch
+gets the same deactivation. Found and fixed a real gap in the shared
+`StubSilver` test double along the way (its generic `IN (...)`-clause
+row filter only recognized MANAGES_FUND's CRD field shape, silently
+returning zero rows for any other type's `IN`-scoped query, including
+IS_INSIDER's own `issuer_ciks` branch) — widened with a safe, ordered
+fallback to also recognize `issuer_cik`.
+
+## 3-axis code review
+
+Ran the mandatory 3-axis `/code-review` (Standards/Spec/GoF). All three
+came back clean — no hard violations, no correctness gaps, no structural
+issues. Two minor findings fixed:
+- **Spec:** the new method's docstring claimed "IS_INSIDER/EMPLOYED_BY
+  deactivation," but this diff only wires it into `_derive_is_insider` --
+  EMPLOYED_BY is Ticket 03's job, not touched here. Corrected the
+  docstring to say it's designed for reuse there, not that it's already
+  done.
+- **Standards:** 3 of the 4 new tests unpacked `_seed_pair`'s return tuple
+  without using it. Cleaned up (kept the unpack only in the one test that
+  actually needs the entity IDs).
+
+Full `tests/mdm/` suite: 704 passed. Full repo suite: pending final
+re-run after the two review fixes above (last full run before them:
+clean, only the 8 pre-existing unrelated Postgres-integration failures
+this repo's test suite always shows without a local Postgres).
+
+**Not yet done:** commit, deploy.
