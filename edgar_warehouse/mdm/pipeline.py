@@ -107,6 +107,19 @@ _RUN_STEP_MAX_WORKERS = int(os.environ.get("MDM_RUN_STEP_CONCURRENCY", "5"))
 # --limit smoke checks) still get periodic progress signal.
 _PROGRESS_LOG_MIN_INTERVAL = int(os.environ.get("MDM_PROGRESS_LOG_INTERVAL", "1000"))
 
+# mdm-run-throughput Ticket 04: how often _run_grouped_concurrent's per-group
+# worker (_process_group) commits WITHIN one group's row loop, not just once
+# at the end. Deliberately its OWN fixed, domain-size-independent constant --
+# NOT log_interval (_progress_log_interval(len(rows)) above), which scales
+# with the WHOLE domain's row count (tens of thousands+ for a full-universe
+# run_securities call) and would need a single group to be >1/8 of the
+# entire domain before ever firing a periodic commit. A `/gof-refactor-reviewer`
+# pass on the first version of this fix caught that exact mismatch: reusing
+# log_interval as the commit threshold meant the fix likely never engaged for
+# the realistic oversized-group sizes (observed live: a few thousand rows)
+# that caused the incident this constant exists to fix.
+_GROUP_COMMIT_INTERVAL = int(os.environ.get("MDM_GROUP_COMMIT_INTERVAL", "1000"))
+
 
 def _progress_log_interval(total_rows: int) -> int:
     """Row interval between mdm_progress log events for a resolve loop.
@@ -832,6 +845,7 @@ class MDMPipeline:
         max_workers: int,
         log_interval: int,
         prefetched_source_refs: Optional[dict[tuple[str, str], tuple[Optional[str], str]]] = None,
+        commit_interval: int = _GROUP_COMMIT_INTERVAL,
     ) -> int:
         """Partition rows into groups by their caller-supplied key; each
         group's rows resolve sequentially on one worker (its own session),
@@ -856,6 +870,13 @@ class MDMPipeline:
         fresh Postgres round trip per row -- built once by the caller,
         before any worker thread starts, from the full row set this call
         will process.
+
+        ``commit_interval`` (mdm-run-throughput Ticket 04) governs how often
+        a group's worker commits WITHIN its row loop, not just once at the
+        end -- deliberately NOT ``log_interval``, which scales with the
+        WHOLE domain's row count (see ``_GROUP_COMMIT_INTERVAL``'s own
+        comment for why conflating the two was a real bug caught by
+        `/gof-refactor-reviewer` before this was fixed).
         """
         groups: dict[Any, list[dict]] = defaultdict(list)
         for key, row in keyed_rows:
@@ -884,8 +905,23 @@ class MDMPipeline:
                     run_id=pipeline_run_id,
                     prefetched_source_refs=prefetched_source_refs,
                 )
-                for row in group_rows:
+                # mdm-run-throughput Ticket 04: commit every commit_interval
+                # rows within the group, not only once at the very end. A
+                # group's rows all share one caller-supplied key (e.g. one
+                # security's canonical_title) and can be unboundedly large --
+                # a single end-of-group commit (mirroring run_companies' per-
+                # row commit, correct there because one row IS its whole unit
+                # of work) left one oversized group's entire progress
+                # uncommitted, and therefore invisible to any other session
+                # and entirely lost if the run was interrupted, for however
+                # long that one group took. Confirmed live in prod: one
+                # security-title group ran 20+ minutes past the last
+                # committed write with zero visibility before being
+                # interrupted, losing all of it.
+                for local_idx, row in enumerate(group_rows, start=1):
                     process_row_fn(worker_ctx, row)
+                    if local_idx % commit_interval == 0:
+                        worker_session.commit()
                     with lock:
                         processed += 1
                         if processed % log_interval == 0:
