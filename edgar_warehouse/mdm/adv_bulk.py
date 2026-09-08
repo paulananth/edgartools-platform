@@ -41,7 +41,15 @@ from edgar_warehouse.mdm.resolvers.fund import FUND_FIELDS
 from edgar_warehouse.mdm.rules import MDMRuleEngine
 
 _WRITE_BATCH_SIZE = 5_000
-_LOOKUP_BATCH_SIZE = 5_000
+# mdm-run-throughput map: matches pipeline.py's _SOURCE_REF_PREFETCH_BATCH_SIZE
+# -- both chunk a single-column string-id `.in_()` SELECT against
+# MdmSourceRef.source_id, proven safe up to 300,000 bound scalar params for
+# this psycopg2-based stack. Deliberately NOT applied to _WRITE_BATCH_SIZE
+# above, which chunks a multi-column bulk INSERT -- SQLAlchemy's own
+# insertmanyvalues_page_size (1000, independent of this constant) already
+# governs that operation's real round-trip count; empirically confirmed
+# bumping it produces zero fewer physical statements.
+_LOOKUP_BATCH_SIZE = 20_000
 
 
 def _chunks(values: list[Any], size: int) -> Iterable[list[Any]]:
