@@ -2301,6 +2301,12 @@ class MDMPipeline:
             )
             for i, value in enumerate(batch_result):
                 totals[i] += value
+            # mdm-run-throughput Ticket 06: same periodic-commit shape as
+            # _derive_institutional_holds' CIK-range loop above -- commit at
+            # this already-existing CRD-batch boundary (the batch has already
+            # flush_pending()'d/unprime_relationship_type()'d internally),
+            # not just once at the end of the whole MANAGES_FUND type.
+            self.session.commit()
             if remaining is not None and totals[0] >= remaining:
                 break
         self._advance_relationship_watermark(
@@ -3267,6 +3273,8 @@ class MDMPipeline:
         cusip: str,
         issuer_name: Optional[str],
         security_class: Optional[str],
+        *,
+        cache: Optional[dict[str, tuple[str, bool]]] = None,
     ) -> Optional[str]:
         """Return entity_id for a security identified by CUSIP, auto-creating if absent.
 
@@ -3274,25 +3282,68 @@ class MDMPipeline:
         mdm_security universe, so auto-creation is required (unlike AUDITED_BY which
         is lookup-only).  UUID5(NAMESPACE_DNS, f"cusip:{cusip}") ensures idempotency
         across multiple bootstrap runs.
+
+        ``cache`` (mdm-run-throughput Ticket 07), when given, memoizes
+        cusip -> (entity_id, security_class_confirmed_satisfied) across repeated
+        calls for the same cusip. Real measurement, 2026-09-08: sec_thirteenf_holding
+        has 6,799,919 rows across only 41,225 distinct CUSIPs -- ~165x repetition --
+        so a bare per-row SELECT here (as this function always did before this cache
+        existed) is the dominant per-row cost of INSTITUTIONAL_HOLDS derivation.
+        Caching only entity_id (a permanent, deterministic mapping -- a cusip's
+        stub_id via UUID5 never changes once created) and a plain bool (never an ORM
+        object reference) is required for this to stay correct across Ticket 04/06's
+        periodic mid-derivation commits, which expire ORM object attributes but never
+        invalidate plain cached values.
+
+        Correctness-preserving for the opportunistic security_class backfill: a cusip
+        is only ever marked ``satisfied`` once we've actually confirmed the DB's
+        security_class is non-NULL (via creation with a real value, or a backfill
+        check that found it already set or just set it) -- exactly mirroring when the
+        unmemoized code below would have last touched/checked it. A cusip whose rows
+        so far all had a falsy security_class stays unsatisfied in the cache (we
+        never checked, so we don't know), so a later row that DOES supply one still
+        performs the real backfill check -- identical eventual behavior to calling
+        this function fresh every time, just without re-querying entity_id itself
+        once it's already known.
         """
         import uuid as _uuid
 
         if not cusip:
             return None
 
-        # Check existing by CUSIP (fastest path — indexed)
         from edgar_warehouse.mdm.database import MdmEntity, MdmSecurity, MdmSourceRef
         from sqlalchemy import select
+
+        if cache is not None and cusip in cache:
+            cached_entity_id, satisfied = cache[cusip]
+            if security_class and not satisfied:
+                rec = self.session.get(MdmSecurity, cached_entity_id)
+                if rec and rec.security_class is None:
+                    rec.security_class = security_class
+                    self.session.flush()
+                    satisfied = True
+                elif rec and rec.security_class is not None:
+                    satisfied = True
+                cache[cusip] = (cached_entity_id, satisfied)
+            return cached_entity_id
+
+        # Check existing by CUSIP (fastest path — indexed)
         existing = self.session.scalar(
             select(MdmSecurity.entity_id).where(MdmSecurity.cusip == cusip)
         )
         if existing:
             # Opportunistically set security_class if still NULL
+            satisfied = False
             if security_class:
                 rec = self.session.get(MdmSecurity, existing)
                 if rec and rec.security_class is None:
                     rec.security_class = security_class
                     self.session.flush()
+                    satisfied = True
+                elif rec and rec.security_class is not None:
+                    satisfied = True
+            if cache is not None:
+                cache[cusip] = (existing, satisfied)
             return existing
 
         # Auto-create new security stub
@@ -3303,6 +3354,8 @@ class MDMPipeline:
             select(MdmSecurity.entity_id).where(MdmSecurity.entity_id == stub_id)
         )
         if already:
+            if cache is not None:
+                cache[cusip] = (already, False)
             return already
 
         canonical = issuer_name.strip() if issuer_name else f"CUSIP:{cusip}"
@@ -3338,6 +3391,8 @@ class MDMPipeline:
             },
         )
         self.session.flush()
+        if cache is not None:
+            cache[cusip] = (stub_id, bool(security_class))
         return stub_id
 
     # ── New derivation methods ────────────────────────────────────────────────
@@ -4098,6 +4153,11 @@ class MDMPipeline:
         # small even though INSTITUTIONAL_HOLDS priming below is now
         # batch-scoped.
         adviser_id_by_cik: dict[int, Optional[str]] = {}
+        # mdm-run-throughput Ticket 07: same shared-across-batches rationale as
+        # adviser_id_by_cik above, for _ensure_security_by_cusip's entity_id
+        # lookup -- bounded by the distinct CUSIP count (41,225 measured live
+        # 2026-09-08), not row count (6,799,919), so this stays small.
+        security_id_by_cusip: dict[str, tuple[str, bool]] = {}
         watermark_bind = self._watermark_bind_value("ingested_at", watermark)
         watermark_state: dict[str, Optional[str]] = {"value": None}
 
@@ -4111,9 +4171,24 @@ class MDMPipeline:
             batch_result = self._derive_institutional_holds_batch(
                 sync_engine, batch_remaining, batch_sql, cik_lo, cik_hi, adviser_id_by_cik,
                 watermark_bind=watermark_bind, watermark_state=watermark_state,
+                security_id_by_cusip=security_id_by_cusip,
             )
             for i, value in enumerate(batch_result):
                 totals[i] += value
+            # mdm-run-throughput Ticket 06: commit at this already-existing
+            # CIK-range batch boundary, not just once at the very end of the
+            # whole type (derive_relationships'/_derive_one's single final
+            # commit). By this point the batch has already flush_pending()'d
+            # and unprime_relationship_type()'d internally (see
+            # _derive_institutional_holds_batch's own finally block), so
+            # nothing is left half-written and the next batch's own
+            # prime_relationship_type re-primes fresh from this committed
+            # state -- same shape as Ticket 04's periodic commit for
+            # _run_grouped_concurrent's oversized groups, applied here
+            # because INSTITUTIONAL_HOLDS derives from sec_thirteenf_holding
+            # (6.8M rows in prod, the largest table in the system) and was
+            # observed live sitting on one uncommitted transaction for 3h24min+.
+            self.session.commit()
             if remaining is not None and totals[0] >= remaining:
                 break
             cik_lo = cik_hi + 1
@@ -4137,6 +4212,7 @@ class MDMPipeline:
         *,
         watermark_bind: Any = None,
         watermark_state: Optional[dict[str, Optional[str]]] = None,
+        security_id_by_cusip: Optional[dict[str, tuple[str, bool]]] = None,
     ) -> tuple[int, int, int, int, int]:
         inserted = 0
         skipped_corporate = 0
@@ -4194,7 +4270,9 @@ class MDMPipeline:
                     }), file=sys.stderr, flush=True)
                     continue
 
-                security_id = self._ensure_security_by_cusip(cusip, issuer_name, security_class)
+                security_id = self._ensure_security_by_cusip(
+                    cusip, issuer_name, security_class, cache=security_id_by_cusip,
+                )
                 if security_id is None:
                     skipped_unresolved_target += 1
                     print(json.dumps({

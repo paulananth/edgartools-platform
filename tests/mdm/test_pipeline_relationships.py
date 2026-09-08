@@ -1545,6 +1545,67 @@ class TestRunRelationships:
         for a, b in itertools.combinations(prime_calls, 2):
             assert a.isdisjoint(b), (a, b, "batches must never overlap")
 
+    def test_manages_fund_commits_periodically_at_each_crd_batch_boundary(
+        self, session, monkeypatch
+    ):
+        """mdm-run-throughput Ticket 06: same periodic-commit fix as
+        INSTITUTIONAL_HOLDS' CIK-range loop, applied to MANAGES_FUND's CRD-range
+        loop for consistency -- 5 advisers, batch size 2 -> 3 batches (2/2/1) ->
+        expect at least 3 periodic commits, not just one at the very end."""
+        import edgar_warehouse.mdm.pipeline as pipeline_module
+
+        monkeypatch.setattr(pipeline_module, "_MANAGES_FUND_CRD_BATCH_SIZE", 2)
+
+        filings = []
+        funds = []
+        for index in range(5):
+            adviser_id = _add_entity(session, "adviser")
+            fund_id = _add_entity(session, "fund")
+            crd_number = str(700000 + index)
+            private_fund_id = f"805-{700000 + index}"
+            accession = f"iapd-adv:{700000 + index}"
+            session.add(MdmAdviser(
+                entity_id=adviser_id, crd_number=crd_number,
+                canonical_name=f"Batch Adviser {index}",
+            ))
+            session.add(MdmFund(
+                entity_id=fund_id, adviser_entity_id=adviser_id,
+                private_fund_id=private_fund_id, canonical_name=f"Batch Fund {index}",
+            ))
+            filings.append({
+                "accession_number": accession, "crd_number": crd_number,
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+            })
+            funds.append({
+                "accession_number": accession, "adviser_crd_number": crd_number,
+                "private_fund_id": private_fund_id, "filing_id": str(700000 + index),
+                "schedule_section": "7B1", "reporting_role": "detailed_reporter",
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+                "source_sha256": f"sha-{index}",
+            })
+        session.commit()
+
+        commit_count = [0]
+
+        def _on_commit(_conn):
+            commit_count[0] += 1
+
+        event.listen(session.get_bind(), "commit", _on_commit)
+
+        summary = MDMPipeline(
+            session=session,
+            silver=StubSilver({
+                "sec_adv_filing": filings,
+                "sec_adv_private_fund": funds,
+            }),
+        ).derive_relationships(relationship_types=["MANAGES_FUND"])
+
+        assert summary["MANAGES_FUND"]["inserted"] == 5
+        assert commit_count[0] >= 3, (
+            f"expected at least 3 periodic commits (one per CRD batch), got {commit_count[0]} -- "
+            "periodic mid-type commit is not firing"
+        )
+
     def test_writes_issued_by_relationship(self, session, fixture_world):
         """ISSUED_BY deriver inserts exactly 1 row when fixture_world has 1 qualifying MdmSecurity. (D-01, D-02, REL-02)"""
         pipe = MDMPipeline(session=session, silver=StubSilver({}))
@@ -1997,6 +2058,149 @@ class TestInstitutionalHoldsBatching:
         assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 0
         assert summary["INSTITUTIONAL_HOLDS"]["skipped"] == 0
         assert len(silver.queries) == 1
+
+    def test_commits_periodically_at_each_cik_batch_boundary(self, monkeypatch):
+        """mdm-run-throughput Ticket 06: _derive_institutional_holds must commit
+        after every CIK-range batch, not just once at the very end of the whole
+        type (derive_relationships'/_derive_one's single final commit) -- the
+        same durability/visibility gap Ticket 04 fixed for _run_grouped_concurrent,
+        found live in prod sitting on one uncommitted transaction for 3h24min+ on
+        INSTITUTIONAL_HOLDS specifically (sec_thirteenf_holding, 6.8M rows).
+
+        3 distinct CIKs, batch_size=1 -> 3 CIK-range batches -> expect 3 commits
+        from this type's own periodic-commit path (plus the final
+        worker_session.commit() from _derive_one, which fires on an
+        already-clean session and is a safe no-op event-wise here since SQLite
+        emits a commit event only when there's something to commit)."""
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})
+        _seed_batching_advisers(session, ciks)
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        commit_count = [0]
+
+        def _on_commit(_conn):
+            commit_count[0] += 1
+
+        event.listen(session.get_bind(), "commit", _on_commit)
+
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+        assert commit_count[0] >= 3, (
+            f"expected at least 3 periodic commits (one per CIK batch), got {commit_count[0]} -- "
+            "periodic mid-type commit is not firing"
+        )
+        session.close()
+
+    def test_ensure_security_by_cusip_cache_batches_round_trips_not_one_per_row(
+        self, monkeypatch
+    ):
+        """mdm-run-throughput Ticket 07: repeated CUSIPs across many holding rows
+        must not each pay a fresh entity_id SELECT round trip -- real measurement,
+        2026-09-08: sec_thirteenf_holding has 6,799,919 rows across only 41,225
+        distinct CUSIPs (~165x repetition). 3 rows, 2 sharing one CUSIP, batch_size
+        large enough to keep them in one batch -> the shared CUSIP's entity_id
+        SELECT must fire once, not twice."""
+        session = _fresh_batching_session()
+        rows = [
+            {
+                "cik": 920001, "accession_number": "acc-x1",
+                "period_of_report": "2023-12-31", "cusip": "999999999",
+                "issuer_name": "Repeat Co", "security_title": "Common Stock",
+                "shares_held": 100, "market_value": 1000,
+                "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            },
+            {
+                "cik": 920002, "accession_number": "acc-x2",
+                "period_of_report": "2023-12-31", "cusip": "999999999",
+                "issuer_name": "Repeat Co", "security_title": "Common Stock",
+                "shares_held": 200, "market_value": 2000,
+                "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            },
+            {
+                "cik": 920003, "accession_number": "acc-x3",
+                "period_of_report": "2023-12-31", "cusip": "888888888",
+                "issuer_name": "Other Co", "security_title": "Common Stock",
+                "shares_held": 300, "market_value": 3000,
+                "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            },
+        ]
+        _seed_batching_advisers(session, [920001, 920002, 920003])
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 10_000
+        )
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        entity_id_select_count = [0]
+
+        def _count_security_lookups(conn, cursor, statement, parameters, context, executemany):
+            if "mdm_security" in statement and "cusip" in statement and "SELECT" in statement.upper():
+                entity_id_select_count[0] += 1
+
+        event.listen(session.get_bind(), "before_cursor_execute", _count_security_lookups)
+
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+        # 2 distinct CUSIPs -> exactly 2 real by-cusip entity_id lookups. Without
+        # the cache this would be 3 (one per row); this precise bound is what
+        # actually distinguishes cached from uncached behavior -- a looser bound
+        # would pass either way and prove nothing.
+        assert entity_id_select_count[0] == 2, (
+            f"expected exactly 2 by-cusip SELECTs (one per distinct CUSIP), got "
+            f"{entity_id_select_count[0]} for 3 rows / 2 distinct CUSIPs -- "
+            "the repeated CUSIP's second row did not hit the cache"
+        )
+
+    def test_ensure_security_by_cusip_cache_preserves_backfill_correctness(
+        self, monkeypatch
+    ):
+        """mdm-run-throughput Ticket 07: a CUSIP first seen with no security_class
+        (cached as unsatisfied) must still get backfilled when a LATER row for the
+        same CUSIP supplies one -- the cache must not silently skip a real
+        backfill the unmemoized code would have performed."""
+        session = _fresh_batching_session()
+        rows = [
+            {
+                "cik": 920001, "accession_number": "acc-y1",
+                "period_of_report": "2023-12-31", "cusip": "777777777",
+                "issuer_name": "Backfill Co", "security_title": "Common Stock",
+                "shares_held": 100, "market_value": 1000,
+                "put_call": None, "discretion_type": "SOLE",
+                "security_class": None,  # first row: no class to offer
+            },
+            {
+                "cik": 920002, "accession_number": "acc-y2",
+                "period_of_report": "2023-12-31", "cusip": "777777777",
+                "issuer_name": "Backfill Co", "security_title": "Common Stock",
+                "shares_held": 200, "market_value": 2000,
+                "put_call": None, "discretion_type": "SOLE",
+                "security_class": "COM",  # second row: offers a class
+            },
+        ]
+        _seed_batching_advisers(session, [920001, 920002])
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 10_000
+        )
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 2
+
+        security_class = session.scalar(
+            select(MdmSecurity.security_class).where(MdmSecurity.cusip == "777777777")
+        )
+        assert security_class == "COM", (
+            "second row's security_class was not backfilled onto the security "
+            "created by the first (cache-unsatisfied) row"
+        )
 
     def test_batching_idempotent_on_rerun(self, monkeypatch):
         """Test E: running derive twice over the same batched fixture inserts 0
