@@ -181,14 +181,14 @@ class TestRunFilingTextSweep:
                 db=MagicMock(),
                 bookkeeping=MagicMock(),
                 sync_run_id="run-manifest-next",
-                now=datetime(2026, 10, 8, 12, 0, tzinfo=UTC),
+                now=datetime(2026, 9, 8, 12, 0, tzinfo=UTC),
             )
 
         next_manifest_path = (
             tmp_path
             / "artifacts"
             / "filing_text_retention"
-            / "observed_date=2026-10-08"
+            / "observed_date=2026-09-08"
             / "run_id=run-manifest-next"
             / "manifest.json"
         )

@@ -127,7 +127,8 @@ Snowflake query result and the manifest binds both its query ID and content
 hash. The sweep re-queries after projection work; if any current required
 identity is not yet visible in canonical Snowflake, it writes an incomplete
 manifest that cannot advance retention. An incomplete predecessor resets the
-streak.
+streak, and a gap of more than one UTC observation date resets it even when
+both surrounding manifests succeeded.
 
 After two consecutive successful daily observations and at least 30 continuous
 days in the manifest-carried not-required streak, download the two consecutive

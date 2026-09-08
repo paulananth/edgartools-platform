@@ -32,7 +32,8 @@ predecessor-linked manifests whose exact not-required identities carry their
 continuous streak start. Each manifest's required and processed sets come from
 one post-projection Snowflake snapshot and bind its real query ID plus content
 hash; an extracted row that is not yet visible in canonical Snowflake makes the
-manifest incomplete. The cost optimizer builds a hash-bound plan from two
+manifest incomplete, and a missing daily observation resets continuity. The
+cost optimizer builds a hash-bound plan from two
 consecutive successful observations, records and verifies Silver retirement,
 rechecks the live canonical required set, verifies the latest manifest and
 exact S3 version inventory, and deletes only the reviewed derived-text
@@ -47,7 +48,7 @@ Silver rows, evidence-publication failure, and S3 version drift all fail
 closed. Bronze paths are outside the accepted target grammar.
 
 Verification after rebasing onto current `origin/main` and rebuilding the
-environment: 71 focused and architecture tests pass; Ruff, targeted Pyright,
+environment: 72 focused and architecture tests pass; Ruff, targeted Pyright,
 Terraform formatting, and diff checks pass. The full suite
 completed with 3197 passed, 7 skipped, and 8 pre-existing PostgreSQL integration
 failures caused by the current test database lacking

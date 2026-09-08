@@ -110,7 +110,11 @@ def build_filing_text_sweep_manifest(
             )
         previous_manifest_hash = str(previous_manifest["manifest_hash"])
         previous_run_id = str(previous_manifest["run_id"])
-        if previous_manifest.get("status") == "succeeded":
+        observation_date_gap = (observed_at_utc.date() - previous_at.date()).days
+        if (
+            previous_manifest.get("status") == "succeeded"
+            and observation_date_gap <= 1
+        ):
             previous_not_required = {
                 _identity(row): row for row in previous_manifest["not_required"]
             }

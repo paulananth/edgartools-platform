@@ -101,14 +101,17 @@ def _version() -> ObjectVersion:
 
 
 def _eligible_manifests() -> tuple[dict, dict]:
-    anchor = _manifest("sweep-anchor", datetime(2026, 8, 1, tzinfo=UTC))
-    prior = _manifest(
-        "sweep-prior",
-        datetime(2026, 8, 31, tzinfo=UTC),
-        previous_manifest=anchor,
-    )
+    previous = _manifest("sweep-day-00", datetime(2026, 8, 1, tzinfo=UTC))
+    prior = previous
+    for day in range(1, 31):
+        prior = _manifest(
+            f"sweep-day-{day:02d}",
+            datetime(2026, 8, 1 + day, tzinfo=UTC),
+            previous_manifest=previous,
+        )
+        previous = prior
     current = _manifest(
-        "sweep-current",
+        "sweep-day-31",
         datetime(2026, 9, 1, tzinfo=UTC),
         previous_manifest=prior,
     )
@@ -235,6 +238,21 @@ def test_plan_rejects_nonconsecutive_manifest_pair() -> None:
         )
 
 
+def test_missing_daily_observation_resets_not_required_continuity() -> None:
+    day_one = _manifest("sweep-day-01", datetime(2026, 8, 1, tzinfo=UTC))
+
+    day_three = _manifest(
+        "sweep-day-03",
+        datetime(2026, 8, 3, tzinfo=UTC),
+        previous_manifest=day_one,
+    )
+
+    assert day_three["previous_manifest_hash"] == day_one["manifest_hash"]
+    assert day_three["not_required"][0]["not_required_since"] == (
+        "2026-08-03T00:00:00Z"
+    )
+
+
 def test_plan_rejects_incomplete_or_too_recent_sweep_evidence() -> None:
     incomplete = build_filing_text_sweep_manifest(
         run_id="sweep-incomplete",
@@ -255,7 +273,7 @@ def test_plan_rejects_incomplete_or_too_recent_sweep_evidence() -> None:
         )
 
     recent_prior = _manifest(
-        "sweep-prior", datetime(2026, 8, 15, tzinfo=UTC)
+        "sweep-prior", datetime(2026, 8, 31, tzinfo=UTC)
     )
     too_recent = build_filing_text_retention_plan(
         prior_manifest=recent_prior,
@@ -387,18 +405,9 @@ def test_cli_builds_reviewable_plan_from_two_explicit_manifests(
     prior_path = tmp_path / "prior.json"
     current_path = tmp_path / "current.json"
     output_path = tmp_path / "plan.json"
-    prior = _manifest("sweep-prior", datetime(2026, 8, 1, tzinfo=UTC))
+    prior, current = _eligible_manifests()
     prior_path.write_text(json.dumps(prior), encoding="utf-8")
-    current_path.write_text(
-        json.dumps(
-            _manifest(
-                "sweep-current",
-                datetime(2026, 9, 1, tzinfo=UTC),
-                previous_manifest=prior,
-            )
-        ),
-        encoding="utf-8",
-    )
+    current_path.write_text(json.dumps(current), encoding="utf-8")
 
     class FakeCli:
         region = "us-east-1"
