@@ -632,16 +632,15 @@ class MDMPipeline:
         correctly quarantines/resolves it against the still-open newer
         version rather than corrupting it.
         """
-        from edgar_warehouse.mdm.graph import close_relationship_version
+        from edgar_warehouse.mdm.graph import (
+            close_relationship_version,
+            confirmed_chronologically_after,
+        )
 
         key = (source_entity_id, target_entity_id)
         still_open = []
         for current in current_by_pair.get(key, []):
-            confirmed_after = (
-                effective_from is not None
-                and current.valid_from_date is not None
-                and effective_from >= current.valid_from_date
-            )
+            confirmed_after = confirmed_chronologically_after(effective_from, current.valid_from_date)
             if (current.properties or {}) == new_properties or not confirmed_after:
                 still_open.append(current)
                 continue
