@@ -602,9 +602,9 @@ class MDMPipeline:
         effective_from: Any,
     ) -> None:
         """IS_INSIDER deactivation (mdm-relationship-versioning-gap Ticket
-        02; designed for reuse by EMPLOYED_BY too, per Ticket 03, but not
-        yet wired there): a Form 3/4/5 filing reporting a DIFFERENT
-        role/title for an already-known (person, issuer) pair is a
+        02), also reused by EMPLOYED_BY's exec/DEF 14A branch (Ticket 03):
+        a Form 3/4/5 filing reporting a DIFFERENT role/title for an
+        already-known (person, issuer) pair is a
         point-in-time snapshot of current status, not an additive fact --
         close whatever open version currently represents the pair before
         the caller inserts the new one, instead of colliding with it as an
@@ -3649,6 +3649,19 @@ class MDMPipeline:
         method's two source tables (``sec_executive_record``,
         ``sec_employment_event``) advance independently and a single
         watermark value can't represent both.
+
+        mdm-relationship-versioning-gap Ticket 03: the exec/DEF 14A branch
+        closes a person-company pair's prior open version via
+        ``_deactivate_if_properties_changed`` (Ticket 02's IS_INSIDER
+        helper) before inserting a new fiscal year's row -- a fiscal year
+        always differs from the prior one (``fiscal_year``/
+        ``source_accession`` are both in ``properties``), so without this
+        every subsequent year collided with the still-open prior version as
+        an unresolvable same-source conflict (97.8% of rows created since
+        PR #568 landed were quarantined this way). The event/Item 5.02
+        branch below is untouched -- it already has its own bespoke
+        closing mechanism (``_current_employment_versions`` plus a
+        chronological guard) predating this ticket.
         """
         exec_watermark = self._relationship_watermark(
             "EMPLOYED_BY:exec", reconciliation_pass=reconciliation_pass
@@ -3689,6 +3702,9 @@ class MDMPipeline:
         # it isn't a pure lookup this fix can safely collapse.
         exec_ciks = {row.get("cik") for row in exec_rows if row.get("cik") is not None}
         company_id_by_cik = self._company_entity_ids(exec_ciks)
+        # mdm-relationship-versioning-gap Ticket 03 -- see this method's own
+        # docstring above for why. Reuses Ticket 02's IS_INSIDER helper.
+        current_by_pair = self._current_open_versions_by_pair(sync_engine, "EMPLOYED_BY")
         for row in exec_rows:
             last_exec_watermark = self._track_watermark(
                 last_exec_watermark, row.get("ingested_at")
@@ -3724,24 +3740,30 @@ class MDMPipeline:
                 continue
 
             effective_from = date(int(fiscal_year), 1, 1) if fiscal_year else None
+            properties = {
+                "role":               row.get("exec_role"),
+                "title":              row.get("exec_role"),
+                "fiscal_year":        fiscal_year,
+                "total_compensation": row.get("total_comp"),
+                "stock_awards":       row.get("stock_awards"),
+                "option_awards":      row.get("option_awards"),
+                "non_equity_incentive": row.get("non_equity_incentive"),
+                "source_accession":   accession_number,
+            }
+            self._deactivate_if_properties_changed(
+                "EMPLOYED_BY", current_by_pair, person_id, company_id,
+                properties, effective_from,
+            )
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="EMPLOYED_BY",
                 source_entity_id=person_id,
                 target_entity_id=company_id,
-                properties={
-                    "role":               row.get("exec_role"),
-                    "title":              row.get("exec_role"),
-                    "fiscal_year":        fiscal_year,
-                    "total_compensation": row.get("total_comp"),
-                    "stock_awards":       row.get("stock_awards"),
-                    "option_awards":      row.get("option_awards"),
-                    "non_equity_incentive": row.get("non_equity_incentive"),
-                    "source_accession":   accession_number,
-                },
+                properties=properties,
                 effective_from=effective_from,
                 source_system="proxy_filing",
                 source_accession=accession_number,
             )
+            self._track_open_version(current_by_pair, person_id, company_id, _rel, created)
             if created:
                 inserted += 1
             else:

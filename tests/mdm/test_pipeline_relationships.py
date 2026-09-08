@@ -2691,6 +2691,148 @@ class TestIsInsiderDeactivation:
         assert open_versions[0].quarantined is False
 
 
+class TestEmployedByExecDeactivation:
+    """mdm-relationship-versioning-gap Ticket 03: a company reporting a
+    NEW fiscal year's DEF 14A comp record for an already-known executive
+    must close the prior open EMPLOYED_BY version instead of colliding
+    with it as an unresolvable same-source conflict (fiscal_year/
+    source_accession are always part of ``properties``, so they always
+    differ across years). Only the exec/``sec_executive_record`` branch is
+    covered here -- the event/Item 5.02 branch already has its own,
+    separately-tested closing mechanism, untouched by this ticket."""
+
+    @staticmethod
+    def _exec_row(
+        *, accession_number: str, fiscal_year: int, exec_role: str,
+        total_comp: Optional[int] = 1000000, cik: int = 920401,
+    ) -> dict:
+        return {
+            "cik": cik, "accession_number": accession_number,
+            "fiscal_year": fiscal_year, "exec_name": "Career Officer",
+            "exec_role": exec_role, "total_comp": total_comp,
+            "base_salary": None, "bonus": None, "stock_awards": None,
+            "option_awards": None, "non_equity_incentive": None,
+        }
+
+    @staticmethod
+    def _seed_company(session: Session, cik: int = 920401) -> str:
+        company_id = _add_entity(session, "company")
+        session.add(MdmCompany(entity_id=company_id, cik=cik, canonical_name="Career Corp"))
+        session.commit()
+        return company_id
+
+    def test_new_fiscal_year_closes_prior_open_version_and_opens_new_one(self, session):
+        self._seed_company(session)
+        rows = [
+            self._exec_row(
+                accession_number="fy2023", fiscal_year=2023, exec_role="CFO",
+                total_comp=1000000,
+            ),
+            self._exec_row(
+                accession_number="fy2024", fiscal_year=2024, exec_role="President",
+                total_comp=1500000,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"sec_executive_record": rows}))
+
+        summary = pipe.derive_relationships(relationship_types=["EMPLOYED_BY"])
+        assert summary["EMPLOYED_BY"]["inserted"] == 2
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ))
+        assert len(all_rows) == 2
+        closed = [r for r in all_rows if r.valid_to_date is not None]
+        open_versions = [r for r in all_rows if r.valid_to_date is None]
+        assert len(closed) == 1
+        assert len(open_versions) == 1
+        assert closed[0].properties["fiscal_year"] == 2023
+        assert closed[0].valid_to_date == date(2024, 1, 1)
+        assert open_versions[0].properties["fiscal_year"] == 2024
+        assert open_versions[0].properties["role"] == "President"
+        # The whole point of this fix: the newer, more accurate comp record
+        # must actually be visible as current -- not quarantined.
+        assert open_versions[0].quarantined is False
+        assert open_versions[0].superseded_by_version_id is None
+
+    def test_reprocessing_an_identical_row_does_not_close_anything(self, session):
+        """An idempotent rerun of the exact same DEF 14A row (same
+        accession_number, same fiscal_year, same role/comp) is not a
+        change -- ensure_relationship's own identical-evidence handling
+        applies, and this fix must not close anything."""
+        self._seed_company(session)
+        row = self._exec_row(accession_number="fy2023", fiscal_year=2023, exec_role="CFO")
+        pipe = MDMPipeline(
+            session=session,
+            silver=StubSilver({"sec_executive_record": [row, dict(row)]}),
+        )
+
+        summary = pipe.derive_relationships(relationship_types=["EMPLOYED_BY"])
+        assert summary["EMPLOYED_BY"]["inserted"] == 1
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ))
+        assert len(all_rows) == 1
+        assert all_rows[0].valid_to_date is None
+
+    def test_reprocessing_an_older_fiscal_year_does_not_close_a_newer_open_version(self, session):
+        """The chronological guard: reprocessing an OLDER fiscal year's row
+        (e.g. a full-history backfill revisiting historical DEF 14A
+        filings) after a NEWER version is already open must never close
+        the newer, already-correct version using a stale date."""
+        from edgar_warehouse.mdm.database import relationship_logical_id
+
+        company_id = self._seed_company(session)
+        # Derive the proxy-stub person id via the real production helper
+        # (not a hand-reimplemented UUID5 calculation) -- as if an earlier
+        # run had already correctly derived and left the 2024 version open.
+        seed_pipe = MDMPipeline(session=session, silver=StubSilver({}))
+        person_id = seed_pipe._ensure_proxy_person("Career Officer", 920401, "seed-accession")
+        session.commit()
+
+        rel_type_id = session.execute(
+            select(MdmRelationshipType.rel_type_id)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ).scalar_one()
+        existing = MdmRelationshipInstance(
+            relationship_id=relationship_logical_id(rel_type_id, person_id, company_id),
+            rel_type_id=rel_type_id,
+            source_entity_id=person_id,
+            target_entity_id=company_id,
+            properties={
+                "role": "President", "title": "President", "fiscal_year": 2024,
+                "total_compensation": 1500000, "stock_awards": None,
+                "option_awards": None, "non_equity_incentive": None,
+                "source_accession": "fy2024",
+            },
+            effective_from=date(2024, 1, 1),
+            valid_from_date=date(2024, 1, 1),
+            valid_to_date=None,
+            source_system="proxy_filing",
+            source_accession="fy2024",
+        )
+        session.add(existing)
+        session.commit()
+
+        # Reprocess an OLDER fiscal-year row for the same pair.
+        row = self._exec_row(accession_number="fy2023", fiscal_year=2023, exec_role="CFO")
+        pipe = MDMPipeline(session=session, silver=StubSilver({"sec_executive_record": [row]}))
+        pipe.derive_relationships(relationship_types=["EMPLOYED_BY"])
+
+        session.expire_all()
+        newer_row = session.get(MdmRelationshipInstance, existing.instance_id)
+        assert newer_row.valid_to_date is None, (
+            "the newer, already-open 2024 version must not be closed by "
+            "reprocessing an older, already-superseded 2023 row"
+        )
+        assert newer_row.properties["fiscal_year"] == 2024
+
+
 # ---------------------------------------------------------------------------
 # _bounded_relationship_sql / plateau-fix regression
 #
