@@ -283,7 +283,7 @@ class SnowflakeGraphSyncExecutor:
                     f"SELECT COUNT(*) FROM {_mdm_fq(context, 'MDM_RELATIONSHIP_INSTANCE')} RI "
                     f"JOIN {_mdm_fq(context, 'MDM_RELATIONSHIP_TYPE')} RT "
                     f"  ON RT.REL_TYPE_ID = RI.REL_TYPE_ID "
-                    f"WHERE RI.IS_ACTIVE = TRUE AND RT.IS_ACTIVE = TRUE"
+                    f"WHERE {_active_relationship_filter()} AND RT.IS_ACTIVE = TRUE"
                     f"{context['relationship_type_filter']}",
                 )
 
@@ -1242,6 +1242,24 @@ def _active_generation_filter(context: dict[str, Any]) -> str:
     return f"""(SELECT ACTIVE_GENERATION_ID FROM {_fq(context, "GRAPH_ACTIVE_POINTER")} WHERE POINTER_ID = 'active')"""
 
 
+def _active_relationship_filter(alias: str = "RI") -> str:
+    """SQL condition for a genuinely-current MDM_RELATIONSHIP_INSTANCE row.
+
+    mdm-relationship-versioning-gap Ticket 07: IS_ACTIVE alone is not
+    enough -- quarantining a row never flips is_active, so every query
+    that reads this table as ground truth (graph materialization,
+    eligible-count preflight, every verify-graph parity/diagnostic check)
+    must also exclude QUARANTINED rows, or a quarantined row and the row
+    it conflicted with both count as "current." Extracted after this
+    exact fragment was pasted at 7 call sites and one was still missed
+    on the first pass (this file's own recurring failure shape -- see
+    ``_active_generation_filter`` above, extracted for the identical
+    reason: a scoping condition needed across many ``_render_*``
+    functions with no single place to get it right once).
+    """
+    return f"{alias}.IS_ACTIVE = TRUE AND {alias}.QUARANTINED = FALSE"
+
+
 def _generation_scope_filter(context: dict[str, Any], generation_id: str | None) -> str:
     """SQL expression scoping a query to one generation.
 
@@ -1484,7 +1502,7 @@ LEFT JOIN {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")} TGT_ML1
   ON TGT_ML1.DISCARDED_ENTITY_ID = RI.TARGET_ENTITY_ID
 LEFT JOIN {_fq(context, "GRAPH_ENTITY_MERGE_LINEAGE")} TGT_ML2
   ON TGT_ML2.DISCARDED_ENTITY_ID = TGT_ML1.KEPT_ENTITY_ID
-WHERE RI.IS_ACTIVE = TRUE
+WHERE {_active_relationship_filter()}
   AND RT.IS_ACTIVE = TRUE{context["relationship_type_filter"]}
 {context["relationship_per_type_limit"]}{context["relationship_limit"]};
 
@@ -1630,8 +1648,8 @@ JOIN {_mdm_fq(context, "MDM_ENTITY_TYPE_DEFINITION")} ETD
 WHERE E.IS_QUARANTINED = FALSE
 UNION ALL
 SELECT 'mdm_relationship_instances_active' AS METRIC, COUNT(*) AS VALUE
-FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")}
-WHERE IS_ACTIVE = TRUE;
+FROM {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
+WHERE {_active_relationship_filter()};
 
 SELECT LABEL, NODE_COUNT
 FROM {_fq(context, "GRAPH_NODE_COUNTS")}
@@ -1650,7 +1668,7 @@ SELECT
 FROM {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
 LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
   ON RI.REL_TYPE_ID = RT.REL_TYPE_ID
- AND RI.IS_ACTIVE = TRUE
+ AND {_active_relationship_filter()}
 LEFT JOIN {_fq(context, "GRAPH_EDGE_COUNTS")} G
   ON G.RELATIONSHIP_TYPE = RT.REL_TYPE_NAME
 WHERE RT.IS_ACTIVE = TRUE
@@ -2068,7 +2086,7 @@ WITH expected AS (
   FROM {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
   LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_INSTANCE")} RI
     ON RI.REL_TYPE_ID = RT.REL_TYPE_ID
-   AND RI.IS_ACTIVE = TRUE
+   AND {_active_relationship_filter()}
   WHERE RT.IS_ACTIVE = TRUE
   GROUP BY RT.REL_TYPE_NAME
 ),
@@ -2148,7 +2166,7 @@ WITH mdm_side AS (
   JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
     ON RT.REL_TYPE_ID = RI.REL_TYPE_ID
    AND RT.IS_ACTIVE = TRUE
-  WHERE RI.IS_ACTIVE = TRUE
+  WHERE {_active_relationship_filter()}
 ),
 graph_side AS (
   SELECT
@@ -2236,7 +2254,7 @@ JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
  AND RT.IS_ACTIVE = TRUE
 LEFT JOIN {_fq(context, "MDM_GRAPH_EDGES")} G
   ON G.EDGEID = RI.INSTANCE_ID::STRING AND G.GENERATION_ID = {scope}
-WHERE RI.IS_ACTIVE = TRUE
+WHERE {_active_relationship_filter()}
   AND G.EDGEID IS NULL
 ORDER BY RT.REL_TYPE_NAME, RI.INSTANCE_ID
 LIMIT {context["sample_limit"]}
@@ -2256,6 +2274,7 @@ LEFT JOIN {_mdm_fq(context, "MDM_RELATIONSHIP_TYPE")} RT
 WHERE G.GENERATION_ID = {scope}
   AND (RI.INSTANCE_ID IS NULL
    OR RI.IS_ACTIVE = FALSE
+   OR RI.QUARANTINED = TRUE
    OR RT.REL_TYPE_ID IS NULL)
 ORDER BY G.RELATIONSHIP_TYPE, G.EDGEID
 LIMIT {context["sample_limit"]}
