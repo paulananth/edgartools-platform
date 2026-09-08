@@ -2736,7 +2736,7 @@ change).
 101, which is not yet implemented/deployed as a whole; no image rebuild
 has happened for this change.
 
-## _run_grouped_concurrent single end-of-group commit 5-whys (fixed 2026-09-07, verification pending)
+## _run_grouped_concurrent single end-of-group commit 5-whys (fixed and live-verified 2026-09-08)
 
 **Problem:** live during mdm-run-throughput Ticket 03's own verification run
 (`mdm-mastering-batchfix-verify-1788823225`), the security domain wrote 2,404
@@ -2836,14 +2836,20 @@ relevant defect in the concrete numbers the plan didn't specify closely
 enough to catch. Both passes earned their keep; neither would have caught
 what the other found.
 
-**Not yet verified against live production data** — per this session's own
+**Verified against live production data 2026-09-08**, per this session's own
 "real measurements, not estimates" standing preference
-([mdm-run-throughput map](.scratch/mdm-run-throughput/map.md)), this fix
-still needs a real prod run against the same class of oversized security
-group that surfaced the gap, confirming commits now checkpoint visibly
-mid-group instead of only being provable in unit tests. See
-[Ticket 04](.scratch/mdm-run-throughput/issues/04-run-grouped-concurrent-single-end-of-group-commit.md)
-for status.
+([mdm-run-throughput map](.scratch/mdm-run-throughput/map.md)): a fresh prod
+run (`mdm-mastering-groupcommit-verify-1788827772`) against the exact entity
+that surfaced this gap showed two independent periodic commits ~10 minutes
+apart (513 → 1017 accumulated rows), confirmed by directly querying MDM
+Postgres's `mdm_entity_attribute_stage` write timeline rather than inferring
+from logs. Commits now checkpoint visibly mid-group, not just once at the
+end. A separate, pre-existing throughput issue (unpruned candidate-row
+accumulation on a handful of hyper-refiled entities) was found along the
+way and does not affect this fix's own correctness — see
+[Ticket 05](.scratch/mdm-run-throughput/issues/05-mdm-entity-attribute-stage-unbounded-candidate-accumulation.md).
+Full detail:
+[Ticket 04](.scratch/mdm-run-throughput/issues/04-run-grouped-concurrent-single-end-of-group-commit.md).
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 

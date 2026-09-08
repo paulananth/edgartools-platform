@@ -1,5 +1,5 @@
 Type: task
-Status: claimed
+Status: resolved
 
 **Spawned by:** live production evidence during the mdm-skip-if-unchanged-batch
 Ticket 03 verification run (`mdm-mastering-batchfix-verify-1788823225`, 2026-09-07).
@@ -110,13 +110,45 @@ Reviewed before writing any code (`/gof-refactor-reviewer`, CLAUDE.md hard rule)
   batch-the-read pattern here, since memory was never the bottleneck for this
   gap (`group_rows` for even a 5,000-row group is trivially small in memory).
 
-**Verification against real production data (in progress):** per explicit
-instruction, this fix will be verified by re-running against the actual security
-title/entity that was live-observed still running past the healthy burst window,
-not just unit tests -- confirming periodic commits now make partial progress
-durable and visible mid-group, and that the specific run this ticket was spawned
-from can now complete (or at minimum show continuing external visibility) instead
-of appearing stalled.
+**Verification against real production data (confirmed 2026-09-08):** re-ran
+against fresh prod data via `mdm-mastering-groupcommit-verify-1788827772` on
+the fixed image (`edgartools-prod-mdm-medium:247`, digest
+`sha256:ab7c46917b7b4d5d03abfc23256a1fb785a64c4ba97b74293a03f0e30b43bf06`).
+Directly queried MDM Postgres's `mdm_entity_attribute_stage` per-minute write
+volume throughout the run (not log-tail inference). Entity
+`a31e1bdf-523e-4911-bc5b-413e8103376c` -- the exact entity flagged in this
+ticket's own original investigation -- showed its `canonical_title`/
+`security_type` row counts jump **513 -> 1017** between two independent
+checkpoints roughly 10 minutes apart (00:47:31 and 00:57:25 UTC), each
+landing as a burst (consistent with a periodic `commit_interval` checkpoint
+committing everything staged since the last one). Two separate periodic
+commits for the same still-running group, each making a meaningful chunk of
+progress (~500 rows) durable and externally visible mid-group, is exactly
+the behavior this fix was built to produce -- a sharp contrast with the
+original incident's single, all-or-nothing commit after 20+ minutes of total
+invisibility.
+
+**A confound was investigated and ruled out along the way:** the run's
+security-domain writes initially went silent for several minutes, which
+looked concerning. Live investigation (checked `pg_locks`/`pg_stat_activity`
+for blocked queries -- none found; checked the `mdm_pipeline_lease` table --
+found a stale lease held by an earlier, manually-ABORTED verification run,
+since stopping a Step Functions execution doesn't run the Python process's
+own cleanup code) found and released that stale lease as a legitimate state
+repair, but the write burst that appeared shortly after had actually landed
+*before* the lease release completed -- so the lease was not the cause of
+the observed silence. The real cause of the multi-minute gaps was confirmed
+separately (see
+[Ticket 05](05-mdm-entity-attribute-stage-unbounded-candidate-accumulation.md)):
+a handful of entities have accumulated thousands of unpruned historical
+candidate rows in `mdm_entity_attribute_stage`, making
+`run_survivorship_for_entity`'s SELECT genuinely slow for those specific
+entities (confirmed via `pg_stat_statements`: 611-619ms max execution time
+vs. 0.15-0.51ms mean for the same query). Postgres CPU was idle and ECS CPU
+was ~20-35% throughout -- neither resource contention nor concurrency was
+the cause of the gaps; this is a real, separate, pre-existing throughput
+issue, orthogonal to this ticket's durability/visibility fix, which
+performed exactly as designed regardless.
 
 Tests: 6 in `tests/mdm/test_run_securities_persons_concurrency.py`'s
 `TestGroupedConcurrentPeriodicCommit` -- periodic-commit-within-an-oversized-group
