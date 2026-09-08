@@ -298,6 +298,33 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     load_rels.add_argument("--run-id", default=None, help="Opaque identity for this MDM operation")
     load_rels.set_defaults(handler=_logged_handler("load-relationships", _handle_load_relationships))
 
+    backfill_quarantine = mdm_sub.add_parser(
+        "backfill-quarantined-relationships",
+        help=(
+            "Correct already-quarantined mdm_relationship_instance rows now that "
+            "the versioning-gap fix (mdm-relationship-versioning-gap Tickets 01-03) "
+            "stops new ones. Only resolves same-source_system conflicts (a "
+            "predecessor version legitimately superseded over time) -- cross-source "
+            "conflicts and rows with no confirmable chronological order are left "
+            "untouched for manual review. Does not touch the Snowflake graph; a "
+            "fresh sync-graph run is still needed to clear graph-side duplicates "
+            "(mdm-relationship-versioning-gap Ticket 04)."
+        ),
+    )
+    backfill_quarantine.add_argument(
+        "--batch-size", type=int, default=500,
+        help="Relationship_ids to process per commit batch (ignored in --dry-run)",
+    )
+    backfill_quarantine.add_argument(
+        "--dry-run", action="store_true", default=False,
+        help="Report what would change without mutating anything",
+    )
+    backfill_quarantine.set_defaults(
+        handler=_logged_handler(
+            "backfill-quarantined-relationships", _handle_backfill_quarantined_relationships
+        )
+    )
+
     api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
     api.add_argument("--host", default="0.0.0.0")
     api.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
@@ -2022,6 +2049,30 @@ def _handle_derive_relationships(args) -> int:
     finally:
         session.close()
     print(json.dumps({"relationship_counts_by_type": summary}, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_backfill_quarantined_relationships(args) -> int:
+    from edgar_warehouse.mdm.relationship_quarantine_backfill import run_backfill
+
+    session = _session()
+    try:
+        summary = run_backfill(
+            session, batch_size=args.batch_size, dry_run=args.dry_run
+        )
+    finally:
+        session.close()
+    print(json.dumps({
+        "dry_run": args.dry_run,
+        "relationship_ids_examined": summary.relationship_ids_examined,
+        "reopened": summary.reopened,
+        "closed": summary.closed,
+        "skipped_cross_source": summary.skipped_cross_source,
+        "skipped_priority_now_configured": summary.skipped_priority_now_configured,
+        "skipped_ambiguous_order": summary.skipped_ambiguous_order,
+        "skipped_ambiguous_date": summary.skipped_ambiguous_date,
+        "skipped_multiple_conflicts": summary.skipped_multiple_conflicts,
+    }, indent=2, sort_keys=True))
     return 0
 
 

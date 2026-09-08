@@ -303,9 +303,10 @@ class GraphSyncEngine:
 
         conflict = None
         for existing in current:
-            if _intervals_overlap(
-                existing.valid_from_date, existing.valid_to_date, resolved_valid_from, resolved_valid_to
-            ) and (existing.properties or {}) != clean_properties:
+            if relationships_conflict(
+                existing.valid_from_date, existing.valid_to_date, existing.properties,
+                resolved_valid_from, resolved_valid_to, clean_properties,
+            ):
                 conflict = existing
                 break
 
@@ -337,7 +338,7 @@ class GraphSyncEngine:
             self.session.flush()
 
         if conflict is not None:
-            winner = _resolve_source_priority(
+            winner = resolve_source_priority(
                 self.session, rel_type_id, conflict.source_system, source_system
             )
             if winner == "new":
@@ -524,6 +525,43 @@ def _intervals_overlap(a_from, a_to, b_from, b_to) -> bool:
     return starts_before_b_ends and starts_before_a_ends
 
 
+def relationships_conflict(
+    a_valid_from, a_valid_to, a_properties: Optional[dict],
+    b_valid_from, b_valid_to, b_properties: Optional[dict],
+) -> bool:
+    """Overlapping windows with differing properties -- the exact
+    discriminator ``ensure_relationship``'s own conflict-detection uses.
+
+    Extracted (mdm-relationship-versioning-gap Ticket 05's 3-axis review)
+    so a retroactive corrector (``relationship_quarantine_backfill.py``)
+    can never silently drift out of sync with what actually causes a
+    conflict at insert time -- both now call this one function instead of
+    each keeping their own copy of the same two-part check.
+    """
+    return (
+        _intervals_overlap(a_valid_from, a_valid_to, b_valid_from, b_valid_to)
+        and (a_properties or {}) != (b_properties or {})
+    )
+
+
+def confirmed_chronologically_after(new_effective_from, existing_valid_from_date) -> bool:
+    """True only when ``new_effective_from`` can be positively confirmed at
+    or after ``existing_valid_from_date`` -- any ambiguity (either side
+    missing) defaults to False, matching this repo's own "when in doubt,
+    leave it open rather than corrupt it" convention for closing a version.
+
+    Shared (mdm-relationship-versioning-gap Ticket 05's 3-axis review) by
+    ``_deactivate_if_properties_changed`` and the retroactive quarantine
+    backfill so the two can never disagree about what counts as safe to
+    close.
+    """
+    return (
+        new_effective_from is not None
+        and existing_valid_from_date is not None
+        and new_effective_from >= existing_valid_from_date
+    )
+
+
 def _evidence_entry(source_system: Optional[str], source_accession: Optional[str]) -> dict:
     return {
         "source_system": source_system,
@@ -548,7 +586,7 @@ def _merge_source_evidence(
         existing.source_evidence = evidence
 
 
-def _resolve_source_priority(
+def resolve_source_priority(
     session: Session,
     rel_type_id: str,
     existing_source: Optional[str],

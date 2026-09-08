@@ -12,6 +12,7 @@ Graph sync runs last.
 """
 from __future__ import annotations
 
+import bisect
 import json
 import os
 import sys
@@ -35,7 +36,10 @@ from edgar_warehouse.mdm.match import MatchAction
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 from edgar_warehouse.mdm.relationship_checkpoint import (
     advance_relationship_watermark,
+    complete_relationship_sweep,
+    get_relationship_checkpoint_state,
     get_relationship_watermark,
+    record_relationship_sweep_progress,
 )
 from edgar_warehouse.mdm.resolvers import (
     CompanyResolver,
@@ -378,6 +382,115 @@ class MDMPipeline:
             watermark_value=watermark_value,
         )
 
+    def _relationship_checkpoint_state(self, checkpoint_key: str):
+        """Read this key's full sweep-aware checkpoint state -- see
+        ``get_relationship_checkpoint_state``. Only meaningful for the two
+        types (``INSTITUTIONAL_HOLDS``, ``MANAGES_FUND``) that use a
+        resumable CIK/CRD-range cursor; every other type only ever reads
+        ``_relationship_watermark`` above."""
+        return get_relationship_checkpoint_state(self.session, checkpoint_key)
+
+    def _complete_relationship_sweep(
+        self,
+        checkpoint_key: str,
+        *,
+        rel_type_name: str,
+        watermark_column: str,
+        watermark_value: Optional[str],
+    ) -> None:
+        """A CIK/CRD sweep just covered its entire range under one stable
+        watermark boundary -- see ``complete_relationship_sweep``."""
+        complete_relationship_sweep(
+            self.session,
+            checkpoint_key,
+            rel_type_name=rel_type_name,
+            watermark_column=watermark_column,
+            watermark_value=watermark_value,
+        )
+
+    def _record_relationship_sweep_progress(
+        self,
+        checkpoint_key: str,
+        *,
+        rel_type_name: str,
+        watermark_column: str,
+        cursor_value: Optional[str],
+        pending_watermark_value: Optional[str],
+    ) -> None:
+        """Persist an in-progress CIK/CRD sweep's resume position and
+        accumulated watermark candidate -- see
+        ``record_relationship_sweep_progress``."""
+        record_relationship_sweep_progress(
+            self.session,
+            checkpoint_key,
+            rel_type_name=rel_type_name,
+            watermark_column=watermark_column,
+            cursor_value=cursor_value,
+            pending_watermark_value=pending_watermark_value,
+        )
+
+    def _finish_relationship_sweep(
+        self,
+        checkpoint_key: str,
+        *,
+        rel_type_name: str,
+        watermark_column: str,
+        reconciliation_pass: bool,
+        swept_to_completion: bool,
+        watermark_value: Optional[str],
+        next_cursor_value: Optional[str],
+    ) -> None:
+        """Record the outcome of one CIK/CRD-range sweep call -- shared by
+        `_derive_institutional_holds` and `_derive_manages_fund` (identical
+        dispatch shape for both; only the checkpoint key/column names and
+        how `next_cursor_value` was derived differ at the call site).
+
+        Three cases:
+          * Reconciliation pass, sweep completed: advance the stable
+            watermark via the original, unconditional-write
+            `_advance_relationship_watermark` -- matches this method's
+            behavior from before this ticket's cursor mechanism existed.
+            Safe because a completed reconciliation sweep genuinely
+            scanned everything, so the observed max is the true max.
+          * Reconciliation pass, cut short by `remaining`: leave the
+            watermark untouched. Advancing off a partial reconciliation
+            scan would reintroduce this exact ticket's bug on the
+            reconciliation path -- reconciliation has no cursor/pending
+            state of its own to make a partial advance safe (see the
+            "not yet specified" note on the mdm-relationship-versioning-gap
+            map about reconciliation sharing this same structural gap,
+            deliberately not fixed here).
+          * Ordinary pass, sweep completed: advance the watermark and
+            clear the cursor for the next sweep to start fresh.
+          * Ordinary pass, cut short: persist the resume cursor, leave
+            the watermark untouched until a future call completes the
+            sweep.
+        """
+        if reconciliation_pass:
+            if swept_to_completion:
+                self._advance_relationship_watermark(
+                    checkpoint_key,
+                    rel_type_name=rel_type_name,
+                    watermark_column=watermark_column,
+                    watermark_value=watermark_value,
+                )
+            return
+        if swept_to_completion:
+            self._complete_relationship_sweep(
+                checkpoint_key,
+                rel_type_name=rel_type_name,
+                watermark_column=watermark_column,
+                watermark_value=watermark_value,
+            )
+        else:
+            self._record_relationship_sweep_progress(
+                checkpoint_key,
+                rel_type_name=rel_type_name,
+                watermark_column=watermark_column,
+                cursor_value=next_cursor_value,
+                pending_watermark_value=watermark_value,
+            )
+
     @staticmethod
     def _index_open_relationship_versions(
         sync_engine: GraphSyncEngine,
@@ -478,6 +591,69 @@ class MDMPipeline:
             }), file=sys.stderr, flush=True)
         current_by_pair[key] = []
         return True
+
+    def _deactivate_if_properties_changed(
+        self,
+        rel_type_name: str,
+        current_by_pair: dict[tuple[str, str], list],
+        source_entity_id: str,
+        target_entity_id: str,
+        new_properties: dict,
+        effective_from: Any,
+    ) -> None:
+        """IS_INSIDER deactivation (mdm-relationship-versioning-gap Ticket
+        02), also reused by EMPLOYED_BY's exec/DEF 14A branch (Ticket 03):
+        a Form 3/4/5 filing reporting a DIFFERENT role/title for an
+        already-known (person, issuer) pair is a
+        point-in-time snapshot of current status, not an additive fact --
+        close whatever open version currently represents the pair before
+        the caller inserts the new one, instead of colliding with it as an
+        unresolvable same-source conflict.
+
+        Uses the exact same discriminator (``properties != new_properties``)
+        ``ensure_relationship``'s own conflict check uses, so this closing
+        logic and that conflict logic never disagree about what counts as
+        "different." Unlike ``_deactivate_if_zero_shares``, this never
+        signals the caller to skip ``ensure_relationship`` -- a role/title
+        change is a new fact to represent, not a disposal, so the caller
+        always still inserts the new version afterward regardless of what
+        happens here.
+
+        Only closes a candidate when the new row's ``effective_from`` can
+        be positively confirmed at or after that candidate's own
+        ``valid_from_date`` -- any ambiguity (either date missing) defaults
+        to leaving it open. This is what makes reprocessing an OLDER row
+        safe: a late-filed amendment with an earlier period_of_report, or
+        a full-history resync/reconciliation pass revisiting historical
+        rows after a newer version is already open, can never close a
+        newer, already-correct version using a stale date. A skipped
+        candidate is left exactly as-is; the stale row falls through to
+        ``ensure_relationship``'s own conflict machinery instead, which
+        correctly quarantines/resolves it against the still-open newer
+        version rather than corrupting it.
+        """
+        from edgar_warehouse.mdm.graph import (
+            close_relationship_version,
+            confirmed_chronologically_after,
+        )
+
+        key = (source_entity_id, target_entity_id)
+        still_open = []
+        for current in current_by_pair.get(key, []):
+            confirmed_after = confirmed_chronologically_after(effective_from, current.valid_from_date)
+            if (current.properties or {}) == new_properties or not confirmed_after:
+                still_open.append(current)
+                continue
+            close_relationship_version(self.session, current.instance_id, effective_from)
+            print(json.dumps({
+                "event": "mdm_relationship_deactivated",
+                "rel_type": rel_type_name,
+                "reason": "properties_changed",
+                "source_entity_id": source_entity_id,
+                "target_entity_id": target_entity_id,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }), file=sys.stderr, flush=True)
+        current_by_pair[key] = still_open
 
     @staticmethod
     def _track_open_version(
@@ -1572,6 +1748,16 @@ class MDMPipeline:
         sync_engine.prime_relationship_type(
             "IS_INSIDER", defer_flush=True, source_entity_ids=batch_source_ids,
         )
+        # mdm-relationship-versioning-gap Ticket 02: a role/title change for
+        # an already-known (person, issuer) pair must close the prior open
+        # version instead of colliding with it as a same-source conflict --
+        # see _deactivate_if_properties_changed. Applies in both branches
+        # (ordinary incremental and issuer_ciks-scoped targeted resync): a
+        # role change matters regardless of which code path triggered the
+        # derivation, and the resync branch's full-history rescan is exactly
+        # the case _deactivate_if_properties_changed's chronological guard
+        # protects.
+        current_by_pair = self._current_open_versions_by_pair(sync_engine, "IS_INSIDER")
         try:
             for row, person_id in zip(rows, resolved_person_ids):
                 if issuer_ciks is None:
@@ -1612,15 +1798,21 @@ class MDMPipeline:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }), file=sys.stderr, flush=True)
                     continue
+                properties = {"role": _derive_role(row), "title": row.get("officer_title") or ""}
+                self._deactivate_if_properties_changed(
+                    "IS_INSIDER", current_by_pair, person_id, issuer_id,
+                    properties, row.get("period_of_report"),
+                )
                 _rel, created = sync_engine.ensure_relationship(
                     rel_type_name="IS_INSIDER",
                     source_entity_id=person_id,
                     target_entity_id=issuer_id,
-                    properties={"role": _derive_role(row), "title": row.get("officer_title") or ""},
+                    properties=properties,
                     effective_from=row.get("period_of_report"),
                     source_system="ownership_filing",
                     source_accession=row.get("accession_number"),
                 )
+                self._track_open_version(current_by_pair, person_id, issuer_id, _rel, created)
                 if created:
                     inserted += 1
                 else:
@@ -2286,10 +2478,38 @@ class MDMPipeline:
         watermark = self._relationship_watermark(
             "MANAGES_FUND", reconciliation_pass=reconciliation_pass
         )
-        watermark_state: dict[str, Optional[str]] = {"value": None}
+
+        # mdm-relationship-versioning-gap Ticket 01: same resumable-cursor
+        # fix as _derive_institutional_holds' CIK-range loop above, applied
+        # to CRD-range space -- see that method's comment for the full
+        # rationale. `all_sorted_crds` is always the full current universe
+        # (recomputed fresh every call); `sorted_crds` below is the slice
+        # this call actually walks, starting from the persisted cursor
+        # (or the whole list, on a fresh sweep or a reconciliation pass).
+        all_sorted_crds = sorted(adviser_ids_by_crd.keys())
+        if reconciliation_pass:
+            sorted_crds = all_sorted_crds
+            pending_watermark_seed: Optional[str] = None
+        else:
+            checkpoint_state = self._relationship_checkpoint_state("MANAGES_FUND")
+            if checkpoint_state.cursor_value is None:
+                sorted_crds = all_sorted_crds
+            else:
+                start_idx = bisect.bisect_left(all_sorted_crds, checkpoint_state.cursor_value)
+                sorted_crds = all_sorted_crds[start_idx:]
+            pending_watermark_seed = checkpoint_state.pending_watermark_value
+        watermark_state: dict[str, Optional[str]] = {"value": pending_watermark_seed}
 
         totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
-        sorted_crds = sorted(adviser_ids_by_crd.keys())
+        # Highest index into `sorted_crds` (this call's slice) actually
+        # covered by a completed batch -- mirrors
+        # _derive_institutional_holds' last_cik_hi_processed: a batch that
+        # both finishes the slice and hits `remaining` simultaneously still
+        # counts as a completed sweep. Since `sorted_crds` is already
+        # sliced from the persisted cursor through the true end of the
+        # full universe, reaching the end of `sorted_crds` means the whole
+        # universe has been covered since the sweep began.
+        last_batch_end_idx = -1
         for start in range(0, len(sorted_crds), _MANAGES_FUND_CRD_BATCH_SIZE):
             batch_crds = sorted_crds[start:start + _MANAGES_FUND_CRD_BATCH_SIZE]
             batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
@@ -2307,13 +2527,21 @@ class MDMPipeline:
             # flush_pending()'d/unprime_relationship_type()'d internally),
             # not just once at the end of the whole MANAGES_FUND type.
             self.session.commit()
+            last_batch_end_idx = start + len(batch_crds) - 1
             if remaining is not None and totals[0] >= remaining:
                 break
-        self._advance_relationship_watermark(
+
+        swept_to_completion = last_batch_end_idx >= len(sorted_crds) - 1
+        self._finish_relationship_sweep(
             "MANAGES_FUND",
             rel_type_name="MANAGES_FUND",
             watermark_column="accession_number",
+            reconciliation_pass=reconciliation_pass,
+            swept_to_completion=swept_to_completion,
             watermark_value=watermark_state["value"],
+            next_cursor_value=(
+                None if swept_to_completion else sorted_crds[last_batch_end_idx + 1]
+            ),
         )
         return tuple(totals)
 
@@ -3420,6 +3648,19 @@ class MDMPipeline:
         method's two source tables (``sec_executive_record``,
         ``sec_employment_event``) advance independently and a single
         watermark value can't represent both.
+
+        mdm-relationship-versioning-gap Ticket 03: the exec/DEF 14A branch
+        closes a person-company pair's prior open version via
+        ``_deactivate_if_properties_changed`` (Ticket 02's IS_INSIDER
+        helper) before inserting a new fiscal year's row -- a fiscal year
+        always differs from the prior one (``fiscal_year``/
+        ``source_accession`` are both in ``properties``), so without this
+        every subsequent year collided with the still-open prior version as
+        an unresolvable same-source conflict (97.8% of rows created since
+        PR #568 landed were quarantined this way). The event/Item 5.02
+        branch below is untouched -- it already has its own bespoke
+        closing mechanism (``_current_employment_versions`` plus a
+        chronological guard) predating this ticket.
         """
         exec_watermark = self._relationship_watermark(
             "EMPLOYED_BY:exec", reconciliation_pass=reconciliation_pass
@@ -3460,6 +3701,9 @@ class MDMPipeline:
         # it isn't a pure lookup this fix can safely collapse.
         exec_ciks = {row.get("cik") for row in exec_rows if row.get("cik") is not None}
         company_id_by_cik = self._company_entity_ids(exec_ciks)
+        # mdm-relationship-versioning-gap Ticket 03 -- see this method's own
+        # docstring above for why. Reuses Ticket 02's IS_INSIDER helper.
+        current_by_pair = self._current_open_versions_by_pair(sync_engine, "EMPLOYED_BY")
         for row in exec_rows:
             last_exec_watermark = self._track_watermark(
                 last_exec_watermark, row.get("ingested_at")
@@ -3495,24 +3739,30 @@ class MDMPipeline:
                 continue
 
             effective_from = date(int(fiscal_year), 1, 1) if fiscal_year else None
+            properties = {
+                "role":               row.get("exec_role"),
+                "title":              row.get("exec_role"),
+                "fiscal_year":        fiscal_year,
+                "total_compensation": row.get("total_comp"),
+                "stock_awards":       row.get("stock_awards"),
+                "option_awards":      row.get("option_awards"),
+                "non_equity_incentive": row.get("non_equity_incentive"),
+                "source_accession":   accession_number,
+            }
+            self._deactivate_if_properties_changed(
+                "EMPLOYED_BY", current_by_pair, person_id, company_id,
+                properties, effective_from,
+            )
             _rel, created = sync_engine.ensure_relationship(
                 rel_type_name="EMPLOYED_BY",
                 source_entity_id=person_id,
                 target_entity_id=company_id,
-                properties={
-                    "role":               row.get("exec_role"),
-                    "title":              row.get("exec_role"),
-                    "fiscal_year":        fiscal_year,
-                    "total_compensation": row.get("total_comp"),
-                    "stock_awards":       row.get("stock_awards"),
-                    "option_awards":      row.get("option_awards"),
-                    "non_equity_incentive": row.get("non_equity_incentive"),
-                    "source_accession":   accession_number,
-                },
+                properties=properties,
                 effective_from=effective_from,
                 source_system="proxy_filing",
                 source_accession=accession_number,
             )
+            self._track_open_version(current_by_pair, person_id, company_id, _rel, created)
             if created:
                 inserted += 1
             else:
@@ -4159,10 +4409,42 @@ class MDMPipeline:
         # 2026-09-08), not row count (6,799,919), so this stays small.
         security_id_by_cusip: dict[str, tuple[str, bool]] = {}
         watermark_bind = self._watermark_bind_value("ingested_at", watermark)
-        watermark_state: dict[str, Optional[str]] = {"value": None}
+
+        # mdm-relationship-versioning-gap Ticket 01: a persisted, resumable
+        # CIK-range cursor, decoupled from `watermark` above. Every call
+        # previously restarted at min_cik regardless of how far a prior,
+        # `remaining`-capped call got -- if backlog exceeds one run's
+        # budget, the watermark could then only ever creep through the
+        # same early CIK slice, never reaching CIK ranges further out
+        # (confirmed live: a 6+ week stale watermark despite continuous
+        # runs). A reconciliation pass always starts a fresh, full-range
+        # sweep and never reads or writes this cursor state at all --
+        # mirrors `_relationship_watermark`'s own "always bypass during
+        # reconciliation" special-case, since reconciliation already scans
+        # under no watermark filter and mixing its progress with the
+        # ordinary incremental pass's in-progress sweep would be unsound.
+        if reconciliation_pass:
+            cursor_lo = min_cik
+            pending_watermark_seed: Optional[str] = None
+        else:
+            checkpoint_state = self._relationship_checkpoint_state("INSTITUTIONAL_HOLDS")
+            cursor_lo = (
+                min_cik
+                if checkpoint_state.cursor_value is None
+                else max(min_cik, min(int(checkpoint_state.cursor_value), max_cik))
+            )
+            pending_watermark_seed = checkpoint_state.pending_watermark_value
+        watermark_state: dict[str, Optional[str]] = {"value": pending_watermark_seed}
 
         totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
-        cik_lo = min_cik
+        cik_lo = cursor_lo
+        # Highest CIK actually covered by a completed batch this call --
+        # the sweep-completion test below (`last_cik_hi_processed >=
+        # max_cik`) is independent of *why* the loop stopped, so a batch
+        # that both finishes the range and happens to hit `remaining`
+        # simultaneously still counts as a completed sweep, not a
+        # truncated one.
+        last_cik_hi_processed = cursor_lo - 1
         while cik_lo <= max_cik:
             cik_hi = min(cik_lo + _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE - 1, max_cik)
             batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
@@ -4189,15 +4471,22 @@ class MDMPipeline:
             # (6.8M rows in prod, the largest table in the system) and was
             # observed live sitting on one uncommitted transaction for 3h24min+.
             self.session.commit()
+            last_cik_hi_processed = cik_hi
             if remaining is not None and totals[0] >= remaining:
                 break
             cik_lo = cik_hi + 1
 
-        self._advance_relationship_watermark(
+        swept_to_completion = last_cik_hi_processed >= max_cik
+        self._finish_relationship_sweep(
             "INSTITUTIONAL_HOLDS",
             rel_type_name="INSTITUTIONAL_HOLDS",
             watermark_column="ingested_at",
+            reconciliation_pass=reconciliation_pass,
+            swept_to_completion=swept_to_completion,
             watermark_value=watermark_state["value"],
+            next_cursor_value=(
+                None if swept_to_completion else str(last_cik_hi_processed + 1)
+            ),
         )
         return tuple(totals)
 

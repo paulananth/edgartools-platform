@@ -405,6 +405,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "019_mdm_run_identity.sql")
         _apply_sql_file(engine, "020_mdm_pipeline_lease.sql")
         _apply_sql_file(engine, "021_relationship_derivation_checkpoint.sql")
+        _apply_sql_file(engine, "022_relationship_derivation_checkpoint_cursor.sql")
 
     if seed:
         with Session(engine) as session:

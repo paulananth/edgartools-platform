@@ -695,6 +695,30 @@ class MdmRelationshipDerivationCheckpoint(Base):
     No row for a given key means "never checkpointed" -- every reader must
     treat that as "scan everything," not "scan nothing" (see pipeline.py's
     ``_relationship_watermark``).
+
+    ``cursor_value``/``pending_watermark_value`` (mdm-relationship-
+    versioning-gap wayfinder map, Ticket 01): a persisted, resumable
+    CIK/CRD-range cursor for the two types (``INSTITUTIONAL_HOLDS``,
+    ``MANAGES_FUND``) whose derivation batches over a range that can
+    exceed one capped run's budget. ``cursor_value`` is the resume
+    position for an in-progress sweep (NULL means no sweep in progress --
+    start fresh from the beginning); ``pending_watermark_value`` is the
+    running max watermark value accumulated across that sweep, since it
+    may span many separate process runs. ``watermark_value`` itself only
+    advances once a sweep is confirmed to have covered the entire range
+    under one stable watermark boundary -- see
+    ``relationship_checkpoint.complete_relationship_sweep``/
+    ``record_relationship_sweep_progress``. Every other relationship
+    type's checkpoint continues to use only ``watermark_value`` via the
+    unchanged ``advance_relationship_watermark``, and never populates
+    these two columns.
+
+    ``watermark_value`` is nullable (relaxed from its original NOT NULL)
+    because a checkpoint row can now legitimately exist -- holding real
+    ``cursor_value``/``pending_watermark_value`` progress -- before any
+    sweep has ever fully completed; in that state ``watermark_value`` is
+    NULL, which ``get_relationship_watermark`` already treats identically
+    to no checkpoint row at all ("scan everything").
     """
 
     __tablename__ = "mdm_relationship_derivation_checkpoint"
@@ -702,7 +726,9 @@ class MdmRelationshipDerivationCheckpoint(Base):
     checkpoint_key: Mapped[str] = mapped_column(Text, primary_key=True)
     rel_type_name: Mapped[str] = mapped_column(Text, nullable=False)
     watermark_column: Mapped[str] = mapped_column(Text, nullable=False)
-    watermark_value: Mapped[str] = mapped_column(Text, nullable=False)
+    watermark_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cursor_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_watermark_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[object] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 
 

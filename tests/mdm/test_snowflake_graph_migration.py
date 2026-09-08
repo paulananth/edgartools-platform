@@ -159,6 +159,17 @@ def test_generated_sql_exposes_phase_2_graph_projection_contract(tmp_path):
     assert "RT.IS_ACTIVE = TRUE" in graph_sql
     assert "OBJECT_CONSTRUCT_KEEP_NULL" in graph_sql
 
+    # mdm-relationship-versioning-gap Ticket 04: the edge-build query must
+    # also exclude quarantined relationship instances -- IS_ACTIVE alone
+    # never excludes them (quarantining never flips is_active), so a
+    # quarantined row and the row it conflicted with both used to
+    # materialize as separate, simultaneously-live graph edges.
+    assert "RI.QUARANTINED = FALSE" in graph_sql
+    # The parity check's own "expected" count must apply the identical
+    # filter, or it silently agrees with the graph's own quarantine-blind
+    # count and reports a false-clean match.
+    assert "RI.QUARANTINED = FALSE" in validation_sql
+
     assert "GRAPH_NODE_AUDITFIRM AS" in graph_sql
     auditfirm_view_start = graph_sql.index("GRAPH_NODE_AUDITFIRM")
     auditfirm_view_sql = graph_sql[auditfirm_view_start : auditfirm_view_start + 400]
@@ -778,6 +789,30 @@ def test_verify_functions_accept_an_explicit_generation_id_for_pre_activation_ch
     # backward-compatible default: no generation_id -> verify the active generation
     default_sql = _render_verify_node_counts(context)
     assert "GRAPH_ACTIVE_POINTER" in default_sql
+
+
+def test_verify_graph_render_functions_exclude_quarantined_relationship_instances():
+    """mdm-relationship-versioning-gap Ticket 04: every verify-graph SQL
+    renderer that reads MDM_RELATIONSHIP_INSTANCE as the "expected"/"real"
+    side must also exclude quarantined rows -- IS_ACTIVE alone never
+    excludes them, so without this a quarantined row (and its edge, per
+    the graph-build fix) is silently treated as correct on both sides of
+    every parity/diagnostic check."""
+    from edgar_warehouse.mdm.snowflake_graph import (
+        _render_exact_relationship_parity,
+        _render_extra_edges,
+        _render_missing_edges,
+        _render_verify_relationship_counts,
+    )
+
+    context = _context()
+    context["sample_limit"] = 20
+    assert "RI.QUARANTINED = FALSE" in _render_verify_relationship_counts(context)
+    assert "RI.QUARANTINED = FALSE" in _render_exact_relationship_parity(context)
+    assert "RI.QUARANTINED = FALSE" in _render_missing_edges(context)
+    # extra_edges runs the OTHER direction: a graph edge whose MDM row IS
+    # quarantined must be flagged as extra, not silently accepted.
+    assert "RI.QUARANTINED = TRUE" in _render_extra_edges(context)
 
 
 # -- 07-05 Task 2: exact identity/property parity (not count-only) -----------

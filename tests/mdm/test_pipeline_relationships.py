@@ -24,7 +24,7 @@ import re
 import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -42,6 +42,7 @@ from edgar_warehouse.mdm.database import (
     MdmEntityTypeDefinition,
     MdmFund,
     MdmPerson,
+    MdmRelationshipDerivationCheckpoint,
     MdmRelationshipInstance,
     MdmRelationshipType,
     MdmSecurity,
@@ -114,14 +115,17 @@ class StubSilver:
             lo, hi = params[0], params[1]
             matched = [r for r in matched if r.get("cik") is not None and lo <= r["cik"] <= hi]
         elif params and " IN (" in sql.upper():
-            # MANAGES_FUND CRD-batch scoping (mdm-oom-manages-fund fix):
-            # filter by whichever CRD-shaped field the matched rows carry --
+            # MANAGES_FUND CRD-batch scoping (mdm-oom-manages-fund fix), or
+            # IS_INSIDER's issuer_ciks-scoped targeted resync (Ticket 21) --
+            # filter by whichever ID-shaped field the matched rows carry --
             # never parsed out of the SQL text, mirroring the BETWEEN case
             # above so batching tests can assert bound-param usage too.
+            # issuer_cik is checked last since it only ever applies to rows
+            # with no CRD field at all (a MANAGES_FUND row never carries it).
             wanted = {str(p) for p in params}
             matched = [
                 r for r in matched
-                if str(r.get("crd_number", r.get("adviser_crd_number", ""))) in wanted
+                if str(r.get("crd_number", r.get("adviser_crd_number", r.get("issuer_cik", "")))) in wanted
             ]
         return matched
 
@@ -2265,6 +2269,568 @@ class TestInstitutionalHoldsBatching:
         for i, a in enumerate(prime_calls):
             for b in prime_calls[i + 1:]:
                 assert not (a & b), f"overlapping prime scopes: {a} and {b}"
+
+
+def _checkpoint(session: Session, key: str) -> Optional[MdmRelationshipDerivationCheckpoint]:
+    # Not session.get(): its identity-map shortcut would return a
+    # previously-loaded (and, across this file's multi-call tests, now
+    # stale) object without re-querying. A plain select always re-reads.
+    session.expire_all()
+    return session.execute(
+        select(MdmRelationshipDerivationCheckpoint).where(
+            MdmRelationshipDerivationCheckpoint.checkpoint_key == key
+        )
+    ).scalar_one_or_none()
+
+
+class TestInstitutionalHoldsResumableCursor:
+    """mdm-relationship-versioning-gap Ticket 01: a target_per_type-capped
+    run must persist a resume cursor (not just fail to advance the
+    watermark) so the NEXT call continues from where it left off instead
+    of restarting CIK-range iteration from min_cik every time."""
+
+    def test_capped_run_persists_cursor_and_resumes_without_rescanning(self, monkeypatch):
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})  # 910002, 910003, 910004
+        _seed_batching_advisers(session, ciks)
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        first = pipe.derive_relationships(
+            target_per_type=2, relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert first["INSTITUTIONAL_HOLDS"]["inserted"] == 2
+
+        # Only 2 of 3 CIKs were ever visited -- the sweep is not complete,
+        # so watermark_value must stay unset and cursor_value must point
+        # exactly one past the last CIK actually processed (910003).
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint is not None
+        assert checkpoint.watermark_value is None
+        assert checkpoint.cursor_value == "910004"
+
+        # A second, unbounded call must resume at CIK 910004 -- not
+        # rescan 910002/910003, which the first call already covered.
+        between_calls_before = [c for c in silver.calls if c[1] is not None and len(c[1]) == 2]
+        second = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert second["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+        between_calls_after = [c for c in silver.calls if c[1] is not None and len(c[1]) == 2]
+        new_between_calls = between_calls_after[len(between_calls_before):]
+        assert len(new_between_calls) == 1
+        _, params = new_between_calls[0]
+        assert params == [910004, 910004], (
+            "resumed call must fetch only the unswept CIK, not restart from min_cik"
+        )
+
+        # The sweep is now complete (910004 was the true max_cik) -- the
+        # cursor must reset so the NEXT sweep starts fresh from the
+        # beginning again.
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint.cursor_value is None
+        session.close()
+
+    def test_reconciliation_pass_never_reads_or_writes_the_cursor(self, monkeypatch):
+        """A reconciliation pass always scans the full range from
+        min_cik, regardless of an in-progress ordinary-pass cursor, and
+        must leave that cursor untouched for the ordinary pass to resume
+        later."""
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})
+        _seed_batching_advisers(session, ciks)
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        pipe.derive_relationships(target_per_type=2, relationship_types=["INSTITUTIONAL_HOLDS"])
+        checkpoint_before = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint_before.cursor_value == "910004"
+
+        pipe.derive_relationships(
+            relationship_types=["INSTITUTIONAL_HOLDS"], reconciliation_pass=True
+        )
+        checkpoint_after = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint_after.cursor_value == "910004", (
+            "a reconciliation pass must not disturb the ordinary pass's in-progress cursor"
+        )
+        session.close()
+
+    def _rows_with_ingested_at(self) -> list[dict]:
+        base = {
+            "issuer_name": "Apple Inc", "security_title": "Common Stock",
+            "shares_held": 1000, "market_value": 15000000,
+            "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            "period_of_report": "2024-03-31",
+        }
+        return [
+            {**base, "cik": 910002, "accession_number": "acc-a", "cusip": "037833100",
+             "ingested_at": datetime(2024, 1, 1, tzinfo=timezone.utc)},
+            {**base, "cik": 910003, "accession_number": "acc-b", "cusip": "594918104",
+             "ingested_at": datetime(2024, 3, 1, tzinfo=timezone.utc)},
+            {**base, "cik": 910004, "accession_number": "acc-c", "cusip": "023135106",
+             "ingested_at": datetime(2024, 6, 1, tzinfo=timezone.utc)},
+        ]
+
+    def test_reconciliation_pass_advances_watermark_when_it_completes_a_full_scan(
+        self, monkeypatch
+    ):
+        """Regression for a real bug this ticket's own code review found:
+        the diff's first draft unconditionally suppressed watermark writes
+        during reconciliation, an unstated behavior change from the
+        pre-existing (pre-Ticket-01) contract -- every other relationship
+        type still advances its watermark during reconciliation. A
+        genuinely complete (uncapped) reconciliation scan must still
+        advance the watermark, exactly as it did before this ticket."""
+        rows = self._rows_with_ingested_at()
+        session = _fresh_batching_session()
+        _seed_batching_advisers(session, [r["cik"] for r in rows])
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        summary = pipe.derive_relationships(
+            relationship_types=["INSTITUTIONAL_HOLDS"], reconciliation_pass=True
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint is not None
+        assert checkpoint.watermark_value == datetime(2024, 6, 1, tzinfo=timezone.utc).isoformat()
+        assert checkpoint.cursor_value is None
+        session.close()
+
+    def test_reconciliation_pass_does_not_advance_watermark_when_capped(self, monkeypatch):
+        """The other half of the same regression: a reconciliation run
+        that itself gets cut short by `remaining` must NOT advance the
+        watermark off a partial scan -- that would reintroduce this exact
+        ticket's bug on the reconciliation path, just with no cursor to
+        recover from it."""
+        rows = self._rows_with_ingested_at()
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        session = _fresh_batching_session()
+        _seed_batching_advisers(session, [r["cik"] for r in rows])
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        summary = pipe.derive_relationships(
+            target_per_type=2, relationship_types=["INSTITUTIONAL_HOLDS"],
+            reconciliation_pass=True,
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 2
+
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint is None, (
+            "a capped reconciliation pass must not create a checkpoint row at all -- "
+            "no watermark write, and reconciliation never persists cursor state"
+        )
+        session.close()
+
+
+class TestManagesFundResumableCursor:
+    """Same resumable-cursor fix as INSTITUTIONAL_HOLDS above, applied to
+    MANAGES_FUND's CRD-range batching."""
+
+    def _seed_advisers_and_funds(self, session: Session, count: int) -> list[str]:
+        crds = []
+        for index in range(count):
+            adviser_id = _add_entity(session, "adviser")
+            fund_id = _add_entity(session, "fund")
+            crd_number = str(700000 + index)
+            crds.append(crd_number)
+            session.add(MdmAdviser(
+                entity_id=adviser_id, crd_number=crd_number,
+                canonical_name=f"Cursor Adviser {index}",
+            ))
+            session.add(MdmFund(
+                entity_id=fund_id, adviser_entity_id=adviser_id,
+                private_fund_id=f"805-{700000 + index}", canonical_name=f"Cursor Fund {index}",
+            ))
+        session.commit()
+        return sorted(crds)
+
+    def _filings_and_funds(self, crds: list[str]) -> tuple[list[dict], list[dict]]:
+        filings, funds = [], []
+        for crd in crds:
+            accession = f"iapd-adv:{crd}"
+            filings.append({
+                "accession_number": accession, "crd_number": crd,
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+            })
+            funds.append({
+                "accession_number": accession, "adviser_crd_number": crd,
+                "private_fund_id": f"805-{crd}", "filing_id": crd,
+                "schedule_section": "7B1", "reporting_role": "detailed_reporter",
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+                "source_sha256": f"sha-{crd}",
+            })
+        return filings, funds
+
+    def test_capped_run_persists_cursor_and_resumes_without_rescanning(self, session, monkeypatch):
+        monkeypatch.setattr("edgar_warehouse.mdm.pipeline._MANAGES_FUND_CRD_BATCH_SIZE", 2)
+        crds = self._seed_advisers_and_funds(session, 5)  # batch size 2 -> 2/2/1
+        filings, funds = self._filings_and_funds(crds)
+        silver = StubSilver({"sec_adv_filing": filings, "sec_adv_private_fund": funds})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        first = pipe.derive_relationships(target_per_type=2, relationship_types=["MANAGES_FUND"])
+        assert first["MANAGES_FUND"]["inserted"] == 2
+
+        # Only the first CRD batch (crds[0], crds[1]) was ever visited --
+        # the sweep is not complete, so cursor_value must point exactly at
+        # the first unswept CRD (crds[2]).
+        checkpoint = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint is not None
+        assert checkpoint.watermark_value is None
+        assert checkpoint.cursor_value == crds[2]
+
+        # A second, unbounded call must resume at crds[2:] -- not rescan
+        # crds[0]/crds[1], which the first call already covered.
+        in_calls_before = [c for c in silver.calls if c[1] is not None and " IN (" in c[0].upper()]
+        second = pipe.derive_relationships(relationship_types=["MANAGES_FUND"])
+        assert second["MANAGES_FUND"]["inserted"] == 3
+        in_calls_after = [c for c in silver.calls if c[1] is not None and " IN (" in c[0].upper()]
+        new_in_calls = in_calls_after[len(in_calls_before):]
+        touched_crds = {crd for _, params in new_in_calls for crd in params}
+        assert touched_crds == set(crds[2:]), (
+            "resumed call must fetch only the unswept CRDs, not restart from the beginning"
+        )
+
+        # The sweep is now complete -- the cursor must reset so the NEXT
+        # sweep starts fresh from the beginning again.
+        checkpoint = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint.cursor_value is None
+
+    def test_reconciliation_pass_never_reads_or_writes_the_cursor(self, session, monkeypatch):
+        monkeypatch.setattr("edgar_warehouse.mdm.pipeline._MANAGES_FUND_CRD_BATCH_SIZE", 2)
+        crds = self._seed_advisers_and_funds(session, 5)
+        filings, funds = self._filings_and_funds(crds)
+        silver = StubSilver({"sec_adv_filing": filings, "sec_adv_private_fund": funds})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        pipe.derive_relationships(target_per_type=2, relationship_types=["MANAGES_FUND"])
+        checkpoint_before = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint_before.cursor_value == crds[2]
+
+        pipe.derive_relationships(relationship_types=["MANAGES_FUND"], reconciliation_pass=True)
+        checkpoint_after = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint_after.cursor_value == crds[2], (
+            "a reconciliation pass must not disturb the ordinary pass's in-progress cursor"
+        )
+
+
+class TestIsInsiderDeactivation:
+    """mdm-relationship-versioning-gap Ticket 02: a role/title change for
+    an already-known (person, issuer) pair must close the prior open
+    version instead of colliding with it as an unresolvable same-source
+    conflict."""
+
+    def _seed_pair(self, session: Session) -> tuple[str, str]:
+        person_id = _add_entity(session, "person")
+        company_id = _add_entity(session, "company")
+        session.add(MdmPerson(entity_id=person_id, owner_cik=910102, canonical_name="Reporting Person"))
+        session.add(MdmCompany(entity_id=company_id, cik=910001, canonical_name="Issuer Corp"))
+        session.commit()
+        return person_id, company_id
+
+    @staticmethod
+    def _owner_row(
+        *, accession_number: str, period_of_report: date,
+        is_director: bool = False, is_officer: bool = False, officer_title: Optional[str] = None,
+    ) -> dict:
+        return {
+            "accession_number": accession_number, "owner_index": 0,
+            "owner_cik": 910102, "owner_name": "Reporting Person",
+            "is_director": is_director, "is_officer": is_officer,
+            "is_ten_percent_owner": False, "is_other": False,
+            "officer_title": officer_title,
+            "issuer_cik": 910001, "period_of_report": period_of_report,
+        }
+
+    def test_role_change_closes_prior_open_version_and_opens_new_one(self, session):
+        self._seed_pair(session)
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+            ),
+            self._owner_row(
+                accession_number="0002", period_of_report=date(2025, 10, 8), is_director=True,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+
+        summary = pipe.derive_relationships(relationship_types=["IS_INSIDER"])
+        assert summary["IS_INSIDER"]["inserted"] == 2
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ))
+        assert len(all_rows) == 2
+        closed = [r for r in all_rows if r.valid_to_date is not None]
+        open_versions = [r for r in all_rows if r.valid_to_date is None]
+        assert len(closed) == 1
+        assert len(open_versions) == 1
+        assert closed[0].properties == {"role": "officer", "title": ""}
+        assert closed[0].valid_to_date == date(2025, 10, 8)
+        assert open_versions[0].properties == {"role": "director", "title": ""}
+        # The whole point of this fix: the newer, more accurate role must
+        # actually be visible as current -- not quarantined or superseded.
+        assert open_versions[0].quarantined is False
+        assert open_versions[0].superseded_by_version_id is None
+
+    def test_identical_role_refiled_leaves_prior_version_open_and_does_not_close(self, session):
+        """A re-filing that reports the SAME role/title at a later date is
+        not a role change -- ensure_relationship's own identical-properties
+        handling applies (no conflict), and this fix must not close
+        anything just because the dates differ."""
+        self._seed_pair(session)
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+                officer_title="CFO",
+            ),
+            self._owner_row(
+                accession_number="0002", period_of_report=date(2025, 10, 8), is_officer=True,
+                officer_title="CFO",
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+
+        pipe.derive_relationships(relationship_types=["IS_INSIDER"])
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ))
+        # Both rows carry identical properties -- nothing here should ever
+        # be closed by this fix; whether ensure_relationship treats the
+        # second as a fresh open version or merges it is out of this
+        # fix's scope, but no row may have a valid_to_date set.
+        assert all(r.valid_to_date is None for r in all_rows)
+
+    def test_reprocessing_an_older_row_does_not_close_a_newer_open_version(self, session):
+        """The chronological guard: reprocessing a row with an OLDER
+        period_of_report than the currently open version (e.g. a
+        full-history issuer_ciks resync revisiting historical filings, or
+        an out-of-order late-filed amendment) must never close the newer,
+        already-correct version using a stale date."""
+        person_id, company_id = self._seed_pair(session)
+        # Insert the NEWER (director) version directly, as if an earlier
+        # run had already correctly derived and left it open.
+        from edgar_warehouse.mdm.database import MdmRelationshipInstance as MRI
+        from edgar_warehouse.mdm.database import relationship_logical_id
+        rel_type_id = session.execute(
+            select(MdmRelationshipType.rel_type_id).where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ).scalar_one()
+        existing = MRI(
+            relationship_id=relationship_logical_id(rel_type_id, person_id, company_id),
+            rel_type_id=rel_type_id,
+            source_entity_id=person_id,
+            target_entity_id=company_id,
+            properties={"role": "director", "title": ""},
+            effective_from=date(2025, 10, 8),
+            valid_from_date=date(2025, 10, 8),
+            valid_to_date=None,
+            source_system="ownership_filing",
+            source_accession="0002",
+        )
+        session.add(existing)
+        session.commit()
+
+        # Now reprocess an OLDER officer row for the same pair (as a
+        # full-history resync would).
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+        pipe.derive_relationships(relationship_types=["IS_INSIDER"], issuer_ciks=[910001])
+
+        session.expire_all()
+        director_row = session.get(MRI, existing.instance_id)
+        assert director_row.valid_to_date is None, (
+            "the newer, already-open director version must not be closed by "
+            "reprocessing an older, already-superseded officer row"
+        )
+        assert director_row.properties == {"role": "director", "title": ""}
+
+    def test_issuer_ciks_scoped_resync_also_closes_on_role_change(self, session):
+        """Deactivation must apply in the issuer_ciks-scoped targeted-resync
+        branch too, not just the ordinary incremental path."""
+        self._seed_pair(session)
+        rows = [
+            self._owner_row(
+                accession_number="0001", period_of_report=date(2024, 10, 16), is_officer=True,
+            ),
+            self._owner_row(
+                accession_number="0002", period_of_report=date(2025, 10, 8), is_director=True,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"FROM sec_ownership_reporting_owner": rows}))
+
+        pipe.derive_relationships(relationship_types=["IS_INSIDER"], issuer_ciks=[910001])
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "IS_INSIDER")
+        ))
+        closed = [r for r in all_rows if r.valid_to_date is not None]
+        open_versions = [r for r in all_rows if r.valid_to_date is None]
+        assert len(closed) == 1
+        assert len(open_versions) == 1
+        assert open_versions[0].properties == {"role": "director", "title": ""}
+        assert open_versions[0].quarantined is False
+
+
+class TestEmployedByExecDeactivation:
+    """mdm-relationship-versioning-gap Ticket 03: a company reporting a
+    NEW fiscal year's DEF 14A comp record for an already-known executive
+    must close the prior open EMPLOYED_BY version instead of colliding
+    with it as an unresolvable same-source conflict (fiscal_year/
+    source_accession are always part of ``properties``, so they always
+    differ across years). Only the exec/``sec_executive_record`` branch is
+    covered here -- the event/Item 5.02 branch already has its own,
+    separately-tested closing mechanism, untouched by this ticket."""
+
+    @staticmethod
+    def _exec_row(
+        *, accession_number: str, fiscal_year: int, exec_role: str,
+        total_comp: Optional[int] = 1000000, cik: int = 920401,
+    ) -> dict:
+        return {
+            "cik": cik, "accession_number": accession_number,
+            "fiscal_year": fiscal_year, "exec_name": "Career Officer",
+            "exec_role": exec_role, "total_comp": total_comp,
+            "base_salary": None, "bonus": None, "stock_awards": None,
+            "option_awards": None, "non_equity_incentive": None,
+        }
+
+    @staticmethod
+    def _seed_company(session: Session, cik: int = 920401) -> str:
+        company_id = _add_entity(session, "company")
+        session.add(MdmCompany(entity_id=company_id, cik=cik, canonical_name="Career Corp"))
+        session.commit()
+        return company_id
+
+    def test_new_fiscal_year_closes_prior_open_version_and_opens_new_one(self, session):
+        self._seed_company(session)
+        rows = [
+            self._exec_row(
+                accession_number="fy2023", fiscal_year=2023, exec_role="CFO",
+                total_comp=1000000,
+            ),
+            self._exec_row(
+                accession_number="fy2024", fiscal_year=2024, exec_role="President",
+                total_comp=1500000,
+            ),
+        ]
+        pipe = MDMPipeline(session=session, silver=StubSilver({"sec_executive_record": rows}))
+
+        summary = pipe.derive_relationships(relationship_types=["EMPLOYED_BY"])
+        assert summary["EMPLOYED_BY"]["inserted"] == 2
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ))
+        assert len(all_rows) == 2
+        closed = [r for r in all_rows if r.valid_to_date is not None]
+        open_versions = [r for r in all_rows if r.valid_to_date is None]
+        assert len(closed) == 1
+        assert len(open_versions) == 1
+        assert closed[0].properties["fiscal_year"] == 2023
+        assert closed[0].valid_to_date == date(2024, 1, 1)
+        assert open_versions[0].properties["fiscal_year"] == 2024
+        assert open_versions[0].properties["role"] == "President"
+        # The whole point of this fix: the newer, more accurate comp record
+        # must actually be visible as current -- not quarantined.
+        assert open_versions[0].quarantined is False
+        assert open_versions[0].superseded_by_version_id is None
+
+    def test_reprocessing_an_identical_row_does_not_close_anything(self, session):
+        """An idempotent rerun of the exact same DEF 14A row (same
+        accession_number, same fiscal_year, same role/comp) is not a
+        change -- ensure_relationship's own identical-evidence handling
+        applies, and this fix must not close anything."""
+        self._seed_company(session)
+        row = self._exec_row(accession_number="fy2023", fiscal_year=2023, exec_role="CFO")
+        pipe = MDMPipeline(
+            session=session,
+            silver=StubSilver({"sec_executive_record": [row, dict(row)]}),
+        )
+
+        summary = pipe.derive_relationships(relationship_types=["EMPLOYED_BY"])
+        assert summary["EMPLOYED_BY"]["inserted"] == 1
+
+        all_rows = list(session.scalars(
+            select(MdmRelationshipInstance)
+            .join(MdmRelationshipType)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ))
+        assert len(all_rows) == 1
+        assert all_rows[0].valid_to_date is None
+
+    def test_reprocessing_an_older_fiscal_year_does_not_close_a_newer_open_version(self, session):
+        """The chronological guard: reprocessing an OLDER fiscal year's row
+        (e.g. a full-history backfill revisiting historical DEF 14A
+        filings) after a NEWER version is already open must never close
+        the newer, already-correct version using a stale date."""
+        from edgar_warehouse.mdm.database import relationship_logical_id
+
+        company_id = self._seed_company(session)
+        # Derive the proxy-stub person id via the real production helper
+        # (not a hand-reimplemented UUID5 calculation) -- as if an earlier
+        # run had already correctly derived and left the 2024 version open.
+        seed_pipe = MDMPipeline(session=session, silver=StubSilver({}))
+        person_id = seed_pipe._ensure_proxy_person("Career Officer", 920401, "seed-accession")
+        session.commit()
+
+        rel_type_id = session.execute(
+            select(MdmRelationshipType.rel_type_id)
+            .where(MdmRelationshipType.rel_type_name == "EMPLOYED_BY")
+        ).scalar_one()
+        existing = MdmRelationshipInstance(
+            relationship_id=relationship_logical_id(rel_type_id, person_id, company_id),
+            rel_type_id=rel_type_id,
+            source_entity_id=person_id,
+            target_entity_id=company_id,
+            properties={
+                "role": "President", "title": "President", "fiscal_year": 2024,
+                "total_compensation": 1500000, "stock_awards": None,
+                "option_awards": None, "non_equity_incentive": None,
+                "source_accession": "fy2024",
+            },
+            effective_from=date(2024, 1, 1),
+            valid_from_date=date(2024, 1, 1),
+            valid_to_date=None,
+            source_system="proxy_filing",
+            source_accession="fy2024",
+        )
+        session.add(existing)
+        session.commit()
+
+        # Reprocess an OLDER fiscal-year row for the same pair.
+        row = self._exec_row(accession_number="fy2023", fiscal_year=2023, exec_role="CFO")
+        pipe = MDMPipeline(session=session, silver=StubSilver({"sec_executive_record": [row]}))
+        pipe.derive_relationships(relationship_types=["EMPLOYED_BY"])
+
+        session.expire_all()
+        newer_row = session.get(MdmRelationshipInstance, existing.instance_id)
+        assert newer_row.valid_to_date is None, (
+            "the newer, already-open 2024 version must not be closed by "
+            "reprocessing an older, already-superseded 2023 row"
+        )
+        assert newer_row.properties["fiscal_year"] == 2024
 
 
 # ---------------------------------------------------------------------------
