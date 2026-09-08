@@ -24,7 +24,7 @@ import re
 import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -42,6 +42,7 @@ from edgar_warehouse.mdm.database import (
     MdmEntityTypeDefinition,
     MdmFund,
     MdmPerson,
+    MdmRelationshipDerivationCheckpoint,
     MdmRelationshipInstance,
     MdmRelationshipType,
     MdmSecurity,
@@ -2265,6 +2266,258 @@ class TestInstitutionalHoldsBatching:
         for i, a in enumerate(prime_calls):
             for b in prime_calls[i + 1:]:
                 assert not (a & b), f"overlapping prime scopes: {a} and {b}"
+
+
+def _checkpoint(session: Session, key: str) -> Optional[MdmRelationshipDerivationCheckpoint]:
+    # Not session.get(): its identity-map shortcut would return a
+    # previously-loaded (and, across this file's multi-call tests, now
+    # stale) object without re-querying. A plain select always re-reads.
+    session.expire_all()
+    return session.execute(
+        select(MdmRelationshipDerivationCheckpoint).where(
+            MdmRelationshipDerivationCheckpoint.checkpoint_key == key
+        )
+    ).scalar_one_or_none()
+
+
+class TestInstitutionalHoldsResumableCursor:
+    """mdm-relationship-versioning-gap Ticket 01: a target_per_type-capped
+    run must persist a resume cursor (not just fail to advance the
+    watermark) so the NEXT call continues from where it left off instead
+    of restarting CIK-range iteration from min_cik every time."""
+
+    def test_capped_run_persists_cursor_and_resumes_without_rescanning(self, monkeypatch):
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})  # 910002, 910003, 910004
+        _seed_batching_advisers(session, ciks)
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        first = pipe.derive_relationships(
+            target_per_type=2, relationship_types=["INSTITUTIONAL_HOLDS"]
+        )
+        assert first["INSTITUTIONAL_HOLDS"]["inserted"] == 2
+
+        # Only 2 of 3 CIKs were ever visited -- the sweep is not complete,
+        # so watermark_value must stay unset and cursor_value must point
+        # exactly one past the last CIK actually processed (910003).
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint is not None
+        assert checkpoint.watermark_value is None
+        assert checkpoint.cursor_value == "910004"
+
+        # A second, unbounded call must resume at CIK 910004 -- not
+        # rescan 910002/910003, which the first call already covered.
+        between_calls_before = [c for c in silver.calls if c[1] is not None and len(c[1]) == 2]
+        second = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert second["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+        between_calls_after = [c for c in silver.calls if c[1] is not None and len(c[1]) == 2]
+        new_between_calls = between_calls_after[len(between_calls_before):]
+        assert len(new_between_calls) == 1
+        _, params = new_between_calls[0]
+        assert params == [910004, 910004], (
+            "resumed call must fetch only the unswept CIK, not restart from min_cik"
+        )
+
+        # The sweep is now complete (910004 was the true max_cik) -- the
+        # cursor must reset so the NEXT sweep starts fresh from the
+        # beginning again.
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint.cursor_value is None
+        session.close()
+
+    def test_reconciliation_pass_never_reads_or_writes_the_cursor(self, monkeypatch):
+        """A reconciliation pass always scans the full range from
+        min_cik, regardless of an in-progress ordinary-pass cursor, and
+        must leave that cursor untouched for the ordinary pass to resume
+        later."""
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        session = _fresh_batching_session()
+        ciks = sorted({r["cik"] for r in _BATCH_THIRTEENF_ROWS})
+        _seed_batching_advisers(session, ciks)
+        silver = StubSilver({"sec_thirteenf_holding": _BATCH_THIRTEENF_ROWS})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        pipe.derive_relationships(target_per_type=2, relationship_types=["INSTITUTIONAL_HOLDS"])
+        checkpoint_before = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint_before.cursor_value == "910004"
+
+        pipe.derive_relationships(
+            relationship_types=["INSTITUTIONAL_HOLDS"], reconciliation_pass=True
+        )
+        checkpoint_after = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint_after.cursor_value == "910004", (
+            "a reconciliation pass must not disturb the ordinary pass's in-progress cursor"
+        )
+        session.close()
+
+    def _rows_with_ingested_at(self) -> list[dict]:
+        base = {
+            "issuer_name": "Apple Inc", "security_title": "Common Stock",
+            "shares_held": 1000, "market_value": 15000000,
+            "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            "period_of_report": "2024-03-31",
+        }
+        return [
+            {**base, "cik": 910002, "accession_number": "acc-a", "cusip": "037833100",
+             "ingested_at": datetime(2024, 1, 1, tzinfo=timezone.utc)},
+            {**base, "cik": 910003, "accession_number": "acc-b", "cusip": "594918104",
+             "ingested_at": datetime(2024, 3, 1, tzinfo=timezone.utc)},
+            {**base, "cik": 910004, "accession_number": "acc-c", "cusip": "023135106",
+             "ingested_at": datetime(2024, 6, 1, tzinfo=timezone.utc)},
+        ]
+
+    def test_reconciliation_pass_advances_watermark_when_it_completes_a_full_scan(
+        self, monkeypatch
+    ):
+        """Regression for a real bug this ticket's own code review found:
+        the diff's first draft unconditionally suppressed watermark writes
+        during reconciliation, an unstated behavior change from the
+        pre-existing (pre-Ticket-01) contract -- every other relationship
+        type still advances its watermark during reconciliation. A
+        genuinely complete (uncapped) reconciliation scan must still
+        advance the watermark, exactly as it did before this ticket."""
+        rows = self._rows_with_ingested_at()
+        session = _fresh_batching_session()
+        _seed_batching_advisers(session, [r["cik"] for r in rows])
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        summary = pipe.derive_relationships(
+            relationship_types=["INSTITUTIONAL_HOLDS"], reconciliation_pass=True
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint is not None
+        assert checkpoint.watermark_value == datetime(2024, 6, 1, tzinfo=timezone.utc).isoformat()
+        assert checkpoint.cursor_value is None
+        session.close()
+
+    def test_reconciliation_pass_does_not_advance_watermark_when_capped(self, monkeypatch):
+        """The other half of the same regression: a reconciliation run
+        that itself gets cut short by `remaining` must NOT advance the
+        watermark off a partial scan -- that would reintroduce this exact
+        ticket's bug on the reconciliation path, just with no cursor to
+        recover from it."""
+        rows = self._rows_with_ingested_at()
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 1
+        )
+        session = _fresh_batching_session()
+        _seed_batching_advisers(session, [r["cik"] for r in rows])
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        summary = pipe.derive_relationships(
+            target_per_type=2, relationship_types=["INSTITUTIONAL_HOLDS"],
+            reconciliation_pass=True,
+        )
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 2
+
+        checkpoint = _checkpoint(session, "INSTITUTIONAL_HOLDS")
+        assert checkpoint is None, (
+            "a capped reconciliation pass must not create a checkpoint row at all -- "
+            "no watermark write, and reconciliation never persists cursor state"
+        )
+        session.close()
+
+
+class TestManagesFundResumableCursor:
+    """Same resumable-cursor fix as INSTITUTIONAL_HOLDS above, applied to
+    MANAGES_FUND's CRD-range batching."""
+
+    def _seed_advisers_and_funds(self, session: Session, count: int) -> list[str]:
+        crds = []
+        for index in range(count):
+            adviser_id = _add_entity(session, "adviser")
+            fund_id = _add_entity(session, "fund")
+            crd_number = str(700000 + index)
+            crds.append(crd_number)
+            session.add(MdmAdviser(
+                entity_id=adviser_id, crd_number=crd_number,
+                canonical_name=f"Cursor Adviser {index}",
+            ))
+            session.add(MdmFund(
+                entity_id=fund_id, adviser_entity_id=adviser_id,
+                private_fund_id=f"805-{700000 + index}", canonical_name=f"Cursor Fund {index}",
+            ))
+        session.commit()
+        return sorted(crds)
+
+    def _filings_and_funds(self, crds: list[str]) -> tuple[list[dict], list[dict]]:
+        filings, funds = [], []
+        for crd in crds:
+            accession = f"iapd-adv:{crd}"
+            filings.append({
+                "accession_number": accession, "crd_number": crd,
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+            })
+            funds.append({
+                "accession_number": accession, "adviser_crd_number": crd,
+                "private_fund_id": f"805-{crd}", "filing_id": crd,
+                "schedule_section": "7B1", "reporting_role": "detailed_reporter",
+                "effective_date": date(2025, 1, 1), "filing_action": "annual_amendment",
+                "source_sha256": f"sha-{crd}",
+            })
+        return filings, funds
+
+    def test_capped_run_persists_cursor_and_resumes_without_rescanning(self, session, monkeypatch):
+        monkeypatch.setattr("edgar_warehouse.mdm.pipeline._MANAGES_FUND_CRD_BATCH_SIZE", 2)
+        crds = self._seed_advisers_and_funds(session, 5)  # batch size 2 -> 2/2/1
+        filings, funds = self._filings_and_funds(crds)
+        silver = StubSilver({"sec_adv_filing": filings, "sec_adv_private_fund": funds})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        first = pipe.derive_relationships(target_per_type=2, relationship_types=["MANAGES_FUND"])
+        assert first["MANAGES_FUND"]["inserted"] == 2
+
+        # Only the first CRD batch (crds[0], crds[1]) was ever visited --
+        # the sweep is not complete, so cursor_value must point exactly at
+        # the first unswept CRD (crds[2]).
+        checkpoint = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint is not None
+        assert checkpoint.watermark_value is None
+        assert checkpoint.cursor_value == crds[2]
+
+        # A second, unbounded call must resume at crds[2:] -- not rescan
+        # crds[0]/crds[1], which the first call already covered.
+        in_calls_before = [c for c in silver.calls if c[1] is not None and " IN (" in c[0].upper()]
+        second = pipe.derive_relationships(relationship_types=["MANAGES_FUND"])
+        assert second["MANAGES_FUND"]["inserted"] == 3
+        in_calls_after = [c for c in silver.calls if c[1] is not None and " IN (" in c[0].upper()]
+        new_in_calls = in_calls_after[len(in_calls_before):]
+        touched_crds = {crd for _, params in new_in_calls for crd in params}
+        assert touched_crds == set(crds[2:]), (
+            "resumed call must fetch only the unswept CRDs, not restart from the beginning"
+        )
+
+        # The sweep is now complete -- the cursor must reset so the NEXT
+        # sweep starts fresh from the beginning again.
+        checkpoint = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint.cursor_value is None
+
+    def test_reconciliation_pass_never_reads_or_writes_the_cursor(self, session, monkeypatch):
+        monkeypatch.setattr("edgar_warehouse.mdm.pipeline._MANAGES_FUND_CRD_BATCH_SIZE", 2)
+        crds = self._seed_advisers_and_funds(session, 5)
+        filings, funds = self._filings_and_funds(crds)
+        silver = StubSilver({"sec_adv_filing": filings, "sec_adv_private_fund": funds})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        pipe.derive_relationships(target_per_type=2, relationship_types=["MANAGES_FUND"])
+        checkpoint_before = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint_before.cursor_value == crds[2]
+
+        pipe.derive_relationships(relationship_types=["MANAGES_FUND"], reconciliation_pass=True)
+        checkpoint_after = _checkpoint(session, "MANAGES_FUND")
+        assert checkpoint_after.cursor_value == crds[2], (
+            "a reconciliation pass must not disturb the ordinary pass's in-progress cursor"
+        )
 
 
 # ---------------------------------------------------------------------------

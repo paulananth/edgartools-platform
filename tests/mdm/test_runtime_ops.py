@@ -116,6 +116,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "019_mdm_run_identity.sql",
         "020_mdm_pipeline_lease.sql",
         "021_relationship_derivation_checkpoint.sql",
+        "022_relationship_derivation_checkpoint_cursor.sql",
     ]
 
 

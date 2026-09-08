@@ -2851,6 +2851,138 @@ way and does not affect this fix's own correctness — see
 Full detail:
 [Ticket 04](.scratch/mdm-run-throughput/issues/04-run-grouped-concurrent-single-end-of-group-commit.md).
 
+## INSTITUTIONAL_HOLDS/MANAGES_FUND capped-restart watermark 5-whys (fixed, not yet deployed, 2026-09-08)
+
+**Problem:** live prod data showed `INSTITUTIONAL_HOLDS`' derivation
+checkpoint watermark stuck at a value 6+ weeks stale despite
+`daily_incremental`/`derive-relationships` runs executing continuously and
+"updating" the checkpoint's `updated_at` every time.
+
+1. Symptom: `mdm_relationship_derivation_checkpoint`'s `INSTITUTIONAL_HOLDS`
+   row had `watermark_value = '2026-07-22T03:13:43...'` while `updated_at`
+   showed the current day — runs kept firing, the watermark barely moved.
+2. Why doesn't a running derivation advance its own watermark? Every call
+   to `_derive_institutional_holds` (`edgar_warehouse/mdm/pipeline.py`)
+   recomputes CIK bounds fresh and always starts its batch loop at
+   `min_cik`, regardless of how far a prior call got.
+3. Why does restarting from `min_cik` matter? Every run is capped by
+   `--target-per-type` (50,000 in the standard prod
+   `edgartools-prod-residual-holds-graph` pipeline). If the backlog of
+   new/changed rows exceeds one capped run's budget, the run always
+   re-walks the same early CIK slice and never reaches CIK ranges further
+   out — no matter how many runs execute.
+4. Why does that stall the watermark specifically? `_advance_relationship_watermark`'s
+   own contract (deliberate, and correct in isolation) only advances to
+   the max `ingested_at` among rows *actually iterated* that call — so a
+   capped run stuck re-scanning the same early slice can only ever
+   advance the watermark to whatever max appears in that slice, never
+   past it.
+5. **Root cause:** two individually-correct behaviors — "cap each run's
+   work" and "only advance the watermark to what was actually iterated" —
+   compound into a structural inability to make forward progress once
+   backlog exceeds one run's capacity, because nothing persisted *where*
+   the last run's iteration stopped. `_derive_manages_fund` has the
+   identical shape over CRD-space (`sorted_crds`, rebuilt and restarted
+   from index 0 every call) — silent today (0% quarantine, since
+   `MANAGES_FUND` passes no `properties` to `ensure_relationship`) but the
+   same coverage gap applies: newly-eligible adviser-fund pairs beyond a
+   capped run's reach may never get derived at all.
+
+**Fix:** a persisted, resumable CIK/CRD-range cursor
+(`mdm_relationship_derivation_checkpoint.cursor_value`/
+`pending_watermark_value`, migration
+`edgar_warehouse/mdm/migrations/022_relationship_derivation_checkpoint_cursor.sql`),
+decoupled from the stable `watermark_value` the batch loops filter
+against. A capped run now resumes at the persisted cursor instead of the
+beginning; `watermark_value` only ever advances once a sweep is confirmed
+to have covered the *entire* range under one *stable* watermark boundary
+(`edgar_warehouse/mdm/relationship_checkpoint.py`'s new
+`complete_relationship_sweep`/`record_relationship_sweep_progress`) — the
+correctness property that specifically prevents a not-yet-revisited slice
+of CIK/CRD space from getting silently watermarked-out by an
+already-advanced watermark from unrelated, already-visited activity in a
+later call (the exact bug an earlier, pre-code `/gof-refactor-reviewer`
+consult on a naive rotating-cursor design had flagged and this design was
+built to avoid).
+
+**Two further, real bugs found by this ticket's own 3-axis `/code-review`
+(this repo's hard rule) on the first draft of this fix, not caught by the
+pre-code design consult** — a live instance of the same lesson the
+`_run_grouped_concurrent` entry above already documents (a second pass
+against the concrete diff catches what a pre-code architectural consult
+cannot):
+
+- **Watermark could never advance at all, for any multi-call sweep.**
+  `advance_relationship_watermark`'s upsert guard was a bare
+  `WHERE watermark_value < excluded.watermark_value` — but
+  `record_relationship_sweep_progress` explicitly writes `watermark_value
+  = NULL` for a sweep's first partial call (the state the new cursor
+  mechanism is specifically designed to reach), and SQL's three-valued
+  logic makes `NULL < x` evaluate to NULL, never TRUE, so the `DO UPDATE`
+  silently never fired. Reproduced directly against the unfixed function
+  before patching. Fixed by widening the guard to
+  `watermark_value.is_(None) | (watermark_value < excluded.watermark_value)`
+  — safe for every other relationship type sharing this function, since
+  their rows (written only through this same function's own no-op-if-None
+  guard) never hold a NULL `watermark_value` in the first place.
+- **Reconciliation passes silently stopped advancing their watermark at
+  all**, an unstated regression versus every other relationship type
+  (which still advance unconditionally during reconciliation) and versus
+  these two types' own pre-existing behavior. Fixed by advancing the
+  watermark during reconciliation exactly when the reconciliation sweep
+  itself completes without being capped (matching the original,
+  pre-ticket behavior for the common case), while still refusing to
+  advance off a *partial*, capped reconciliation scan (which would
+  reintroduce this exact ticket's bug on the reconciliation path —
+  reconciliation deliberately has no cursor/pending state of its own to
+  make a partial advance safe).
+
+**Lesson (same shape as the `_run_grouped_concurrent` entry above, a
+second confirmation of the same pattern):** a pre-code `/gof-refactor-reviewer`
+consult can correctly bless an architecture's shape while the concrete
+diff still gets a load-bearing detail wrong — here, specifically, SQL's
+three-valued NULL comparison semantics and an unstated behavior change on
+a code path (reconciliation) the reviewer's own brief didn't specifically
+prompt scrutiny of. The mandatory post-diff 3-axis `/code-review` (not
+just the pre-code consult) is what caught both.
+
+**Also, deliberately not fixed here:** `reconciliation_pass` itself still
+restarts its own CIK/CRD scan from the beginning on every call — if a
+reconciliation run is ever capped by its own `target_per_type` in
+practice, it would have the identical structural gap this fix closes for
+the ordinary incremental pass. No live evidence yet that reconciliation
+is actually capped this way in prod. Filed as open fog on the
+[mdm-relationship-versioning-gap map](.scratch/mdm-relationship-versioning-gap/map.md),
+not a ticket, pending that live check.
+
+Tests: 4 in `tests/mdm/test_pipeline_relationships.py`
+(`TestInstitutionalHoldsResumableCursor`, `TestManagesFundResumableCursor`)
+proving a capped run persists the cursor (not the watermark) and a
+follow-up call resumes at exactly the unswept CIK/CRD range without
+rescanning already-covered ground (asserted against the stub's recorded
+query params, not just row counts); 2 more proving the reconciliation
+watermark-advance fix (completes → advances, capped → doesn't); 3 new in
+`tests/mdm/test_relationship_checkpoint.py` (new file — first dedicated,
+function-level test coverage for `relationship_checkpoint.py`) proving
+`advance_relationship_watermark`'s NULL-guard fix directly, including a
+regression guard that the fix didn't loosen the original "never regress a
+real value" contract. Full `tests/mdm/` suite green (700 passed).
+
+**Not yet run-verified against a real Postgres instance** — no local
+Postgres was reachable in this sandbox to exercise migration 022's actual
+`ALTER COLUMN ... DROP NOT NULL`/`ADD COLUMN IF NOT EXISTS` statements;
+only the SQLAlchemy-model-equivalent schema (via SQLite's
+`Base.metadata.create_all`) has been exercised. Both statements are
+standard, idempotent Postgres DDL already used elsewhere in this same
+migrations directory, but per this file's own repeated lesson (see the
+"MDM Postgres migration-011 schema drift", "mdm_pipeline_lease migration
+never applied", and "Migration 010 DuckDB commit-conflict" entries above)
+a migration existing and being correct is not the same as it having been
+applied/verified — a live `mdm migrate` run (or at minimum a local
+Postgres smoke test) against this migration specifically remains the
+honest bar before calling it verified. **Not yet committed, built, or
+deployed** as of this entry.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live

@@ -12,6 +12,7 @@ Graph sync runs last.
 """
 from __future__ import annotations
 
+import bisect
 import json
 import os
 import sys
@@ -35,7 +36,10 @@ from edgar_warehouse.mdm.match import MatchAction
 from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 from edgar_warehouse.mdm.relationship_checkpoint import (
     advance_relationship_watermark,
+    complete_relationship_sweep,
+    get_relationship_checkpoint_state,
     get_relationship_watermark,
+    record_relationship_sweep_progress,
 )
 from edgar_warehouse.mdm.resolvers import (
     CompanyResolver,
@@ -377,6 +381,115 @@ class MDMPipeline:
             watermark_column=watermark_column,
             watermark_value=watermark_value,
         )
+
+    def _relationship_checkpoint_state(self, checkpoint_key: str):
+        """Read this key's full sweep-aware checkpoint state -- see
+        ``get_relationship_checkpoint_state``. Only meaningful for the two
+        types (``INSTITUTIONAL_HOLDS``, ``MANAGES_FUND``) that use a
+        resumable CIK/CRD-range cursor; every other type only ever reads
+        ``_relationship_watermark`` above."""
+        return get_relationship_checkpoint_state(self.session, checkpoint_key)
+
+    def _complete_relationship_sweep(
+        self,
+        checkpoint_key: str,
+        *,
+        rel_type_name: str,
+        watermark_column: str,
+        watermark_value: Optional[str],
+    ) -> None:
+        """A CIK/CRD sweep just covered its entire range under one stable
+        watermark boundary -- see ``complete_relationship_sweep``."""
+        complete_relationship_sweep(
+            self.session,
+            checkpoint_key,
+            rel_type_name=rel_type_name,
+            watermark_column=watermark_column,
+            watermark_value=watermark_value,
+        )
+
+    def _record_relationship_sweep_progress(
+        self,
+        checkpoint_key: str,
+        *,
+        rel_type_name: str,
+        watermark_column: str,
+        cursor_value: Optional[str],
+        pending_watermark_value: Optional[str],
+    ) -> None:
+        """Persist an in-progress CIK/CRD sweep's resume position and
+        accumulated watermark candidate -- see
+        ``record_relationship_sweep_progress``."""
+        record_relationship_sweep_progress(
+            self.session,
+            checkpoint_key,
+            rel_type_name=rel_type_name,
+            watermark_column=watermark_column,
+            cursor_value=cursor_value,
+            pending_watermark_value=pending_watermark_value,
+        )
+
+    def _finish_relationship_sweep(
+        self,
+        checkpoint_key: str,
+        *,
+        rel_type_name: str,
+        watermark_column: str,
+        reconciliation_pass: bool,
+        swept_to_completion: bool,
+        watermark_value: Optional[str],
+        next_cursor_value: Optional[str],
+    ) -> None:
+        """Record the outcome of one CIK/CRD-range sweep call -- shared by
+        `_derive_institutional_holds` and `_derive_manages_fund` (identical
+        dispatch shape for both; only the checkpoint key/column names and
+        how `next_cursor_value` was derived differ at the call site).
+
+        Three cases:
+          * Reconciliation pass, sweep completed: advance the stable
+            watermark via the original, unconditional-write
+            `_advance_relationship_watermark` -- matches this method's
+            behavior from before this ticket's cursor mechanism existed.
+            Safe because a completed reconciliation sweep genuinely
+            scanned everything, so the observed max is the true max.
+          * Reconciliation pass, cut short by `remaining`: leave the
+            watermark untouched. Advancing off a partial reconciliation
+            scan would reintroduce this exact ticket's bug on the
+            reconciliation path -- reconciliation has no cursor/pending
+            state of its own to make a partial advance safe (see the
+            "not yet specified" note on the mdm-relationship-versioning-gap
+            map about reconciliation sharing this same structural gap,
+            deliberately not fixed here).
+          * Ordinary pass, sweep completed: advance the watermark and
+            clear the cursor for the next sweep to start fresh.
+          * Ordinary pass, cut short: persist the resume cursor, leave
+            the watermark untouched until a future call completes the
+            sweep.
+        """
+        if reconciliation_pass:
+            if swept_to_completion:
+                self._advance_relationship_watermark(
+                    checkpoint_key,
+                    rel_type_name=rel_type_name,
+                    watermark_column=watermark_column,
+                    watermark_value=watermark_value,
+                )
+            return
+        if swept_to_completion:
+            self._complete_relationship_sweep(
+                checkpoint_key,
+                rel_type_name=rel_type_name,
+                watermark_column=watermark_column,
+                watermark_value=watermark_value,
+            )
+        else:
+            self._record_relationship_sweep_progress(
+                checkpoint_key,
+                rel_type_name=rel_type_name,
+                watermark_column=watermark_column,
+                cursor_value=next_cursor_value,
+                pending_watermark_value=watermark_value,
+            )
 
     @staticmethod
     def _index_open_relationship_versions(
@@ -2286,10 +2399,38 @@ class MDMPipeline:
         watermark = self._relationship_watermark(
             "MANAGES_FUND", reconciliation_pass=reconciliation_pass
         )
-        watermark_state: dict[str, Optional[str]] = {"value": None}
+
+        # mdm-relationship-versioning-gap Ticket 01: same resumable-cursor
+        # fix as _derive_institutional_holds' CIK-range loop above, applied
+        # to CRD-range space -- see that method's comment for the full
+        # rationale. `all_sorted_crds` is always the full current universe
+        # (recomputed fresh every call); `sorted_crds` below is the slice
+        # this call actually walks, starting from the persisted cursor
+        # (or the whole list, on a fresh sweep or a reconciliation pass).
+        all_sorted_crds = sorted(adviser_ids_by_crd.keys())
+        if reconciliation_pass:
+            sorted_crds = all_sorted_crds
+            pending_watermark_seed: Optional[str] = None
+        else:
+            checkpoint_state = self._relationship_checkpoint_state("MANAGES_FUND")
+            if checkpoint_state.cursor_value is None:
+                sorted_crds = all_sorted_crds
+            else:
+                start_idx = bisect.bisect_left(all_sorted_crds, checkpoint_state.cursor_value)
+                sorted_crds = all_sorted_crds[start_idx:]
+            pending_watermark_seed = checkpoint_state.pending_watermark_value
+        watermark_state: dict[str, Optional[str]] = {"value": pending_watermark_seed}
 
         totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
-        sorted_crds = sorted(adviser_ids_by_crd.keys())
+        # Highest index into `sorted_crds` (this call's slice) actually
+        # covered by a completed batch -- mirrors
+        # _derive_institutional_holds' last_cik_hi_processed: a batch that
+        # both finishes the slice and hits `remaining` simultaneously still
+        # counts as a completed sweep. Since `sorted_crds` is already
+        # sliced from the persisted cursor through the true end of the
+        # full universe, reaching the end of `sorted_crds` means the whole
+        # universe has been covered since the sweep began.
+        last_batch_end_idx = -1
         for start in range(0, len(sorted_crds), _MANAGES_FUND_CRD_BATCH_SIZE):
             batch_crds = sorted_crds[start:start + _MANAGES_FUND_CRD_BATCH_SIZE]
             batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
@@ -2307,13 +2448,21 @@ class MDMPipeline:
             # flush_pending()'d/unprime_relationship_type()'d internally),
             # not just once at the end of the whole MANAGES_FUND type.
             self.session.commit()
+            last_batch_end_idx = start + len(batch_crds) - 1
             if remaining is not None and totals[0] >= remaining:
                 break
-        self._advance_relationship_watermark(
+
+        swept_to_completion = last_batch_end_idx >= len(sorted_crds) - 1
+        self._finish_relationship_sweep(
             "MANAGES_FUND",
             rel_type_name="MANAGES_FUND",
             watermark_column="accession_number",
+            reconciliation_pass=reconciliation_pass,
+            swept_to_completion=swept_to_completion,
             watermark_value=watermark_state["value"],
+            next_cursor_value=(
+                None if swept_to_completion else sorted_crds[last_batch_end_idx + 1]
+            ),
         )
         return tuple(totals)
 
@@ -4159,10 +4308,42 @@ class MDMPipeline:
         # 2026-09-08), not row count (6,799,919), so this stays small.
         security_id_by_cusip: dict[str, tuple[str, bool]] = {}
         watermark_bind = self._watermark_bind_value("ingested_at", watermark)
-        watermark_state: dict[str, Optional[str]] = {"value": None}
+
+        # mdm-relationship-versioning-gap Ticket 01: a persisted, resumable
+        # CIK-range cursor, decoupled from `watermark` above. Every call
+        # previously restarted at min_cik regardless of how far a prior,
+        # `remaining`-capped call got -- if backlog exceeds one run's
+        # budget, the watermark could then only ever creep through the
+        # same early CIK slice, never reaching CIK ranges further out
+        # (confirmed live: a 6+ week stale watermark despite continuous
+        # runs). A reconciliation pass always starts a fresh, full-range
+        # sweep and never reads or writes this cursor state at all --
+        # mirrors `_relationship_watermark`'s own "always bypass during
+        # reconciliation" special-case, since reconciliation already scans
+        # under no watermark filter and mixing its progress with the
+        # ordinary incremental pass's in-progress sweep would be unsound.
+        if reconciliation_pass:
+            cursor_lo = min_cik
+            pending_watermark_seed: Optional[str] = None
+        else:
+            checkpoint_state = self._relationship_checkpoint_state("INSTITUTIONAL_HOLDS")
+            cursor_lo = (
+                min_cik
+                if checkpoint_state.cursor_value is None
+                else max(min_cik, min(int(checkpoint_state.cursor_value), max_cik))
+            )
+            pending_watermark_seed = checkpoint_state.pending_watermark_value
+        watermark_state: dict[str, Optional[str]] = {"value": pending_watermark_seed}
 
         totals = [0, 0, 0, 0, 0]  # inserted, skipped_corporate, skipped_unresolved_source/target, skipped_existing
-        cik_lo = min_cik
+        cik_lo = cursor_lo
+        # Highest CIK actually covered by a completed batch this call --
+        # the sweep-completion test below (`last_cik_hi_processed >=
+        # max_cik`) is independent of *why* the loop stopped, so a batch
+        # that both finishes the range and happens to hit `remaining`
+        # simultaneously still counts as a completed sweep, not a
+        # truncated one.
+        last_cik_hi_processed = cursor_lo - 1
         while cik_lo <= max_cik:
             cik_hi = min(cik_lo + _INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE - 1, max_cik)
             batch_remaining = None if remaining is None else max(remaining - totals[0], 0)
@@ -4189,15 +4370,22 @@ class MDMPipeline:
             # (6.8M rows in prod, the largest table in the system) and was
             # observed live sitting on one uncommitted transaction for 3h24min+.
             self.session.commit()
+            last_cik_hi_processed = cik_hi
             if remaining is not None and totals[0] >= remaining:
                 break
             cik_lo = cik_hi + 1
 
-        self._advance_relationship_watermark(
+        swept_to_completion = last_cik_hi_processed >= max_cik
+        self._finish_relationship_sweep(
             "INSTITUTIONAL_HOLDS",
             rel_type_name="INSTITUTIONAL_HOLDS",
             watermark_column="ingested_at",
+            reconciliation_pass=reconciliation_pass,
+            swept_to_completion=swept_to_completion,
             watermark_value=watermark_state["value"],
+            next_cursor_value=(
+                None if swept_to_completion else str(last_cik_hi_processed + 1)
+            ),
         )
         return tuple(totals)
 
