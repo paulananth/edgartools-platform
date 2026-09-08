@@ -2097,6 +2097,111 @@ class TestInstitutionalHoldsBatching:
         )
         session.close()
 
+    def test_ensure_security_by_cusip_cache_batches_round_trips_not_one_per_row(
+        self, monkeypatch
+    ):
+        """mdm-run-throughput Ticket 07: repeated CUSIPs across many holding rows
+        must not each pay a fresh entity_id SELECT round trip -- real measurement,
+        2026-09-08: sec_thirteenf_holding has 6,799,919 rows across only 41,225
+        distinct CUSIPs (~165x repetition). 3 rows, 2 sharing one CUSIP, batch_size
+        large enough to keep them in one batch -> the shared CUSIP's entity_id
+        SELECT must fire once, not twice."""
+        session = _fresh_batching_session()
+        rows = [
+            {
+                "cik": 920001, "accession_number": "acc-x1",
+                "period_of_report": "2023-12-31", "cusip": "999999999",
+                "issuer_name": "Repeat Co", "security_title": "Common Stock",
+                "shares_held": 100, "market_value": 1000,
+                "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            },
+            {
+                "cik": 920002, "accession_number": "acc-x2",
+                "period_of_report": "2023-12-31", "cusip": "999999999",
+                "issuer_name": "Repeat Co", "security_title": "Common Stock",
+                "shares_held": 200, "market_value": 2000,
+                "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            },
+            {
+                "cik": 920003, "accession_number": "acc-x3",
+                "period_of_report": "2023-12-31", "cusip": "888888888",
+                "issuer_name": "Other Co", "security_title": "Common Stock",
+                "shares_held": 300, "market_value": 3000,
+                "put_call": None, "discretion_type": "SOLE", "security_class": None,
+            },
+        ]
+        _seed_batching_advisers(session, [920001, 920002, 920003])
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 10_000
+        )
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        entity_id_select_count = [0]
+
+        def _count_security_lookups(conn, cursor, statement, parameters, context, executemany):
+            if "mdm_security" in statement and "cusip" in statement and "SELECT" in statement.upper():
+                entity_id_select_count[0] += 1
+
+        event.listen(session.get_bind(), "before_cursor_execute", _count_security_lookups)
+
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 3
+        # 2 distinct CUSIPs -> exactly 2 real by-cusip entity_id lookups. Without
+        # the cache this would be 3 (one per row); this precise bound is what
+        # actually distinguishes cached from uncached behavior -- a looser bound
+        # would pass either way and prove nothing.
+        assert entity_id_select_count[0] == 2, (
+            f"expected exactly 2 by-cusip SELECTs (one per distinct CUSIP), got "
+            f"{entity_id_select_count[0]} for 3 rows / 2 distinct CUSIPs -- "
+            "the repeated CUSIP's second row did not hit the cache"
+        )
+
+    def test_ensure_security_by_cusip_cache_preserves_backfill_correctness(
+        self, monkeypatch
+    ):
+        """mdm-run-throughput Ticket 07: a CUSIP first seen with no security_class
+        (cached as unsatisfied) must still get backfilled when a LATER row for the
+        same CUSIP supplies one -- the cache must not silently skip a real
+        backfill the unmemoized code would have performed."""
+        session = _fresh_batching_session()
+        rows = [
+            {
+                "cik": 920001, "accession_number": "acc-y1",
+                "period_of_report": "2023-12-31", "cusip": "777777777",
+                "issuer_name": "Backfill Co", "security_title": "Common Stock",
+                "shares_held": 100, "market_value": 1000,
+                "put_call": None, "discretion_type": "SOLE",
+                "security_class": None,  # first row: no class to offer
+            },
+            {
+                "cik": 920002, "accession_number": "acc-y2",
+                "period_of_report": "2023-12-31", "cusip": "777777777",
+                "issuer_name": "Backfill Co", "security_title": "Common Stock",
+                "shares_held": 200, "market_value": 2000,
+                "put_call": None, "discretion_type": "SOLE",
+                "security_class": "COM",  # second row: offers a class
+            },
+        ]
+        _seed_batching_advisers(session, [920001, 920002])
+        monkeypatch.setattr(
+            "edgar_warehouse.mdm.pipeline._INSTITUTIONAL_HOLDS_CIK_BATCH_SIZE", 10_000
+        )
+        silver = StubSilver({"sec_thirteenf_holding": rows})
+        pipe = MDMPipeline(session=session, silver=silver)
+
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 2
+
+        security_class = session.scalar(
+            select(MdmSecurity.security_class).where(MdmSecurity.cusip == "777777777")
+        )
+        assert security_class == "COM", (
+            "second row's security_class was not backfilled onto the security "
+            "created by the first (cache-unsatisfied) row"
+        )
+
     def test_batching_idempotent_on_rerun(self, monkeypatch):
         """Test E: running derive twice over the same batched fixture inserts 0
         rows on the second run."""
