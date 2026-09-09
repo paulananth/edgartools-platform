@@ -45,6 +45,23 @@ class MDMRuleEngine:
     _field_survivorship: dict[tuple[str, str], FieldRule] = field(default_factory=dict)
     _match_thresholds: dict[tuple[str, str], tuple[float, float]] = field(default_factory=dict)
     _normalization: dict[str, dict[str, str]] = field(default_factory=dict)
+    # normalize_name is a pure function of (name, self._normalization), and
+    # self._normalization never changes after load() -- safe to memoize by
+    # raw input string for this engine instance's lifetime. Ticket 06's
+    # security-issuer-link backfill (mdm-relationship-versioning-gap map)
+    # calls FuzzyNameMatcher.match() once per security against the SAME
+    # ~74K-candidate pool every time, re-normalizing every candidate name
+    # from scratch on every call -- ~900M redundant calls, measured live at
+    # a 13+ hour extrapolated runtime versus 27 minutes for the identical
+    # work done with pre-normalized candidates. run_companies/
+    # _run_grouped_concurrent share one MDMRuleEngine instance across
+    # ThreadPoolExecutor worker threads (pipeline.py) -- a plain dict here
+    # is still safe under that concurrent access because the function being
+    # cached is pure: two threads racing on the same miss just redo the
+    # same idempotent computation, never produce a wrong cached value, and
+    # CPython's GIL protects the dict's own internal structure from
+    # corruption. No lock needed for that reason -- don't add one.
+    _normalize_name_cache: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, session: Session) -> "MDMRuleEngine":
@@ -123,6 +140,16 @@ class MDMRuleEngine:
     def normalize_name(self, name: Optional[str]) -> Optional[str]:
         if not name:
             return name
+        # normalize_name(name) for a truthy `name` always returns a str
+        # (possibly empty), never None -- a `.get(name)` hit is unambiguous.
+        cached = self._normalize_name_cache.get(name)
+        if cached is not None:
+            return cached
+        result = self._normalize_name_uncached(name)
+        self._normalize_name_cache[name] = result
+        return result
+
+    def _normalize_name_uncached(self, name: str) -> str:
         text = name.strip().lower()
         # Drop apostrophes rather than routing them through the general
         # punctuation-to-space substitution below -- a possessive name like

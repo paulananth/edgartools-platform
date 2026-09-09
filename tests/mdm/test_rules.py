@@ -143,6 +143,67 @@ def test_normalize_name_lone_letter_elsewhere_is_untouched(engine: MDMRuleEngine
     assert engine.normalize_name("Bank of A Holdings") == "Bank Of A Holdings"
 
 
+def test_normalize_name_caches_by_raw_input(
+    engine: MDMRuleEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Fixes a live-measured O(N*M) bug: FuzzyNameMatcher.match() calls
+    # normalize_name on every candidate on every call, re-normalizing the
+    # same ~74K company names on each of ~12K securities. A dict-size or
+    # returned-value check alone is NOT sufficient proof here -- a write to
+    # the same key is idempotent, so cache size stays constant on a second
+    # call whether or not the read-before-compute check ever ran (confirmed
+    # live: deliberately disabling the cache lookup while keeping the write
+    # still passed a size-only version of this test). Spy on the uncached
+    # path directly to prove the second call is a genuine hit.
+    calls: list[str] = []
+    original = engine._normalize_name_uncached
+
+    def _spy(name: str) -> str:
+        calls.append(name)
+        return original(name)
+
+    monkeypatch.setattr(engine, "_normalize_name_uncached", _spy)
+
+    assert engine._normalize_name_cache == {}
+    first = engine.normalize_name("Apple Inc.")
+    assert calls == ["Apple Inc."]
+    assert engine._normalize_name_cache["Apple Inc."] == first
+
+    second = engine.normalize_name("Apple Inc.")
+    assert second == first
+    assert calls == ["Apple Inc."], "second call must be a cache hit, not a recomputation"
+
+
+def test_normalize_name_cache_stores_empty_string_result(
+    engine: MDMRuleEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A name that normalizes to "" (e.g. a bare legal suffix) must still be
+    # a genuine cache hit on the second call, not mistaken for "not cached"
+    # -- a naive falsy check on the cached value (`if cached:`) would treat
+    # an empty-string result as a permanent miss and recompute every time,
+    # silently defeating the cache for exactly this input shape. Proven by
+    # spying on the uncached path, not just checking the returned value --
+    # a correctness-only assertion would pass identically whether or not
+    # caching actually happened.
+    calls: list[str] = []
+    original = engine._normalize_name_uncached
+
+    def _spy(name: str) -> str:
+        calls.append(name)
+        return original(name)
+
+    monkeypatch.setattr(engine, "_normalize_name_uncached", _spy)
+
+    first = engine.normalize_name("Inc")
+    assert first == ""
+    assert engine._normalize_name_cache.get("Inc") == ""
+    assert calls == ["Inc"]
+
+    second = engine.normalize_name("Inc")
+    assert second == ""
+    assert calls == ["Inc"], "second call must be a cache hit, not a recomputation"
+
+
 def test_normalize_name_strips_company_and_adr_tokens(engine: MDMRuleEngine) -> None:
     assert engine.normalize_name("3M Company") == "3m"
     assert engine.normalize_name("Legend Biotech Corp Sponsored ADR") == "Legend Biotech"
