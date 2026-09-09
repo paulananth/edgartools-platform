@@ -23,6 +23,7 @@ from edgar_warehouse.mdm.database import (
 ALL = "all"
 _WS_RE = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[^\w\s]")
+_APOSTROPHE_RE = re.compile(r"['’]")
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,23 @@ class MDMRuleEngine:
     _field_survivorship: dict[tuple[str, str], FieldRule] = field(default_factory=dict)
     _match_thresholds: dict[tuple[str, str], tuple[float, float]] = field(default_factory=dict)
     _normalization: dict[str, dict[str, str]] = field(default_factory=dict)
+    # normalize_name is a pure function of (name, self._normalization), and
+    # self._normalization never changes after load() -- safe to memoize by
+    # raw input string for this engine instance's lifetime. Ticket 06's
+    # security-issuer-link backfill (mdm-relationship-versioning-gap map)
+    # calls FuzzyNameMatcher.match() once per security against the SAME
+    # ~74K-candidate pool every time, re-normalizing every candidate name
+    # from scratch on every call -- ~900M redundant calls, measured live at
+    # a 13+ hour extrapolated runtime versus 27 minutes for the identical
+    # work done with pre-normalized candidates. run_companies/
+    # _run_grouped_concurrent share one MDMRuleEngine instance across
+    # ThreadPoolExecutor worker threads (pipeline.py) -- a plain dict here
+    # is still safe under that concurrent access because the function being
+    # cached is pure: two threads racing on the same miss just redo the
+    # same idempotent computation, never produce a wrong cached value, and
+    # CPython's GIL protects the dict's own internal structure from
+    # corruption. No lock needed for that reason -- don't add one.
+    _normalize_name_cache: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, session: Session) -> "MDMRuleEngine":
@@ -122,7 +140,23 @@ class MDMRuleEngine:
     def normalize_name(self, name: Optional[str]) -> Optional[str]:
         if not name:
             return name
+        # normalize_name(name) for a truthy `name` always returns a str
+        # (possibly empty), never None -- a `.get(name)` hit is unambiguous.
+        cached = self._normalize_name_cache.get(name)
+        if cached is not None:
+            return cached
+        result = self._normalize_name_uncached(name)
+        self._normalize_name_cache[name] = result
+        return result
+
+    def _normalize_name_uncached(self, name: str) -> str:
         text = name.strip().lower()
+        # Drop apostrophes rather than routing them through the general
+        # punctuation-to-space substitution below -- a possessive name like
+        # "McDonald's" must normalize to one token ("mcdonalds"), matching a
+        # canonical name that never had the apostrophe, not split into two
+        # tokens ("mcdonald", "s") that no longer align with anything.
+        text = _APOSTROPHE_RE.sub("", text)
         text = _PUNCT_RE.sub(" ", text)
         tokens = _WS_RE.split(text)
         suffixes = self._normalization.get("legal_suffix", {})
@@ -136,6 +170,14 @@ class MDMRuleEngine:
             elif replacement:
                 cleaned.append(replacement)
             # else: empty replacement → drop the token entirely
+        # Drop a trailing share-class designation ("Class A"/"Class B"/...).
+        # Security issuer names carry this constantly (Form 3/4/5 filer
+        # names); MdmCompany.canonical_name essentially never does -- the
+        # issuer's identity doesn't change by share class. Scoped narrowly
+        # to "class" immediately followed by a single letter so a lone
+        # letter elsewhere in a name is never touched.
+        if len(cleaned) >= 2 and cleaned[-2] == "class" and len(cleaned[-1]) == 1:
+            cleaned = cleaned[:-2]
         joined = " ".join(cleaned).strip()
         return " ".join(w.capitalize() for w in joined.split())
 

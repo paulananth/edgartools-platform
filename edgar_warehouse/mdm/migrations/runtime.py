@@ -845,11 +845,33 @@ def _seed_normalization_rules(session: Session) -> None:
         ("legal_suffix", "llc", ""),
         ("legal_suffix", "corp", ""),
         ("legal_suffix", "corporation", ""),
+        ("legal_suffix", "lp", ""),
         ("legal_suffix", "ltd", ""),
         ("legal_suffix", "limited", ""),
+        ("legal_suffix", "plc", ""),
         ("legal_suffix", "trust", ""),
         ("legal_suffix", "fund", ""),
         ("legal_suffix", "group", ""),
+        ("legal_suffix", "partners", ""),
+        ("legal_suffix", "associates", ""),
+        ("legal_suffix", "co", ""),
+        ("legal_suffix", "na", ""),
+        ("legal_suffix", "holdings", ""),
+        ("legal_suffix", "services", ""),
+        # Corporate-suffix/share-class/ADR tokens found live in prod, common
+        # in security issuer_name strings (Form 3/4/5 filer names) but rare
+        # or absent in MdmCompany.canonical_name -- e.g. "3M Company" vs.
+        # "3m Co" only aligned once "company" strips the same way "co" does;
+        # "Legend Biotech Corp Sponsored ADR" needs "sponsored"/"adr"
+        # stripped to align with "Legend Biotech".
+        ("legal_suffix", "company", ""),
+        ("legal_suffix", "companies", ""),
+        ("legal_suffix", "new", ""),
+        ("legal_suffix", "sponsored", ""),
+        ("legal_suffix", "unsponsored", ""),
+        ("legal_suffix", "adr", ""),
+        ("legal_suffix", "ads", ""),
+        ("legal_suffix", "sp", ""),
         ("title_alias", "CHIEF EXECUTIVE OFFICER", "CEO"),
         ("title_alias", "CEO", "CEO"),
         ("title_alias", "CHIEF FINANCIAL OFFICER", "CFO"),
