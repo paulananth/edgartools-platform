@@ -184,6 +184,49 @@ class TestValidIntervalConstraint:
         session.add(row)
         session.flush()  # must not raise
 
+    def test_zero_length_interval_is_rejected(self, world, session):
+        """mdm-relationship-versioning-gap Ticket 05 backfill, live-reproduced
+        2026-09-08: a same-day close (valid_to_date == valid_from_date) hits
+        this exact constraint (strictly `>`, not `>=`) -- the real prod
+        failure this ticket's own confirmed_chronologically_after fix
+        addresses. Boundary case Ticket 05's own test suite never covered."""
+        row = MdmRelationshipInstance(
+            relationship_id=relationship_logical_id(
+                world["rel_types"]["EMPLOYED_BY"], world["person_id"], world["company_id"]
+            ),
+            rel_type_id=world["rel_types"]["EMPLOYED_BY"],
+            source_entity_id=world["person_id"],
+            target_entity_id=world["company_id"],
+            valid_from_date=date(2024, 1, 1),
+            valid_to_date=date(2024, 1, 1),
+        )
+        session.add(row)
+        with pytest.raises(IntegrityError):
+            session.flush()
+
+
+class TestConfirmedChronologicallyAfter:
+    """Direct tests of graph.confirmed_chronologically_after -- shared by
+    _deactivate_if_properties_changed (live, deployed) and the Ticket 05
+    quarantine backfill. Strict `>`, not `>=` (see the function's own
+    docstring and TestValidIntervalConstraint.test_zero_length_interval_is_rejected
+    above for why equality must not be treated as confirmed)."""
+
+    def test_strictly_after_is_confirmed(self) -> None:
+        assert graph_module.confirmed_chronologically_after(date(2024, 1, 2), date(2024, 1, 1)) is True
+
+    def test_equal_dates_are_not_confirmed(self) -> None:
+        assert graph_module.confirmed_chronologically_after(date(2024, 1, 1), date(2024, 1, 1)) is False
+
+    def test_before_is_not_confirmed(self) -> None:
+        assert graph_module.confirmed_chronologically_after(date(2023, 12, 31), date(2024, 1, 1)) is False
+
+    def test_new_none_is_not_confirmed(self) -> None:
+        assert graph_module.confirmed_chronologically_after(None, date(2024, 1, 1)) is False
+
+    def test_existing_none_is_not_confirmed(self) -> None:
+        assert graph_module.confirmed_chronologically_after(date(2024, 1, 1), None) is False
+
 
 class TestMigrationFileGuards:
     """Structural guard checks (mirrors test_runtime_ops.py's normalized-text
