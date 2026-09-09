@@ -46,8 +46,14 @@ pre/post-fix behavior and tightened to the precise `==2` before being trusted) a
 row offers no `security_class`, cached unsatisfied; a second row for the same CUSIP
 offers one; asserts the backfill still lands). Full `tests/mdm/` suite green.
 
-**Not yet deployed or live-verified as of this entry** — same as Ticket 06, this fix has
-not yet been built into an image or deployed to prod. Real before/after wall-clock or
-round-trip-count measurement against a live `INSTITUTIONAL_HOLDS` derivation is the
-natural follow-up once deployed, matching this map's "real measurements" standing
-preference.
+**Deployed and live-verified 2026-09-08** (same deploy as Ticket 06 — PR #572 merged,
+fresh MDM image `mdm-sha-3af348b5d0b7` built and deployed to prod). Ran a scoped
+`mdm derive-relationships --relationship-type INSTITUTIONAL_HOLDS --target-per-type 10000`
+task directly against the new image (`edgartools-prod-mdm-utility`, mode
+`mdm_backfill_relationships`), full run 07:00:47–07:36:18 ET (~35.5 min, 9,900 rows
+committed). Full-run CloudWatch log count (paginated across all ~58K structured log lines,
+not just the first response page): **8,056 `mdm_relationship_created` events against only
+1,626 CUSIP `SELECT mdm_security.entity_id ... WHERE cusip=` round trips (~20%)** — real
+prod SQL traffic confirming CUSIPs repeated across rows are served from the cache rather
+than re-queried on nearly every row, consistent with this ticket's real Snowflake
+measurement (~165x average repetition per CUSIP).

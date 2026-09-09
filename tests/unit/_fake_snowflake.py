@@ -34,6 +34,24 @@ class FakeSnowflakeCursor:
     def fetchall(self) -> list[tuple]:
         return self._rows
 
+    def fetch_arrow_all(self):
+        """Mirrors real snowflake-connector-python: returns a `pa.Table`
+        built from the fetched rows, or `None` for zero rows (there's no
+        schema to build a table from) -- source_dimensional_export.py's
+        Snowflake-sourced builders (Ticket 06, mdm-relationship-versioning-
+        gap-adjacent OOM fix) rely on this exact contract."""
+        import pyarrow as pa
+
+        if not self._rows:
+            return None
+        columns = [col[0] for col in self.description]
+        return pa.table(
+            {
+                column: [row[i] for row in self._rows]
+                for i, column in enumerate(columns)
+            }
+        )
+
     def close(self) -> None:
         self.closed = True
 

@@ -35,8 +35,28 @@ Tests: 2 new in `tests/mdm/test_pipeline_relationships.py` —
 tests used). Both confirmed to fail (`commit_count == 1`) against the pre-fix code via
 a `git stash` round-trip, then pass after. Full `tests/mdm/` suite green: 689 passed.
 
-**Not yet deployed or live-verified as of this entry** — this fix has not yet been built
-into an image or deployed to prod. The live incident that surfaced this (session `583257`,
-`daily-incremental-1788831083`'s `Mastering` step) is still running on the pre-fix image as
-of when this ticket was written; the fix will apply starting with the next MDM image
-build+deploy and `mdm mastering` run.
+**Deployed and live-verified 2026-09-08.** Built and deployed a fresh MDM prod image
+(`edgartools-prod-images:mdm-sha-3af348b5d0b7`/`mdm-prod`, digest
+`sha256:8a7bd53...`) via `deploy-aws-application.sh --env prod --skip-build --enable-mdm`
+(PR #572, containing both this ticket and Ticket 07, merged and deployed together).
+
+Deploying surfaced the exact incident this ticket documents, still live: session `583257`
+(`daily-incremental-1788831083`'s `Mastering` step, still on the *old* pre-fix image, running
+7h15min+ on `RunMdmChain`) was still open, idle-in-transaction, and now blocking a fresh
+scoped verification task (`mdm derive-relationships --relationship-type INSTITUTIONAL_HOLDS
+--target-per-type 10000`) via a Postgres `transactionid` lock. Stopped the stale execution
+(`aws stepfunctions stop-execution`), confirmed the nested MDM execution and its lock both
+cleared, then started a fresh unscoped `daily_incremental` execution on the fixed image.
+
+Direct evidence the fix works: querying `mdm_relationship_instance` for the scoped test's
+`run_id` while its ECS task was still `RUNNING` (not yet finished) showed row count go
+`0 → 384` — durable, externally-visible progress landing mid-derivation, not withheld until
+a single end-of-type commit. This is the same live technique Ticket 04 used for its own
+mid-group commit proof, applied here to the sibling relationship-derivation path.
+
+**Full-run confirmation (execution ran 07:00:47–07:36:18 ET, ~35.5 min, 9,900 rows against
+a 10,000 target-per-type):** grouping committed rows by minute for this `run_id` shows six
+distinct landing bursts spread across the whole run — 11:01 (384), 11:07 (2,271), 11:15
+(459), 11:16 (1,417), 11:20 (898), 11:23 (4,471) UTC — not one commit at 11:36 when the
+execution actually finished. This is exactly the periodic-checkpoint behavior the fix was
+built for, at real production scale, not just a small window.
