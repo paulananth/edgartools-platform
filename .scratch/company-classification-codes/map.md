@@ -28,28 +28,16 @@ the map is clear.
 
 ## Decisions so far
 
+- [Research NAICS/GICS/alternative classification systems for MDM companies](issues/01-research-naics-gics-alternatives.md) — neither NAICS nor GICS is worth adding: GICS is proprietary end-to-end with no free/low-cost per-company data path at any scale (enterprise-quote-only, no self-serve tier); NAICS's taxonomy is free but SEC/EDGAR captures no NAICS data for MDM's company universe, and the public SIC-to-NAICS crosswalk is confirmed many-to-many, so a derived value would be an approximation, not sourced fact. Recommends deriving SIC's own native 4-tier hierarchy (Division/Major Group/Industry Group, already implicit in the `sic_code` EdgarTools has 100% coverage on) instead — same tier depth as GICS, zero license, zero new data source.
+- [Confirm final classification approach](issues/02-confirm-final-approach.md) — user accepted the recommendation: derive SIC's own hierarchy, do not add NAICS or GICS. Map destination reached; closes the map.
+
 ## Not yet specified
 
-- Where the chosen classification would live (a new MDM company field
-  mirroring `sic_code`, a separate lookup/crosswalk table, or a
-  gold-layer-only derived column) -- depends on which system is chosen
-  and whether it's a flat code or needs a hierarchy (NAICS is
-  hierarchical: 2-6 digit sector/subsector/industry-group/industry/
-  national-industry; GICS is similarly tiered).
-- Migration/versioning shape if a new field is added alongside the
-  existing `sic_code` -- additive column vs. broader redesign.
-- Cheaper alternative worth weighing against adding NAICS/GICS: SIC
-  itself already has a 4-level hierarchy (Division letter -> 2-digit
-  Major Group -> 3-digit Industry Group -> 4-digit Industry) -- the same
-  tier count as GICS's Sector/Industry Group/Industry/Sub-Industry.
-  EdgarTools captures only the flat 4-digit `sic_code` today (confirmed
-  via grep -- no division/major-group/industry-group field anywhere).
-  Major Group and Industry Group are cheap to derive (simple digit-
-  prefix truncation of the existing code); Division is not a prefix --
-  it's defined by ranges of major-group codes and needs a small
-  range-lookup table. Deriving SIC's own existing hierarchy may satisfy
-  much of the "want industry grouping/rollup" motivation without needing
-  a second classification system, a license, or new source data at all.
+- Where a derived SIC hierarchy (Division/Major Group/Industry Group)
+  would live (new MDM company fields mirroring `sic_code`, or a
+  gold-layer-only derived column) and the exact shape of the
+  Division range-lookup table -- deferred to the follow-up build effort,
+  out of scope for this (decision-only) map.
 
 ## Out of scope
 
