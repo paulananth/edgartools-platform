@@ -51,7 +51,7 @@ INSERT INTO mdm_match_threshold (entity_type, match_method, auto_merge_min, revi
     ('person',  'cik_exact',  1.00, 1.00),
     ('person',  'fuzzy_name', 0.92, 0.80),
     ('person',  'ml_splink',  0.95, 0.75),
-    ('company', 'fuzzy_name', 0.95, 0.85),
+    ('company', 'fuzzy_name', 0.80, 0.70),
     ('adviser', 'fuzzy_name', 0.92, 0.80)
 ON CONFLICT (entity_type, match_method) DO NOTHING;
 
