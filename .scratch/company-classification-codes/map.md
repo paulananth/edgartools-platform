@@ -38,6 +38,18 @@ the map is clear.
   national-industry; GICS is similarly tiered).
 - Migration/versioning shape if a new field is added alongside the
   existing `sic_code` -- additive column vs. broader redesign.
+- Cheaper alternative worth weighing against adding NAICS/GICS: SIC
+  itself already has a 4-level hierarchy (Division letter -> 2-digit
+  Major Group -> 3-digit Industry Group -> 4-digit Industry) -- the same
+  tier count as GICS's Sector/Industry Group/Industry/Sub-Industry.
+  EdgarTools captures only the flat 4-digit `sic_code` today (confirmed
+  via grep -- no division/major-group/industry-group field anywhere).
+  Major Group and Industry Group are cheap to derive (simple digit-
+  prefix truncation of the existing code); Division is not a prefix --
+  it's defined by ranges of major-group codes and needs a small
+  range-lookup table. Deriving SIC's own existing hierarchy may satisfy
+  much of the "want industry grouping/rollup" motivation without needing
+  a second classification system, a license, or new source data at all.
 
 ## Out of scope
 
