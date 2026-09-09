@@ -118,3 +118,31 @@ gaps this repo's suite always shows without a local Postgres), 7 skipped.
 
 **Not yet done:** deploy, and (separately, much later, needing its own
 explicit go-ahead) actually execute against real prod.
+
+**Correction (2026-09-08): a real bug found on the first live prod run.**
+Deployed and executed for real against prod Postgres. The run crashed
+~7 seconds in with `psycopg2.errors.CheckViolation: new row for relation
+"mdm_relationship_instance" violates check constraint
+"ck_rel_instance_valid_interval"` -- `close_relationship_version` tried to
+set `valid_to_date` equal to `valid_from_date` (a same-day supersession),
+but that constraint requires `valid_to_date > valid_from_date`, strictly.
+Root cause: `confirmed_chronologically_after` (`graph.py`) used `>=`, so a
+same-day match was (wrongly) treated as "confirmed after" and an invalid
+zero-length interval was attempted. **This function is shared with the
+already-deployed, live `_deactivate_if_properties_changed`** (Tickets 02/03)
+-- meaning this was a live latent bug in prod, not backfill-only, just not
+yet triggered there. Fixed: `>=` -> `>` (strict), matching the function's
+own "when in doubt, leave it open" philosophy -- a same-day supersession is
+genuinely ambiguous for ordering anyway, so treating it as unconfirmed (skip,
+counted in `skipped_ambiguous_order`) rather than attempting an interval the
+schema can't represent is the correct behavior, not just a workaround.
+New tests: `TestConfirmedChronologicallyAfter` (5 cases, direct function-level)
+plus `TestValidIntervalConstraint::test_zero_length_interval_is_rejected`
+(proves the real DB constraint fires for the equal-dates case) in
+`tests/mdm/test_relationship_temporal_contract.py` -- a boundary case this
+ticket's own original test suite never covered. Confirmed no prod data was
+corrupted: the crash happened mid-batch, before that batch's own
+`session.commit()` was ever reached, so Postgres rolled back the entire
+uncommitted transaction on connection close. Full `tests/mdm/` suite green
+(739 passed) after the fix. Real backfill run needs to be re-attempted
+against prod with the fix deployed.

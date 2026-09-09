@@ -545,10 +545,24 @@ def relationships_conflict(
 
 
 def confirmed_chronologically_after(new_effective_from, existing_valid_from_date) -> bool:
-    """True only when ``new_effective_from`` can be positively confirmed at
-    or after ``existing_valid_from_date`` -- any ambiguity (either side
-    missing) defaults to False, matching this repo's own "when in doubt,
-    leave it open rather than corrupt it" convention for closing a version.
+    """True only when ``new_effective_from`` can be positively confirmed
+    STRICTLY after ``existing_valid_from_date`` -- any ambiguity (either side
+    missing, or the two dates being equal) defaults to False, matching this
+    repo's own "when in doubt, leave it open rather than corrupt it"
+    convention for closing a version.
+
+    Strict, not ``>=`` (mdm-relationship-versioning-gap Ticket 05 backfill,
+    live-reproduced 2026-09-08): closing a version calls
+    ``close_relationship_version`` with this same date as the new
+    ``effective_to``/``valid_to_date``, and ``mdm_relationship_instance``'s
+    own ``ck_rel_instance_valid_interval`` check constraint requires
+    ``valid_to_date > valid_from_date`` -- strictly greater, a zero-length
+    interval is rejected outright. A same-day "supersession" is genuinely
+    ambiguous for ordering anyway (which of two same-day filings is later?),
+    so treating it as unconfirmed and leaving the row for manual/priority
+    resolution instead of attempting an interval the schema can't represent
+    is also the correct call under this function's own documented philosophy,
+    not just a constraint workaround.
 
     Shared (mdm-relationship-versioning-gap Ticket 05's 3-axis review) by
     ``_deactivate_if_properties_changed`` and the retroactive quarantine
@@ -558,7 +572,7 @@ def confirmed_chronologically_after(new_effective_from, existing_valid_from_date
     return (
         new_effective_from is not None
         and existing_valid_from_date is not None
-        and new_effective_from >= existing_valid_from_date
+        and new_effective_from > existing_valid_from_date
     )
 
 
