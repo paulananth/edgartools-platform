@@ -49,6 +49,10 @@ from edgar_warehouse.mdm.resolvers import (
 from edgar_warehouse.mdm.resolvers.base import ResolverContext, SilverReader
 from edgar_warehouse.mdm.resolvers.security import _ownership_security_source_id
 from edgar_warehouse.mdm.rules import MDMRuleEngine
+from edgar_warehouse.mdm.security_issuer_link import (
+    load_company_candidates,
+    resolve_issuer_entity_id,
+)
 from edgar_warehouse.mdm.sql_fragments import (
     exclude_individual_reporting_owners_sql,
     prefer_non_owner_cik_qualify,
@@ -3503,6 +3507,7 @@ class MDMPipeline:
         security_class: Optional[str],
         *,
         cache: Optional[dict[str, tuple[str, bool]]] = None,
+        company_candidates: Optional[list[dict]] = None,
     ) -> Optional[str]:
         """Return entity_id for a security identified by CUSIP, auto-creating if absent.
 
@@ -3533,6 +3538,15 @@ class MDMPipeline:
         performs the real backfill check -- identical eventual behavior to calling
         this function fresh every time, just without re-querying entity_id itself
         once it's already known.
+
+        ``company_candidates`` (mdm-relationship-versioning-gap Ticket 06), when
+        given, is used to fuzzy-match a newly-created stub's ``issuer_name``
+        against the company universe (see security_issuer_link.py) so future
+        CUSIP stubs get their issuer link at creation time instead of staying
+        permanently orphaned. Only applied on the create path -- an
+        already-existing stub's issuer link is corrected by the dedicated
+        backfill (``mdm backfill-security-issuer-links``), not opportunistically
+        here, to keep this already-long function's per-call cost bounded.
         """
         import uuid as _uuid
 
@@ -3587,6 +3601,11 @@ class MDMPipeline:
             return already
 
         canonical = issuer_name.strip() if issuer_name else f"CUSIP:{cusip}"
+        issuer_entity_id = None
+        if company_candidates is not None:
+            issuer_entity_id = resolve_issuer_entity_id(
+                self.engine, issuer_name, company_candidates, cusip=cusip,
+            )
         entity = MdmEntity(
             entity_id=stub_id,
             entity_type="security",
@@ -3599,6 +3618,7 @@ class MDMPipeline:
             canonical_title=canonical,
             cusip=cusip,
             security_class=security_class,
+            issuer_entity_id=issuer_entity_id,
         )
         self.session.add(security)
         source_ref = MdmSourceRef(
@@ -4408,6 +4428,14 @@ class MDMPipeline:
         # lookup -- bounded by the distinct CUSIP count (41,225 measured live
         # 2026-09-08), not row count (6,799,919), so this stays small.
         security_id_by_cusip: dict[str, tuple[str, bool]] = {}
+        # mdm-relationship-versioning-gap Ticket 06: the company candidate
+        # pool for fuzzy-matching a CUSIP stub's free-text issuer_name to its
+        # issuer MdmCompany row. issuer_name carries no CIK to narrow
+        # candidates by (unlike every other fuzzy-match use in this
+        # codebase), so this compares against the whole company universe --
+        # fetched once here and reused across every batch, not re-fetched
+        # per security.
+        company_candidates = load_company_candidates(self.session)
         watermark_bind = self._watermark_bind_value("ingested_at", watermark)
 
         # mdm-relationship-versioning-gap Ticket 01: a persisted, resumable
@@ -4454,6 +4482,7 @@ class MDMPipeline:
                 sync_engine, batch_remaining, batch_sql, cik_lo, cik_hi, adviser_id_by_cik,
                 watermark_bind=watermark_bind, watermark_state=watermark_state,
                 security_id_by_cusip=security_id_by_cusip,
+                company_candidates=company_candidates,
             )
             for i, value in enumerate(batch_result):
                 totals[i] += value
@@ -4502,6 +4531,7 @@ class MDMPipeline:
         watermark_bind: Any = None,
         watermark_state: Optional[dict[str, Optional[str]]] = None,
         security_id_by_cusip: Optional[dict[str, tuple[str, bool]]] = None,
+        company_candidates: Optional[list[dict]] = None,
     ) -> tuple[int, int, int, int, int]:
         inserted = 0
         skipped_corporate = 0
@@ -4561,6 +4591,7 @@ class MDMPipeline:
 
                 security_id = self._ensure_security_by_cusip(
                     cusip, issuer_name, security_class, cache=security_id_by_cusip,
+                    company_candidates=company_candidates,
                 )
                 if security_id is None:
                     skipped_unresolved_target += 1

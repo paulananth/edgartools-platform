@@ -325,6 +325,27 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         )
     )
 
+    backfill_issuer_links = mdm_sub.add_parser(
+        "backfill-security-issuer-links",
+        help=(
+            "Link already-existing CUSIP-stub securities (13F-derived, no "
+            "Form-4 anchor) to their issuer MdmCompany row via fuzzy name "
+            "matching (mdm-relationship-versioning-gap Ticket 06). Only "
+            "auto-links high-confidence matches (score >= the existing "
+            "company/fuzzy_name auto_merge_min threshold); lower-confidence "
+            "candidates are logged, not linked, for manual follow-up."
+        ),
+    )
+    backfill_issuer_links.add_argument(
+        "--dry-run", action="store_true", default=False,
+        help="Report what would change without mutating anything",
+    )
+    backfill_issuer_links.set_defaults(
+        handler=_logged_handler(
+            "backfill-security-issuer-links", _handle_backfill_security_issuer_links
+        )
+    )
+
     api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
     api.add_argument("--host", default="0.0.0.0")
     api.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
@@ -2072,6 +2093,27 @@ def _handle_backfill_quarantined_relationships(args) -> int:
         "skipped_ambiguous_order": summary.skipped_ambiguous_order,
         "skipped_ambiguous_date": summary.skipped_ambiguous_date,
         "skipped_multiple_conflicts": summary.skipped_multiple_conflicts,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_backfill_security_issuer_links(args) -> int:
+    from edgar_warehouse.mdm.security_issuer_link import backfill_missing_issuer_links
+
+    session = _session()
+    try:
+        summary = backfill_missing_issuer_links(session, dry_run=args.dry_run)
+        if not args.dry_run:
+            session.commit()
+    finally:
+        session.close()
+    print(json.dumps({
+        "dry_run": args.dry_run,
+        "examined": summary.examined,
+        "linked": summary.linked,
+        "review_logged": summary.review_logged,
+        "skipped_no_name": summary.skipped_no_name,
+        "skipped_no_match": summary.skipped_no_match,
     }, indent=2, sort_keys=True))
     return 0
 

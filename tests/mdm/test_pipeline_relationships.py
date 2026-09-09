@@ -1204,6 +1204,40 @@ class TestRunRelationships:
             + summary["INSTITUTIONAL_HOLDS"]["skipped_existing"]
         )
 
+    def test_institutional_holds_links_cusip_stub_to_issuer(self, session):
+        """mdm-relationship-versioning-gap Ticket 06: a newly-created CUSIP
+        stub gets issuer_entity_id set via fuzzy name matching against the
+        known company universe, when a high-confidence candidate exists."""
+        from edgar_warehouse.mdm.database import MdmEntity, MdmMatchThreshold, MdmSecurity
+
+        apple_id = str(uuid.uuid4())
+        session.add(MdmEntity(entity_id=apple_id, entity_type="company", resolution_method="cik_exact"))
+        session.add(MdmCompany(entity_id=apple_id, cik=320193, canonical_name="Apple Inc."))
+        session.add(MdmMatchThreshold(
+            entity_type="company", match_method="fuzzy_name",
+            auto_merge_min=0.95, review_min=0.85,
+        ))
+        session.commit()
+
+        silver = StubSilver({
+            "sec_thirteenf_holding": [
+                {
+                    "cik": 910002, "accession_number": "0000-issuer-link",
+                    "period_of_report": "2023-12-31", "cusip": "037833100",
+                    "issuer_name": "Apple Inc", "security_title": "Common Stock",
+                    "shares_held": 1000, "market_value": 15000000,
+                    "put_call": None, "discretion_type": "SOLE", "security_class": None,
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["INSTITUTIONAL_HOLDS"])
+        assert summary["INSTITUTIONAL_HOLDS"]["inserted"] == 1
+
+        stub = session.scalar(select(MdmSecurity).where(MdmSecurity.cusip == "037833100"))
+        assert stub is not None
+        assert stub.issuer_entity_id == apple_id
+
     def test_thirteenf_manager_outside_adv_universe_is_created(self, session):
         silver = StubSilver({
             "sec_thirteenf_holding": [{
