@@ -7,7 +7,7 @@ import hashlib
 import json
 import sys
 from collections.abc import Callable, Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any
 
 try:
@@ -86,36 +86,13 @@ def _table_from_records(schema: pa.Schema, records: list[dict[str, Any]]) -> pa.
     )
 
 
-def _coerce_int(value: Any) -> int | None:
-    try:
-        return int(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_float(value: Any) -> float | None:
-    try:
-        return float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_date(value: Any) -> date | None:
-    if value in (None, ""):
-        return None
-    if isinstance(value, date):
-        return value
-    try:
-        return date.fromisoformat(str(value)[:10])
-    except (TypeError, ValueError):
-        return None
-
-
-def _fetch_snowflake_silver_rows(query: str) -> list[dict[str, Any]]:
+def _fetch_snowflake_silver_arrow(query: str) -> pa.Table | None:
     """Run `query` against the live EDGARTOOLS_SILVER Snowflake schema and
-    return every row as a dict with lowercased column names (Snowflake's
-    connector returns uppercase names for unquoted identifiers by default) --
-    same pattern as mdm_entity_backfill.py's _fetch_pending_rows.
+    return the result as a `pa.Table` with lowercased column names
+    (Snowflake's connector returns uppercase names for unquoted identifiers
+    by default), or `None` if the query returned zero rows (the connector's
+    own `fetch_arrow_all()` contract -- there's no schema to build a table
+    from with no rows).
 
     Used only by the 5 orphan evidence-table builders below (dbt-gold-
     silver-rewiring map, Ticket 06): those tables have no dbt gold model at
@@ -126,6 +103,21 @@ def _fetch_snowflake_silver_rows(query: str) -> list[dict[str, Any]]:
     than sharing the local-DuckDB `conn` threaded through every other
     builder in _source_export_table_builders() -- these 5 are the only builders in
     this file reading Snowflake instead of DuckDB.
+
+    mdm-relationship-versioning-gap-adjacent OOM fix (2026-09-08): this used
+    to fetch via `cursor.fetchall()` into a `list[dict]`, which every caller
+    then rebuilt into a SECOND `list[dict]` (applying per-row coercion) before
+    `_table_from_records` rebuilt a THIRD, per-column Python list for every
+    field in the target schema -- on top of the Snowflake driver's own
+    internal Arrow-to-Python-tuple conversion inside `fetchall()` itself. For
+    `sec_adv_private_fund` (414,968 rows, still growing -- see this file's own
+    fund_index note elsewhere in the codebase) that stack of redundant
+    full-table Python-object copies OOM-killed a live `daily_incremental` run
+    on the 8192MB `large` ECS profile. `fetch_arrow_all()` goes straight from
+    Snowflake's wire format to one Arrow table, with no intermediate Python
+    row objects at all -- every caller below now casts/reorders/sorts that
+    table using PyArrow's own vectorized operations instead of a per-row
+    Python comprehension.
     """
     from edgar_warehouse.mdm.export import silver_connection_settings
 
@@ -134,16 +126,30 @@ def _fetch_snowflake_silver_rows(query: str) -> list[dict[str, Any]]:
         cursor = connection.cursor()
         try:
             cursor.execute(query)
-            columns = [col[0].lower() for col in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+            table = cursor.fetch_arrow_all()
+            if table is None:
+                return None
+            return table.rename_columns([name.lower() for name in table.column_names])
         finally:
             cursor.close()
     finally:
         connection.close()
 
 
+def _cast_to_schema(table: pa.Table | None, schema: pa.Schema) -> pa.Table:
+    """Reorder/select `table`'s columns to match `schema` by name and cast
+    to its types -- `pa.Table.cast()` corresponds positionally, not by name,
+    so `.select(schema.names)` must run first. `table is None` (the
+    zero-rows case from `_fetch_snowflake_silver_arrow`) returns an empty
+    table of the target schema, matching the pre-fix `_table_from_records`
+    behavior for an empty `records` list."""
+    if table is None:
+        return _empty(schema)
+    return table.select(schema.names).cast(schema)
+
+
 def _build_sec_subsidiary_evidence() -> pa.Table:
-    rows = _fetch_snowflake_silver_rows(
+    table = _fetch_snowflake_silver_arrow(
         """
         SELECT
             accession_number,
@@ -162,37 +168,20 @@ def _build_sec_subsidiary_evidence() -> pa.Table:
         FROM SEC_SUBSIDIARY_EVIDENCE
         """
     )
-    records = [
-        {
-            "accession_number": row.get("accession_number"),
-            "registrant_cik": _coerce_int(row.get("registrant_cik")),
-            "document_name": row.get("document_name"),
-            "document_type": row.get("document_type"),
-            "row_ordinal": _coerce_int(row.get("row_ordinal")),
-            "legal_name": row.get("legal_name"),
-            "jurisdiction": row.get("jurisdiction"),
-            "parent_scope": row.get("parent_scope"),
-            "immediate_parent_known": row.get("immediate_parent_known"),
-            "effective_date": _coerce_date(row.get("effective_date")),
-            "row_locator": row.get("row_locator"),
-            "source_sha256": row.get("source_sha256"),
-            "parser_version": row.get("parser_version"),
-        }
-        for row in rows
-    ]
-    records.sort(
-        key=lambda r: (
-            r["registrant_cik"] or 0,
-            r["accession_number"] or "",
-            r["document_name"] or "",
-            r["row_ordinal"] or 0,
-        )
+    table = _cast_to_schema(table, _SEC_SUBSIDIARY_EVIDENCE_SCHEMA)
+    return table.sort_by(
+        [
+            ("registrant_cik", "ascending"),
+            ("accession_number", "ascending"),
+            ("document_name", "ascending"),
+            ("row_ordinal", "ascending"),
+        ],
+        null_placement="at_start",
     )
-    return _table_from_records(_SEC_SUBSIDIARY_EVIDENCE_SCHEMA, records)
 
 
 def _build_sec_auditor_report_evidence() -> pa.Table:
-    rows = _fetch_snowflake_silver_rows(
+    table = _fetch_snowflake_silver_arrow(
         """
         SELECT
             accession_number,
@@ -215,40 +204,19 @@ def _build_sec_auditor_report_evidence() -> pa.Table:
         FROM SEC_AUDITOR_REPORT_EVIDENCE
         """
     )
-    records = [
-        {
-            "accession_number": row.get("accession_number"),
-            "registrant_cik": _coerce_int(row.get("registrant_cik")),
-            "form_type": row.get("form_type"),
-            "document_name": row.get("document_name"),
-            "audited_period_end": _coerce_date(row.get("audited_period_end")),
-            "report_date": _coerce_date(row.get("report_date")),
-            "principal_firm_name": row.get("principal_firm_name"),
-            "principal_firm_location": row.get("principal_firm_location"),
-            "pcaob_firm_id": row.get("pcaob_firm_id"),
-            "evidence_source": row.get("evidence_source"),
-            "raw_locator": row.get("raw_locator"),
-            "source_sha256": row.get("source_sha256"),
-            "evidence_fingerprint": row.get("evidence_fingerprint"),
-            "form_ap_filing_id": row.get("form_ap_filing_id"),
-            "original_form_ap_filing_id": row.get("original_form_ap_filing_id"),
-            "latest_amendment": row.get("latest_amendment"),
-            "parser_version": row.get("parser_version"),
-        }
-        for row in rows
-    ]
-    records.sort(
-        key=lambda r: (
-            r["registrant_cik"] or 0,
-            r["accession_number"] or "",
-            r["evidence_fingerprint"] or "",
-        )
+    table = _cast_to_schema(table, _SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA)
+    return table.sort_by(
+        [
+            ("registrant_cik", "ascending"),
+            ("accession_number", "ascending"),
+            ("evidence_fingerprint", "ascending"),
+        ],
+        null_placement="at_start",
     )
-    return _table_from_records(_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA, records)
 
 
 def _build_sec_employment_event() -> pa.Table:
-    rows = _fetch_snowflake_silver_rows(
+    table = _fetch_snowflake_silver_arrow(
         """
         SELECT
             accession_number,
@@ -264,33 +232,19 @@ def _build_sec_employment_event() -> pa.Table:
         FROM SEC_EMPLOYMENT_EVENT
         """
     )
-    records = [
-        {
-            "accession_number": row.get("accession_number"),
-            "event_index": _coerce_int(row.get("event_index")),
-            "cik": _coerce_int(row.get("cik")),
-            "event_type": row.get("event_type"),
-            "person_name": row.get("person_name"),
-            "exec_role": row.get("exec_role"),
-            "previous_role": row.get("previous_role"),
-            "compensation_amount": _coerce_float(row.get("compensation_amount")),
-            "effective_date": _coerce_date(row.get("effective_date")),
-            "parser_version": row.get("parser_version"),
-        }
-        for row in rows
-    ]
-    records.sort(
-        key=lambda r: (
-            r["cik"] or 0,
-            r["accession_number"] or "",
-            r["event_index"] or 0,
-        )
+    table = _cast_to_schema(table, _SEC_EMPLOYMENT_EVENT_SCHEMA)
+    return table.sort_by(
+        [
+            ("cik", "ascending"),
+            ("accession_number", "ascending"),
+            ("event_index", "ascending"),
+        ],
+        null_placement="at_start",
     )
-    return _table_from_records(_SEC_EMPLOYMENT_EVENT_SCHEMA, records)
 
 
 def _build_sec_adv_firm_roster() -> pa.Table:
-    rows = _fetch_snowflake_silver_rows(
+    table = _fetch_snowflake_silver_arrow(
         """
         SELECT
             adviser_crd_number,
@@ -308,29 +262,15 @@ def _build_sec_adv_firm_roster() -> pa.Table:
         FROM SEC_ADV_FIRM_ROSTER
         """
     )
-    records = [
-        {
-            "adviser_crd_number": row.get("adviser_crd_number"),
-            "dataset_period": row.get("dataset_period"),
-            "private_funds_reported": row.get("private_funds_reported"),
-            "private_fund_count_7b1": _coerce_int(row.get("private_fund_count_7b1")),
-            "any_hedge_funds": row.get("any_hedge_funds"),
-            "hedge_fund_count": _coerce_int(row.get("hedge_fund_count")),
-            "any_pe_funds": row.get("any_pe_funds"),
-            "pe_fund_count": _coerce_int(row.get("pe_fund_count")),
-            "total_gross_assets_private_funds": _coerce_float(row.get("total_gross_assets_private_funds")),
-            "private_fund_count_7b2": _coerce_int(row.get("private_fund_count_7b2")),
-            "source_sha256": row.get("source_sha256"),
-            "parser_version": row.get("parser_version"),
-        }
-        for row in rows
-    ]
-    records.sort(key=lambda r: (r["adviser_crd_number"] or "", r["dataset_period"] or ""))
-    return _table_from_records(_SEC_ADV_FIRM_ROSTER_SCHEMA, records)
+    table = _cast_to_schema(table, _SEC_ADV_FIRM_ROSTER_SCHEMA)
+    return table.sort_by(
+        [("adviser_crd_number", "ascending"), ("dataset_period", "ascending")],
+        null_placement="at_start",
+    )
 
 
 def _build_sec_adv_private_fund_passthrough() -> pa.Table:
-    rows = _fetch_snowflake_silver_rows(
+    table = _fetch_snowflake_silver_arrow(
         """
         SELECT
             accession_number,
@@ -353,30 +293,11 @@ def _build_sec_adv_private_fund_passthrough() -> pa.Table:
         FROM SEC_ADV_PRIVATE_FUND
         """
     )
-    records = [
-        {
-            "accession_number": row.get("accession_number"),
-            "fund_index": _coerce_int(row.get("fund_index")),
-            "filing_id": row.get("filing_id"),
-            "adviser_crd_number": row.get("adviser_crd_number"),
-            "private_fund_id": row.get("private_fund_id"),
-            "reference_id": row.get("reference_id"),
-            "schedule_section": row.get("schedule_section"),
-            "reporting_role": row.get("reporting_role"),
-            "filing_action": row.get("filing_action"),
-            "fund_name": row.get("fund_name"),
-            "fund_type": row.get("fund_type"),
-            "jurisdiction": row.get("jurisdiction"),
-            "aum_amount": _coerce_float(row.get("aum_amount")),
-            "effective_date": _coerce_date(row.get("effective_date")),
-            "source_dataset_period": row.get("source_dataset_period"),
-            "source_sha256": row.get("source_sha256"),
-            "parser_version": row.get("parser_version"),
-        }
-        for row in rows
-    ]
-    records.sort(key=lambda r: (r["accession_number"] or "", r["fund_index"] or 0))
-    return _table_from_records(_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA, records)
+    table = _cast_to_schema(table, _SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA)
+    return table.sort_by(
+        [("accession_number", "ascending"), ("fund_index", "ascending")],
+        null_placement="at_start",
+    )
 
 
 def _timed(name: str, fn: Callable[[], pa.Table]) -> pa.Table:
@@ -396,7 +317,7 @@ def _timed(name: str, fn: Callable[[], pa.Table]) -> pa.Table:
 def _source_export_table_builders() -> list[tuple[str, Callable[[], pa.Table]]]:
     # Every table here has no dbt gold model of its own, so it still reads
     # Snowflake's EDGARTOOLS_SILVER directly instead of a local DuckDB
-    # `conn` -- see _fetch_snowflake_silver_rows.
+    # `conn` -- see _fetch_snowflake_silver_arrow.
     return [
         ("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence()),
         ("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence()),
