@@ -63,7 +63,12 @@ def engine() -> MDMRuleEngine:
             ("company", "fuzzy_name"): (0.95, 0.85),
         },
         _normalization={
-            "legal_suffix": {"INC": "", "LLC": "", "CORP": "", "LTD": ""},
+            "legal_suffix": {
+                "INC": "", "LLC": "", "CORP": "", "LTD": "", "CO": "",
+                "PLC": "", "COMPANY": "", "COMPANIES": "", "NEW": "",
+                "SPONSORED": "", "UNSPONSORED": "", "ADR": "", "ADS": "",
+                "SP": "",
+            },
             "title_alias": {"CHIEF EXECUTIVE OFFICER": "CEO", "CEO": "CEO", "DIRECTOR": "Director"},
             "address_abbr": {"ST": "Street", "AVE": "Avenue", "STE": "Suite"},
             "state_code": {"CALIFORNIA": "CA", "NEW YORK": "NY"},
@@ -107,6 +112,45 @@ def test_normalize_name_strips_legal_suffix(engine: MDMRuleEngine) -> None:
 def test_normalize_name_none_passthrough(engine: MDMRuleEngine) -> None:
     assert engine.normalize_name(None) is None
     assert engine.normalize_name("") == ""
+
+
+def test_normalize_name_strips_apostrophe_as_one_token(engine: MDMRuleEngine) -> None:
+    # "McDonald's" must collapse to one token ("mcdonalds"), matching a
+    # canonical name that never had the apostrophe -- not split into two
+    # tokens by the general punctuation-to-space substitution.
+    assert engine.normalize_name("McDonald's Corporation") == "Mcdonalds Corporation"
+    assert engine.normalize_name("O'Brien") == "Obrien"
+
+
+def test_normalize_name_drops_trailing_share_class(engine: MDMRuleEngine) -> None:
+    assert engine.normalize_name("Alphabet Inc. Class A") == "Alphabet"
+    assert engine.normalize_name("Dell Technologies, Inc. Class C") == "Dell Technologies"
+
+
+def test_normalize_name_share_class_requires_single_letter(engine: MDMRuleEngine) -> None:
+    # "Class" followed by anything other than a single letter is left alone
+    # -- this must not eat real words that happen to follow "class".
+    assert engine.normalize_name("World Class Logistics Inc") == "World Class Logistics"
+
+
+def test_normalize_name_lone_letter_elsewhere_is_untouched(engine: MDMRuleEngine) -> None:
+    # A single-letter token NOT immediately preceded by "class" must survive
+    # -- the strip is gated on the exact "class <letter>" pair, not on any
+    # lone letter anywhere in the name.
+    assert engine.normalize_name("A Corp") == "A"
+    # The lone "a" here is a middle token, never adjacent to "class" -- must
+    # survive untouched, unlike a genuine trailing "Class A" designation.
+    assert engine.normalize_name("Bank of A Holdings") == "Bank Of A Holdings"
+
+
+def test_normalize_name_strips_company_and_adr_tokens(engine: MDMRuleEngine) -> None:
+    assert engine.normalize_name("3M Company") == "3m"
+    assert engine.normalize_name("Legend Biotech Corp Sponsored ADR") == "Legend Biotech"
+    assert engine.normalize_name("Core Scientific Inc New") == "Core Scientific"
+    assert engine.normalize_name("Example Companies Ltd") == "Example"
+    assert engine.normalize_name("Example Corp Unsponsored ADR") == "Example"
+    assert engine.normalize_name("Example Corp ADS") == "Example"
+    assert engine.normalize_name("Diageo PLC Sp ADR") == "Diageo"
 
 
 def test_normalize_title_alias_hit(engine: MDMRuleEngine) -> None:

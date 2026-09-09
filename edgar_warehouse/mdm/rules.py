@@ -23,6 +23,7 @@ from edgar_warehouse.mdm.database import (
 ALL = "all"
 _WS_RE = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[^\w\s]")
+_APOSTROPHE_RE = re.compile(r"['’]")
 
 
 @dataclass(frozen=True)
@@ -123,6 +124,12 @@ class MDMRuleEngine:
         if not name:
             return name
         text = name.strip().lower()
+        # Drop apostrophes rather than routing them through the general
+        # punctuation-to-space substitution below -- a possessive name like
+        # "McDonald's" must normalize to one token ("mcdonalds"), matching a
+        # canonical name that never had the apostrophe, not split into two
+        # tokens ("mcdonald", "s") that no longer align with anything.
+        text = _APOSTROPHE_RE.sub("", text)
         text = _PUNCT_RE.sub(" ", text)
         tokens = _WS_RE.split(text)
         suffixes = self._normalization.get("legal_suffix", {})
@@ -136,6 +143,14 @@ class MDMRuleEngine:
             elif replacement:
                 cleaned.append(replacement)
             # else: empty replacement → drop the token entirely
+        # Drop a trailing share-class designation ("Class A"/"Class B"/...).
+        # Security issuer names carry this constantly (Form 3/4/5 filer
+        # names); MdmCompany.canonical_name essentially never does -- the
+        # issuer's identity doesn't change by share class. Scoped narrowly
+        # to "class" immediately followed by a single letter so a lone
+        # letter elsewhere in a name is never touched.
+        if len(cleaned) >= 2 and cleaned[-2] == "class" and len(cleaned[-1]) == 1:
+            cleaned = cleaned[:-2]
         joined = " ".join(cleaned).strip()
         return " ".join(w.capitalize() for w in joined.split())
 

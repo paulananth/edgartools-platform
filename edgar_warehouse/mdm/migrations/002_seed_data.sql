@@ -4,6 +4,17 @@
 -- Description: Inserts initial configuration and reference data for all
 --              rule, graph-registry, and normalization tables.
 --              All statements use ON CONFLICT DO NOTHING for idempotency.
+--
+-- NOT EXECUTED BY ANY CODE PATH (confirmed 2026-09-09, edgartools-platform
+-- CLAUDE.md's "migration/seed drift" 5-whys family): edgar_warehouse/mdm/
+-- migrations/runtime.py's migrate() calls _apply_sql_file() for 001 and
+-- 003-022 but skips this one; seed_defaults() seeds via its own separate
+-- Python functions (_seed_normalization_rules/_seed_match_thresholds/etc.)
+-- instead. Kept only as a documentation reference -- runtime.py is the
+-- single source of truth for what actually gets seeded via `mdm migrate`.
+-- If you edit rows here, mirror the change in runtime.py too, or this file
+-- will silently drift out of sync again (as it already had for 8 rows
+-- before this comment was added).
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -76,7 +87,15 @@ INSERT INTO mdm_normalization_rule (rule_type, input_value, canonical_value) VAL
     ('legal_suffix', 'co',           ''),
     ('legal_suffix', 'na',           ''),
     ('legal_suffix', 'holdings',     ''),
-    ('legal_suffix', 'services',     '')
+    ('legal_suffix', 'services',     ''),
+    ('legal_suffix', 'company',      ''),
+    ('legal_suffix', 'companies',    ''),
+    ('legal_suffix', 'new',          ''),
+    ('legal_suffix', 'sponsored',    ''),
+    ('legal_suffix', 'unsponsored',  ''),
+    ('legal_suffix', 'adr',          ''),
+    ('legal_suffix', 'ads',          ''),
+    ('legal_suffix', 'sp',           '')
 ON CONFLICT (rule_type, input_value) DO NOTHING;
 
 -- ---------------------------------------------------------------------------

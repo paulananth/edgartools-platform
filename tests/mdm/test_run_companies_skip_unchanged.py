@@ -129,7 +129,9 @@ class TestSkipIfUnchanged:
         golden = session.execute(
             select(MdmCompany).where(MdmCompany.cik == target_cik)
         ).scalar_one()
-        assert golden.canonical_name == "Renamed Company"
+        # "Company" is a stripped legal_suffix token (same treatment as
+        # "Co"/"Corp"/"Inc"), so the normalized canonical_name is "Renamed".
+        assert golden.canonical_name == "Renamed"
 
     def test_skip_if_unchanged_returns_none_when_no_prior_match_exists(self) -> None:
         session = _seeded_sqlite_session(static_pool=True)
