@@ -70,11 +70,12 @@ def _row(
     valid_to_date=None,
     quarantined: bool = False,
     source_system: str = "ownership_filing",
+    rel_type_id: str | None = None,
 ) -> MdmRelationshipInstance:
     row = MdmRelationshipInstance(
         instance_id=str(uuid.uuid4()),
         relationship_id=relationship_id,
-        rel_type_id=session.info["rel_type_id"],
+        rel_type_id=rel_type_id if rel_type_id is not None else session.info["rel_type_id"],
         source_entity_id=str(uuid.uuid4()),
         target_entity_id=str(uuid.uuid4()),
         properties=properties,
@@ -559,6 +560,80 @@ class TestFindQuarantinedRelationshipIdsPagination:
         assert first_batch == ["rel-aaa"]
         second_batch = find_quarantined_relationship_ids(session, limit=1, after=first_batch[-1])
         assert second_batch == ["rel-bbb"]
+
+
+class TestRelationshipTypeScoping:
+    """mdm-relationship-versioning-gap Ticket 08/09: the chain-aware walk
+    is deliberately rolled out to INSTITUTIONAL_HOLDS first, not the other
+    5 affected types -- a real prod run must be able to scope to just the
+    validated type(s), not silently touch every quarantined relationship_id
+    regardless of type."""
+
+    def _other_rel_type_id(self, session) -> str:
+        other_id = str(uuid.uuid4())
+        session.add(MdmRelationshipType(
+            rel_type_id=other_id,
+            rel_type_name="OTHER_REL_TYPE",
+            source_node_type="person",
+            target_node_type="company",
+            direction="outbound",
+            is_temporal=True,
+            merge_strategy="extend_temporal",
+            is_active=True,
+        ))
+        session.commit()
+        return other_id
+
+    def test_find_quarantined_relationship_ids_filters_by_type(self, session):
+        other_type_id = self._other_rel_type_id(session)
+        _row(
+            session, relationship_id="rel-target-type",
+            properties={"role": "officer"}, effective_from=date(2024, 1, 1),
+            quarantined=True,
+        )
+        _row(
+            session, relationship_id="rel-other-type",
+            properties={"role": "officer"}, effective_from=date(2024, 1, 1),
+            quarantined=True, rel_type_id=other_type_id,
+        )
+        session.commit()
+
+        assert find_quarantined_relationship_ids(
+            session, relationship_types=[REL_TYPE_NAME]
+        ) == ["rel-target-type"]
+        assert find_quarantined_relationship_ids(
+            session, relationship_types=["OTHER_REL_TYPE"]
+        ) == ["rel-other-type"]
+        assert set(find_quarantined_relationship_ids(session)) == {
+            "rel-target-type", "rel-other-type",
+        }
+
+    def test_run_backfill_scoped_to_one_type_leaves_other_types_untouched(self, session):
+        other_type_id = self._other_rel_type_id(session)
+        _row(
+            session, relationship_id="rel-target-type",
+            properties={"role": "officer"}, effective_from=date(2024, 10, 16),
+        )
+        target_quarantined = _row(
+            session, relationship_id="rel-target-type",
+            properties={"role": "director"}, effective_from=date(2025, 10, 8),
+            quarantined=True,
+        )
+        other_quarantined = _row(
+            session, relationship_id="rel-other-type",
+            properties={"role": "director"}, effective_from=date(2025, 10, 8),
+            quarantined=True, rel_type_id=other_type_id,
+        )
+        session.commit()
+
+        summary = run_backfill(session, relationship_types=[REL_TYPE_NAME], dry_run=False)
+        session.commit()
+
+        assert summary.relationship_ids_examined == 1
+        assert summary.reopened == 1
+        session.expire_all()
+        assert session.get(MdmRelationshipInstance, target_quarantined.instance_id).quarantined is False
+        assert session.get(MdmRelationshipInstance, other_quarantined.instance_id).quarantined is True
 
 
 class TestRunBackfillEndToEnd:

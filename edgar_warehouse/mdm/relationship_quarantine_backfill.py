@@ -31,12 +31,12 @@ import json
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from edgar_warehouse.mdm.database import MdmRelationshipInstance
+from edgar_warehouse.mdm.database import MdmRelationshipInstance, MdmRelationshipType
 from edgar_warehouse.mdm.graph import (
     close_relationship_version,
     confirmed_chronologically_after,
@@ -70,7 +70,11 @@ class RelationshipQuarantineBackfillSummary:
 
 
 def find_quarantined_relationship_ids(
-    session: Session, *, limit: Optional[int] = None, after: Optional[str] = None
+    session: Session,
+    *,
+    limit: Optional[int] = None,
+    after: Optional[str] = None,
+    relationship_types: Optional[Sequence[str]] = None,
 ) -> list[str]:
     """Distinct relationship_ids with at least one currently-quarantined row.
 
@@ -79,10 +83,26 @@ def find_quarantined_relationship_ids(
     ``backfill_relationship_id`` (cross-source conflicts, ambiguous dates),
     so a batch loop that re-queries "still has a quarantined row" without
     this would loop forever on exactly those rows instead of advancing.
+
+    ``relationship_types`` (rel_type_name values, e.g. ``INSTITUTIONAL_HOLDS``)
+    restricts to those types only -- ``None`` means no filter (every type
+    with a quarantined row). Needed because ``backfill_relationship_id``'s
+    chain-aware walk (Ticket 08/09, mdm-relationship-versioning-gap) is
+    deliberately rolled out to INSTITUTIONAL_HOLDS first; the other 5
+    affected types have not had their property shapes/edge cases examined
+    against the new walk yet.
     """
-    stmt = select(MdmRelationshipInstance.relationship_id).where(
-        MdmRelationshipInstance.quarantined.is_(True)
-    ).distinct().order_by(MdmRelationshipInstance.relationship_id)
+    stmt = (
+        select(MdmRelationshipInstance.relationship_id)
+        .where(MdmRelationshipInstance.quarantined.is_(True))
+        .distinct()
+        .order_by(MdmRelationshipInstance.relationship_id)
+    )
+    if relationship_types is not None:
+        stmt = stmt.join(
+            MdmRelationshipType,
+            MdmRelationshipType.rel_type_id == MdmRelationshipInstance.rel_type_id,
+        ).where(MdmRelationshipType.rel_type_name.in_(relationship_types))
     if after is not None:
         stmt = stmt.where(MdmRelationshipInstance.relationship_id > after)
     if limit is not None:
@@ -311,7 +331,11 @@ def backfill_relationship_id(
 
 
 def run_backfill(
-    session: Session, *, batch_size: int = 500, dry_run: bool = False
+    session: Session,
+    *,
+    batch_size: int = 500,
+    dry_run: bool = False,
+    relationship_types: Optional[Sequence[str]] = None,
 ) -> RelationshipQuarantineBackfillSummary:
     """Drain every relationship_id with a quarantined row, committing per batch.
 
@@ -320,17 +344,23 @@ def run_backfill(
     candidate list once up front instead (bounded by the live quarantined
     count, not an arbitrary batch size) and report on all of it in one
     pass.
+
+    ``relationship_types`` restricts to those rel_type_name values only --
+    see ``find_quarantined_relationship_ids`` for why this matters (Ticket
+    08/09's INSTITUTIONAL_HOLDS-first rollout scope).
     """
     total = RelationshipQuarantineBackfillSummary()
     if dry_run:
-        for relationship_id in find_quarantined_relationship_ids(session):
+        for relationship_id in find_quarantined_relationship_ids(
+            session, relationship_types=relationship_types
+        ):
             total.add(backfill_relationship_id(session, relationship_id, dry_run=True))
         return total
 
     after: Optional[str] = None
     while True:
         relationship_ids = find_quarantined_relationship_ids(
-            session, limit=batch_size, after=after
+            session, limit=batch_size, after=after, relationship_types=relationship_types
         )
         if not relationship_ids:
             break
