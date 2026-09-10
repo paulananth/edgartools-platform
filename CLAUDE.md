@@ -149,7 +149,7 @@ problem entirely.
 |------|----------|
 | ETL runtime (form parsing, S3 writes) | `edgar_warehouse/application/warehouse_orchestrator.py` (`edgar_warehouse/runtime.py` is a pure re-export shim onto `edgar_warehouse/application/command_router.py`, which is real but thin: its own `run_command`/`run_seed_universe_command` route through `LEGACY_COMMAND_REGISTRY`/`execute_standard_command`, ultimately calling `warehouse_orchestrator._execute_warehouse` -- confirmed live 2026-09-02 while tracing `bootstrap`'s full call chain for its retirement, correcting this table's prior "both are compatibility shims re-exporting from here" claim) |
 | Silver-layer transformations | `edgar_warehouse/silver_store.py` (`edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase`, not a second implementation) |
-| Source-layer dimensional export (feeds `EDGARTOOLS_SOURCE`, not `EDGARTOOLS_GOLD` — see single-path-per-layer map Ticket 01, which is why this module was renamed off its old "gold_models.py" name) | `edgar_warehouse/serving/source_dimensional_export.py` (`edgar_warehouse/gold.py` is a thin compatibility shim re-exporting it, not a second implementation) |
+| Source-layer dimensional export (feeds `EDGARTOOLS_SOURCE`, not `EDGARTOOLS_GOLD` — see single-path-per-layer map Ticket 01, which is why this module was renamed off its old "gold_models.py" name) | `edgar_warehouse/serving/source_dimensional_export.py` (its `edgar_warehouse/gold.py` compatibility shim was deleted in PR #550, 2026-09-06 — zero importers repo-wide; the module's own DuckDB-materialized builders were retired the same commit since every dbt gold model now `ref()`s dbt silver directly) |
 | Ownership / Form 3-4-5 parser | `edgar_warehouse/parsers/ownership.py` |
 | ADV parser (investment advisers) | `edgar_warehouse/parsers/adv.py` |
 | CLI entry point | `edgar_warehouse/cli.py` |
@@ -217,12 +217,22 @@ Streamlit dashboard                            |                      |
                                        (examples/mdm_graph_dashboard/)
 ```
 
-MDM reads from silver (today: mostly DuckDB `silver_store.py`; migrating to
-`EDGARTOOLS_SILVER`, same in-progress caveat as above) and resolves entities
-independently of the gold/dbt path — the two branches above run in parallel,
-not in sequence. See "Graph storage" and "MDM database" notes further below
-for what each Snowflake-hosted piece actually is, since both names ("Neo4j",
-"Postgres mirror") suggest external services that don't exist here.
+MDM's own silver reader is **always** Snowflake `EDGARTOOLS_SILVER` via
+`SnowflakeSilverReader` (`edgar_warehouse/mdm/cli.py`'s `_silver_reader()`
+docstring is explicit: "Always EDGARTOOLS_SILVER via SnowflakeSilverReader")
+— cut over live-verified 2026-09-06 (duckdb-retirement-cutover Ticket 05).
+DuckDB's `ShardedSilverReader` still exists in the codebase but only for
+parity-verification tooling (`mdm verify-resolver-input-parity`, which
+needs both readers side by side to diff them), not as MDM's production
+read path. The broader silver-layer DuckDB retirement (the write path,
+bookkeeping tables, and final cleanup — duckdb-retirement-cutover Tickets
+06-14/16) is still in progress as of this writing; MDM's reader is simply
+the one piece of that migration that's already fully cut over. MDM
+resolves entities independently of the gold/dbt path — the two branches
+above run in parallel, not in sequence. See "Graph storage" and "MDM
+database" notes further below for what each Snowflake-hosted piece
+actually is, since both names ("Neo4j", "Postgres mirror") suggest
+external services that don't exist here.
 
 ## ECS cost-sizing conclusions (Ticket 28, resolved 2026-08-30)
 
@@ -322,12 +332,15 @@ bugs, infra errors), do a 5-whys root-cause pass before applying a fix:
 2. Ask "why" repeatedly (3-5 times) until you reach a root cause, not just
    the proximate trigger.
 3. Apply the fix at the root cause, not just the symptom.
-4. If the issue is non-trivial or likely to recur, document the chain
-   (problem → whys → resolution) in this file or `TODOS.md` so future
-   sessions don't re-debug it from scratch.
-
-The "Long-load 5-whys (resolved)" section below is the template for this —
-follow that format for new entries.
+4. If the issue is non-trivial or likely to recur, document only the final
+   conclusion in this file or `TODOS.md` so future sessions don't re-debug
+   it from scratch — the numbered why-by-why walkthrough is scaffolding for
+   *finding* the root cause, not something a future reader needs preserved.
+   Write: **Problem** (1 sentence), **Root cause** (1 sentence), **Fix**
+   (1 sentence — the actual code/infra change), **Lesson** (1-2 sentences —
+   the reusable insight, especially if it names a pattern repeated
+   elsewhere in this file), plus any ticket/file links. 4-8 lines total,
+   not a full incident narrative.
 
 ## Long-load 5-whys (resolved)
 
@@ -442,50 +455,18 @@ restart this fix was written to unblock.
 
 ## Artifact-throttle 5-whys (resolved 2026-07-12)
 
-**Problem:** A 20-CIK `load_history` re-run spent ~20+ min (est. ~93 min floor) in
-`filing_artifact_pipeline` over 5,583 accessions with flat ~416 MiB memory, looking like it
-was re-loading immutable, already-captured SEC data.
-
-1. Why iterate 5,583 accessions? Per-window `bootstrap-next` runs with the default
-   `--artifact-policy all_attachments`; `_configured_parser_accessions` selects every
-   ownership/ADV-form accession in the window (heavy insiders → 5,583 Form 3/4/5).
-2. Why revisit immutable data? Idempotency lives at the **download** layer, not the
-   **iteration** layer — `fetch_filing_artifacts` returns cached artifacts with no SEC call
-   when `existing_rows and not force`, but the orchestrator loop still visits every accession
-   to check the cache. No "universe already captured → skip the pass" short-circuit.
-3. Why does checking cached accessions cost ~93 min? The loop ran
-   `time.sleep(WAREHOUSE_ARTIFACT_REQUEST_DELAY)` (default **1.0s**) after **every**
-   accession, **unconditionally, even on a pure cache hit**. 5,583 × 1s ≈ 93 min of no-op
-   throttle. **Root cause:** the SEC rate-limit sleep was paid on the idempotent no-op path,
-   not just on real network fetches.
-
-**Resolution (root-cause fix, #1):** `fetch_filing_artifacts` now returns `network_fetches`
-(count of real SEC round-trips: edgartools `get_filing` + each `download_bytes`); the
-orchestrator loop throttles only when `network_fetches > 0`. Cache hits (immutable,
-already-captured artifacts) return `network_fetches=0` and skip the sleep, so re-runs against
-loaded bronze no longer pay the ~93-min dead-time throttle while new filings are still fully
-rate-limited. Locked in by `tests/unit/test_loader_idempotency.py` (`network_fetches` = 0 on
-cache hit, 1 on fetch).
-
-**Additional mitigations:**
-- **#2 — opt-in artifact skip:** `load_history`'s SM input now accepts an optional
-  `artifact_policy` field (`ArtifactPolicyCheck`/`ArtifactPolicyDefault` states in
-  `deploy-aws-application.sh`, mirroring `WindowSizeCheck`/`TotalCikLimitCheck`), threaded
-  through to per-window `bootstrap-next --artifact-policy`. Default stays
-  `all_attachments` — `load_history` is the canonical loader for **brand-new** company
-  universes (see Phased Pipeline below), so it must keep fetching artifacts for genuinely
-  new CIKs by default. Pass `{"artifact_policy": "skip"}` explicitly only when re-running
-  over an already-loaded universe purely to skip fetch entirely; do not make this the
-  default, or first-time loads would silently stop capturing ownership/ADV artifacts.
-- **#3 — lower redundant throttle default:** `WAREHOUSE_ARTIFACT_REQUEST_DELAY` default
-  lowered `1.0s → 0.2s`. `sec_client.py`'s `pyrate_limiter` bucket (9 req/sec, matching
-  `EDGAR_RATE_LIMIT_PER_SEC`) already throttles every individual SEC request; the
-  orchestrator's per-accession sleep is a second, more conservative layer on top of that,
-  not the primary rate-limit safety net.
-
-NOTE: fix #1 (code) and #3 (default) take effect only after a warehouse image rebuild +
-deploy. Fix #2 (SM input plumbing) takes effect after the next `deploy-aws-application.sh`
-run that re-registers the `load_history` state machine — no image rebuild required.
+A 20-CIK `load_history` re-run spent ~93 min in `filing_artifact_pipeline` over 5,583
+already-captured accessions, looking like it was re-loading immutable SEC data. **Root
+cause:** the orchestrator's `time.sleep(WAREHOUSE_ARTIFACT_REQUEST_DELAY)` (default 1.0s)
+fired after every accession unconditionally, even on a pure cache hit — idempotency lived
+at the download layer, not the iteration layer, so checking 5,583 already-cached
+accessions paid the full SEC rate-limit throttle for zero real network calls. **Fix:**
+`fetch_filing_artifacts` now returns `network_fetches` (real SEC round-trips only); the
+orchestrator throttles only when `network_fetches > 0`. Also added an opt-in
+`artifact_policy: skip` SM input for re-runs over an already-loaded universe (default
+stays `all_attachments` so first-time loads still capture ownership/ADV artifacts), and
+lowered the redundant per-accession delay default `1.0s → 0.2s` (the real SEC rate limit
+is already enforced by `sec_client.py`'s `pyrate_limiter`).
 
 ## Gold-build memory / daily_incremental OOM 5-whys (fixed and deployed, re-run pending, 2026-07-30)
 
@@ -559,34 +540,17 @@ this fix failing. Full ticket detail: `.scratch/gold-build-memory-reliability/ma
 
 ## AWS teardown 5-whys (resolved 2026-07-11)
 
-`destroy-aws-complete.sh` is authored/tested for Linux/CI and failed three times on macOS
-(Colima host, default bash 3.2, GNU-vs-BSD tool differences) during the `077127448006`
-decommission. Fixes are in the script; re-record here if they regress.
-
-**Problem 1 — `mktemp: mkstemp failed ... File exists`, aborted at the first S3 bucket.**
-1. `mktemp "${TMP_DIR}/s3-versions-XXXXXX.json"` failed. 2. BSD/macOS `mktemp` only substitutes
-*trailing* `X`s; the `.json` suffix after the X's makes the template literal. 3. Written for GNU
-`mktemp` (substitutes X's anywhere). 4. `set -e` aborts the whole run. **Root cause:** GNU-vs-BSD
-`mktemp`. **Fix:** drop the `.json` suffix so X's are trailing (portable; `aws … file://` ignores
-the extension).
-
-**Problem 2 — `DeleteObjects MalformedXML`, aborted emptying a small bucket.**
-1. `delete-objects` rejected the payload on `snowflake-export` (only ~75 live objects). 2. A single
-`list-object-versions --max-items 1000` page returned 537 Versions + 473 DeleteMarkers = **1010**
-combined; the Python summed both into one request. 3. S3 `delete-objects` accepts at most **1000
-keys** per call. **Root cause:** versioned buckets can return >1000 combined versions+markers per
-page. **Fix:** cap each delete batch to `objects[:1000]`; the outer loop re-lists from the start and
-converges.
-
-**Problem 3 — `mapfile: command not found`, task-def cleanup silently no-op'd.**
-1. Ad-hoc cleanup used `mapfile -t`. 2. macOS ships bash 3.2, which lacks `mapfile` (bash 4+).
-**Root cause:** bash-3.2 host. **Fix:** build arrays with `while IFS= read -r … do ARR+=("$line"); done < <(cmd)`.
-
-**Also:** prod `infra/terraform/accounts/prod/backend.hcl` pointed at the stale
-`edgartools-dev-tfstate-077127448006/accounts/prod` state (6 resources: leftover notifications
-module) instead of the real `edgartools-prod-tfstate/accounts/prod` (44 resources). A naive
-`terraform destroy` would have orphaned the entire prod VPC/ECS/KMS stack. **Lesson:** verify a
-teardown's backend resolves to the *current* state (`terraform state list` count) before trusting it.
+`destroy-aws-complete.sh` (authored/tested for Linux/CI) failed three times on macOS
+(Colima, bash 3.2, GNU-vs-BSD tool differences) during the `077127448006` decommission,
+all now fixed in the script: (1) `mktemp` template had a non-trailing suffix, which BSD
+`mktemp` doesn't substitute — fixed by dropping the suffix; (2) a versioned S3 bucket's
+`list-object-versions` page returned >1000 combined versions+markers, exceeding
+`delete-objects`'s 1000-key limit — fixed by capping each batch to `objects[:1000]`; (3)
+`mapfile` isn't available on bash 3.2 — fixed with a `while read` loop instead. **Also**
+found: prod's `backend.hcl` pointed at a stale, near-empty tfstate object instead of the
+real 44-resource prod state — a naive `terraform destroy` would have orphaned the entire
+prod VPC/ECS/KMS stack. **Lesson:** verify a teardown's backend resolves to the *current*
+state (`terraform state list` count) before trusting it.
 
 ## INSTITUTIONAL_HOLDS / EMPLOYED_BY 5-whys (fixed, not yet deployed, 2026-07-26)
 
@@ -659,70 +623,28 @@ for such paths as unproven, not verified.
 
 ## Manifest-pipeline ownership + cursor-syntax incident 5-whys (resolved 2026-07-27)
 
-**Problem:** applying the ERDP-01/02/04 Snowflake bootstrap SQL fixes to prod (new
-`GUIDANCE_FACTS`/`CONSENSUS_ESTIMATES`/`TRANSCRIPT_EVENTS` tables, updated `LOAD_EXPORTS_FOR_RUN`/
-`REFRESH_AFTER_LOAD`/`PROCESS_RUN_MANIFEST_STREAM`) turned into a live `SNOWFLAKE_RUN_MANIFEST_TASK`
-outage plus a second, self-inflicted access break, while migrating one pilot company (Apple,
-320193) end-to-end.
+Applying the ERDP-01/02/04 Snowflake bootstrap SQL fixes to prod caused a live
+`SNOWFLAKE_RUN_MANIFEST_TASK` outage: `REFRESH_AFTER_LOAD` tried `ALTER DYNAMIC TABLE ...
+REFRESH` on gold tables it didn't own, since ownership had silently drifted
+table-by-table across ad-hoc `ACCOUNTADMIN`/`EDGARTOOLS_PROD_DEPLOYER` bootstrapping with
+no single source-controlled owner role. **Root cause:** no bootstrap SQL provisioned one
+dedicated owner role for gold objects. **Fix:** created `EDGARTOOLS_PROD_LOADER`
+(`infra/snowflake/sql/bootstrap/08_loader_role.sql`), transferred ownership of all 20 gold
+tables + 3 manifest procedures onto it, pointed `profiles.yml`'s prod dbt target there by
+default. A compounding self-inflicted bug surfaced mid-fix: `GRANT OWNERSHIP ... REVOKE
+CURRENT GRANTS` strips *all* outbound grants, not just the previous owner's — this
+silently dropped the dashboard reader role's `SELECT` on all 20 tables; caught and fixed
+with an explicit re-grant, and `08_loader_role.sql` now uses `COPY CURRENT GRANTS` so a
+re-application can't repeat it.
 
-1. Symptom: `SNOWFLAKE_RUN_MANIFEST_TASK` started `FAILED`-looping shortly after the bootstrap SQL
-   was reapplied, instead of the expected `SUCCEEDED`/`SKIPPED`(idle) pattern.
-2. Why fail? `REFRESH_AFTER_LOAD` (recreated under `EDGARTOOLS_PROD_DEPLOYER`) tried
-   `ALTER DYNAMIC TABLE ... REFRESH` on tables it didn't own — `COMPANY` and most of the original 9
-   gold tables were owned by `ACCOUNTADMIN` from early ad-hoc bootstrapping, `EARNINGS_CALENDAR`
-   plus the 3 new Explore tables were owned by whichever role last ran `dbt run --full-refresh`
-   against them. Snowflake requires the *direct owner* role for that `ALTER` (documented elsewhere
-   in this file). Ownership had never been consistent across the 20 gold tables.
-3. Why was ownership never consistent? No source-controlled bootstrap SQL provisioned a single role
-   for these objects — each fix session used whatever role was convenient at the time
-   (`ACCOUNTADMIN` for early manual bootstrapping, `EDGARTOOLS_PROD_DEPLOYER` for dbt runs), so
-   ownership silently drifted table-by-table with every unrelated deploy.
-4. Why did the interim fix (granting `ACCOUNTADMIN` ownership of `REFRESH_AFTER_LOAD` as a
-   stopgap) get corrected mid-incident? Per explicit user instruction: ad-hoc `ACCOUNTADMIN`
-   ownership is not an acceptable pattern for pipeline objects. **Root cause of the ownership
-   churn:** fixed by creating a single dedicated `EDGARTOOLS_PROD_LOADER` role
-   (`infra/snowflake/sql/bootstrap/08_loader_role.sql`) and transferring ownership of all 20 gold
-   dynamic tables plus the 3 manifest procedures onto it in one operation, and pointing
-   `profiles.yml`'s prod dbt target at that role by default (it previously defaulted to
-   `EDGARTOOLS_PROD_DEPLOYER`, which would have silently re-flipped ownership on the next
-   unparameterized `dbt run --target prod`).
-5. **Compounding self-inflicted bug:** the ownership transfer used
-   `GRANT OWNERSHIP ... REVOKE CURRENT GRANTS`, which revokes *all* outbound grants on an object,
-   not just the previous owner's — this silently stripped `EDGARTOOLS_PROD_READER`'s (the
-   Streamlit dashboard's role) `SELECT` on all 20 gold tables. Caught before being reported as
-   fixed, via `SHOW GRANTS ON TABLE ... COMPANY` showing only the new `OWNERSHIP` row. Fixed with
-   `GRANT SELECT ON ALL/FUTURE DYNAMIC TABLES ... TO ROLE EDGARTOOLS_PROD_READER`; `08_loader_role.sql`
-   uses `COPY CURRENT GRANTS` instead so a future re-application of this fix cannot repeat it.
-
-**Separate, genuine defect found and fixed along the way:** `PROCESS_RUN_MANIFEST_STREAM`'s
-shorthand `FOR row IN (SELECT col1, col2 FROM ...) DO` cursor form (Snowflake Scripting's
-row-iteration-over-a-query syntax) fails with `Unsupported: Scalar subquery with multi-column
-SELECT clause` — independently reproduced live on 2026-07-27 with a trivial two-column literal
-`SELECT 1, 2 UNION ALL SELECT 3, 4`, unrelated to any table in this repo. **This is not a
-"never worked" case**: `TASK_HISTORY` shows the same procedure body succeeded as recently as
-2026-07-26 16:53:53, less than a day before the failures started — so treat this as a real but
-not fully understood intermittent defect in the multi-column form, not a permanently broken
-construct. Do not use the shorthand `FOR row IN (SELECT col_a, col_b, ...) DO` form for 2+ columns
-in this account; use the explicit form instead:
-```sql
-DECLARE
-  cnt INTEGER;
-  c1 CURSOR FOR (SELECT col_a, col_b FROM ...);
-  v_a TYPE; v_b TYPE;
-BEGIN
-  cnt := (SELECT COUNT(*) FROM (SELECT col_a, col_b FROM ...));
-  OPEN c1;
-  FOR i IN 1 TO cnt DO
-    FETCH c1 INTO v_a, v_b;
-    ...
-  END FOR;
-  CLOSE c1;
-END;
-```
-A naive "loop until `FETCH` stops returning rows" pattern (checking `SQLROWCOUNT`/`v_a IS NULL`)
-hung indefinitely under this same account state and had to be killed with
-`SELECT SYSTEM$CANCEL_QUERY('<query_id>')` — the bounded `FOR i IN 1 TO <precomputed COUNT(*)>`
-form above is the one that worked. Live in `04_refresh_wrapper.sql`.
+**Separate defect found along the way:** Snowflake Scripting's shorthand `FOR row IN
+(SELECT col_a, col_b, ...) DO` cursor form fails with `Unsupported: Scalar subquery with
+multi-column SELECT clause` for 2+ columns (reproduced with a trivial literal, unrelated
+to any table here) — intermittent, not permanently broken (had succeeded the day before).
+**Do not use the shorthand multi-column `FOR row IN (...) DO` form in this account** — use
+an explicit `DECLARE ... CURSOR ... OPEN ... FOR i IN 1 TO <precomputed COUNT(*)> DO FETCH
+... END FOR` instead (a naive "loop until FETCH stops returning rows" pattern hangs
+indefinitely and needs `SYSTEM$CANCEL_QUERY` to kill). Live in `04_refresh_wrapper.sql`.
 
 ## Streamlit-in-Snowflake ownership 5-whys (resolved 2026-07-27)
 
@@ -1277,237 +1199,60 @@ the way to get one once this ships.
 
 ## MDM Postgres migration-011 schema drift blocking every mdm run (resolved 2026-08-20 — see correction below; the 2026-08-19 "resolved" claim was itself never actually verified)
 
-**Problem:** the `relderiv-fix-verify-1787165186` execution (verifying the
-relationship-derivation-concurrency fix above) failed at `MdmRun` — every
-`mdm run --entity-type all` attempt exited 1 after exhausting retries.
-Discovered while investigating a separate, adjacent symptom: the
-mdm-ahead-of-silver backfill sweep (`backfill-mdm-entity-ids`) showed 0 of
-5,752 `sec_company` rows resolved in `EDGARTOOLS_PROD.EDGARTOOLS_SILVER`
-despite that feature (Phases A/B, `.scratch/mdm-ahead-of-silver/map.md`)
-being fully implemented, tested, and wired into prod's `daily_incremental`/
-`bootstrap` state machines for days.
+`mdm run --entity-type all` exited 1 with Postgres `UndefinedColumn` on
+`mdm_source_ref.source_content_hash` — commit `7ffda2d7` added the column to the
+SQLAlchemy model the same day, with a proper migration file, but nothing auto-applies
+migrations on deploy; no `mdm migrate` execution had run against prod since. **Root
+cause:** a committed, correct migration is not the same as a migration that reached the
+live database — applying it is a separate manual step nothing enforces (same gap as "MDM
+Snowflake mirror schema lost on cutover" above, Postgres side this time).
 
-1. Symptom: the ECS task's logs showed every query against `mdm_source_ref`
-   failing with Postgres `UndefinedColumn` — 61 straight `mdm_sql_failed`
-   events, same `statement_hash`, all selecting (among other columns)
-   `mdm_source_ref.source_content_hash`.
-2. Why is that column undefined? It doesn't exist on the live table, but the
-   SQLAlchemy `MdmSourceRef` model declares it
-   (`edgar_warehouse/mdm/database.py:216`) — `select()` on the mapped class
-   pulls every mapped column, so any query touching this table fails
-   outright, not just ones that need the new field.
-3. Why does the model have a column the table doesn't? Commit `7ffda2d7`
-   ("skip-if-unchanged fast path for run_companies", single-path-per-layer
-   Ticket 03) added `source_content_hash` to the model **that same day**
-   (2026-08-19 12:06 ET) — a few hours before this failure — along with a
-   proper migration file, `edgar_warehouse/mdm/migrations/
-   011_source_ref_content_hash.sql` (`ADD COLUMN IF NOT EXISTS`).
-4. Why wasn't the migration applied? `migrate()`
-   (`edgar_warehouse/mdm/migrations/runtime.py`) runs `011` as part of its
-   sequence, but `migrate()` only executes via an explicit `mdm migrate`
-   ECS/Step-Functions invocation (`edgartools-prod-mdm-migrate`) — nothing
-   triggers it automatically on deploy or on `mdm run` startup. No `mdm
-   migrate` execution had run against prod since `7ffda2d7` shipped.
-5. **Root cause:** same class of gap as "MDM Snowflake mirror schema lost on
-   cutover" above, just on the Postgres side this time — a schema migration
-   can exist, be correct, and be committed, and still never reach the live
-   database, because applying it is a separate manual step nothing enforces.
-   The mdm-ahead-of-silver backfill sweep's "0 resolved" reading was a
-   downstream symptom: `run_companies` couldn't write/read `mdm_source_ref`
-   at all, so the sweep's `MdmSourceRef` lookup had nothing to match against
-   — the backfill code itself was never the problem.
+**CORRECTION (2026-08-20): the first "Fix" never actually fixed anything — both of its
+verification steps were false signals.** The "fix" (`edgartools-prod-mdm-migrate`) and its
+"re-verification" (`edgartools-prod-mdm-run`) were individually-named state machines that
+state-machine-consolidation had already superseded with one consolidated
+`edgartools-prod-mdm-utility` machine nine days earlier, but left `ACTIVE` and
+un-deleted, called "orphaned but harmless." Both orphaned originals were frozen on a
+task-def image pushed a full day *before* the migration file even existed — so `mdm
+migrate` ran a shorter, older migration list and reported SUCCEEDED truthfully for a
+schema version that was never the live problem, and `mdm run`'s stale image never even
+selected the new column, so "no `UndefinedColumn` error" wasn't evidence of a fix — it was
+evidence the check never exercised the code path being tested. **Real fix:** re-ran the
+migration via the actually-current `edgartools-prod-mdm-utility` machine, confirmed via
+direct ECS log inspection. **Gap closed same-day:** all 7 orphaned MDM Utility Machine
+originals deleted live in prod, so this exact false-signal shape can no longer recur
+through those names.
 
-**Fix:** ran `edgartools-prod-mdm-migrate` (applies `011_source_ref_content_hash.sql`,
-purely additive `ADD COLUMN IF NOT EXISTS`) — succeeded. Re-verified with a
-scoped `mdm run --limit 25` (`edgartools-prod-mdm-run`, avoids a full-universe
-run's cost) — succeeded, no more `UndefinedColumn` errors. Then ran
-`backfill-mdm-entity-ids` as a standalone one-off ECS task (same task
-definition/command the `BackfillMdmEntityIds` state in `daily_incremental`/
-`bootstrap` already uses, per `deploy-aws-application.sh`) to close the loop
-on the original adjacent symptom: resolved 5,752/5,752 pending `sec_company`
-rows (`mdm_entity_backfill_completed`, `remaining_by_table.sec_company: 0`),
-wrote them to the Snowflake landing export, and confirmed live —
-`EDGARTOOLS_PROD.EDGARTOOLS_SILVER_LANDING.SEC_COMPANY` shows 5,752 rows
-with `mdm_entity_id` populated after `LOAD_SILVER_LANDING_TASK`'s next
-5-minute cycle picked up the export. (The downstream collapsed
-`EDGARTOOLS_SILVER.SEC_COMPANY` dynamic table has its own separate 6-hour
-`target_lag`, pre-existing and unrelated to this fix, so it will reflect
-these rows on its own schedule — not re-verified in this pass, and not
-needed to confirm the mdm-ahead-of-silver pipeline itself works end-to-end.)
-
-**Lesson:** a same-day ORM/migration-file change with no forcing function to
-apply it in prod is a live landmine for every other consumer of that table —
-even work (like the relationship-derivation concurrency fix, and the
-mdm-ahead-of-silver feature, both unrelated to `7ffda2d7`) that was fully
-correct on its own can look broken purely because a sibling change's
-migration never ran. When `mdm run` (or any MDM Postgres consumer) fails
-with `UndefinedColumn`/`UndefinedTable`, check for an unapplied migration
-before assuming the failing code itself is at fault.
-
-**CORRECTION (2026-08-20): the "Fix" above never actually fixed anything —
-both of its verification steps were false signals.** Discovered while
-investigating a Stage 14 (`bronze_seed_silver_gold`) full-universe rerun
-that still failed at `MdmRun` with the identical `UndefinedColumn:
-mdm_source_ref.source_content_hash` error, a full day after this section
-was first marked resolved.
-
-1. Symptom: `mdm run --entity-type all` still failed with the exact same
-   error the original "Fix" claimed to have closed, reproduced twice more
-   (once inside Stage 14's real execution, once via a standalone scoped
-   `mdm run --limit 5` on the current `edgartools-prod-mdm-medium:178` task
-   def) — including immediately after re-running the exact same "Fix"
-   command and confirming it reported SUCCEEDED again.
-2. Why would the same "successful" fix keep failing to fix anything? Both
-   `edgartools-prod-mdm-migrate` (the "Fix" step) and
-   `edgartools-prod-mdm-run` (the "Re-verified" step) are individually-named
-   state machines that the state-machine-consolidation effort (ticket 02,
-   2026-08-10, `.scratch/state-machine-consolidation/issues/
-   02-decide-consolidation-mechanism-for-shared-mdm-tail.md`) had already
-   superseded with one consolidated `edgartools-prod-mdm-utility` machine
-   (`{"mode": "mdm_migrate"}` / `{"mode": "mdm_run"}`) nine days earlier —
-   but left `ACTIVE`, un-deleted, called "orphaned but harmless" in that
-   ticket's own text.
-3. Why does invoking an "orphaned but harmless" machine matter? Both
-   orphaned originals are frozen on task-def revisions from an image pushed
-   **2026-08-09** (`edgartools-prod-mdm-{small,medium}:149`) — a full day
-   *before* commit `7ffda2d7` even added `source_content_hash` to the
-   `MdmSourceRef` model or wrote migration 011. `edgartools-prod-mdm-utility`
-   was, by contrast, correctly re-registered onto the current `:178`
-   revision by every deploy since (confirmed live: `edgartools-prod-mdm-
-   small:178`/`edgartools-prod-mdm-medium:178` both resolve to the current
-   prod image digest, an ancestor of `85ab9e65`).
-4. Why did that make the original "Fix" a false positive? `mdm migrate`'s
-   stale 2026-08-09 image doesn't contain `011_source_ref_content_hash.sql`
-   in its migration sequence at all (that file didn't exist yet when the
-   image was built) — so the orphaned `edgartools-prod-mdm-migrate` ran a
-   shorter, older migration list, hit nothing new, and reported SUCCEEDED
-   truthfully — for a version of the schema that was never the live problem.
-   The real Postgres table was never touched.
-5. **Root cause of the false negative too:** the orphaned
-   `edgartools-prod-mdm-run`'s equally-stale image predates
-   `source_content_hash` being added to the ORM model, so its `SELECT`
-   against `mdm_source_ref` never asked for that column in the first place
-   — "no `UndefinedColumn` error" was not evidence the migration worked, it
-   was evidence the check never exercised the code path being tested. Two
-   independent stale-code false signals, both pointing the same wrong
-   direction, made the "resolved 2026-08-19" claim look doubly confirmed
-   when neither confirmation ever touched current code.
-
-**Real fix:** re-ran the migration via the actually-current
-`edgartools-prod-mdm-utility` machine (`{"mode": "mdm_migrate"}`) —
-confirmed via direct ECS log inspection that `mdm_source_ref.source_content_hash`
-is now queried, updated, and read back successfully with zero
-`UndefinedColumn` errors, on a scoped `mdm run --entity-type company --limit
-5` task run directly against the current `edgartools-prod-mdm-medium:178`
-task def (exit code 0). Migration 011 is now genuinely, durably applied.
-
-**Lesson (sharper than the first pass above):** "the fix succeeded" and "the
-verification found no error" are not equivalent to "the fix touched current
-code" — when a check can silently run against stale, superseded
-infrastructure and still report a clean result, a false positive and a
-false negative can both look identical to success.
-
-**Gap closed same-day (2026-08-20):** all 7 orphaned MDM Utility Machine
-originals — not just the two that bit this incident — were deleted live in
-prod (`.scratch/state-machine-consolidation/issues/
-05-delete-orphaned-mdm-utility-machine-originals.md`, resolved): zero
-running executions confirmed, fresh rollback snapshots captured, then
-`edgartools-prod-mdm-run`/`-backfill-relationships`/`-sync-graph`/
-`-verify-graph`/`-counts`/`-migrate`/`-check-connectivity` all deleted.
-`edgartools-prod-mdm-utility` (the correct, current consolidated machine)
-and every legitimate sibling confirmed untouched. This class of false
-signal can no longer recur through these 7 names — there is nothing left
-to accidentally invoke.
+**Lesson (the reason this entry stays load-bearing across the file):** "the fix succeeded"
+and "the verification found no error" are not equivalent to "the fix touched current
+code" — when a check can silently run against stale, superseded infrastructure and still
+report a clean result, a false positive and a false negative can both look identical to
+success.
 
 ## SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap 5-whys (resolved 2026-08-22)
 
-**Problem:** After finally getting `bronze_seed_silver_gold`'s "Stage 14" and the standalone "Stage 15"
-(`install.sh`'s two `gold-refresh`-adjacent stages) to a real `SUCCEEDED` state, `gold-verify-live`
-still reported 19 of 19 checked `EDGARTOOLS_GOLD` tables empty — including `COMPANY`, which should
-never be empty once `bronze_seed_silver_gold` has run.
+After Stage 14/15 reported `SUCCEEDED`, `gold-verify-live` still showed 19 of 19 gold
+tables empty (including `COMPANY`). **Root cause:** the dbt-gold-silver-rewiring migration
+pointed several gold models at `EDGARTOOLS_SILVER` directly, but `EDGARTOOLS_PROD_LOADER`
+(the role `REFRESH_AFTER_LOAD` runs as owner under) only ever had grants on
+`EDGARTOOLS_GOLD` — missing both `OPERATE` (to refresh) and, once that was granted,
+`SELECT` (on every referenced object) on `EDGARTOOLS_SILVER`'s 29 dynamic tables. Same
+"fixed in one place, never ported to the new dependency" shape as several other entries
+here. **Fix:** `infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql` grants both
+privileges additively; `install.sh`'s Stage 15 retry loop also now fires `EXECUTE TASK`
+manually each attempt instead of passively waiting on the widened 6-hour schedule (a
+separate, unrelated bug this incident's retry loop tripped over). Applied live: all 20 gold
+tables refreshed and confirmed via a fresh `gold-verify-live`.
 
-1. Symptom: `gold-verify-live` failing repeatedly, `COMPANY` row count 0, no error surfaced by the
-   Step Function or ECS task — everything upstream reported success.
-2. Why empty despite success upstream? `SNOWFLAKE_RUN_MANIFEST_TASK`'s `TASK_HISTORY` (checked
-   directly, not assumed) showed the task **firing exactly on its 360-minute schedule** but
-   **failing every single scheduled run**, going back to at least 2026-08-18:
-   `SQL compilation error: OPERATE privilege is required on all upstream Dynamic Tables of
-   'EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY' to perform a manual refresh.` The task's own `state`
-   stayed `started` throughout — a "started, on-schedule, silently failing every tick" task gives
-   no ambient signal that anything is wrong.
-3. Why the OPERATE gap? `COMPANY`'s dbt model (the `dbt-gold-silver-rewiring` map) now reads
-   directly from `EDGARTOOLS_SILVER.SEC_COMPANY` via `ref()`, not the old Python-populated
-   `EDGARTOOLS_SOURCE` mirror. `08_loader_role.sql` (the "Manifest-pipeline ownership" fix, above)
-   only ever granted `EDGARTOOLS_PROD_LOADER` — the role `REFRESH_AFTER_LOAD` runs
-   `EXECUTE AS OWNER` under — privileges on `EDGARTOOLS_GOLD`. It was never extended to cover
-   `EDGARTOOLS_SILVER`, so every one of `EDGARTOOLS_SILVER`'s 29 dynamic tables sat owned by
-   `EDGARTOOLS_PROD_DEPLOYER` with no grant to loader at all.
-4. Why did fixing OPERATE alone not fix it? A second, distinct gap surfaced immediately after:
-   `SQL access control error: ... Your primary role EDGARTOOLS_PROD_LOADER must have SELECT
-   granted on TABLE EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_COMPANY.` A dynamic table's query runs
-   as its *owner* — `OPERATE` lets the owner role refresh the object itself, but the owner role
-   separately needs `SELECT` on every object the query text references. Both grants were missing,
-   not just one.
-5. **Root cause:** the silver-layer migration (dbt-gold-silver-rewiring) introduced a new upstream
-   dependency for several gold models without anyone re-checking whether the loader role's existing
-   grant surface (scoped to `EDGARTOOLS_GOLD` only, from the earlier ownership incident) still
-   covered it — the same "fixed in one place, never ported to the newly-added dependency" shape as
-   several other entries in this file (`ShardedSilverReader._TABLES`, the `SeedUniverse` task-profile
-   hardcodes). Nothing enforced that a new cross-schema `ref()` edge also needed a matching grant.
-
-**Compounding, unrelated finding along the way:** `install.sh`'s own Stage 15 retry loop
-(20 attempts × 60s = ~20 minutes, built to ride out `REFRESH_AFTER_LOAD`'s per-table refresh time)
-can **never succeed** as originally written, independent of the grant bug above: the
-`ecs-cost-sizing` credit-consumption fix (see below) widened `SNOWFLAKE_RUN_MANIFEST_TASK`'s
-schedule `1 min → 15 min → 6 hours` on 2026-08-14, after Stage 15's retry loop was written, and
-nobody re-checked the two against each other. A purely passive 20-minute poll can only pass if it
-happens to land within minutes of a 6-hourly tick — everywhere else, it always exhausts and fails,
-even with zero underlying problem.
-
-**Fix:**
-- `infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql` (new) grants
-  `EDGARTOOLS_<ENV>_LOADER` `OPERATE` + `SELECT` on `ALL` + `FUTURE` dynamic tables in
-  `EDGARTOOLS_SILVER` — additive only, no `REVOKE CURRENT GRANTS` (per the manifest-pipeline-
-  ownership incident's own lesson). Wired into `install.sh` as a new "Snowflake: loader read
-  grants on silver" stage, immediately after the existing loader-role-ownership stage and before
-  any gold-refresh stage.
-- `install.sh`'s Stage 15 retry loop now fires `EXECUTE TASK EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK`
-  manually on every attempt (a call against an empty manifest stream just `SKIP`s harmlessly),
-  decoupling this stage from the 6-hour schedule without changing the schedule itself — the
-  credit-economy decision stays intact.
-- Applied live to `PRJEDJU-QJB05385`: both grants applied, `REFRESH_AFTER_LOAD` re-run directly
-  for the stuck `gold-refresh-stage15-1787432984` manifest (its `LOAD_EXPORTS_FOR_RUN` half had
-  already succeeded and consumed the stream; only the refresh half was stuck) — all 20 gold tables
-  refreshed successfully. `COMPANY` (5,752 rows), `FILING_ACTIVITY`/`FILING_DETAIL` (474,897 rows
-  each), `OWNERSHIP_ACTIVITY`/`OWNERSHIP_HOLDINGS` (3 rows each) now populated and confirmed via a
-  fresh `gold-verify-live`.
-
-**Not fixed here, separately noted:** `gold-verify-live` still shows 14 tables empty after this
-fix. Checked each: most (`FINANCIAL_FACTS`, `SEC_ADV_OFFICE`-derived tables, etc.) have genuinely
-empty upstream silver data — the same, already-tracked "6 empty gold tables" gap from the
-`snowflake-account-cutover` map's ticket 08 (awaiting task #35's full-universe fundamentals
-backfill), just wider in scope than that ticket originally found. One new, real gap:
-`TICKER_REFERENCE`'s dbt model was repointed (same `dbt-gold-silver-rewiring` migration) to read
-from `EDGARTOOLS_SILVER.SEC_COMPANY_TICKER`, which has **zero rows** — even though the old,
-now-orphaned `EDGARTOOLS_SOURCE.TICKER_REFERENCE` mirror still has 10,398 real rows. The silver
-ingestion for company tickers appears to have never been wired up post-migration. Not investigated
-further this session — needs its own ticket before fixing.
-
-**Resolved 2026-08-22, as a side effect of the seed-universe-narrow-hydrate map's ticket 06** (a
-publish/merge-side streaming-I/O fix, unrelated in purpose to this gap): the real root cause was
-that `seed-universe` — the only writer of `sec_company_ticker` — had never successfully completed
-against the rebuilt Snowflake account at all; every attempt OOM'd (see that map for the two-part
-fix: table-scoped merges, then streaming file transfer). Once `seed-universe` finally ran clean,
-`sec_company_ticker` populated (20,806 rows) and its Snowflake landing export wrote
-`ticker_reference: 10403` for `LOAD_SILVER_LANDING_TASK`'s next cycle to pick up — the silver
-ingestion path was correctly wired all along; it just never had a chance to run.
-
-**Also still orphaned, found while wiring this fix (not fixed here):** `infra/snowflake/sql/bootstrap/
-16_silver_landing_deployer_read.sql` and `17_mdm_export_deployer_read.sql` are committed, real,
-non-dead fixes (each carries its own root-cause header) but are referenced by **neither**
-`install.sh` nor `deploy-snowflake-stack.sh` — confirmed via a plain grep, zero hits for either
-filename in either script. Both predate this fix and are unrelated to it; noted here so a future
-session doesn't have to rediscover the gap from scratch.
+Two further gaps surfaced and were separately resolved/tracked:
+- `TICKER_REFERENCE` showed 0 rows because `seed-universe` (the only writer of
+  `sec_company_ticker`) had never completed against the rebuilt Snowflake account — every
+  attempt OOM'd. Resolved 2026-08-22 as a side effect of the seed-universe-narrow-hydrate
+  map's Ticket 06 (streaming-I/O fix); once `seed-universe` ran clean, ticker data
+  populated normally — the silver ingestion path itself was fine all along.
+- `infra/snowflake/sql/bootstrap/16_silver_landing_deployer_read.sql` and
+  `17_mdm_export_deployer_read.sql` are committed, real fixes but referenced by neither
+  `install.sh` nor `deploy-snowflake-stack.sh` — still orphaned, not fixed.
 
 ## Ticket 20 Source Family Registry — Postgres-only activation/rerun bugs 5-whys (fixed, not yet deployed, 2026-08-24)
 
@@ -1612,240 +1357,76 @@ more severe platform behavior it surfaced.
 
 ## snowflake_write RESET ACCESS re-grant 5-whys (fixed, deployed to prod 2026-08-26)
 
-**Problem:** Deploying Ticket 30's `snowflake_write` REVOKE fix (change-propagation map — see
-"Manifest-pipeline ownership" and the Ticket 20 entry above for the sibling incidents this one
-continues) via `bootstrap-prod-mdm.sh` completed with `mdm migrate` reporting success and no
-errors, but a live `has_table_privilege` sweep immediately after showed `application` and
-`snowflake_write` **still** fully leaking DML access on all 11 fenced acquisition-ledger/registry
-objects — contradicting an error-free migration run.
+Deploying Ticket 30's `snowflake_write` REVOKE fix via `bootstrap-prod-mdm.sh` reported success,
+but a live `has_table_privilege` sweep immediately after showed `application`/`snowflake_write`
+still fully leaking DML access on all 11 fenced objects. **Root cause:** Snowflake-hosted Postgres
+re-grants `snowflake_write`'s baseline DML access as a platform side effect of resetting *either*
+role's access via `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` — a previously
+undocumented behavior — and `bootstrap-prod-mdm.sh`'s normal run order applies the REVOKE via
+`mdm migrate` *then* calls `RESET ACCESS FOR 'application'` later in the same script, silently
+reopening the fence on every normal run. Migration 014 (Ticket 20) had the identical gap. **Fix:**
+`bootstrap-prod-mdm.sh` now re-runs `mdm migrate` as its true last database-mutating step, after
+both RESET ACCESS calls; `014_source_registry.sql` got the same REVOKE block 013 has. Verified:
+zero leaks across all 11 objects × both roles × SELECT/INSERT/UPDATE/DELETE.
 
-1. Symptom: `has_table_privilege('snowflake_write', 'source_fetch_decision', 'SELECT')` returned
-   `true` right after a `mdm migrate` run whose own code path (confirmed by direct inspection and
-   by calling `_apply_acquisition_ledger_migration` as a raw Python import) unconditionally issues
-   `REVOKE ALL PRIVILEGES ... FROM snowflake_write` on that exact table when `may_manage` is true
-   (confirmed true: `pg_has_role('snowflake_admin', 'edgartools_acquisition_owner', 'MEMBER')`).
-2. Why does a successful REVOKE not show as revoked moments later? Calling
-   `_apply_acquisition_ledger_migration(engine)` directly (bypassing the `mdm migrate` CLI
-   entirely) revoked it immediately and the change held — proving the REVOKE mechanism itself is
-   correct. The CLI path and the direct-call path use the identical source file and function; the
-   only structural difference between the two test runs was how many
-   `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` calls happened around each one.
-3. Why would RESET ACCESS matter? Isolated with a minimal repro: REVOKE, verify revoked (`false`),
-   call `RESET ACCESS FOR 'snowflake_admin'` again with **zero other writes** in between, re-verify
-   — the privilege came back (`true`). Repeated for `RESET ACCESS FOR 'application'` with the same
-   result. **Root cause: Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML
-   access to these objects as a platform side effect of resetting *either* role's access** — a
-   previously-undocumented behavior, distinct from and more severe than the standing
-   `pg_default_acl` rule Ticket 30's original investigation already found (that rule explains why
-   *new* tables get the grant; this explains why an *already-revoked* table's grant comes back).
-4. Why did this make the fix ineffective in practice, not just in this one test? `bootstrap-prod-mdm.sh`'s
-   normal run order is `mdm migrate` (applies the REVOKE) *then* `RESET ACCESS FOR 'application'`
-   (part of the very same script, run on every single invocation) — so the script's own final step
-   silently reopened the fence on every normal run, not just during ad hoc diagnostics.
-5. **Root cause, restated:** the fix assumed "REVOKE persists once applied," which holds for plain
-   Postgres but not for this platform's managed-role reconciliation, and nothing in the deploy
-   script re-verified the end state after its own later steps ran.
+**Update (Ticket 44, 2026-08-26):** the deferred monitoring follow-up (`mdm check-fence`,
+`edgar_warehouse/mdm/fence_monitor.py`, discovers the fenced-table set live rather than
+hardcoding it) is now built and live-verified — and immediately found a **third** instance of
+this exact gap on `source_evidence_conflict` (migration 015), fixed the same way.
 
-**Compounding finding, same investigation:** migration 014 (`014_source_registry.sql`, Ticket 20)
-had the identical original gap 013 once had — its own `application`-only REVOKE never got a
-`snowflake_write` counterpart when it was written, so its two tables leaked via the same inherited-membership
-path documented in Ticket 30's original writeup. Fixed the same way, mirroring 013's block.
-
-**Fix:** `bootstrap-prod-mdm.sh` gained a new step — a fresh `snowflake_admin` rotation followed by
-re-running `mdm migrate` (idempotent) — inserted after the `application` RESET ACCESS + secret
-write and before the optional Snowflake-secret population, so it becomes the script's true last
-database-mutating operation and both RESET ACCESS calls' side effects get corrected before the
-script exits. `014_source_registry.sql` gained the same `snowflake_write` REVOKE block 013 has.
-Live state after both fixes, verified via a full `has_table_privilege` sweep across all 11 objects
-× both roles × SELECT/INSERT/UPDATE/DELETE: zero leaks.
-
-**Open, unresolved risk:** this fix only protects runs that go through `bootstrap-prod-mdm.sh`
-end-to-end. Any future credential rotation of either role — including one run outside this script,
-e.g. manual incident response — reopens the fence until the next `mdm migrate` run, and nothing
-currently monitors for that drift. A periodic live `has_table_privilege` check, alerting if either
-role regains access, is the natural follow-up; not yet built. See
-[Ticket 30](.scratch/change-propagation/issues/30-fence-application-from-acquisition-tables-under-snowflake-write.md)'s
-"Bullet 4 resolved" section for full detail.
-
-**Process note:** while diagnosing this live, a `RESET ACCESS FOR 'application'` command's raw
-output was briefly piped through `tail` into visible output instead of straight into a
-credential-consuming script, exposing the new plaintext password in that session's transcript.
-Caught immediately; invalidated by rotating `application` again through the correct piped pattern
-before any further action, with the AWS secret rewritten to match. A reminder that even a "just
-checking it ran" command against this script's output needs the same discipline as every other
-credential-handling step — there is no safe shortcut for a quick manual peek.
-
-**Update (2026-08-26, Ticket 44): the monitoring follow-up this incident's own writeup deferred is
-now built, live-verified, and already earned its keep.** `mdm check-fence`
-(`edgar_warehouse/mdm/fence_monitor.py`) discovers the fenced-table set live from
-`pg_class`/`pg_roles` rather than hardcoding the 11 objects known at the time — and that design
-choice mattered immediately: a live run against prod found a **third** instance of this exact gap,
-on `source_evidence_conflict` (migration 015, Ticket 25's evidence-conflict/repair table, owned by
-`edgartools_acquisition_owner` same as 013's tables) — it had the identical missing
-`snowflake_write` REVOKE block 013 had before this fix and 014 had before its own sibling fix,
-never independently noticed until the monitor's live discovery surfaced it. Fixed the same way.
-Confirmed live through the ordinary `application` DSN (piped directly from the existing
-`edgartools-prod/mdm/postgres_dsn` secret, no elevated credential) that the check runs clean with
-zero errors, closing this file's own "not yet confirmed" note on that exact question. Full
-writeup: [Ticket 44](.scratch/change-propagation/issues/44-monitor-snowflake-write-privilege-drift.md).
-
-**Second process note, same session, same mistake repeated:** verifying the point directly above
-required reading the `application` DSN secret, and the very first attempt used a standalone
-`aws secretsmanager get-secret-value ... | head -5` to debug a JSON-parsing failure — printing the
-live plaintext password again, the identical failure mode as the note above, caught and fixed the
-same way (immediate re-rotation through the safe piped pattern, secret rewritten). Two occurrences
-of the exact same mistake in one session, both during ad hoc "let me just check this" commands
-written outside the established safe pattern rather than through it — the lesson from the first
-instance evidently wasn't sufficient on its own. **Concrete rule going forward, not just a
-reminder:** never pipe a `snow sql ... RESET ACCESS` or `aws secretsmanager get-secret-value`
-command's output to `head`/`tail`/`cat`/a bare variable capture for ANY reason, including debugging
-a downstream parsing error — always pipe directly into the credential-consuming script and add
-debug output (e.g. `type(pw)`, length, whether a key exists) *inside* that script instead, since
-that's the only way to see what's needed without the credential ever passing through the
-transcript.
+**Process note (the same mistake, twice in one session):** diagnosing this live, a `RESET ACCESS
+FOR 'application'` command's raw output was briefly piped through `tail` into visible output
+instead of straight into a credential-consuming script, exposing the plaintext password in the
+transcript — caught immediately, fixed by re-rotating `application` through the correct piped
+pattern. The identical mistake recurred later the same session via a standalone `aws
+secretsmanager get-secret-value ... | head -5` used to debug a JSON-parsing failure — printing
+the live plaintext password again. **Concrete rule going forward, not just a reminder:** never
+pipe a `snow sql ... RESET ACCESS` or `aws secretsmanager get-secret-value` command's output to
+`head`/`tail`/`cat`/a bare variable capture for ANY reason, including debugging a downstream
+parsing error — always pipe directly into the credential-consuming script and add debug output
+(e.g. `type(pw)`, length, whether a key exists) *inside* that script instead, since that's the
+only way to see what's needed without the credential ever passing through the transcript.
 
 ## LOAD_SILVER_LANDING_TASK credit-burn 5-whys (resolved 2026-08-25, widened further 2026-08-26)
 
-**Problem:** `EDGARTOOLS_PROD_REFRESH_WH` went from ~$0/day to ~9 credits/day, sustained every
-day, starting 2026-08-18 — confirmed via `SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY`
-and `METERING_DAILY_HISTORY` (this one warehouse is essentially all of the account's
-`WAREHOUSE_METERING` cost on every affected day).
+`EDGARTOOLS_PROD_REFRESH_WH` jumped from ~$0/day to ~9 credits/day starting 2026-08-18.
+**Root cause:** `LOAD_SILVER_LANDING_TASK` shipped with a "tune once real volume exists"
+5-minute cadence (288 resumes/day) and nobody circled back — the same
+poll-interval-too-tight-for-warehouse-resume-billing shape already diagnosed and fixed for
+`SNOWFLAKE_RUN_MANIFEST_TASK` three weeks earlier, never ported to this sibling task. **Fix:**
+schedule widened `5 MIN → 60 MIN → 180 MIN` (8 resumes/day, ~0.27 credits/day extrapolated,
+not yet independently re-measured at this cadence) — see
+[Ticket 02](.scratch/silver-landing-task-cost/issues/02-widen-load-silver-landing-task-to-0.3-0.5-credit-day.md).
+Nothing downstream depends on landing's write latency, so the wider cadence doesn't block any
+consumer (each refreshes on its own `TARGET_LAG`).
 
-1. Symptom: `EDGARTOOLS_PROD_REFRESH_WH` (X-Small, `auto_suspend=60`) burns ~9 credits/day, every
-   day, with no obvious backfill or manual work running.
-2. Why? `QUERY_HISTORY` on that warehouse shows 58,971 `COPY INTO` statements and 1,908
-   `CALL LOAD_SILVER_LANDING()` calls over 7 days — continuous, not bursty.
-3. Why so many? `TASK_HISTORY` shows `LOAD_SILVER_LANDING_TASK` firing every 5 minutes, 288
-   times/day, every day since it was created (2026-08-18 14:17), each firing running one
-   `COPY INTO` per silver-landing table (~30 tables,
-   `infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql`'s `LOAD_SILVER_LANDING()`
-   procedure) regardless of whether new Parquet files actually landed since the last run.
-4. Why does that cost real credits when each run only does ~20-30s of real work? Snowflake bills
-   a per-resume minimum on top of actual compute time; with the warehouse suspending between
-   5-minute ticks (idle time between runs exceeds `auto_suspend=60`), nearly every one of the 288
-   daily firings pays that minimum on top of its real work, even on ticks with nothing new to
-   load.
-5. **Root cause:** `LOAD_SILVER_LANDING_TASK` was shipped with an explicitly-labeled "starting
-   default... tune once real volume exists" 5-minute cadence (Ticket 07's own comment, silver-
-   snowflake-migration map) and nobody circled back to tune it — the exact same
-   poll-interval-too-tight-for-warehouse-resume-billing shape this file's own "ecs-cost-sizing"
-   finding had already diagnosed and fixed for `SNOWFLAKE_RUN_MANIFEST_TASK` (1 MIN → 15 MIN →
-   6 HOUR) three weeks earlier. That fix was never ported to this sibling task, created after it
-   — the same "sibling path silently diverged" pattern this file documents repeatedly elsewhere
-   (`ShardedSilverReader._TABLES`, shard-publish, relationship-derivation, the silver-loader
-   OPERATE+SELECT gap above).
-
-**Fix:** `LOAD_SILVER_LANDING_TASK`'s `SCHEDULE` widened `5 MINUTE → 60 MINUTE` in
-`infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql` (24 resumes/day instead of 288),
-applied live to prod (`SHOW TASKS` confirms `schedule: 60 MINUTE`, `state: started`). Sized to
-land under an explicit **≤1 credit/day** ceiling for this task, extrapolated from the 5-minute
-cadence's own observed ~9 credits/day at 288 resumes/day.
-
-**Re-verified 2026-08-26 (Ticket 02) and widened further:** the 60-minute cadence's real cost was
-independently measured against a full clean day of `WAREHOUSE_METERING_HISTORY` (the fix landed
-mid-morning on 08-25, so that calendar day's raw total was a misleading transition-day mix of old
-and new cadence) — a steady **0.031-0.042 credits/hour**, extrapolating to **~0.80 credits/day**,
-comfortably confirming the ≤1 credit/day target. The operator then asked to bring cost down
-further, into an explicit 0.3-0.5 credit/day band; presented with concrete options (120 MINUTE
-≈0.40/day, 180 MINUTE ≈0.27/day, a stream-gated conditional task mirroring
-`SNOWFLAKE_RUN_MANIFEST_TASK`'s own `WHEN SYSTEM$STREAM_HAS_DATA(...)` pattern, or a custom
-interval), the operator chose **180 MINUTE** (8 resumes/day) — applied live to prod, `SHOW TASKS`
-confirms `schedule: 180 MINUTE`, `state: started`. Extrapolated cost ~0.27 credits/day, not yet
-independently re-measured at this cadence — see
-[Ticket 02](.scratch/silver-landing-task-cost/issues/02-widen-load-silver-landing-task-to-0.3-0.5-credit-day.md)
-for the full write-up and that open re-verification item.
-
-`ALTER TASK ... SET SCHEDULE` against a `STARTED` root task fails closed (`"Unable to update
-graph with root task ... since that root task is not suspended"`, confirmed live) — the script
-now `SUSPEND`s before altering the schedule and `RESUME`s after, both idempotent no-ops if
-already in that state, so a re-run is safe regardless of the task's current state. Nothing
-downstream depends on landing's write latency (Ticket 07's own answer, unchanged by this fix) —
-a multi-hour ceiling on data freshness here doesn't block any consumer, since every consumer
-refreshes on its own `TARGET_LAG`, not on landing's write time.
-
-**For future builds — read this before adding any new Snowflake `TASK`:** a fixed-interval poll
-task pays a per-resume minimum charge close to every tick unless the interval is wide enough for
-the warehouse to have been suspended for a meaningful stretch beforehand. Before shipping a new
-scheduled task (or accepting a "5 MINUTE, tune later" placeholder default the way this one was
-shipped), size the interval — or add a data-presence gate so idle ticks skip the resume
-entirely (e.g. a stream-gated conditional task via `WHEN SYSTEM$STREAM_HAS_DATA(...)`, already
-live for the sibling `SNOWFLAKE_RUN_MANIFEST_TASK` but still not built for this task, since a
-fixed-interval widening met every credit target asked of it so far) — against an explicit credit
-budget up front, the same way this fix had to retrofit one after the fact.
-Full write-up: `.scratch/silver-landing-task-cost/issues/01-cap-load-silver-landing-task-credit-spend.md`,
-`.scratch/silver-landing-task-cost/issues/02-widen-load-silver-landing-task-to-0.3-0.5-credit-day.md`.
+**For future builds — read before adding any new Snowflake `TASK`:** a fixed-interval poll task
+pays a per-resume minimum charge close to every tick unless the interval is wide enough for the
+warehouse to have suspended meaningfully beforehand. Size the interval against an explicit
+credit budget up front (or add a data-presence gate, e.g. `WHEN SYSTEM$STREAM_HAS_DATA(...)`)
+instead of shipping a "tune later" placeholder default.
 
 ## Migration 010 DuckDB commit-conflict 5-whys (resolved 2026-08-27)
 
-**Problem:** A live-prod `daily-incremental` run (kicked off to verify the change-propagation
-map's Ticket 46) crashed before any of Ticket 46's own code ran at all — the ECS task exited 1
-while merely opening the local Silver DuckDB, hydrated fresh from prod's canonical
-`silver.duckdb` (1.59GB). `_duckdb.TransactionException: TransactionContext Error: Failed to
-commit: Attempting to modify table sec_financial_fact but another transaction has altered this
-table`, raised from `_apply_schema_migration`'s own `self._conn.execute("COMMIT")`.
-
-1. Symptom: the exception traces through `_ensure_schema_evolution` applying migration
-   `010_company_facts_retirement_columns` (`_add_company_facts_retirement_columns`, Ticket 33's
-   own migration adding `valid_from`/`valid_to`/`is_current` to `sec_financial_fact`/
-   `sec_accounting_flag`) — not anything from this session's Ticket 46 work.
-2. Why did the COMMIT fail claiming "another transaction" touched the table, when only one
-   transaction (this process's own explicit `BEGIN TRANSACTION`) ever ran? Built a tight,
-   deterministic repro (`SilverDatabase` opened against a hand-built pre-Ticket-33 store) and
-   isolated it via direct pairwise testing of the migration's own ALTER statements: DuckDB
-   1.5.2's `ALTER TABLE ... ADD COLUMN ... DEFAULT <expr>` against a table with **existing rows**
-   triggers an internal row-backfill rewrite that bumps the table's version — confirmed via a
-   1-row repro (crashes) vs. a 0-row repro (succeeds cleanly), deterministic either way.
-3. Why does a version bump break the commit? A **second** `ALTER TABLE` statement against that
-   same table, inside the **same explicit transaction**, then hits DuckDB's commit-time conflict
-   check against that bump — reproduced directly: `valid_from DEFAULT NOW()` then `valid_to`
-   (no default) on the same table, same transaction → crash; either statement alone → fine;
-   without the explicit `BEGIN TRANSACTION` wrapper (autocommit per statement) → fine. Confirmed
-   this isn't fixable by reordering: two default-bearing columns (`valid_from`, `is_current`)
-   both need backfill, and only one statement can be last regardless of order — every ordering
-   with 2+ default-bearing `ADD COLUMN`s on one table in one transaction crashes.
-4. Why did migration 010 hit this specific shape? It issues exactly 3 `ADD COLUMN` statements per
-   table (two default-bearing: `valid_from`, `is_current`), on two tables, inside
-   `_apply_schema_migration`'s shared explicit-transaction wrapper — the same wrapper every other
-   migration in `_schema_migrations()` also uses.
-5. **Root cause:** no test ever exercised migration 010 against a **non-empty** pre-migration
-   table — every existing test in `test_silver_store_schema_migration.py` either opens a fresh
-   store (already has the columns via `_DDL`, migration no-ops) or predates Ticket 33 entirely
-   (migration 010 not yet defined). And daily-incremental itself had not run successfully in prod
-   in 3+ weeks (confirmed: last `SUCCEEDED` execution was 2026-08-04; zero active EventBridge
-   rules for it at all) — so this Ticket 46 verification run was the **first real attempt** to
-   apply migration 010 against prod's actual, populated `sec_financial_fact`. Checked all 6 other
-   plain-ALTER migrations (003/004/005/006/008/009) for the same shape (2+ `ADD COLUMN`
-   statements on one table, at least one with a `DEFAULT`, inside the shared transaction) — none
-   of the others have it (005/006/009 loop over multiple tables/columns but never combine a
-   default-bearing `ADD COLUMN` with a second statement on the *same* table); migration 010 is
-   the only one affected among everything currently shipped.
-
-**Resolution:** `_schema_migrations()`'s tuples gained a 4th field, `requires_transaction: bool`
-(`True` for every existing migration, preserving current behavior exactly); migration 010 is the
-one entry marked `False`. `_apply_schema_migration` now only wraps `migrate()` in
-`BEGIN TRANSACTION`/`COMMIT`/`ROLLBACK` when `requires_transaction` is `True` — when `False`, each
-statement `migrate()` issues autocommits on its own, and `_record_schema_migration` runs as its
-own trivial autocommitted `INSERT`. Safe specifically for migration 010 because every statement it
-issues is `ADD COLUMN IF NOT EXISTS` — already idempotent under interrupt-and-retry. **Not** applied
-globally: `_backup_and_recreate_table`-based migrations (001/002/007) genuinely need the shared
-transactional envelope — their `RENAME` → `CREATE TABLE IF NOT EXISTS` → `INSERT...SELECT`
-sequence is not safely retriable without it (a crash mid-sequence would leave the renamed-away
-backup table orphaned and the main table's own retry-detection query finding nothing to recreate,
-since it checks the live table's current PK, and there's no live table to check).
-
-New regression test, `test_migration_010_adds_retirement_columns_to_populated_tables`
-(`tests/unit/test_silver_store_schema_migration.py`) — builds a pre-Ticket-33 store with ≥1
-row in each affected table (the exact shape no prior test covered), confirmed to reproduce the
-crash verbatim before the fix (reverted the fix locally, reran, watched it fail with the identical
-`_duckdb.TransactionException`) and pass after. Full repo suite green after the fix.
-
-**Lesson:** a schema migration's own unit tests can all pass while still never exercising the one
-precondition (a genuinely populated table) that matters in production — an empty-table-only test
-suite for a migration is unproven for exactly the thing migrations exist to do: evolve real data.
-Same class of gap as the "MDM Postgres migration-011 schema drift" and "Ticket 20 Source Family
-Registry" entries above (SQLite can't model Postgres's real GRANT/role semantics; here, an empty
-DuckDB table can't model DuckDB's real ADD-COLUMN-with-DEFAULT row-rewrite semantics) — a real,
-populated fixture is not optional coverage for anything that touches existing rows.
+A live-prod `daily-incremental` run crashed opening the local Silver DuckDB:
+`TransactionException: Failed to commit: Attempting to modify table sec_financial_fact but
+another transaction has altered this table`, from migration 010
+(`_add_company_facts_retirement_columns`, Ticket 33). **Root cause:** DuckDB 1.5.2's `ALTER
+TABLE ... ADD COLUMN ... DEFAULT <expr>` against a table with existing rows triggers an
+internal row-backfill that bumps the table's version — a **second** `ADD COLUMN` statement
+in the same explicit transaction then hits DuckDB's commit-time conflict check against that
+bump. Migration 010 issues two default-bearing `ADD COLUMN`s on the same table inside the
+shared transactional wrapper every migration uses, and no test had ever exercised it against
+a non-empty pre-migration table (daily-incremental hadn't run successfully in prod in 3+
+weeks, so this was the first real attempt at scale). **Fix:** `_schema_migrations()` tuples
+gained a `requires_transaction: bool` field (defaults `True`); migration 010 is marked
+`False` so its statements autocommit individually instead of sharing one transaction — safe
+because every statement is `ADD COLUMN IF NOT EXISTS`, already idempotent under
+interrupt-and-retry. Not applied globally: the `_backup_and_recreate_table`-based migrations
+(001/002/007) genuinely need the shared transactional envelope. **Lesson:** a migration's own
+unit tests can all pass while never exercising the one precondition (a genuinely populated
+table) that matters in production — an empty-table-only test suite is unproven for exactly
+the thing migrations exist to do.
 
 ## sec_financial_fact retirement publish-conflict 5-whys (partially resolved 2026-08-27)
 
@@ -1917,381 +1498,85 @@ not accidentally exempted alongside `valid_from`). Full repo suite green.
 
 ## daily_incremental multi-hour runtime after Bookkeeping Postgres cutover 5-whys (CORRECTED — not one-time, see bottom, 2026-09-01)
 
-**Problem:** A `daily_incremental` execution
-(`daily-incremental-ticket15-postfix-1788270018`) ran 6+ hours in
-`RunWarehouseTask` (one 3.5h attempt that OOM'd at 8192MB, then a retry
-still running past 5h total) — far past any prior `daily_incremental`
-duration on record in this file, with no crash-loop or retry-exhaustion
-signal, just very slow.
-
-1. Symptom: `RunWarehouseTask` running far longer than a normal ~7-day
-   incremental window should take, no error, no repeated retries — just
-   one very long-running task.
-2. Why so slow? Live CloudWatch logs showed `silver_apply_progress` events
-   with a fixed `cik_count: 12068` denominator — i.e. this run touched
-   essentially the **entire tracked company universe**, not a bounded
-   7-day delta.
-3. Why would a daily incremental touch the whole universe? `sec_company_
-   sync_state` (the table `get_tracked_ciks`/tracking-status filtering
-   reads to scope a run) now lives in the Bookkeeping Postgres store
-   (DuckDB Retirement Cutover Ticket 02/04), not DuckDB.
-4. Why would that make every CIK eligible? Ticket 02's own "Operator-
-   accepted cost" section: the Bookkeeping Postgres store was provisioned
-   **empty**, not migrated from existing DuckDB state, by explicit
-   operator decision — every CIK's real tracking status (`active`,
-   `bootstrap_completed_at`, etc.) was wiped, so every CIK reverted to
-   looking pending/eligible again.
-5. **Root cause:** this was the **first `daily_incremental` execution run
-   against the live, freshly-provisioned Bookkeeping Postgres store** —
-   exactly the reactivation hazard Ticket 02 flagged in advance ("every
-   currently paused/completed CIK reverts to pending and becomes eligible
-   for full re-bootstrap on the first post-cutover run"). Not a hang, not
-   a regression, not the accession-expansion bug from the earlier 5-whys
-   above (that fix, `--recurring-index-lookback-days 7`, was correctly in
-   effect this whole run) — a real, expected, **one-time** full-universe
-   pass triggered by the cutover's own documented empty-start design.
-
-**Resolution / what to check first for a slow `daily_incremental` (or
-`bootstrap`) run going forward:** before assuming a hang or regression,
-check live CloudWatch logs for `silver_apply_progress`'s `cik_count` field
-(or equivalent per-run CIK-count logging). A `cik_count` near the size of
-the full tracked universe on what should be a small incremental run is the
-signature of this exact cause — a bookkeeping-store (or any tracking-state
-store) reset, not a stuck task. This specific instance should self-resolve
-once this one run completes: `sec_company_sync_state` will hold real
-per-CIK status again, and the next `daily_incremental` run should return
-to its normal bounded scope. If a future cutover of any tracking-state
-store is done with an empty start again, expect and budget for one
-full-universe-scale run immediately afterward — this is not a one-off
-peculiarity of the Bookkeeping Postgres cutover, it is inherent to any
-"start empty, let CIKs reactivate naturally" migration design.
-
-**CORRECTION (2026-09-01, same day): the "one-time, expected" conclusion
-above was wrong** — found while investigating a *separate* 16-minute silent
-stall in an unrelated diagnostic task, which led to discovering the real
-root cause. `edgar_warehouse/bookkeeping/store.py`'s `BookkeepingStore`
-**never calls `self._session.commit()` anywhere** across any of its 31
-write methods (`upsert_daily_index_checkpoint`, `upsert_company_sync_state`,
-`start_sync_run`/`complete_sync_run`, `start_pipeline_run`/
-`complete_pipeline_run`, etc.) — confirmed via `grep -n commit
-edgar_warehouse/bookkeeping/store.py` returning zero matches. SQLAlchemy's
-`Session` never auto-commits, so every write is silently rolled back by
-Postgres when the owning process exits, regardless of whether the call site
-logged `"status": "succeeded"`. Confirmed live, twice: wrote a checkpoint
-via one ECS task (logged success), then two independent later reads (a
-different task, and a fresh rerun of the identical command) both failed to
-see it.
-
-This means the reactivation was never one-time — **every**
-`daily_incremental`/`bootstrap` run has been losing its own tracking state
-on every single run since the Bookkeeping Postgres cutover, because no run
-has ever durably recorded that it processed anything. The "self-resolve
-once this one run completes" expectation above never held. Full root
-cause, fix (a `BookkeepingStore.commit()` method called at
-`_execute_warehouse_bronze_capture`'s two real conclusion points, following
-MDM's own explicit-commit-at-caller convention rather than introducing
-engine-level autocommit), and tests:
-`.scratch/bronze-capture-oom/issues/03-bookkeeping-store-never-commits-any-write.md`.
-Deployed to prod 2026-09-01. **Live-verified 2026-09-02**: a fresh
-`daily_incremental` execution
-(`daily-incremental-stresstest-zero-updates-1788383101`) correctly
-reported `rows_written: 0`/`rows_skipped: 9457` on `silver_apply_progress`
-for the full tracked universe — confirming checkpoints from an earlier run
-now genuinely survive a process restart, closing the gap this section's
-own prior "not yet live-verified" note left open.
-
-**Lesson:** "logged as succeeded, no error" is not evidence a database
-write is durable — the same class of gap as this file's other
-transaction/session-commit incidents (see the Ticket 20 Source Family
-Registry and migration-011 entries above), just on a store that had never
-been exercised across a real process-restart boundary before this
-investigation.
+A `daily_incremental` execution ran 6+ hours instead of a bounded ~7-day window — live
+CloudWatch logs showed `silver_apply_progress` with `cik_count: 12068`, i.e. it touched the
+entire tracked universe. First diagnosis: the Bookkeeping Postgres cutover (Ticket 02/04)
+provisioned the tracking-state store **empty** by explicit operator decision, so every CIK
+looked pending/eligible again — flagged in advance as an expected one-time reactivation
+cost. **CORRECTION (same day):** that "one-time, expected" conclusion was wrong.
+`edgar_warehouse/bookkeeping/store.py`'s `BookkeepingStore` never called
+`self._session.commit()` anywhere across any of its 31 write methods — SQLAlchemy's
+`Session` never auto-commits, so every write was silently rolled back on process exit
+regardless of a logged "succeeded" status. This meant reactivation was never one-time:
+every run since the cutover lost its own tracking state, because no run had ever durably
+recorded that it processed anything. **Fix:** a `BookkeepingStore.commit()` method called
+at `_execute_warehouse_bronze_capture`'s two real conclusion points (MDM's own
+explicit-commit-at-caller convention). Deployed 2026-09-01, live-verified 2026-09-02 — a
+fresh run correctly showed `rows_written: 0`/`rows_skipped: 9457` for the full universe,
+confirming checkpoints now survive a process restart. **Lesson:** "logged as succeeded, no
+error" is not evidence a database write is durable — the same class of gap as the Ticket 20
+Source Family Registry and migration-011 entries, on a store never exercised across a real
+process-restart boundary before this investigation.
 
 ## Bookkeeping checkpoint could outrun silver publish on crash 5-whys (fixed 2026-09-02)
 
-**Problem:** found immediately after the commit fix above landed, while
-scoping unrelated work: the fix that made `BookkeepingStore` commits
-durable at all had, as a side effect, reopened a second, distinct
-data-loss window that could never occur before that fix (when nothing
-ever committed, nothing could be *prematurely* durable either).
-
-1. Symptom: `_execute_warehouse_bronze_capture`
-   (`warehouse_orchestrator.py`) called `bookkeeping.commit()` immediately
-   after `complete_sync_run`/`complete_pipeline_run`, but **before**
-   `_publish_silver_database_with_retry` (the actual silver merge/publish)
-   ran. Confirmed via direct code reading, not assumption.
-2. Why does commit-before-publish matter? `bookkeeping.commit()` durably
-   commits the *entire* shared session — every write issued anywhere in
-   the run, including any `upsert_source_checkpoint`/
-   `upsert_daily_index_checkpoint`/`upsert_company_sync_state` calls made
-   earlier (e.g. inside `_apply_submission_snapshot_to_silver`), not just
-   the two status rows the call site appears to be committing.
-3. Why is that unsafe? If silver publish then fails (a real exception, or
-   a hard OOM kill before it's ever reached — this exact task's own
-   documented shape, see "Gold-build memory / daily_incremental OOM
-   5-whys" above), a checkpoint already durably claims "content captured"
-   even though the content never reached canonical Silver.
-4. Why is that permanent, not self-healing? The next run's skip-if-
-   unchanged comparison (`main_checkpoint.get("last_sha256") ==
-   main_write_record["sha256"]`) can't distinguish "genuinely already
-   captured" from "checkpoint written, then discarded on crash" — a
-   matching hash silently skips `db.stage_submission(...)` forever, unless
-   SEC happens to re-file that exact content later.
-5. **Root cause:** the success-path commit was placed for a different,
-   legitimate reason (guarantee *some* durable run-status record survives
-   a downstream failure, per the except block's own correction logic) —
-   but a single shared session has no way to commit only the status rows
-   while leaving checkpoint rows pending; committing early for one
-   necessarily commits early for both.
-
-**Fix:** `bookkeeping.commit()` moved to fire only after silver publish
-*and* landing export have both actually succeeded — the true durability
-boundary. New `BookkeepingStore.rollback()` method
-(`edgar_warehouse/bookkeeping/store.py`). The except block now calls
-`rollback()` first (discarding everything staged this run, since nothing
-commits until after publish succeeds), then re-issues
-`start_sync_run`/`start_pipeline_run` (idempotent `INSERT ... ON CONFLICT`
-upserts, confirmed dialect-safe on both SQLite and Postgres) to recreate
-the run's row in the fresh post-rollback transaction — required because
-`complete_sync_run`/`complete_pipeline_run` are plain `UPDATE`-by-id
-statements that need the row to already exist — then records a "failed"
-status and commits once, cleanly.
-
-**Confirmed to cover every caller, not just `daily_incremental`:** the fix
-lives in the shared `_execute_warehouse_bronze_capture` function, not a
-command-specific branch. `_run_submissions_bronze_then_silver` (which
-wraps the checkpoint-writing call this bug centers on) is invoked from
-`daily-incremental`, `bootstrap-full`, `bootstrap-next`, and
-`seed-universe` — all four share the same fix with no additional wiring.
-
-Tests: `tests/bookkeeping/test_store_commit.py`'s new
-`TestRollbackDurability` proves `rollback()` genuinely discards a write
-(not just a call-shape check); `tests/unit/test_pipeline_run_tracking.py`
-gained a MagicMock call-order/count proof plus a real-`BookkeepingStore`
-integration test (`test_bronze_capture_rolls_back_a_checkpoint_write_when_silver_publish_fails`)
-that writes a real checkpoint, fails publish, and confirms — via an
-independent second session, mirroring the sibling commit-durability
-tests' own idiom — that the checkpoint does not survive. 3-axis code
-review (Standards/Spec/GoF) run before commit per this file's own hard
-rule; findings: a stale "already-durable" claim in an unrelated nearby
-comment (fixed), a missing test for the `write_landing_export`-fails path
-specifically vs. only `_publish_silver_database_with_retry`-fails (fixed),
-and this very 5-whys entry (the Standards axis flagged its absence as a
-hard violation of this file's own discipline).
+The commit fix above, applied literally, reopened a second data-loss window: it made
+`bookkeeping.commit()` durably commit the *entire* shared session immediately after
+`complete_sync_run`/`complete_pipeline_run` — but **before** the actual silver
+merge/publish ran. If publish then failed or OOM'd, a checkpoint already durably claimed
+"content captured" even though it never reached canonical Silver, and the next run's
+skip-if-unchanged hash comparison couldn't tell genuine capture from a crash-discarded
+one — silently skipping real work forever. **Root cause:** a single shared session can't
+commit only the status rows while leaving checkpoint rows pending; committing early for
+one necessarily commits early for both. **Fix:** `bookkeeping.commit()` moved to fire only
+after silver publish *and* landing export both succeed; a new
+`BookkeepingStore.rollback()` discards everything staged on failure, then re-issues
+idempotent `start_sync_run`/`start_pipeline_run` upserts so the failed-status record can
+still commit cleanly. Lives in the shared `_execute_warehouse_bronze_capture` function, so
+`daily-incremental`, `bootstrap-full`, `bootstrap-next`, and `seed-universe` all share the
+fix with no additional wiring. 3-axis code review (Standards/Spec/GoF) caught a stale
+comment and a missing test for the landing-export-fails path — both fixed before commit.
 
 ## mdm_entity_backfill.py Snowflake paramstyle crash 5-whys (fixed 2026-09-02)
 
-**Problem:** `backfill-mdm-entity-ids` (`run_mdm_entity_backfill_sweep`) crashed
-on its first real batch of pending rows with `TypeError: not all arguments
-converted during string formatting`, raised from inside
-`snowflake-connector-python`'s own `_preprocess_pyformat_query`.
-
-1. Symptom: the crash traces through `_fetch_pending_rows_batches`'s
-   `cursor.execute(sql, params)` call, where `sql` uses `?`-style (qmark)
-   placeholders — DuckDB's native bind style, reused here by convention with
-   every other MDM SQL string in this codebase.
-2. Why does a qmark-style query fail against Snowflake? `snowflake-connector-
-   python` defaults its module-global `paramstyle` to `pyformat` (`%s`), not
-   `qmark`. Passed a `?`-placeholder string under that default, the connector's
-   own preprocessor tries to `%`-format the SQL text against the params and
-   fails outright — `?` is not a valid `%`-format specifier.
-3. Why wasn't this caught earlier? `run_mdm_entity_backfill_sweep`'s connect
-   call site (`connection = _silver_connection_settings().connect()`) never
-   touched `paramstyle` at all — it silently inherited whichever value was
-   ambient in the process, which is `pyformat` unless something else already
-   flipped it.
-4. Why does flipping `paramstyle` even matter, and why wasn't it just missing
-   a one-line fix? A **sibling module already had the fix** —
-   `edgar_warehouse/silver_support/snowflake_reader.py`'s
-   `SnowflakeSilverReader.connect()` — but the fix isn't "set paramstyle to
-   qmark before calling execute()"; it's "set it to qmark for exactly the
-   `connect()` call itself." Snowflake's connector reads the global
-   `paramstyle` **once, at connect time**, and caches it on the connection
-   object — mutating the global afterward has no effect on an
-   already-open connection (confirmed live against that sibling module's own
-   docstring and tests). `mdm_entity_backfill.py`'s connect call site never
-   went through this dance at all.
-5. **Root cause:** the qmark-paramstyle-scoping requirement is a genuinely
-   non-obvious Snowflake connector quirk, encoded correctly in exactly one
-   place in the codebase (`snowflake_reader.py`) — a second, independent
-   caller (`mdm_entity_backfill.py`) that also needed a qmark-style Snowflake
-   connection had no way to discover that requirement short of reading that
-   other module's docstring, and didn't.
-
-**Fix:** extracted the scoping dance into a new shared function,
-`connect_with_qmark_paramstyle()` (`edgar_warehouse/silver_support/
-snowflake_reader.py`), carrying the full explanation in its own docstring.
-`SnowflakeSilverReader.connect()` now delegates to it (no behavior change,
-proven by its existing tests passing unchanged). `mdm_entity_backfill.py`'s
-connect call site now calls it too, closing the crash.
-`/gof-refactor-reviewer` consulted before this edit (CLAUDE.md hard rule):
-verdict was extraction is justified here specifically because a real,
-already-realized bug (not a hypothetical) came from the dance's absence at a
-second call site, and the "why" is non-obvious enough that a third
-undiscovered call site duplicating it inline risks getting it subtly wrong
-again.
-
-Tests: `tests/unit/test_connect_with_qmark_paramstyle.py` (new, covers the
-shared function directly — sets qmark only during connect, restores on both
-success and a raised exception); `tests/unit/test_snowflake_silver_reader.py`
-updated to prove `SnowflakeSilverReader.connect()` still delegates correctly;
-`tests/mdm/test_entity_backfill.py` gained
-`test_sweep_connects_with_qmark_paramstyle`, using a settings double that
-records the ambient paramstyle at the moment `.connect()` is called — the
-prior end-to-end test only used a plain `MagicMock`, which never exercised
-this timing at all and would not have caught this bug. Full repo suite green.
+`backfill-mdm-entity-ids` crashed with `TypeError: not all arguments converted during
+string formatting` from `snowflake-connector-python`. **Root cause:** the connector
+defaults its module-global `paramstyle` to `pyformat`, not `qmark` — and this call site
+used `?`-style placeholders (DuckDB's native bind style, reused by MDM convention)
+without ever setting `paramstyle`. A sibling module (`snowflake_reader.py`) already had
+the fix, but the fix is non-obvious: **Snowflake's connector reads the global `paramstyle`
+once, at connect time, and caches it on the connection object** — mutating the global
+afterward has no effect on an already-open connection, so the fix has to scope the qmark
+setting to exactly the `connect()` call. `mdm_entity_backfill.py` never went through this
+dance at all. **Fix:** extracted the scoping dance into a shared
+`connect_with_qmark_paramstyle()` function; both callers now delegate to it. New test uses
+a settings double that records the ambient paramstyle at the moment `.connect()` is called
+(a plain `MagicMock` wouldn't have caught the timing-dependent bug).
 
 ## daily_incremental same-day re-claim 5-whys (fixed 2026-09-04)
 
-**Problem:** A manually-started `daily_incremental` execution
-(`daily-incremental-1788549087`) re-processed `cik_count: 8699` — live
-CloudWatch logs showed every one of those CIKs' silver-apply rows
-correctly skipped (`rows_written: 0`), but the run still paid the full
-per-CIK discovery/checkpoint-resolution cost, ~35-44 minutes of pure
-overhead, for a set of CIKs an earlier same-day run
-(`daily-incremental-resultpathfix-clean-1788517378`, finished ~4h51m
-earlier) had already fully succeeded on.
+A manually-started `daily_incremental` re-processed 8,699 CIKs an earlier same-day run had
+already fully succeeded on — every silver-apply row correctly skipped, but the run still
+paid ~35-44 minutes of pure discovery/checkpoint overhead. **Root cause:**
+`claim_discovery_ciks` only ever blocked a CIK `status='in_progress'` under a *different*
+`run_id` — a concurrent-writer guard, not a "was this already done" check; it conflated
+two distinct dedup guarantees under one status field. **Fix:** a second blocking condition
+— a CIK already `status='succeeded'` under the same `discovery_source`, finished the same
+calendar day, is now blocked from reclaim — scoped narrowly (same source, same day only)
+so Ticket 45's deliberate 7-day late-republish recheck stays fully intact.
 
-1. Symptom: two `daily_incremental` executions on the same calendar day
-   both claimed the identical 8,699-CIK set — confirmed via a direct,
-   read-only query against prod Bookkeeping Postgres:
-   `discovery_checkpoint` showed the morning run's `run_id` with
-   `status='succeeded'` for exactly 8,699 `scope_key`s, and the afternoon
-   run's own live log emitted the same `cik_count: 8699`.
-2. Why does a same-day rerun redo the same CIKs? `claim_discovery_ciks`
-   (`edgar_warehouse/bookkeeping/store.py`) only ever blocked a CIK that
-   was `status='in_progress'` under a *different* `run_id` — a genuinely
-   concurrent-writer guard, not a "was this already done" check.
-3. Why didn't a `'succeeded'` status block reclaim? It was never designed
-   to: `claim_discovery_ciks`'s whole job (per its own pre-existing
-   docstring) is "prevent active overlap" between concurrent runs, not
-   "don't redo recently-finished work" — those are two different
-   guarantees that happened to share one function, and only the first was
-   ever built.
-4. Why wasn't this caught by the already-known "9,205 CIKs, same 5
-   business days" observation from 2026-09-03 (recorded in this function's
-   own pre-fix comment)? That comment correctly diagnosed the *symptom*
-   (a same-day rerun reprocesses the same CIK union) and fixed its
-   *performance* cost (batching the round trips from O(N) to O(chunks)),
-   but treated the redundant reclaim itself as an accepted consequence of
-   Ticket 45's deliberate "force-recheck the trailing seven calendar days
-   on every run" design (`.scratch/release-readiness/issues/
-   45-decide-narrow-daily-incremental-stage0-and-cadence.md`) — nobody
-   had separated "recheck across calendar days, by design" from "recheck
-   within the same calendar day, never decided."
-5. **Root cause:** `claim_discovery_ciks` conflated two distinct
-   dedup guarantees under one status field — "not concurrently in
-   progress" (real, needed, already correct) and "not already finished
-   recently" (assumed by callers to follow from the first, but never
-   actually implemented) — and the one prior investigation into this
-   exact symptom fixed the performance cost of the gap without noticing
-   the gap itself was fixable without touching Ticket 45's deliberate
-   7-day design at all.
-
-**Fix:** `claim_discovery_ciks` gained a second blocking condition — a CIK
-already `status='succeeded'` under the *same* `discovery_source`, with
-`finished_at` on the *same UTC calendar day* as this call's `claimed_at`,
-is now also blocked from reclaim. Deliberately narrow: scoped to same
-source (a different source, e.g. `bootstrap_next`, is unaffected) and same
-calendar day only — a CIK last succeeded on a *prior* day is reclaimed
-exactly as before, so Ticket 45's 7-day late-republish protection is fully
-intact. A same `run_id` reclaiming its own prior same-day success is also
-explicitly exempted (`existing_run_id != run_id` in the new condition),
-preserving this method's original, always-documented "allow the same
-run_id to reclaim" invariant — a real gap found by `/code-review`'s Spec
-axis in the first draft, fixed before commit rather than shipped silently
-narrowed. New `_as_utc_date` static helper normalizes the date comparison
-against SQLite's real behavior in this store's own test suite (SQLite has
-no genuine `TIMESTAMP(timezone=True)` support and drops tzinfo on
-round-trip, unlike Postgres in prod, which always returns a tz-aware
-value) — `.astimezone()` on a naive datetime assumes local system time,
-which would have silently mis-shifted the date depending on the running
-machine's timezone; reproduced live in this fix's own test suite before
-being corrected.
-
-Verified live against real prod Bookkeeping Postgres (read-only investigation,
-then a scoped smoke test using 10 clearly-fake CIK numbers,
-900000001-900000010, split across 3 isolated scenario groups covering the
-blocked case, the cross-source-unaffected case, and the prior-day-still-
-reclaims case) — all five expected outcomes confirmed, zero leftover rows
-after cleanup. Not run as a full end-to-end `daily_incremental` execution
-against the fix (that requires a new warehouse image build + deploy,
-not done in this pass) — the live verification is at the `BookkeepingStore`
-layer directly, the same layer the bug lives in.
-
-Tests: 6 in `tests/bookkeeping/test_store.py`'s `TestDiscoveryCheckpoint` —
-same-day-blocked (the core fix), prior-calendar-day-still-reclaims (Ticket
-45's window, unchanged), cross-source-isolation, same-run-id-can-still-
-reclaim (the Spec-review regression guard), and same-day-`failed`-still-
-reclaims (proving the new check is scoped to `'succeeded'` only). Full
-repo suite green: 2923 passed, 6 skipped (same pre-existing, unrelated gaps
-as every prior entry in this file).
-
-**Follow-up bug found live the same evening (2026-09-04), same function:**
-a fresh `daily_incremental` execution
-(`daily-incremental-postdeploy2-1788567999`, run against the just-rebuilt
-prod images) reclaimed and fully reprocessed the identical 8,699 CIKs a
-run earlier *that same day* (`daily-incremental-resultpathfix-clean-
-1788517378`, finished 06:36 ET) had already succeeded on — the fix above
-should have blocked this.
-
-1. Symptom: live CloudWatch logs on the new run showed `sec_load_started`/
-   `silver_apply_started` with `cik_count: 8699` — the exact figure the
-   same-day fix was supposed to reduce to 0, confirmed via a direct
-   Postgres read: all 8,699 `discovery_checkpoint` rows already
-   `status='succeeded'` for today under `discovery_source='daily_incremental'`.
-2. Why did the same-day check miss it? The new run's `claimed_at` was
-   `2026-09-05T00:41:16Z` (20:41 ET) — the earlier success's `finished_at`
-   was `2026-09-04T10:36:43Z` (06:36 ET). `_as_utc_date` compared **Sept 4**
-   vs. **Sept 5** and found no match, since 8:41 PM ET is already past
-   midnight UTC.
-3. Why does that happen at 20:41 ET specifically? US/Eastern is UTC-4
-   (EDT) or UTC-5 (EST); any local time from roughly 20:00 ET onward falls
-   on the *next* UTC calendar date. The fix's own "same UTC calendar day"
-   scoping (chosen to sidestep a real, separate SQLite-tzinfo-drop issue,
-   see `_as_utc_date`'s original docstring) never accounted for this.
-4. Why wasn't this caught by the fix's own tests? Every test's timestamps
-   happened to land in UTC daytime hours (06:30/15:11 UTC, i.e. 02:30/11:11
-   ET) — none exercised a time past ~20:00 ET, so none could have
-   surfaced a UTC/ET calendar-day mismatch.
-5. **Root cause:** "same calendar day" is a business-day concept here (SEC
-   daily-index dates, the 7-day recheck window, and every human operator
-   of this pipeline all think in US/Eastern) — comparing UTC calendar
-   dates instead silently redefines "same day" to mean something different
-   for roughly a third of every 24-hour cycle (evening ET), the exact
-   window this bug reproduced in.
-
-**Fix:** `_as_utc_date` renamed to `_as_business_date` and changed to
-convert to `America/New_York` (via `pytz`, already a core dependency —
-unlike stdlib `zoneinfo`, which needs a system tz database or the separate
-`tzdata` pip package, and neither is installed in this repo's warehouse/mdm
-Docker images, confirmed via a grep of both Dockerfiles for `apt-get
-install`) before taking `.date()`, instead of returning the UTC date
-directly. The SQLite-tzinfo-drop handling the original fix needed is
-preserved (a naive value is still treated as already-UTC, not local system
-time, before converting to ET). Both call sites in `claim_discovery_ciks`
-updated; the inline comment corrected from "same UTC calendar day" to
-"same US/Eastern business day."
-
-New regression test,
-`test_claim_skips_cik_already_succeeded_same_business_day_across_utc_midnight`,
-reproduces the exact live shape (a 06:30 ET success and a 20:30 ET claim,
-same ET day, crossing a UTC calendar-day boundary) — confirmed to fail
-before the fix and pass after. The existing
-`test_claim_reclaims_cik_succeeded_on_a_prior_calendar_day` test's
-timestamps were corrected to actually cross an ET midnight boundary (its
-original 23:59/00:05 UTC pair was, in ET, the same business day both
-times — it was accidentally testing the wrong boundary and would have
-passed either way). Full repo suite green (excluding the 8 pre-existing,
-unrelated `tests/integration/test_acquisition_ledger_postgres.py` /
-`test_conflict_postgres.py` failures — a schema-drift issue against the
-local test-Postgres instance's `source_fetch_work` table, a different
-subsystem entirely, not touched by this change).
-
-**Lesson:** a "same calendar day" check needs an explicit timezone, and
-the correct one is whatever timezone the *business process* runs in, not
-UTC by default — UTC only felt safe here because the original fix's own
-tests never happened to run past 8pm ET.
+**Follow-up bug the same evening, same function:** a fresh run at 20:41 ET still reclaimed
+the identical 8,699 CIKs. **Root cause:** the fix compared **UTC** calendar days, and any
+local time from ~20:00 ET onward already falls on the next UTC date — so the fix silently
+redefined "same day" for roughly a third of every 24-hour cycle, exactly the evening
+window this bug hit. None of the fix's own tests happened to use timestamps past ~20:00
+ET, so this was invisible until it hit live traffic. **Fix:** the date-comparison helper
+now converts to `America/New_York` (via `pytz`, already a dependency — `zoneinfo` needs a
+tz database not installed in these Docker images) before taking `.date()`, instead of
+using the UTC date directly. **Lesson:** a "same calendar day" check needs an explicit
+timezone, and the correct one is whatever timezone the *business process* runs in — not
+UTC by default, which only felt safe here because the original fix's own tests never
+happened to run past 8pm ET.
 
 ## daily_incremental per-CIK checkpoint round trips, unbatched regardless of diff outcome (fixed 2026-09-04)
 
@@ -2365,52 +1650,16 @@ site, well after this loop returns).
 
 ## mdm_pipeline_lease migration never applied after PR #537 deploy (fixed live 2026-09-05)
 
-**Problem:** immediately after deploying fresh prod images containing PR
-#537's MDM Reconciliation Backstop work, a live `daily_incremental`
-execution's `RunMdmChain` failed 2 retries in a row (~9-10min each) at its
-`Mastering` sub-state, exhausting the child Step Functions execution's
-retries before the outer daily_incremental run had a chance to progress.
-
-1. Symptom: `psycopg2.errors.UndefinedTable: relation "mdm_pipeline_lease"
-   does not exist`, raised from inside `mdm mastering`'s own startup path.
-2. Why does a table not exist when the deployed image's code references
-   it? `mdm_pipeline_lease` is added by
-   `edgar_warehouse/mdm/migrations/020_mdm_pipeline_lease.sql`
-   (PR #537's own lease-table migration), correctly committed and
-   correctly registered in `migrations/runtime.py`.
-3. Why wasn't it applied? The migration file existing and being
-   registered only means `mdm migrate` *would* apply it — nothing runs
-   `mdm migrate` automatically after a deploy; it is always a separate,
-   manual invocation. The deploy in this session (image rebuild +
-   `deploy-aws-application.sh --enable-mdm`) never included it.
-4. Why wasn't this caught before the live run hit it? Confirmed the
-   failing ECS task's image digest matched the just-deployed image exactly
-   — this was not a stale-image issue, and not the already-fixed
-   `sec_reconcile_finding` gap (that code path is gone). It was a fresh
-   instance of the exact same class of gap this file already documents
-   multiple times (migration 011, the Ticket 20 Source Family Registry
-   entry, the original MDM Snowflake mirror schema entry): a real,
-   committed, correctly-registered migration that simply never got run
-   against the live database after being merged.
-5. **Root cause:** no forcing function ties "a new migration file merged
-   to main" to "an `mdm migrate` execution against prod" — the same root
-   cause already named in this file's other migration-gap entries, still
-   unaddressed as a systemic fix (only fixed reactively, incident by
-   incident, each time it recurs).
-
-**Fix (live, no code change):** ran `mdm migrate` via the current,
-correct `edgartools-prod-mdm-utility` state machine (`{"mode":
-"mdm_migrate"}`) — confirmed SUCCEEDED, table created. The next
-`RunMdmChain` retry got past `Mastering` cleanly and the same
-`daily_incremental` execution went on to succeed end-to-end, including
-`FactPublishtoGold`. Cost: ~25 minutes of wasted retries/backoff before
-the gap was found and fixed.
-
-**Lesson, repeated from the entries this incident echoes:** treat every
-future prod deploy that includes new migration files as incomplete until
-`mdm migrate` has been explicitly re-run against the target environment —
-"the image is current" and "the migration was applied" are two separate
-facts, and only one of them is guaranteed by a deploy script.
+Right after deploying fresh prod images with PR #537's MDM Reconciliation Backstop work, a
+`daily_incremental` execution's `RunMdmChain` failed at `Mastering` with
+`UndefinedTable: relation "mdm_pipeline_lease" does not exist` — the migration file was
+correctly committed and registered, but nothing runs `mdm migrate` automatically after a
+deploy, and this deploy didn't include it. Same class of gap as migration-011 and the
+Ticket 20 Source Family Registry entries. **Fix:** ran `mdm migrate` via
+`edgartools-prod-mdm-utility` — confirmed SUCCEEDED, table created, the same
+`daily_incremental` execution then succeeded end-to-end. **Lesson:** treat every prod
+deploy with new migration files as incomplete until `mdm migrate` has been explicitly
+re-run — "the image is current" and "the migration was applied" are separate facts.
 
 ## mdm_change_log had no write-side diff, unboundedly regenerating mdm publish's backlog (fixed 2026-09-05)
 
@@ -2500,83 +1749,24 @@ above.
 
 ## verify-resolver-input-parity 100% false-positive mismatch 5-whys (resolved 2026-09-06)
 
-**Problem:** re-verifying duckdb-retirement-cutover Ticket 05's own correctness
-gate (`edgar-warehouse mdm verify-resolver-input-parity`) live against a
-fresh `silver.duckdb` and the current `EDGARTOOLS_SILVER` reported 100%
-mismatch on every sampled row across all 6 `RESOLVER_INPUT_TABLES` tables
-and all 5 entity types — despite Ticket 05's coverage gap (a separate,
-already-fixed issue) being confirmed closed.
-
-1. Symptom: `mismatched_keys_total == keys_compared` on `sec_company`,
-   `sec_adv_filing`, `sec_adv_private_fund`, `sec_ownership_reporting_owner`,
-   `sec_ownership_non_derivative_txn`, `sec_ownership_derivative_txn` — every
-   single sampled key, not a scattered few.
-2. Why report every row as mismatched? `verify_resolver_input_parity`
-   (`edgar_warehouse/mdm/silver_parity.py`) compares rows via a full-row
-   SHA256 (`resolvers.base.content_hash`), reused verbatim from a different,
-   within-one-system use case (detecting an unchanged row across separate
-   `mdm mastering` invocations, where the caller controls the field set and
-   any drift is a real signal).
-3. Why does a full-row hash fail here specifically? Manually diffing one
-   mismatched row per table directly against both readers found every core
-   business field byte-identical — the hash was catching columns that
-   legitimately diverge between the two systems by design, not real content
-   drift.
-4. Why do those columns diverge by design? Three independent, already-known
-   facts, none of them bugs on their own: (a) sync-bookkeeping timestamps
-   (`last_sync_run_id`/`first_sync_run_id`/`last_synced_at`) are populated in
-   DuckDB but never carried by the Snowflake landing export; (b)
-   `mdm_entity_id` is asynchronously backfilled by a separate sweep
-   (mdm-ahead-of-silver map) and can be populated on one side and not the
-   other purely by backfill timing; (c) 3 of the 6 tables
-   (`sec_ownership_non_derivative_txn`, `sec_ownership_derivative_txn`,
-   `sec_ownership_reporting_owner`) have a Snowflake-only denormalized `cik`
-   column their own dbt models deliberately join in from
-   `sec_company_filing` (single-path-per-layer map, Ticket 06) — DuckDB's own
-   tables never had this column at all.
-5. **Root cause:** the gate compared whole rows with no concept of "this
-   column is expected to differ across storage backends" — a cross-system
-   equivalence check needs that concept even though a within-one-system
-   unchanged-row check (the hash function's original purpose) never did.
-
-**Fix:** `RESOLVER_INPUT_TABLES` widened each table's tuple from
-`(table, key_columns)` to `(table, key_columns, exclude_columns)` — a
-per-table `frozenset` of exactly the columns confirmed live to legitimately
-diverge. Excluded columns are stripped from **both** sides' row dicts before
-hashing, so an extra column present on only one side (the `cik` case)
-doesn't cause a key-set mismatch either; anything not in the list still
-participates in the comparison exactly as before, so a genuine content
-difference on any other column still fails loud. Deliberately a new,
-purpose-built set rather than reusing `silver_protection.py`'s
-`PROTECTED_TABLE_REGISTRY.provenance_columns` (consulted
-`/gof-refactor-reviewer` first) — that registry answers a different
-question (same-key conflict-authority resolution during a DuckDB
-candidate-into-canonical merge) and doesn't even cover
-`first_sync_run_id`/`last_synced_at` or the `cik` case, so reusing it would
-have left the exact gap this fix closes.
-
-**A first-pass fix caught its own gap on re-verification**: the initial
-exclusion list only covered the 2 ownership *transaction* tables' `cik`
-join, missing that `sec_ownership_reporting_owner` (the `person` entity
-type's resolver-input table) has the identical Ticket 06 dbt-join shape —
-confirmed via its own dbt model file. A second live re-run after the first
-fix showed `person` still failing 100%; the same one-row-diff technique
-found the same schema-shape (not content) difference, and the fix was
-extended to cover it. Lesson (same shape as this file's other "manually
-spot-check a few, assume the rest are the same" traps): a live re-run after
-a fix is not optional even when the fix looks structurally complete —
-partial manual verification missed a table the automated live gate caught
-immediately.
-
-Final live verification: `mdm verify-resolver-input-parity` exits 0,
-`"passed": true` for every one of `adviser`/`company`/`fund`/`person`/
-`security`. Tests: 6 new in `tests/unit/test_resolver_input_parity.py`,
-each excluded-column case paired with a "real difference still fails"
-counterpart (proving the exclusion doesn't swallow genuine corruption).
-Full repo suite green (3092 passed, 6 skipped, only the pre-existing
-unrelated Postgres-integration failures documented elsewhere in this file).
-Full write-up:
-`.scratch/duckdb-retirement-cutover/issues/05-cutover-mdm-reader-to-snowflake.md`.
+`mdm verify-resolver-input-parity` reported 100% mismatch on every sampled row across all
+6 `RESOLVER_INPUT_TABLES` and all 5 entity types. **Root cause:** the check compared rows
+via a full-row SHA256 reused from a different, within-one-system use case (detecting an
+unchanged row across `mdm mastering` invocations) — but manually diffing rows found every
+core business field byte-identical; the hash was catching columns that legitimately
+diverge between DuckDB and Snowflake by design (sync-bookkeeping timestamps never carried
+by the landing export, async `mdm_entity_id` backfill timing, and a Snowflake-only
+denormalized `cik` join on 3 tables DuckDB never had). A cross-system equivalence check
+needs a concept of "this column is expected to differ across backends" that a
+within-one-system hash never needed. **Fix:** `RESOLVER_INPUT_TABLES` widened with a
+per-table `exclude_columns` frozenset, stripped from both sides before hashing —
+deliberately a new set rather than reusing `silver_protection.py`'s
+`PROTECTED_TABLE_REGISTRY.provenance_columns`, which answers a different question and
+doesn't cover this gap. **A first-pass fix missed one table** (the `person` entity type's
+`sec_ownership_reporting_owner` has the identical Snowflake-only `cik` join, initially
+uncaught) — found only on a live re-run after the fix looked complete. **Lesson:** a live
+re-run after a fix is not optional even when the fix looks structurally complete — partial
+manual verification missed a table the automated live gate caught immediately.
 
 ## full-reconcile decommissioned entirely (2026-09-04)
 
@@ -2738,116 +1928,37 @@ has happened for this change.
 
 ## _run_grouped_concurrent single end-of-group commit 5-whys (fixed and live-verified 2026-09-08)
 
-**Problem:** live during mdm-run-throughput Ticket 03's own verification run
-(`mdm-mastering-batchfix-verify-1788823225`), the security domain wrote 2,404
-rows across 226 distinct entities to `mdm_entity_attribute_stage` in a healthy
-4-minute burst, then **all writes stopped completely** for the remaining ~23
-minutes until the run was manually stopped — while CloudWatch showed
-continuing SQL activity the entire time.
+During a live verification run, the security domain wrote 2,404 rows in a healthy 4-minute
+burst, then **all writes stopped completely** for ~23 minutes while CloudWatch showed
+continuing SQL activity — looking like a stuck entity, but direct Postgres queries showed
+the suspected entity received zero writes. **Root cause:** `MDMPipeline._run_grouped_concurrent`'s
+per-group worker (`_process_group`) called `worker_session.commit()` exactly once, after
+its entire group's loop finished — mirroring `run_companies`' pattern (correct there,
+since one row is its whole unit of work), but security/person's unit of work is an entire
+*group* (rows sharing `canonical_title`/`owner_cik`, unboundedly large). One oversized
+group runs invisibly for as long as it takes, and if interrupted, 100% of its progress is
+lost. Same recurring shape as `MANAGES_FUND`/`INSTITUTIONAL_HOLDS` batching, but a
+write-side durability problem, not those two's read-side memory problem. **Fix:**
+`_process_group` now commits every `commit_interval` rows within the loop, not just at the
+end.
 
-1. Symptom: a live CloudWatch query for the entity showing a frozen candidate
-   count (2753, unchanged for 22+ minutes) looked like a stuck reprocessing
-   loop on one specific entity. Directly querying MDM Postgres disproved this
-   first theory: that exact entity received **zero writes** during the run's
-   entire window — its data was stale, from an unrelated earlier run. The
-   real stuck entity was never identified by ID; only its effect was.
-2. Why did writes stop but SQL activity continue? `run_survivorship_for_entity`
-   (called only from `resolve_one` in `company.py`/`security.py`/`person.py`,
-   confirmed via `grep`, no other caller exists) issues a `SELECT` of all
-   current candidates for one `(entity_id, field_name)` plus an `UPDATE` of
-   the winning row's `was_selected` flag — and that `UPDATE` never touches
-   `loaded_at`, so it's invisible to a query watching for new writes even
-   while genuinely running.
-3. Why was `_stage_attrs` (which DOES touch `loaded_at`) not producing any
-   visible writes either, if `resolve_one` was still executing? Because
-   `MDMPipeline._run_grouped_concurrent`'s per-group worker
-   (`_process_group`) called `worker_session.commit()` exactly **once**,
-   after its entire `for row in group_rows:` loop finished — not
-   periodically. Every write inside a still-running group's transaction,
-   including earlier rows' `_stage_attrs` calls, stays invisible to any
-   other session until that whole group finally commits.
-4. Why does one group take that long? Rows are grouped by
-   `canonical_title`/`owner_cik` so that same-title/same-CIK rows never race
-   on the same underlying entity (`_run_grouped_concurrent`'s own documented
-   safety invariant) — but nothing bounds how large one group can get. One
-   hyper-popular security's title, with a large number of genuinely distinct
-   ownership-transaction rows, can end up entirely on one worker thread with
-   no checkpoint until it finishes.
-5. **Root cause:** `_process_group` mirrors `run_companies`' `_resolve_row`,
-   which commits once per submitted unit of work — correct there because one
-   row IS run_companies' whole unit of work. `_run_grouped_concurrent`
-   generalized that pattern to security/person, whose unit of work is an
-   entire GROUP, unboundedly large. The same pattern that's correct for
-   company became a real gap here: one oversized group runs invisibly for as
-   long as it takes, and if interrupted (a deploy, a timeout, or an operator
-   stopping the execution — exactly what happened here), 100% of its
-   progress is lost. Same recurring shape this file already documents twice
-   (`MANAGES_FUND` CRD-batching, `INSTITUTIONAL_HOLDS` adviser-batching) —
-   "one outlier entity overwhelms an unbounded unit of work" — though
-   distinguished from those: this is a write-side durability/visibility
-   problem, not the read-side memory problem those two fixed
-   (`/gof-refactor-reviewer` confirmed these are different costs and the fix
-   should not reuse their read-batching pattern).
+**A second `/gof-refactor-reviewer` pass, run against the actual diff (not just the
+pre-code design consult), caught a real bug in the first version of this fix:** it reused
+`log_interval` — scaled from the *entire domain's* row count, not any single group's size
+— as the per-group commit threshold, meaning a group would need to exceed 1/8 of the whole
+domain before ever triggering a periodic commit; observed group sizes top out around 5,000
+rows, so the original fix would likely never have engaged for the exact incident it was
+built to fix. Corrected with a genuinely separate, small constant
+(`_GROUP_COMMIT_INTERVAL`, default 1000, not scaled by domain size). **This is the insight
+a later entry ("INSTITUTIONAL_HOLDS/MANAGES_FUND capped-restart watermark") calls back to
+as "a second confirmation of the same pattern":** a pre-code `/gof-refactor-reviewer`
+consult can correctly bless an architecture's shape while the concrete diff still gets a
+load-bearing detail wrong — a second pass against the actual diff, not just the plan, is
+what caught it.
 
-**Fix:** `_process_group` now tracks a local, per-group row counter (separate
-from the existing shared/locked `processed` counter used only for
-progress-log cadence) and calls `worker_session.commit()` every
-`commit_interval` rows within the loop, in addition to the existing final
-commit after the loop. Reviewed via `/gof-refactor-reviewer` before writing
-any code (this file's own hard rule): confirmed periodic commit within the
-same sequential loop is correct (sub-chunking a group into separately-
-submitted concurrent pieces would violate the same-group-must-stay-
-sequential invariant), and confirmed no SQLAlchemy post-commit object-
-expiration risk (nothing in `resolve_one`/`run_survivorship_for_entity`/
-`_stage_attrs` holds an ORM object reference across row iterations).
-
-**A second `/gof-refactor-reviewer` pass, run against the actual diff before
-commit (not just the pre-code design consult above), caught a real bug in
-the first version of this fix:** it reused `log_interval` — the SAME value
-passed in for progress-log cadence — as the per-group commit threshold too.
-`log_interval` is `_progress_log_interval(len(rows))`, scaled from the
-ENTIRE domain's row count (confirmed live: `run_securities`' security domain
-was still processing 71,253+ rows and counting), not any single group's
-size. A single group would need to exceed 1/8 of the whole domain before
-ever triggering a periodic commit — observed live group sizes top out
-around 5,000 rows, so the original fix would likely never have engaged for
-the exact incident it was built to fix. Corrected: a genuinely separate
-module constant, `_GROUP_COMMIT_INTERVAL` (env: `MDM_GROUP_COMMIT_INTERVAL`,
-default 1000, NOT derived from or scaled by domain size), threaded through
-as `_run_grouped_concurrent`'s new `commit_interval` parameter (defaults to
-`_GROUP_COMMIT_INTERVAL`, so existing callers need no changes). `log_interval`
-now governs progress-log cadence only, exactly as before this fix.
-
-Tests: 6 in `tests/mdm/test_run_securities_persons_concurrency.py`'s
-`TestGroupedConcurrentPeriodicCommit` — periodic commit within an oversized
-group, a trailing partial batch still gets its final commit, a small group
-under the interval is unchanged (regression guard), each group's local
-counter resets independently rather than sharing one running total, the
-second review's own regression guard (commit_interval still fires for a
-30-row group even when log_interval is set to a real domain-scaled 62,500,
-proving genuine decoupling), and a sanity check that `_GROUP_COMMIT_INTERVAL`'s
-default is small enough to ever fire for a realistic group size. Full
-`tests/mdm/` suite (687 tests) and full repo suite green.
-
-**Lesson:** the pre-code `/gof-refactor-reviewer` consult (this file's own
-hard rule) caught the right *architectural* shape, but a second pass against
-the actual diff — not just the plan — caught a real, live-production-
-relevant defect in the concrete numbers the plan didn't specify closely
-enough to catch. Both passes earned their keep; neither would have caught
-what the other found.
-
-**Verified against live production data 2026-09-08**, per this session's own
-"real measurements, not estimates" standing preference
-([mdm-run-throughput map](.scratch/mdm-run-throughput/map.md)): a fresh prod
-run (`mdm-mastering-groupcommit-verify-1788827772`) against the exact entity
-that surfaced this gap showed two independent periodic commits ~10 minutes
-apart (513 → 1017 accumulated rows), confirmed by directly querying MDM
-Postgres's `mdm_entity_attribute_stage` write timeline rather than inferring
-from logs. Commits now checkpoint visibly mid-group, not just once at the
-end. A separate, pre-existing throughput issue (unpruned candidate-row
-accumulation on a handful of hyper-refiled entities) was found along the
-way and does not affect this fix's own correctness — see
-[Ticket 05](.scratch/mdm-run-throughput/issues/05-mdm-entity-attribute-stage-unbounded-candidate-accumulation.md).
+**Verified against live production data 2026-09-08:** a fresh prod run against the exact
+entity that surfaced this gap showed two independent periodic commits ~10 minutes apart
+(513 → 1017 accumulated rows), confirmed by directly querying Postgres's write timeline.
 Full detail:
 [Ticket 04](.scratch/mdm-run-throughput/issues/04-run-grouped-concurrent-single-end-of-group-commit.md).
 
@@ -2985,98 +2096,68 @@ deployed** as of this entry.
 
 ## Quarantine backfill uncached priority lookup 5-whys (fixed, deployed and live-verified 2026-09-10)
 
-**Problem:** a real prod dry-run of `run_backfill()` (Ticket 09,
-mdm-relationship-versioning-gap map), scoped to `--relationship-type
-INSTITUTIONAL_HOLDS` (~7,966 relationship_ids), ran 8.5+ hours without
-completing and had to be manually stopped (`aws ecs stop-task`) — no
-crash, no error, just far too slow to ever finish in a usable window.
+A real prod dry-run of `run_backfill()` (Ticket 09, mdm-relationship-versioning-gap
+map), scoped to `--relationship-type INSTITUTIONAL_HOLDS`, ran 8.5+ hours
+without completing (~9 identical uncached Postgres round trips/sec against
+`mdm_relationship_source_priority`, ~270,000+ estimated redundant queries)
+and had to be manually stopped. **Root cause:** `resolve_source_priority()`
+was called once per conflicting row pair inside the new chain-aware walk
+(`relationship_quarantine_backfill.py`, added 2026-09-09) with zero
+memoization, even though `rel_type_id` is constant for a type-scoped run
+and `(existing_source, new_source)` pairs repeat constantly — the same
+"no per-batch memoization for an invariant value" shape this file already
+documents elsewhere (`_ensure_thirteenf_manager`, `_derive_is_insider`),
+just not yet ported to this newly-added call site. **Fix:** a
+`priority_cache` dict created once in `run_backfill()` and threaded
+through its entire loop (dry-run and real-run branches alike), mirroring
+the existing `_ensure_thirteenf_manager` pattern; `resolve_source_priority()`
+itself left untouched since its only other caller fires once per row, a
+naturally bounded cost. Deployed and **live-verified end-to-end**: a
+re-run dry-run completed in ~10 minutes (was 8.5+ hours, unfinished); the
+real backfill then ran against prod (exit 0, ~1h46m, 8,525
+relationship_ids examined, 84,212 closed, 62,947 reopened) — see
+[Ticket 09](.scratch/mdm-relationship-versioning-gap/issues/09-implement-chain-aware-backfill-institutional-holds.md)
+for full counts. **Lesson:** a newly-added, never-yet-run-at-scale code
+path is exactly where this repo's "memoize per-batch, don't re-query an
+invariant value per row" convention is easiest to forget — treat "first
+real run at scale" as the genuine test of batch-processing code, not the
+unit test suite alone (SQLite-backed tests here never exercised more than
+a handful of relationship_ids, so the N+1 shape was invisible until real
+volume hit it).
 
-1. Symptom: CloudWatch showed the task steadily issuing ~9 Postgres round
-   trips/second for the entire 8.5-hour run, with no sign of slowing or
-   completing.
-2. Why 9/sec instead of a burst-then-idle pattern? Every one of those
-   round trips was the identical query shape: `SELECT ... FROM
-   mdm_relationship_source_priority WHERE rel_type_id = %(rel_type_id_1)s
-   AND is_active = true AND source_system IN (%(source_system_1_1)s,
-   %(source_system_1_2)s)` — all returning `rowcount=0` (no priority
-   rules configured for INSTITUTIONAL_HOLDS at all).
-3. Why re-issue the identical query so many times? `resolve_source_priority()`
-   (`graph.py`) is called from `backfill_relationship_id`'s per-group
-   conflict-guard loop (`relationship_quarantine_backfill.py`) once per
-   conflicting row pair, with zero caching — a fresh, uncached round trip
-   on every single call.
-4. Why does that matter at this scale specifically? `rel_type_id` is
-   constant for the entire run (scoped to one type), and a prior live
-   diagnostic (Ticket 08) had already confirmed same-relationship_id
-   conflicting rows are ~100% same-`source_system` — so the actual
-   `(existing_source, new_source)` argument pairs repeat constantly
-   across all 7,966 relationship_ids, yet the function re-derives the
-   identical, already-known answer from Postgres every time. Estimated
-   ~270,000+ redundant round trips made before the task was stopped.
-5. **Root cause:** the same "no per-call memoization for a value that's
-   effectively invariant across a batch run" shape this file already
-   documents multiple times (`_ensure_thirteenf_manager` re-querying the
-   same manager CIK per holding row, `_derive_is_insider`/`_derive_holds`
-   re-querying the same CIK per row — see "Relationship-derivation
-   single-threaded tail" above) — just not yet fixed at this specific,
-   newly-added call site (Ticket 09's chain-aware walk, added 2026-09-09,
-   had never been run against real prod data at this scale before this
-   attempt).
+## Two graph-generation activation paths, now out of sync (found live 2026-09-10, not yet reconciled)
 
-**Fix:** a private `_resolve_source_priority_cached()` helper in
-`relationship_quarantine_backfill.py` memoizes on the exact `(rel_type_id,
-existing_source, new_source)` tuple (order-preserving — the function's
-"existing"/"new" return value is directional, so an order-independent key
-would silently return the wrong winner). `resolve_source_priority()`
-itself (`graph.py`) is deliberately left untouched — its only other
-caller, `ensure_relationship`, fires once per newly-written row, a
-naturally bounded cost with no repetition to amortize, so caching there
-would add complexity for no benefit and risk masking genuine mid-run
-config edits on the live write path, where staleness would actually
-matter. `backfill_relationship_id` gained an optional `priority_cache`
-keyword param (defaults to a fresh per-call dict, preserving existing
-direct-caller behavior); `run_backfill()` creates ONE cache dict up front
-and threads it through its entire loop — both the dry-run branch and the
-batched real-run branch — so the cache persists across the whole run, not
-just within one relationship_id or one batch. Mirrors the already-proven
-`_ensure_thirteenf_manager` per-batch memoization pattern rather than
-inventing a new mechanism.
-
-Confirmed safe to cache despite being a live-data lookup: this is an
-offline, one-shot batch correction tool, not the live write path — a
-cache built at the start of one run can only miss a priority rule edited
-mid-run, which just moves one row between two already-tolerated,
-already-flagged-for-review outcomes (resolved vs.
-`skipped_priority_now_configured`), not a correctness regression.
-
-Tests: `TestPriorityCheckCachedAcrossRun` (2 new,
-`tests/mdm/test_relationship_quarantine_backfill.py`) uses SQLAlchemy's
-`event.listen(bind, "before_cursor_execute", ...)` (the same
-statement-counting idiom this repo's other bounded-round-trip tests use)
-to assert the number of `mdm_relationship_source_priority` queries stays
-flat (≤1) across 10 relationship_ids, for both `run_backfill()` branches
-— confirmed to fail (10 queries) before the fix and pass after. Full
-`tests/mdm/` suite green (757 passed). `/gof-refactor-reviewer` consulted
-before implementing (this file's own hard rule); 3-axis `/code-review`
-(Standards/Spec/GoF) came back clean.
-
-**Not yet deployed/re-verified as of this entry** — the runaway dry-run
-was stopped (`aws ecs stop-task`, confirmed `lastStatus: STOPPED`) before
-this fix was written; the next step is rebuilding/redeploying the MDM
-image and re-running the dry-run scoped to `--relationship-type
-INSTITUTIONAL_HOLDS` against real prod to confirm the fix holds at
-scale, before proceeding to the real (non-dry-run) backfill.
-
-**Lesson:** a newly-added, never-yet-run-at-scale code path (this chain-
-aware walk was one day old in prod terms) is exactly where this repo's
-established "memoize per-batch, don't re-query the same invariant value
-per row" convention is easiest to forget — the fix pattern already
-existed multiple times elsewhere in this codebase, but a new call site
-doesn't inherit it automatically. Treat "first real run at scale" as the
-genuine test of any batch-processing code, not the unit test suite alone
-(SQLite-backed unit tests here never exercised more than a handful of
-relationship_ids, so the N+1 shape was invisible until real volume hit
-it).
+There are two independent ways to publish and activate a graph generation,
+and they don't share bookkeeping. **Path 1 (older, whole-graph):**
+`mdm publish-relationships` → `mdm reconcile --generation-id` → `mdm
+graph-activate` — connects straight to Snowflake
+(`snowflake_graph.py`/`activate_graph_generation`), flips Snowflake's own
+`GRAPH_ACTIVE_POINTER`, and has no Postgres-side record at all. **Path 2
+(newer, partitioned):** the `edgartools-prod-generation-build` Step
+Function (`mdm generation-plan` → parallel `generation-build-partition`
+per type → `generation-fan-in` → `generation-activate`) tracks every step
+in Postgres's `mdm_graph_generation`/`mdm_graph_partition` tables, and its
+per-partition build still calls the same underlying
+`SnowflakeGraphSyncExecutor` Path 1 uses — so both paths write the same
+Snowflake tables, just orchestrated differently, with only Path 2 leaving
+a Postgres-side trail. Used Path 1 today (INSTITUTIONAL_HOLDS backfill →
+graph rebuild, `generation_id db802e24-...`) without knowing Path 2
+existed. Confirmed live: Snowflake's active pointer now correctly shows
+`db802e24-...` (exact parity, reconcile passed), but
+`mdm_graph_generation` in Postgres still shows generation `9bc1d71d-...`
+(Path 2's own run from 2026-09-09) as `activated` and has no row for
+`db802e24-...` at all. **Not yet reconciled** — operator decision, left
+as-is rather than triggering another rebuild. Risk: the next Path 2 run
+would plan its next generation off the stale `9bc1d71d-...` baseline, and
+anything reading Postgres (not Snowflake) for "what's currently active"
+reports the wrong, day-old generation. Fix options for whoever picks this
+up: re-run `edgartools-prod-generation-build` (creates a fresh,
+properly-tracked generation superseding both), or backfill a Postgres
+`mdm_graph_generation` row for `db802e24-...` directly. **Lesson:** before
+manually orchestrating a multi-step prod workflow via raw `aws ecs
+run-task`, check `aws stepfunctions list-state-machines` first — a
+purpose-built, already-proven state machine for the exact task can exist
+without being referenced anywhere in CLAUDE.md's own architecture docs.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
@@ -3109,15 +2190,34 @@ Stage 1B — Fundamentals (windowed, MaxConcurrency=1 each, run after Stage 1)
   FetchEntityFacts → FetchPerFilingFundamentals → FetchThirteenFHoldings
   • XBRL company facts, 8-K/DEF 14A per-filing data, and 13F holdings respectively
 
-Stage 2 — MDM entity resolution (sequential Step Functions)
-  mdm-mastering → mdm-infer-relationships → mdm-publish → mdm-publish-relationships → mdm-reconcile
-  • Runs after Stage 1/1B complete so entity resolution sees the full silver dataset
-  • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
+Stage 1C — ADV bulk + Firm Roster (lenient, run after Stage 1B, not in earlier
+versions of this doc -- confirmed live via describe-state-machine 2026-09-10)
+  FetchAdvBulk → IngestAdvBulkSources → FetchFirmRoster → IngestFirmRosterSources
+  • fetch-adv-bulk + ingest-relationship-sources (adv-fetch-pipeline-wiring spec),
+    then fetch-firm-roster + ingest-relationship-sources (adv-firm-roster-crosscheck
+    spec, ticket 02) -- so MDM sees fresh ADV silver and the Firm Roster completeness
+    cross-check stays current in this same execution
+  • All 4 states have a Catch, same leniency as Stage 1B (AD-13) -- a failure here
+    doesn't abort the run, it just proceeds without fresh ADV/roster data
 
-Stage 3 — Gold refresh (single ECS task)
+Stage 2 — MDM entity resolution (nested Step Functions execution, not inline states)
+  RunMdmChain invokes the separate `edgartools-prod-mdm` state machine
+  (startExecution.sync:2), which runs: Mastering → BackpropagateIdsToSilver →
+  "Infer Relationships" → Publish → "Publish Relationships" → Reconcile
+  (Reconcile has a non-fatal Catch, ReconcileFailedNonFatal -- a reconcile
+  failure doesn't abort the outer `load_history` run)
+  • Runs after Stage 1/1B/1C complete so entity resolution sees the full silver dataset
+  • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
+  • BackpropagateIdsToSilver (between Mastering and Infer Relationships) writes
+    resolved mdm_entity_ids back to silver so relationship derivation can join
+    against them -- not previously documented in this section
+
+Stage 3 — Gold refresh (single ECS task, live state name `FactPublishtoGold`)
   gold-refresh
   • Writes Snowflake export manifests for source-layer serving exports (not the gold layer)
-  • EDGARTOOLS_GOLD is 21 Snowflake dynamic tables. Live prod 2026-08-29: every
+  • EDGARTOOLS_GOLD is 23 Snowflake dynamic tables (see Data Layer Definitions
+    above for the current authoritative list -- this line previously said 21,
+    stale against that same table). Live prod 2026-08-29: every
     table had TARGET_LAG=DOWNSTREAM but DYNAMIC_TABLE_REFRESH_HISTORY showed
     REFRESH_TRIGGER=MANUAL only (REFRESH_AFTER_LOAD after a run manifest).
     DOWNSTREAM does not refresh gold leaves. gold_model_config() now uses
@@ -3167,6 +2267,23 @@ strict SQL parity check plus Native App checks (compute pool, `GRAPH_INFO`, `BFS
 against that same Snowflake target. One credential (the same `MDM_SNOWFLAKE_*`/
 `DBT_SNOWFLAKE_*`/Snowflake CLI connection used everywhere else), one platform. Native App
 grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
+
+**Publishing is generation-scoped, not a direct overwrite** (`edgar_warehouse/mdm/
+snowflake_graph.py`): `mdm publish-relationships` always materializes into a
+**new** `GRAPH_GENERATION` row, `STATUS` defaulting to `'building'`
+(`GENERATION_STATUSES = ("building", "verified", "activated", "retired",
+"failed")`) — pass `--generation-id` to target a specific one, otherwise a
+fresh UUID is minted; publishing alone never makes it live. `mdm reconcile
+--generation-id <id>` verifies that specific generation and, on pass,
+promotes it `'building' → 'verified'` (the only status `graph-activate`
+accepts); on fail, demotes it to `'failed'`. `mdm graph-activate
+--generation-id <id>` is the final step: atomically flips
+`GRAPH_ACTIVE_POINTER` to the target generation, retires whichever
+generation was previously `'activated'`, and promotes the target to
+`'activated'` — all inside one `BEGIN`/`COMMIT` so a crash mid-flip can't
+leave the pointer referencing a generation whose own status wasn't updated
+to match. `mdm reconcile` with no `--generation-id` instead verifies
+whatever generation the pointer currently targets.
 
 **The write/sync path splits across two modules, not one** (investigated
 2026-08-19, not previously written down here): `edgar_warehouse/mdm/graph.py`
@@ -3256,9 +2373,13 @@ Warehouse Pipeline Machine and structurally supersedes it for ongoing use;
 ```bash
 aws stepfunctions start-execution \
   --region us-east-1 \
-  --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-dev-load-history \
+  --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-load-history \
   --name "load-history-$(date +%s)" \
   --input '{}'
+# NOTE: the dev ARN this example previously used (edgartools-dev-load-history)
+# no longer exists -- AWS-side dev was decommissioned (see the account map at
+# the top of this file); confirmed live 2026-09-10 via list-state-machines,
+# zero edgartools-dev-* state machines remain. prod is the only live target.
 # Monitor: aws stepfunctions describe-execution --execution-arn <arn> --query status
 # No verified timing figure for the current windowed/sequential shape as of this writing --
 # do not rely on a "~15 min for 100 companies" style estimate carried over from an older,
@@ -3270,7 +2391,7 @@ throughput argument -- `load_history`'s own Stage 1 also processes CIK windows o
 time (MaxConcurrency=1), so raw per-CIK throughput between the two isn't dramatically
 different. Use `load_history` anyway because it provides what a bare local
 `bootstrap-next` call doesn't: per-window resumability and retry (`MaxAttempts: 3` with
-backoff on `WindowedBootstrap`), correct Stage 0/1/1B/2/3 sequencing (identity before
+backoff on `WindowedBootstrap`), correct Stage 0/1/1B/1C/2/3 sequencing (identity before
 ownership/ADV, MDM after silver is complete, gold last), and the cross-command
 `sec_fetch_active` lease that prevents it from racing a concurrently-running
 `daily_incremental`/`bootstrap`/etc. Reserve `bootstrap-next` for single-company ad-hoc
