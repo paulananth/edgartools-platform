@@ -319,6 +319,16 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         "--dry-run", action="store_true", default=False,
         help="Report what would change without mutating anything",
     )
+    backfill_quarantine.add_argument(
+        "--relationship-type", action="append", default=None,
+        help=(
+            "Relationship type to backfill; repeat for multiple types. "
+            "Only INSTITUTIONAL_HOLDS has been validated for the chain-aware "
+            "walk (mdm-relationship-versioning-gap Ticket 08/09) -- omitting "
+            "this flag backfills every type with a quarantined row, including "
+            "types not yet examined against the new walk logic."
+        ),
+    )
     backfill_quarantine.set_defaults(
         handler=_logged_handler(
             "backfill-quarantined-relationships", _handle_backfill_quarantined_relationships
@@ -2079,12 +2089,16 @@ def _handle_backfill_quarantined_relationships(args) -> int:
     session = _session()
     try:
         summary = run_backfill(
-            session, batch_size=args.batch_size, dry_run=args.dry_run
+            session,
+            batch_size=args.batch_size,
+            dry_run=args.dry_run,
+            relationship_types=args.relationship_type,
         )
     finally:
         session.close()
     print(json.dumps({
         "dry_run": args.dry_run,
+        "relationship_types": list(args.relationship_type or []),
         "relationship_ids_examined": summary.relationship_ids_examined,
         "reopened": summary.reopened,
         "closed": summary.closed,

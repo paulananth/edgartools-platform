@@ -70,11 +70,12 @@ def _row(
     valid_to_date=None,
     quarantined: bool = False,
     source_system: str = "ownership_filing",
+    rel_type_id: str | None = None,
 ) -> MdmRelationshipInstance:
     row = MdmRelationshipInstance(
         instance_id=str(uuid.uuid4()),
         relationship_id=relationship_id,
-        rel_type_id=session.info["rel_type_id"],
+        rel_type_id=rel_type_id if rel_type_id is not None else session.info["rel_type_id"],
         source_entity_id=str(uuid.uuid4()),
         target_entity_id=str(uuid.uuid4()),
         properties=properties,
@@ -190,6 +191,103 @@ class TestBackfillCoreCase:
         assert rows[v3.instance_id].valid_to_date is None
         assert rows[v3.instance_id].quarantined is False
 
+    def test_reopens_against_multiple_simultaneously_open_predecessors(self, session):
+        """Real prod shape (mdm-relationship-versioning-gap Ticket 08/09):
+        write-time closing never fired for v1/v2, so BOTH sit open
+        (valid_to_date=None) with differing properties -- already a
+        violated invariant before v3 ever arrives. v3 then conflicts with
+        BOTH v1 and v2 simultaneously (they're both still open-ended), not
+        just one. The old pairwise design bails out entirely on 2+
+        conflicts (skipped_multiple_conflicts); the chain-aware walk must
+        instead close v1 at v2's date and v2 at v3's date -- reusing the
+        SAME chronological ordering that already resolves the single-
+        conflict case -- leaving only v3 open, even though v1 and v2 were
+        never themselves quarantined."""
+        rel_id = "rel-multi-open-chain"
+        v1 = _row(
+            session, relationship_id=rel_id,
+            properties={"shares": 100}, effective_from=date(2023, 1, 1),
+        )
+        v2 = _row(
+            session, relationship_id=rel_id,
+            properties={"shares": 200}, effective_from=date(2024, 1, 1),
+        )
+        v3 = _row(
+            session, relationship_id=rel_id,
+            properties={"shares": 300}, effective_from=date(2025, 1, 1),
+            quarantined=True,
+        )
+        session.commit()
+
+        summary = backfill_relationship_id(session, rel_id)
+        session.commit()
+
+        assert summary.closed == 2
+        assert summary.reopened == 1
+        session.expire_all()
+        rows = {
+            r.instance_id: r for r in session.scalars(
+                select(MdmRelationshipInstance).where(
+                    MdmRelationshipInstance.relationship_id == rel_id
+                )
+            )
+        }
+        assert rows[v1.instance_id].valid_to_date == date(2024, 1, 1)
+        assert rows[v2.instance_id].valid_to_date == date(2025, 1, 1)
+        assert rows[v3.instance_id].valid_to_date is None
+        assert rows[v3.instance_id].quarantined is False
+
+    def test_closing_a_row_via_later_supersession_also_clears_its_own_stale_quarantine_flag(self, session):
+        """A row can stay quarantined=True after its OWN group's processing
+        (e.g. an irreconcilable same-date sibling conflict) but still joins
+        open_set regardless -- it can then be the `conflict` a later,
+        cleanly-resolving row closes. close_relationship_version only ever
+        sets valid_to_date/effective_to, never quarantined -- so without
+        this fix, such a row ends up permanently stuck quarantined=True
+        forever with a valid_to_date already set, a self-contradictory
+        state (closed history that never stops being flagged as needing
+        review) that no future run can ever correct, since a closed row's
+        own effective_from/valid_to_date never change again."""
+        rel_id = "rel-close-clears-quarantine"
+        a = _row(
+            session, relationship_id=rel_id,
+            properties={"shares": 100}, effective_from=date(2024, 1, 1),
+            quarantined=True,
+        )
+        b = _row(
+            session, relationship_id=rel_id,
+            properties={"shares": 200}, effective_from=date(2024, 1, 1),
+            quarantined=True,
+        )
+        c = _row(
+            session, relationship_id=rel_id,
+            properties={"shares": 300}, effective_from=date(2025, 1, 1),
+        )
+        session.commit()
+
+        summary = backfill_relationship_id(session, rel_id)
+        session.commit()
+
+        assert summary.skipped_multiple_conflicts == 2  # a/b's own same-date tie
+        assert summary.closed == 2  # c closes both a and b
+        assert summary.reopened == 2  # a and b's stale quarantine is cleared on close
+        session.expire_all()
+        rows = {
+            r.instance_id: r for r in session.scalars(
+                select(MdmRelationshipInstance).where(
+                    MdmRelationshipInstance.relationship_id == rel_id
+                )
+            )
+        }
+        assert rows[a.instance_id].valid_to_date == date(2025, 1, 1)
+        assert rows[a.instance_id].quarantined is False
+        assert rows[a.instance_id].quarantine_reason is None
+        assert rows[b.instance_id].valid_to_date == date(2025, 1, 1)
+        assert rows[b.instance_id].quarantined is False
+        assert rows[b.instance_id].quarantine_reason is None
+        assert rows[c.instance_id].valid_to_date is None
+        assert rows[c.instance_id].quarantined is False
+
     def test_no_current_conflict_remaining_just_reopens_without_closing_anything(self, session):
         """The row this quarantined row originally conflicted with has
         since been closed by some other process -- nothing left to close,
@@ -286,11 +384,22 @@ class TestBackfillSkipsWhatItShouldNotResolve:
         assert session.get(MdmRelationshipInstance, current.instance_id).valid_to_date is None
         assert session.get(MdmRelationshipInstance, quarantined.instance_id).quarantined is True
 
-    def test_ambiguous_chronological_order_is_left_untouched(self, session):
-        """The quarantined row's effective_from is EARLIER than the
-        conflicting row's valid_from_date -- reprocessing an older row
-        (a late-filed amendment, or a full-history resync) must never be
-        force-resolved by assuming it's the 'newer' fact."""
+    def test_earlier_quarantined_row_resolves_as_legitimate_prior_history(self, session):
+        """A quarantined row dated EARLIER than an already-active row it
+        conflicts with is NOT the ambiguous case
+        `confirmed_chronologically_after`'s own docstring guards against
+        ('never close a NEWER version using a stale date') -- it's the
+        opposite direction: the chronological walk reaches the LATER
+        (already-active) row, confirms ITS date is after the quarantined
+        row's date, and closes the quarantined row using the later row's
+        own confirmed date. Officer 2024-10-16 -> 2025-10-08, then
+        director 2025-10-08 onward, is a complete and correct two-period
+        history -- leaving the officer row quarantined forever would serve
+        no purpose. (Ticket 09: confirmed this is the intended behavior,
+        a correction from the pairwise design's blind spot, not a
+        regression -- the old design only ever checked the quarantined
+        row's own date against its one candidate, never the reverse
+        direction.)"""
         rel_id = "rel-out-of-order"
         current = _row(
             session, relationship_id=rel_id,
@@ -300,6 +409,68 @@ class TestBackfillSkipsWhatItShouldNotResolve:
             session, relationship_id=rel_id,
             properties={"role": "officer"}, effective_from=date(2024, 10, 16),
             quarantined=True,
+        )
+        session.commit()
+
+        summary = backfill_relationship_id(session, rel_id)
+        session.commit()
+
+        assert summary.closed == 1
+        assert summary.reopened == 1
+        session.expire_all()
+        assert session.get(MdmRelationshipInstance, current.instance_id).valid_to_date is None
+        newer = session.get(MdmRelationshipInstance, quarantined.instance_id)
+        assert newer.quarantined is False
+        assert newer.valid_to_date == date(2025, 10, 8)
+
+    def test_same_day_supersession_is_genuinely_ambiguous_and_left_untouched(self, session):
+        """Two rows with the IDENTICAL effective_from can never be
+        positively confirmed as one coming strictly after the other --
+        `confirmed_chronologically_after` requires strict `>`, matching
+        `ck_rel_instance_valid_interval`'s own `valid_to_date > valid_from_date`
+        constraint (a zero-length interval is rejected outright). This is
+        the case the guard genuinely exists for, regardless of which
+        direction the walk approaches it from."""
+        rel_id = "rel-same-day"
+        current = _row(
+            session, relationship_id=rel_id,
+            properties={"role": "director"}, effective_from=date(2025, 1, 1),
+        )
+        quarantined = _row(
+            session, relationship_id=rel_id,
+            properties={"role": "officer"}, effective_from=date(2025, 1, 1),
+            quarantined=True,
+        )
+        session.commit()
+
+        summary = backfill_relationship_id(session, rel_id)
+        session.commit()
+
+        assert summary.closed == 0
+        assert summary.reopened == 0
+        assert summary.skipped_ambiguous_order == 1
+        session.expire_all()
+        assert session.get(MdmRelationshipInstance, current.instance_id).valid_to_date is None
+        assert session.get(MdmRelationshipInstance, quarantined.instance_id).quarantined is True
+
+    def test_same_day_supersession_is_ambiguous_regardless_of_row_insertion_order(self, session):
+        """Same scenario as the test above, but with the quarantined row
+        inserted BEFORE the active row -- the outcome must not depend on
+        which row a database query happens to return first for a tied
+        effective_from. A walk that only checks a row against whatever's
+        already accumulated in an 'open set' would let whichever row is
+        iterated first see zero conflicts and get trivially reopened,
+        before its same-day sibling is ever added -- this must not
+        happen regardless of insertion/iteration order."""
+        rel_id = "rel-same-day-reversed"
+        quarantined = _row(
+            session, relationship_id=rel_id,
+            properties={"role": "officer"}, effective_from=date(2025, 1, 1),
+            quarantined=True,
+        )
+        current = _row(
+            session, relationship_id=rel_id,
+            properties={"role": "director"}, effective_from=date(2025, 1, 1),
         )
         session.commit()
 
@@ -389,6 +560,80 @@ class TestFindQuarantinedRelationshipIdsPagination:
         assert first_batch == ["rel-aaa"]
         second_batch = find_quarantined_relationship_ids(session, limit=1, after=first_batch[-1])
         assert second_batch == ["rel-bbb"]
+
+
+class TestRelationshipTypeScoping:
+    """mdm-relationship-versioning-gap Ticket 08/09: the chain-aware walk
+    is deliberately rolled out to INSTITUTIONAL_HOLDS first, not the other
+    5 affected types -- a real prod run must be able to scope to just the
+    validated type(s), not silently touch every quarantined relationship_id
+    regardless of type."""
+
+    def _other_rel_type_id(self, session) -> str:
+        other_id = str(uuid.uuid4())
+        session.add(MdmRelationshipType(
+            rel_type_id=other_id,
+            rel_type_name="OTHER_REL_TYPE",
+            source_node_type="person",
+            target_node_type="company",
+            direction="outbound",
+            is_temporal=True,
+            merge_strategy="extend_temporal",
+            is_active=True,
+        ))
+        session.commit()
+        return other_id
+
+    def test_find_quarantined_relationship_ids_filters_by_type(self, session):
+        other_type_id = self._other_rel_type_id(session)
+        _row(
+            session, relationship_id="rel-target-type",
+            properties={"role": "officer"}, effective_from=date(2024, 1, 1),
+            quarantined=True,
+        )
+        _row(
+            session, relationship_id="rel-other-type",
+            properties={"role": "officer"}, effective_from=date(2024, 1, 1),
+            quarantined=True, rel_type_id=other_type_id,
+        )
+        session.commit()
+
+        assert find_quarantined_relationship_ids(
+            session, relationship_types=[REL_TYPE_NAME]
+        ) == ["rel-target-type"]
+        assert find_quarantined_relationship_ids(
+            session, relationship_types=["OTHER_REL_TYPE"]
+        ) == ["rel-other-type"]
+        assert set(find_quarantined_relationship_ids(session)) == {
+            "rel-target-type", "rel-other-type",
+        }
+
+    def test_run_backfill_scoped_to_one_type_leaves_other_types_untouched(self, session):
+        other_type_id = self._other_rel_type_id(session)
+        _row(
+            session, relationship_id="rel-target-type",
+            properties={"role": "officer"}, effective_from=date(2024, 10, 16),
+        )
+        target_quarantined = _row(
+            session, relationship_id="rel-target-type",
+            properties={"role": "director"}, effective_from=date(2025, 10, 8),
+            quarantined=True,
+        )
+        other_quarantined = _row(
+            session, relationship_id="rel-other-type",
+            properties={"role": "director"}, effective_from=date(2025, 10, 8),
+            quarantined=True, rel_type_id=other_type_id,
+        )
+        session.commit()
+
+        summary = run_backfill(session, relationship_types=[REL_TYPE_NAME], dry_run=False)
+        session.commit()
+
+        assert summary.relationship_ids_examined == 1
+        assert summary.reopened == 1
+        session.expire_all()
+        assert session.get(MdmRelationshipInstance, target_quarantined.instance_id).quarantined is False
+        assert session.get(MdmRelationshipInstance, other_quarantined.instance_id).quarantined is True
 
 
 class TestRunBackfillEndToEnd:

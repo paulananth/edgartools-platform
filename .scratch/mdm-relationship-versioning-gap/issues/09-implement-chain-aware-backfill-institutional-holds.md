@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: claimed
 Blocked by: 08
 
 ## Question
@@ -35,4 +35,61 @@ relationship types beyond INSTITUTIONAL_HOLDS (Ticket 08's rollout
 sequencing decision -- prove the mechanism here first).
 
 ## Answer
+
+Implemented (not yet run against prod -- see "Remaining" below).
+`backfill_relationship_id()` in `relationship_quarantine_backfill.py`
+rewritten from Ticket 05's pairwise "one active row vs one quarantined
+row" walk into a chronological, date-grouped chain walk: loads the full
+row set (active + quarantined) for a relationship_id, groups rows sharing
+the exact same `effective_from` (avoids order-dependent tie-breaking on
+same-date rows), walks groups in ascending date order maintaining an
+`open_set`, and closes/reopens via the same `relationships_conflict`/
+`confirmed_chronologically_after`/`resolve_source_priority` guards Ticket
+05 already used -- never inserting a new row, always UPDATE in place.
+
+**Sub-decision (a) -- identical-properties dedup: answered by the existing
+discriminator, not a new dedup step.** `relationships_conflict` already
+requires *differing* properties to register as a conflict, so two
+chronologically-adjacent same-source rows with genuinely identical
+properties never appear as conflicts to each other and are left exactly
+as they are -- correct by the existing design, no additional dedup logic
+needed or added.
+
+**Sub-decision (b) -- out-of-order arrival: resolved by walk order, no
+special-case needed.** Processing strictly in business-date
+(`effective_from`) order rather than write/quarantine order means a
+late-arriving amendment for an earlier period is naturally slotted into
+its correct chronological position when the walk reaches it, correctly
+compared against only the rows genuinely earlier than it. No additional
+handling beyond the existing `confirmed_chronologically_after` guard was
+needed.
+
+**Bug found and fixed during the mandatory 3-axis `/code-review` (Spec
+axis) before commit, not caught by the pre-code `/gof-refactor-reviewer`
+consult:** a row that stays quarantined after an unresolved conflict in
+its own group (e.g. an irreconcilable same-date sibling tie) was still
+unconditionally added to `open_set` -- so a later, cleanly-resolving row
+could select it as the `conflict` it closes. `close_relationship_version`
+only ever sets `valid_to_date`/`effective_to`, never `quarantined` -- so
+without a fix, that row would end up permanently stuck `quarantined=True`
+forever with a `valid_to_date` already set, a self-contradictory state no
+future run could ever correct (a closed row's own dates never change
+again). Fixed: closing a previously-quarantined row now also clears
+`quarantined`/`quarantine_reason` and counts toward `summary.reopened`
+(mirroring the dry-run-safe counter/mutation split the rest of the
+function already used). New regression test,
+`test_closing_a_row_via_later_supersession_also_clears_its_own_stale_quarantine_flag`,
+confirmed to fail before the fix (`reopened=0` instead of `2`) and pass
+after.
+
+Full `tests/mdm/` suite green (752 passed) after the fix. Standards and
+GoF review axes came back clean (no hard violations; GoF verdict "leave
+it" -- one cohesive function, no repeated-change evidence to justify a
+structural split).
+
+**Remaining, per this ticket's own scope:** deploy + dry-run against real
+prod, capture before/after `skipped_multiple_conflicts` counts, then run
+the real backfill for INSTITUTIONAL_HOLDS -- needs explicit go-ahead
+before the real (non-dry-run) prod execution, per this map's established
+precedent for prod-mutating actions.
 

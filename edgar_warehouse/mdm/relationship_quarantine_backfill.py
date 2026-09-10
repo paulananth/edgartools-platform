@@ -31,12 +31,12 @@ import json
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from edgar_warehouse.mdm.database import MdmRelationshipInstance
+from edgar_warehouse.mdm.database import MdmRelationshipInstance, MdmRelationshipType
 from edgar_warehouse.mdm.graph import (
     close_relationship_version,
     confirmed_chronologically_after,
@@ -70,7 +70,11 @@ class RelationshipQuarantineBackfillSummary:
 
 
 def find_quarantined_relationship_ids(
-    session: Session, *, limit: Optional[int] = None, after: Optional[str] = None
+    session: Session,
+    *,
+    limit: Optional[int] = None,
+    after: Optional[str] = None,
+    relationship_types: Optional[Sequence[str]] = None,
 ) -> list[str]:
     """Distinct relationship_ids with at least one currently-quarantined row.
 
@@ -79,10 +83,26 @@ def find_quarantined_relationship_ids(
     ``backfill_relationship_id`` (cross-source conflicts, ambiguous dates),
     so a batch loop that re-queries "still has a quarantined row" without
     this would loop forever on exactly those rows instead of advancing.
+
+    ``relationship_types`` (rel_type_name values, e.g. ``INSTITUTIONAL_HOLDS``)
+    restricts to those types only -- ``None`` means no filter (every type
+    with a quarantined row). Needed because ``backfill_relationship_id``'s
+    chain-aware walk (Ticket 08/09, mdm-relationship-versioning-gap) is
+    deliberately rolled out to INSTITUTIONAL_HOLDS first; the other 5
+    affected types have not had their property shapes/edge cases examined
+    against the new walk yet.
     """
-    stmt = select(MdmRelationshipInstance.relationship_id).where(
-        MdmRelationshipInstance.quarantined.is_(True)
-    ).distinct().order_by(MdmRelationshipInstance.relationship_id)
+    stmt = (
+        select(MdmRelationshipInstance.relationship_id)
+        .where(MdmRelationshipInstance.quarantined.is_(True))
+        .distinct()
+        .order_by(MdmRelationshipInstance.relationship_id)
+    )
+    if relationship_types is not None:
+        stmt = stmt.join(
+            MdmRelationshipType,
+            MdmRelationshipType.rel_type_id == MdmRelationshipInstance.rel_type_id,
+        ).where(MdmRelationshipType.rel_type_name.in_(relationship_types))
     if after is not None:
         stmt = stmt.where(MdmRelationshipInstance.relationship_id > after)
     if limit is not None:
@@ -124,7 +144,7 @@ def _record_backfill_evidence(row: MdmRelationshipInstance, note: str) -> None:
 def backfill_relationship_id(
     session: Session, relationship_id: str, *, dry_run: bool = False
 ) -> RelationshipQuarantineBackfillSummary:
-    """Correct every quarantined row sharing ``relationship_id``.
+    """Correct every conflicting row sharing ``relationship_id``.
 
     Reuses the exact discriminator/overlap/chronological-guard/priority
     semantics ``ensure_relationship``/``_deactivate_if_properties_changed``
@@ -136,6 +156,33 @@ def backfill_relationship_id(
     disagreement, or a date that can't be positively confirmed to come
     after the row it conflicts with) is left exactly as it is, not
     force-resolved.
+
+    Chain-aware (mdm-relationship-versioning-gap Ticket 08/09): walks the
+    relationship_id's ENTIRE row history (both currently-active and
+    currently-quarantined rows together) in one pass, sorted by business
+    date (``effective_from``, falling back to ``valid_from_date``) -- not
+    just quarantined rows one at a time against a static "current
+    candidates" snapshot. A live-prod diagnostic found real relationship_ids
+    where write-time closing never fired for TWO OR MORE consecutive
+    periods at once (e.g. three consecutive 13F quarters all sitting with
+    ``valid_to_date IS NULL`` simultaneously) -- the previous single-
+    conflict-only design would bail out entirely (``skipped_multiple_
+    conflicts``) rather than resolve any of them. This walk closes every
+    open row a later row genuinely conflicts with (subject to the same
+    guards, checked per conflicting pair), closing each one against the
+    date of whichever row in the sorted sequence actually supersedes it --
+    never against a later row further down the chain, which would silently
+    stretch an intermediate row's ``valid_to_date`` across periods it was
+    never actually valid for. Processing strictly in business-date order
+    (not write/quarantine order) also means a late-arriving amendment for
+    an earlier period is naturally slotted into its correct chronological
+    position, with no separate out-of-order handling needed.
+
+    Also corrects conflicts between two rows that were NEVER quarantined
+    at all (write-time closing simply never fired for that pair) --
+    confirmed by design decision, since the walk already has to process
+    the full row set to get chronological ordering right, and leaving a
+    known-bad pair uncorrected once discovered would serve no purpose.
     """
     summary = RelationshipQuarantineBackfillSummary(relationship_ids_examined=1)
 
@@ -146,75 +193,149 @@ def backfill_relationship_id(
         .where(MdmRelationshipInstance.superseded_by_version_id.is_(None))
     ))
 
-    quarantined = [r for r in rows if r.quarantined]
-    current_candidates = [r for r in rows if not r.quarantined]
-
-    dated_quarantined = []
-    for row in quarantined:
-        if _effective_from_of(row) is None:
+    dated: list[tuple[Any, MdmRelationshipInstance]] = []
+    for row in rows:
+        effective_from = _effective_from_of(row)
+        if effective_from is None:
             summary.skipped_ambiguous_date += 1
             continue
-        dated_quarantined.append(row)
-    dated_quarantined.sort(key=_effective_from_of)
+        dated.append((effective_from, row))
+    dated.sort(key=lambda pair: pair[0])
 
-    for q in dated_quarantined:
-        q_effective_from = _effective_from_of(q)
-        conflicts = [
-            c for c in current_candidates
-            if relationships_conflict(
-                c.valid_from_date, c.valid_to_date, c.properties,
-                q.valid_from_date, q.valid_to_date, q.properties,
-            )
-        ]
-        if len(conflicts) > 1:
-            summary.skipped_multiple_conflicts += 1
-            continue
-        if not conflicts:
-            # No currently-active conflict remains for this row -- whatever
-            # it originally conflicted with has since been closed/superseded
-            # by some other process. Nothing to close; just reopen.
-            if not dry_run:
-                q.quarantined = False
-                q.quarantine_reason = None
-                _record_backfill_evidence(q, "reopened: no active conflict remained")
-            summary.reopened += 1
-            current_candidates.append(q)
-            continue
+    # Group rows sharing the exact same effective_from together.
+    # confirmed_chronologically_after requires a STRICT `>`, so two
+    # same-date rows can never confirm either as "after" the other --
+    # processing them one at a time against an incrementally-built
+    # open_set would make the outcome depend on arbitrary database
+    # row-return order for the tie (whichever happens to be visited first
+    # sees zero conflicts and would be wrongly treated as unconditionally
+    # safe). Each date-group is resolved as a unit against rows from
+    # STRICTLY EARLIER dates only, then any irreconcilable conflicts
+    # *within* the group are counted (never resolved, symmetric
+    # regardless of iteration order within the group), before the whole
+    # group joins the open set together.
+    groups: list[tuple[Any, list[MdmRelationshipInstance]]] = []
+    for effective_from, row in dated:
+        if groups and groups[-1][0] == effective_from:
+            groups[-1][1].append(row)
+        else:
+            groups.append((effective_from, [row]))
 
-        conflict = conflicts[0]
-        priority_winner = resolve_source_priority(
-            session, q.rel_type_id, conflict.source_system, q.source_system
-        )
-        if priority_winner != "none":
-            # A mdm_relationship_source_priority rule now resolves this
-            # pair by configured authority -- a different resolution axis
-            # (supersession, not versioning) that this backfill was never
-            # designed to apply automatically. Flag for a separate decision.
-            summary.skipped_priority_now_configured += 1
-            continue
-        if conflict.source_system != q.source_system:
-            summary.skipped_cross_source += 1
-            continue
-        if not confirmed_chronologically_after(q_effective_from, conflict.valid_from_date):
-            summary.skipped_ambiguous_order += 1
-            continue
+    open_set: list[MdmRelationshipInstance] = []
+    for effective_from, group in groups:
+        resolved_by_row: dict[str, list[MdmRelationshipInstance]] = {}
+        unresolved_by_row: dict[str, bool] = {}
 
-        if not dry_run:
-            close_relationship_version(session, conflict.instance_id, q_effective_from)
-            _record_backfill_evidence(conflict, f"closed: superseded by {q.instance_id}")
-            q.quarantined = False
-            q.quarantine_reason = None
-            _record_backfill_evidence(q, f"reopened: superseded {conflict.instance_id}")
-        summary.closed += 1
-        summary.reopened += 1
-        current_candidates.remove(conflict)
-        current_candidates.append(q)
+        for row in group:
+            conflicts = [
+                o for o in open_set
+                if relationships_conflict(
+                    o.valid_from_date, o.valid_to_date, o.properties,
+                    row.valid_from_date, row.valid_to_date, row.properties,
+                )
+            ]
+            resolved: list[MdmRelationshipInstance] = []
+            unresolved = False
+            for conflict in conflicts:
+                priority_winner = resolve_source_priority(
+                    session, row.rel_type_id, conflict.source_system, row.source_system
+                )
+                if priority_winner != "none":
+                    # A mdm_relationship_source_priority rule now resolves
+                    # this pair by configured authority -- a different
+                    # resolution axis (supersession, not versioning) that
+                    # this backfill was never designed to apply
+                    # automatically. Flag for a separate decision.
+                    summary.skipped_priority_now_configured += 1
+                    unresolved = True
+                    continue
+                if conflict.source_system != row.source_system:
+                    summary.skipped_cross_source += 1
+                    unresolved = True
+                    continue
+                if not confirmed_chronologically_after(effective_from, conflict.valid_from_date):
+                    summary.skipped_ambiguous_order += 1
+                    unresolved = True
+                    continue
+                resolved.append(conflict)
+            resolved_by_row[row.instance_id] = resolved
+            unresolved_by_row[row.instance_id] = unresolved
+
+        # Close every open-set conflict any group member resolved
+        # cleanly, once each, before checking intra-group conflicts.
+        already_closed: set[str] = set()
+        for row in group:
+            for conflict in resolved_by_row[row.instance_id]:
+                if conflict.instance_id in already_closed:
+                    continue
+                already_closed.add(conflict.instance_id)
+                # A closed row is, by definition, no longer part of "current"
+                # state -- its own earlier, unresolved quarantine (from a
+                # same-date sibling conflict, or a cross-source/ambiguous-
+                # order guard at the time IT was processed) no longer applies
+                # once a later row has cleanly superseded it here. Leaving
+                # quarantined=True would strand it permanently, since a
+                # closed row's own valid_to_date never changes again on a
+                # future run.
+                was_quarantined = conflict.quarantined
+                if not dry_run:
+                    close_relationship_version(session, conflict.instance_id, effective_from)
+                    if was_quarantined:
+                        conflict.quarantined = False
+                        conflict.quarantine_reason = None
+                    _record_backfill_evidence(conflict, f"closed: superseded by {row.instance_id}")
+                summary.closed += 1
+                if was_quarantined:
+                    summary.reopened += 1
+        open_set = [o for o in open_set if o.instance_id not in already_closed]
+
+        # Same-date rows can never confirm chronological order against
+        # each other -- any conflict within the group is genuinely
+        # ambiguous, symmetric regardless of which member is "row_i".
+        for i, row_i in enumerate(group):
+            for row_j in group[i + 1:]:
+                if relationships_conflict(
+                    row_i.valid_from_date, row_i.valid_to_date, row_i.properties,
+                    row_j.valid_from_date, row_j.valid_to_date, row_j.properties,
+                ):
+                    summary.skipped_ambiguous_order += 1
+                    unresolved_by_row[row_i.instance_id] = True
+                    unresolved_by_row[row_j.instance_id] = True
+
+        for row in group:
+            if unresolved_by_row[row.instance_id]:
+                # At least one conflicting row couldn't be resolved
+                # (cross-source, a now-configured priority rule, an
+                # ambiguous order, or a same-date sibling) -- `row` can't
+                # cleanly represent "current" state while a conflicting
+                # predecessor remains open, so if it was quarantined it
+                # stays quarantined. Progress already made above (any
+                # OTHER conflict that DID resolve) is kept.
+                if row.quarantined:
+                    summary.skipped_multiple_conflicts += 1
+            elif row.quarantined:
+                if not dry_run:
+                    row.quarantined = False
+                    row.quarantine_reason = None
+                    resolved = resolved_by_row[row.instance_id]
+                    note = (
+                        f"reopened: superseded {[c.instance_id for c in resolved]}"
+                        if resolved
+                        else "reopened: no active conflict remained"
+                    )
+                    _record_backfill_evidence(row, note)
+                summary.reopened += 1
+            open_set.append(row)
 
     return summary
 
 
 def run_backfill(
-    session: Session, *, batch_size: int = 500, dry_run: bool = False
+    session: Session,
+    *,
+    batch_size: int = 500,
+    dry_run: bool = False,
+    relationship_types: Optional[Sequence[str]] = None,
 ) -> RelationshipQuarantineBackfillSummary:
     """Drain every relationship_id with a quarantined row, committing per batch.
 
@@ -223,17 +344,23 @@ def run_backfill(
     candidate list once up front instead (bounded by the live quarantined
     count, not an arbitrary batch size) and report on all of it in one
     pass.
+
+    ``relationship_types`` restricts to those rel_type_name values only --
+    see ``find_quarantined_relationship_ids`` for why this matters (Ticket
+    08/09's INSTITUTIONAL_HOLDS-first rollout scope).
     """
     total = RelationshipQuarantineBackfillSummary()
     if dry_run:
-        for relationship_id in find_quarantined_relationship_ids(session):
+        for relationship_id in find_quarantined_relationship_ids(
+            session, relationship_types=relationship_types
+        ):
             total.add(backfill_relationship_id(session, relationship_id, dry_run=True))
         return total
 
     after: Optional[str] = None
     while True:
         relationship_ids = find_quarantined_relationship_ids(
-            session, limit=batch_size, after=after
+            session, limit=batch_size, after=after, relationship_types=relationship_types
         )
         if not relationship_ids:
             break
