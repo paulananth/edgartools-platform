@@ -2983,6 +2983,101 @@ Postgres smoke test) against this migration specifically remains the
 honest bar before calling it verified. **Not yet committed, built, or
 deployed** as of this entry.
 
+## Quarantine backfill uncached priority lookup 5-whys (fixed, deployed and live-verified 2026-09-10)
+
+**Problem:** a real prod dry-run of `run_backfill()` (Ticket 09,
+mdm-relationship-versioning-gap map), scoped to `--relationship-type
+INSTITUTIONAL_HOLDS` (~7,966 relationship_ids), ran 8.5+ hours without
+completing and had to be manually stopped (`aws ecs stop-task`) — no
+crash, no error, just far too slow to ever finish in a usable window.
+
+1. Symptom: CloudWatch showed the task steadily issuing ~9 Postgres round
+   trips/second for the entire 8.5-hour run, with no sign of slowing or
+   completing.
+2. Why 9/sec instead of a burst-then-idle pattern? Every one of those
+   round trips was the identical query shape: `SELECT ... FROM
+   mdm_relationship_source_priority WHERE rel_type_id = %(rel_type_id_1)s
+   AND is_active = true AND source_system IN (%(source_system_1_1)s,
+   %(source_system_1_2)s)` — all returning `rowcount=0` (no priority
+   rules configured for INSTITUTIONAL_HOLDS at all).
+3. Why re-issue the identical query so many times? `resolve_source_priority()`
+   (`graph.py`) is called from `backfill_relationship_id`'s per-group
+   conflict-guard loop (`relationship_quarantine_backfill.py`) once per
+   conflicting row pair, with zero caching — a fresh, uncached round trip
+   on every single call.
+4. Why does that matter at this scale specifically? `rel_type_id` is
+   constant for the entire run (scoped to one type), and a prior live
+   diagnostic (Ticket 08) had already confirmed same-relationship_id
+   conflicting rows are ~100% same-`source_system` — so the actual
+   `(existing_source, new_source)` argument pairs repeat constantly
+   across all 7,966 relationship_ids, yet the function re-derives the
+   identical, already-known answer from Postgres every time. Estimated
+   ~270,000+ redundant round trips made before the task was stopped.
+5. **Root cause:** the same "no per-call memoization for a value that's
+   effectively invariant across a batch run" shape this file already
+   documents multiple times (`_ensure_thirteenf_manager` re-querying the
+   same manager CIK per holding row, `_derive_is_insider`/`_derive_holds`
+   re-querying the same CIK per row — see "Relationship-derivation
+   single-threaded tail" above) — just not yet fixed at this specific,
+   newly-added call site (Ticket 09's chain-aware walk, added 2026-09-09,
+   had never been run against real prod data at this scale before this
+   attempt).
+
+**Fix:** a private `_resolve_source_priority_cached()` helper in
+`relationship_quarantine_backfill.py` memoizes on the exact `(rel_type_id,
+existing_source, new_source)` tuple (order-preserving — the function's
+"existing"/"new" return value is directional, so an order-independent key
+would silently return the wrong winner). `resolve_source_priority()`
+itself (`graph.py`) is deliberately left untouched — its only other
+caller, `ensure_relationship`, fires once per newly-written row, a
+naturally bounded cost with no repetition to amortize, so caching there
+would add complexity for no benefit and risk masking genuine mid-run
+config edits on the live write path, where staleness would actually
+matter. `backfill_relationship_id` gained an optional `priority_cache`
+keyword param (defaults to a fresh per-call dict, preserving existing
+direct-caller behavior); `run_backfill()` creates ONE cache dict up front
+and threads it through its entire loop — both the dry-run branch and the
+batched real-run branch — so the cache persists across the whole run, not
+just within one relationship_id or one batch. Mirrors the already-proven
+`_ensure_thirteenf_manager` per-batch memoization pattern rather than
+inventing a new mechanism.
+
+Confirmed safe to cache despite being a live-data lookup: this is an
+offline, one-shot batch correction tool, not the live write path — a
+cache built at the start of one run can only miss a priority rule edited
+mid-run, which just moves one row between two already-tolerated,
+already-flagged-for-review outcomes (resolved vs.
+`skipped_priority_now_configured`), not a correctness regression.
+
+Tests: `TestPriorityCheckCachedAcrossRun` (2 new,
+`tests/mdm/test_relationship_quarantine_backfill.py`) uses SQLAlchemy's
+`event.listen(bind, "before_cursor_execute", ...)` (the same
+statement-counting idiom this repo's other bounded-round-trip tests use)
+to assert the number of `mdm_relationship_source_priority` queries stays
+flat (≤1) across 10 relationship_ids, for both `run_backfill()` branches
+— confirmed to fail (10 queries) before the fix and pass after. Full
+`tests/mdm/` suite green (757 passed). `/gof-refactor-reviewer` consulted
+before implementing (this file's own hard rule); 3-axis `/code-review`
+(Standards/Spec/GoF) came back clean.
+
+**Not yet deployed/re-verified as of this entry** — the runaway dry-run
+was stopped (`aws ecs stop-task`, confirmed `lastStatus: STOPPED`) before
+this fix was written; the next step is rebuilding/redeploying the MDM
+image and re-running the dry-run scoped to `--relationship-type
+INSTITUTIONAL_HOLDS` against real prod to confirm the fix holds at
+scale, before proceeding to the real (non-dry-run) backfill.
+
+**Lesson:** a newly-added, never-yet-run-at-scale code path (this chain-
+aware walk was one day old in prod terms) is exactly where this repo's
+established "memoize per-batch, don't re-query the same invariant value
+per row" convention is easiest to forget — the fix pattern already
+existed multiple times elsewhere in this codebase, but a new call site
+doesn't inherit it automatically. Treat "first real run at scale" as the
+genuine test of any batch-processing code, not the unit test suite alone
+(SQLite-backed unit tests here never exercised more than a handful of
+relationship_ids, so the N+1 shape was invisible until real volume hit
+it).
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
