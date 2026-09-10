@@ -72,6 +72,27 @@ non-qualifying and a fresh control must precede both medium candidates. Ticket
 29 remains open; no profile promotion or production reference change has been
 made.
 
+## Restarted (2026-09-10) — measurement only after DuckDB retirement
+
+The branch was rebased onto current `origin/main` and the canary contract was
+reconciled with the completed DuckDB retirement. `gold-refresh` no longer
+hydrates or publishes `warehouse/silver/sec/silver.duckdb`; its remaining five
+orphan evidence exports read Snowflake `EDGARTOOLS_SILVER` directly. The old S3
+ETag/size input-identity gate was therefore removed rather than allowed to
+validate a stale object.
+
+The repaired evaluator can measure task-bound CPU/memory, duration, estimated
+Fargate compute cost, exact Gold manifest/Snowflake-export output parity, and
+cross-run idempotency. It now enforces the complete large-control -> medium-1 ->
+medium-2 order and scans for ECS overlap across the whole cohort window,
+including the gaps. Output hashes are labeled only as output identity.
+
+This rerun cannot resolve Ticket 29 or promote `medium`: the current production
+image does not emit a real Snowflake input-envelope identity/count contract, and
+the success-path runs do not exercise recovery. The evaluator deliberately
+reports performance results separately while keeping both `sizing_gates_passed`
+and overall `passed` false until those two evidence seams exist.
+
 ## Parked (2026-09-01)
 
 Per operator direction, stop this cohort and restart it only after all Step
@@ -89,8 +110,8 @@ Restart procedure after the blocker clears:
 3. prepare fresh immutable unscheduled control/candidate definitions from that
    exact live source;
 4. require a writer-free window for the complete control plus two sequential
-   medium executions, with full-window overlap evidence and hydrated silver
-   content identity matching each launch; and
+   medium executions, with full-window overlap evidence;
 5. evaluate correctness, funnel, structural recovery, idempotency, telemetry,
-   p95 duration, and validated-output cost before resolving the ticket or
-   changing any production profile reference.
+   p95 duration, and validated-output cost; and
+6. keep sizing/promotion unqualified until a matched Snowflake input-envelope
+   contract and exercised recovery evidence are captured.

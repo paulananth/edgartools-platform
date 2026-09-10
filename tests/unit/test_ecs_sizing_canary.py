@@ -163,9 +163,12 @@ def test_add_unbounded_residual_sync_removes_only_the_legacy_cap() -> None:
         "States.Array('mdm', 'publish-relationships', "
         "'--generation-id', $$.Execution.Name)"
     )
-    assert "--limit-per-type" in definition["States"]["Publish Relationships"]["Parameters"][
-        "Overrides"
-    ]["ContainerOverrides"][0]["Command.$"]
+    assert (
+        "--limit-per-type"
+        in definition["States"]["Publish Relationships"]["Parameters"]["Overrides"][
+            "ContainerOverrides"
+        ][0]["Command.$"]
+    )
 
 
 def test_add_unbounded_residual_sync_fails_closed_on_unknown_command() -> None:
@@ -588,36 +591,64 @@ def test_gold_candidate_and_control_use_ticket29_sequence_identity() -> None:
     }
 
 
-def test_gold_input_identity_captures_versioned_canonical_silver() -> None:
-    class FakeCli:
-        def call(self, *args: str) -> dict:
-            assert args == (
-                "s3api",
-                "head-object",
-                "--bucket",
-                "edgartools-prod-warehouse-690839588395",
-                "--key",
-                "warehouse/silver/sec/silver.duckdb",
-            )
-            return {
-                "VersionId": "version-1",
-                "ETag": '"abc123"',
-                "ContentLength": 42,
-                "LastModified": "2026-09-01T00:00:00+00:00",
-                "ServerSideEncryption": "AES256",
-            }
-
-    assert ecs_sizing_canary.gold_input_identity(
-        FakeCli(), env="prod", account="690839588395"
-    ) == {
-        "bucket": "edgartools-prod-warehouse-690839588395",
-        "key": "warehouse/silver/sec/silver.duckdb",
-        "version_id": "version-1",
-        "etag": "abc123",
-        "content_length": 42,
-        "last_modified": "2026-09-01T00:00:00+00:00",
-        "server_side_encryption": "AES256",
+def test_gold_launch_order_requires_control_then_two_candidates() -> None:
+    control = {
+        "name": "ticket29-gold-control-3-20260910T120000Z",
+        "status": "SUCCEEDED",
+        "startDate": "2026-09-10T12:00:00+00:00",
+        "stateMachineArn": "state-machine:current-control",
     }
+    candidate = {
+        "name": "ticket29-gold-2-20260910T121000Z",
+        "status": "SUCCEEDED",
+        "startDate": "2026-09-10T12:10:00+00:00",
+    }
+
+    ecs_sizing_canary.validate_gold_launch_order(
+        [control],
+        cohort="gold",
+        expected_control_state_machine_arn="state-machine:current-control",
+    )
+    ecs_sizing_canary.validate_gold_launch_order(
+        [control, candidate],
+        cohort="gold",
+        expected_control_state_machine_arn="state-machine:current-control",
+    )
+    with pytest.raises(ValueError, match="fresh large control"):
+        ecs_sizing_canary.validate_gold_launch_order(
+            [],
+            cohort="gold",
+            expected_control_state_machine_arn="state-machine:current-control",
+        )
+    with pytest.raises(ValueError, match="already has two medium candidates"):
+        ecs_sizing_canary.validate_gold_launch_order(
+            [
+                control,
+                candidate,
+                {
+                    **candidate,
+                    "name": "ticket29-gold-3-20260910T122000Z",
+                    "startDate": "2026-09-10T12:20:00+00:00",
+                },
+            ],
+            cohort="gold",
+            expected_control_state_machine_arn="state-machine:current-control",
+        )
+    with pytest.raises(ValueError, match="latest large control is FAILED"):
+        ecs_sizing_canary.validate_gold_launch_order(
+            [{**control, "status": "FAILED"}],
+            cohort="gold",
+            expected_control_state_machine_arn="state-machine:current-control",
+        )
+    with pytest.raises(ValueError, match="current immutable definition"):
+        ecs_sizing_canary.validate_gold_launch_order(
+            [control],
+            cohort="gold",
+            expected_control_state_machine_arn="state-machine:new-control",
+        )
+    ecs_sizing_canary.validate_gold_launch_order(
+        [control, candidate], cohort="gold-control"
+    )
 
 
 def test_cluster_overlap_filters_to_other_tasks_in_execution_window() -> None:
@@ -669,6 +700,69 @@ def test_cluster_overlap_filters_to_other_tasks_in_execution_window() -> None:
             "command": [],
         },
     ]
+
+
+def test_cluster_overlap_pages_every_ecs_task_status() -> None:
+    class FakeCli:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, ...]] = []
+
+        def call(self, *args: str) -> dict:
+            self.calls.append(args)
+            if args[:2] == ("ecs", "list-tasks"):
+                status = args[args.index("--desired-status") + 1]
+                token = (
+                    args[args.index("--next-token") + 1]
+                    if "--next-token" in args
+                    else None
+                )
+                if status == "STOPPED" and token is None:
+                    return {"taskArns": ["task/own"], "nextToken": "page-2"}
+                if status == "STOPPED" and token == "page-2":
+                    return {"taskArns": ["task/overlap"]}
+                return {"taskArns": []}
+            if args[:2] == ("ecs", "describe-tasks"):
+                return {
+                    "tasks": [
+                        {
+                            "taskArn": "task/own",
+                            "createdAt": "2026-09-01T12:01:00+00:00",
+                            "stoppedAt": "2026-09-01T12:02:00+00:00",
+                        },
+                        {
+                            "taskArn": "task/overlap",
+                            "createdAt": "2026-09-01T12:03:00+00:00",
+                            "stoppedAt": "2026-09-01T12:04:00+00:00",
+                        },
+                    ]
+                }
+            raise AssertionError(args)
+
+    cli = FakeCli()
+    assert ecs_sizing_canary._cluster_overlap(
+        cli,
+        cluster="edgartools-prod-warehouse",
+        start=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+        end=datetime(2026, 9, 1, 12, 10, tzinfo=UTC),
+        excluded_task_arns={"task/own"},
+    ) == [
+        {
+            "task_arn": "task/overlap",
+            "task_definition_arn": None,
+            "created_at": "2026-09-01T12:03:00+00:00",
+            "stopped_at": "2026-09-01T12:04:00+00:00",
+            "command": [],
+        }
+    ]
+    assert any("--next-token" in call for call in cli.calls)
+
+
+def test_overlap_evidence_fails_closed_when_report_is_late() -> None:
+    with pytest.raises(ValueError, match="within 30 minutes"):
+        ecs_sizing_canary.validate_overlap_evidence_freshness(
+            window_start=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            captured_at=datetime(2026, 9, 1, 12, 31, tzinfo=UTC),
+        )
 
 
 def test_residual_launch_lock_uses_conditional_create_and_owned_delete() -> None:
@@ -786,7 +880,9 @@ def test_validate_report_contract_binds_execution_state_tasks_and_image() -> Non
         ecs_sizing_canary.validate_report_contract(execution, launch, tasks)
 
 
-def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() -> None:
+def test_evaluate_gold_cohort_scores_sizing_but_fails_promotion_without_recovery() -> (
+    None
+):
     manifest = [
         {
             "table_name": "dim_company",
@@ -816,16 +912,32 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
                     "allow_concurrent": False,
                     "active_task_arns": [],
                 },
-                "input_identity": {
-                    "etag": "input-sha",
-                    "content_length": 300,
-                    "version_id": f"{cohort}-{duration}",
-                },
                 "candidate_task_definition_arn": (
                     f"arn:aws:ecs:r:a:task-definition/edgartools-prod-{profile}:1"
                 ),
             },
-            "execution": {"status": "SUCCEEDED", "duration_seconds": duration},
+            "execution": {
+                "status": "SUCCEEDED",
+                "duration_seconds": duration,
+                "start_date": (
+                    "2026-09-10T12:00:00+00:00"
+                    if cohort == "gold-control"
+                    else (
+                        "2026-09-10T12:10:00+00:00"
+                        if duration == 102.0
+                        else "2026-09-10T12:20:00+00:00"
+                    )
+                ),
+                "stop_date": (
+                    "2026-09-10T12:05:00+00:00"
+                    if cohort == "gold-control"
+                    else (
+                        "2026-09-10T12:15:00+00:00"
+                        if duration == 102.0
+                        else "2026-09-10T12:25:00+00:00"
+                    )
+                ),
+            },
             "tasks": [
                 {
                     "state": "RunWarehouseTask",
@@ -840,20 +952,12 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
                     },
                     "application_evidence": [
                         {
-                            "event": "silver_database_hydrated",
-                            "size_bytes": 300,
-                        },
-                        {
                             "event": "gold_publish_started",
-                            "silver_table_counts": {
-                                "sec_company": 10,
-                                "sec_company_filing": 20,
-                            },
                         },
                         {
                             "event": "gold_build_completed",
                             "table_count": 2,
-                            "gold_manifest": manifest,
+                            "gold_manifest": [dict(entry) for entry in manifest],
                             "gold_row_counts": {
                                 "dim_company": 10,
                                 "dim_filing": 20,
@@ -864,11 +968,14 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
                             },
                         },
                         {
-                            "event": "silver_publish_completed",
-                            "silver_database": {
-                                "source_version": "input-sha",
-                                "staged_checksum": "input-sha",
-                                "size_bytes": 300,
+                            "event": "gold_publish_completed",
+                            "gold_row_counts": {
+                                "dim_company": 10,
+                                "dim_filing": 20,
+                            },
+                            "snowflake_export_counts": {
+                                "company": 10,
+                                "filing_detail": 20,
                             },
                         },
                     ],
@@ -891,23 +998,24 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
             evidence(cohort="gold", profile="medium", duration=102.0, cost=0.0055),
             evidence(cohort="gold", profile="medium", duration=104.0, cost=0.0056),
         ],
+        cohort_overlap=[],
     )
 
-    assert result["passed"] is True
+    assert result["performance_gates_passed"] is True
+    assert result["sizing_gates_passed"] is False
+    assert result["passed"] is False
     assert result["candidate_duration_p95_seconds"] == pytest.approx(103.9)
     assert result["duration_regression_percent"] == pytest.approx(3.9)
     assert result["candidate_cost_p95_usd"] == pytest.approx(0.005595)
     assert result["cost_improvement_percent"] == pytest.approx(44.05)
-    assert result["input_content_identity"] == {
-        "etag": "input-sha",
-        "content_length": 300,
+    assert result["output_identity_summary"]["mode"] == "exact_gold_output"
+    assert result["input_envelope_evidence"] == {
+        "passed": False,
+        "status": "not_captured",
+        "source_system": "EDGARTOOLS_SILVER",
     }
     assert result["record_funnel"] == {
-        "input_silver_table_counts": {
-            "sec_company": 10,
-            "sec_company_filing": 20,
-        },
-        "input_silver_rows": 30,
+        "output_tables": ["dim_company", "dim_filing"],
         "attempted_gold_tables": 2,
         "committed_gold_tables": 2,
         "committed_gold_rows": 30,
@@ -915,14 +1023,29 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
         "exported_serving_rows": 30,
         "skipped_rejected_deduplicated": "not_applicable",
     }
-    assert result["recovery_parity"] == {
+    assert result["structural_recovery_parity"] == {
         "passed": True,
         "mode": "same_asl_except_task_definition",
     }
-    assert result["failures"] == []
+    assert result["recovery_evidence"] == {
+        "passed": False,
+        "status": "not_exercised",
+    }
+    assert result["idempotency"]["passed"] is True
+    assert result["performance_failures"] == []
+    assert result["sizing_failures"] == [
+        "matched Snowflake input envelope was not captured"
+    ]
+    assert result["failures"] == [
+        "matched Snowflake input envelope was not captured",
+        "recovery behavior was not exercised",
+    ]
 
     mismatched = evidence(cohort="gold", profile="medium", duration=104.0, cost=0.0056)
-    mismatched["launch_contract"]["input_identity"]["etag"] = "changed-input"
+    mismatched["tasks"][0]["application_evidence"][1]["gold_manifest"][0] = {
+        **manifest[0],
+        "parquet_sha256": "changed-output",
+    }
     rejected = ecs_sizing_canary.evaluate_gold_cohort(
         control=evidence(
             cohort="gold-control", profile="large", duration=100.0, cost=0.010
@@ -931,8 +1054,43 @@ def test_evaluate_gold_cohort_accepts_two_identical_faster_cheaper_candidates() 
             evidence(cohort="gold", profile="medium", duration=102.0, cost=0.0055),
             mismatched,
         ],
+        cohort_overlap=[],
     )
     assert (
-        "candidate and control input content identities do not match"
-        in rejected["failures"]
+        "gold manifest or Snowflake export output parity failed" in rejected["failures"]
     )
+
+
+def test_evaluate_gold_cohort_rejects_overlapping_run_order() -> None:
+    # The detailed fixture above exercises the accepted order. This guard is
+    # intentionally a small pure-function seam around report timestamps.
+    with pytest.raises(ValueError, match="control must stop before candidate 1"):
+        ecs_sizing_canary.validate_gold_report_order(
+            control={
+                "execution": {
+                    "start_date": "2026-09-10T12:00:00+00:00",
+                    "stop_date": "2026-09-10T12:12:00+00:00",
+                }
+            },
+            candidates=[
+                {
+                    "execution": {
+                        "start_date": "2026-09-10T12:10:00+00:00",
+                        "stop_date": "2026-09-10T12:15:00+00:00",
+                    }
+                },
+                {
+                    "execution": {
+                        "start_date": "2026-09-10T12:20:00+00:00",
+                        "stop_date": "2026-09-10T12:25:00+00:00",
+                    }
+                },
+            ],
+        )
+
+
+def test_evaluate_gold_cohort_requires_full_window_overlap_evidence() -> None:
+    with pytest.raises(ValueError, match="full cohort-window overlap evidence"):
+        ecs_sizing_canary.evaluate_gold_cohort(
+            control={}, candidates=[{}, {}], cohort_overlap=None
+        )

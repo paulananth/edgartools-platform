@@ -37,10 +37,11 @@ EXPECTED_ACCOUNT = "690839588395"
 CLUSTER_BASENAME = "warehouse"
 PERFORMANCE_LOG_GROUP = "/aws/ecs/containerinsights/{cluster}/performance"
 TERMINAL_STATUSES = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
+OVERLAP_EVIDENCE_MAX_AGE = timedelta(minutes=30)
 FARGATE_VCPU_HOUR_USD = 0.0404784
 FARGATE_GIB_HOUR_USD = 0.004446
 FARGATE_PRICING_SOURCE = "https://aws.amazon.com/fargate/pricing/"
-FARGATE_PRICING_CAPTURED_AT = "2026-08-29"
+FARGATE_PRICING_CAPTURED_AT = "2026-09-10"
 CANARIES = {
     "gold": {
         "ticket": 29,
@@ -287,7 +288,9 @@ def add_unbounded_residual_sync(
         .get("ContainerOverrides", [])
     )
     if len(containers) != 1:
-        raise ValueError("residual Publish Relationships has an unexpected container override")
+        raise ValueError(
+            "residual Publish Relationships has an unexpected container override"
+        )
     legacy = (
         "States.Array('mdm', 'publish-relationships', "
         "'--generation-id', $$.Execution.Name, "
@@ -558,24 +561,9 @@ def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"gold evidence must contain exactly one {name} event")
         return matches[0]
 
-    hydrated = single_event("silver_database_hydrated")
-    started = single_event("gold_publish_started")
+    single_event("gold_publish_started")
     event = single_event("gold_build_completed")
-    published = single_event("silver_publish_completed")
-    silver_database = published.get("silver_database") or {}
-    hydrated_identity = {
-        "etag": str(silver_database.get("source_version") or ""),
-        "content_length": hydrated.get("size_bytes"),
-    }
-    if (
-        not hydrated_identity["etag"]
-        or not isinstance(hydrated_identity["content_length"], int)
-        or silver_database.get("staged_checksum") != hydrated_identity["etag"]
-        or silver_database.get("size_bytes") != hydrated_identity["content_length"]
-    ):
-        raise ValueError(
-            "hydrated canonical silver identity is incomplete or inconsistent"
-        )
+    published = single_event("gold_publish_completed")
     manifest = event.get("gold_manifest") or []
     if not manifest:
         raise ValueError("gold_build_completed is missing its manifest")
@@ -609,14 +597,12 @@ def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
     table_count = event.get("table_count")
     if table_count != len(normalized_manifest):
         raise ValueError("attempted and committed gold table counts do not match")
-    silver_table_counts = started.get("silver_table_counts") or {}
-    if not silver_table_counts or not all(
-        isinstance(count, int) and count >= 0 for count in silver_table_counts.values()
-    ):
-        raise ValueError("gold input silver table counts are missing or invalid")
+    if published.get("gold_row_counts") != row_counts:
+        raise ValueError("completed gold row counts do not match the durable manifest")
+    if published.get("snowflake_export_counts") != snowflake_counts:
+        raise ValueError("completed Snowflake export counts do not match the manifest")
     record_funnel = {
-        "input_silver_table_counts": silver_table_counts,
-        "input_silver_rows": sum(silver_table_counts.values()),
+        "output_tables": sorted(manifest_counts),
         "attempted_gold_tables": table_count,
         "committed_gold_tables": len(normalized_manifest),
         "committed_gold_rows": sum(manifest_counts.values()),
@@ -624,8 +610,14 @@ def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
         "exported_serving_rows": sum(snowflake_counts.values()),
         "skipped_rejected_deduplicated": "not_applicable",
     }
+    source_output_sha256 = _json_hash(
+        {
+            "manifest": normalized_manifest,
+            "snowflake_export_counts": snowflake_counts,
+        }
+    )
     return {
-        "hydrated_input_content_identity": hydrated_identity,
+        "output_sha256": source_output_sha256,
         "record_funnel": record_funnel,
         "manifest": normalized_manifest,
         "gold_row_counts": row_counts,
@@ -634,12 +626,20 @@ def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
 
 
 def evaluate_gold_cohort(
-    *, control: dict[str, Any], candidates: list[dict[str, Any]]
+    *,
+    control: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    cohort_overlap: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
     """Apply Ticket 29's matched-output, duration, and cost gates offline."""
     if len(candidates) != 2:
         raise ValueError("Ticket 29 requires exactly two candidate reports")
-    failures: list[str] = []
+    if cohort_overlap is None:
+        raise ValueError("full cohort-window overlap evidence is required")
+    validate_gold_report_order(control=control, candidates=candidates)
+    performance_failures: list[str] = []
+    if cohort_overlap:
+        performance_failures.append("gold cohort overlapped other cluster work")
     run_specs = [
         ("control", control, "gold-control", "large", 0),
         ("candidate 1", candidates[0], "gold", "medium", 1),
@@ -647,9 +647,8 @@ def evaluate_gold_cohort(
     ]
     images: set[str] = set()
     source_hashes: set[str] = set()
-    input_content_identities: set[tuple[str, int]] = set()
     outputs: list[dict[str, Any]] = []
-    recovery_parity_passed = True
+    structural_recovery_parity_passed = True
     for (
         label,
         evidence,
@@ -659,10 +658,14 @@ def evaluate_gold_cohort(
     ) in run_specs:
         launch = evidence.get("launch_contract") or {}
         if launch.get("ticket") != 29 or launch.get("cohort") != expected_cohort:
-            failures.append(f"{label} has the wrong Ticket 29 cohort identity")
+            performance_failures.append(
+                f"{label} has the wrong Ticket 29 cohort identity"
+            )
         task_definition = str(launch.get("candidate_task_definition_arn") or "")
         if f"edgartools-prod-{expected_profile}:" not in task_definition:
-            failures.append(f"{label} is not on warehouse {expected_profile}")
+            performance_failures.append(
+                f"{label} is not on warehouse {expected_profile}"
+            )
         images.add(str(launch.get("image") or ""))
         source_hashes.add(str(launch.get("source_definition_hash") or ""))
         if (
@@ -670,45 +673,37 @@ def evaluate_gold_cohort(
             or launch.get("compatibility_overlays") != []
             or launch.get("covered_states") != ["RunWarehouseTask"]
         ):
-            failures.append(f"{label} does not preserve structural recovery parity")
-            recovery_parity_passed = False
+            performance_failures.append(
+                f"{label} does not preserve structural recovery parity"
+            )
+            structural_recovery_parity_passed = False
         concurrency = launch.get("concurrency_context") or {}
         if concurrency.get("allow_concurrent") or concurrency.get("active_task_arns"):
-            failures.append(f"{label} allowed concurrent cluster work")
+            performance_failures.append(f"{label} allowed concurrent cluster work")
         if evidence.get("cluster_overlap") is None:
-            failures.append(
+            performance_failures.append(
                 f"{label} is missing full-window cluster isolation evidence"
             )
         elif evidence["cluster_overlap"]:
-            failures.append(f"{label} overlapped other cluster work")
-        input_identity = launch.get("input_identity") or {}
-        input_etag = str(input_identity.get("etag") or "")
-        input_size = input_identity.get("content_length")
-        if not input_etag or not isinstance(input_size, int):
-            failures.append(f"{label} is missing canonical silver input identity")
-        else:
-            input_content_identities.add((input_etag, input_size))
+            performance_failures.append(f"{label} overlapped other cluster work")
         local_gates = evidence.get("execution_local_gates") or {}
         if not local_gates.get("passed"):
-            failures.append(f"{label} failed execution-local gates")
+            performance_failures.append(f"{label} failed execution-local gates")
         output = _gold_output_identity(evidence)
         outputs.append(output)
-        hydrated_identity = output["hydrated_input_content_identity"]
-        if hydrated_identity != {
-            "etag": input_etag,
-            "content_length": input_size,
-        }:
-            failures.append(
-                f"{label} hydrated silver does not match its launch content identity"
-            )
     if "" in images or len(images) != 1:
-        failures.append("candidate and control image identities do not match")
+        performance_failures.append(
+            "candidate and control image identities do not match"
+        )
     if "" in source_hashes or len(source_hashes) != 1:
-        failures.append("candidate and control source definitions do not match")
-    if len(input_content_identities) != 1:
-        failures.append("candidate and control input content identities do not match")
-    if any(output != outputs[0] for output in outputs[1:]):
-        failures.append("gold manifest or Snowflake export output parity failed")
+        performance_failures.append(
+            "candidate and control source definitions do not match"
+        )
+    output_parity_passed = not any(output != outputs[0] for output in outputs[1:])
+    if not output_parity_passed:
+        performance_failures.append(
+            "gold manifest or Snowflake export output parity failed"
+        )
 
     control_duration = float(control["execution"]["duration_seconds"])
     candidate_durations = [
@@ -717,7 +712,7 @@ def evaluate_gold_cohort(
     candidate_duration_p95 = _percentile(candidate_durations, 0.95)
     duration_regression = (candidate_duration_p95 / control_duration - 1) * 100
     if duration_regression > 5:
-        failures.append(
+        performance_failures.append(
             f"candidate p95 duration regression {duration_regression:.2f}% exceeds 5%"
         )
 
@@ -728,19 +723,27 @@ def evaluate_gold_cohort(
     candidate_cost_p95 = _percentile(candidate_costs, 0.95)
     cost_improvement = (1 - candidate_cost_p95 / control_cost) * 100
     if cost_improvement < 10:
-        failures.append(
+        performance_failures.append(
             f"candidate p95 cost improvement {cost_improvement:.2f}% is below 10%"
         )
-    input_content_identity = None
-    if len(input_content_identities) == 1:
-        etag, content_length = next(iter(input_content_identities))
-        input_content_identity = {
-            "etag": etag,
-            "content_length": content_length,
-        }
+    input_envelope_evidence = {
+        "passed": False,
+        "status": "not_captured",
+        "source_system": "EDGARTOOLS_SILVER",
+    }
+    sizing_failures = [
+        *performance_failures,
+        "matched Snowflake input envelope was not captured",
+    ]
+    recovery_evidence = {"passed": False, "status": "not_exercised"}
+    failures = [*sizing_failures, "recovery behavior was not exercised"]
     return {
         "passed": not failures,
         "failures": failures,
+        "performance_gates_passed": not performance_failures,
+        "performance_failures": performance_failures,
+        "sizing_gates_passed": not sizing_failures,
+        "sizing_failures": sizing_failures,
         "control_duration_seconds": control_duration,
         "candidate_duration_seconds": candidate_durations,
         "candidate_duration_p95_seconds": candidate_duration_p95,
@@ -749,11 +752,21 @@ def evaluate_gold_cohort(
         "candidate_cost_usd": candidate_costs,
         "candidate_cost_p95_usd": candidate_cost_p95,
         "cost_improvement_percent": cost_improvement,
-        "input_content_identity": input_content_identity,
+        "output_identity_summary": {
+            "mode": "exact_gold_output",
+            "sha256": outputs[0]["output_sha256"],
+        },
+        "input_envelope_evidence": input_envelope_evidence,
+        "cohort_overlap": cohort_overlap,
         "record_funnel": outputs[0]["record_funnel"],
-        "recovery_parity": {
-            "passed": recovery_parity_passed,
+        "structural_recovery_parity": {
+            "passed": structural_recovery_parity_passed,
             "mode": "same_asl_except_task_definition",
+        },
+        "recovery_evidence": recovery_evidence,
+        "idempotency": {
+            "passed": output_parity_passed,
+            "mode": "exact_repeated_output_manifest",
         },
         "output_identity": outputs[0],
     }
@@ -781,6 +794,76 @@ def validate_attempt_sequence(
         raise ValueError(f"prior attempt {attempt - 1} is absent for {cohort}")
 
 
+def validate_gold_launch_order(
+    executions: list[dict[str, Any]],
+    *,
+    cohort: str,
+    expected_control_state_machine_arn: str | None = None,
+) -> None:
+    """Require a fresh large control followed by at most two medium runs."""
+    if cohort not in {"gold", "gold-control"}:
+        return
+    running = [
+        execution for execution in executions if execution["status"] == "RUNNING"
+    ]
+    if running:
+        raise ValueError(
+            f"gold cohort execution is still RUNNING: {running[0]['name']}"
+        )
+    if cohort == "gold-control":
+        return
+    ordered = sorted(executions, key=lambda item: _parse_datetime(item["startDate"]))
+    controls = [
+        execution
+        for execution in ordered
+        if execution["name"].startswith(CANARIES["gold-control"]["execution_prefix"])
+    ]
+    if not controls:
+        raise ValueError("gold candidate requires a fresh large control")
+    latest_control = controls[-1]
+    if latest_control["status"] != "SUCCEEDED":
+        raise ValueError(
+            f"latest large control is {latest_control['status']}, not SUCCEEDED"
+        )
+    if (
+        not expected_control_state_machine_arn
+        or latest_control.get("stateMachineArn") != expected_control_state_machine_arn
+    ):
+        raise ValueError(
+            "latest large control does not use the current immutable definition"
+        )
+    control_started = _parse_datetime(latest_control["startDate"])
+    candidates_after_control = [
+        execution
+        for execution in ordered
+        if execution["name"].startswith(f"{CANARIES['gold']['execution_prefix']}-")
+        and not execution["name"].startswith(
+            CANARIES["gold-control"]["execution_prefix"]
+        )
+        and _parse_datetime(execution["startDate"]) > control_started
+    ]
+    if len(candidates_after_control) >= 2:
+        raise ValueError(
+            "gold cohort already has two medium candidates; run a fresh large control"
+        )
+
+
+def validate_gold_report_order(
+    *, control: dict[str, Any], candidates: list[dict[str, Any]]
+) -> None:
+    """Require non-overlapping control, candidate 1, candidate 2 reports."""
+    if len(candidates) != 2:
+        raise ValueError("Ticket 29 requires exactly two candidate reports")
+    control_stop = _parse_datetime(control["execution"]["stop_date"])
+    candidate_1_start = _parse_datetime(candidates[0]["execution"]["start_date"])
+    candidate_1_stop = _parse_datetime(candidates[0]["execution"]["stop_date"])
+    candidate_2_start = _parse_datetime(candidates[1]["execution"]["start_date"])
+    if control_stop > candidate_1_start:
+        raise ValueError("control must stop before candidate 1 starts")
+    if candidate_1_stop > candidate_2_start:
+        raise ValueError("candidate 1 must stop before candidate 2 starts")
+
+
 def sequencing_cohorts(cohort: str) -> tuple[str, ...]:
     """Return cohorts that must never overlap at the Step Functions level."""
     if cohort in {"residual", "residual-control"}:
@@ -802,29 +885,6 @@ def launch_concurrency_context(
     return {
         "allow_concurrent": allow_concurrent,
         "active_task_arns": sorted(set(active_task_arns)),
-    }
-
-
-def gold_input_identity(cli: AwsCli, *, env: str, account: str) -> dict[str, Any]:
-    """Capture the exact canonical silver object visible at canary launch."""
-    bucket = f"edgartools-{env}-warehouse-{account}"
-    key = "warehouse/silver/sec/silver.duckdb"
-    head = cli.call(
-        "s3api",
-        "head-object",
-        "--bucket",
-        bucket,
-        "--key",
-        key,
-    )
-    return {
-        "bucket": bucket,
-        "key": key,
-        "version_id": head.get("VersionId"),
-        "etag": str(head.get("ETag") or "").strip('"'),
-        "content_length": head.get("ContentLength"),
-        "last_modified": head.get("LastModified"),
-        "server_side_encryption": head.get("ServerSideEncryption"),
     }
 
 
@@ -1285,6 +1345,25 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
         validate_attempt_sequence(
             sequence_executions, cohort=args.cohort, attempt=args.attempt
         )
+        expected_control_state_machine_arn = None
+        if args.cohort == "gold":
+            control_plan = _definition_plan(
+                cli,
+                env=args.env,
+                account=account,
+                cohort="gold-control",
+            )
+            control_machine = _find_state_machine(cli, control_plan["canary_name"])
+            if not control_machine:
+                raise RuntimeError(
+                    "current immutable gold control is absent; run prepare --apply"
+                )
+            expected_control_state_machine_arn = control_machine["stateMachineArn"]
+        validate_gold_launch_order(
+            sequence_executions,
+            cohort=args.cohort,
+            expected_control_state_machine_arn=expected_control_state_machine_arn,
+        )
         cluster = _cluster_name(args.env)
         active_tasks: list[str] = []
         for desired_status in ("RUNNING", "PENDING"):
@@ -1315,11 +1394,6 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
                 "canary definition drifted from the current production source; "
                 "rerun prepare --apply"
             )
-        input_identity = (
-            gold_input_identity(cli, env=args.env, account=account)
-            if args.cohort in {"gold", "gold-control"}
-            else None
-        )
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         name = execution_name(args.cohort, attempt=args.attempt, timestamp=timestamp)
         started = cli.call(
@@ -1342,8 +1416,6 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
         "start_date": started["startDate"],
         "state_machine_arn": machine["stateMachineArn"],
     }
-    if input_identity is not None:
-        launch_manifest["input_identity"] = input_identity
     _write_json(
         args.output,
         launch_manifest,
@@ -1425,16 +1497,23 @@ def _cluster_overlap(
 ) -> list[dict[str, Any]]:
     task_arns: set[str] = set()
     for status in ("RUNNING", "PENDING", "STOPPED"):
-        task_arns.update(
-            cli.call(
+        token: str | None = None
+        while True:
+            list_args = [
                 "ecs",
                 "list-tasks",
                 "--cluster",
                 cluster,
                 "--desired-status",
                 status,
-            ).get("taskArns", [])
-        )
+            ]
+            if token:
+                list_args += ["--next-token", token]
+            page = cli.call(*list_args)
+            task_arns.update(page.get("taskArns", []))
+            token = page.get("nextToken")
+            if not token:
+                break
     tasks: list[dict[str, Any]] = []
     sorted_arns = sorted(task_arns)
     for offset in range(0, len(sorted_arns), 100):
@@ -1453,6 +1532,17 @@ def _cluster_overlap(
         end=end,
         excluded_task_arns=excluded_task_arns,
     )
+
+
+def validate_overlap_evidence_freshness(
+    *, window_start: datetime, captured_at: datetime
+) -> None:
+    """Fail closed before ECS stopped-task discovery can become stale."""
+    if captured_at - window_start > OVERLAP_EVIDENCE_MAX_AGE:
+        raise ValueError(
+            "terminal canary reports must be captured within 30 minutes of stop "
+            "for full-window ECS overlap evidence"
+        )
 
 
 def _normalize_terminal_task(task: dict[str, Any]) -> dict[str, Any]:
@@ -1708,6 +1798,12 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
         if execution.get("stopDate")
         else datetime.now(UTC)
     )
+    captured_at = datetime.now(UTC)
+    if status in TERMINAL_STATUSES:
+        validate_overlap_evidence_freshness(
+            window_start=start_date,
+            captured_at=captured_at,
+        )
     cluster_overlap = _cluster_overlap(
         cli,
         cluster=cluster,
@@ -1722,7 +1818,7 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
     )
     evidence = {
         "schema_version": 1,
-        "captured_at": datetime.now(UTC).isoformat(),
+        "captured_at": captured_at.isoformat(),
         "launch_contract": launch,
         "execution": {
             "arn": args.execution_arn,
@@ -1770,10 +1866,33 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def evaluate_gold_reports(args: argparse.Namespace) -> int:
+def evaluate_gold_reports(cli: AwsCli, args: argparse.Namespace) -> int:
+    control = _read_json(args.control_report)
+    candidates = [_read_json(path) for path in args.candidate_reports]
+    if len(candidates) != 2:
+        raise ValueError("Ticket 29 requires exactly two candidate reports")
+    cohort_start = _parse_datetime(control["execution"]["start_date"])
+    cohort_end = _parse_datetime(candidates[-1]["execution"]["stop_date"])
+    validate_overlap_evidence_freshness(
+        window_start=cohort_start,
+        captured_at=datetime.now(UTC),
+    )
+    task_arns = {
+        str(task["task_arn"])
+        for report in [control, *candidates]
+        for task in report.get("tasks") or []
+    }
+    cohort_overlap = _cluster_overlap(
+        cli,
+        cluster=_cluster_name(args.env),
+        start=cohort_start,
+        end=cohort_end,
+        excluded_task_arns=task_arns,
+    )
     result = evaluate_gold_cohort(
-        control=_read_json(args.control_report),
-        candidates=[_read_json(path) for path in args.candidate_reports],
+        control=control,
+        candidates=candidates,
+        cohort_overlap=cohort_overlap,
     )
     _write_json(args.output, result)
     return 0 if result["passed"] else 2
@@ -1790,7 +1909,7 @@ def main(argv: list[str] | None = None) -> int:
             return start(cli, args)
         if args.command == "report":
             return report(cli, args)
-        return evaluate_gold_reports(args)
+        return evaluate_gold_reports(cli, args)
     except (RuntimeError, TypeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 3
