@@ -1967,6 +1967,7 @@ class SilverDatabase:
     ) -> dict[str, Any]:
         from edgar_warehouse.loaders.bronze_submission_extractors import (
             filter_rows_by_min_filing_date,
+            is_reporting_company_entity_type,
             stage_address_loader,
             stage_company_loader,
             stage_former_name_loader,
@@ -1975,9 +1976,20 @@ class SilverDatabase:
             stage_recent_filing_loader,
         )
 
-        company_rows = stage_company_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
-        address_rows = stage_address_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
-        former_name_rows = stage_former_name_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+        # individual-filer-company-misclassification map, Ticket 03/04: SEC's
+        # own entityType is only knowable once main_payload is fetched (here),
+        # so this is the sole place to gate the sec_company/address/former_name
+        # writes -- an individual/insider filer (entityType='other') is not a
+        # reporting company and must not be written into the company universe.
+        is_reporting_company = is_reporting_company_entity_type(main_payload.get("entityType"))
+        if is_reporting_company:
+            company_rows = stage_company_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+            address_rows = stage_address_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+            former_name_rows = stage_former_name_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
+        else:
+            company_rows = []
+            address_rows = []
+            former_name_rows = []
         manifest_rows = stage_manifest_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
         recent_rows = filter_rows_by_min_filing_date(
             stage_recent_filing_loader(
