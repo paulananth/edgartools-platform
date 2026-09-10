@@ -1,5 +1,5 @@
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 08
 
 ## Question
@@ -87,9 +87,48 @@ GoF review axes came back clean (no hard violations; GoF verdict "leave
 it" -- one cohesive function, no repeated-change evidence to justify a
 structural split).
 
-**Remaining, per this ticket's own scope:** deploy + dry-run against real
-prod, capture before/after `skipped_multiple_conflicts` counts, then run
-the real backfill for INSTITUTIONAL_HOLDS -- needs explicit go-ahead
-before the real (non-dry-run) prod execution, per this map's established
-precedent for prod-mutating actions.
+**Second bug found live during the real prod dry-run, unrelated to the
+walk logic above:** `resolve_source_priority()` had no per-call caching,
+and the chain walk's own conflict-guard loop called it once per
+conflicting row pair -- with `rel_type_id` constant for the whole
+type-scoped run and `(existing_source, new_source)` pairs repeating
+constantly, the dry-run ran 8.5+ hours without finishing (~9 uncached
+Postgres round trips/sec, ~270,000+ estimated redundant queries) before
+being manually stopped. Fixed with a `priority_cache` shared across the
+entire `run_backfill()` call (not per relationship_id), mirroring the
+existing `_ensure_thirteenf_manager` per-batch memoization pattern. Full
+detail: CLAUDE.md's "Quarantine backfill uncached priority lookup
+5-whys". Re-verified via a fresh dry-run after the fix: completed in
+~10 minutes (previously 8.5+ hours, unfinished).
+
+**Real (non-dry-run) backfill executed against prod 2026-09-10, scoped to
+`--relationship-type INSTITUTIONAL_HOLDS`.** Task
+`f3add6d39f0345f6b9c86dde2a4c67f5`, 06:32-08:18 ET (~1h46m), exit code 0.
+Final summary:
+
+```json
+{
+  "closed": 84212,
+  "relationship_ids_examined": 8525,
+  "reopened": 62947,
+  "skipped_ambiguous_date": 0,
+  "skipped_ambiguous_order": 458139,
+  "skipped_cross_source": 0,
+  "skipped_multiple_conflicts": 62947,
+  "skipped_priority_now_configured": 0
+}
+```
+
+Verified directly against live Postgres (not just log trust): quarantined
+`INSTITUTIONAL_HOLDS` rows dropped 65,778 -> 21,704 between two direct
+queries taken before and after the run. The remaining 21,704 are expected,
+not a bug -- they're the `skipped_ambiguous_order`/`skipped_multiple_conflicts`
+cases the design deliberately leaves for manual review rather than
+guessing at chronological order or an unconfigured priority.
+
+**Still open, not part of this ticket's scope:** the Snowflake graph
+(`sync-graph`) is quarantine-blind (Ticket 04's finding) and still shows
+the pre-backfill duplicate edges for every reopened/closed row until a
+fresh generation sync + `mdm reconcile` runs -- tracked as the next step
+on this map, not blocking this ticket's resolution.
 
