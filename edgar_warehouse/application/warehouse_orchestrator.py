@@ -49,6 +49,7 @@ from edgar_warehouse.domain.policy.command_scope import (
 )
 from edgar_warehouse.loaders import (
     filter_rows_by_min_filing_date,
+    is_reporting_company_entity_type,
     seed_universe_loader,
     stage_daily_index_filing_loader,
     stage_manifest_loader,
@@ -5575,8 +5576,20 @@ def _apply_submission_snapshot_to_silver(
         tracking_status = "active"
         bootstrap_completed_at = bootstrap_completed_at or now
         pagination_completed_at = now
-    elif tracking_status not in {"active", "paused", "historical_complete", "error", "deregistered"}:
+    elif tracking_status not in {"active", "paused", "historical_complete", "error", "deregistered", "non_company"}:
         tracking_status = "active"
+
+    # individual-filer-company-misclassification map, Ticket 03/04: entityType
+    # is only knowable once main_payload is fetched (here) -- an individual/
+    # insider filer (entityType != 'operating'/'investment') overrides
+    # whatever the block above computed, same as _demote_deregistered_ciks'
+    # unconditional overwrite for Form 15. This is the compounding-cost fix:
+    # once a CIK is known non-company, _filter_ciks_to_universe's existing
+    # "tracking_status='active' only" filter excludes it from every future
+    # daily_incremental sweep, so its full submissions.json is fetched
+    # exactly once more (this call), never again.
+    if not is_reporting_company_entity_type(main_payload.get("entityType")):
+        tracking_status = "non_company"
 
     # Batched by the caller (upsert_company_sync_states_bulk) -- see this
     # function's docstring.

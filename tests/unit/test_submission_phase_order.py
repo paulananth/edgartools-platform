@@ -665,6 +665,74 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         # row rather than db.company_states.
         self.assertEqual(result["company_sync_state_row"]["tracking_status"], "deregistered")
 
+    def test_individual_filer_entity_type_demotes_tracking_status_to_non_company(self) -> None:
+        """individual-filer-company-misclassification map, Ticket 03/04:
+        once main_payload's entityType is known to be an individual/insider
+        filer ('other', not 'operating'/'investment'), tracking_status must
+        flip to 'non_company' -- this is the compounding-cost fix, since
+        _filter_ciks_to_universe only ever selects tracking_status='active'
+        CIKs for future daily_incremental sweeps."""
+        db = _CachedSubmissionDb(tracking_status="active")
+        snapshot = {
+            "cik": 1548760,
+            "include_pagination": True,
+            "main_payload": {
+                "entityType": "other",
+                "filings": {
+                    "recent": {
+                        "accessionNumber": ["recent-1"],
+                        "form": ["4"],
+                        "filingDate": ["2026-04-25"],
+                        "reportDate": ["2026-04-24"],
+                        "acceptanceDateTime": ["20260425120000"],
+                        "primaryDocument": ["recent.xml"],
+                    }
+                },
+            },
+            "main_write_record": {
+                "sha256": "sha-main",
+                "source_name": "submissions_main",
+                "relative_path": "submissions/main.json",
+            },
+            "manifest_file_names": ["CIK0001548760-submissions-001.json"],
+            "pagination_snapshots": [
+                {
+                    "file_name": "CIK0001548760-submissions-001.json",
+                    "payload": {
+                        "filings": {
+                            "accessionNumber": ["historical-1"],
+                            "form": ["4"],
+                            "filingDate": ["2025-01-02"],
+                            "reportDate": ["2025-01-01"],
+                            "acceptanceDateTime": ["20250102120000"],
+                            "primaryDocument": ["historical.xml"],
+                        }
+                    },
+                    "write_record": {
+                        "sha256": "sha-page",
+                        "source_name": "submissions_pagination",
+                        "relative_path": "submissions/001.json",
+                    },
+                }
+            ],
+        }
+
+        with patch.object(warehouse_orchestrator, "_sync_mdm_tracking_status"):
+            result = warehouse_orchestrator._apply_submission_snapshot_to_silver(
+                db=db,
+                bookkeeping=db,
+                sync_run_id="run-1",
+                snapshot=snapshot,
+                force=False,
+                load_mode="bootstrap_batch",
+                recent_limit=None,
+                now=date(2026, 4, 25),
+                existing_state=db.get_company_sync_state(1548760),
+                main_checkpoint=db.get_source_checkpoint("submissions_main", "cik:1548760"),
+            )
+
+        self.assertEqual(result["company_sync_state_row"]["tracking_status"], "non_company")
+
     def test_configured_form_artifact_pipeline_filters_to_parser_forms(self) -> None:
         calls: list[tuple[str, str]] = []
 
