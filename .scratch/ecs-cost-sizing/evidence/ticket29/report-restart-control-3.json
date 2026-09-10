@@ -1,0 +1,484 @@
+{
+  "captured_at": "2026-09-10T12:24:10.553768+00:00",
+  "cluster_overlap": [],
+  "estimated_compute_cost_usd": 0.0028807520000000003,
+  "execution": {
+    "arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket29-gold-large-control-5d92be2d3a66:ticket29-gold-control-3-20260910T121929Z",
+    "duration_seconds": 108.789,
+    "name": "ticket29-gold-control-3-20260910T121929Z",
+    "start_date": "2026-09-10T08:19:32.914000-04:00",
+    "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket29-gold-large-control-5d92be2d3a66",
+    "status": "SUCCEEDED",
+    "stop_date": "2026-09-10T08:21:21.703000-04:00"
+  },
+  "execution_local_gates": {
+    "failures": [],
+    "passed": true,
+    "warnings": []
+  },
+  "fargate_pricing": {
+    "additional_ephemeral_storage_gib": 0,
+    "captured_at": "2026-09-10",
+    "cpu_architecture": "x86_64",
+    "memory_gib_hour_usd": 0.004446,
+    "operating_system": "Linux",
+    "region": "us-east-1",
+    "source": "https://aws.amazon.com/fargate/pricing/",
+    "vcpu_hour_usd": 0.0404784
+  },
+  "launch_contract": {
+    "attempt": 3,
+    "canary_definition_hash": "5d92be2d3a665c70ec484ef163eba66211e1a582a89d5e4232b95ee0e819d6cc",
+    "canary_name": "canary-ticket29-gold-large-control-5d92be2d3a66",
+    "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:289",
+    "changed_reference_count": 0,
+    "cohort": "gold-control",
+    "compatibility_overlays": [],
+    "concurrency_context": {
+      "active_task_arns": [],
+      "allow_concurrent": false
+    },
+    "covered_states": [
+      "RunWarehouseTask"
+    ],
+    "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket29-gold-large-control-5d92be2d3a66:ticket29-gold-control-3-20260910T121929Z",
+    "expected_task_states": [
+      "RunWarehouseTask"
+    ],
+    "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:239612ad9c39a6d9fb6c6398f8c24e23aa0972a2b3bf396d13f258830a05542a",
+    "source_definition_hash": "5d92be2d3a665c70ec484ef163eba66211e1a582a89d5e4232b95ee0e819d6cc",
+    "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+    "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:289",
+    "start_date": "2026-09-10T08:19:32.914000-04:00",
+    "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket29-gold-large-control-5d92be2d3a66",
+    "task_definition_contract": {
+      "RunWarehouseTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:289"
+    },
+    "ticket": 29
+  },
+  "promotion_gates_not_inferred": [
+    "representative non-zero input/output record funnel",
+    "matched current-image large-profile duration baseline",
+    "cost per successful validated output improvement of at least 10%",
+    "cross-run cohort count"
+  ],
+  "schema_version": 1,
+  "tasks": [
+    {
+      "application_evidence": [
+        {
+          "command": "gold-refresh",
+          "emitted_at": "2026-09-10T12:20:18.122061Z",
+          "event": "bronze_silver_started",
+          "run_id": "ticket29-gold-control-3-20260910T121929Z"
+        },
+        {
+          "emitted_at": "2026-09-10T12:20:18.122160Z",
+          "event": "gold_refresh_started",
+          "run_id": "ticket29-gold-control-3-20260910T121929Z"
+        },
+        {
+          "command": "gold-refresh",
+          "emitted_at": "2026-09-10T12:20:18.122222Z",
+          "event": "bronze_silver_completed",
+          "rows_inserted": 0,
+          "rows_skipped": 0,
+          "run_id": "ticket29-gold-control-3-20260910T121929Z"
+        },
+        {
+          "command": "gold-refresh",
+          "emitted_at": "2026-09-10T12:20:19.468604Z",
+          "event": "gold_publish_started",
+          "run_id": "ticket29-gold-control-3-20260910T121929Z",
+          "silver_table_counts": {
+            "discovery_checkpoint": 15435,
+            "gold_manifest": 323,
+            "pipeline_run": 820,
+            "pipeline_run_lease": 2,
+            "schema_migration": 10,
+            "sec_accounting_flag": 0,
+            "sec_adv_disclosure_event": 0,
+            "sec_adv_filing": 0,
+            "sec_adv_firm_roster": 0,
+            "sec_adv_office": 0,
+            "sec_adv_private_fund": 0,
+            "sec_auditor_report_evidence": 0,
+            "sec_company": 0,
+            "sec_company_address": 0,
+            "sec_company_filing": 0,
+            "sec_company_former_name": 0,
+            "sec_company_submission_file": 0,
+            "sec_company_sync_state": 74428,
+            "sec_company_ticker": 0,
+            "sec_current_filing_feed": 0,
+            "sec_daily_index_checkpoint": 14,
+            "sec_earnings_release": 0,
+            "sec_employment_event": 0,
+            "sec_executive_record": 0,
+            "sec_filing_attachment": 0,
+            "sec_filing_text": 0,
+            "sec_financial_derived": 0,
+            "sec_financial_fact": 0,
+            "sec_guidance_fact": 0,
+            "sec_guidance_fact_reject": 0,
+            "sec_ownership_derivative_txn": 0,
+            "sec_ownership_non_derivative_txn": 0,
+            "sec_ownership_reporting_owner": 0,
+            "sec_parse_run": 11827,
+            "sec_pcaob_firm_identity": 0,
+            "sec_raw_object": 0,
+            "sec_reconcile_finding": 0,
+            "sec_source_checkpoint": 77675,
+            "sec_subsidiary_evidence": 0,
+            "sec_sync_run": 820,
+            "sec_thirteenf_filing": 0,
+            "sec_thirteenf_holding": 0,
+            "sec_tracked_universe": 0,
+            "stg_daily_index_filing": 33466
+          }
+        },
+        {
+          "command": "gold-refresh",
+          "emitted_at": "2026-09-10T12:20:19.468701Z",
+          "event": "gold_build_started",
+          "run_id": "ticket29-gold-control-3-20260910T121929Z"
+        },
+        {
+          "emitted_at": "2026-09-10T12:20:19.534765Z",
+          "event": "gold_table_started",
+          "table": "sec_subsidiary_evidence"
+        },
+        {
+          "duration_seconds": 3.7,
+          "emitted_at": "2026-09-10T12:20:23.230908Z",
+          "event": "gold_table_completed",
+          "rows": 0,
+          "table": "sec_subsidiary_evidence"
+        },
+        {
+          "emitted_at": "2026-09-10T12:20:24.493449Z",
+          "event": "gold_table_started",
+          "table": "sec_auditor_report_evidence"
+        },
+        {
+          "duration_seconds": 2.24,
+          "emitted_at": "2026-09-10T12:20:26.733340Z",
+          "event": "gold_table_completed",
+          "rows": 0,
+          "table": "sec_auditor_report_evidence"
+        },
+        {
+          "emitted_at": "2026-09-10T12:20:27.099570Z",
+          "event": "gold_table_started",
+          "table": "sec_employment_event"
+        },
+        {
+          "duration_seconds": 3.29,
+          "emitted_at": "2026-09-10T12:20:30.387368Z",
+          "event": "gold_table_completed",
+          "rows": 7676,
+          "table": "sec_employment_event"
+        },
+        {
+          "emitted_at": "2026-09-10T12:20:30.787671Z",
+          "event": "gold_table_started",
+          "table": "sec_adv_firm_roster"
+        },
+        {
+          "duration_seconds": 3.33,
+          "emitted_at": "2026-09-10T12:20:34.121474Z",
+          "event": "gold_table_completed",
+          "rows": 47457,
+          "table": "sec_adv_firm_roster"
+        },
+        {
+          "emitted_at": "2026-09-10T12:20:34.538482Z",
+          "event": "gold_table_started",
+          "table": "sec_adv_private_fund"
+        },
+        {
+          "duration_seconds": 17.01,
+          "emitted_at": "2026-09-10T12:20:51.547220Z",
+          "event": "gold_table_completed",
+          "rows": 414968,
+          "table": "sec_adv_private_fund"
+        },
+        {
+          "command": "gold-refresh",
+          "duration_seconds": 33.662002,
+          "emitted_at": "2026-09-10T12:20:53.130616Z",
+          "event": "gold_build_completed",
+          "gold_manifest": [
+            {
+              "byte_size": 2356,
+              "parquet_sha256": "1f842f693093ebcc2454fe60b84680ecca46bbc5d1a6222ceda3714e3d3f0441",
+              "relative_path": "gold/sec_subsidiary_evidence/run_id=ticket29-gold-control-3-20260910T121929Z/sec_subsidiary_evidence.parquet",
+              "row_count": 0,
+              "storage_layer": "warehouse_gold",
+              "storage_path": "s3://edgartools-prod-warehouse-690839588395/warehouse/gold/sec_subsidiary_evidence/run_id=ticket29-gold-control-3-20260910T121929Z/sec_subsidiary_evidence.parquet",
+              "table_name": "sec_subsidiary_evidence"
+            },
+            {
+              "byte_size": 3139,
+              "parquet_sha256": "eb72bda0cf7c43464ecd53638ec18f829ca5658402fd0c091afee31b9f152f20",
+              "relative_path": "gold/sec_auditor_report_evidence/run_id=ticket29-gold-control-3-20260910T121929Z/sec_auditor_report_evidence.parquet",
+              "row_count": 0,
+              "storage_layer": "warehouse_gold",
+              "storage_path": "s3://edgartools-prod-warehouse-690839588395/warehouse/gold/sec_auditor_report_evidence/run_id=ticket29-gold-control-3-20260910T121929Z/sec_auditor_report_evidence.parquet",
+              "table_name": "sec_auditor_report_evidence"
+            },
+            {
+              "byte_size": 173469,
+              "parquet_sha256": "d077e0acccdfa1e61758d7fecc91d0a15f183dc2a9dad9fe777f769da51b8c0b",
+              "relative_path": "gold/sec_employment_event/run_id=ticket29-gold-control-3-20260910T121929Z/sec_employment_event.parquet",
+              "row_count": 7676,
+              "storage_layer": "warehouse_gold",
+              "storage_path": "s3://edgartools-prod-warehouse-690839588395/warehouse/gold/sec_employment_event/run_id=ticket29-gold-control-3-20260910T121929Z/sec_employment_event.parquet",
+              "table_name": "sec_employment_event"
+            },
+            {
+              "byte_size": 408882,
+              "parquet_sha256": "3497a968a9efafa10d6dda6334efbf3e49db3bd74e5fff83881eabfa73a8ac42",
+              "relative_path": "gold/sec_adv_firm_roster/run_id=ticket29-gold-control-3-20260910T121929Z/sec_adv_firm_roster.parquet",
+              "row_count": 47457,
+              "storage_layer": "warehouse_gold",
+              "storage_path": "s3://edgartools-prod-warehouse-690839588395/warehouse/gold/sec_adv_firm_roster/run_id=ticket29-gold-control-3-20260910T121929Z/sec_adv_firm_roster.parquet",
+              "table_name": "sec_adv_firm_roster"
+            },
+            {
+              "byte_size": 15378184,
+              "parquet_sha256": "1e6c763ba3b7f7e2bcb03ecb7e67983888e4e0b155613733d922c903a6e4eeb1",
+              "relative_path": "gold/sec_adv_private_fund/run_id=ticket29-gold-control-3-20260910T121929Z/sec_adv_private_fund.parquet",
+              "row_count": 414968,
+              "storage_layer": "warehouse_gold",
+              "storage_path": "s3://edgartools-prod-warehouse-690839588395/warehouse/gold/sec_adv_private_fund/run_id=ticket29-gold-control-3-20260910T121929Z/sec_adv_private_fund.parquet",
+              "table_name": "sec_adv_private_fund"
+            }
+          ],
+          "gold_row_counts": {
+            "sec_adv_firm_roster": 47457,
+            "sec_adv_private_fund": 414968,
+            "sec_auditor_report_evidence": 0,
+            "sec_employment_event": 7676,
+            "sec_subsidiary_evidence": 0
+          },
+          "run_id": "ticket29-gold-control-3-20260910T121929Z",
+          "snowflake_export_counts": {
+            "sec_adv_firm_roster": 47457,
+            "sec_adv_private_fund": 414968,
+            "sec_auditor_report_evidence": 0,
+            "sec_employment_event": 7676,
+            "sec_subsidiary_evidence": 0
+          },
+          "table_count": 5
+        },
+        {
+          "command": "gold-refresh",
+          "duration_seconds": 33.662002,
+          "emitted_at": "2026-09-10T12:20:53.130792Z",
+          "event": "gold_publish_completed",
+          "gold_row_counts": {
+            "sec_adv_firm_roster": 47457,
+            "sec_adv_private_fund": 414968,
+            "sec_auditor_report_evidence": 0,
+            "sec_employment_event": 7676,
+            "sec_subsidiary_evidence": 0
+          },
+          "run_id": "ticket29-gold-control-3-20260910T121929Z",
+          "snowflake_export_counts": {
+            "sec_adv_firm_roster": 47457,
+            "sec_adv_private_fund": 414968,
+            "sec_auditor_report_evidence": 0,
+            "sec_employment_event": 7676,
+            "sec_subsidiary_evidence": 0
+          }
+        },
+        {
+          "command": "gold-refresh",
+          "emitted_at": "2026-09-10T12:20:53.293932Z",
+          "event": "silver_publish_started",
+          "run_id": "ticket29-gold-control-3-20260910T121929Z",
+          "storage_root": "s3://edgartools-prod-warehouse-690839588395/warehouse"
+        },
+        {
+          "command": "gold-refresh",
+          "emitted_at": "2026-09-10T12:20:53.294084Z",
+          "event": "silver_publish_completed",
+          "run_id": "ticket29-gold-control-3-20260910T121929Z",
+          "silver_database": null
+        },
+        {
+          "command": "gold-refresh",
+          "emitted_at": "2026-09-10T12:20:53.294159Z",
+          "event": "silver_landing_export_completed",
+          "run_id": "ticket29-gold-control-3-20260910T121929Z",
+          "table_counts": {}
+        },
+        {
+          "arguments": {
+            "command": "gold-refresh",
+            "run_id": "ticket29-gold-control-3-20260910T121929Z"
+          },
+          "bronze_object_count": 0,
+          "cik_count": null,
+          "cik_universe_path": null,
+          "command": "gold-refresh",
+          "environment": {
+            "bronze_root": "s3://edgartools-prod-bronze-690839588395/warehouse/bronze",
+            "environment_name": "prod",
+            "identity_present": true,
+            "silver_landing_export_root": "s3://edgartools-prod-snowflake-export-690839588395/warehouse/artifacts/silver_landing",
+            "silver_root": "/tmp/edgar-warehouse-silver",
+            "snowflake_export_root": "s3://edgartools-prod-snowflake-export-690839588395/warehouse/artifacts/snowflake_exports",
+            "warehouse_root": "s3://edgartools-prod-warehouse-690839588395/warehouse"
+          },
+          "gold_row_counts": {
+            "sec_adv_firm_roster": 47457,
+            "sec_adv_private_fund": 414968,
+            "sec_auditor_report_evidence": 0,
+            "sec_employment_event": 7676,
+            "sec_subsidiary_evidence": 0
+          },
+          "message": "Warehouse bronze capture completed successfully. Raw SEC files and run manifests were written to the configured bronze, warehouse, and Snowflake export roots.",
+          "raw_writes": [],
+          "run_id": "ticket29-gold-control-3-20260910T121929Z",
+          "runtime_mode": "bronze_capture",
+          "scope": {},
+          "silver_database": null,
+          "silver_landing_export_row_counts": {},
+          "silver_table_counts": {
+            "discovery_checkpoint": 15435,
+            "gold_manifest": 323,
+            "pipeline_run": 820,
+            "pipeline_run_lease": 2,
+            "schema_migration": 10,
+            "sec_accounting_flag": 0,
+            "sec_adv_disclosure_event": 0,
+            "sec_adv_filing": 0,
+            "sec_adv_firm_roster": 0,
+            "sec_adv_office": 0,
+            "sec_adv_private_fund": 0,
+            "sec_auditor_report_evidence": 0,
+            "sec_company": 0,
+            "sec_company_address": 0,
+            "sec_company_filing": 0,
+            "sec_company_former_name": 0,
+            "sec_company_submission_file": 0,
+            "sec_company_sync_state": 74428,
+            "sec_company_ticker": 0,
+            "sec_current_filing_feed": 0,
+            "sec_daily_index_checkpoint": 14,
+            "sec_earnings_release": 0,
+            "sec_employment_event": 0,
+            "sec_executive_record": 0,
+            "sec_filing_attachment": 0,
+            "sec_filing_text": 0,
+            "sec_financial_derived": 0,
+            "sec_financial_fact": 0,
+            "sec_guidance_fact": 0,
+            "sec_guidance_fact_reject": 0,
+            "sec_ownership_derivative_txn": 0,
+            "sec_ownership_non_derivative_txn": 0,
+            "sec_ownership_reporting_owner": 0,
+            "sec_parse_run": 11827,
+            "sec_pcaob_firm_identity": 0,
+            "sec_raw_object": 0,
+            "sec_reconcile_finding": 0,
+            "sec_source_checkpoint": 77675,
+            "sec_subsidiary_evidence": 0,
+            "sec_sync_run": 820,
+            "sec_thirteenf_filing": 0,
+            "sec_thirteenf_holding": 0,
+            "sec_tracked_universe": 0,
+            "stg_daily_index_filing": 33466
+          },
+          "snowflake_export_manifest": {
+            "layer": "snowflake_export_manifest",
+            "path": "s3://edgartools-prod-snowflake-export-690839588395/warehouse/artifacts/snowflake_exports/manifests/workflow_name=gold_refresh/business_date=2026-09-10/run_id=ticket29-gold-control-3-20260910T121929Z/run_manifest.json",
+            "relative_path": "manifests/workflow_name=gold_refresh/business_date=2026-09-10/run_id=ticket29-gold-control-3-20260910T121929Z/run_manifest.json"
+          },
+          "snowflake_export_row_counts": {
+            "sec_adv_firm_roster": 47457,
+            "sec_adv_private_fund": 414968,
+            "sec_auditor_report_evidence": 0,
+            "sec_employment_event": 7676,
+            "sec_subsidiary_evidence": 0
+          },
+          "started_at": "2026-09-10T12:20:16.458622Z",
+          "status": "ok",
+          "writes": [
+            {
+              "layer": "gold",
+              "path": "s3://edgartools-prod-warehouse-690839588395/warehouse/gold/runs/gold-refresh/ticket29-gold-control-3-20260910T121929Z/manifest.json",
+              "relative_path": "gold/runs/gold-refresh/ticket29-gold-control-3-20260910T121929Z/manifest.json"
+            },
+            {
+              "layer": "artifacts",
+              "path": "s3://edgartools-prod-warehouse-690839588395/warehouse/artifacts/runs/gold-refresh/ticket29-gold-control-3-20260910T121929Z/manifest.json",
+              "relative_path": "artifacts/runs/gold-refresh/ticket29-gold-control-3-20260910T121929Z/manifest.json"
+            },
+            {
+              "layer": "snowflake_export_manifest",
+              "path": "s3://edgartools-prod-snowflake-export-690839588395/warehouse/artifacts/snowflake_exports/manifests/workflow_name=gold_refresh/business_date=2026-09-10/run_id=ticket29-gold-control-3-20260910T121929Z/run_manifest.json",
+              "relative_path": "manifests/workflow_name=gold_refresh/business_date=2026-09-10/run_id=ticket29-gold-control-3-20260910T121929Z/run_manifest.json"
+            },
+            {
+              "layer": "run_manifest",
+              "path": "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/runs/gold-refresh/ticket29-gold-control-3-20260910T121929Z/run_manifest.json",
+              "relative_path": "runs/gold-refresh/ticket29-gold-control-3-20260910T121929Z/run_manifest.json"
+            }
+          ]
+        }
+      ],
+      "billable_duration_seconds": 88.081,
+      "billed_duration_seconds": 89,
+      "cpu_reserved": 2048,
+      "created_at": "2026-09-10T08:19:33.871000-04:00",
+      "estimated_compute_cost_usd": 0.0028807520000000003,
+      "exit_code": 0,
+      "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:239612ad9c39a6d9fb6c6398f8c24e23aa0972a2b3bf396d13f258830a05542a",
+      "memory_reserved_mib": 8192,
+      "pull_started_at": "2026-09-10T08:19:52.414000-04:00",
+      "reason": null,
+      "requested_memory_gib_hours": 0.19777777777777777,
+      "requested_vcpu_hours": 0.049444444444444444,
+      "retry_ordinal": 1,
+      "started_at": "2026-09-10T08:20:10.689000-04:00",
+      "state": "RunWarehouseTask",
+      "stop_code": "EssentialContainerExited",
+      "stopped_at": "2026-09-10T08:21:20.495000-04:00",
+      "stopped_reason": "Essential container in task exited",
+      "task_arn": "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/628482bf22c744a68ce8a5a3060825b8",
+      "task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:289",
+      "task_id": "628482bf22c744a68ce8a5a3060825b8",
+      "telemetry": {
+        "cpu": {
+          "average": 510.024716796875,
+          "average_percent": 24.903550624847412,
+          "maximum": 510.024716796875,
+          "maximum_percent": 24.903550624847412,
+          "p95": 510.024716796875,
+          "p95_percent": 24.903550624847412,
+          "reserved": 2048.0,
+          "seconds_at_or_above_70_percent": 0,
+          "seconds_at_or_above_80_percent": 0,
+          "seconds_at_or_above_90_percent": 0
+        },
+        "memory": {
+          "average": 356.0,
+          "average_percent": 4.345703125,
+          "maximum": 356.0,
+          "maximum_percent": 4.345703125,
+          "p95": 356.0,
+          "p95_percent": 4.345703125,
+          "reserved": 8192.0,
+          "seconds_at_or_above_70_percent": 0,
+          "seconds_at_or_above_80_percent": 0,
+          "seconds_at_or_above_90_percent": 0
+        },
+        "period_seconds": 60,
+        "sample_count": 1
+      }
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 # Run `warehouse.gold_standalone` Medium Canaries
 
 Type: task
-Status: parked
-Blocked by: completion and deployment of all Step Functions fixes
+Status: blocked
+Blocked by: matched Snowflake input-envelope identity and exercised recovery evidence
 
 ## Question
 
@@ -92,6 +92,34 @@ image does not emit a real Snowflake input-envelope identity/count contract, and
 the success-path runs do not exercise recovery. The evaluator deliberately
 reports performance results separately while keeping both `sizing_gates_passed`
 and overall `passed` false until those two evidence seams exist.
+
+### Rerun outcome (2026-09-10)
+
+After the concurrently running MDM generation finished, a fresh isolated cohort
+completed on source `large:289`, candidate `medium:294`, image digest
+`sha256:239612ad...a05542a`, and source ASL hash `5d92be2d...d6cc`:
+
+- control `ticket29-gold-control-4-20260910T231743Z`: 103.823s end to end,
+  83.078s billed, $0.002719 estimated compute, 13.77% CPU p95, 0.89% memory
+  peak/p95;
+- medium `ticket29-gold-3-20260910T232130Z`: 104.216s end to end, 86.638s
+  billed, $0.001408 estimated compute, 46.80% CPU p95, 5.32% memory peak/p95;
+- medium `ticket29-gold-4-20260910T232632Z`: 87.109s end to end, 70.397s
+  billed, $0.001149 estimated compute, 54.89% CPU p95, 5.91% memory peak/p95.
+
+Every execution exited zero without retry. The combined control-start through
+candidate-2-stop overlap scan found no other ECS task. All three runs produced
+the same exact five-table output identity (`bb81b054...963a3`) and 470,101-row
+funnel, so output correctness and cross-run idempotency passed. Candidate p95
+duration was 103.361s, 0.45% faster than control, and candidate p95 estimated
+compute cost was $0.001395, 48.69% lower than control. These performance gates
+passed.
+
+Overall and sizing qualification remain fail-closed: matched Snowflake input
+envelope was not captured, and recovery was not exercised. No production task
+definition or profile reference was changed. The earlier control-3/candidate-2
+pair is diagnostic only because its reporting window expired before the cohort
+could be completed.
 
 ## Parked (2026-09-01)
 
