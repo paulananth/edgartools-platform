@@ -146,3 +146,14 @@ corrupted: the crash happened mid-batch, before that batch's own
 uncommitted transaction on connection close. Full `tests/mdm/` suite green
 (739 passed) after the fix. Real backfill run needs to be re-attempted
 against prod with the fix deployed.
+
+**Superseded by [Ticket 08](08-redesign-quarantine-backfill-for-multi-version-chains.md)
+(2026-09-09):** a real dry-run against prod with this fix deployed found
+`closed: 0, reopened: 0` — this ticket's design (one active row vs. one
+quarantined row) doesn't hold; real relationship_ids have chains of 2-353
+simultaneously-active same-source rows, not a single stuck one. This
+ticket's module (`relationship_quarantine_backfill.py`) and its shared
+discriminator functions are reused, extended for full chronological chains
+rather than replaced — see Ticket 08 for the corrected design and
+[Ticket 09](09-implement-chain-aware-backfill-institutional-holds.md) for
+the implementation.

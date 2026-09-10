@@ -174,6 +174,24 @@ wiring through `derive_relationships(["INSTITUTIONAL_HOLDS"])`. Full
 `tests/mdm/` suite green (739 passed, including the separately-discovered
 `confirmed_chronologically_after` fix's own 6 new tests).
 
-**Not yet deployed.** The backfill has not been run against real prod
-(1,718 already-orphaned securities) -- needs its own explicit go-ahead,
-same pattern as Ticket 05.
+**Deployed and live-verified 2026-09-09.** Ran for real against prod
+(same perf-fixed MDM image as PR #575's O(N*M) `normalize_name`
+memoization fix, which made this run practical at all — CUSIP processing
+went from ~85s/unit pre-fix to ~40s/unit). Full run 17:13-19:02 ET
+(~1h48m), exit code 0:
+
+```json
+{
+  "dry_run": false,
+  "examined": 12174,
+  "linked": 7294,
+  "review_logged": 3895,
+  "skipped_no_match": 985,
+  "skipped_no_name": 0
+}
+```
+
+7,294 (60%) securities auto-linked to their issuer company via fuzzy
+match clearing the 0.95/0.85 threshold; 3,895 (32%) logged to the REVIEW
+tier for manual review (candidate found, below threshold, never written);
+985 (8%) had no candidate at all; 0 had no name to match on.
