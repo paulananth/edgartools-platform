@@ -15,7 +15,7 @@ import uuid
 from datetime import date
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -681,3 +681,71 @@ class TestRunBackfillEndToEnd:
         # Still quarantined -- confirms the run terminated rather than
         # looping, without silently pretending the row got fixed.
         assert find_quarantined_relationship_ids(session) == ["rel-stuck"]
+
+
+class TestPriorityCheckCachedAcrossRun:
+    """Live-prod incident (2026-09-10): a real dry-run scoped to
+    INSTITUTIONAL_HOLDS ran 8.5+ hours without completing and had to be
+    manually stopped. CloudWatch showed ~9 Postgres round trips/second, all
+    the identical SELECT against mdm_relationship_source_priority -- one
+    fresh, uncached query per conflicting pair, even though rel_type_id is
+    constant for a scoped run and the real source_system pairs repeat
+    constantly (confirmed live: same-relationship_id conflicting rows are
+    ~100% same-source_system). resolve_source_priority() itself is left
+    untouched (its other call site, ensure_relationship, fires once per
+    write -- a naturally bounded cost, not this shape); the fix memoizes
+    at the backfill call site only, with one cache shared across an
+    entire run_backfill() invocation, mirroring the already-established
+    _ensure_thirteenf_manager per-batch memoization pattern."""
+
+    def _statement_counter(self, session):
+        statements: list[str] = []
+
+        def capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+            normalized = " ".join(statement.lower().split())
+            if "mdm_relationship_source_priority" in normalized and normalized.startswith("select"):
+                statements.append(normalized)
+
+        bind = session.get_bind()
+        event.listen(bind, "before_cursor_execute", capture_statement)
+        return statements, bind, capture_statement
+
+    def _many_conflicting_relationship_ids(self, session, count: int) -> None:
+        for i in range(count):
+            rel_id = f"rel-priority-cache-{i}"
+            _row(
+                session, relationship_id=rel_id,
+                properties={"role": "officer"}, effective_from=date(2024, 1, 1),
+            )
+            _row(
+                session, relationship_id=rel_id,
+                properties={"role": "director"}, effective_from=date(2025, 1, 1),
+                quarantined=True,
+            )
+        session.commit()
+
+    def test_dry_run_issues_one_priority_query_not_one_per_relationship_id(self, session):
+        self._many_conflicting_relationship_ids(session, count=10)
+
+        statements, bind, listener = self._statement_counter(session)
+        try:
+            summary = run_backfill(session, dry_run=True)
+        finally:
+            event.remove(bind, "before_cursor_execute", listener)
+
+        assert summary.relationship_ids_examined == 10
+        assert summary.reopened == 10
+        assert len(statements) <= 1, statements
+
+    def test_real_run_issues_one_priority_query_not_one_per_relationship_id(self, session):
+        self._many_conflicting_relationship_ids(session, count=10)
+
+        statements, bind, listener = self._statement_counter(session)
+        try:
+            summary = run_backfill(session, batch_size=3, dry_run=False)
+        finally:
+            event.remove(bind, "before_cursor_execute", listener)
+
+        assert summary.relationship_ids_examined == 10
+        assert summary.reopened == 10
+        assert len(statements) <= 1, statements

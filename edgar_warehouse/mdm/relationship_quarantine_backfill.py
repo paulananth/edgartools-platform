@@ -120,6 +120,42 @@ def _effective_from_of(row: MdmRelationshipInstance):
     return row.effective_from if row.effective_from is not None else row.valid_from_date
 
 
+_PriorityCache = dict[tuple[str, Optional[str], Optional[str]], str]
+
+
+def _resolve_source_priority_cached(
+    session: Session,
+    cache: _PriorityCache,
+    rel_type_id: str,
+    existing_source: Optional[str],
+    new_source: Optional[str],
+) -> str:
+    """Memoized ``resolve_source_priority`` for the backfill's own repeated
+    pairwise conflict checks.
+
+    Live-prod incident (2026-09-10): a dry-run scoped to a single
+    relationship type ran 8.5+ hours without completing -- CloudWatch
+    showed ~9 Postgres round trips/second, all the identical query against
+    ``mdm_relationship_source_priority``, because ``rel_type_id`` is
+    constant for a scoped run and real ``(existing_source, new_source)``
+    pairs repeat constantly (same-relationship_id conflicts are ~100%
+    same-source_system). ``resolve_source_priority`` itself (``graph.py``)
+    is left untouched -- its only other caller, ``ensure_relationship``,
+    fires once per newly-written row, a naturally bounded cost with no
+    repetition to amortize, so caching there would add complexity for no
+    benefit. Caching here is safe because this is an offline, one-shot
+    batch tool, not the live write path -- a cache built at the start of
+    one ``run_backfill`` invocation can only miss a priority rule edited
+    mid-run, which just moves a row between two already-tolerated,
+    already-flagged-for-review outcomes (resolved vs.
+    ``skipped_priority_now_configured``), not a correctness regression.
+    """
+    key = (rel_type_id, existing_source, new_source)
+    if key not in cache:
+        cache[key] = resolve_source_priority(session, rel_type_id, existing_source, new_source)
+    return cache[key]
+
+
 def _record_backfill_evidence(row: MdmRelationshipInstance, note: str) -> None:
     """Append a trace of this correction to the row's own ``source_evidence``.
 
@@ -142,9 +178,19 @@ def _record_backfill_evidence(row: MdmRelationshipInstance, note: str) -> None:
 
 
 def backfill_relationship_id(
-    session: Session, relationship_id: str, *, dry_run: bool = False
+    session: Session,
+    relationship_id: str,
+    *,
+    dry_run: bool = False,
+    priority_cache: Optional[_PriorityCache] = None,
 ) -> RelationshipQuarantineBackfillSummary:
     """Correct every conflicting row sharing ``relationship_id``.
+
+    ``priority_cache`` memoizes ``resolve_source_priority`` lookups (see
+    ``_resolve_source_priority_cached``) -- defaults to a fresh per-call
+    dict so a direct/standalone caller behaves exactly as before;
+    ``run_backfill`` passes one shared dict across its whole loop so the
+    cache actually pays off across relationship_ids, not just within one.
 
     Reuses the exact discriminator/overlap/chronological-guard/priority
     semantics ``ensure_relationship``/``_deactivate_if_properties_changed``
@@ -185,6 +231,8 @@ def backfill_relationship_id(
     known-bad pair uncorrected once discovered would serve no purpose.
     """
     summary = RelationshipQuarantineBackfillSummary(relationship_ids_examined=1)
+    if priority_cache is None:
+        priority_cache = {}
 
     rows = list(session.scalars(
         select(MdmRelationshipInstance)
@@ -237,8 +285,8 @@ def backfill_relationship_id(
             resolved: list[MdmRelationshipInstance] = []
             unresolved = False
             for conflict in conflicts:
-                priority_winner = resolve_source_priority(
-                    session, row.rel_type_id, conflict.source_system, row.source_system
+                priority_winner = _resolve_source_priority_cached(
+                    session, priority_cache, row.rel_type_id, conflict.source_system, row.source_system
                 )
                 if priority_winner != "none":
                     # A mdm_relationship_source_priority rule now resolves
@@ -348,13 +396,21 @@ def run_backfill(
     ``relationship_types`` restricts to those rel_type_name values only --
     see ``find_quarantined_relationship_ids`` for why this matters (Ticket
     08/09's INSTITUTIONAL_HOLDS-first rollout scope).
+
+    One ``priority_cache`` (see ``_resolve_source_priority_cached``) is
+    shared across the ENTIRE run -- not per relationship_id, not per
+    batch -- so the redundant-query cost stays flat regardless of how
+    many relationship_ids this run touches.
     """
     total = RelationshipQuarantineBackfillSummary()
+    priority_cache: _PriorityCache = {}
     if dry_run:
         for relationship_id in find_quarantined_relationship_ids(
             session, relationship_types=relationship_types
         ):
-            total.add(backfill_relationship_id(session, relationship_id, dry_run=True))
+            total.add(backfill_relationship_id(
+                session, relationship_id, dry_run=True, priority_cache=priority_cache
+            ))
         return total
 
     after: Optional[str] = None
@@ -365,7 +421,9 @@ def run_backfill(
         if not relationship_ids:
             break
         for relationship_id in relationship_ids:
-            total.add(backfill_relationship_id(session, relationship_id, dry_run=False))
+            total.add(backfill_relationship_id(
+                session, relationship_id, dry_run=False, priority_cache=priority_cache
+            ))
         after = relationship_ids[-1]
         session.commit()
         print(json.dumps({
