@@ -64,6 +64,17 @@ class ResolverContext:
     # in _skip_if_unchanged -- callers that don't build one (tests, any
     # future resolver that doesn't opt in) see no behavior change.
     prefetched_source_refs: Optional[dict[tuple[str, str], tuple[Optional[str], str]]] = None
+    # mdm-run-throughput Ticket 05: a per-group (not per-run) lazy cache for
+    # stage_candidate()'s value-collapsing lookup, keyed by
+    # (entity_id, source_system, field_name, value_str, global_priority) ->
+    # the live MdmEntityAttributeStage ORM row. Unlike prefetched_source_refs
+    # (built once, read-only, shared across worker threads), this is created
+    # fresh and empty per group by _run_grouped_concurrent and mutated
+    # in-memory as that group's rows process sequentially on one session --
+    # safe because a group never spans more than one thread/session. None
+    # (the default) opts a caller out entirely (e.g. run_companies' per-row
+    # path), preserving stage_candidate()'s exact pre-Ticket-05 behavior.
+    staged_representatives: Optional[dict[tuple, Any]] = None
 
 
 @dataclass
@@ -179,6 +190,7 @@ class BaseResolver:
                 field_name,
                 value,
                 effective_date=effective_date,
+                representative_cache=ctx.staged_representatives,
             )
 
     def _log_change(
