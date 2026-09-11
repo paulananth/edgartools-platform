@@ -1,5 +1,5 @@
 Type: task
-Status: ready-for-agent
+Status: done
 
 ## Task
 
@@ -36,3 +36,24 @@ import already there.
 Independent of [Ticket 03](03-migrate-daily-incremental-onto-shared-builders.md)
 — different file, different test file — can run in parallel with it once
 Ticket 01 is done.
+
+## Answer
+
+Migrated (commit `6cfcc688`). All 5 acceptance criteria met. Verified
+byte-identical against `main`'s pre-migration output via a direct
+JSON-generation comparison (not just unit tests) for all 5 stages — the
+only difference anywhere in the generated machine is the deliberate
+`FirmRosterForceCheck` Comment normalization. 7 new regression tests added
+to `tests/architecture/test_load_history_state_machine.py` (59 total in
+that file, all passing). A `/gof-refactor-reviewer` pass on the planned
+wiring-in change (before writing the edit) confirmed no orphaned
+references among the 12 removed intermediate variables. The full 3-axis
+`/code-review` against Ticket 01's closing commit found zero blocking
+findings on all three axes — Standards, Spec, and GoF each came back
+clean, with only non-blocking notes (a partial-migration data-clump
+artifact in the untouched `ecs_state()` closure; a states.update()-vs-
+extract-and-rekey idiom inconsistency GoF explicitly said doesn't clear
+Rule 0's bar). Full architecture + unit suite green (599 passed, 2
+pre-existing skips) before commit.
+
+Ready for [Ticket 03](03-migrate-daily-incremental-onto-shared-builders.md), independent and already unblocked.
