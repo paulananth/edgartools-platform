@@ -49,8 +49,8 @@ Silver warehouse state (typed tables after parse) is the authoritative published
 _Avoid_: Silver as processing ledger, Bronze as business state, edgartools local disk cache as shared state, agent queries against DuckDB silver
 
 **Agent System of Engagement**:
-Snowflake Decision Contract objects only; agents never read silver or bronze directly.
-_Avoid_: Runtime silver as agent API, ad-hoc SEC calls from the agent
+Snowflake Decision Contract objects only; agents never read silver or bronze directly. A Mongo Decision Projection is not a second SoE.
+_Avoid_: Runtime silver as agent API, ad-hoc SEC calls from the agent, Mongo as v1 SoE
 
 **Human Explore System of Engagement**:
 Labeled Explore Mode over Snowflake gold (and related analytics tables), not valid as Trading Decision input.
@@ -436,7 +436,11 @@ _Avoid_: Replacing FY with Q silently, inventing interim when none is newer than
 
 **Snowflake Decision Contract**:
 The v1 delivery of the Agent Decision Surface: published Snowflake objects (views, tables, or procedures) that return Decision Graph Bundles or their relational equivalent under a declared schema version; the Human Audit View queries these same objects. Bootstrap SQL owns the `EDGARTOOLS_DECISION` objects; dbt owns gold and silver; Python owns semantics; the watermark aggregator writes READY.
-_Avoid_: Streamlit-only data path, agent-private tables that diverge from audit UI, S3 file dump as the primary contract, undocumented ad-hoc gold joins, dbt-owned READY publication
+_Avoid_: Streamlit-only data path, agent-private tables that diverge from audit UI, S3 file dump as the primary contract, undocumented ad-hoc gold joins, dbt-owned READY publication, treating Mongo as the v1 contract
+
+**Mongo Decision Projection**:
+An additive public-internet copy of a READY Snowflake Decision Contract onto MongoDB documents for v2 agents. It is not a second Agent System of Engagement. A separate publisher writes it after READY. It publishes one issuer Decision Graph Bundle document per Bundle Subject (same section envelope; holders, auditor, and parent stay unavailable; ADV is not_applicable) and one Subject Feature Screen document per Bundle Subject. Each agent-grade document carries the full Decision Watermark required for an Agent-Grade Read, including bronze identity when bronze persist was used, plus an explicit READY marker. If the projection does not match current READY Snowflake, the publisher fail-closes in place (`not_ready`, not agent-grade) without deleting the payload; the v2 agent abstains.
+_Avoid_: Mongo as v1 SoE, parallel gold/graph writer, Python bundle dump without READY, Mongo winning when Snowflake disagrees, four-field pin as the full watermark, warehouse ingest into Atlas, one universe Feature Screen document, Explore gold as v2, omitting bundle sections silently, paid Atlas as a v2 prerequisite, private-only Atlas as the v2 agent path, watermark aggregator as the Mongo writer, deleting projection docs on pointer move
 
 **Decision Watermark**:
 The composite identity bound into every Decision Graph Bundle as inspectable components: a digest of the ordered unique content-addressed Bronze artifact hashes (mandatory; the full hash list is not the watermark), silver-derived parse/completeness claims (versions and section coverage), Relationship Generation Snapshot / active graph generation id, gold/feature as-of (run_id), and business date; a bundle is invalid for agent use if any required component is missing or the components are known to disagree. A concatenated display token may exist for logs, but it is not the identity.
@@ -475,8 +479,8 @@ The single-subject retrieval of a Decision Graph Bundle (Trading-Relevant Neighb
 _Avoid_: Requiring full-universe dump to inspect one CIK
 
 **Deferred Access Control**:
-v1 of the Agent Decision Surface does not implement product-level authentication (for example OAuth); access is whatever the operator's Snowflake (or equivalent) session already allows. The contract must remain callable behind a later pluggable access layer without changing Decision Feature semantics or bundle shape.
-_Avoid_: Baking a one-off auth scheme into the bundle schema, blocking go-live on OAuth, assuming public internet exposure of Snowflake
+v1 of the Agent Decision Surface does not implement product-level authentication (for example OAuth); access is whatever the operator's Snowflake (or equivalent) session already allows. v2 internet agents use one read-only Atlas database user (SCRAM) plus TLS; the Mongo publisher uses a separate write user. The contract must remain callable behind a later pluggable access layer without changing Decision Feature semantics or bundle shape.
+_Avoid_: Baking a one-off auth scheme into the bundle schema, blocking go-live on OAuth, assuming public internet exposure of Snowflake, sharing the publisher write user with internet agents, treating Atlas UI / plugin OAuth as trading-agent auth
 
 **Agent-Grade Read**:
 A Subject Bundle Read or Subject Feature Screen result whose Decision Watermark components are present and aligned, including the Bronze digest, over a non-empty Decision Subject Universe; only Agent-Grade Reads are valid inputs to a Trading Decision. Missing bronze digest or empty universe is not READY and not agent-grade (no tradeable payload). An empty or unavailable neighborhood section does not by itself fail the bundle. If the active graph generation changes, agent-grade reads fail closed; the old READY publication is not rewritten.
