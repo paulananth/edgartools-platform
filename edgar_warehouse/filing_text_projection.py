@@ -10,7 +10,12 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
-from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory
+from edgar_warehouse.infrastructure.dataset_path_catalog import (
+    default_capture_spec_factory,
+)
+from edgar_warehouse.infrastructure.filing_text_mutation_lock import (
+    filing_text_mutation_lock,
+)
 from edgar_warehouse.infrastructure.object_storage import object_exists, read_bytes
 
 
@@ -55,6 +60,27 @@ def extract_text_for_accession(
     accession_number: str,
     sync_run_id: str,
     text_version: str = "generic_text_v1",
+) -> dict[str, Any]:
+    with filing_text_mutation_lock(
+        context.storage_root,
+        owner=f"extract:{sync_run_id}:{accession_number}:{text_version}",
+    ):
+        return _extract_text_for_accession_unlocked(
+            context=context,
+            db=db,
+            accession_number=accession_number,
+            sync_run_id=sync_run_id,
+            text_version=text_version,
+        )
+
+
+def _extract_text_for_accession_unlocked(
+    *,
+    context: Any,
+    db: Any,
+    accession_number: str,
+    sync_run_id: str,
+    text_version: str,
 ) -> dict[str, Any]:
     filing = db.get_filing(accession_number)
     if filing is None:

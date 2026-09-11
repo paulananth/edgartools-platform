@@ -376,7 +376,6 @@ def _handle_compare_filing_artifact_capture(args: argparse.Namespace) -> int:
 
 def _handle_reconcile_decision_watermark(args: argparse.Namespace) -> int:
     import json
-
     from pathlib import Path
 
     from edgar_warehouse.serving.watermark_aggregator import (
@@ -1583,8 +1582,9 @@ def build_parser() -> argparse.ArgumentParser:
         "sweep-filing-text",
         help="release-readiness Ticket 101: extract sec_filing_text for every genuine "
              "periodic-reporting company (real 10-K/10-K405/10KSB/10KSB40 filing within the "
-             "trailing 2 years, real ticker) not yet processed, and report (never delete) "
-             "already-extracted text whose CIK no longer qualifies. Computed fresh every run "
+             "trailing 2 years, real ticker) not yet processed; write a complete immutable "
+             "exact-identity retention manifest and report (never delete) obsolete known text. "
+             "Computed fresh every run "
              "-- see edgar_warehouse/filing_text_sweep.py.",
     )
     sweep_filing_text.add_argument(
@@ -1692,7 +1692,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gold_verify_live.set_defaults(handler=_handle_gold_verify_live)
 
-    from edgar_warehouse.table_reconciliation.cli import register_subparser as _register_table_reconcile
+    from edgar_warehouse.table_reconciliation.cli import (
+        register_subparser as _register_table_reconcile,
+    )
 
     _register_table_reconcile(subparsers)
 

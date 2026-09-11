@@ -36,6 +36,14 @@ _Avoid_: Using `silverstage/` as an S3 lifecycle prefix, treating the Python rel
 Permanent removal of billed bytes on a versioned bucket by deleting specific `Key` + `VersionId` pairs. Key-only delete and `aws s3 rm` leave payloads billed behind delete markers.
 _Avoid_: Recursive `s3 rm`, Terraform one-shot deletes, unversioned DELETE
 
+**Derived Filing Text**:
+A rebuildable normalized-text projection identified by filing accession and interpretation version and produced from retained Bronze filing evidence; it is not source evidence.
+_Avoid_: Bronze Artifact, raw filing, canonical source evidence
+
+**Retirable Derived Filing Text**:
+A Derived Filing Text identity outside the authoritative required set that has satisfied its deletion-eligibility boundary; this status never applies to the underlying Bronze evidence.
+_Avoid_: Obsolete CIK, obsolete filing, Bronze deletion candidate
+
 **Runtime System of Engagement**:
 Silver warehouse state (typed tables after parse) is the authoritative published business state against which processors compute Lifecycle Diffs; the Change Ledger decides acquisition and processing eligibility and records completion.
 _Avoid_: Silver as processing ledger, Bronze as business state, edgartools local disk cache as shared state, agent queries against DuckDB silver

@@ -30,8 +30,6 @@ locals {
     for arn in [
       try(local.provisioning.mdm_postgres_dsn_secret_arn, ""),
       try(local.provisioning.bookkeeping_postgres_dsn_secret_arn, ""),
-      try(local.provisioning.mdm_neo4j_secret_arn, ""),
-      try(local.provisioning.mdm_api_keys_secret_arn, ""),
       try(local.provisioning.mdm_snowflake_secret_arn, ""),
     ] : arn if arn != null && arn != ""
   ]
@@ -41,12 +39,12 @@ locals {
 module "github_actions_ecr" {
   source = "../../modules/github_actions_ecr"
 
-  environment         = local.environment
-  name_prefix         = local.name_prefix
-  github_org          = "paulananth"
-  github_repo         = "edgartools-platform"
-  ecr_name_prefix     = local.name_prefix
-  tags                = local.effective_tags
+  environment     = local.environment
+  name_prefix     = local.name_prefix
+  github_org      = "paulananth"
+  github_repo     = "edgartools-platform"
+  ecr_name_prefix = local.name_prefix
+  tags            = local.effective_tags
 }
 
 module "runtime_access" {

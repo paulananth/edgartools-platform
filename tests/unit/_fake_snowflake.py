@@ -18,6 +18,7 @@ class FakeSnowflakeCursor:
         self._rows: list[tuple] = []
         self.last_query: str | None = None
         self.last_params: list | tuple | None = None
+        self.sfqid: str | None = None
         self.closed = False
 
     def execute(self, query: str, params: list | tuple | None = None) -> None:
@@ -61,9 +62,11 @@ class FakeSnowflakeConnection:
         self._table_data = table_data
         self.closed = False
         self.cursors: list[FakeSnowflakeCursor] = []
+        self.next_query_id: str | None = None
 
     def cursor(self) -> FakeSnowflakeCursor:
         created = FakeSnowflakeCursor(self._table_data)
+        created.sfqid = self.next_query_id
         self.cursors.append(created)
         return created
 
@@ -91,11 +94,11 @@ class RecordingConnectSettings:
     connect() call site is correctly wrapped in
     connect_with_qmark_paramstyle()."""
 
-    def __init__(self, connection: "FakeSnowflakeConnection") -> None:
+    def __init__(self, connection: FakeSnowflakeConnection) -> None:
         self._connection = connection
         self.paramstyle_during_connect: str | None = None
 
-    def connect(self) -> "FakeSnowflakeConnection":
+    def connect(self) -> FakeSnowflakeConnection:
         import snowflake.connector as sc
 
         self.paramstyle_during_connect = sc.paramstyle

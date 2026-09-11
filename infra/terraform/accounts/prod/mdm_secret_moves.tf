@@ -12,16 +12,6 @@ moved {
 }
 
 moved {
-  from = module.mdm[0].aws_secretsmanager_secret.api_keys
-  to   = module.runtime.aws_secretsmanager_secret.mdm_api_keys
-}
-
-moved {
   from = module.mdm[0].aws_secretsmanager_secret.snowflake
   to   = module.runtime.aws_secretsmanager_secret.mdm_snowflake
-}
-
-moved {
-  from = module.mdm[0].aws_secretsmanager_secret.neo4j
-  to   = module.runtime.aws_secretsmanager_secret.mdm_neo4j
 }

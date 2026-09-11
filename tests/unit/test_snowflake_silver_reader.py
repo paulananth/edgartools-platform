@@ -8,8 +8,6 @@ docstring for why each of these is load-bearing, not incidental.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
@@ -87,6 +85,27 @@ def test_fetch_closes_its_own_cursor():
     assert cursor.closed is True
 
 
+def test_fetch_with_query_id_binds_rows_to_snowflake_query_identity():
+    reader, connection = _reader_over(
+        {"SEC_COMPANY": (["CIK"], [(320193,)])}
+    )
+    connection.next_query_id = "01b-query-id"
+
+    rows, query_id = reader.fetch_with_query_id("SELECT cik FROM sec_company")
+
+    assert rows == [{"cik": 320193}]
+    assert query_id == "01b-query-id"
+
+
+def test_fetch_with_query_id_fails_closed_without_snowflake_query_identity():
+    reader, _connection = _reader_over(
+        {"SEC_COMPANY": (["CIK"], [(320193,)])}
+    )
+
+    with pytest.raises(RuntimeError, match="query ID"):
+        reader.fetch_with_query_id("SELECT cik FROM sec_company")
+
+
 def test_close_closes_the_underlying_connection():
     reader, connection = _reader_over({})
 
@@ -147,7 +166,9 @@ def test_default_settings_factory_overrides_role_to_mdm_silver_reader(monkeypatc
     # patching dataclasses.replace itself, which every other dataclass in
     # the process also uses.
     from edgar_warehouse.mdm.export import SnowflakeConnectionSettings
-    from edgar_warehouse.silver_support.snowflake_reader import _mdm_silver_reader_settings
+    from edgar_warehouse.silver_support.snowflake_reader import (
+        _mdm_silver_reader_settings,
+    )
 
     fake_upstream_settings = SnowflakeConnectionSettings(
         account="acct",

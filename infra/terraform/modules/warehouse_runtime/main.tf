@@ -106,12 +106,12 @@ resource "aws_ecs_cluster" "warehouse" {
   tags = merge(local.tags, { Name = "${local.name_prefix}-warehouse" })
 }
 
-resource "aws_secretsmanager_secret" "runner_credentials" {
-  name                    = "${local.name_prefix}-runner-credentials"
-  description             = "Legacy empty operator credential container. Do not use for sec_platform_runner runtime roles."
-  recovery_window_in_days = 0
+removed {
+  from = aws_secretsmanager_secret.runner_credentials
 
-  tags = merge(local.tags, { Name = "${local.name_prefix}-runner-credentials", Legacy = "runner-credentials" })
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "aws_secretsmanager_secret" "mdm_postgres_dsn" {
@@ -128,18 +128,20 @@ resource "aws_secretsmanager_secret" "bookkeeping_postgres_dsn" {
   tags = merge(local.tags, { Name = "${local.name_prefix}/bookkeeping/postgres_dsn", RuntimeSecret = "bookkeeping-postgres-dsn" })
 }
 
-resource "aws_secretsmanager_secret" "mdm_neo4j" {
-  name        = "${local.name_prefix}/mdm/neo4j"
-  description = "Empty Neo4j connection details container for MDM graph sync. Populate the value out-of-band."
+removed {
+  from = aws_secretsmanager_secret.mdm_neo4j
 
-  tags = merge(local.tags, { Name = "${local.name_prefix}/mdm/neo4j", RuntimeSecret = "mdm-neo4j" })
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "aws_secretsmanager_secret" "mdm_api_keys" {
-  name        = "${local.name_prefix}/mdm/api_keys"
-  description = "Empty MDM API key container. Populate the value out-of-band."
+removed {
+  from = aws_secretsmanager_secret.mdm_api_keys
 
-  tags = merge(local.tags, { Name = "${local.name_prefix}/mdm/api_keys", RuntimeSecret = "mdm-api-keys" })
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "aws_secretsmanager_secret" "mdm_snowflake" {
