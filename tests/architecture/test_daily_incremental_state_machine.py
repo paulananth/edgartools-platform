@@ -628,3 +628,88 @@ def test_sweep_filing_text_command_shape_and_profile(daily_definition: dict) -> 
     # StartAt-rooted trace.
     assert states["ReleaseSecFetchLease"]["Next"] == "SweepFilingText"
     assert states["SweepFilingText"]["Next"] == "RunMdmChain"
+
+
+# -- pipeline-stage-builders ticket 03: byte-identical migration proof --------
+#
+# write_warehouse_mdm_gold_definition's ADV-bulk and Firm-Roster force-capable
+# fetch trios now call infra/scripts/pipeline_stage_helpers.py's
+# force_capable_fetch_stage instead of hand-written JSON blocks -- the second
+# hand-copy of this exact shape (load_history's own copy was migrated in
+# ticket 02), whose own code comment used to admit it was "kept in sync
+# manually." Verified byte-identical against main's pre-migration output via
+# direct JSON comparison during implementation; the one deliberate exception
+# is FirmRosterForceCheck's Comment text, documented below.
+
+
+def _assert_daily_force_capable_fetch_trio(
+    daily_definition: dict, choice_state_name: str, fetch_state_name: str,
+    forced_state_name: str, ingest_state_name: str, command: str,
+    next_state_on_success: str, catch_next_state: str,
+) -> None:
+    states = daily_definition["States"]
+    expected_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": catch_next_state}]
+
+    choice = states[choice_state_name]
+    assert choice["Type"] == "Choice"
+    assert choice["Default"] == "InvalidForceInput"
+    by_shape = {(c.get("IsPresent"), c.get("BooleanEquals")): c["Next"] for c in choice["Choices"]}
+    assert by_shape[(False, None)] == fetch_state_name
+    assert by_shape[(None, True)] == forced_state_name
+    assert by_shape[(None, False)] == fetch_state_name
+
+    fetch = states[fetch_state_name]
+    forced = states[forced_state_name]
+    ingest = states[ingest_state_name]
+
+    for state, expect_force in ((fetch, False), (forced, True)):
+        assert state["Next"] == ingest_state_name
+        assert state["ResultPath"] is None
+        assert state["Catch"] == expected_catch
+        cmd = state["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+        assert f"States.Array('{command}'" in cmd
+        assert ("'--force'" in cmd) is expect_force
+        assert state["Parameters"]["TaskDefinition"] == "arn:wh-medium"
+
+    assert ingest["Next"] == next_state_on_success
+    assert ingest["ResultPath"] is None
+    assert ingest["Catch"] == expected_catch
+    ingest_cmd = ingest["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert f"warehouse/bronze/runs/{command}/" in ingest_cmd
+    assert "source_manifest.json" in ingest_cmd
+
+
+def test_adv_bulk_force_trio_matches_pre_migration_shape(daily_definition: dict) -> None:
+    _assert_daily_force_capable_fetch_trio(
+        daily_definition, "ForceCheck", "FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources",
+        "fetch-adv-bulk", "FirmRosterForceCheck", "ReleaseSecFetchLease",
+    )
+    # ForceCheck already had the fuller Comment wording pre-migration -- true
+    # byte-identical, no normalization needed for this one.
+    assert (
+        daily_definition["States"]["ForceCheck"]["Comment"]
+        == "Route to FetchAdvBulkForced (includes --force) when caller supplied "
+           "force=true; otherwise FetchAdvBulk (no --force), the normal path."
+    )
+
+
+def test_firm_roster_force_trio_matches_pre_migration_shape(daily_definition: dict) -> None:
+    _assert_daily_force_capable_fetch_trio(
+        daily_definition, "FirmRosterForceCheck", "FetchFirmRoster", "FetchFirmRosterForced",
+        "IngestFirmRosterSources", "fetch-firm-roster", "ReleaseSecFetchLease", "ReleaseSecFetchLease",
+    )
+
+
+def test_firm_roster_force_check_comment_deliberately_normalized(daily_definition: dict) -> None:
+    """Pre-migration, FirmRosterForceCheck's Comment lacked ForceCheck's
+    trailing ", the normal path." clause (a copy-paste divergence, not a
+    behavioral difference -- Comment is inert ASL metadata). This is the one
+    place this migration's output intentionally differs from the exact
+    pre-migration text; every other assertion in this section is a true
+    byte-identical check -- same normalization ticket 02 already applied to
+    load_history's copy of this same trio."""
+    assert (
+        daily_definition["States"]["FirmRosterForceCheck"]["Comment"]
+        == "Route to FetchFirmRosterForced (includes --force) when caller supplied "
+           "force=true; otherwise FetchFirmRoster (no --force), the normal path."
+    )

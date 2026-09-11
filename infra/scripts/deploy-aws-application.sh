@@ -3072,9 +3072,12 @@ import json, pathlib, sys
  bootstrap_next_task_arn, seed_universe_task_arn, mdm_state_machine_arn, script_dir) = sys.argv[1:]
 sys.path.insert(0, script_dir)
 from mdm_tail_helper import call_mdm_machine
+from pipeline_stage_helpers import EcsNetworkContext, fundamentals_mode_stage, force_capable_fetch_stage
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
+network = EcsNetworkContext(cluster_arn=cluster_arn, subnets=subnets,
+                             security_groups=security_groups, container_name=container_name)
 
 def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
     s = {
@@ -3581,15 +3584,11 @@ windowed_bootstrap = {
 # so Branch A and Branch B process identical CIK windows for the same {window_offset,
 # window_limit} item.
 #
-# AD-13: partial Branch B failure is accepted. A failure is caught and routed to
+# AD-13: partial Branch B failure is accepted. A failure is caught (via
+# fundamentals_mode_stage's fixed catch_next_state behavior below) and routed to
 # FetchPerFilingFundamentals so the pipeline proceeds. Gaps self-heal via idempotent
 # backfill; a hard abort would defeat that. Branch A remains strict.
-stage1b_entity_facts_catch = [{
-    "ErrorEquals": ["States.ALL"],
-    "ResultPath": None,
-    "Next": "FetchPerFilingFundamentals",
-}]
-
+#
 # wh_large_arn, not wh_medium_arn (2026-08-14, ecs-cost-sizing ticket 20): a
 # 500-CIK entity-facts window OOM'd (exit 137) on all 3 configured attempts on
 # wh_medium_arn (4096MB) during load_history retry7's live full-universe
@@ -3600,44 +3599,28 @@ stage1b_entity_facts_catch = [{
 # structural fix in silver_protection.py (phase-1 SQL bulk insert for
 # brand-new keys + chunked Python conflict resolution for the rest) -- see
 # .scratch/ecs-cost-sizing/issues/20-fix-stage1b-entity-facts-oom-on-medium-profile.md.
-per_window_fundamentals_entity_facts = ecs_state(wh_large_arn,
-    "States.Array('bootstrap-fundamentals', '--mode', 'entity-facts', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
-    is_end=True)
-
-fundamentals_entity_facts = {
-    "Type": "Map",
-    "Comment": "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, sec_financial_derived, sec_accounting_flag in unified SEC silver. Runs after Branch A to avoid concurrent writes to the same DuckDB artifact.",
-    "MaxConcurrency": 1,
-    # 15, not 0 (2026-08-14, ecs-cost-sizing ticket 21): at ToleratedFailurePercentage=0,
-    # window 1 of N exhausting its retries aborts the Map immediately, abandoning every
-    # PENDING window without even attempting it -- live evidence from load_history retry7
-    # showed this zeroed out net-new entity-facts coverage across the full run (0.04% CIK
-    # coverage of the universe after a 16-hour execution that reported SUCCEEDED). 15%
-    # tolerates isolated bad windows (a huge filer, a transient SEC 5xx) while still hard-
-    # stopping well before all windows are attempted if something systemic is broken (bad
-    # image, missing credential, unapplied migration) -- see the ticket for the full
-    # analysis and the follow-up (per-window Catch inside the ItemProcessor, so no window's
-    # failure counts against any other window at all) this stopgap doesn't yet cover.
-    "ToleratedFailurePercentage": 15,
-    "ItemReader": {
-        "Resource": "arn:aws:states:::s3:getObject",
-        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-        "Parameters": {
-            "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
-        },
-    },
-    "ItemProcessor": {
-        # DISTRIBUTED, not INLINE — see the WindowedBootstrap comment above (fix-pipelines
-        # 06-03): ItemReader requires Mode=DISTRIBUTED, not INLINE.
-        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-        "StartAt": "RunFundamentalsEntityFacts",
-        "States": {"RunFundamentalsEntityFacts": per_window_fundamentals_entity_facts},
-    },
-    "ResultPath": None,
-    "Catch": stage1b_entity_facts_catch,
-    "Next": "FetchPerFilingFundamentals",
-}
+#
+# Built via fundamentals_mode_stage (pipeline-stage-builders wayfinder map,
+# ticket 02) instead of a hand-written Map+ecs_state block -- ToleratedFailurePercentage=15
+# (not 0, 2026-08-14 ecs-cost-sizing ticket 21: at 0, window 1 of N exhausting its
+# retries aborts the Map immediately, abandoning every PENDING window without even
+# attempting it -- live evidence from load_history retry7 showed this zeroed out
+# net-new entity-facts coverage across the full run) and the DISTRIBUTED ItemProcessor
+# mode (INLINE is not supported for a Map whose ItemReader reads from S3, per the
+# WindowedBootstrap comment above) are the shape's fixed behavior, not parameters.
+fundamentals_entity_facts = fundamentals_mode_stage(
+    "entity-facts", wh_large_arn, windowed=True, network=network,
+    outer_state_name="FetchEntityFacts",
+    item_processor_state_name="RunFundamentalsEntityFacts",
+    next_on_success="FetchPerFilingFundamentals",
+    catch_next_state="FetchPerFilingFundamentals",
+    bronze_bucket_name=bronze_bucket_name,
+    map_comment=(
+        "Branch B entity-facts: SEC companyfacts XBRL -> sec_financial_fact, "
+        "sec_financial_derived, sec_accounting_flag in unified SEC silver. Runs after "
+        "Branch A to avoid concurrent writes to the same DuckDB artifact."
+    ),
+)["FetchEntityFacts"]
 
 stage1_parallel = {
     "Type": "Parallel",
@@ -3661,92 +3644,52 @@ stage1_parallel = {
 # raw-object metadata (data-architecture Issues 1 and 4). Run sequentially after Branch A and
 # entity-facts because all Branch B modes write the same unified SEC silver DuckDB file.
 #
-# AD-13 applies here too: a Catch on either stage skips to the next step (not a hard abort) so a
-# transient Branch B failure never blocks MDM/gold for the (strict, already-complete) Branch A data.
-stage1b_per_filing_catch = [{
-    "ErrorEquals": ["States.ALL"],
-    "ResultPath": None,
-    "Next": "FetchThirteenFHoldings",
-}]
-stage1b_thirteenf_catch = [{
-    "ErrorEquals": ["States.ALL"],
-    "ResultPath": None,
-    "Next": "DatasetPeriodCheck",
-}]
-
-# wh_large_arn, not wh_medium_arn -- same fix as per_window_fundamentals_entity_facts
-# above (ecs-cost-sizing ticket 20): shares the identical merge_candidate_into_canonical
+# AD-13 applies here too: a Catch on either stage (via fundamentals_mode_stage's fixed
+# catch_next_state behavior) skips to the next step (not a hard abort) so a transient
+# Branch B failure never blocks MDM/gold for the (strict, already-complete) Branch A data.
+#
+# wh_large_arn, not wh_medium_arn -- same fix as fundamentals_entity_facts above
+# (ecs-cost-sizing ticket 20): shares the identical merge_candidate_into_canonical
 # publish-step risk, and live evidence from the same load_history retry7 run confirmed
 # it -- this window also OOM'd twice on wh_medium_arn before the 3rd attempt was
-# preempted by this fix.
-per_window_fundamentals_per_filing = ecs_state(wh_large_arn,
-    "States.Array('bootstrap-fundamentals', '--mode', 'per-filing', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
-    is_end=True)
+# preempted by this fix. ToleratedFailurePercentage=15 -- same rationale as
+# fundamentals_entity_facts above (ecs-cost-sizing ticket 21); this Map shares the
+# identical topology and live evidence showed per-filing coverage was equally zeroed
+# out (0.07%/1.7% CIK coverage) by the same abort-on-first-failure behavior.
+fundamentals_per_filing = fundamentals_mode_stage(
+    "per-filing", wh_large_arn, windowed=True, network=network,
+    outer_state_name="FetchPerFilingFundamentals",
+    item_processor_state_name="RunFundamentalsPerFiling",
+    next_on_success="FetchThirteenFHoldings",
+    catch_next_state="FetchThirteenFHoldings",
+    bronze_bucket_name=bronze_bucket_name,
+    map_comment=(
+        "Branch B per-filing (post-Branch-A): 8-K earnings + DEF 14A proxy -> "
+        "sec_earnings_release, sec_executive_record in unified SEC silver. Reads "
+        "filing/attachment/raw-object metadata Branch A just finished writing."
+    ),
+)["FetchPerFilingFundamentals"]
 
-fundamentals_per_filing = {
-    "Type": "Map",
-    "Comment": "Branch B per-filing (post-Branch-A): 8-K earnings + DEF 14A proxy -> sec_earnings_release, sec_executive_record in unified SEC silver. Reads filing/attachment/raw-object metadata Branch A just finished writing.",
-    "MaxConcurrency": 1,
-    # 15, not 0 -- same rationale as fundamentals_entity_facts above (ecs-cost-sizing
-    # ticket 21); this Map shares the identical topology and live evidence showed
-    # per-filing coverage was equally zeroed out (0.07%/1.7% CIK coverage) by the same
-    # abort-on-first-failure behavior.
-    "ToleratedFailurePercentage": 15,
-    "ItemReader": {
-        "Resource": "arn:aws:states:::s3:getObject",
-        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-        "Parameters": {
-            "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
-        },
-    },
-    "ItemProcessor": {
-        # DISTRIBUTED, not INLINE — see the WindowedBootstrap comment above (fix-pipelines
-        # 06-03): ItemReader requires Mode=DISTRIBUTED, not INLINE.
-        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-        "StartAt": "RunFundamentalsPerFiling",
-        "States": {"RunFundamentalsPerFiling": per_window_fundamentals_per_filing},
-    },
-    "ResultPath": None,
-    "Catch": stage1b_per_filing_catch,
-    "Next": "FetchThirteenFHoldings",
-}
-
-# wh_large_arn, not wh_medium_arn -- same fix as per_window_fundamentals_entity_facts
-# above (ecs-cost-sizing ticket 20): shares the identical merge_candidate_into_canonical
+# wh_large_arn, not wh_medium_arn -- same fix as fundamentals_entity_facts above
+# (ecs-cost-sizing ticket 20): shares the identical merge_candidate_into_canonical
 # publish-step risk, and sec_thirteenf_holding's per-filing fan-out (6.8M rows at
 # full-universe maturity) makes this mode's exposure at least as large as entity-facts',
 # not yet independently observed OOMing but moved preemptively rather than waiting for it.
-per_window_fundamentals_thirteenf = ecs_state(wh_large_arn,
-    "States.Array('bootstrap-fundamentals', '--mode', 'thirteenf', '--cik-offset', States.Format('{}', $.window_offset), '--cik-limit', States.Format('{}', $.window_limit), '--run-id', $$.Execution.Name)",
-    is_end=True)
-
-fundamentals_thirteenf = {
-    "Type": "Map",
-    "Comment": "Branch B 13F (post-Branch-A, data-architecture Issue 4): INFORMATION TABLE XML -> sec_thirteenf_holding in unified SEC silver. Same Branch A dependency as per-filing; runs after it in this same sequential stage.",
-    "MaxConcurrency": 1,
-    # 15, not 0 -- same rationale as fundamentals_entity_facts above (ecs-cost-sizing
-    # ticket 21).
-    "ToleratedFailurePercentage": 15,
-    "ItemReader": {
-        "Resource": "arn:aws:states:::s3:getObject",
-        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-        "Parameters": {
-            "Bucket": bronze_bucket_name,
-            "Key.$": "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', $$.Execution.Name)",
-        },
-    },
-    "ItemProcessor": {
-        # DISTRIBUTED, not INLINE — see the WindowedBootstrap comment above (fix-pipelines
-        # 06-03): ItemReader requires Mode=DISTRIBUTED, not INLINE.
-        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-        "StartAt": "RunFundamentalsThirteenF",
-        "States": {"RunFundamentalsThirteenF": per_window_fundamentals_thirteenf},
-    },
-    "ResultPath": None,
-    "Catch": stage1b_thirteenf_catch,
-    "Next": "DatasetPeriodCheck",
-}
+# ToleratedFailurePercentage=15 -- same rationale as fundamentals_entity_facts above
+# (ecs-cost-sizing ticket 21).
+fundamentals_thirteenf = fundamentals_mode_stage(
+    "thirteenf", wh_large_arn, windowed=True, network=network,
+    outer_state_name="FetchThirteenFHoldings",
+    item_processor_state_name="RunFundamentalsThirteenF",
+    next_on_success="DatasetPeriodCheck",
+    catch_next_state="DatasetPeriodCheck",
+    bronze_bucket_name=bronze_bucket_name,
+    map_comment=(
+        "Branch B 13F (post-Branch-A, data-architecture Issue 4): INFORMATION TABLE XML "
+        "-> sec_thirteenf_holding in unified SEC silver. Same Branch A dependency as "
+        "per-filing; runs after it in this same sequential stage."
+    ),
+)["FetchThirteenFHoldings"]
 
 # (4d) AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 01 — ADV Pipeline map
 # ticket 06 decisions 2/4): fetches new SEC/IAPD advFilingData monthly archives and
@@ -3785,63 +3728,36 @@ dataset_period_default = {
 # interpolate into a single command array. A boolean flag's token must be conditionally
 # present or absent entirely, which States.Format cannot do within one array — so this
 # branches to two literal FetchAdvBulk Task definitions instead of injecting a value.
-force_check = {
-    "Type": "Choice",
-    "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
-    "Choices": [
-        {
-            "Variable": "$.force",
-            "IsPresent": False,
-            "Next": "FetchAdvBulk",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": True,
-            "Next": "FetchAdvBulkForced",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": False,
-            "Next": "FetchAdvBulk",
-        },
-    ],
-    "Default": "InvalidForceInput",
-}
-
-# Next="ReleaseSecFetchLease", not "Mastering" directly -- these ADV/firm-roster
-# fetch stages are still inside the sec_fetch_active fetch-heavy span
-# (release-readiness ticket 84), so a failure here must still release the
-# lease before falling through to MDM, not skip release entirely.
-adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
-
-fetch_adv_bulk = ecs_state(wh_medium_arn,
-    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-    next_state="IngestAdvBulkSources")
-fetch_adv_bulk["Catch"] = adv_bulk_fetch_catch
-# ResultPath: null preserves $.dataset_period/$.force unchanged into the next state --
-# without this the ECS runTask.sync result object replaces the entire input (D-15 bug,
-# see the `seed` state's comment above for the original occurrence of this class of bug).
-fetch_adv_bulk["ResultPath"] = None
-
-fetch_adv_bulk_forced = ecs_state(wh_medium_arn,
-    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-    next_state="IngestAdvBulkSources")
-fetch_adv_bulk_forced["Catch"] = adv_bulk_fetch_catch
-fetch_adv_bulk_forced["ResultPath"] = None
-
-# IngestAdvBulkSources re-derives fetch-adv-bulk's manifest path independently
+#
+# Next="ReleaseSecFetchLease" on failure (via catch_next_state below), not "Mastering"
+# directly -- these ADV/firm-roster fetch stages are still inside the sec_fetch_active
+# fetch-heavy span (release-readiness ticket 84), so a failure here must still release
+# the lease before falling through to MDM, not skip release entirely. ResultPath: null
+# (fixed behavior, force_capable_fetch_stage's own convention) preserves
+# $.dataset_period/$.force unchanged into the next state -- without this the ECS
+# runTask.sync result object replaces the entire input (D-15 bug, see the `seed` state's
+# comment above for the original occurrence of this class of bug).
+#
+# Built via force_capable_fetch_stage (pipeline-stage-builders wayfinder map, ticket 02)
+# instead of a hand-written Choice+Fetch+FetchForced+Ingest block. IngestAdvBulkSources
+# re-derives fetch-adv-bulk's manifest path independently
 # (bronze_root/runs/fetch-adv-bulk/<run-id>/source_manifest.json, confirmed against
 # tests/application/test_fetch_adv_bulk_command.py) rather than the state machine
 # capturing FetchAdvBulk's literal output — mirroring how Stage0CompanyIdentity
 # re-derives cik_windows.jsonl's S3 key the same way instead of passing it through
 # execution state.
-ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
-    "States.Array('ingest-relationship-sources', '--source-manifest', "
-    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
-    "'--run-id', $$.Execution.Name)",
-    next_state="FirmRosterForceCheck")
-ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
-ingest_adv_bulk_sources["ResultPath"] = None
+_adv_bulk_states = force_capable_fetch_stage(
+    "fetch-adv-bulk", wh_medium_arn, network=network,
+    choice_state_name="ForceCheck", fetch_state_name="FetchAdvBulk",
+    ingest_state_name="IngestAdvBulkSources",
+    next_state_on_success="FirmRosterForceCheck",
+    catch_next_state="ReleaseSecFetchLease",
+    bronze_bucket_name=bronze_bucket_name,
+)
+force_check = _adv_bulk_states["ForceCheck"]
+fetch_adv_bulk = _adv_bulk_states["FetchAdvBulk"]
+fetch_adv_bulk_forced = _adv_bulk_states["FetchAdvBulkForced"]
+ingest_adv_bulk_sources = _adv_bulk_states["IngestAdvBulkSources"]
 
 # Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02):
 # fetch-firm-roster + ingest-relationship-sources, sharing this same Stage and the
@@ -3850,48 +3766,24 @@ ingest_adv_bulk_sources["ResultPath"] = None
 # separate schedule. Re-checks $.force (FirmRosterForceCheck) rather than reusing
 # ForceCheck's own routing, since ForceCheck already routed to FetchAdvBulk/
 # FetchAdvBulkForced above and a Choice state can only have one Next per branch.
-firm_roster_force_check = {
-    "Type": "Choice",
-    "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
-    "Choices": [
-        {
-            "Variable": "$.force",
-            "IsPresent": False,
-            "Next": "FetchFirmRoster",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": True,
-            "Next": "FetchFirmRosterForced",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": False,
-            "Next": "FetchFirmRoster",
-        },
-    ],
-    "Default": "InvalidForceInput",
-}
-
-fetch_firm_roster = ecs_state(wh_medium_arn,
-    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-    next_state="IngestFirmRosterSources")
-fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
-fetch_firm_roster["ResultPath"] = None
-
-fetch_firm_roster_forced = ecs_state(wh_medium_arn,
-    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-    next_state="IngestFirmRosterSources")
-fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
-fetch_firm_roster_forced["ResultPath"] = None
-
-ingest_firm_roster_sources = ecs_state(wh_medium_arn,
-    "States.Array('ingest-relationship-sources', '--source-manifest', "
-    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
-    "'--run-id', $$.Execution.Name)",
-    next_state="ReleaseSecFetchLease")
-ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
-ingest_firm_roster_sources["ResultPath"] = None
+#
+# Note (pipeline-stage-builders ticket 02): force_capable_fetch_stage generates the
+# fuller Force-check Comment wording ("...the normal path.") for this trio too, even
+# though this exact copy previously lacked that trailing clause -- a deliberate,
+# zero-functional-impact text normalization (Comment is inert ASL metadata, never
+# read by execution semantics), not a preserved behavioral difference.
+_firm_roster_states = force_capable_fetch_stage(
+    "fetch-firm-roster", wh_medium_arn, network=network,
+    choice_state_name="FirmRosterForceCheck", fetch_state_name="FetchFirmRoster",
+    ingest_state_name="IngestFirmRosterSources",
+    next_state_on_success="ReleaseSecFetchLease",
+    catch_next_state="ReleaseSecFetchLease",
+    bronze_bucket_name=bronze_bucket_name,
+)
+firm_roster_force_check = _firm_roster_states["FirmRosterForceCheck"]
+fetch_firm_roster = _firm_roster_states["FetchFirmRoster"]
+fetch_firm_roster_forced = _firm_roster_states["FetchFirmRosterForced"]
+ingest_firm_roster_sources = _firm_roster_states["IngestFirmRosterSources"]
 
 # sec_fetch_active lease (release-readiness ticket 84): acquired right
 # before SeedUniverse, released right before Mastering -- spans every state
@@ -4083,9 +3975,12 @@ import json, pathlib, sys
  mdm_state_machine_arn, script_dir) = sys.argv[1:]
 sys.path.insert(0, script_dir)
 from mdm_tail_helper import call_mdm_machine
+from pipeline_stage_helpers import EcsNetworkContext, force_capable_fetch_stage
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
+network = EcsNetworkContext(cluster_arn=cluster_arn, subnets=subnets,
+                             security_groups=security_groups, container_name=container_name)
 
 WAREHOUSE_COMMANDS = {
     "daily_incremental": "daily-incremental",
@@ -4636,100 +4531,46 @@ dataset_period_default = {
     "Next": "ForceCheck",
 }
 
-force_check = {
-    "Type": "Choice",
-    "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
-    "Choices": [
-        {
-            "Variable": "$.force",
-            "IsPresent": False,
-            "Next": "FetchAdvBulk",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": True,
-            "Next": "FetchAdvBulkForced",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": False,
-            "Next": "FetchAdvBulk",
-        },
-    ],
-    "Default": "InvalidForceInput",
-}
-
-# Next="ReleaseSecFetchLease", not "Mastering" directly -- these ADV/firm-roster
-# fetch stages are still inside the sec_fetch_active fetch-heavy span
-# (release-readiness ticket 84), so a failure here must still release the
-# lease before falling through to MDM, not skip release entirely.
-adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
-
-fetch_adv_bulk = ecs_state(wh_medium_arn,
-    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-    next_state="IngestAdvBulkSources")
-fetch_adv_bulk["Catch"] = adv_bulk_fetch_catch
-fetch_adv_bulk["ResultPath"] = None
-
-fetch_adv_bulk_forced = ecs_state(wh_medium_arn,
-    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-    next_state="IngestAdvBulkSources")
-fetch_adv_bulk_forced["Catch"] = adv_bulk_fetch_catch
-fetch_adv_bulk_forced["ResultPath"] = None
-
-ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
-    "States.Array('ingest-relationship-sources', '--source-manifest', "
-    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
-    "'--run-id', $$.Execution.Name)",
-    next_state="FirmRosterForceCheck")
-ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
-ingest_adv_bulk_sources["ResultPath"] = None
+# Next="ReleaseSecFetchLease" on failure (via catch_next_state below), not
+# "Mastering" directly -- these ADV/firm-roster fetch stages are still inside
+# the sec_fetch_active fetch-heavy span (release-readiness ticket 84), so a
+# failure here must still release the lease before falling through to MDM,
+# not skip release entirely.
+#
+# Built via force_capable_fetch_stage (pipeline-stage-builders wayfinder map,
+# ticket 03) -- the same shared function load_history's own copy of this trio
+# now uses (ticket 02), replacing the second, previously hand-copied instance
+# this file's own comment used to admit was "kept in sync" manually per the
+# Stage0CompanyIdentity duplication convention.
+_adv_bulk_states = force_capable_fetch_stage(
+    "fetch-adv-bulk", wh_medium_arn, network=network,
+    choice_state_name="ForceCheck", fetch_state_name="FetchAdvBulk",
+    ingest_state_name="IngestAdvBulkSources",
+    next_state_on_success="FirmRosterForceCheck",
+    catch_next_state="ReleaseSecFetchLease",
+    bronze_bucket_name=bronze_bucket_name,
+)
+force_check = _adv_bulk_states["ForceCheck"]
+fetch_adv_bulk = _adv_bulk_states["FetchAdvBulk"]
+fetch_adv_bulk_forced = _adv_bulk_states["FetchAdvBulkForced"]
+ingest_adv_bulk_sources = _adv_bulk_states["IngestAdvBulkSources"]
 
 # Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02) --
-# same shape/rationale as load_history's copy above (kept in sync per this file's
-# documented Stage0CompanyIdentity duplication convention).
-firm_roster_force_check = {
-    "Type": "Choice",
-    "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
-    "Choices": [
-        {
-            "Variable": "$.force",
-            "IsPresent": False,
-            "Next": "FetchFirmRoster",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": True,
-            "Next": "FetchFirmRosterForced",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": False,
-            "Next": "FetchFirmRoster",
-        },
-    ],
-    "Default": "InvalidForceInput",
-}
-
-fetch_firm_roster = ecs_state(wh_medium_arn,
-    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-    next_state="IngestFirmRosterSources")
-fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
-fetch_firm_roster["ResultPath"] = None
-
-fetch_firm_roster_forced = ecs_state(wh_medium_arn,
-    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-    next_state="IngestFirmRosterSources")
-fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
-fetch_firm_roster_forced["ResultPath"] = None
-
-ingest_firm_roster_sources = ecs_state(wh_medium_arn,
-    "States.Array('ingest-relationship-sources', '--source-manifest', "
-    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
-    "'--run-id', $$.Execution.Name)",
-    next_state="ReleaseSecFetchLease")
-ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
-ingest_firm_roster_sources["ResultPath"] = None
+# same shape/rationale as load_history's copy (ticket 02 of this file's own
+# pipeline-stage-builders map already migrated that copy onto the same shared
+# function).
+_firm_roster_states = force_capable_fetch_stage(
+    "fetch-firm-roster", wh_medium_arn, network=network,
+    choice_state_name="FirmRosterForceCheck", fetch_state_name="FetchFirmRoster",
+    ingest_state_name="IngestFirmRosterSources",
+    next_state_on_success="ReleaseSecFetchLease",
+    catch_next_state="ReleaseSecFetchLease",
+    bronze_bucket_name=bronze_bucket_name,
+)
+firm_roster_force_check = _firm_roster_states["FirmRosterForceCheck"]
+fetch_firm_roster = _firm_roster_states["FetchFirmRoster"]
+fetch_firm_roster_forced = _firm_roster_states["FetchFirmRosterForced"]
+ingest_firm_roster_sources = _firm_roster_states["IngestFirmRosterSources"]
 
 # sec_fetch_active lease (release-readiness ticket 84): acquired right
 # before RefreshMode dispatch, released right before Mastering -- spans

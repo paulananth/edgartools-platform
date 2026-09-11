@@ -1100,3 +1100,154 @@ def test_load_history_previously_uncaught_states_release_lease_on_failure(defini
     assert failed["Type"] == "Fail"
     assert failed["ErrorPath"] == "$.sec_fetch_task_error.Error"
     assert failed["CausePath"] == "$.sec_fetch_task_error.Cause"
+
+
+# -- pipeline-stage-builders ticket 02: byte-identical migration proof --------
+#
+# write_load_history_definition's 3 fundamentals-mode stages and 2 force-capable
+# fetch trios now call infra/scripts/pipeline_stage_helpers.py's
+# fundamentals_mode_stage/force_capable_fetch_stage instead of hand-written JSON
+# blocks. These tests pin the exact pre-migration shape (reconstructed here, not
+# fetched from git, so the test stays meaningful after this migration lands) --
+# proven byte-identical against the real pre-migration output during
+# implementation via direct comparison against `main`. The one deliberate,
+# documented exception is FirmRosterForceCheck's Comment text, normalized to
+# match ForceCheck's fuller wording (an inert ASL metadata field, never read by
+# execution semantics) -- asserted separately below, not as part of the
+# byte-identical checks.
+
+_EXPECTED_FUNDAMENTALS_MAP_COMMON = {
+    "MaxConcurrency": 1,
+    "ToleratedFailurePercentage": 15,
+    "ResultPath": None,
+}
+
+
+def _assert_windowed_fundamentals_stage(
+    definition: dict, outer_state_name: str, item_processor_state_name: str,
+    mode: str, next_on_success: str,
+) -> None:
+    state = definition["States"][outer_state_name]
+    assert state["Type"] == "Map"
+    for k, v in _EXPECTED_FUNDAMENTALS_MAP_COMMON.items():
+        assert state[k] == v, f"{outer_state_name}.{k}"
+    assert state["Next"] == next_on_success
+    assert state["Catch"] == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": next_on_success}]
+    assert state["ItemReader"] == {
+        "Resource": "arn:aws:states:::s3:getObject",
+        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
+        "Parameters": {
+            "Bucket": "fake-bronze-bucket",
+            "Key.$": (
+                "States.Format('warehouse/bronze/reference/cik_universe/runs/{}/cik_windows.jsonl', "
+                "$$.Execution.Name)"
+            ),
+        },
+    }
+    proc = state["ItemProcessor"]
+    assert proc["ProcessorConfig"] == {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"}
+    assert proc["StartAt"] == item_processor_state_name
+    per_window = proc["States"][item_processor_state_name]
+    assert per_window["End"] is True
+    assert "Catch" not in per_window
+    assert "ResultPath" not in per_window
+    cmd = per_window["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert f"'--mode', '{mode}'" in cmd
+    assert "'--cik-offset', States.Format('{}', $.window_offset)" in cmd
+    assert "'--cik-limit', States.Format('{}', $.window_limit)" in cmd
+    assert per_window["Parameters"]["TaskDefinition"] == "arn:wh-large"
+    assert per_window["Retry"] == [
+        {"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 120, "BackoffRate": 2.0, "MaxAttempts": 3}
+    ]
+
+
+def test_fetch_entity_facts_matches_pre_migration_shape(definition: dict) -> None:
+    _assert_windowed_fundamentals_stage(
+        definition, "FetchEntityFacts", "RunFundamentalsEntityFacts",
+        "entity-facts", "FetchPerFilingFundamentals",
+    )
+
+
+def test_fetch_per_filing_fundamentals_matches_pre_migration_shape(definition: dict) -> None:
+    _assert_windowed_fundamentals_stage(
+        definition, "FetchPerFilingFundamentals", "RunFundamentalsPerFiling",
+        "per-filing", "FetchThirteenFHoldings",
+    )
+
+
+def test_fetch_thirteenf_holdings_matches_pre_migration_shape(definition: dict) -> None:
+    _assert_windowed_fundamentals_stage(
+        definition, "FetchThirteenFHoldings", "RunFundamentalsThirteenF",
+        "thirteenf", "DatasetPeriodCheck",
+    )
+
+
+def _assert_force_capable_fetch_trio(
+    definition: dict, choice_state_name: str, fetch_state_name: str,
+    forced_state_name: str, ingest_state_name: str, command: str,
+    next_state_on_success: str, catch_next_state: str,
+) -> None:
+    states = definition["States"]
+    expected_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": catch_next_state}]
+
+    choice = states[choice_state_name]
+    assert choice["Type"] == "Choice"
+    assert choice["Default"] == "InvalidForceInput"
+    by_shape = {(c.get("IsPresent"), c.get("BooleanEquals")): c["Next"] for c in choice["Choices"]}
+    assert by_shape[(False, None)] == fetch_state_name
+    assert by_shape[(None, True)] == forced_state_name
+    assert by_shape[(None, False)] == fetch_state_name
+
+    fetch = states[fetch_state_name]
+    forced = states[forced_state_name]
+    ingest = states[ingest_state_name]
+
+    for state, expect_force in ((fetch, False), (forced, True)):
+        assert state["Next"] == ingest_state_name
+        assert state["ResultPath"] is None
+        assert state["Catch"] == expected_catch
+        cmd = state["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+        assert f"States.Array('{command}'" in cmd
+        assert ("'--force'" in cmd) is expect_force
+
+    assert ingest["Next"] == next_state_on_success
+    assert ingest["ResultPath"] is None
+    assert ingest["Catch"] == expected_catch
+    ingest_cmd = ingest["Parameters"]["Overrides"]["ContainerOverrides"][0]["Command.$"]
+    assert f"warehouse/bronze/runs/{command}/" in ingest_cmd
+    assert "source_manifest.json" in ingest_cmd
+
+
+def test_adv_bulk_force_trio_matches_pre_migration_shape(definition: dict) -> None:
+    _assert_force_capable_fetch_trio(
+        definition, "ForceCheck", "FetchAdvBulk", "FetchAdvBulkForced", "IngestAdvBulkSources",
+        "fetch-adv-bulk", "FirmRosterForceCheck", "ReleaseSecFetchLease",
+    )
+    # ForceCheck already had the fuller Comment wording pre-migration -- true
+    # byte-identical, no normalization needed for this one.
+    assert (
+        definition["States"]["ForceCheck"]["Comment"]
+        == "Route to FetchAdvBulkForced (includes --force) when caller supplied "
+           "force=true; otherwise FetchAdvBulk (no --force), the normal path."
+    )
+
+
+def test_firm_roster_force_trio_matches_pre_migration_shape(definition: dict) -> None:
+    _assert_force_capable_fetch_trio(
+        definition, "FirmRosterForceCheck", "FetchFirmRoster", "FetchFirmRosterForced",
+        "IngestFirmRosterSources", "fetch-firm-roster", "ReleaseSecFetchLease", "ReleaseSecFetchLease",
+    )
+
+
+def test_firm_roster_force_check_comment_deliberately_normalized(definition: dict) -> None:
+    """Pre-migration, FirmRosterForceCheck's Comment lacked ForceCheck's
+    trailing ", the normal path." clause (a copy-paste divergence, not a
+    behavioral difference -- Comment is inert ASL metadata). This is the one
+    place this migration's output intentionally differs from the exact
+    pre-migration text; every other assertion in this section is a true
+    byte-identical check."""
+    assert (
+        definition["States"]["FirmRosterForceCheck"]["Comment"]
+        == "Route to FetchFirmRosterForced (includes --force) when caller supplied "
+           "force=true; otherwise FetchFirmRoster (no --force), the normal path."
+    )

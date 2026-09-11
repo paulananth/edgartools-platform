@@ -92,11 +92,24 @@ pipeline uses it — not shipped as an unused abstraction.
     the same shared function `load_history` already uses for those modes,
     so that the new wiring is a call with `windowed` set to the
     non-windowed case, not a fourth hand-copied block.
-12. As a platform engineer, I want the two shared functions to live as
-    ordinary functions in the same deploy script both pipeline builders
-    already live in, so that no new module boundary, import path, or build
-    step is introduced for what is fundamentally the same file's own
-    internal duplication.
+12. As a platform engineer, I want the two shared functions to live in a
+    real, importable Python module both pipeline builders already have a
+    proven way to reach, so that they are genuinely shared code rather than
+    two more copies of the same text.
+
+    **Correction after reading the actual code (superseding the original
+    version of this story):** `write_load_history_definition` and
+    `write_warehouse_mdm_gold_definition` are bash functions that each
+    invoke their own independent `python3 -` subprocess via a heredoc —
+    confirmed by the file's own existing comments, which twice already
+    state outright that these two functions "can't share code" for exactly
+    this reason. A plain function defined in one heredoc's text is invisible
+    to the other's. The file already has a proven answer to this: a small
+    sibling `.py` module (`mdm_tail_helper.py`) that both heredocs import via
+    `sys.path.insert(0, SCRIPT_DIR)`, used today for the MDM-tail wiring
+    every MDM-invoking pipeline shares. The two new functions belong in a
+    new sibling module of the same kind, imported the same way — not as
+    bare functions dropped into the deploy script's own text.
 13. As a platform engineer, I want the shared functions to cover exactly
     the two shapes that have already recurred (windowed/non-windowed mode
     stage; force-capable fetch trio), not a single do-everything builder
@@ -117,11 +130,18 @@ pipeline uses it — not shipped as an unused abstraction.
 
 ## Implementation Decisions
 
-- Two new functions are added to the deploy script that already contains
-  both pipeline-definition builders (the same file `load_history`'s and
-  `daily_incremental`'s Step Functions definitions are assembled in
-  today), not a new module or file — this is an internal-duplication fix
-  within one script, not a new architectural boundary.
+- **Corrected during implementation, superseding this section's original
+  "same script, no new module" decision:** `write_load_history_definition`
+  and `write_warehouse_mdm_gold_definition` are bash functions, each
+  running its own independent `python3 -` subprocess against a heredoc —
+  there is no shared Python runtime between them, confirmed by the file's
+  own pre-existing comments stating this outright. The two new functions
+  live in a new sibling Python module next to the deploy script, imported
+  by both heredocs via `sys.path.insert(0, SCRIPT_DIR)` — the exact,
+  already-proven mechanism `mdm_tail_helper.py` established for this same
+  problem (sharing MDM-tail wiring across the same subprocess boundary).
+  This is a new file, but not a new pattern for this codebase — it is the
+  established one, applied a second time.
 - The first function assembles a "pipeline-stage" shape: one ECS task
   invocation for a given mode/command and task-definition ARN, optionally
   wrapped in a Distributed Map (reading the same CIK-window manifest
