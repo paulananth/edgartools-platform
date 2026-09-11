@@ -853,6 +853,12 @@ class BranchBSourceReaderTests(unittest.TestCase):
             [{"raw_object_id": "raw-1", "storage_path": "s3://bucket/doc.htm"}],
         ]
         fake_db = MagicMock()
+        # Ticket 02: db.fetch is now legitimately called once, to bulk-prefetch
+        # sec_fundamentals_processed_accession -- this is fundamentals' own
+        # write-side bookkeeping (read back via the same db that writes it),
+        # not the Branch A filing/attachment/raw-object metadata this test
+        # class is otherwise about. Empty result means "not yet processed".
+        fake_db.fetch.return_value = []
         fake_db.merge_earnings_releases.return_value = 1
         fake_db.merge_executive_records.return_value = 0
 
@@ -872,8 +878,12 @@ class BranchBSourceReaderTests(unittest.TestCase):
         self.assertEqual(metrics["filings_scanned"], 1)
         self.assertEqual(metrics["filings_parsed"], 1)
         self.assertEqual(metrics["rows_earnings_release"], 1)
-        fake_db.fetch.assert_not_called()
+        fake_db.fetch.assert_called_once()
+        self.assertIn("sec_fundamentals_processed_accession", fake_db.fetch.call_args[0][0])
         fake_db.merge_earnings_releases.assert_called_once()
+        fake_db.mark_fundamentals_accession_processed.assert_called_once_with(
+            mode="per-filing", accession_number="0001-test",
+        )
 
     def test_per_filing_uses_item_202_exhibit_for_apple_earnings_parser(self) -> None:
         """Apple's 8-K cover is not the earnings statement; Exhibit 99.1 is."""
@@ -896,6 +906,7 @@ class BranchBSourceReaderTests(unittest.TestCase):
             [{"raw_object_id": "earnings", "storage_path": "s3://bucket/ex99-1.htm"}],
         ]
         db = MagicMock()
+        db.fetch.return_value = []
         db.merge_earnings_releases.return_value = 1
         db.merge_executive_records.return_value = 0
         db.merge_guidance_facts.return_value = 0
