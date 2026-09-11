@@ -4,16 +4,20 @@ mdm_entity_attribute_stage backfill (attribute_stage_backfill.py).
 Covers: collapsing a redundant group down to its Pareto-maximal member
 (max effective_date, then max loaded_at), leaving single-row and genuinely
 distinct-value groups untouched, migrating a lost was_selected flag onto
-the retained representative, dry-run not mutating, and run_backfill's
-batching/pagination.
+the retained representative, dry-run not mutating, run_backfill's
+batching/pagination, and collapse_entities_batch's cross-entity batching
+(one SELECT/DELETE per batch, not per entity/group -- the round-trip fix
+added 2026-09-11 after the original per-entity shape measured ~14h against
+real prod).
 """
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from edgar_warehouse.mdm.attribute_stage_backfill import (
+    collapse_entities_batch,
     collapse_entity,
     find_collapsible_entity_ids,
     run_backfill,
@@ -56,6 +60,18 @@ def _add_row(
 
 def _all_rows(session) -> list[MdmEntityAttributeStage]:
     return list(session.execute(select(MdmEntityAttributeStage)).scalars().all())
+
+
+def _capture_statements(session) -> list[str]:
+    """Record every SQL statement executed on this session's bind from
+    this point forward -- used to prove round-trip counts directly rather
+    than inferring them from behavior."""
+    statements: list[str] = []
+    event.listen(
+        session.get_bind(), "before_cursor_execute",
+        lambda conn, cursor, statement, *a, **kw: statements.append(statement),
+    )
+    return statements
 
 
 class TestCollapseEntity:
@@ -249,6 +265,80 @@ class TestCollapseEntity:
         assert len(_all_rows(session)) == 2, "dry-run must not delete anything"
 
 
+class TestCollapseEntitiesBatch:
+    """The round-trip fix: one SELECT and one bulk DELETE per batch of
+    entities, not one round trip per entity or per group."""
+
+    def test_empty_batch_makes_no_query_and_returns_zero_summary(self) -> None:
+        session = _seeded_sqlite_session(static_pool=True)
+        statements = _capture_statements(session)
+
+        summary = collapse_entities_batch(session, [])
+
+        assert summary == type(summary)()
+        assert statements == []
+
+    def test_round_trip_count_stays_flat_as_batch_size_grows(self) -> None:
+        """Two SQL statements total for a real (non-dry-run) batch --
+        one SELECT for every entity's rows, one bulk DELETE for every
+        redundant row across every entity/group -- regardless of how many
+        entities or groups are in the batch."""
+        session = _seeded_sqlite_session(static_pool=True)
+        entity_ids = [f"e{i}" for i in range(20)]
+        for eid in entity_ids:
+            _add_row(session, entity_id=eid, source_id="s1", effective_date=date(2024, 1, 1))
+            _add_row(session, entity_id=eid, source_id="s2", effective_date=date(2024, 6, 1))
+        session.commit()
+
+        statements = _capture_statements(session)
+
+        summary = collapse_entities_batch(session, entity_ids)
+        session.commit()
+
+        assert summary.entities_examined == 20
+        assert summary.groups_collapsed == 20
+        assert summary.rows_deleted == 20
+        selects = [s for s in statements if s.strip().upper().startswith("SELECT")]
+        deletes = [s for s in statements if s.strip().upper().startswith("DELETE")]
+        assert len(selects) == 1, "one SELECT for the whole batch, not one per entity"
+        assert len(deletes) == 1, "one bulk DELETE for the whole batch, not one per group"
+
+    def test_one_entitys_redundant_rows_never_delete_another_entitys_rows(self) -> None:
+        session = _seeded_sqlite_session(static_pool=True)
+        _add_row(session, entity_id="e1", source_id="s1", effective_date=date(2024, 1, 1))
+        _add_row(session, entity_id="e1", source_id="s2", effective_date=date(2024, 6, 1))
+        # e2 shares the exact same field_value/priority as e1 -- proves the
+        # grouping key includes entity_id, not just the other four columns.
+        _add_row(session, entity_id="e2", source_id="s3", effective_date=date(2024, 1, 1))
+        session.commit()
+
+        summary = collapse_entities_batch(session, ["e1", "e2"])
+        session.commit()
+
+        assert summary.groups_collapsed == 1, "e2 has only one row -- nothing to collapse"
+        assert summary.rows_deleted == 1
+        rows = _all_rows(session)
+        assert len(rows) == 2
+        assert {r.entity_id for r in rows} == {"e1", "e2"}, (
+            "e2's single row must survive untouched -- it must never land "
+            "in e1's redundant-id batch delete"
+        )
+
+    def test_dry_run_batch_reports_but_does_not_mutate(self) -> None:
+        session = _seeded_sqlite_session(static_pool=True)
+        for eid in ("e1", "e2"):
+            _add_row(session, entity_id=eid, source_id="s1", effective_date=date(2024, 1, 1))
+            _add_row(session, entity_id=eid, source_id="s2", effective_date=date(2024, 6, 1))
+        session.commit()
+
+        summary = collapse_entities_batch(session, ["e1", "e2"], dry_run=True)
+        session.commit()
+
+        assert summary.groups_collapsed == 2
+        assert summary.rows_deleted == 2
+        assert len(_all_rows(session)) == 4, "dry-run must not delete anything"
+
+
 class TestFindCollapsibleEntityIds:
     def test_only_returns_entities_with_a_multi_row_group(self) -> None:
         session = _seeded_sqlite_session(static_pool=True)
@@ -290,7 +380,7 @@ class TestRunBackfill:
         assert len(rows) == 3
         assert all(r.effective_date == date(2024, 6, 1) for r in rows)
 
-    def test_dry_run_examines_everything_in_one_pass_without_mutating(self) -> None:
+    def test_dry_run_examines_everything_across_all_pages_without_mutating(self) -> None:
         session = _seeded_sqlite_session(static_pool=True)
         for eid in ("e1", "e2"):
             _add_row(session, entity_id=eid, source_id="s1", effective_date=date(2024, 1, 1))
@@ -303,3 +393,68 @@ class TestRunBackfill:
         assert summary.groups_collapsed == 2
         assert summary.rows_deleted == 2
         assert len(_all_rows(session)) == 4, "dry-run must not delete anything"
+
+    def test_dry_run_pages_at_batch_size_like_the_real_run(self) -> None:
+        """Dry-run used to fetch the full unbounded candidate list in one
+        shot; it now pages at the same batch_size boundary as the real
+        run, purely to bound each SELECT's size -- proven here by forcing
+        3 entities through batch_size=1 and confirming 3 separate SELECTs
+        against mdm_entity_attribute_stage fire (one per page), with no
+        DELETE at all since it's a dry run."""
+        session = _seeded_sqlite_session(static_pool=True)
+        for eid in ("e1", "e2", "e3"):
+            _add_row(session, entity_id=eid, source_id="s1", effective_date=date(2024, 1, 1))
+            _add_row(session, entity_id=eid, source_id="s2", effective_date=date(2024, 6, 1))
+        session.commit()
+
+        statements = _capture_statements(session)
+
+        summary = run_backfill(session, batch_size=1, dry_run=True)
+
+        assert summary.entities_examined == 3
+        assert summary.groups_collapsed == 3
+        assert summary.rows_deleted == 3
+        row_selects = [
+            s for s in statements
+            if s.strip().upper().startswith("SELECT")
+            and "mdm_entity_attribute_stage.stage_id" in s
+        ]
+        assert len(row_selects) == 3, "one row-fetch SELECT per page of batch_size=1"
+        deletes = [s for s in statements if s.strip().upper().startswith("DELETE")]
+        assert deletes == [], "dry-run must never issue a DELETE"
+        assert len(_all_rows(session)) == 6, "dry-run must not delete anything"
+
+    def test_limit_caps_total_entities_examined_across_pages(self) -> None:
+        """--limit bounds a quick correctness check against real data
+        without walking the whole live candidate set -- proven here by
+        capping at 2 of 5 collapsible entities, spanning two batch_size=1
+        pages, and confirming the third page is never fetched at all."""
+        session = _seeded_sqlite_session(static_pool=True)
+        for i in range(5):
+            eid = f"e{i}"
+            _add_row(session, entity_id=eid, source_id="s1", effective_date=date(2024, 1, 1))
+            _add_row(session, entity_id=eid, source_id="s2", effective_date=date(2024, 6, 1))
+        session.commit()
+
+        summary = run_backfill(session, batch_size=1, dry_run=True, limit=2)
+
+        assert summary.entities_examined == 2
+        assert summary.groups_collapsed == 2
+        assert summary.rows_deleted == 2
+
+    def test_limit_also_caps_a_real_non_dry_run(self) -> None:
+        session = _seeded_sqlite_session(static_pool=True)
+        for i in range(5):
+            eid = f"e{i}"
+            _add_row(session, entity_id=eid, source_id="s1", effective_date=date(2024, 1, 1))
+            _add_row(session, entity_id=eid, source_id="s2", effective_date=date(2024, 6, 1))
+        session.commit()
+
+        summary = run_backfill(session, batch_size=1, limit=2)
+
+        assert summary.entities_examined == 2
+        assert summary.rows_deleted == 2
+        assert len(_all_rows(session)) == 8, (
+            "only the 2 limited entities collapse -- the other 3 entities' "
+            "4 rows are untouched"
+        )

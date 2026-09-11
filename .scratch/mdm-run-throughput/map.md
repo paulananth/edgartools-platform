@@ -55,6 +55,24 @@ with their own cost model" -- that map's own Out of scope section flagged
   up the fix, vs. letting it finish on the old single-threaded code and
   applying the fix starting with the next execution -- an operational
   deploy-timing call, not a design question this map tracks.
+- `attribute_stage_backfill.py`'s `collapse_entity`/`run_backfill` (Ticket
+  05's backfill CLI) do one Postgres round trip per entity_id
+  (`WHERE entity_id = :id`), not a bulk `entity_id IN (...)` fetch across
+  the existing 500-id keyset batch boundary. Live-measured 2026-09-11 during
+  the real prod dry-run: `find_collapsible_entity_ids` (no `limit`) found
+  139,349 distinct entities with >=1 collapsible group (a different, larger
+  population than the earlier ">10-row group" count of 2,793 -- both are
+  correct, they measure different things), and each entity's round trip
+  costs a flat ~57ms (cross-region latency dominates, same root cause
+  already on record in this map's Notes), giving ~15 entities/sec and a
+  projected ~2.5-3h dry run. Not fixed or blocking this run (advisor
+  consulted: the real-run branch already pages at `batch_size=500` and
+  commits per batch, so it's a slow-but-safe, resumable-in-effect
+  production operation, same shape as Ticket 09's 1h46m backfill on the
+  sibling map) -- filed here as a real, evidenced, non-blocking finding for
+  whoever next touches this file: batch the per-entity SELECT via
+  `entity_id IN (...)` at the same 500-id boundary the pagination already
+  uses.
 ## Out of scope
 
 - `run_advisers`/`run_funds` -- already implemented as a bulk/batched

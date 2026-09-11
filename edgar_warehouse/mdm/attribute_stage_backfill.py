@@ -86,34 +86,55 @@ def find_collapsible_entity_ids(
     return list(session.execute(stmt).scalars().all())
 
 
-def collapse_entity(
+def _loaded_key(r: MdmEntityAttributeStage) -> tuple:
+    loaded = r.loaded_at
+    return (loaded is not None, loaded or _MIN_DATETIME)
+
+
+def collapse_entities_batch(
     session: Session,
-    entity_id: str,
+    entity_ids: list[str],
     *,
     dry_run: bool = False,
 ) -> AttributeStageBackfillSummary:
-    """Collapse every redundant group for one entity in one pass."""
-    summary = AttributeStageBackfillSummary(entities_examined=1)
+    """Collapse every redundant group across a whole batch of entities in
+    one pass -- one SELECT and (for a real run) one bulk DELETE for the
+    entire batch, instead of one round trip per entity/group. Live-measured
+    2026-09-11: the original per-entity/per-group shape cost ~4.8 DELETE
+    round trips per entity on top of its own SELECT (671,075 collapsed
+    groups / 139,349 entities from the completed dry run), each a flat
+    ~57ms cross-region Postgres round trip -- projecting the real run to
+    ~14h. This collects every group's redundant rows across the whole
+    batch first and issues one DELETE per batch instead of one per group.
+    """
+    summary = AttributeStageBackfillSummary(entities_examined=len(entity_ids))
+    if not entity_ids:
+        return summary
+
     rows = list(
         session.execute(
             select(MdmEntityAttributeStage).where(
-                MdmEntityAttributeStage.entity_id == entity_id
+                MdmEntityAttributeStage.entity_id.in_(entity_ids)
             )
         ).scalars().all()
     )
 
     groups: dict[tuple, list[MdmEntityAttributeStage]] = defaultdict(list)
     for row in rows:
-        key = (row.source_system, row.field_name, row.field_value, row.global_priority)
+        key = (
+            row.entity_id,
+            row.source_system,
+            row.field_name,
+            row.field_value,
+            row.global_priority,
+        )
         groups[key].append(row)
+
+    batch_redundant_ids: list = []
 
     for group_rows in groups.values():
         if len(group_rows) <= 1:
             continue
-
-        def _loaded_key(r: MdmEntityAttributeStage) -> tuple:
-            loaded = r.loaded_at
-            return (loaded is not None, loaded or _MIN_DATETIME)
 
         representative = max(group_rows, key=_loaded_key)
         redundant = [r for r in group_rows if r is not representative]
@@ -138,14 +159,33 @@ def collapse_entity(
         if any(r.was_selected for r in redundant) and not representative.was_selected:
             representative.was_selected = True
 
-        redundant_ids = [r.stage_id for r in redundant]
+        batch_redundant_ids.extend(r.stage_id for r in redundant)
+
+    if batch_redundant_ids:
         session.execute(
             delete(MdmEntityAttributeStage).where(
-                MdmEntityAttributeStage.stage_id.in_(redundant_ids)
+                MdmEntityAttributeStage.stage_id.in_(batch_redundant_ids)
             )
         )
 
     return summary
+
+
+def collapse_entity(
+    session: Session,
+    entity_id: str,
+    *,
+    dry_run: bool = False,
+) -> AttributeStageBackfillSummary:
+    """Collapse every redundant group for one entity in one pass.
+
+    Thin single-entity wrapper over collapse_entities_batch, kept for
+    readability and as the direct target of the per-entity grouping/
+    retention-rule unit tests -- a batch of one is a strict subset of the
+    batch function's own behavior (same grouping key, entity_id just
+    doesn't vary), not a second implementation to keep in sync.
+    """
+    return collapse_entities_batch(session, [entity_id], dry_run=dry_run)
 
 
 def run_backfill(
@@ -153,30 +193,44 @@ def run_backfill(
     *,
     batch_size: int = 500,
     dry_run: bool = False,
+    limit: Optional[int] = None,
 ) -> AttributeStageBackfillSummary:
     """Drain every entity with a collapsible group, committing per batch.
 
-    Dry-run fetches the full candidate entity_id list once up front
-    (bounded by the live collapsible count, not an arbitrary batch size)
-    since nothing mutates to advance a batched cursor -- mirrors
-    ``relationship_quarantine_backfill.run_backfill``'s identical dry-run
-    shape.
+    Both branches page through ``find_collapsible_entity_ids`` at the same
+    ``batch_size`` boundary and call ``collapse_entities_batch`` once per
+    page -- one SELECT and (for a real run) one bulk DELETE per batch,
+    instead of one round trip per entity/group. Dry-run pages the same way
+    as the real run (rather than fetching the full candidate list unbounded
+    up front, as an earlier version of this function did) purely to bound
+    its own per-batch SELECT size; unlike the real branch it never commits
+    or advances any durable state, so paging here is a read-side cost
+    control, not a resumability mechanism.
+
+    ``limit`` caps the total number of entities examined across every page
+    (``None``, the default, is unbounded -- the original full-backfill
+    contract). Use it for a fast correctness check against real data
+    (``dry_run=True, limit=50``) instead of walking the whole live
+    candidate set just to prove the logic works -- see the AGENTS.md/
+    CLAUDE.md note this closes the loop on.
     """
     total = AttributeStageBackfillSummary()
 
-    if dry_run:
-        for entity_id in find_collapsible_entity_ids(session):
-            total.add(collapse_entity(session, entity_id, dry_run=True))
-        return total
-
     after: Optional[str] = None
     while True:
-        entity_ids = find_collapsible_entity_ids(session, limit=batch_size, after=after)
+        page_size = batch_size
+        if limit is not None:
+            remaining = limit - total.entities_examined
+            if remaining <= 0:
+                break
+            page_size = min(batch_size, remaining)
+        entity_ids = find_collapsible_entity_ids(session, limit=page_size, after=after)
         if not entity_ids:
             break
-        for entity_id in entity_ids:
-            total.add(collapse_entity(session, entity_id, dry_run=False))
+        total.add(collapse_entities_batch(session, entity_ids, dry_run=dry_run))
         after = entity_ids[-1]
+        if dry_run:
+            continue
         session.commit()
         print(json.dumps({
             "event": "mdm_attribute_stage_backfill_batch",
