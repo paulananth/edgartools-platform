@@ -57,6 +57,7 @@ View versus Explore, consistent with ADR 0001 and ADR 0006.
 - [Lock issuer v1 agent-grade bundle sections](issues/05-lock-issuer-v1-agent-grade-sections.md) — Agent-grade: features + `IS_INSIDER` + `EMPLOYED_BY`. Holders/auditor/parent keys stay `unavailable`. Section flags do not fail the bundle. Graph-keyed insiders/employment; FY/interim coverage follows glossary/Python.
 - [Lock v1 As-Of Decision Feature keys against gold](issues/11-lock-v1-feature-keys-against-gold.md) — Keep 19 Python keys; alias `return_on_equity`/`return_on_assets`; pass through derived `ebitda`/`eps_diluted`/`ebitda_margin`; no `operating_margin`→`ebitda_margin`.
 - [Bind v1 feature keys to gold FINANCIAL_FACTORS](issues/12-bind-v1-feature-keys-to-gold-financial-factors.md) — Python alias + gold passthrough + SQL 01/03 19-key projection. Needs dbt `--full-refresh` of `financial_factors` in prod.
+- [Inventory data not available to agents](issues/13-inventory-data-not-available-to-agents.md) — No READY contract. Holders/auditor/parent unavailable; Explore-only gold; empty consensus/guidance/transcripts; live gold still missing factor passthrough and 13F issuer CIK; silver person/13F-filing identity not on the contract. [research](research/13-data-not-available-to-agents.md)
 
 ## Not yet specified
 
@@ -74,4 +75,5 @@ View versus Explore, consistent with ADR 0001 and ADR 0006.
 - Filing text / NLP as Decision Features.
 - Greenfield rewrite, new microservice, external Neo4j, DuckDB replacement.
 - MongoDB or a JSON document store as the v1 Agent Decision Surface (ADR 0001 Snowflake-only; S3/API remains optional later, not this map).
+- Bookkeeping Postgres and bronze S3 as agent-readable data (ADR 0001: agents read the Snowflake Decision Contract only; not inventoried).
 - Public SaaS packaging.

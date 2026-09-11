@@ -1,0 +1,160 @@
+SELECT 'pointer' AS probe, p.ACTIVE_GENERATION_ID::VARCHAR AS k1, p.ACTIVATED_AT::VARCHAR AS k2,
+       g.NODE_COUNT::VARCHAR AS n1, g.EDGE_COUNT::VARCHAR AS n2
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER p
+LEFT JOIN EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_GENERATION g
+  ON g.GENERATION_ID = p.ACTIVE_GENERATION_ID
+WHERE p.POINTER_ID = 'active';
++------------------------------------------------------------------------------+
+| PROBE   | K1                      | K2                     | N1     | N2     |
+|---------+-------------------------+------------------------+--------+--------|
+| pointer | ae0db138-2aeb-4e69-87ba | 2026-09-10             | 233647 | 575485 |
+|         | -f812da92b2eb           | 16:15:24.458 -0700     |        |        |
++------------------------------------------------------------------------------+
+
+SELECT 'ff_cols' AS probe, COLUMN_NAME AS k1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'EDGARTOOLS_GOLD' AND TABLE_NAME = 'FINANCIAL_FACTORS'
+  AND COLUMN_NAME ILIKE ANY ('EBITDA%','EPS%','ROE','ROA','RETURN_ON%','OPERATING_MARGIN')
+ORDER BY COLUMN_NAME;
++----------------------------+
+| PROBE   | K1               |
+|---------+------------------|
+| ff_cols | OPERATING_MARGIN |
+| ff_cols | RETURN_ON_ASSETS |
+| ff_cols | RETURN_ON_EQUITY |
++----------------------------+
+
+SELECT 'oh_person_cols' AS probe, COLUMN_NAME AS k1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'EDGARTOOLS_GOLD' AND TABLE_NAME = 'OWNERSHIP_HOLDINGS'
+  AND (COLUMN_NAME ILIKE '%OWNER%' OR COLUMN_NAME ILIKE '%PERSON%' OR COLUMN_NAME ILIKE '%ACCESSION%')
+ORDER BY COLUMN_NAME;
++--------------------------------------------+
+| PROBE          | K1                        |
+|----------------+---------------------------|
+| oh_person_cols | ACCESSION_NUMBER          |
+| oh_person_cols | OWNERSHIP_DIRECT_INDIRECT |
+| oh_person_cols | OWNER_INDEX               |
++--------------------------------------------+
+
+SELECT 'ih_issuer_cols' AS probe, COLUMN_NAME AS k1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'EDGARTOOLS_GOLD' AND TABLE_NAME = 'INSTITUTIONAL_HOLDINGS'
+  AND (COLUMN_NAME ILIKE '%ISSUER%' OR COLUMN_NAME ILIKE '%MANAGER%' OR COLUMN_NAME ILIKE '%CIK%' OR COLUMN_NAME ILIKE '%CUSIP%' OR COLUMN_NAME ILIKE '%SHARE%')
+ORDER BY COLUMN_NAME;
++-------------------------------------+
+| PROBE          | K1                 |
+|----------------+--------------------|
+| ih_issuer_cols | CIK                |
+| ih_issuer_cols | CUSIP              |
+| ih_issuer_cols | ISSUER_NAME        |
+| ih_issuer_cols | QOQ_CHANGE_SHARES  |
+| ih_issuer_cols | SHARES_HELD        |
+| ih_issuer_cols | VOTING_AUTH_SHARED |
++-------------------------------------+
+
+SELECT 'graph_nodes' AS probe, ENTITY_TYPE AS k1, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES n
+JOIN EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER p
+  ON p.POINTER_ID = 'active' AND p.ACTIVE_GENERATION_ID = n.GENERATION_ID
+GROUP BY ENTITY_TYPE
+ORDER BY 1;
++---------------------------------+
+| PROBE       | K1       | N1     |
+|-------------+----------+--------|
+| graph_nodes | company  | 68949  |
+| graph_nodes | person   | 6364   |
+| graph_nodes | fund     | 130615 |
+| graph_nodes | adviser  | 24449  |
+| graph_nodes | security | 3270   |
++---------------------------------+
+
+SELECT 'silver_auditor' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_AUDITOR_REPORT_EVIDENCE;
++---------------------+
+| PROBE          | N1 |
+|----------------+----|
+| silver_auditor | 0  |
++---------------------+
+
+SELECT 'silver_subsidiary' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_SUBSIDIARY_EVIDENCE;
++------------------------+
+| PROBE             | N1 |
+|-------------------+----|
+| silver_subsidiary | 0  |
++------------------------+
+
+SELECT 'silver_employment' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_EMPLOYMENT_EVENT;
++--------------------------+
+| PROBE             | N1   |
+|-------------------+------|
+| silver_employment | 7676 |
++--------------------------+
+
+SELECT 'silver_thirteenf_filing' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_THIRTEENF_FILING;
++---------------------------------+
+| PROBE                   | N1    |
+|-------------------------+-------|
+| silver_thirteenf_filing | 14364 |
++---------------------------------+
+
+SELECT 'silver_ownership_owner' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_OWNERSHIP_REPORTING_OWNER;
++--------------------------------+
+| PROBE                  | N1    |
+|------------------------+-------|
+| silver_ownership_owner | 59030 |
++--------------------------------+
+
+SELECT 'source_auditor' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_AUDITOR_REPORT_EVIDENCE;
++---------------------+
+| PROBE          | N1 |
+|----------------+----|
+| source_auditor | 0  |
++---------------------+
+
+SELECT 'source_thirteenf_filing' AS probe, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA = 'EDGARTOOLS_SOURCE' AND TABLE_NAME = 'SEC_THIRTEENF_FILING';
++------------------------------+
+| PROBE                   | N1 |
+|-------------------------+----|
+| source_thirteenf_filing | 0  |
++------------------------------+
+
+SELECT 'gold_company' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY;
++----------------------+
+| PROBE        | N1    |
+|--------------+-------|
+| gold_company | 73691 |
++----------------------+
+
+SELECT 'mdm_company_entity' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.MDM_COMPANY_ENTITY;
++----------------------------+
+| PROBE              | N1    |
+|--------------------+-------|
+| mdm_company_entity | 68949 |
++----------------------------+
+
+SELECT 'mdm_company_entity_active' AS probe, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.MDM_COMPANY_ENTITY
+WHERE LOWER(COALESCE(TRACKING_STATUS,'')) = 'active';
++-----------------------------------+
+| PROBE                     | N1    |
+|---------------------------+-------|
+| mdm_company_entity_active | 63197 |
++-----------------------------------+
+
+SELECT 'decision_objects' AS probe, TABLE_NAME AS k1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA = 'EDGARTOOLS_DECISION'
+ORDER BY 1;
+No data
+
+SELECT 'mdm_schema_tables' AS probe, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA = 'MDM';
++------------------------+
+| PROBE             | N1 |
+|-------------------+----|
+| mdm_schema_tables | 19 |
++------------------------+
+

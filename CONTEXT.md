@@ -399,8 +399,8 @@ The primary entity the Decision Graph Bundle is built for (typically a company i
 _Avoid_: Portfolio of tickers as one bundle, anonymous search result set
 
 **Trading-Relevant Neighborhood**:
-The v1 Decision Graph Bundle scope around a Bundle Subject: person edges that establish insider or reported executive employment, security/holding edges that establish ownership or institutional position when present, auditor edges when present, plus subject-level accounting Decision Features; adviser/private-fund structure is out of v1 unless it attaches through an already-included edge type.
-_Avoid_: Full MDM type registry dump, ADV-first bundle, every historical edge without currency rules
+The v1 Decision Graph Bundle scope around a Bundle Subject. Agent-grade sections are As-Of Decision Features, current `IS_INSIDER` edges, and current `EMPLOYED_BY` edges. Institutional holders, auditor, and parent keys remain on the payload but are not v1 Trading Decision input until their gold/graph bind exists; ADV is `not_applicable` for a pure issuer.
+_Avoid_: Full MDM type registry dump, ADV-first bundle, treating unbound 13F gold or zero-row auditor/parent evidence as agent-grade, every historical edge without currency rules
 
 **Current Neighborhood (default)**:
 The Decision Graph Bundle edge set limited to Current-at-Watermark Relationships for the declared business date; ended or not-yet-current edges are omitted unless the consumer explicitly requests history.
@@ -411,7 +411,7 @@ Generation-Eligible Relationship Versions that are not current at the watermark,
 _Avoid_: Default payload, history without valid_from/valid_to, mixing current and historical without flags
 
 **As-Of Decision Features**:
-Subject-level Decision Features published for the Bundle Subject at the bundle watermark: values must be the latest complete computation available for that as-of (not a stale prior export). Inputs may be multi-period history (for example 3y/5y CAGR, YoY growth); the *published* feature row is still a single current as-of view, with nulls when history is insufficient under declared rules.
+Subject-level Decision Features published for the Bundle Subject at the bundle watermark: a primary annual vector plus an optional latest interim if newer; interim does not require FY. Coverage is present / empty / unavailable for FY and present / not_applicable for interim; all-null measures are empty, not unavailable. Values must be the latest complete computation available for that as-of (not a stale prior export). Null is not zero.
 _Avoid_: Shipping last week's factor file, treating null CAGR as zero, requiring the agent to recompute CAGR from raw facts for v1, conflating "uses historic inputs" with "may be stale"
 
 **Primary Annual Feature Vector**:
@@ -419,28 +419,32 @@ The As-Of Decision Features taken from the most recent complete fiscal-year (FY)
 _Avoid_: Mixing FY and quarter metrics without labels, oldest FY, average of all years
 
 **Latest Interim Feature Vector**:
-When a non-FY fiscal period exists with period_end after the Primary Annual Feature Vector's period_end, its factor row is included alongside the annual vector and explicitly labeled as interim; otherwise it is omitted.
-_Avoid_: Replacing FY with Q silently, inventing interim when none is newer than FY
+When a non-FY fiscal period exists with period_end after the Primary Annual Feature Vector's period_end (or after nothing, if there is no FY), its factor row is included alongside the annual vector and explicitly labeled as interim; otherwise the interim section is `not_applicable`.
+_Avoid_: Replacing FY with Q silently, inventing interim when none is newer than FY, requiring FY before an interim may be present
 
 **Snowflake Decision Contract**:
 The v1 delivery of the Agent Decision Surface: published Snowflake objects (views, tables, or procedures) that return Decision Graph Bundles or their relational equivalent under a declared schema version; the Human Audit View queries these same objects.
 _Avoid_: Streamlit-only data path, agent-private tables that diverge from audit UI, S3 file dump as the primary contract, undocumented ad-hoc gold joins
 
 **Decision Watermark**:
-The composite identity bound into every Decision Graph Bundle: Bronze Persist evidence-manifest identity, silver-derived parse/completeness claims (versions and section coverage), Relationship Generation Snapshot (or equivalent graph generation id), gold/feature as-of (run_id), and business date; a bundle is invalid for agent use if any required component is missing or the components are known to disagree.
-_Avoid_: Wall-clock now, best-effort multi-table join without pins, gold-only or graph-only as sole identity
+The composite identity bound into every Decision Graph Bundle as inspectable components: a digest of the ordered unique content-addressed Bronze artifact hashes (mandatory; the full hash list is not the watermark), silver-derived parse/completeness claims (versions and section coverage), Relationship Generation Snapshot / active graph generation id, gold/feature as-of (run_id), and business date; a bundle is invalid for agent use if any required component is missing or the components are known to disagree. A concatenated display token may exist for logs, but it is not the identity.
+_Avoid_: Persist-only bronze hash, capture-manifest id as the bronze identity, ledger revision as the bronze identity, listing every Bronze artifact hash on the contract row, concatenated watermark string as the identity, wall-clock now, best-effort multi-table join without pins, gold-only or graph-only as sole identity
 
 **Pure-SEC Decision Features**:
 Decision Features derived only from SEC (and approved operator-supplied SEC-family) filings and platform calculations on those filings; market prices, market cap, and price-derived multiples are outside the Agent Decision Surface.
 _Avoid_: PE, EV/EBITDA from prices, yfinance fields inside the bundle, silent nulls that look like "no market data loaded" mixed with accounting nulls without a separate market contract
 
+**Warehouse-Active**:
+A company whose warehouse sync tracking status is `active` (past first bootstrap, not pending, not deregistered). This is warehouse tracking, not gold `COMPANY.tracking_status`, which is an MDM column.
+_Avoid_: bootstrap_pending as warehouse-active, gold COMPANY.tracking_status as warehouse-active, silver sec_company existence as tracking
+
 **Decision Subject Universe**:
-The set of Bundle Subjects eligible for agent consumption: entities in the platform tracked/active universe (MDM or company sync tracking status that marks the name as maintained), not every CIK that ever appears in raw gold rows.
-_Avoid_: All COMPANY rows, ad-hoc one-off CIKs without tracking, investable cohort unless explicitly adopted later
+The set of Bundle Subjects eligible for agent consumption: the intersection of warehouse-active and MDM-active entities, published as a watermark-aligned snapshot on the Snowflake Decision Contract. One-sided CIKs are excluded; an empty intersection is not a publishable contract.
+_Avoid_: MDM-only tracking_status, gold COMPANY.tracking_status as the warehouse-active flag, warehouse-only COMPANY rows, listing one-sided CIKs as unavailable agent subjects, live join to bookkeeping as the agent universe, ad-hoc one-off CIKs without tracking, investable cohort unless explicitly adopted later
 
 **Bundle Coverage Flags**:
-Structured present / empty / unavailable markers on each section of a Decision Graph Bundle (features, insiders, holdings, auditor, etc.) so partial data is explicit; empty means complete derivation with zero members, unavailable means the platform could not assert completeness for that section at the Decision Watermark.
-_Avoid_: Omitting sections silently, zeros that mean "unknown", hard-failing the whole bundle for one missing optional section
+Structured present / empty / unavailable / not_applicable markers on each section of a Decision Graph Bundle so partial data is explicit; empty means complete derivation with zero members, unavailable means the platform could not assert completeness for that section at the Decision Watermark. v1 keeps holders, auditor, and parent keys as unavailable (missing bind or inventory), not empty.
+_Avoid_: Omitting sections silently, zeros that mean "unknown", calling zero-row auditor/parent evidence empty, attaching unbound gold 13F as agent-grade, hard-failing the whole bundle for one missing optional section
 
 **Decision Contract Version**:
 An explicit integer (or major.minor) schema identity carried on every Decision Graph Bundle and Snowflake Decision Contract response; agents pin a supported version; breaking shape or semantics changes require a version bump.
@@ -463,8 +467,8 @@ v1 of the Agent Decision Surface does not implement product-level authentication
 _Avoid_: Baking a one-off auth scheme into the bundle schema, blocking go-live on OAuth, assuming public internet exposure of Snowflake
 
 **Agent-Grade Read**:
-A Subject Bundle Read or Subject Feature Screen result whose Decision Watermark components are present and aligned; only Agent-Grade Reads are valid inputs to a Trading Decision. Misaligned or incomplete watermark components fail closed (no agent-grade payload), rather than best-effort join.
-_Avoid_: Best-effort mismatched graph and features, silent degraded data for trading, "prefer gold" or "prefer graph" without invalidation
+A Subject Bundle Read or Subject Feature Screen result whose Decision Watermark components are present and aligned, including the Bronze digest, over a non-empty Decision Subject Universe; only Agent-Grade Reads are valid inputs to a Trading Decision. Missing bronze digest or empty universe is not READY and not agent-grade (no tradeable payload). An empty or unavailable neighborhood section does not by itself fail the bundle.
+_Avoid_: Best-effort mismatched graph and features, silent degraded data for trading, READY publication without bronze digest, READY publication of an empty universe, failing a bundle because one issuer has no insiders, treating missing bronze as coverage-only, failing gold or MDM because the contract is not READY, "prefer gold" or "prefer graph" without invalidation
 
 ### Deployment orchestration (Step Functions)
 
