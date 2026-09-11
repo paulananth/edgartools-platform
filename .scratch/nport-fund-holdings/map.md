@@ -27,6 +27,12 @@ Implementation is a separate future handoff once the design is settled.
   relationship type), different filer population and different holder/
   holding direction (13F: a manager's holdings across many issuers;
   N-PORT: a fund's own constituent holdings of its own portfolio).
+- See also the
+  [relationship-closing-pattern-framework map](../relationship-closing-pattern-framework/map.md)
+  (charted from a `mdm-relationship-versioning-gap` fog item, validates
+  its framework against this map's own prospective `FUND_HOLDS` type as
+  a concrete test case) -- relevant once Ticket 04 below unblocks and a
+  relationship type is actually being designed.
 - Surfaced from a tangent during the `mdm-relationship-versioning-gap`
   map's Ticket 06 investigation (INSTITUTIONAL_HOLDS securities never
   link to their issuer company) -- N-PORT was researched as a candidate

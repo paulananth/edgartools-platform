@@ -68,3 +68,14 @@ Net working estimate, subject to Ticket 07 landing first: **one genuinely
 new relationship type** (fund-holds-its-own-constituents), **one open
 reuse-vs-extend question** (fund-to-adviser), and the rest resolved via
 plain FK attributes rather than new graph relationship types.
+
+**Cross-reference (added by a sibling charting session, does not resolve
+this ticket):** once this ticket is unblocked and a `FUND_HOLDS`-shaped
+relationship type is confirmed, see the
+[relationship-closing-pattern-framework map](../../relationship-closing-pattern-framework/map.md)'s
+[Ticket 03](../../relationship-closing-pattern-framework/issues/03-validate-against-nport-fund-holds.md)
+for which relationship-versioning closing pattern it should use (working
+answer there: almost certainly the same "periodic-snapshot-diff" pattern
+`INSTITUTIONAL_HOLDS`/`MANAGES_FUND` already use, since `FUND_HOLDS` is
+structurally the fund-side mirror of `INSTITUTIONAL_HOLDS` -- confirm
+against that ticket's actual resolution rather than assuming).

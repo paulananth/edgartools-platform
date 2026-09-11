@@ -1,0 +1,19 @@
+# Name relationship-closing patterns instead of reinventing them per type
+
+**Status:** accepted
+
+Four independently-written mechanisms already close a prior `mdm_relationship_instance` version when a new fact supersedes it, discovered while investigating a stalled INSTITUTIONAL_HOLDS watermark. We name the real pattern families behind them and require every relationship type be classified against one, instead of refactoring the existing implementations into one shared abstraction or letting a fifth bespoke mechanism get written the next time a relationship type needs this.
+
+## Patterns
+
+- **value_signals_disposal** — the new row's own value directly encodes "this relationship ended" (e.g. `shares_owned_after == 0`). Use when the source data carries an explicit in-band "this fact is now false" signal alongside the fact stream itself. Today: `HOLDS`, `COMPANY_HOLDS` (`_deactivate_if_zero_shares`).
+- **property_differs_from_prior** — the new row is a point-in-time status snapshot for an already-fixed (source, target) pair; a differing property value means the prior status is now stale, not that a new fact has been added alongside it. Use for per-pair status fields with no explicit disposal signal (role/title, audit firm, disclosed parent). Today: `IS_INSIDER`, `EMPLOYED_BY` (`_deactivate_if_properties_changed`); `HAS_PARENT_COMPANY` (no dedicated close logic exists yet — its `sec_subsidiary_evidence` write path currently derives zero rows in prod, a separate known bug, but this is the pattern its properties shape implies); `AUDITED_BY` (a fourth, independently-written inline copy of this same concept, missing the chronological guard the shared helper has — see Consequences).
+- **periodic_snapshot_diff** — the source periodically reports its full current set of targets for a source entity; anything absent from the latest report closes, and even still-present targets roll forward to a fresh version each period (their properties, e.g. `quarter_end`, differ every period even when the underlying fact is unchanged). Use when a filing type reports a complete snapshot of a *set*, not a single pair. Today: `INSTITUTIONAL_HOLDS`, `MANAGES_FUND`.
+- **no_versioning_needed** — the relationship is a pure existence fact with no properties to ever conflict over or close. Today: `ISSUED_BY`, `IS_ENTITY_OF`, `IS_PERSON_OF`.
+
+## Consequences
+
+- `edgar_warehouse/mdm/pipeline.py`'s `RELATIONSHIP_CLOSING_PATTERNS` registry maps every member of `RELATIONSHIP_TYPES` to one of the four pattern names above; `tests/mdm/test_relationship_closing_pattern_registry.py` fails closed if a relationship type is ever added without a corresponding entry, or an entry uses an unrecognized pattern name.
+- The existing closing implementations are **not** refactored into one shared abstraction. Per `/gof-refactor-reviewer`'s own Rule 0, three to four small, independently correct, low-churn implementations don't yet justify the migration risk of collapsing them — this ADR is a selection framework, not a unification.
+- A new relationship type's implementer picks its pattern from this list before writing a closing mechanism, instead of writing a fifth bespoke one; if none of the four fits, that itself is a signal to revisit this ADR rather than silently diverge.
+- `AUDITED_BY` is registered as `property_differs_from_prior` despite its inline closer's missing `confirmed_chronologically_after` guard (tracked as `mdm-relationship-versioning-gap` Ticket 11) — the registry reflects intended pattern, not a guarantee the current implementation is bug-free.
