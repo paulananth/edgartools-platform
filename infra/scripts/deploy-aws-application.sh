@@ -3975,9 +3975,12 @@ import json, pathlib, sys
  mdm_state_machine_arn, script_dir) = sys.argv[1:]
 sys.path.insert(0, script_dir)
 from mdm_tail_helper import call_mdm_machine
+from pipeline_stage_helpers import EcsNetworkContext, force_capable_fetch_stage
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
+network = EcsNetworkContext(cluster_arn=cluster_arn, subnets=subnets,
+                             security_groups=security_groups, container_name=container_name)
 
 WAREHOUSE_COMMANDS = {
     "daily_incremental": "daily-incremental",
@@ -4528,100 +4531,46 @@ dataset_period_default = {
     "Next": "ForceCheck",
 }
 
-force_check = {
-    "Type": "Choice",
-    "Comment": "Route to FetchAdvBulkForced (includes --force) when caller supplied force=true; otherwise FetchAdvBulk (no --force), the normal path.",
-    "Choices": [
-        {
-            "Variable": "$.force",
-            "IsPresent": False,
-            "Next": "FetchAdvBulk",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": True,
-            "Next": "FetchAdvBulkForced",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": False,
-            "Next": "FetchAdvBulk",
-        },
-    ],
-    "Default": "InvalidForceInput",
-}
-
-# Next="ReleaseSecFetchLease", not "Mastering" directly -- these ADV/firm-roster
-# fetch stages are still inside the sec_fetch_active fetch-heavy span
-# (release-readiness ticket 84), so a failure here must still release the
-# lease before falling through to MDM, not skip release entirely.
-adv_bulk_fetch_catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "ReleaseSecFetchLease"}]
-
-fetch_adv_bulk = ecs_state(wh_medium_arn,
-    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-    next_state="IngestAdvBulkSources")
-fetch_adv_bulk["Catch"] = adv_bulk_fetch_catch
-fetch_adv_bulk["ResultPath"] = None
-
-fetch_adv_bulk_forced = ecs_state(wh_medium_arn,
-    "States.Array('fetch-adv-bulk', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-    next_state="IngestAdvBulkSources")
-fetch_adv_bulk_forced["Catch"] = adv_bulk_fetch_catch
-fetch_adv_bulk_forced["ResultPath"] = None
-
-ingest_adv_bulk_sources = ecs_state(wh_medium_arn,
-    "States.Array('ingest-relationship-sources', '--source-manifest', "
-    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-adv-bulk/{{}}/source_manifest.json', $$.Execution.Name), "
-    "'--run-id', $$.Execution.Name)",
-    next_state="FirmRosterForceCheck")
-ingest_adv_bulk_sources["Catch"] = adv_bulk_fetch_catch
-ingest_adv_bulk_sources["ResultPath"] = None
+# Next="ReleaseSecFetchLease" on failure (via catch_next_state below), not
+# "Mastering" directly -- these ADV/firm-roster fetch stages are still inside
+# the sec_fetch_active fetch-heavy span (release-readiness ticket 84), so a
+# failure here must still release the lease before falling through to MDM,
+# not skip release entirely.
+#
+# Built via force_capable_fetch_stage (pipeline-stage-builders wayfinder map,
+# ticket 03) -- the same shared function load_history's own copy of this trio
+# now uses (ticket 02), replacing the second, previously hand-copied instance
+# this file's own comment used to admit was "kept in sync" manually per the
+# Stage0CompanyIdentity duplication convention.
+_adv_bulk_states = force_capable_fetch_stage(
+    "fetch-adv-bulk", wh_medium_arn, network=network,
+    choice_state_name="ForceCheck", fetch_state_name="FetchAdvBulk",
+    ingest_state_name="IngestAdvBulkSources",
+    next_state_on_success="FirmRosterForceCheck",
+    catch_next_state="ReleaseSecFetchLease",
+    bronze_bucket_name=bronze_bucket_name,
+)
+force_check = _adv_bulk_states["ForceCheck"]
+fetch_adv_bulk = _adv_bulk_states["FetchAdvBulk"]
+fetch_adv_bulk_forced = _adv_bulk_states["FetchAdvBulkForced"]
+ingest_adv_bulk_sources = _adv_bulk_states["IngestAdvBulkSources"]
 
 # Firm Roster completeness cross-check (adv-firm-roster-crosscheck spec, ticket 02) --
-# same shape/rationale as load_history's copy above (kept in sync per this file's
-# documented Stage0CompanyIdentity duplication convention).
-firm_roster_force_check = {
-    "Type": "Choice",
-    "Comment": "Route to FetchFirmRosterForced (includes --force) when caller supplied force=true; otherwise FetchFirmRoster (no --force).",
-    "Choices": [
-        {
-            "Variable": "$.force",
-            "IsPresent": False,
-            "Next": "FetchFirmRoster",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": True,
-            "Next": "FetchFirmRosterForced",
-        },
-        {
-            "Variable": "$.force",
-            "BooleanEquals": False,
-            "Next": "FetchFirmRoster",
-        },
-    ],
-    "Default": "InvalidForceInput",
-}
-
-fetch_firm_roster = ecs_state(wh_medium_arn,
-    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--run-id', $$.Execution.Name)",
-    next_state="IngestFirmRosterSources")
-fetch_firm_roster["Catch"] = adv_bulk_fetch_catch
-fetch_firm_roster["ResultPath"] = None
-
-fetch_firm_roster_forced = ecs_state(wh_medium_arn,
-    "States.Array('fetch-firm-roster', '--dataset-period', States.Format('{}', $.dataset_period), '--force', '--run-id', $$.Execution.Name)",
-    next_state="IngestFirmRosterSources")
-fetch_firm_roster_forced["Catch"] = adv_bulk_fetch_catch
-fetch_firm_roster_forced["ResultPath"] = None
-
-ingest_firm_roster_sources = ecs_state(wh_medium_arn,
-    "States.Array('ingest-relationship-sources', '--source-manifest', "
-    f"States.Format('s3://{bronze_bucket_name}/warehouse/bronze/runs/fetch-firm-roster/{{}}/source_manifest.json', $$.Execution.Name), "
-    "'--run-id', $$.Execution.Name)",
-    next_state="ReleaseSecFetchLease")
-ingest_firm_roster_sources["Catch"] = adv_bulk_fetch_catch
-ingest_firm_roster_sources["ResultPath"] = None
+# same shape/rationale as load_history's copy (ticket 02 of this file's own
+# pipeline-stage-builders map already migrated that copy onto the same shared
+# function).
+_firm_roster_states = force_capable_fetch_stage(
+    "fetch-firm-roster", wh_medium_arn, network=network,
+    choice_state_name="FirmRosterForceCheck", fetch_state_name="FetchFirmRoster",
+    ingest_state_name="IngestFirmRosterSources",
+    next_state_on_success="ReleaseSecFetchLease",
+    catch_next_state="ReleaseSecFetchLease",
+    bronze_bucket_name=bronze_bucket_name,
+)
+firm_roster_force_check = _firm_roster_states["FirmRosterForceCheck"]
+fetch_firm_roster = _firm_roster_states["FetchFirmRoster"]
+fetch_firm_roster_forced = _firm_roster_states["FetchFirmRosterForced"]
+ingest_firm_roster_sources = _firm_roster_states["IngestFirmRosterSources"]
 
 # sec_fetch_active lease (release-readiness ticket 84): acquired right
 # before RefreshMode dispatch, released right before Mastering -- spans
