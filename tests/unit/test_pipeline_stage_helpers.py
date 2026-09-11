@@ -84,6 +84,20 @@ class TestEcsState:
         result = _ecs_state(_network(), "arn:task", "cmd", is_end=True, max_attempts=5)
         assert result["Retry"][0]["MaxAttempts"] == 5
 
+    def test_catch_and_result_path_omitted_by_default(self):
+        # The per-window task inside a windowed fundamentals_mode_stage
+        # relies on this -- the real per-window blocks it replaces have
+        # neither key at all.
+        result = _ecs_state(_network(), "arn:task", "cmd", is_end=True)
+        assert "Catch" not in result
+        assert "ResultPath" not in result
+
+    def test_catch_and_result_path_set_when_provided(self):
+        catch = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "SomeState"}]
+        result = _ecs_state(_network(), "arn:task", "cmd", is_end=True, catch=catch, result_path=None)
+        assert result["Catch"] == catch
+        assert result["ResultPath"] is None
+
 
 class TestFundamentalsModeStage:
     def test_windowed_returns_distributed_map_over_cik_windows(self):

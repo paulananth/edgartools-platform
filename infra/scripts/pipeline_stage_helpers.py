@@ -28,7 +28,7 @@ there.
 """
 from __future__ import annotations
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 
 class EcsNetworkContext(NamedTuple):
@@ -53,20 +53,28 @@ _CIK_WINDOWS_KEY_EXPR = (
     "$$.Execution.Name)"
 )
 
+# Sentinel distinguishing "caller didn't ask for ResultPath at all" (the
+# per-window task inside a windowed fundamentals_mode_stage -- matches the
+# real per-window blocks, which have no ResultPath key) from "caller
+# explicitly wants ResultPath: None" (every other call site below).
+_RESULT_PATH_UNSET = object()
+
 
 def _ecs_state(network: EcsNetworkContext, task_def_arn, cmd_expr,
-               next_state=None, is_end=False, retry_secs=120, max_attempts=3):
+               next_state=None, is_end=False, retry_secs=120, max_attempts=3,
+               catch=None, result_path=_RESULT_PATH_UNSET):
     """Parameter-explicit twin of the file's 7 existing local ecs_state()
     closures -- identical shape (matching the two closures at
     deploy-aws-application.sh:3079/4095 specifically, the ones actually
     replaced here), taking network context as an explicit argument instead
     of capturing it from an enclosing heredoc's locals.
 
-    Deliberately does NOT default ResultPath the way one of this file's
-    other 5 ecs_state() closures does (write_mdm_definition's, a different
-    machine) -- the two closures load_history/daily_incremental actually
-    use omit it, relying on each call site to set ResultPath explicitly
-    only where it matters (see the public functions below).
+    `catch`/`result_path` fold in what every public function below used to
+    set manually on the returned dict after calling this -- both are
+    optional (and, for ResultPath, distinguishable from an explicit `None`)
+    since the per-window task inside a windowed fundamentals_mode_stage
+    needs neither key present at all, matching the real per-window blocks
+    it replaces.
     """
     if next_state is None and not is_end:
         raise ValueError("_ecs_state requires next_state or is_end=True")
@@ -100,6 +108,10 @@ def _ecs_state(network: EcsNetworkContext, task_def_arn, cmd_expr,
         s["End"] = True
     else:
         s["Next"] = next_state
+    if catch is not None:
+        s["Catch"] = catch
+    if result_path is not _RESULT_PATH_UNSET:
+        s["ResultPath"] = result_path
     return s
 
 
@@ -173,9 +185,8 @@ def fundamentals_mode_stage(mode, task_arn, *, windowed, network,
         return {outer_state_name: stage}
 
     cmd_expr = "States.Array('bootstrap-fundamentals', '--mode', '%s', '--run-id', $$.Execution.Name)" % mode
-    stage = _ecs_state(network, task_arn, cmd_expr, next_state=next_on_success, retry_secs=retry_secs)
-    stage["Catch"] = catch
-    stage["ResultPath"] = None
+    stage = _ecs_state(network, task_arn, cmd_expr, next_state=next_on_success, retry_secs=retry_secs,
+                        catch=catch, result_path=None)
     return {outer_state_name: stage}
 
 
@@ -229,17 +240,12 @@ def force_capable_fetch_stage(command, task_arn, *, network,
         "$$.Execution.Name), '--run-id', $$.Execution.Name)"
     )
 
-    fetch_state = _ecs_state(network, task_arn, fetch_cmd, next_state=ingest_state_name, retry_secs=retry_secs)
-    fetch_state["Catch"] = catch
-    fetch_state["ResultPath"] = None
-
-    forced_state = _ecs_state(network, task_arn, fetch_forced_cmd, next_state=ingest_state_name, retry_secs=retry_secs)
-    forced_state["Catch"] = catch
-    forced_state["ResultPath"] = None
-
-    ingest_state = _ecs_state(network, task_arn, ingest_cmd, next_state=next_state_on_success, retry_secs=retry_secs)
-    ingest_state["Catch"] = catch
-    ingest_state["ResultPath"] = None
+    fetch_state = _ecs_state(network, task_arn, fetch_cmd, next_state=ingest_state_name, retry_secs=retry_secs,
+                              catch=catch, result_path=None)
+    forced_state = _ecs_state(network, task_arn, fetch_forced_cmd, next_state=ingest_state_name, retry_secs=retry_secs,
+                               catch=catch, result_path=None)
+    ingest_state = _ecs_state(network, task_arn, ingest_cmd, next_state=next_state_on_success, retry_secs=retry_secs,
+                               catch=catch, result_path=None)
 
     return {
         choice_state_name: choice_state,
