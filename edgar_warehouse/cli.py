@@ -1551,6 +1551,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build gold tables and write Snowflake export manifests from current silver state. "
              "Run once after bootstrap-batch (phased pipeline) completes all batches.",
     )
+    gold_refresh.add_argument(
+        "--input-snapshot-at",
+        default=None,
+        help=(
+            "Read the five direct Snowflake Silver inputs at this timezone-aware "
+            "timestamp. Reserved for matched ECS sizing canaries."
+        ),
+    )
     _add_run_id_arg(gold_refresh)
     gold_refresh.set_defaults(handler=_handle_gold_refresh)
 

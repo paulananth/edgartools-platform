@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from edgar_warehouse.serving.source_dimensional_export import GOLD_INPUT_COLUMNS
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SPEC = importlib.util.spec_from_file_location(
     "ecs_sizing_canary", REPO_ROOT / "scripts" / "ops" / "ecs_sizing_canary.py"
@@ -439,6 +441,18 @@ def test_parser_exposes_ticket29_gold_candidate_and_control_cohorts() -> None:
     ]
     assert evaluate_args.output == Path("cohort.json")
 
+    start_args = ecs_sizing_canary.build_parser().parse_args(
+        [
+            "start",
+            "gold-control",
+            "--attempt",
+            "5",
+            "--input-snapshot-at",
+            "2026-09-11T12:00:00Z",
+        ]
+    )
+    assert start_args.input_snapshot_at == "2026-09-11T12:00:00Z"
+
 
 def test_prepare_dry_run_is_scoped_to_selected_gold_cohort(tmp_path: Path) -> None:
     account = "690839588395"
@@ -482,13 +496,25 @@ def test_prepare_dry_run_is_scoped_to_selected_gold_cohort(tmp_path: Path) -> No
             if args[:2] == ("sts", "get-caller-identity"):
                 return {"Account": account}
             if args[:2] == ("stepfunctions", "describe-state-machine"):
+                task = _task(large_arn)
+                task["Parameters"]["Overrides"] = {
+                    "ContainerOverrides": [
+                        {
+                            "Name": "edgar-warehouse",
+                            "Command.$": (
+                                "States.Array('gold-refresh', '--run-id', "
+                                "$$.Execution.Name)"
+                            ),
+                        }
+                    ]
+                }
                 return {
                     "roleArn": "step-functions-role",
                     "definition": json.dumps(
                         {
                             "StartAt": "RunWarehouseTask",
                             "States": {
-                                "RunWarehouseTask": _task(large_arn),
+                                "RunWarehouseTask": task,
                             },
                         }
                     ),
@@ -521,6 +547,26 @@ def test_prepare_dry_run_is_scoped_to_selected_gold_cohort(tmp_path: Path) -> No
     assert payload["plans"][0]["candidate_task_definition_arn"] == medium_arn
     assert payload["plans"][0]["covered_states"] == ["RunWarehouseTask"]
     assert payload["plans"][0]["changed_reference_count"] == 1
+    assert payload["plans"][0]["compatibility_overlays"] == [
+        "gold input pinned to $.input_snapshot_at"
+    ]
+
+
+def test_gold_input_snapshot_normalization_requires_utc_timestamp() -> None:
+    assert ecs_sizing_canary.normalize_gold_input_snapshot_at(
+        "2026-09-11T08:00:00-04:00"
+    ) == "2026-09-11T12:00:00.000000Z"
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        ecs_sizing_canary.normalize_gold_input_snapshot_at("2026-09-11T12:00:00")
+
+    assert ecs_sizing_canary.canary_execution_input(
+        "gold", "2026-09-11T08:00:00-04:00"
+    ) == {"input_snapshot_at": "2026-09-11T12:00:00.000000Z"}
+    with pytest.raises(ValueError, match="only valid for Ticket 29"):
+        ecs_sizing_canary.canary_execution_input(
+            "residual", "2026-09-11T12:00:00Z"
+        )
 
 
 def test_validate_attempt_sequence_requires_terminal_predecessor_and_no_reuse() -> None:
@@ -898,15 +944,51 @@ def test_evaluate_gold_cohort_scores_sizing_but_fails_promotion_without_recovery
         },
     ]
 
+    envelope_identity = {
+        "schema_version": 1,
+        "source_system": "EDGARTOOLS_SILVER",
+        "account": "prod-account",
+        "database": "EDGARTOOLS_PROD",
+        "schema": "EDGARTOOLS_SILVER",
+        "snapshot_at": "2026-09-10T11:59:55.000000Z",
+        "tables": [
+            {
+                "table_name": name,
+                "row_count": index + 1,
+                "selected_columns": list(GOLD_INPUT_COLUMNS[name]),
+            }
+            for index, name in enumerate(
+                [
+                    "SEC_ADV_FIRM_ROSTER",
+                    "SEC_ADV_PRIVATE_FUND",
+                    "SEC_AUDITOR_REPORT_EVIDENCE",
+                    "SEC_EMPLOYMENT_EVENT",
+                    "SEC_SUBSIDIARY_EVIDENCE",
+                ]
+            )
+        ],
+    }
+    input_envelope = {
+        **envelope_identity,
+        "envelope_sha256": ecs_sizing_canary._json_hash(envelope_identity),
+        "query_ids": {
+            entry["table_name"]: f"query-{index}"
+            for index, entry in enumerate(envelope_identity["tables"])
+        },
+    }
+
     def evidence(*, cohort: str, profile: str, duration: float, cost: float) -> dict:
         return {
             "launch_contract": {
                 "ticket": 29,
                 "cohort": cohort,
                 "image": "repo@sha256:current",
+                "input_snapshot_at": input_envelope["snapshot_at"],
                 "source_definition_hash": "source-hash",
                 "changed_reference_count": 0 if profile == "large" else 1,
-                "compatibility_overlays": [],
+                "compatibility_overlays": [
+                    "gold input pinned to $.input_snapshot_at"
+                ],
                 "covered_states": ["RunWarehouseTask"],
                 "concurrency_context": {
                     "allow_concurrent": False,
@@ -953,9 +1035,11 @@ def test_evaluate_gold_cohort_scores_sizing_but_fails_promotion_without_recovery
                     "application_evidence": [
                         {
                             "event": "gold_publish_started",
+                            "gold_input_envelope": input_envelope,
                         },
                         {
                             "event": "gold_build_completed",
+                            "gold_input_envelope": input_envelope,
                             "table_count": 2,
                             "gold_manifest": [dict(entry) for entry in manifest],
                             "gold_row_counts": {
@@ -969,6 +1053,7 @@ def test_evaluate_gold_cohort_scores_sizing_but_fails_promotion_without_recovery
                         },
                         {
                             "event": "gold_publish_completed",
+                            "gold_input_envelope": input_envelope,
                             "gold_row_counts": {
                                 "dim_company": 10,
                                 "dim_filing": 20,
@@ -1002,7 +1087,7 @@ def test_evaluate_gold_cohort_scores_sizing_but_fails_promotion_without_recovery
     )
 
     assert result["performance_gates_passed"] is True
-    assert result["sizing_gates_passed"] is False
+    assert result["sizing_gates_passed"] is True
     assert result["passed"] is False
     assert result["candidate_duration_p95_seconds"] == pytest.approx(103.9)
     assert result["duration_regression_percent"] == pytest.approx(3.9)
@@ -1010,9 +1095,11 @@ def test_evaluate_gold_cohort_scores_sizing_but_fails_promotion_without_recovery
     assert result["cost_improvement_percent"] == pytest.approx(44.05)
     assert result["output_identity_summary"]["mode"] == "exact_gold_output"
     assert result["input_envelope_evidence"] == {
-        "passed": False,
-        "status": "not_captured",
+        "passed": True,
+        "status": "matched",
         "source_system": "EDGARTOOLS_SILVER",
+        "snapshot_at": "2026-09-10T11:59:55.000000Z",
+        "envelope_sha256": input_envelope["envelope_sha256"],
     }
     assert result["record_funnel"] == {
         "output_tables": ["dim_company", "dim_filing"],
@@ -1033,12 +1120,58 @@ def test_evaluate_gold_cohort_scores_sizing_but_fails_promotion_without_recovery
     }
     assert result["idempotency"]["passed"] is True
     assert result["performance_failures"] == []
-    assert result["sizing_failures"] == [
-        "matched Snowflake input envelope was not captured"
+    assert result["sizing_failures"] == []
+    assert result["failures"] == ["recovery behavior was not exercised"]
+
+    missing_envelope = evidence(
+        cohort="gold", profile="medium", duration=104.0, cost=0.0056
+    )
+    for event in missing_envelope["tasks"][0]["application_evidence"]:
+        event.pop("gold_input_envelope")
+    missing_result = ecs_sizing_canary.evaluate_gold_cohort(
+        control=evidence(
+            cohort="gold-control", profile="large", duration=100.0, cost=0.010
+        ),
+        candidates=[
+            evidence(cohort="gold", profile="medium", duration=102.0, cost=0.0055),
+            missing_envelope,
+        ],
+        cohort_overlap=[],
+    )
+    assert "matched Snowflake input envelope was not captured" in missing_result[
+        "sizing_failures"
     ]
-    assert result["failures"] == [
-        "matched Snowflake input envelope was not captured",
-        "recovery behavior was not exercised",
+
+    mismatched_envelope = evidence(
+        cohort="gold", profile="medium", duration=104.0, cost=0.0056
+    )
+    changed_envelope = dict(input_envelope)
+    changed_envelope["snapshot_at"] = "2026-09-10T12:00:00.000000Z"
+    changed_identity = {
+        key: value
+        for key, value in changed_envelope.items()
+        if key not in {"envelope_sha256", "query_ids"}
+    }
+    changed_envelope["envelope_sha256"] = ecs_sizing_canary._json_hash(
+        changed_identity
+    )
+    mismatched_envelope["launch_contract"]["input_snapshot_at"] = changed_envelope[
+        "snapshot_at"
+    ]
+    for event in mismatched_envelope["tasks"][0]["application_evidence"]:
+        event["gold_input_envelope"] = changed_envelope
+    envelope_result = ecs_sizing_canary.evaluate_gold_cohort(
+        control=evidence(
+            cohort="gold-control", profile="large", duration=100.0, cost=0.010
+        ),
+        candidates=[
+            evidence(cohort="gold", profile="medium", duration=102.0, cost=0.0055),
+            mismatched_envelope,
+        ],
+        cohort_overlap=[],
+    )
+    assert "Snowflake input envelopes do not match" in envelope_result[
+        "sizing_failures"
     ]
 
     mismatched = evidence(cohort="gold", profile="medium", duration=104.0, cost=0.0056)

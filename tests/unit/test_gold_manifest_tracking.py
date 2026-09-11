@@ -7,7 +7,6 @@ import pyarrow as pa
 
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
 
 
 def _context(tmp_path) -> WarehouseCommandContext:
@@ -23,7 +22,9 @@ def _context(tmp_path) -> WarehouseCommandContext:
 
 
 def test_write_source_export_to_storage_manifest_hashes_parquet_files(tmp_path) -> None:
-    from edgar_warehouse.serving.source_dimensional_export import write_source_export_to_storage_manifest
+    from edgar_warehouse.serving.source_dimensional_export import (
+        write_source_export_to_storage_manifest,
+    )
 
     storage_root = StorageLocation(str(tmp_path / "warehouse"))
     table = pa.table({"cik": pa.array([320193], type=pa.int64())})
@@ -108,6 +109,90 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
     )
     complete_metrics = fake_bookkeeping.complete_pipeline_run.call_args.kwargs["metrics"]
     assert complete_metrics["gold_manifest"] == manifest_entries
+
+
+def test_gold_refresh_persists_and_emits_frozen_input_envelope(tmp_path) -> None:
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _execute_warehouse_bronze_capture,
+    )
+
+    context = _context(tmp_path)
+    fake_db = MagicMock()
+    fake_db.get_table_counts.return_value = {}
+    fake_bookkeeping = MagicMock()
+    fake_bookkeeping.get_table_counts.return_value = {}
+    envelope = {
+        "schema_version": 1,
+        "source_system": "EDGARTOOLS_SILVER",
+        "snapshot_at": "2026-09-11T12:00:00.000000Z",
+        "tables": [],
+        "envelope_sha256": "abc",
+        "query_ids": {},
+    }
+
+    with (
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
+            return_value=fake_db,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._bookkeeping_store",
+            return_value=fake_bookkeeping,
+        ),
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
+            return_value=(
+                [],
+                {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"},
+            ),
+        ),
+        patch(
+            "edgar_warehouse.serving.source_dimensional_export.capture_gold_input_envelope",
+            return_value=envelope,
+        ) as capture_envelope,
+        patch(
+            "edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables",
+            return_value=iter(()),
+        ) as iter_gold,
+        patch(
+            "edgar_warehouse.application.warehouse_orchestrator._emit_pipeline_event"
+        ) as emit,
+    ):
+        result = _execute_warehouse_bronze_capture(
+            context=context,
+            command_name="gold-refresh",
+            arguments={
+                "run_id": "run-frozen",
+                "input_snapshot_at": "2026-09-11T12:00:00Z",
+            },
+        )
+
+    capture_envelope.assert_called_once_with("2026-09-11T12:00:00Z")
+    iter_gold.assert_called_once_with(
+        input_snapshot_at="2026-09-11T12:00:00Z"
+    )
+    assert result["gold_input_envelope"] == envelope
+    complete_metrics = fake_bookkeeping.complete_pipeline_run.call_args.kwargs["metrics"]
+    assert complete_metrics["gold_input_envelope"] == envelope
+    gold_events = {
+        call.args[0]: call.kwargs
+        for call in emit.call_args_list
+        if call.args[0]
+        in {
+            "gold_publish_started",
+            "gold_build_completed",
+            "gold_publish_completed",
+        }
+    }
+    assert set(gold_events) == {
+        "gold_publish_started",
+        "gold_build_completed",
+        "gold_publish_completed",
+    }
+    assert all(
+        payload["gold_input_envelope"] == envelope
+        for payload in gold_events.values()
+    )
 
 
 def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> None:

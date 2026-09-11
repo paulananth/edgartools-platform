@@ -622,6 +622,7 @@ def _execute_warehouse_bronze_capture(
     silver_database_write: dict[str, Any] | None = None
     silver_table_counts: dict[str, int] | None = None
     landing_export_counts: dict[str, int] | None = None
+    gold_input_envelope: dict[str, Any] | None = None
     try:
         _emit_pipeline_event(
             "bronze_silver_started",
@@ -653,17 +654,31 @@ def _execute_warehouse_bronze_capture(
         silver_table_counts = {**db.get_table_counts(), **bookkeeping.get_table_counts()}
         if context.snowflake_export_root is not None and publish_gold:
             from edgar_warehouse.serving.source_dimensional_export import (
+                capture_gold_input_envelope,
                 iter_source_export_tables,
                 write_source_export_table_manifest_entry,
             )
-            from edgar_warehouse.serving.targets.snowflake import write_gold_table_to_serving_export
+            from edgar_warehouse.serving.targets.snowflake import (
+                write_gold_table_to_serving_export,
+            )
 
             gold_started_at = datetime.now(UTC)
+            input_snapshot_at = str(arguments.get("input_snapshot_at") or "").strip()
+            if input_snapshot_at:
+                try:
+                    gold_input_envelope = capture_gold_input_envelope(
+                        input_snapshot_at
+                    )
+                except (RuntimeError, ValueError) as exc:
+                    raise WarehouseRuntimeError(
+                        f"Could not capture frozen Gold input envelope: {exc}"
+                    ) from exc
             _emit_pipeline_event(
                 "gold_publish_started",
                 command=command_name,
                 run_id=run_id,
                 silver_table_counts=silver_table_counts,
+                gold_input_envelope=gold_input_envelope,
             )
 
             export_business_date = _resolve_export_business_date(command_name=command_name, scope=scope, now=now)
@@ -676,7 +691,12 @@ def _execute_warehouse_bronze_capture(
             gold_row_counts = {}
             snowflake_export_counts = {}
             table_count = 0
-            for table_name, table in iter_source_export_tables():
+            gold_tables = (
+                iter_source_export_tables(input_snapshot_at=input_snapshot_at)
+                if input_snapshot_at
+                else iter_source_export_tables()
+            )
+            for table_name, table in gold_tables:
                 table_count += 1
                 manifest_entry = write_source_export_table_manifest_entry(
                     table_name, table, context.storage_root, run_id
@@ -720,12 +740,14 @@ def _execute_warehouse_bronze_capture(
                 table_count=table_count,
                 gold_row_counts=gold_row_counts,
                 gold_manifest=gold_manifest_entries,
+                gold_input_envelope=gold_input_envelope,
                 snowflake_export_counts=snowflake_export_counts,
             )
             _emit_pipeline_event(
                 "gold_publish_completed",
                 command=command_name,
                 duration_seconds=gold_build_duration,
+                gold_input_envelope=gold_input_envelope,
                 gold_row_counts=gold_row_counts,
                 run_id=run_id,
                 snowflake_export_counts=snowflake_export_counts,
@@ -746,6 +768,7 @@ def _execute_warehouse_bronze_capture(
                 "silver_table_counts": silver_table_counts or {},
                 "gold_row_counts": gold_row_counts or {},
                 "gold_manifest": gold_manifest_entries or [],
+                "gold_input_envelope": gold_input_envelope,
                 "snowflake_export_row_counts": snowflake_export_counts or {},
             },
         )
@@ -1031,6 +1054,7 @@ def _execute_warehouse_bronze_capture(
         "runtime_mode": context.runtime_mode,
         "scope": scope,
         "gold_row_counts": gold_row_counts,
+        "gold_input_envelope": gold_input_envelope,
         "silver_table_counts": silver_table_counts,
         "silver_database": silver_database_write,
         "snowflake_export_manifest": snowflake_export_manifest_write,
