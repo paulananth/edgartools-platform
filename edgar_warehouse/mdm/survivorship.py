@@ -23,6 +23,8 @@ from sqlalchemy.orm import Session
 from edgar_warehouse.mdm.database import MdmEntityAttributeStage
 from edgar_warehouse.mdm.rules import FieldRule, MDMRuleEngine
 
+_MIN_DATETIME = datetime.min.replace(tzinfo=timezone.utc)
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -177,6 +179,7 @@ def stage_candidate(
     field_name: str,
     field_value: Optional[Any],
     effective_date: Optional[date] = None,
+    representative_cache: Optional[dict[tuple, MdmEntityAttributeStage]] = None,
 ) -> MdmEntityAttributeStage:
     """Upsert a single source value into the staging table before survivorship
     runs, keyed on the natural key (entity_id, source_system, source_id,
@@ -195,9 +198,55 @@ def stage_candidate(
     unchanged fix (mdm-resolver-skip-unchanged map) existed. That fix stops
     new duplicates for the resolvers it covers; this closes the same gap
     structurally, for every caller, including future ones.
+
+    mdm-run-throughput Ticket 05: a distinct-but-related growth source --
+    genuinely distinct ``source_id``s (real, separate transactions) that
+    all confirm the exact same ``field_value``. Migration 012's natural key
+    never collapses these (each has its own real source_id), so a heavily-
+    refiled security's title gets re-staged as a brand-new row on every one
+    of its thousands of ownership-transaction filings, even though the
+    value never changes. Confirmed live: one entity had 5,048 rows, ALL
+    identical value, ALL one source_system.
+
+    ``_pick_by_rule`` (this module) needs, per (entity_id, field_name,
+    source_system, global_priority, field_value) group, the row holding
+    the group's true max effective_date AND the row holding the group's
+    true max loaded_at -- NOT the same sort key for every rule type
+    (caught by the mandatory Standards/Spec code-review pass, not the
+    original design): only ``most_recent`` looks at effective_date at
+    all; ``immutable``/``highest_source_rank``/``source_priority`` sort
+    purely on ``(priority, loaded_at)`` and never touch it. Since priority
+    is held fixed within a group, this reduces to two independent maxima,
+    not one combined sort. Rather than retain two physical rows, both
+    branches below fold both maxima onto ONE retained row -- forward-
+    advance ``effective_date`` only when strictly greater (never
+    regresses the group's true max), always refresh ``loaded_at`` to the
+    latest confirmation (trivially always the group's max, since it's
+    always "now") -- so the single row always holds both true maxima
+    simultaneously, correct for every rule type without needing two rows.
+
+    When ``representative_cache`` is provided (keyed by
+    ``(entity_id, source_system, field_name, value_str, global_priority)``),
+    a cache hit mutates the already-tracked ORM row in place with zero
+    Postgres round trips -- built for ``MDMPipeline._run_grouped_concurrent``,
+    where one group's rows share one session and process strictly
+    sequentially, so holding a live ORM object across calls within the
+    group is safe (no cross-session/cross-thread sharing, unlike
+    ``ResolverContext.prefetched_source_refs``, which is read-only and
+    shared read-only across worker threads). A cache miss falls back to one
+    Postgres lookup (still far cheaper than the thousands of inserts it
+    replaces) and populates the cache for the rest of the group.
+    ``representative_cache=None`` (the default) preserves the exact
+    pre-Ticket-05 behavior -- always insert a fresh row when no exact
+    source_id match exists -- for any caller that hasn't opted in (e.g.
+    run_companies' per-row, non-grouped path), deliberately avoiding a
+    second Postgres round trip on every call for callers this fix's own
+    `/gof-refactor-reviewer` pass flagged as not worth that cost without
+    the cache.
     """
     priority = engine.get_source_priority(entity_type, source_system)
     value_str = None if field_value is None else str(field_value)
+    now = datetime.now(timezone.utc)
     existing = session.execute(
         select(MdmEntityAttributeStage).where(
             MdmEntityAttributeStage.entity_id == entity_id,
@@ -207,12 +256,85 @@ def stage_candidate(
         )
     ).scalar_one_or_none()
     if existing is not None:
+        if representative_cache is not None:
+            # This restage may change field_value out from under a
+            # representative_cache entry keyed on the row's OLD value --
+            # confirmed by the mandatory Standards code-review pass, not
+            # caught by the original test suite. Without this pop, a later
+            # brand-new source_id confirming that OLD value would hit the
+            # stale cache entry and get merged into THIS row, which no
+            # longer actually represents that value -- corrupting the row
+            # (evidence pointer advanced to a source_id that never
+            # confirmed the value now sitting in it). Only reachable when
+            # the identical source_id is restaged mid-group with a changed
+            # value (e.g. under reconciliation_pass, which bypasses
+            # _skip_if_unchanged and can reprocess a row already seen
+            # earlier in the same group) -- narrow, but real.
+            stale_key = (entity_id, source_system, field_name, existing.field_value, existing.global_priority)
+            if representative_cache.get(stale_key) is existing:
+                del representative_cache[stale_key]
         existing.field_value = value_str
         existing.global_priority = priority
         existing.effective_date = effective_date
-        existing.loaded_at = datetime.now(timezone.utc)
+        existing.loaded_at = now
         existing.was_selected = False
         return existing
+
+    rep_key: Optional[tuple] = None
+    if representative_cache is not None:
+        rep_key = (entity_id, source_system, field_name, value_str, priority)
+        representative = representative_cache.get(rep_key)
+        if representative is None:
+            # mandatory Standards/Spec code-review pass, not the original
+            # design: _pick_by_rule's 4 rule types do NOT share one sort
+            # key. Only most_recent uses effective_date at all; immutable/
+            # highest_source_rank/source_priority sort purely on
+            # (priority, loaded_at) and never look at effective_date. A
+            # naive ORDER BY effective_date DESC, loaded_at DESC LIMIT 1
+            # can pick a row with a high effective_date but a STALE
+            # loaded_at, silently discarding the group's true max-loaded_at
+            # row (the one those 3 rule types actually need) if a legacy,
+            # not-yet-backfilled group holds it on a different physical
+            # row. Fetch every candidate (bounded, rare -- only reachable
+            # once per distinct value per group per run, since a hit here
+            # populates the cache for every subsequent call) and fold both
+            # maxima onto the most-recently-loaded row, mirroring exactly
+            # what the cache-hit branch below already does incrementally.
+            candidates = list(session.execute(
+                select(MdmEntityAttributeStage).where(
+                    MdmEntityAttributeStage.entity_id == entity_id,
+                    MdmEntityAttributeStage.source_system == source_system,
+                    MdmEntityAttributeStage.field_name == field_name,
+                    MdmEntityAttributeStage.field_value == value_str,
+                    MdmEntityAttributeStage.global_priority == priority,
+                )
+            ).scalars().all())
+            if candidates:
+                representative = max(
+                    candidates,
+                    key=lambda r: (r.loaded_at is not None, r.loaded_at or _MIN_DATETIME),
+                )
+                true_max_effective_date = max(
+                    (r.effective_date for r in candidates if r.effective_date is not None),
+                    default=None,
+                )
+                if true_max_effective_date is not None and (
+                    representative.effective_date is None
+                    or true_max_effective_date > representative.effective_date
+                ):
+                    representative.effective_date = true_max_effective_date
+        if representative is not None:
+            if effective_date is not None and (
+                representative.effective_date is None
+                or effective_date > representative.effective_date
+            ):
+                representative.effective_date = effective_date
+            representative.source_id = source_id
+            representative.loaded_at = now
+            representative.was_selected = False
+            representative_cache[rep_key] = representative
+            return representative
+
     row = MdmEntityAttributeStage(
         entity_id=entity_id,
         source_system=source_system,
@@ -223,6 +345,8 @@ def stage_candidate(
         effective_date=effective_date,
     )
     session.add(row)
+    if rep_key is not None:
+        representative_cache[rep_key] = row
     return row
 
 

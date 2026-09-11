@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved (superseded, 2026-09-11)
 
 ## Question
 
@@ -45,4 +45,17 @@ source state each run).
 
 ## Answer
 
-(not yet resolved)
+Superseded, not separately implemented. This ticket's question — a real
+incremental/diff filter for every `_derive_*` method — is exactly what the
+map's own later tickets answered under different numbers (the map was
+re-chartered after this ticket was filed, and it was never renumbered or
+closed at the time): [Confirm incremental-filtering status and data
+volume](01-confirm-incremental-filtering-status-and-data-volume.md) did
+the per-type audit this ticket called for, [Decide which types need
+filtering and mechanism](02-decide-which-types-need-filtering-and-mechanism.md)
+locked the design, and [Implement checkpoint, watermarks, and
+deactivation](04-implement-checkpoint-watermarks-and-deactivation.md)
+shipped it for 6 of the 7 scoped types (`ISSUED_BY` deferred — no valid
+watermark column exists and its ~3K-row scale means there's no real
+performance problem to solve there; see the map's own "Not yet specified").
+Closing as a duplicate so it stops reading as an open frontier item.

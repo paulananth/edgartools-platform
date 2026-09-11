@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: resolved
 
 ## Question
 
@@ -66,24 +66,94 @@ concurrency tuning would relieve.
 
 ## Answer
 
-Not yet resolved — this ticket documents the finding. Candidate directions,
-not yet evaluated against each other:
+**Confirmed live before designing anything:** `_skip_if_unchanged` is not
+bypassed by a bug -- the accumulation is legitimate. Live query against the
+top accumulator entities showed every single row within a group shares the
+exact same `field_value` and `source_system` (one entity: 5,048 rows, 1
+distinct value). Each row is a genuinely distinct real transaction
+(`source_id`), which migration 012's unique constraint correctly never
+collapses (it's keyed on `source_id`, not value) -- "keep only the most
+recent N rows" (candidate direction 1 above) was explicitly rejected as
+unsafe (an old high-priority row could be truncated away, silently
+flipping the winner for `source_priority`/`highest_source_rank`/
+`immutable` rules).
 
-- Prune `mdm_entity_attribute_stage` to keep only the most-recent N candidate
-  rows per `(entity_id, field_name)`, or only rows within some retention
-  window, since `run_survivorship_for_entity` only ever needs the current
-  set of live candidates to pick a winner -- historical duplicate rows from
-  long-superseded runs serve no read purpose once `_skip_if_unchanged`
-  already prevents re-staging an unchanged row.
-- Investigate whether `_skip_if_unchanged`'s existing fast path (Ticket 03)
-  should have already prevented most of this accumulation for entities that
-  are genuinely unchanged run-over-run, and if not, why these specific
-  entities keep bypassing it (e.g. genuinely distinct ownership-transaction
-  `source_id`s each run, which Ticket 03's own design deliberately doesn't
-  collapse -- would need to check whether that's the actual mechanism here).
-- Whether a bounded/batched read in `run_survivorship_for_entity` itself
-  (e.g. only reading the top-K most relevant candidates instead of the full
-  set) is safe without changing survivorship's winner-selection correctness.
+**Both a write-time guard and a one-time backfill were built** (user
+decision, both needed -- write-time-only leaves already-bloated entities
+slow forever; backfill-only recurs on the next run):
+
+- `edgar_warehouse/mdm/survivorship.py`'s `stage_candidate()` gained an
+  optional `representative_cache` parameter. When provided (only by
+  `MDMPipeline._run_grouped_concurrent`, i.e. `run_securities`/
+  `run_persons` -- deliberately NOT `run_companies`' separate per-row
+  path, see below), a confirmation of an already-seen `(source_system,
+  field_name, field_value, global_priority)` group mutates the tracked
+  row in place instead of inserting a new one.
+- `edgar_warehouse/mdm/attribute_stage_backfill.py` (new module, mirrors
+  `relationship_quarantine_backfill.py`'s dry-run/batch/commit shape): a
+  one-time CLI (`mdm collapse-attribute-stage-history --dry-run`) that
+  applies the same collapse retroactively to already-accumulated groups.
+
+**A pre-code `/gof-refactor-reviewer` pass caught a real design flaw
+before it shipped:** the original plan was a per-call representative
+lookup, but `_skip_if_unchanged` already filters out genuinely-reprocessed
+rows, so almost every real call reaching `stage_candidate` carries a
+brand-new `source_id` -- meaning the exact-match lookup returns `None`
+almost every time, and a second per-call lookup would double Postgres
+round trips on the *dominant* path, not just the rare heavily-refiled one.
+User chose a batch/group-scoped cache over "ship it, measure live." The
+final implementation is a lazy, per-group (not eager whole-batch) cache --
+`ResolverContext.staged_representatives`, freshly created empty by
+`_run_grouped_concurrent` per group, since a group's rows share one
+session and process strictly sequentially (safe to hold a live ORM object
+across calls, unlike the read-only, cross-thread-shared
+`prefetched_source_refs`). Proven live to cost zero extra SQL on a cache
+hit within a commit interval, and exactly one reload SELECT (not more)
+across a Ticket-04 periodic commit boundary (SQLAlchemy's
+`expire_on_commit=True`) -- both directly tested, not assumed.
+
+**The mandatory post-diff 3-axis `/code-review` (not just the pre-code
+consult) caught two further real bugs the design review missed:**
+
+1. **Wrong retention rule.** The original design used one lexicographic
+   sort ("max effective_date, then max loaded_at as tiebreak") on the
+   theory that `_pick_by_rule`'s 4 rule types share one sort key. They
+   don't: only `most_recent` looks at `effective_date` at all --
+   `immutable`/`highest_source_rank`/`source_priority` sort purely on
+   `(priority, loaded_at)` and never touch it. The lexicographic sort
+   could silently discard the group's true max-`loaded_at` row (what
+   those 3 rule types need) in favor of one with a higher `effective_date`
+   but staler `loaded_at` -- flipping the winner for those rule types.
+   Fixed in both the write-time cache-miss DB fallback and the backfill:
+   retain the most-recently-loaded row, then top up its `effective_date`
+   to the group's true max (which may have lived on a different,
+   now-collapsed row) -- correct for all 4 rule types on one row, mirrors
+   exactly what the write-time incremental fold already does correctly
+   (forward-advance `effective_date`, always refresh `loaded_at`).
+2. **Stale cache entry on value-changing restage.** The exact-source_id
+   restage branch (a literal reprocessing of the same transaction, e.g.
+   under `reconciliation_pass`) can change a row's `field_value` without
+   telling the cache -- a later brand-new `source_id` confirming the row's
+   *old* value would then wrongly reuse (and corrupt) a row that no
+   longer represents it. Fixed by popping the stale cache entry when the
+   restage branch detects its own key no longer matches the row's new
+   value.
+
+Both bugs were reproduced with real regression tests before being fixed
+(`test_cache_miss_db_fallback_preserves_both_maxima_from_different_legacy_rows`,
+`test_max_effective_date_and_max_loaded_at_on_different_rows_both_preserved`,
+`test_restage_with_changed_value_does_not_leave_a_stale_cache_entry`).
+
+29 new tests across `tests/mdm/test_survivorship_representative_collapse.py`
+(11) and `tests/mdm/test_attribute_stage_backfill.py` (12), plus the
+pre-existing `test_survivorship_stage_upsert.py` (5, unchanged, still
+green). Full repo suite: 3250 passed, 7 skipped, only the 8 pre-existing,
+already-documented unrelated `tests/integration/
+test_acquisition_ledger_postgres.py`/`test_conflict_postgres.py` failures.
+
+**Not yet deployed or backfilled against real prod** as of this entry --
+implemented and reviewed, no image rebuild or live run has happened for
+this fix yet.
 
 ## Not yet specified / open follow-up
 

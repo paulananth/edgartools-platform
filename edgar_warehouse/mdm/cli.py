@@ -356,6 +356,37 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         )
     )
 
+    collapse_attr_stage = mdm_sub.add_parser(
+        "collapse-attribute-stage-history",
+        help=(
+            "One-time backfill: collapse already-accumulated "
+            "mdm_entity_attribute_stage rows now that stage_candidate()'s "
+            "write-time guard (mdm-run-throughput Ticket 05) stops new "
+            "accumulation for grouped resolvers. For each "
+            "(entity_id, source_system, field_name, field_value, "
+            "global_priority) group with more than one row, keeps the "
+            "most-recently-loaded row (needed by 3 of survivorship's 4 rule "
+            "types) and tops up its effective_date to the group's true max "
+            "(needed by the 4th) before deleting the rest -- provably safe, "
+            "since survivorship's winner-selection never needs anything "
+            "else from that group. Groups whose rows genuinely differ in "
+            "value (real correction/restatement history) are never touched."
+        ),
+    )
+    collapse_attr_stage.add_argument(
+        "--batch-size", type=int, default=500,
+        help="Entity_ids to process per commit batch (ignored in --dry-run)",
+    )
+    collapse_attr_stage.add_argument(
+        "--dry-run", action="store_true", default=False,
+        help="Report what would change without mutating anything",
+    )
+    collapse_attr_stage.set_defaults(
+        handler=_logged_handler(
+            "collapse-attribute-stage-history", _handle_collapse_attribute_stage_history
+        )
+    )
+
     api = mdm_sub.add_parser("api", help="Run the MDM FastAPI service with uvicorn")
     api.add_argument("--host", default="0.0.0.0")
     api.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
@@ -2107,6 +2138,27 @@ def _handle_backfill_quarantined_relationships(args) -> int:
         "skipped_ambiguous_order": summary.skipped_ambiguous_order,
         "skipped_ambiguous_date": summary.skipped_ambiguous_date,
         "skipped_multiple_conflicts": summary.skipped_multiple_conflicts,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_collapse_attribute_stage_history(args) -> int:
+    from edgar_warehouse.mdm.attribute_stage_backfill import run_backfill
+
+    session = _session()
+    try:
+        summary = run_backfill(
+            session,
+            batch_size=args.batch_size,
+            dry_run=args.dry_run,
+        )
+    finally:
+        session.close()
+    print(json.dumps({
+        "dry_run": args.dry_run,
+        "entities_examined": summary.entities_examined,
+        "groups_collapsed": summary.groups_collapsed,
+        "rows_deleted": summary.rows_deleted,
     }, indent=2, sort_keys=True))
     return 0
 

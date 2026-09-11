@@ -1124,6 +1124,16 @@ class MDMPipeline:
                     silver=silver,
                     run_id=pipeline_run_id,
                     prefetched_source_refs=prefetched_source_refs,
+                    # mdm-run-throughput Ticket 05: fresh, empty per group --
+                    # this group's rows share this one session and process
+                    # strictly sequentially, so a live ORM row can be cached
+                    # and reused across calls within the group with zero
+                    # cross-thread risk. See stage_candidate()'s own docstring.
+                    # Deliberately NOT set on run_companies' per-row _resolve_row
+                    # (above) -- there, every row gets its own fresh worker
+                    # session, so a per-row cache would never hit and only adds
+                    # overhead; the grouped shape here is what makes caching pay off.
+                    staged_representatives={},
                 )
                 # mdm-run-throughput Ticket 04: commit every commit_interval
                 # rows within the group, not only once at the very end. A
