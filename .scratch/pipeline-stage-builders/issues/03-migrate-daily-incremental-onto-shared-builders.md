@@ -1,5 +1,5 @@
 Type: task
-Status: open
+Status: ready-for-agent
 
 ## Task
 

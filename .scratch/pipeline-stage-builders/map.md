@@ -41,7 +41,7 @@ merging.
 
 ## Decisions so far
 
-(none yet — map just created)
+- [Build pipeline_stage_helpers.py: the two shared factory functions, proven in isolation](issues/01-build-pipeline-stage-helpers-module.md) — built and merged into this branch; both functions verified byte-identical against real production shapes; two real findings (MaxAttempts/ResultPath drift; unused import + duplicated post-processing) caught by review and fixed. Tickets 02/03 unblocked.
 
 ## Not yet specified
 
