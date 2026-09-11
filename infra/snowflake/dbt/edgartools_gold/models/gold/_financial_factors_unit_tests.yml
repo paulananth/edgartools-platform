@@ -57,7 +57,10 @@ unit_tests:
             property_plant_equipment_net: 120
             shares_outstanding: 900
             gross_profit: 90
+            ebitda: 36
             ebit: 30
+            eps_diluted: 2.0
+            ebitda_margin: 0.24
             roic: 0.15
     expect:
       rows:
@@ -67,10 +70,16 @@ unit_tests:
           working_capital: 50
           asset_growth_yoy: null
           shares_outstanding_yoy_change: null
+          ebitda: null
+          eps_diluted: null
+          ebitda_margin: null
         - cik: 1
           accession_number: "0002"
           fiscal_year: 2024
           working_capital: 60
+          ebitda: 36
+          eps_diluted: 2.0
+          ebitda_margin: 0.24
           working_capital_to_assets: 0.2
           current_ratio: 3.0
           quick_ratio: 2.0

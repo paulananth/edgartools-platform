@@ -244,6 +244,26 @@ class IssuerSubjectBundleTests(unittest.TestCase):
         self.assertIsNone(feat["fy_features"]["net_income"])
         self.assertEqual(feat["fy_features"]["revenue"], 100.0)
 
+    def test_subject_features_bind_gold_return_on_equity_as_roe(self) -> None:
+        bundle = build_issuer_subject_bundle(
+            subject_cik=1,
+            watermark_components=_wm(),
+            period_rows=[
+                {
+                    "cik": 1,
+                    "fiscal_period": "FY",
+                    "period_end": "2023-12-31",
+                    "return_on_equity": 0.18,
+                    "return_on_assets": 0.07,
+                }
+            ],
+        )
+        feat = bundle["sections"][SECTION_SUBJECT_FEATURES]
+        self.assertEqual(feat["fy_features_coverage"], COVERAGE_PRESENT)
+        self.assertEqual(feat["fy_features"]["roe"], 0.18)
+        self.assertEqual(feat["fy_features"]["roa"], 0.07)
+        self.assertNotIn("return_on_equity", feat["fy_features"])
+
     def test_fail_closed_watermark(self) -> None:
         bundle = build_issuer_subject_bundle(
             subject_cik=1,

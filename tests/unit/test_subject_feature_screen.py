@@ -193,6 +193,49 @@ class SubjectFeatureScreenTests(unittest.TestCase):
         )
         self.assertEqual(screen["rows"][0]["fy_features_coverage"], COVERAGE_EMPTY)
 
+    def test_gold_financial_factors_column_names_bind_to_contract_keys(self) -> None:
+        """Live gold uses return_on_equity / return_on_assets, not roe / roa."""
+        screen = build_subject_feature_screen(
+            warehouse_active_ciks=[1],
+            mdm_active_ciks=[1],
+            period_rows=[
+                _period(
+                    1,
+                    "FY",
+                    "2023-12-31",
+                    return_on_equity=0.18,
+                    return_on_assets=0.07,
+                    ebitda=40.0,
+                    eps_diluted=1.25,
+                    ebitda_margin=0.32,
+                    operating_margin=0.22,
+                )
+            ],
+            watermark_components=_wm(),
+        )
+        features = screen["rows"][0]["fy_features"]
+        self.assertEqual(screen["rows"][0]["fy_features_coverage"], COVERAGE_PRESENT)
+        self.assertEqual(features["roe"], 0.18)
+        self.assertEqual(features["roa"], 0.07)
+        self.assertEqual(features["ebitda"], 40.0)
+        self.assertEqual(features["eps_diluted"], 1.25)
+        self.assertEqual(features["ebitda_margin"], 0.32)
+        self.assertNotIn("operating_margin", features)
+        self.assertNotIn("return_on_equity", features)
+        self.assertIsNone(features["revenue"])
+
+    def test_gold_operating_margin_does_not_fill_ebitda_margin_or_coverage(self) -> None:
+        screen = build_subject_feature_screen(
+            warehouse_active_ciks=[1],
+            mdm_active_ciks=[1],
+            period_rows=[_period(1, "FY", "2023-12-31", operating_margin=0.22)],
+            watermark_components=_wm(),
+        )
+        row = screen["rows"][0]
+        self.assertEqual(row["fy_features_coverage"], COVERAGE_EMPTY)
+        self.assertIsNone(row["fy_features"]["ebitda_margin"])
+        self.assertNotIn("operating_margin", row["fy_features"])
+
 
 if __name__ == "__main__":
     unittest.main()

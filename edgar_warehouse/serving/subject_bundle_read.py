@@ -23,6 +23,7 @@ from edgar_warehouse.serving.subject_feature_screen import (
     COVERAGE_PRESENT,
     COVERAGE_UNAVAILABLE,
     PURE_SEC_FEATURE_KEYS,
+    pure_sec_feature_vector,
     select_as_of_feature_periods,
 )
 
@@ -365,7 +366,7 @@ def _build_subject_features_section(
     def _vec(period: Mapping[str, Any] | None) -> dict[str, Any]:
         if period is None:
             return {k: None for k in PURE_SEC_FEATURE_KEYS}
-        return {k: period.get(k) for k in PURE_SEC_FEATURE_KEYS}
+        return pure_sec_feature_vector(period)
 
     def _cov(period: Mapping[str, Any] | None, *, interim_section: bool) -> str:
         if period is None:
