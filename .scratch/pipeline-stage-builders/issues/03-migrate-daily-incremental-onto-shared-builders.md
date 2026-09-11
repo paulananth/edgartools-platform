@@ -1,5 +1,5 @@
 Type: task
-Status: ready-for-agent
+Status: done
 
 ## Task
 
@@ -35,3 +35,25 @@ is proven by Ticket 02 against `load_history` only.
 Independent of [Ticket 02](02-migrate-load-history-onto-shared-builders.md)
 — different file, different test file — can run in parallel with it once
 Ticket 01 is done.
+
+## Answer
+
+Migrated (commit `74c2ac44`). All 5 acceptance criteria met. Verified
+byte-identical against `main`'s pre-migration output for both trios (direct
+JSON comparison) — the only difference anywhere is the same
+`FirmRosterForceCheck` Comment normalization Ticket 02 already applied to
+`load_history`'s copy. The stale "kept in sync ... manually" comment was
+updated, not left misleading, to reflect that both copies now share the
+same function. 3 new regression tests added to
+`tests/architecture/test_daily_incremental_state_machine.py` (30 total in
+that file, all passing). A `/gof-refactor-reviewer` pass on the planned
+wiring-in change confirmed no orphaned references. The full 3-axis
+`/code-review` against Ticket 02's closing commit found zero blocking
+findings on all three axes (GoF explicitly reported zero rather than
+manufacturing any). Full architecture + unit suite green (602 passed, 2
+pre-existing skips) before commit.
+
+This closes the pipeline-stage-builders map — all 3 tickets done, both
+hand-copied duplication axes (windowed fundamentals-mode stage,
+force-capable fetch trio) are now fully collapsed onto the two shared
+functions across both pipelines.

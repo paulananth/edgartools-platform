@@ -1,6 +1,6 @@
 wayfinder:map
 
-## Destination
+## Destination — REACHED
 
 All existing hand-copied Step Functions duplication across `load_history` and
 `daily_incremental` — the windowed fundamentals-mode stage (3 instances) and
@@ -9,6 +9,9 @@ unit-tested factory functions in a new `infra/scripts/pipeline_stage_helpers.py`
 module, with byte-identical-output regression proof for every migrated call
 site. Reaching the end of this map means the spec is fully implemented,
 reviewed, and merged — not just designed.
+
+All 3 tickets done on branch `claude/pipeline-stage-builders-impl`, not yet
+merged to `main`. Ready for PR.
 
 ## Notes
 
@@ -43,6 +46,7 @@ merging.
 
 - [Build pipeline_stage_helpers.py: the two shared factory functions, proven in isolation](issues/01-build-pipeline-stage-helpers-module.md) — built and merged into this branch; both functions verified byte-identical against real production shapes; two real findings (MaxAttempts/ResultPath drift; unused import + duplicated post-processing) caught by review and fixed. Tickets 02/03 unblocked.
 - [Migrate load_history onto shared builders](issues/02-migrate-load-history-onto-shared-builders.md) — all 5 hand-copied blocks migrated, byte-identical to pre-migration output (one deliberate Comment normalization), 7 new regression tests, 3-axis code review clean.
+- [Migrate daily_incremental onto shared builders](issues/03-migrate-daily-incremental-onto-shared-builders.md) — both hand-copied fetch trios migrated, byte-identical (same Comment normalization), stale "kept in sync manually" comment corrected, 3 new regression tests, 3-axis code review clean (0 findings). Map complete.
 
 ## Not yet specified
 
