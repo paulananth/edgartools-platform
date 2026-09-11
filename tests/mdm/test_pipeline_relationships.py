@@ -1165,6 +1165,91 @@ class TestRunRelationships:
         assert fy2023.valid_to_date is None
         assert fy2023.is_active is True
 
+    def test_audited_by_late_restatement_does_not_close_newer_version_with_stale_date(
+        self, session, fixture_world
+    ):
+        """mdm-relationship-versioning-gap Ticket 11: _derive_audited_by's
+        inline closer had no confirmed_chronologically_after guard (unlike
+        the shared _deactivate_if_properties_changed helper IS_INSIDER/
+        EMPLOYED_BY use for the same concept).
+
+        Reproduces via SQL ordering (registrant_cik, audited_period_end,
+        report_date, accession_number): a late-filed FY2022 restatement
+        (report_date far in the future, since it corrects the auditor long
+        after the original filing) sorts BEFORE the FY2023 row in the same
+        batch, because audited_period_end is the primary sort key. Before
+        the fix, FY2023's processing (auditor_changed=True vs the
+        restatement's auditor) closes the still-open, chronologically NEWER
+        restated FY2022 version using FY2023's OLDER report_date --
+        violating valid_to_date > valid_from_date and raising IntegrityError
+        on flush. After the fix, the guard leaves the restated version open
+        instead of corrupting/crashing on it.
+        """
+        pwc_entity_id = _add_entity(session, "audit_firm")
+        session.add(MdmAuditFirm(
+            entity_id=pwc_entity_id,
+            firm_name="PricewaterhouseCoopers LLP",
+            canonical_name="PricewaterhouseCoopers LLP",
+            pcaob_firm_id="E2",
+            big4=True,
+        ))
+        session.commit()
+
+        silver = StubSilver({
+            "sec_auditor_report_evidence": [
+                # FY2022 original: Deloitte (E1), filed early.
+                {
+                    "cik": 910001, "accession_number": "fy22-orig",
+                    "fiscal_year": 2022, "period_end": date(2022, 12, 31),
+                    "report_date": date(2023, 1, 15),
+                    "auditor_pcaob_id": "E1", "auditor_name": "Deloitte LLP",
+                    "evidence_source": "sec_ixbrl", "evidence_fingerprint": "fp-orig",
+                    "form_ap_filing_id": "ap-1",
+                },
+                # FY2022 late restatement: SAME fiscal period (sorts before
+                # FY2023 despite a much later report_date), corrects the
+                # auditor to PwC (E2).
+                {
+                    "cik": 910001, "accession_number": "fy22-restated",
+                    "fiscal_year": 2022, "period_end": date(2022, 12, 31),
+                    "report_date": date(2024, 6, 1),
+                    "auditor_pcaob_id": "E2", "auditor_name": "PricewaterhouseCoopers LLP",
+                    "evidence_source": "sec_ixbrl", "evidence_fingerprint": "fp-restated",
+                    "form_ap_filing_id": "ap-2",
+                },
+                # FY2023: back to Deloitte, filed BEFORE the FY2022
+                # restatement's own report_date -- the stale-date hazard.
+                {
+                    "cik": 910001, "accession_number": "fy23-orig",
+                    "fiscal_year": 2023, "period_end": date(2023, 12, 31),
+                    "report_date": date(2024, 1, 15),
+                    "auditor_pcaob_id": "E1", "auditor_name": "Deloitte LLP",
+                    "evidence_source": "sec_ixbrl", "evidence_fingerprint": "fp-fy23",
+                    "form_ap_filing_id": "ap-3",
+                },
+            ],
+        })
+        pipe = MDMPipeline(session=session, silver=silver)
+        summary = pipe.derive_relationships(relationship_types=["AUDITED_BY"])
+        assert summary["AUDITED_BY"]["inserted"] == 3
+
+        instances = session.scalars(
+            select(MdmRelationshipInstance).where(
+                MdmRelationshipInstance.target_entity_id.in_(
+                    [fixture_world["audit_firm_entity_id"], pwc_entity_id]
+                )
+            )
+        ).all()
+        restated_fy2022 = next(
+            i for i in instances if i.properties.get("evidence_fingerprint") == "fp-restated"
+        )
+        # The restated FY2022 version (valid_from_date 2024-06-01) must not
+        # be closed by FY2023's own, chronologically EARLIER report_date
+        # (2024-01-15) -- that would both corrupt the data (a version
+        # "closed" before it opened) and violate the DB's own
+        # ck_rel_instance_valid_interval check constraint.
+        assert restated_fy2022.valid_to_date is None
+
     def test_optional_fundamentals_source_table_missing_audited_by(self, session):
         """AUDITED_BY: missing sec_accounting_flag → 0 rows, no exception. (06-02)"""
         silver = MissingTableSilver("sec_accounting_flag")

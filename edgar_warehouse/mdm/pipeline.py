@@ -169,12 +169,12 @@ KNOWN_RELATIONSHIP_CLOSING_PATTERNS = frozenset({
 })
 
 # Every RELATIONSHIP_TYPES member classified against one pattern above.
-# This registry documents intended pattern, not a guarantee the current
-# implementation is bug-free -- AUDITED_BY is registered as
-# property_differs_from_prior despite its own inline closer (in
-# _derive_audited_by) still missing the confirmed_chronologically_after
-# guard IS_INSIDER/EMPLOYED_BY already have; see
-# mdm-relationship-versioning-gap Ticket 11.
+# This registry documents intended pattern, not a guarantee every
+# implementation was bug-free at the time of classification -- AUDITED_BY
+# was registered as property_differs_from_prior while its own inline
+# closer (in _derive_audited_by) was still missing the
+# confirmed_chronologically_after guard IS_INSIDER/EMPLOYED_BY already
+# had; fixed in mdm-relationship-versioning-gap Ticket 11.
 RELATIONSHIP_CLOSING_PATTERNS: dict[str, str] = {
     "IS_INSIDER":           "property_differs_from_prior",
     "HOLDS":                "value_signals_disposal",
@@ -4122,7 +4122,10 @@ class MDMPipeline:
                     MdmRelationshipInstance,
                     MdmRelationshipType,
                 )
-                from edgar_warehouse.mdm.graph import close_relationship_version
+                from edgar_warehouse.mdm.graph import (
+                    close_relationship_version,
+                    confirmed_chronologically_after,
+                )
 
                 prior_versions = self.session.scalars(
                     select(MdmRelationshipInstance)
@@ -4136,6 +4139,24 @@ class MDMPipeline:
                     .where(MdmRelationshipInstance.valid_to_date.is_(None))
                 ).all()
                 for prior_version in prior_versions:
+                    # mdm-relationship-versioning-gap Ticket 11: a late-filed
+                    # restatement or a full-history resync/reconciliation
+                    # pass can revisit an OLDER row after a newer,
+                    # chronologically-later AUDITED_BY version is already
+                    # open (e.g. a restated fiscal year filed long after a
+                    # later fiscal year's original filing, which then sorts
+                    # ahead of it by audited_period_end). Without this
+                    # guard, reprocessing that older row would close the
+                    # newer version using a stale effective_from date --
+                    # confirmed live to raise IntegrityError against
+                    # ck_rel_instance_valid_interval. Mirrors
+                    # _deactivate_if_properties_changed's identical guard
+                    # (IS_INSIDER/EMPLOYED_BY): a skipped candidate is left
+                    # exactly as-is rather than force-closed.
+                    if not confirmed_chronologically_after(
+                        effective_from, prior_version.valid_from_date
+                    ):
+                        continue
                     close_relationship_version(
                         self.session, prior_version.instance_id, effective_from
                     )
