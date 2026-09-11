@@ -105,7 +105,7 @@ TMP_DIR="${REPO_ROOT}/.tmp"
 # credential-isolation Ticket 1/2 -- rather than reimplemented here: this
 # script previously read the password out of config.toml's own [connections]
 # table directly, a layout no real SnowCLI config anywhere in this repo
-# (including CI's own smoke-test.yml) actually produces, so that lookup
+# (including the now-retired CI smoke-test workflow) actually produced, so that lookup
 # always silently resolved empty against a real operator setup. The shared
 # resolver reads ~/.snowflake/connections.toml, the layout SnowCLI actually
 # uses, and is the same chain `mdm publish`/`mdm publish-relationships` already trust.
