@@ -1,0 +1,134 @@
+SELECT 'gold_factors' AS layer, COUNT(*) AS row_count, COUNT(DISTINCT CIK) AS ciks
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS
+UNION ALL
+SELECT 'gold_derived', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_DERIVED
+UNION ALL
+SELECT 'gold_facts', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTS
+UNION ALL
+SELECT 'silver_derived', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_FINANCIAL_DERIVED
+UNION ALL
+SELECT 'silver_facts', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_FINANCIAL_FACT
+UNION ALL
+SELECT 'landing_derived', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER_LANDING.SEC_FINANCIAL_DERIVED
+UNION ALL
+SELECT 'landing_facts', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER_LANDING.SEC_FINANCIAL_FACT
+UNION ALL
+SELECT 'gold_company', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY
+UNION ALL
+SELECT 'mdm_active', COUNT(*), COUNT(DISTINCT CIK)
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.MDM_COMPANY_ENTITY
+WHERE LOWER(COALESCE(TRACKING_STATUS, '')) = 'active';
++-------------------------------------+
+| LAYER           | ROW_COUNT | CIKS  |
+|-----------------+-----------+-------|
+| gold_factors    | 5056      | 21    |
+| gold_derived    | 5056      | 21    |
+| gold_facts      | 434805    | 21    |
+| silver_derived  | 5056      | 21    |
+| silver_facts    | 434805    | 21    |
+| landing_derived | 5056      | 21    |
+| landing_facts   | 434805    | 21    |
+| gold_company    | 73691     | 73691 |
+| mdm_active      | 63197     | 63197 |
++-------------------------------------+
+
+SELECT CIK, COUNT(*) AS factor_rows
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS
+GROUP BY CIK
+ORDER BY CIK;
++-----------------------+
+| CIK     | FACTOR_ROWS |
+|---------+-------------|
+| 1800    | 273         |
+| 8818    | 252         |
+| 10329   | 244         |
+| 14177   | 168         |
+| 15615   | 243         |
+| 16160   | 231         |
+| 22701   | 211         |
+| 23194   | 279         |
+| 25895   | 167         |
+| 27093   | 225         |
+| 27996   | 267         |
+| 60519   | 246         |
+| 75288   | 228         |
+| 77543   | 234         |
+| 82020   | 281         |
+| 277638  | 249         |
+| 320193  | 282         |
+| 764180  | 273         |
+| 875355  | 271         |
+| 1064728 | 260         |
+| 1603978 | 172         |
++-----------------------+
+
+SELECT f.CIK, c.ENTITY_NAME
+FROM (
+    SELECT DISTINCT CIK FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS
+) f
+LEFT JOIN EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY c
+  ON LPAD(c.CIK::STRING, 10, '0') = LPAD(f.CIK::STRING, 10, '0')
+ORDER BY f.CIK;
++---------------------------------------------+
+| CIK     | ENTITY_NAME                       |
+|---------+-----------------------------------|
+| 1800    | ABBOTT LABORATORIES               |
+| 8818    | Avery Dennison Corp               |
+| 10329   | BASSETT FURNITURE INDUSTRIES INC  |
+| 14177   | BRIDGFORD FOODS CORP              |
+| 15615   | MASTEC INC                        |
+| 16160   | CAL-MAINE FOODS INC               |
+| 22701   | SUNation Energy, Inc.             |
+| 23194   | COMSTOCK RESOURCES INC            |
+| 25895   | CROWN CRAFTS INC                  |
+| 27093   | U.S. GOLD CORP.                   |
+| 27996   | DELUXE CORP                       |
+| 60519   | LOUISIANA-PACIFIC CORP            |
+| 75288   | OXFORD INDUSTRIES INC             |
+| 77543   | TUTOR PERINI CORP                 |
+| 82020   | UNITED STATES LIME & MINERALS INC |
+| 277638  | DAVEY TREE EXPERT CO              |
+| 320193  | Apple Inc.                        |
+| 764180  | ALTRIA GROUP, INC.                |
+| 875355  | BLOOMIA HOLDINGS, INC.            |
+| 1064728 | PEABODY ENERGY CORP               |
+| 1603978 | AQUABOUNTY TECHNOLOGIES INC       |
++---------------------------------------------+
+
+SELECT
+    COUNT(DISTINCT f.CIK) AS fact_ciks_not_in_derived
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTS f
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_DERIVED d
+    WHERE LPAD(d.CIK::STRING, 10, '0') = LPAD(f.CIK::STRING, 10, '0')
+);
++--------------------------+
+| FACT_CIKS_NOT_IN_DERIVED |
+|--------------------------|
+| 0                        |
++--------------------------+
+
+SELECT MIN(INGESTED_AT) AS min_ingested, MAX(INGESTED_AT) AS max_ingested
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_DERIVED;
++---------------------------------------------------------------------+
+| MIN_INGESTED                     | MAX_INGESTED                     |
+|----------------------------------+----------------------------------|
+| 2026-07-29 20:49:59.325025-07:00 | 2026-08-04 16:25:53.912931-07:00 |
++---------------------------------------------------------------------+
+
+SELECT MIN(INGESTED_AT) AS min_ingested, MAX(INGESTED_AT) AS max_ingested
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTS;
++---------------------------------------------------------------------+
+| MIN_INGESTED                     | MAX_INGESTED                     |
+|----------------------------------+----------------------------------|
+| 2026-07-29 20:49:58.912343-07:00 | 2026-08-04 16:25:41.858740-07:00 |
++---------------------------------------------------------------------+
+

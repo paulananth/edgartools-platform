@@ -1,0 +1,741 @@
+SELECT 'factors_cols' AS probe, ORDINAL_POSITION, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_CATALOG = 'EDGARTOOLS_PROD'
+  AND TABLE_SCHEMA = 'EDGARTOOLS_GOLD'
+  AND TABLE_NAME = 'FINANCIAL_FACTORS'
+ORDER BY ORDINAL_POSITION;
++------------------------------------------------------------------------------+
+|              | ORDINAL_POSITI |                 |              |             |
+| PROBE        | ON             | COLUMN_NAME     | DATA_TYPE    | IS_NULLABLE |
+|--------------+----------------+-----------------+--------------+-------------|
+| factors_cols | 1              | CIK             | NUMBER       | NO          |
+| factors_cols | 2              | ACCESSION_NUMBE | TEXT         | NO          |
+|              |                | R               |              |             |
+| factors_cols | 3              | FISCAL_YEAR     | NUMBER       | NO          |
+| factors_cols | 4              | FISCAL_PERIOD   | TEXT         | NO          |
+| factors_cols | 5              | PERIOD_END      | DATE         | NO          |
+| factors_cols | 6              | FORM_TYPE       | TEXT         | NO          |
+| factors_cols | 7              | IS_CURRENT_PERI | BOOLEAN      | YES         |
+|              |                | OD              |              |             |
+| factors_cols | 8              | REVENUE         | FLOAT        | YES         |
+| factors_cols | 9              | TOTAL_ASSETS    | FLOAT        | YES         |
+| factors_cols | 10             | TOTAL_LIABILITI | FLOAT        | YES         |
+|              |                | ES              |              |             |
+| factors_cols | 11             | TOTAL_EQUITY    | FLOAT        | YES         |
+| factors_cols | 12             | CASH_AND_EQUIVA | FLOAT        | YES         |
+|              |                | LENTS           |              |             |
+| factors_cols | 13             | TOTAL_DEBT      | FLOAT        | YES         |
+| factors_cols | 14             | OPERATING_CASH_ | FLOAT        | YES         |
+|              |                | FLOW            |              |             |
+| factors_cols | 15             | FREE_CASH_FLOW  | FLOAT        | YES         |
+| factors_cols | 16             | NET_INCOME      | FLOAT        | YES         |
+| factors_cols | 17             | CURRENT_ASSETS  | FLOAT        | YES         |
+| factors_cols | 18             | CURRENT_LIABILI | FLOAT        | YES         |
+|              |                | TIES            |              |             |
+| factors_cols | 19             | ACCOUNTS_RECEIV | FLOAT        | YES         |
+|              |                | ABLE            |              |             |
+| factors_cols | 20             | INVENTORY       | FLOAT        | YES         |
+| factors_cols | 21             | SELLING_GENERAL | FLOAT        | YES         |
+|              |                | _ADMIN_EXPENSE  |              |             |
+| factors_cols | 22             | RETAINED_EARNIN | FLOAT        | YES         |
+|              |                | GS              |              |             |
+| factors_cols | 23             | DEPRECIATION_AM | FLOAT        | YES         |
+|              |                | ORTIZATION      |              |             |
+| factors_cols | 24             | PROPERTY_PLANT_ | FLOAT        | YES         |
+|              |                | EQUIPMENT_NET   |              |             |
+| factors_cols | 25             | SHARES_OUTSTAND | FLOAT        | YES         |
+|              |                | ING             |              |             |
+| factors_cols | 26             | GROSS_PROFIT    | FLOAT        | YES         |
+| factors_cols | 27             | EBIT            | FLOAT        | YES         |
+| factors_cols | 28             | WORKING_CAPITAL | FLOAT        | YES         |
+| factors_cols | 29             | WORKING_CAPITAL | FLOAT        | YES         |
+|              |                | _TO_ASSETS      |              |             |
+| factors_cols | 30             | CURRENT_RATIO   | FLOAT        | YES         |
+| factors_cols | 31             | QUICK_RATIO     | FLOAT        | YES         |
+| factors_cols | 32             | RECEIVABLES_TO_ | FLOAT        | YES         |
+|              |                | REVENUE         |              |             |
+| factors_cols | 33             | INVENTORY_TO_AS | FLOAT        | YES         |
+|              |                | SETS            |              |             |
+| factors_cols | 34             | SGA_TO_REVENUE  | FLOAT        | YES         |
+| factors_cols | 35             | RETAINED_EARNIN | FLOAT        | YES         |
+|              |                | GS_TO_ASSETS    |              |             |
+| factors_cols | 36             | ASSET_TURNOVER  | FLOAT        | YES         |
+| factors_cols | 37             | DEBT_TO_ASSETS  | FLOAT        | YES         |
+| factors_cols | 38             | CASH_TO_ASSETS  | FLOAT        | YES         |
+| factors_cols | 39             | FREE_CASH_FLOW_ | FLOAT        | YES         |
+|              |                | TO_REVENUE      |              |             |
+| factors_cols | 40             | ACCRUALS_TO_ASS | FLOAT        | YES         |
+|              |                | ETS             |              |             |
+| factors_cols | 41             | ASSET_GROWTH_YO | FLOAT        | YES         |
+|              |                | Y               |              |             |
+| factors_cols | 42             | SHARES_OUTSTAND | FLOAT        | YES         |
+|              |                | ING_YOY_CHANGE  |              |             |
+| factors_cols | 43             | GROSS_MARGIN    | FLOAT        | YES         |
+| factors_cols | 44             | OPERATING_MARGI | FLOAT        | YES         |
+|              |                | N               |              |             |
+| factors_cols | 45             | NET_MARGIN      | FLOAT        | YES         |
+| factors_cols | 46             | RETURN_ON_EQUIT | FLOAT        | YES         |
+|              |                | Y               |              |             |
+| factors_cols | 47             | RETURN_ON_ASSET | FLOAT        | YES         |
+|              |                | S               |              |             |
+| factors_cols | 48             | ROIC            | FLOAT        | YES         |
+| factors_cols | 49             | REVENUE_CAGR_3Y | FLOAT        | YES         |
+| factors_cols | 50             | NET_INCOME_CAGR | FLOAT        | YES         |
+|              |                | _3Y             |              |             |
+| factors_cols | 51             | TOTAL_ASSETS_CA | FLOAT        | YES         |
+|              |                | GR_3Y           |              |             |
+| factors_cols | 52             | REVENUE_CAGR_5Y | FLOAT        | YES         |
+| factors_cols | 53             | NET_INCOME_CAGR | FLOAT        | YES         |
+|              |                | _5Y             |              |             |
+| factors_cols | 54             | TOTAL_ASSETS_CA | FLOAT        | YES         |
+|              |                | GR_5Y           |              |             |
+| factors_cols | 55             | PARSER_VERSION  | TEXT         | YES         |
+| factors_cols | 56             | INGESTED_AT     | TIMESTAMP_TZ | YES         |
++------------------------------------------------------------------------------+
+
+SELECT 'derived_cols' AS probe, ORDINAL_POSITION, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_CATALOG = 'EDGARTOOLS_PROD'
+  AND TABLE_SCHEMA = 'EDGARTOOLS_GOLD'
+  AND TABLE_NAME = 'FINANCIAL_DERIVED'
+ORDER BY ORDINAL_POSITION;
++------------------------------------------------------------------------------+
+|              | ORDINAL_POSITI |                 |              |             |
+| PROBE        | ON             | COLUMN_NAME     | DATA_TYPE    | IS_NULLABLE |
+|--------------+----------------+-----------------+--------------+-------------|
+| derived_cols | 1              | CIK             | NUMBER       | NO          |
+| derived_cols | 2              | ACCESSION_NUMBE | TEXT         | NO          |
+|              |                | R               |              |             |
+| derived_cols | 3              | FISCAL_YEAR     | NUMBER       | NO          |
+| derived_cols | 4              | FISCAL_PERIOD   | TEXT         | NO          |
+| derived_cols | 5              | PERIOD_END      | DATE         | NO          |
+| derived_cols | 6              | FORM_TYPE       | TEXT         | NO          |
+| derived_cols | 7              | REVENUE         | FLOAT        | YES         |
+| derived_cols | 8              | GROSS_PROFIT    | FLOAT        | YES         |
+| derived_cols | 9              | EBITDA          | FLOAT        | YES         |
+| derived_cols | 10             | EBIT            | FLOAT        | YES         |
+| derived_cols | 11             | NET_INCOME      | FLOAT        | YES         |
+| derived_cols | 12             | EPS_DILUTED     | FLOAT        | YES         |
+| derived_cols | 13             | TOTAL_ASSETS    | FLOAT        | YES         |
+| derived_cols | 14             | TOTAL_LIABILITI | FLOAT        | YES         |
+|              |                | ES              |              |             |
+| derived_cols | 15             | TOTAL_EQUITY    | FLOAT        | YES         |
+| derived_cols | 16             | CASH_AND_EQUIVA | FLOAT        | YES         |
+|              |                | LENTS           |              |             |
+| derived_cols | 17             | TOTAL_DEBT      | FLOAT        | YES         |
+| derived_cols | 18             | CURRENT_ASSETS  | FLOAT        | YES         |
+| derived_cols | 19             | CURRENT_LIABILI | FLOAT        | YES         |
+|              |                | TIES            |              |             |
+| derived_cols | 20             | ACCOUNTS_RECEIV | FLOAT        | YES         |
+|              |                | ABLE            |              |             |
+| derived_cols | 21             | INVENTORY       | FLOAT        | YES         |
+| derived_cols | 22             | SELLING_GENERAL | FLOAT        | YES         |
+|              |                | _ADMIN_EXPENSE  |              |             |
+| derived_cols | 23             | RETAINED_EARNIN | FLOAT        | YES         |
+|              |                | GS              |              |             |
+| derived_cols | 24             | DEPRECIATION_AM | FLOAT        | YES         |
+|              |                | ORTIZATION      |              |             |
+| derived_cols | 25             | PROPERTY_PLANT_ | FLOAT        | YES         |
+|              |                | EQUIPMENT_NET   |              |             |
+| derived_cols | 26             | SHARES_OUTSTAND | FLOAT        | YES         |
+|              |                | ING             |              |             |
+| derived_cols | 27             | OPERATING_CASH_ | FLOAT        | YES         |
+|              |                | FLOW            |              |             |
+| derived_cols | 28             | CAPEX           | FLOAT        | YES         |
+| derived_cols | 29             | FREE_CASH_FLOW  | FLOAT        | YES         |
+| derived_cols | 30             | GROSS_MARGIN    | FLOAT        | YES         |
+| derived_cols | 31             | EBITDA_MARGIN   | FLOAT        | YES         |
+| derived_cols | 32             | NET_MARGIN      | FLOAT        | YES         |
+| derived_cols | 33             | ROIC            | FLOAT        | YES         |
+| derived_cols | 34             | ROE             | FLOAT        | YES         |
+| derived_cols | 35             | ROA             | FLOAT        | YES         |
+| derived_cols | 36             | REVENUE_YOY_GRO | FLOAT        | YES         |
+|              |                | WTH             |              |             |
+| derived_cols | 37             | EBITDA_YOY_GROW | FLOAT        | YES         |
+|              |                | TH              |              |             |
+| derived_cols | 38             | NET_INCOME_YOY_ | FLOAT        | YES         |
+|              |                | GROWTH          |              |             |
+| derived_cols | 39             | PARSER_VERSION  | TEXT         | YES         |
+| derived_cols | 40             | INGESTED_AT     | TIMESTAMP_TZ | YES         |
++------------------------------------------------------------------------------+
+
+SELECT 'silver_derived_cols' AS probe, ORDINAL_POSITION, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_CATALOG = 'EDGARTOOLS_PROD'
+  AND TABLE_SCHEMA = 'EDGARTOOLS_SILVER'
+  AND TABLE_NAME = 'SEC_FINANCIAL_DERIVED'
+ORDER BY ORDINAL_POSITION;
++------------------------------------------------------------------------------+
+|                | ORDINAL_POSITI |               |              |             |
+| PROBE          | ON             | COLUMN_NAME   | DATA_TYPE    | IS_NULLABLE |
+|----------------+----------------+---------------+--------------+-------------|
+| silver_derived | 1              | CIK           | NUMBER       | NO          |
+| _cols          |                |               |              |             |
+| silver_derived | 2              | ACCESSION_NUM | TEXT         | NO          |
+| _cols          |                | BER           |              |             |
+| silver_derived | 3              | FISCAL_PERIOD | TEXT         | NO          |
+| _cols          |                |               |              |             |
+| silver_derived | 4              | PERIOD_END    | DATE         | NO          |
+| _cols          |                |               |              |             |
+| silver_derived | 5              | FISCAL_YEAR   | NUMBER       | NO          |
+| _cols          |                |               |              |             |
+| silver_derived | 6              | FORM_TYPE     | TEXT         | NO          |
+| _cols          |                |               |              |             |
+| silver_derived | 7              | REVENUE       | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 8              | GROSS_PROFIT  | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 9              | EBITDA        | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 10             | EBIT          | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 11             | NET_INCOME    | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 12             | EPS_DILUTED   | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 13             | TOTAL_ASSETS  | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 14             | TOTAL_LIABILI | FLOAT        | YES         |
+| _cols          |                | TIES          |              |             |
+| silver_derived | 15             | TOTAL_EQUITY  | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 16             | CASH_AND_EQUI | FLOAT        | YES         |
+| _cols          |                | VALENTS       |              |             |
+| silver_derived | 17             | TOTAL_DEBT    | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 18             | CURRENT_ASSET | FLOAT        | YES         |
+| _cols          |                | S             |              |             |
+| silver_derived | 19             | CURRENT_LIABI | FLOAT        | YES         |
+| _cols          |                | LITIES        |              |             |
+| silver_derived | 20             | ACCOUNTS_RECE | FLOAT        | YES         |
+| _cols          |                | IVABLE        |              |             |
+| silver_derived | 21             | INVENTORY     | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 22             | SELLING_GENER | FLOAT        | YES         |
+| _cols          |                | AL_ADMIN_EXPE |              |             |
+|                |                | NSE           |              |             |
+| silver_derived | 23             | RETAINED_EARN | FLOAT        | YES         |
+| _cols          |                | INGS          |              |             |
+| silver_derived | 24             | DEPRECIATION_ | FLOAT        | YES         |
+| _cols          |                | AMORTIZATION  |              |             |
+| silver_derived | 25             | PROPERTY_PLAN | FLOAT        | YES         |
+| _cols          |                | T_EQUIPMENT_N |              |             |
+|                |                | ET            |              |             |
+| silver_derived | 26             | SHARES_OUTSTA | FLOAT        | YES         |
+| _cols          |                | NDING         |              |             |
+| silver_derived | 27             | OPERATING_CAS | FLOAT        | YES         |
+| _cols          |                | H_FLOW        |              |             |
+| silver_derived | 28             | CAPEX         | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 29             | FREE_CASH_FLO | FLOAT        | YES         |
+| _cols          |                | W             |              |             |
+| silver_derived | 30             | GROSS_MARGIN  | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 31             | EBITDA_MARGIN | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 32             | NET_MARGIN    | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 33             | ROIC          | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 34             | ROE           | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 35             | ROA           | FLOAT        | YES         |
+| _cols          |                |               |              |             |
+| silver_derived | 36             | PARSER_VERSIO | TEXT         | YES         |
+| _cols          |                | N             |              |             |
+| silver_derived | 37             | INGESTED_AT   | TIMESTAMP_TZ | YES         |
+| _cols          |                |               |              |             |
++------------------------------------------------------------------------------+
+
+SELECT 'named_bind_cols' AS probe, TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_CATALOG = 'EDGARTOOLS_PROD'
+  AND (
+        (TABLE_SCHEMA = 'EDGARTOOLS_GOLD' AND TABLE_NAME IN ('FINANCIAL_FACTORS', 'FINANCIAL_DERIVED'))
+     OR (TABLE_SCHEMA = 'EDGARTOOLS_SILVER' AND TABLE_NAME = 'SEC_FINANCIAL_DERIVED')
+  )
+  AND COLUMN_NAME IN (
+        'EBITDA', 'EPS_DILUTED', 'EBITDA_MARGIN',
+        'RETURN_ON_EQUITY', 'RETURN_ON_ASSETS',
+        'ROE', 'ROA', 'ROIC',
+        'OPERATING_MARGIN',
+        'REVENUE', 'GROSS_PROFIT', 'EBIT', 'NET_INCOME',
+        'TOTAL_ASSETS', 'TOTAL_LIABILITIES', 'TOTAL_EQUITY',
+        'CASH_AND_EQUIVALENTS', 'TOTAL_DEBT',
+        'OPERATING_CASH_FLOW', 'FREE_CASH_FLOW',
+        'GROSS_MARGIN', 'NET_MARGIN'
+  )
+ORDER BY TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME;
++------------------------------------------------------------------------------+
+| PROBE           | TABLE_SCHEMA      | TABLE_NAME         | COLUMN_NAME       |
+|-----------------+-------------------+--------------------+-------------------|
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | CASH_AND_EQUIVALE |
+|                 |                   |                    | NTS               |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | EBIT              |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | EBITDA            |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | EBITDA_MARGIN     |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | EPS_DILUTED       |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | FREE_CASH_FLOW    |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | GROSS_MARGIN      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | GROSS_PROFIT      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | NET_INCOME        |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | NET_MARGIN        |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | OPERATING_CASH_FL |
+|                 |                   |                    | OW                |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | REVENUE           |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | ROA               |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | ROE               |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | ROIC              |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | TOTAL_ASSETS      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | TOTAL_DEBT        |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | TOTAL_EQUITY      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_DERIVED  | TOTAL_LIABILITIES |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | CASH_AND_EQUIVALE |
+|                 |                   |                    | NTS               |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | EBIT              |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | FREE_CASH_FLOW    |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | GROSS_MARGIN      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | GROSS_PROFIT      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | NET_INCOME        |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | NET_MARGIN        |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | OPERATING_CASH_FL |
+|                 |                   |                    | OW                |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | OPERATING_MARGIN  |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | RETURN_ON_ASSETS  |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | RETURN_ON_EQUITY  |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | REVENUE           |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | ROIC              |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | TOTAL_ASSETS      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | TOTAL_DEBT        |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | TOTAL_EQUITY      |
+| named_bind_cols | EDGARTOOLS_GOLD   | FINANCIAL_FACTORS  | TOTAL_LIABILITIES |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | CASH_AND_EQUIVALE |
+|                 |                   | VED                | NTS               |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | EBIT              |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | EBITDA            |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | EBITDA_MARGIN     |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | EPS_DILUTED       |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | FREE_CASH_FLOW    |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | GROSS_MARGIN      |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | GROSS_PROFIT      |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | NET_INCOME        |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | NET_MARGIN        |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | OPERATING_CASH_FL |
+|                 |                   | VED                | OW                |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | REVENUE           |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | ROA               |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | ROE               |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | ROIC              |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | TOTAL_ASSETS      |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | TOTAL_DEBT        |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | TOTAL_EQUITY      |
+|                 |                   | VED                |                   |
+| named_bind_cols | EDGARTOOLS_SILVER | SEC_FINANCIAL_DERI | TOTAL_LIABILITIES |
+|                 |                   | VED                |                   |
++------------------------------------------------------------------------------+
+
+SELECT
+    'factors_counts' AS probe,
+    COUNT(*) AS row_count,
+    COUNT(DISTINCT CIK) AS distinct_cik,
+    COUNT_IF(UPPER(FISCAL_PERIOD) = 'FY') AS fy_rows,
+    COUNT_IF(UPPER(FISCAL_PERIOD) <> 'FY') AS non_fy_rows,
+    COUNT(DISTINCT IFF(UPPER(FISCAL_PERIOD) = 'FY', CIK, NULL)) AS fy_ciks,
+    COUNT(DISTINCT IFF(UPPER(FISCAL_PERIOD) <> 'FY', CIK, NULL)) AS non_fy_ciks
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS;
++------------------------------------------------------------------------------+
+|           |           | DISTINCT_ |         | NON_FY_RO |         | NON_FY_C |
+| PROBE     | ROW_COUNT | CIK       | FY_ROWS | WS        | FY_CIKS | IKS      |
+|-----------+-----------+-----------+---------+-----------+---------+----------|
+| factors_c | 5056      | 21        | 1867    | 3189      | 21      | 21       |
+| ounts     |           |           |         |           |         |          |
++------------------------------------------------------------------------------+
+
+SELECT
+    'factors_period_mix' AS probe,
+    FISCAL_PERIOD,
+    COUNT(*) AS row_count,
+    COUNT(DISTINCT CIK) AS distinct_cik
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS
+GROUP BY FISCAL_PERIOD
+ORDER BY row_count DESC;
++---------------------------------------------------------------+
+| PROBE              | FISCAL_PERIOD | ROW_COUNT | DISTINCT_CIK |
+|--------------------+---------------+-----------+--------------|
+| factors_period_mix | FY            | 1867      | 21           |
+| factors_period_mix | Q3            | 1136      | 21           |
+| factors_period_mix | Q2            | 1063      | 21           |
+| factors_period_mix | Q1            | 990       | 21           |
++---------------------------------------------------------------+
+
+SELECT
+    'derived_counts' AS probe,
+    COUNT(*) AS row_count,
+    COUNT(DISTINCT CIK) AS distinct_cik,
+    COUNT_IF(UPPER(FISCAL_PERIOD) = 'FY') AS fy_rows,
+    COUNT_IF(UPPER(FISCAL_PERIOD) <> 'FY') AS non_fy_rows
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_DERIVED;
++-------------------------------------------------------------------+
+| PROBE          | ROW_COUNT | DISTINCT_CIK | FY_ROWS | NON_FY_ROWS |
+|----------------+-----------+--------------+---------+-------------|
+| derived_counts | 5056      | 21           | 1867    | 3189        |
++-------------------------------------------------------------------+
+
+SELECT
+    'silver_derived_counts' AS probe,
+    COUNT(*) AS row_count,
+    COUNT(DISTINCT CIK) AS distinct_cik
+FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_FINANCIAL_DERIVED;
++--------------------------------------------------+
+| PROBE                 | ROW_COUNT | DISTINCT_CIK |
+|-----------------------+-----------+--------------|
+| silver_derived_counts | 5056      | 21           |
++--------------------------------------------------+
+
+SELECT
+    'factors_nonnull' AS probe,
+    COUNT(*) AS n,
+    COUNT_IF(REVENUE IS NOT NULL) AS revenue,
+    COUNT_IF(GROSS_PROFIT IS NOT NULL) AS gross_profit,
+    COUNT_IF(EBIT IS NOT NULL) AS ebit,
+    COUNT_IF(NET_INCOME IS NOT NULL) AS net_income,
+    COUNT_IF(TOTAL_ASSETS IS NOT NULL) AS total_assets,
+    COUNT_IF(TOTAL_LIABILITIES IS NOT NULL) AS total_liabilities,
+    COUNT_IF(TOTAL_EQUITY IS NOT NULL) AS total_equity,
+    COUNT_IF(CASH_AND_EQUIVALENTS IS NOT NULL) AS cash_and_equivalents,
+    COUNT_IF(TOTAL_DEBT IS NOT NULL) AS total_debt,
+    COUNT_IF(OPERATING_CASH_FLOW IS NOT NULL) AS operating_cash_flow,
+    COUNT_IF(FREE_CASH_FLOW IS NOT NULL) AS free_cash_flow,
+    COUNT_IF(GROSS_MARGIN IS NOT NULL) AS gross_margin,
+    COUNT_IF(NET_MARGIN IS NOT NULL) AS net_margin,
+    COUNT_IF(RETURN_ON_EQUITY IS NOT NULL) AS return_on_equity,
+    COUNT_IF(RETURN_ON_ASSETS IS NOT NULL) AS return_on_assets,
+    COUNT_IF(ROIC IS NOT NULL) AS roic,
+    COUNT_IF(OPERATING_MARGIN IS NOT NULL) AS operating_margin
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS;
++------------------------------------------------------------------------------+
+|   |   |   |   |   |   |   |   |   | C |   |   |   |    |   |    |   |    |   |
+|   |   |   |   |   |   |   |   |   | A |   | O |   |    |   |    |   |    |   |
+|   |   |   |   |   |   |   |   |   | S |   | P |   |    |   |    |   |    |   |
+|   |   |   |   |   |   |   | T |   | H |   | E |   |    |   |    |   |    |   |
+|   |   |   |   |   |   |   | O |   | _ |   | R |   |    |   |    | R |    | O |
+|   |   |   |   |   |   |   | T |   | A |   | A |   |    |   |    | E |    | P |
+|   |   |   |   |   |   |   | A |   | N |   | T | F |    |   |    | T |    | E |
+|   |   |   |   |   |   |   | L |   | D |   | I | R |    |   |    | U |    | R |
+|   |   |   | G |   |   | T | _ | T | _ |   | N | E |    |   |    | R |    | A |
+|   |   |   | R |   |   | O | L | O | E |   | G | E |    |   |    | N |    | T |
+|   |   |   | O |   | N | T | I | T | Q | T | _ | _ |    | N |    | _ |    | I |
+|   |   |   | S |   | E | A | A | A | U | O | C | C |    | E |    | O |    | N |
+|   |   |   | S |   | T | L | B | L | I | T | A | A |    | T | RE | N |    | G |
+|   |   | R | _ |   | _ | _ | I | _ | V | A | S | S |    | _ | TU | _ |    | _ |
+|   |   | E | P |   | I | A | L | E | A | L | H | H | GR | M | RN | A |    | M |
+| P |   | V | R |   | N | S | I | Q | L | _ | _ | _ | OS | A | _O | S |    | A |
+| R |   | E | O | E | C | S | T | U | E | D | F | F | S_ | R | N_ | S |    | R |
+| O |   | N | F | B | O | E | I | I | N | E | L | L | MA | G | EQ | E |    | G |
+| B |   | U | I | I | M | T | E | T | T | B | O | O | RG | I | UI | T | RO | I |
+| E | N | E | T | T | E | S | S | Y | S | T | W | W | IN | N | TY | S | IC | N |
+|---+---+---+---+---+---+---+---+---+---+---+---+---+----+---+----+---+----+---|
+| f | 5 | 3 | 2 | 2 | 4 | 2 | 2 | 3 | 3 | 1 | 2 | 1 | 23 | 3 | 24 | 1 | 10 | 2 |
+| a | 0 | 5 | 4 | 8 | 1 | 9 | 6 | 5 | 3 | 5 | 4 | 8 | 86 | 4 | 81 | 9 | 14 | 5 |
+| c | 5 | 2 | 8 | 7 | 0 | 1 | 4 | 0 | 2 | 7 | 2 | 4 |    | 9 |    | 5 |    | 7 |
+| t | 6 | 3 | 9 | 0 | 0 | 4 | 7 | 7 | 2 | 1 | 4 | 1 |    | 9 |    | 9 |    | 6 |
+| o |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| r |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| s |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| _ |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| n |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| o |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| n |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| n |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| u |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| l |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
+| l |   |   |   |   |   |   |   |   |   |   |   |   |    |   |    |   |    |   |
++------------------------------------------------------------------------------+
+
+SELECT
+    'factors_fy_nonnull' AS probe,
+    COUNT(*) AS n,
+    COUNT_IF(REVENUE IS NOT NULL) AS revenue,
+    COUNT_IF(GROSS_PROFIT IS NOT NULL) AS gross_profit,
+    COUNT_IF(EBIT IS NOT NULL) AS ebit,
+    COUNT_IF(NET_INCOME IS NOT NULL) AS net_income,
+    COUNT_IF(TOTAL_ASSETS IS NOT NULL) AS total_assets,
+    COUNT_IF(TOTAL_LIABILITIES IS NOT NULL) AS total_liabilities,
+    COUNT_IF(TOTAL_EQUITY IS NOT NULL) AS total_equity,
+    COUNT_IF(CASH_AND_EQUIVALENTS IS NOT NULL) AS cash_and_equivalents,
+    COUNT_IF(TOTAL_DEBT IS NOT NULL) AS total_debt,
+    COUNT_IF(OPERATING_CASH_FLOW IS NOT NULL) AS operating_cash_flow,
+    COUNT_IF(FREE_CASH_FLOW IS NOT NULL) AS free_cash_flow,
+    COUNT_IF(GROSS_MARGIN IS NOT NULL) AS gross_margin,
+    COUNT_IF(NET_MARGIN IS NOT NULL) AS net_margin,
+    COUNT_IF(RETURN_ON_EQUITY IS NOT NULL) AS return_on_equity,
+    COUNT_IF(RETURN_ON_ASSETS IS NOT NULL) AS return_on_assets,
+    COUNT_IF(ROIC IS NOT NULL) AS roic
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS
+WHERE UPPER(FISCAL_PERIOD) = 'FY';
++------------------------------------------------------------------------------+
+|   |   |   |   |    |   |    |   |    | C |    |   |    |   |    |   |    |   |
+|   |   |   |   |    |   |    |   |    | A |    | O |    |   |    |   |    |   |
+|   |   |   |   |    |   |    |   |    | S |    | P |    |   |    |   |    |   |
+|   |   |   |   |    |   |    | T |    | H |    | E |    |   |    |   |    |   |
+|   |   |   |   |    |   |    | O |    | _ |    | R |    |   |    | R |    |   |
+|   |   |   |   |    |   |    | T |    | A |    | A |    |   |    | E |    |   |
+|   |   |   |   |    |   |    | A |    | N |    | T |    |   |    | T |    |   |
+|   |   |   |   |    |   |    | L |    | D |    | I |    |   |    | U |    |   |
+|   |   |   | G |    |   |    | _ |    | _ |    | N |    | G |    | R |    |   |
+|   |   |   | R |    |   |    | L |    | E |    | G |    | R |    | N |    |   |
+|   |   |   | O |    | N |    | I |    | Q |    | _ |    | O |    | _ |    |   |
+|   |   |   | S |    | E |    | A |    | U |    | C |    | S |    | O |    |   |
+|   |   |   | S |    | T |    | B |    | I |    | A |    | S |    | N | RE |   |
+|   |   | R | _ |    | _ |    | I |    | V |    | S | FR | _ |    | _ | TU |   |
+|   |   | E | P |    | I | TO | L | TO | A |    | H | EE | M |    | E | RN |   |
+| P |   | V | R |    | N | TA | I | TA | L | TO | _ | _C | A | NE | Q | _O |   |
+| R |   | E | O |    | C | L_ | T | L_ | E | TA | F | AS | R | T_ | U | N_ | R |
+| O |   | N | F |    | O | AS | I | EQ | N | L_ | L | H_ | G | MA | I | AS | O |
+| B |   | U | I | EB | M | SE | E | UI | T | DE | O | FL | I | RG | T | SE | I |
+| E | N | E | T | IT | E | TS | S | TY | S | BT | W | OW | N | IN | Y | TS | C |
+|---+---+---+---+----+---+----+---+----+---+----+---+----+---+----+---+----+---|
+| f | 1 | 1 | 1 | 11 | 1 | 75 | 6 | 88 | 8 | 42 | 7 | 59 | 1 | 17 | 8 | 75 | 4 |
+| a | 8 | 7 | 2 | 76 | 8 | 9  | 6 | 8  | 1 | 3  | 6 | 7  | 2 | 10 | 6 | 8  | 0 |
+| c | 6 | 2 | 7 |    | 6 |    | 1 |    | 4 |    | 3 |    | 1 |    | 2 |    | 1 |
+| t | 7 | 3 | 3 |    | 6 |    |   |    |   |    |   |    | 6 |    |   |    |   |
+| o |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| r |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| s |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| _ |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| f |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| y |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| _ |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| n |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| o |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| n |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| n |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| u |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| l |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
+| l |   |   |   |    |   |    |   |    |   |    |   |    |   |    |   |    |   |
++------------------------------------------------------------------------------+
+
+SELECT
+    'factors_any_live_key' AS probe,
+    COUNT(*) AS n,
+    COUNT_IF(
+        REVENUE IS NOT NULL
+        OR GROSS_PROFIT IS NOT NULL
+        OR EBIT IS NOT NULL
+        OR NET_INCOME IS NOT NULL
+        OR TOTAL_ASSETS IS NOT NULL
+        OR TOTAL_LIABILITIES IS NOT NULL
+        OR TOTAL_EQUITY IS NOT NULL
+        OR CASH_AND_EQUIVALENTS IS NOT NULL
+        OR TOTAL_DEBT IS NOT NULL
+        OR OPERATING_CASH_FLOW IS NOT NULL
+        OR FREE_CASH_FLOW IS NOT NULL
+        OR GROSS_MARGIN IS NOT NULL
+        OR NET_MARGIN IS NOT NULL
+        OR RETURN_ON_EQUITY IS NOT NULL
+        OR RETURN_ON_ASSETS IS NOT NULL
+        OR ROIC IS NOT NULL
+    ) AS any_of_16_live_keys
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS;
++---------------------------------------------------+
+| PROBE                | N    | ANY_OF_16_LIVE_KEYS |
+|----------------------+------+---------------------|
+| factors_any_live_key | 5056 | 5056                |
++---------------------------------------------------+
+
+SELECT
+    'derived_passthrough' AS probe,
+    COUNT(*) AS n,
+    COUNT_IF(EBITDA IS NOT NULL) AS ebitda,
+    COUNT_IF(EPS_DILUTED IS NOT NULL) AS eps_diluted,
+    COUNT_IF(EBITDA_MARGIN IS NOT NULL) AS ebitda_margin,
+    COUNT_IF(ROE IS NOT NULL) AS roe,
+    COUNT_IF(ROA IS NOT NULL) AS roa,
+    COUNT_IF(ROIC IS NOT NULL) AS roic,
+    COUNT_IF(REVENUE IS NOT NULL) AS revenue,
+    COUNT_IF(GROSS_PROFIT IS NOT NULL) AS gross_profit,
+    COUNT_IF(EBIT IS NOT NULL) AS ebit,
+    COUNT_IF(NET_INCOME IS NOT NULL) AS net_income,
+    COUNT_IF(TOTAL_ASSETS IS NOT NULL) AS total_assets,
+    COUNT_IF(TOTAL_LIABILITIES IS NOT NULL) AS total_liabilities,
+    COUNT_IF(TOTAL_EQUITY IS NOT NULL) AS total_equity,
+    COUNT_IF(CASH_AND_EQUIVALENTS IS NOT NULL) AS cash_and_equivalents,
+    COUNT_IF(TOTAL_DEBT IS NOT NULL) AS total_debt,
+    COUNT_IF(OPERATING_CASH_FLOW IS NOT NULL) AS operating_cash_flow,
+    COUNT_IF(FREE_CASH_FLOW IS NOT NULL) AS free_cash_flow,
+    COUNT_IF(GROSS_MARGIN IS NOT NULL) AS gross_margin,
+    COUNT_IF(NET_MARGIN IS NOT NULL) AS net_margin
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_DERIVED;
++------------------------------------------------------------------------------+
+|   |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  | F |  |   |
+|   |   |   |   | E |   |   |   |   |   |   |  |   |  |   |  |   |  | R |  |   |
+|   |   |   |   | B |   |   |   |   | G |   |  | T |  | T |  |   |  | E |  |   |
+|   |   |   | E | I |   |   |   |   | R |   |  | O |  | O |  |   |  | E |  |   |
+|   |   |   | P | T |   |   |   |   | O |   |  | T |  | T |  | T |  | _ |  | N |
+|   |   |   | S | D |   |   |   |   | S |   |  | A |  | A |  | O |  | C |  | E |
+|   |   |   | _ | A |   |   |   |   | S |   |  | L |  | L |  | T |  | A |  | T |
+|   |   |   | D | _ |   |   |   | R | _ |   |  | _ |  | _ |  | A |  | S |  | _ |
+|   |   | E | I | M |   |   |   | E | P |   |  | A |  | E |  | L |  | H |  | M |
+| P |   | B | L | A |   |   |   | V | R |   |  | S |  | Q |  | _ |  | _ |  | A |
+| R |   | I | U | R |   |   | R | E | O | E |  | S |  | U |  | D |  | F |  | R |
+| O |   | T | T | G | R | R | O | N | F | B |  | E |  | I |  | E |  | L |  | G |
+| B |   | D | E | I | O | O | I | U | I | I |  | T |  | T |  | B |  | O |  | I |
+| E | N | A | D | N | E | A | C | E | T | T |  | S |  | Y |  | T |  | W |  | N |
+|---+---+---+---+---+---+---+---+---+---+---+--+---+--+---+--+---+--+---+--+---|
+| d | 5 | 2 | 3 | 2 | 2 | 1 | 1 | 3 | 2 | 2 |  | 2 |  | 3 |  | 1 |  | 1 |  | 3 |
+| e | 0 | 3 | 2 | 1 | 5 | 9 | 0 | 5 | 4 | 8 |  | 9 |  | 5 |  | 5 |  | 8 |  | 4 |
+| r | 5 | 9 | 9 | 9 | 5 | 5 | 1 | 2 | 8 | 7 |  | 1 |  | 0 |  | 7 |  | 4 |  | 9 |
+| i | 6 | 2 | 8 | 7 | 2 | 9 | 4 | 3 | 9 | 0 |  | 4 |  | 7 |  | 1 |  | 1 |  | 9 |
+| v |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| e |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| d |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| _ |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| p |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| a |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| s |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| s |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| t |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| h |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| r |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| o |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| u |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| g |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
+| h |   |   |   |   |   |   |   |   |   |   |  |   |  |   |  |   |  |   |  |   |
++------------------------------------------------------------------------------+
+
+SELECT
+    'derived_fy_passthrough' AS probe,
+    COUNT(*) AS n,
+    COUNT_IF(EBITDA IS NOT NULL) AS ebitda,
+    COUNT_IF(EPS_DILUTED IS NOT NULL) AS eps_diluted,
+    COUNT_IF(EBITDA_MARGIN IS NOT NULL) AS ebitda_margin,
+    COUNT_IF(ROE IS NOT NULL) AS roe,
+    COUNT_IF(ROA IS NOT NULL) AS roa
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_DERIVED
+WHERE UPPER(FISCAL_PERIOD) = 'FY';
++------------------------------------------------------------------------------+
+| PROBE              | N    | EBITDA | EPS_DILUTED | EBITDA_MARGIN | ROE | ROA |
+|--------------------+------+--------+-------------+---------------+-----+-----|
+| derived_fy_passthr | 1867 | 777    | 1647        | 716           | 886 | 758 |
+| ough               |      |        |             |               |     |     |
++------------------------------------------------------------------------------+
+
+SELECT
+    'silver_derived_passthrough' AS probe,
+    COUNT(*) AS n,
+    COUNT_IF(EBITDA IS NOT NULL) AS ebitda,
+    COUNT_IF(EPS_DILUTED IS NOT NULL) AS eps_diluted,
+    COUNT_IF(EBITDA_MARGIN IS NOT NULL) AS ebitda_margin,
+    COUNT_IF(ROE IS NOT NULL) AS roe,
+    COUNT_IF(ROA IS NOT NULL) AS roa,
+    COUNT_IF(ROIC IS NOT NULL) AS roic
+FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_FINANCIAL_DERIVED;
++------------------------------------------------------------------------------+
+|             |      |        |             | EBITDA_MARG |      |      |      |
+| PROBE       | N    | EBITDA | EPS_DILUTED | IN          | ROE  | ROA  | ROIC |
+|-------------+------+--------+-------------+-------------+------+------+------|
+| silver_deri | 5056 | 2392   | 3298        | 2197        | 2552 | 1959 | 1014 |
+| ved_passthr |      |        |             |             |      |      |      |
+| ough        |      |        |             |             |      |      |      |
++------------------------------------------------------------------------------+
+
+SELECT
+    'derived_sample' AS probe,
+    CIK,
+    ACCESSION_NUMBER,
+    FISCAL_YEAR,
+    FISCAL_PERIOD,
+    PERIOD_END,
+    EBITDA,
+    EPS_DILUTED,
+    EBITDA_MARGIN,
+    ROE,
+    ROA
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_DERIVED
+WHERE EBITDA IS NOT NULL
+   OR EPS_DILUTED IS NOT NULL
+   OR EBITDA_MARGIN IS NOT NULL
+ORDER BY PERIOD_END DESC
+LIMIT 8;
++------------------------------------------------------------------------------+
+|      |      | ACCE |      | FISC |      |      |      |       |      |       |
+|      |      | SSIO | FISC | AL_P | PERI |      | EPS_ | EBITD |      |       |
+| PROB |      | N_NU | AL_Y | ERIO | OD_E | EBIT | DILU | A_MAR |      |       |
+| E    | CIK  | MBER | EAR  | D    | ND   | DA   | TED  | GIN   | ROE  | ROA   |
+|------+------+------+------+------+------+------+------+-------+------+-------|
+| deri | 7641 | 0000 | 2026 | Q2   | 2026 | 3248 | 1.37 | 0.531 | -0.8 | 0.068 |
+| ved_ | 80   | 7641 |      |      | -06- | 0000 |      | 50057 | 6131 | 85599 |
+| samp |      | 80-2 |      |      | 30   | 00.0 |      | 27376 | 9340 | 56852 |
+| le   |      | 6-00 |      |      |      |      |      | 861   | 3298 | 6397  |
+|      |      | 0094 |      |      |      |      |      |       | 35   |       |
+| deri | 1561 | 0000 | 2026 | Q2   | 2026 | 3498 | 1.65 | 0.079 | 0.03 | 0.011 |
+| ved_ | 5    | 0156 |      |      | -06- | 0200 |      | 98117 | 7422 | 90948 |
+| samp |      | 15-2 |      |      | 30   | 0.0  |      | 77789 | 5474 | 43674 |
+| le   |      | 6-00 |      |      |      |      |      | 8707  | 6089 | 80317 |
+|      |      | 0093 |      |      |      |      |      |       | 1215 |       |
+| deri | 8202 | 0001 | 2026 | Q2   | 2026 | 5369 | 1.2  | 0.541 | 0.04 | 0.046 |
+| ved_ | 0    | 1046 |      |      | -06- | 4000 |      | 67423 | 9602 | 17581 |
+| samp |      | 59-2 |      |      | 30   | .0   |      | 27946 | 5044 | 06189 |
+| le   |      | 6-08 |      |      |      |      |      | 25    | 1621 | 646   |
+|      |      | 8668 |      |      |      |      |      |       | 8336 |       |
+| deri | 2319 | 0001 | 2026 | Q2   | 2026 | 1900 | 0.03 | 0.537 | 0.00 | 0.001 |
+| ved_ | 4    | 1931 |      |      | -06- | 1300 |      | 85078 | 3398 | 16496 |
+| samp |      | 25-2 |      |      | 30   | 0.0  |      | 20947 | 8113 | 55547 |
+| le   |      | 6-32 |      |      |      |      |      | 571   | 0781 | 08860 |
+|      |      | 6260 |      |      |      |      |      |       | 3427 | 9     |
+|      |      |      |      |      |      |      |      |       | 4    |       |
+| deri | 1616 | 0001 | 2026 | FY   | 2026 | 4745 | 6.63 | 0.162 | 0.12 | 0.101 |
+| ved_ | 0    | 5627 |      |      | -05- | 2800 |      | 97663 | 0286 | 90663 |
+| samp |      | 62-2 |      |      | 30   | 0.0  |      | 99050 | 4552 | 44442 |
+| le   |      | 6-00 |      |      |      |      |      | 4294  | 8675 | 7639  |
+|      |      | 0080 |      |      |      |      |      |       | 155  |       |
+| deri | 1032 | 0001 | 2026 | Q2   | 2026 | 4524 | 0.24 | 0.054 | 0.01 | 0.006 |
+| ved_ | 9    | 4377 |      |      | -05- | 000. |      | 01597 | 2396 | 42235 |
+| samp |      | 49-2 |      |      | 30   | 0    |      | 55471 | 9454 | 06622 |
+| le   |      | 6-02 |      |      |      |      |      | 4458  | 5100 | 36011 |
+|      |      | 2289 |      |      |      |      |      |       | 805  |       |
+| deri | 7528 | 0000 | 2026 | Q1   | 2026 | 3874 | 1.0  | 0.098 | 0.02 | 0.011 |
+| ved_ | 8    | 0752 |      |      | -05- | 3000 |      | 98518 | 8636 | 20302 |
+| samp |      | 88-2 |      |      | 02   | .0   |      | 65856 | 3896 | 45475 |
+| le   |      | 6-00 |      |      |      |      |      | 5873  | 9028 | 39976 |
+|      |      | 0058 |      |      |      |      |      |       | 8314 |       |
+| deri | 2709 | 0001 | 2026 | FY   | 2026 | -189 | -1.1 | None  | -0.3 | -0.34 |
+| ved_ | 3    | 4931 |      |      | -04- | 3504 | 5    |       | 5295 | 26986 |
+| samp |      | 52-2 |      |      | 30   | 8.0  |      |       | 4161 | 60541 |
+| le   |      | 6-03 |      |      |      |      |      |       | 1118 | 98556 |
+|      |      | 5188 |      |      |      |      |      |       | 726  |       |
++------------------------------------------------------------------------------+
+
+SELECT
+    'dt_refresh' AS probe,
+    NAME,
+    SCHEMA_NAME,
+    TARGET_LAG,
+    REFRESH_MODE,
+    LAST_SUCCESSFUL_REFRESH_TIME,
+    LAST_COMPLETED_REFRESH_TIME,
+    DATA_TIMESTAMP
+FROM TABLE(EDGARTOOLS_PROD.INFORMATION_SCHEMA.DYNAMIC_TABLES())
+WHERE SCHEMA_NAME = 'EDGARTOOLS_GOLD'
+  AND NAME IN ('FINANCIAL_FACTORS', 'FINANCIAL_DERIVED')
+ORDER BY NAME;
+╭─ Error ──────────────────────────────────────────────────────────────────────╮
+│ 000904 (42000): 01c70143-030b-5316-0031-a7f700d0a976: SQL compilation error: │
+│ error line 5 at position 4                                                   │
+│ invalid identifier 'TARGET_LAG'                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯

@@ -1,7 +1,7 @@
 # Decide whether bronze digest requires a contract version bump
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 03
 
 ## Question
@@ -25,3 +25,10 @@ Decide:
 
 Predecessor Ticket 09 shipped version `"1"` with persist-only bronze. This
 ticket does not reopen persist-only.
+
+## Answer
+
+The first published Snowflake Decision Contract uses Decision Contract
+Version **1**. The unpublished persist-only sketch does not count as a
+live pin. Increase the number only after a READY publication exists and a
+later breaking shape or semantics change ships.

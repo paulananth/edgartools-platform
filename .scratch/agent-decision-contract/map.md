@@ -45,6 +45,14 @@ View versus Explore, consistent with ADR 0001 and ADR 0006.
   issuer-bundle SQL still sketches auditor from SOURCE; dashboard SQL
   fail-closes on `DECISION_CONTRACT_PUBLICATION` + `GRAPH_ACTIVE_POINTER`.
 - Ask the operator one grilling question at a time.
+- Implementation sequence locked 2026-09-11: finish remaining decisions
+  (contract version → READY writer → Agent View), then implement.
+  First implementation slice: **missing input data** before contract
+  objects. Do not widen v1 neighborhood sections.
+- Sibling [v1 Agent-Grade Inputs](../agent-decision-v1-inputs/map.md) owns
+  that first slice (prod feature bind, `IS_INSIDER` / `EMPLOYED_BY`
+  identity). Q13 on this map (which missing data first) is held and
+  superseded by that map. This map still owns contract objects.
 
 ## Decisions so far
 
@@ -58,11 +66,14 @@ View versus Explore, consistent with ADR 0001 and ADR 0006.
 - [Lock v1 As-Of Decision Feature keys against gold](issues/11-lock-v1-feature-keys-against-gold.md) — Keep 19 Python keys; alias `return_on_equity`/`return_on_assets`; pass through derived `ebitda`/`eps_diluted`/`ebitda_margin`; no `operating_margin`→`ebitda_margin`.
 - [Bind v1 feature keys to gold FINANCIAL_FACTORS](issues/12-bind-v1-feature-keys-to-gold-financial-factors.md) — Python alias + gold passthrough + SQL 01/03 19-key projection. Needs dbt `--full-refresh` of `financial_factors` in prod.
 - [Inventory data not available to agents](issues/13-inventory-data-not-available-to-agents.md) — No READY contract. Holders/auditor/parent unavailable; Explore-only gold; empty consensus/guidance/transcripts; live gold still missing factor passthrough and 13F issuer CIK; silver person/13F-filing identity not on the contract. [research](research/13-data-not-available-to-agents.md)
+- [Decide whether bronze digest requires a contract version bump](issues/09-bronze-digest-contract-version-bump.md) — First published Snowflake Decision Contract is version 1. Bump only after a READY row exists and a later breaking change ships.
+- [Decide who writes a READY Decision Contract publication](issues/06-decide-publication-ready-writer.md) — Aggregator writes READY after `mdm reconcile` then gold refresh. All watermark gates in one row. Pointer move hides agent-grade reads; old row is not rewritten.
+- [Lock Agent View query allowlist on Streamlit-in-Snowflake](issues/07-lock-agent-view-query-allowlist.md) — Issuer contract objects only; Explore banner required; same CIK across modes; not-READY shows display reason, ready views empty.
+- [Decide who owns Snowflake Decision Contract objects](issues/14-contract-sql-ownership.md) — Bootstrap SQL owns `EDGARTOOLS_DECISION`. dbt owns gold/silver. Python owns semantics. Aggregator writes READY.
 
 ## Not yet specified
 
-- Who writes `DECISION_CONTRACT_PUBLICATION` and when it becomes READY.
-- Whether dbt or bootstrap SQL owns the long-term contract views.
+<!-- decisions complete for v1 contract; remaining work is implementation -->
 
 ## Out of scope
 

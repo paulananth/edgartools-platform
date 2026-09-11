@@ -1,0 +1,82 @@
+SELECT 'pointer' AS probe,
+       p.ACTIVE_GENERATION_ID::VARCHAR AS generation_id,
+       p.ACTIVATED_AT::VARCHAR AS activated_at,
+       g.NODE_COUNT AS node_count,
+       g.EDGE_COUNT AS edge_count
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER p
+LEFT JOIN EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_GENERATION g
+  ON g.GENERATION_ID = p.ACTIVE_GENERATION_ID
+WHERE p.POINTER_ID = 'active';
++------------------------------------------------------------------------------+
+| PROBE   | GENERATION_ID       | ACTIVATED_AT       | NODE_COUNT | EDGE_COUNT |
+|---------+---------------------+--------------------+------------+------------|
+| pointer | ae0db138-2aeb-4e69- | 2026-09-10         | 233647     | 575485     |
+|         | 87ba-f812da92b2eb   | 16:15:24.458 -0700 |            |            |
++------------------------------------------------------------------------------+
+
+SELECT 'edge_cols' AS probe, COLUMN_NAME, DATA_TYPE
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_CATALOG = 'EDGARTOOLS_PROD'
+  AND TABLE_SCHEMA = 'NEO4J_GRAPH_MIGRATION'
+  AND TABLE_NAME = 'GRAPH_EDGE_IS_INSIDER'
+ORDER BY ORDINAL_POSITION;
++--------------------------------------------------+
+| PROBE     | COLUMN_NAME           | DATA_TYPE    |
+|-----------+-----------------------+--------------|
+| edge_cols | EDGEID                | TEXT         |
+| edge_cols | RELATIONSHIP_TYPE     | TEXT         |
+| edge_cols | SOURCENODEID          | TEXT         |
+| edge_cols | TARGETNODEID          | TEXT         |
+| edge_cols | SOURCE_ENTITY_TYPE    | TEXT         |
+| edge_cols | TARGET_ENTITY_TYPE    | TEXT         |
+| edge_cols | SOURCE_SYSTEM         | TEXT         |
+| edge_cols | SOURCE_ACCESSION      | TEXT         |
+| edge_cols | EFFECTIVE_FROM        | TIMESTAMP_TZ |
+| edge_cols | EFFECTIVE_TO          | TIMESTAMP_TZ |
+| edge_cols | RELATIONSHIP_ID       | TEXT         |
+| edge_cols | VALID_FROM_DATE       | DATE         |
+| edge_cols | VALID_TO_DATE         | DATE         |
+| edge_cols | DATE_PROVENANCE       | TEXT         |
+| edge_cols | RELATIONSHIP_KIND     | TEXT         |
+| edge_cols | SOURCENODEID_ORIGINAL | TEXT         |
+| edge_cols | TARGETNODEID_ORIGINAL | TEXT         |
+| edge_cols | GRAPH_SYNC_STATUS     | TEXT         |
+| edge_cols | GRAPH_SYNCED_AT       | TIMESTAMP_TZ |
+| edge_cols | CREATED_AT            | TIMESTAMP_TZ |
+| edge_cols | UPDATED_AT            | TIMESTAMP_TZ |
+| edge_cols | PROPERTIES            | VARIANT      |
++--------------------------------------------------+
+
+SELECT
+    'is_insider_counts' AS probe,
+    COUNT(*) AS edge_count,
+    COUNT(DISTINCT IFF(TARGET_ENTITY_TYPE = 'company', TARGETNODEID, NULL)) AS distinct_company_targets,
+    COUNT(DISTINCT IFF(SOURCE_ENTITY_TYPE = 'person', SOURCENODEID, NULL)) AS distinct_person_sources,
+    COUNT_IF(SOURCE_ACCESSION IS NOT NULL AND TRIM(SOURCE_ACCESSION) <> '') AS edges_with_accession,
+    COUNT_IF(SOURCE_ACCESSION IS NULL OR TRIM(SOURCE_ACCESSION) = '') AS edges_without_accession,
+    COUNT_IF(EFFECTIVE_TO IS NULL) AS effective_to_null,
+    COUNT_IF(VALID_TO_DATE IS NULL) AS valid_to_null,
+    COUNT_IF(EFFECTIVE_TO IS NULL AND SOURCE_ACCESSION IS NOT NULL AND TRIM(SOURCE_ACCESSION) <> '') AS current_with_accession
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_IS_INSIDER;
++------------------------------------------------------------------------------+
+|        |        |        |        |        |        |       |        | CURRE |
+|        |        | DISTIN | DISTIN | EDGES_ | EDGES_ | EFFEC |        | NT_WI |
+|        |        | CT_COM | CT_PER | WITH_A | WITHOU | TIVE_ | VALID_ | TH_AC |
+|        | EDGE_C | PANY_T | SON_SO | CCESSI | T_ACCE | TO_NU | TO_NUL | CESSI |
+| PROBE  | OUNT   | ARGETS | URCES  | ON     | SSION  | LL    | L      | ON    |
+|--------+--------+--------+--------+--------+--------+-------+--------+-------|
+| is_ins | 902    | 88     | 342    | 902    | 0      | 902   | 902    | 902   |
+| ider_c |        |        |        |        |        |       |        |       |
+| ounts  |        |        |        |        |        |       |        |       |
++------------------------------------------------------------------------------+
+
+SELECT 'is_insider_entity_types' AS probe, SOURCE_ENTITY_TYPE, TARGET_ENTITY_TYPE, COUNT(*) AS n
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_IS_INSIDER
+GROUP BY 1, 2
+ORDER BY n DESC;
+╭─ Error ──────────────────────────────────────────────────────────────────────╮
+│ 001104 (42601): 01c70143-030b-5696-0031-a7f700d2e33e: SQL compilation error: │
+│ error line 1 at position 63                                                  │
+│ 'GRAPH_EDGE_IS_INSIDER.TARGET_ENTITY_TYPE' in select clause is neither an    │
+│ aggregate nor in the group by clause.                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯

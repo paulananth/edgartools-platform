@@ -379,16 +379,16 @@ An action choice formed by an agent *outside* this platform’s execution bounda
 _Avoid_: Broker order, fill, portfolio rebalance inside the warehouse
 
 **Human Audit View**:
-A read-only UI (for example Streamlit-in-Snowflake) that shows the same facts available on the Agent Decision Surface so a person can verify what an agent would have seen.
-_Avoid_: Primary product surface, customer research portal, operator release console
+A read-only UI (for example Streamlit-in-Snowflake) that shows the same facts available on the Agent Decision Surface so a person can verify what an agent would have seen. The same Bundle Subject (CIK) may stay selected when switching Agent View Mode and Explore Mode in one session.
+_Avoid_: Primary product surface, customer research portal, operator release console, clearing the company on every mode switch
 
 **Agent View Mode**:
-A Human Audit View mode that renders only Decision Graph Bundle / Snowflake Decision Contract projections so a person can see what the agent is allowed to read at a Decision Watermark.
-_Avoid_: Mixing unlabeled explore queries into agent view, calling free gold joins "what the agent saw"
+A Human Audit View mode that renders only issuer Snowflake Decision Contract objects (feature screen, issuer bundle, contract status, display status, subject resolver) so a person can see what the agent is allowed to read at a Decision Watermark. When the contract is not READY, it shows a display not-ready reason; ready views stay empty.
+_Avoid_: Mixing unlabeled explore queries into agent view, calling free gold joins "what the agent saw", manager bundle or standalone holders/auditor views as Agent View, falling back to gold inside Agent View when not READY
 
 **Explore Mode**:
-A Human Audit View mode that may query gold (and related) tables beyond the Decision Contract for human investigation; it is not an input to Trading Decisions and must be visually and labeled distinct from Agent View Mode.
-_Avoid_: Using explore as the agent source of truth, silent mode switching, explore without "not agent contract" labeling
+A Human Audit View mode that may query gold (and related) tables beyond the Decision Contract for human investigation; it is not an input to Trading Decisions and must show a persistent banner that it is not the Snowflake Decision Contract. The Agent View allowlist, not the banner, blocks gold in Agent View Mode.
+_Avoid_: Using explore as the agent source of truth, silent mode switching, explore without "not agent contract" labeling, treating the banner as the only control
 
 **Decision Graph Bundle**:
 The Agent Decision Surface unit of read: a multi-entity payload rooted at one subject (usually an issuer) that includes related entities and relationship edges the agent may use, bound to one Relationship Generation Snapshot / data watermark.
@@ -401,6 +401,10 @@ _Avoid_: Portfolio of tickers as one bundle, anonymous search result set
 **Trading-Relevant Neighborhood**:
 The v1 Decision Graph Bundle scope around a Bundle Subject. Agent-grade sections are As-Of Decision Features, current `IS_INSIDER` edges, and current `EMPLOYED_BY` edges. Institutional holders, auditor, and parent keys remain on the payload but are not v1 Trading Decision input until their gold/graph bind exists; ADV is `not_applicable` for a pure issuer.
 _Avoid_: Full MDM type registry dump, ADV-first bundle, treating unbound 13F gold or zero-row auditor/parent evidence as agent-grade, every historical edge without currency rules
+
+**v1 Agent-Grade Input Facts**:
+The Snowflake gold rows and active-graph edges that v1 Trading-Relevant Neighborhood sections read, before the Snowflake Decision Contract publishes them: As-Of Decision Features from `FINANCIAL_FACTORS`, current `IS_INSIDER` edges, and current `EMPLOYED_BY` edges.
+_Avoid_: Decision Contract views as a substitute for missing gold or graph columns, treating locked-unavailable neighborhood keys as v1 input work, agents reading silver or bronze
 
 **Current Neighborhood (default)**:
 The Decision Graph Bundle edge set limited to Current-at-Watermark Relationships for the declared business date; ended or not-yet-current edges are omitted unless the consumer explicitly requests history.
@@ -423,8 +427,8 @@ When a non-FY fiscal period exists with period_end after the Primary Annual Feat
 _Avoid_: Replacing FY with Q silently, inventing interim when none is newer than FY, requiring FY before an interim may be present
 
 **Snowflake Decision Contract**:
-The v1 delivery of the Agent Decision Surface: published Snowflake objects (views, tables, or procedures) that return Decision Graph Bundles or their relational equivalent under a declared schema version; the Human Audit View queries these same objects.
-_Avoid_: Streamlit-only data path, agent-private tables that diverge from audit UI, S3 file dump as the primary contract, undocumented ad-hoc gold joins
+The v1 delivery of the Agent Decision Surface: published Snowflake objects (views, tables, or procedures) that return Decision Graph Bundles or their relational equivalent under a declared schema version; the Human Audit View queries these same objects. Bootstrap SQL owns the `EDGARTOOLS_DECISION` objects; dbt owns gold and silver; Python owns semantics; the watermark aggregator writes READY.
+_Avoid_: Streamlit-only data path, agent-private tables that diverge from audit UI, S3 file dump as the primary contract, undocumented ad-hoc gold joins, dbt-owned READY publication
 
 **Decision Watermark**:
 The composite identity bound into every Decision Graph Bundle as inspectable components: a digest of the ordered unique content-addressed Bronze artifact hashes (mandatory; the full hash list is not the watermark), silver-derived parse/completeness claims (versions and section coverage), Relationship Generation Snapshot / active graph generation id, gold/feature as-of (run_id), and business date; a bundle is invalid for agent use if any required component is missing or the components are known to disagree. A concatenated display token may exist for logs, but it is not the identity.
@@ -447,8 +451,8 @@ Structured present / empty / unavailable / not_applicable markers on each sectio
 _Avoid_: Omitting sections silently, zeros that mean "unknown", calling zero-row auditor/parent evidence empty, attaching unbound gold 13F as agent-grade, hard-failing the whole bundle for one missing optional section
 
 **Decision Contract Version**:
-An explicit integer (or major.minor) schema identity carried on every Decision Graph Bundle and Snowflake Decision Contract response; agents pin a supported version; breaking shape or semantics changes require a version bump.
-_Avoid_: Docs-only changelog, watermark-only identity for shape, silent column renames
+An explicit integer (or major.minor) schema identity carried on every Decision Graph Bundle and Snowflake Decision Contract response; agents pin a supported version. The first published Snowflake Decision Contract is version 1. Breaking shape or semantics changes after a READY publication require a version bump.
+_Avoid_: Docs-only changelog, watermark-only identity for shape, silent column renames, calling the first live publication version 2 because an unpublished sketch existed
 
 **Latest Complete Holdings Period**:
 For institutional/13F-style holdings in a Decision Graph Bundle, the most recent report period that is fully loaded for the relevant managers/subject at the Decision Watermark; the section is still "current" under Current Neighborhood rules only relative to that lagged source period, and coverage metadata must expose the period and known reporting lag—not same-day market positions.
@@ -467,8 +471,8 @@ v1 of the Agent Decision Surface does not implement product-level authentication
 _Avoid_: Baking a one-off auth scheme into the bundle schema, blocking go-live on OAuth, assuming public internet exposure of Snowflake
 
 **Agent-Grade Read**:
-A Subject Bundle Read or Subject Feature Screen result whose Decision Watermark components are present and aligned, including the Bronze digest, over a non-empty Decision Subject Universe; only Agent-Grade Reads are valid inputs to a Trading Decision. Missing bronze digest or empty universe is not READY and not agent-grade (no tradeable payload). An empty or unavailable neighborhood section does not by itself fail the bundle.
-_Avoid_: Best-effort mismatched graph and features, silent degraded data for trading, READY publication without bronze digest, READY publication of an empty universe, failing a bundle because one issuer has no insiders, treating missing bronze as coverage-only, failing gold or MDM because the contract is not READY, "prefer gold" or "prefer graph" without invalidation
+A Subject Bundle Read or Subject Feature Screen result whose Decision Watermark components are present and aligned, including the Bronze digest, over a non-empty Decision Subject Universe; only Agent-Grade Reads are valid inputs to a Trading Decision. Missing bronze digest or empty universe is not READY and not agent-grade (no tradeable payload). An empty or unavailable neighborhood section does not by itself fail the bundle. If the active graph generation changes, agent-grade reads fail closed; the old READY publication is not rewritten.
+_Avoid_: Best-effort mismatched graph and features, silent degraded data for trading, READY publication without bronze digest, READY publication of an empty universe, serving a retired graph generation as agent-grade, failing a bundle because one issuer has no insiders, treating missing bronze as coverage-only, failing gold or MDM because the contract is not READY, "prefer gold" or "prefer graph" without invalidation
 
 ### Deployment orchestration (Step Functions)
 
