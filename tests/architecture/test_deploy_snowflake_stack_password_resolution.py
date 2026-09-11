@@ -3,8 +3,8 @@
 
 This function used to reimplement Snowflake password resolution as bash +
 inline python3 reading config.toml's own [connections] table -- a layout no
-real SnowCLI config anywhere in this repo (including CI's smoke-test.yml)
-actually produces, so it always silently resolved empty. It now delegates
+real SnowCLI config anywhere in this repo (including the now-retired CI
+smoke-test workflow) actually produced, so it always silently resolved empty. It now delegates
 to `edgar-warehouse resolve-snowflake-env` (see
 tests/unit/test_resolve_snowflake_env_cli.py for that command's own
 behavioral coverage against fixture toml files).
