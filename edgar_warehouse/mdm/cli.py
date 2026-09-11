@@ -375,11 +375,27 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     collapse_attr_stage.add_argument(
         "--batch-size", type=int, default=500,
-        help="Entity_ids to process per commit batch (ignored in --dry-run)",
+        help=(
+            "Entity_ids fetched/processed per SELECT+DELETE round trip; "
+            "also the commit boundary for a real run (--dry-run pages at "
+            "this size too, to bound its own SELECT cost, but never "
+            "commits)"
+        ),
     )
     collapse_attr_stage.add_argument(
         "--dry-run", action="store_true", default=False,
         help="Report what would change without mutating anything",
+    )
+    collapse_attr_stage.add_argument(
+        "--limit", type=int, default=None,
+        help=(
+            "Cap the total number of entities examined across every page "
+            "(e.g. --dry-run --limit 50 for a fast correctness check "
+            "against real data). Unbounded by default -- see this repo's "
+            "AGENTS.md/CLAUDE.md note on why a one-time backfill CLI needs "
+            "this rather than forcing a full-table dry run just to prove "
+            "the logic works."
+        ),
     )
     collapse_attr_stage.set_defaults(
         handler=_logged_handler(
@@ -2151,6 +2167,7 @@ def _handle_collapse_attribute_stage_history(args) -> int:
             session,
             batch_size=args.batch_size,
             dry_run=args.dry_run,
+            limit=args.limit,
         )
     finally:
         session.close()

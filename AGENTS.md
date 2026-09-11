@@ -454,6 +454,19 @@ bash infra/scripts/run-aws-mdm-e2e.sh --env dev --aws-profile sec_platform_deplo
 bash infra/scripts/run-aws-mdm-e2e.sh --env dev --status-only
 ```
 
+**One-time backfill CLIs must expose a `--limit`/bounded-sample mode, not just `--dry-run`.**
+A full unbounded `--dry-run` still walks the entire live candidate set — for
+`mdm collapse-attribute-stage-history` that was 139,349 entities at one
+Postgres round trip each (~57ms/entity, cross-region latency), projecting a
+multi-hour dry run just to confirm the logic works on real data. `--dry-run`
+proves nothing a bounded sample (tens of rows) wouldn't also prove, at a
+fraction of the cost — confirm on a small sample first, then either trust the
+existing test suite + code review for the full run or let the full run
+double as its own dry run (it's already the resumable, batched-commit path,
+so an interrupted full run costs nothing extra to retry). Build the `--limit`
+flag in from the start next time; retrofitting one after a slow prod dry run
+is already underway is the wrong order.
+
 ## Snowflake Native S3 Pull
 
 Snowflake is the analytics target for the AWS path. Use the wrapper for normal AWS/Snowflake native-pull deployment:

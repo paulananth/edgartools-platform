@@ -2125,6 +2125,30 @@ unit test suite alone (SQLite-backed tests here never exercised more than
 a handful of relationship_ids, so the N+1 shape was invisible until real
 volume hit it).
 
+## Backfill CLI `--dry-run` walked the entire live table just to prove the logic works (found live 2026-09-11)
+
+**Problem:** verifying `mdm collapse-attribute-stage-history --dry-run` (Ticket
+05, mdm-run-throughput map) against real prod meant waiting on a multi-hour
+run before getting any signal, because `--dry-run` had no bound — it walked
+every collapsible entity in the live table (139,349 of them) exactly like a
+real run would, just without the writes.
+
+**Root cause:** `find_collapsible_entity_ids()` already supports `limit`/
+`after` for keyset pagination (the real, non-dry-run branch uses it), but
+the dry-run branch calls it with no `limit`, and the CLI's own `--dry-run`
+flag never exposed a way to bound the sample. "Prove the logic is correct on
+real data" and "prove the full backfill completes" got conflated into one
+mode with one cost — the first only needs tens of rows; only the second
+needs the whole table.
+
+**Lesson:** a one-time backfill CLI's `--dry-run` should default to (or offer)
+a small bounded sample for correctness verification, separate from an
+unbounded pass that estimates full-run scope/cost. Build the `--limit` flag
+in from the start — see the same note in `AGENTS.md`'s AWS MDM section.
+Don't wait out a slow unbounded dry run "because it's already running";
+that's sunk-cost, not evidence the bounded version wouldn't have answered
+the question already.
+
 ## Two graph-generation activation paths, now out of sync (found live 2026-09-10, not yet reconciled)
 
 There are two independent ways to publish and activate a graph generation,
