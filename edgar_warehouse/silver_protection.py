@@ -72,6 +72,18 @@ class ProtectedTablePolicy:
     # identity or provenance" depends on the table's own key semantics, not
     # the column name alone.
     provenance_columns: frozenset[str] = frozenset()
+    # Ticket 01 (fundamentals-daily-integration map): a second, narrower
+    # tiebreak column for the specific case where the primary
+    # authority_column ties (sec_financial_fact/sec_accounting_flag's
+    # retirement writes never advance ingested_at, by design -- see
+    # CLAUDE.md's "sec_financial_fact retirement publish-conflict" 5-whys).
+    # Excluded from same-key comparison the same way authority_column is
+    # (see _comparable_columns below), and consulted by _resolve_conflict
+    # only when every genuinely differing comparable column is a member of
+    # retirement_columns. None/empty for every table with no such fallback
+    # -- behavior for those tables is unchanged.
+    retirement_authority_column: str | None = None
+    retirement_columns: frozenset[str] = frozenset()
 
 
 # Reviewed, fail-closed registry of every canonical domain table in the
@@ -261,13 +273,17 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         # produce two genuinely different timestamps for the exact same
         # "became valid" event -- no shared default expression can make them
         # equal, so this column can never be made comparable here.
-        # Deliberately does NOT include valid_to/is_current -- those carry
-        # real retirement-state content that a future candidate legitimately
-        # needs to update, and blocking on a genuine conflict there is
-        # correct today; how retirement conflicts *should* resolve is a
-        # separate, open design question (see CLAUDE.md's "sec_financial_fact
-        # retirement publish-conflict" 5-whys).
         provenance_columns=frozenset({"valid_from"}),
+        # Ticket 01 (fundamentals-daily-integration map): resolves the open
+        # question the comment above used to raise ("how retirement
+        # conflicts *should* resolve is a separate, open design question").
+        # valid_to/is_current stay real, comparable business content (a
+        # genuine value conflict alongside a retirement still correctly
+        # aborts as ambiguous) -- only a tie on ingested_at where the *sole*
+        # difference is retirement state now falls back to this column
+        # instead of aborting permanently.
+        retirement_authority_column="retirement_state_observed_at",
+        retirement_columns=frozenset({"valid_to", "is_current"}),
     ),
     "sec_financial_derived": ProtectedTablePolicy(
         "sec_financial_derived",
@@ -284,6 +300,9 @@ PROTECTED_TABLE_REGISTRY: dict[str, ProtectedTablePolicy] = {
         # Same reasoning as sec_financial_fact's own valid_from exemption
         # above -- both tables gained identical Ticket 33 retirement columns.
         provenance_columns=frozenset({"valid_from"}),
+        # Same Ticket 01 retirement-tie fallback as sec_financial_fact above.
+        retirement_authority_column="retirement_state_observed_at",
+        retirement_columns=frozenset({"valid_to", "is_current"}),
     ),
     "sec_executive_record": ProtectedTablePolicy(
         "sec_executive_record", ("cik", "accession_number", "exec_name"), authority_column="ingested_at"
@@ -522,6 +541,13 @@ def _comparable_columns(policy: "ProtectedTablePolicy", all_columns: list[str]) 
     excluded = set(policy.business_keys) | _PROVENANCE_COLUMNS | policy.provenance_columns
     if policy.authority_column is not None:
         excluded.add(policy.authority_column)
+    # Ticket 01 (fundamentals-daily-integration map): retirement_authority_column
+    # is excluded the same way authority_column is -- it's set independently
+    # via now() on each side, so leaving it comparable would make it always
+    # differ, permanently defeating _resolve_conflict's "only retirement_columns
+    # differ" subset check below.
+    if policy.retirement_authority_column is not None:
+        excluded.add(policy.retirement_authority_column)
     return [c for c in all_columns if c not in excluded]
 
 
@@ -999,7 +1025,7 @@ def merge_candidate_into_canonical(
                         unchanged += 1
                         continue
 
-                    winner = _resolve_conflict(policy, canon_row, cand_row)
+                    winner = _resolve_conflict(policy, canon_row, cand_row, differing=differing)
                     if winner is None:
                         conflicts.append(
                             RowConflict(
@@ -1132,6 +1158,7 @@ def _resolve_conflict(
     policy: ProtectedTablePolicy,
     canonical_row: dict[str, Any],
     candidate_row: dict[str, Any],
+    differing: tuple[str, ...] = (),
 ) -> str | None:
     """Return 'candidate', 'canonical', or None (ambiguous) for a same-key conflict."""
     if policy.authority_column is None:
@@ -1144,7 +1171,31 @@ def _resolve_conflict(
         return "candidate"
     if canon_value > cand_value:
         return "canonical"
-    return None  # exact tie on the authority column is still ambiguous.
+
+    # Exact tie on the primary authority column. Ticket 01
+    # (fundamentals-daily-integration map): sec_financial_fact/
+    # sec_accounting_flag's retirement writes never advance ingested_at by
+    # design, so a genuine retirement (or reinstatement) always ties here.
+    # If every column that actually differs between the two sides is one of
+    # this table's declared retirement_columns (valid_to/is_current), fall
+    # back to the table's own retirement_authority_column instead of
+    # declaring the tie permanently ambiguous. A genuine *value* conflict
+    # alongside a retirement (differing includes a non-retirement column)
+    # still falls through to the ambiguous return below, unchanged.
+    if (
+        policy.retirement_authority_column is not None
+        and differing
+        and set(differing) <= policy.retirement_columns
+    ):
+        retirement_canon_value = canonical_row.get(policy.retirement_authority_column)
+        retirement_cand_value = candidate_row.get(policy.retirement_authority_column)
+        if retirement_canon_value is not None and retirement_cand_value is not None:
+            if retirement_cand_value > retirement_canon_value:
+                return "candidate"
+            if retirement_canon_value > retirement_cand_value:
+                return "canonical"
+
+    return None  # exact tie on the authority column (no retirement fallback available) is still ambiguous.
 
 
 def _primary_key_columns(conn: duckdb.DuckDBPyConnection, catalog: str, table_name: str) -> tuple[str, ...]:

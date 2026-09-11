@@ -1016,6 +1016,24 @@ class SilverDatabase:
                 # for atomicity across their RENAME+CREATE+INSERT sequence.
                 False,
             ),
+            (
+                "011_financial_fact_retirement_state_observed_at",
+                "Add retirement_state_observed_at to sec_financial_fact and "
+                "sec_accounting_flag, giving a genuine retirement's own "
+                "authority-column tie (ingested_at never advances on retire, "
+                "by design) a second, narrower tiebreak column instead of "
+                "permanently aborting the publish (fundamentals-daily-"
+                "integration map, Ticket 01; closes CLAUDE.md's "
+                "'sec_financial_fact retirement publish-conflict' 5-whys "
+                "Part B).",
+                self._add_financial_fact_retirement_state_observed_at,
+                # False: same DuckDB ADD-COLUMN-with-DEFAULT-on-populated-table
+                # commit-conflict risk documented for migration 010 above --
+                # this migration issues its own DEFAULT-bearing ADD COLUMN per
+                # table. Every statement is IF NOT EXISTS, so it's already
+                # safe to run outside the shared transactional envelope.
+                False,
+            ),
         )
 
     def _schema_migration_applied(self, migration_name: str) -> bool:
@@ -1139,6 +1157,20 @@ class SilverDatabase:
             )
             self._conn.execute(
                 f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS is_current BOOLEAN DEFAULT TRUE"
+            )
+
+    def _add_financial_fact_retirement_state_observed_at(self) -> None:
+        """Ticket 01 (fundamentals-daily-integration map). DEFAULT NOW()
+        backfills every pre-existing row to "as of migration time, this row's
+        current retirement state was last observed now" -- the earliest
+        honest value, since retirement-state timestamps weren't tracked
+        before this column existed (same rationale as
+        _add_company_facts_retirement_columns above).
+        """
+        for table in ("sec_financial_fact", "sec_accounting_flag"):
+            self._conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                "retirement_state_observed_at TIMESTAMPTZ DEFAULT NOW()"
             )
 
     def _widen_adv_fund_index_to_bigint(self) -> None:
@@ -3095,7 +3127,13 @@ class SilverDatabase:
                     -- to notice the reversal. A no-op for a fact that was
                     -- never retired (already is_current=TRUE/valid_to=NULL).
                     is_current = TRUE,
-                    valid_to = NULL
+                    valid_to = NULL,
+                    -- Ticket 01 (fundamentals-daily-integration map): every
+                    -- write that touches is_current/valid_to also bumps this
+                    -- column, so retire_financial_facts_not_in_snapshot's own
+                    -- write and this reinstatement share one consistent
+                    -- "when did retirement state last change" clock.
+                    retirement_state_observed_at = now()
             """,
             rows=rows,
             values_fn=lambda r: [
@@ -3121,6 +3159,7 @@ class SilverDatabase:
         "cik", "accession_number", "fiscal_year", "fiscal_period", "period_end",
         "period_start", "form_type", "concept", "value", "unit", "decimals",
         "segment", "parser_version", "valid_from", "valid_to", "is_current",
+        "retirement_state_observed_at",
     )
 
     def retire_financial_facts_not_in_snapshot(
@@ -3162,11 +3201,11 @@ class SilverDatabase:
             retired = self._conn.execute(
                 f"""
                 UPDATE sec_financial_fact
-                SET is_current = FALSE, valid_to = ?
+                SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
                 WHERE cik = ? AND is_current = TRUE
                 RETURNING {row_columns_sql}
                 """,
-                [now, cik],
+                [now, now, cik],
             ).fetchall()
         else:
             self._conn.execute(
@@ -3192,7 +3231,7 @@ class SilverDatabase:
                 retired = self._conn.execute(
                     f"""
                     UPDATE sec_financial_fact
-                    SET is_current = FALSE, valid_to = ?
+                    SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
                     WHERE cik = ?
                       AND is_current = TRUE
                       AND NOT EXISTS (
@@ -3206,7 +3245,7 @@ class SilverDatabase:
                       )
                     RETURNING {row_columns_sql}
                     """,
-                    [now, cik],
+                    [now, now, cik],
                 ).fetchall()
             finally:
                 self._conn.execute("DELETE FROM stg_financial_fact_retain_keys")
@@ -3495,7 +3534,10 @@ class SilverDatabase:
                 -- Ticket 33: same reinstatement-on-reappearance as
                 -- merge_financial_facts above.
                 is_current = TRUE,
-                valid_to = NULL
+                valid_to = NULL,
+                -- Ticket 01 (fundamentals-daily-integration map): same
+                -- reasoning as merge_financial_facts above.
+                retirement_state_observed_at = now()
             """,
             rows,
             lambda r: [
@@ -3523,6 +3565,7 @@ class SilverDatabase:
         "auditor_name", "auditor_pcaob_id", "auditor_location", "icfr_attestation",
         "auditor_changed", "beneish_m_score", "altman_z_score", "piotroski_f_score",
         "parser_version", "valid_from", "valid_to", "is_current",
+        "retirement_state_observed_at",
     )
 
     def retire_accounting_flags_not_in_snapshot(
@@ -3540,24 +3583,24 @@ class SilverDatabase:
             retired = self._conn.execute(
                 f"""
                 UPDATE sec_accounting_flag
-                SET is_current = FALSE, valid_to = ?
+                SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
                 WHERE cik = ? AND is_current = TRUE
                 RETURNING {row_columns_sql}
                 """,
-                [now, cik],
+                [now, now, cik],
             ).fetchall()
         else:
             placeholders = ", ".join("?" * len(accession_numbers))
             retired = self._conn.execute(
                 f"""
                 UPDATE sec_accounting_flag
-                SET is_current = FALSE, valid_to = ?
+                SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
                 WHERE cik = ?
                   AND is_current = TRUE
                   AND accession_number NOT IN ({placeholders})
                 RETURNING {row_columns_sql}
                 """,
-                [now, cik, *accession_numbers],
+                [now, now, cik, *accession_numbers],
             ).fetchall()
 
         return self._finalize_retirement("sec_accounting_flag", self._ACCOUNTING_FLAG_ROW_COLUMNS, retired)
