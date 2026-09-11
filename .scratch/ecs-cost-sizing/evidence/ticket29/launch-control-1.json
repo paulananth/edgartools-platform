@@ -1,0 +1,40 @@
+{
+  "attempt": 1,
+  "canary_definition_hash": "79cf6314d0a90b617c4e79a95d409ce201542a1b562292cc0e363aeb31002d46",
+  "canary_name": "canary-ticket29-gold-large-control-79cf6314d0a9",
+  "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:233",
+  "changed_reference_count": 0,
+  "cohort": "gold-control",
+  "compatibility_overlays": [],
+  "concurrency_context": {
+    "active_task_arns": [
+      "arn:aws:ecs:us-east-1:690839588395:task/edgartools-prod-warehouse/340f0e10eae042918605313a39225de8"
+    ],
+    "allow_concurrent": true
+  },
+  "covered_states": [
+    "RunWarehouseTask"
+  ],
+  "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket29-gold-large-control-79cf6314d0a9:ticket29-gold-control-1-20260901T112434Z",
+  "expected_task_states": [
+    "RunWarehouseTask"
+  ],
+  "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:87b4690bb15274d08e0ed869cf5c3dba03b8150d9ffa75925b233faa07f87f07",
+  "input_identity": {
+    "canonical_silver_bucket": "edgartools-prod-warehouse-690839588395",
+    "canonical_silver_key": "warehouse/silver/sec/silver.duckdb",
+    "content_length": 1800417280,
+    "etag": "e32dacf7bf9cfb150f5567c32caefb89",
+    "last_modified": "2026-09-01T00:02:16+00:00",
+    "version_id": "5JbN.uMxH64jWLlmzsJoi12ezjIC0Gtu"
+  },
+  "source_definition_hash": "79cf6314d0a90b617c4e79a95d409ce201542a1b562292cc0e363aeb31002d46",
+  "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+  "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:233",
+  "start_date": "2026-09-01T07:24:37.832000-04:00",
+  "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket29-gold-large-control-79cf6314d0a9",
+  "task_definition_contract": {
+    "RunWarehouseTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:233"
+  },
+  "ticket": 29
+}

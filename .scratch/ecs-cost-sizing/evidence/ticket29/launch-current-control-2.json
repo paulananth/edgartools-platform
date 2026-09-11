@@ -1,0 +1,39 @@
+{
+  "attempt": 2,
+  "canary_definition_hash": "0b5921fc1bb5ac158e84271b2852db30f35c3bbb713dfdefc71a33420240e1e7",
+  "canary_name": "canary-ticket29-gold-large-control-0b5921fc1bb5",
+  "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:236",
+  "changed_reference_count": 0,
+  "cohort": "gold-control",
+  "compatibility_overlays": [],
+  "concurrency_context": {
+    "active_task_arns": [],
+    "allow_concurrent": false
+  },
+  "covered_states": [
+    "RunWarehouseTask"
+  ],
+  "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket29-gold-large-control-0b5921fc1bb5:ticket29-gold-control-2-20260902T001736Z",
+  "expected_task_states": [
+    "RunWarehouseTask"
+  ],
+  "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:b3a16183c371effbb7313e77e0f3216ba986c684b00cb5c35f98a3b6fcc247fe",
+  "input_identity": {
+    "bucket": "edgartools-prod-warehouse-690839588395",
+    "content_length": 1800417280,
+    "etag": "0032cf8c442576bbf21aeea6a8e8ae53",
+    "key": "warehouse/silver/sec/silver.duckdb",
+    "last_modified": "2026-09-02T00:13:46+00:00",
+    "server_side_encryption": "AES256",
+    "version_id": "fCDQ9WRaUM1qNT1CvNT2ckLQ920csIvO"
+  },
+  "source_definition_hash": "0b5921fc1bb5ac158e84271b2852db30f35c3bbb713dfdefc71a33420240e1e7",
+  "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+  "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:236",
+  "start_date": "2026-09-01T20:17:38.040000-04:00",
+  "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket29-gold-large-control-0b5921fc1bb5",
+  "task_definition_contract": {
+    "RunWarehouseTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:236"
+  },
+  "ticket": 29
+}

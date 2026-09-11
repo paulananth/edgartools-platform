@@ -1,4 +1,4 @@
-"""Prepare, launch, and report the ECS sizing canaries from Ticket 28.
+"""Prepare, launch, and report the ECS sizing canaries from Tickets 28 and 29.
 
 The command is deliberately dry-run-first. ``prepare`` derives unscheduled
 Standard state machines from the current production definitions and changes
@@ -37,12 +37,36 @@ EXPECTED_ACCOUNT = "690839588395"
 CLUSTER_BASENAME = "warehouse"
 PERFORMANCE_LOG_GROUP = "/aws/ecs/containerinsights/{cluster}/performance"
 TERMINAL_STATUSES = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
+OVERLAP_EVIDENCE_MAX_AGE = timedelta(minutes=30)
 FARGATE_VCPU_HOUR_USD = 0.0404784
 FARGATE_GIB_HOUR_USD = 0.004446
 FARGATE_PRICING_SOURCE = "https://aws.amazon.com/fargate/pricing/"
-FARGATE_PRICING_CAPTURED_AT = "2026-08-29"
+FARGATE_PRICING_CAPTURED_AT = "2026-09-10"
 CANARIES = {
+    "gold": {
+        "ticket": 29,
+        "source": "gold-refresh",
+        "name": "canary-ticket29-gold-medium",
+        "source_family": "large",
+        "candidate_family": "medium",
+        "state_prefix": "RunWarehouseTask",
+        "expected_changes": {1},
+        "input": {},
+        "execution_prefix": "ticket29-gold",
+    },
+    "gold-control": {
+        "ticket": 29,
+        "source": "gold-refresh",
+        "name": "canary-ticket29-gold-large-control",
+        "source_family": "large",
+        "candidate_family": "large",
+        "state_prefix": "RunWarehouseTask",
+        "expected_changes": {1},
+        "input": {},
+        "execution_prefix": "ticket29-gold-control",
+    },
     "sync": {
+        "ticket": 28,
         "source": "mdm-utility",
         "name": "canary-ticket28-mdm-sync-graph-large",
         "source_family": "mdm-medium",
@@ -50,8 +74,10 @@ CANARIES = {
         "state_prefix": "mdm_sync_graph_",
         "expected_changes": {5, 7},
         "input": {"mode": "mdm_sync_graph", "limit": 0},
+        "execution_prefix": "ticket28-sync",
     },
     "residual": {
+        "ticket": 28,
         "source": "residual-holds-graph",
         "name": "canary-ticket28-residual-holds-medium",
         "source_family": "mdm-large",
@@ -59,8 +85,10 @@ CANARIES = {
         "state_prefix": "Mdm",
         "expected_changes": {8},
         "input": {},
+        "execution_prefix": "ticket28-residual",
     },
     "residual-control": {
+        "ticket": 28,
         "source": "residual-holds-graph",
         "name": "canary-ticket28-residual-holds-large-control",
         "source_family": "mdm-large",
@@ -68,8 +96,10 @@ CANARIES = {
         "state_prefix": "Mdm",
         "expected_changes": {8},
         "input": {},
+        "execution_prefix": "ticket28-residual-control",
     },
 }
+DEFAULT_CANARIES = ("residual", "residual-control", "sync")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,11 +109,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env", default="prod", choices=["dev", "prod"])
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    prepare = subparsers.add_parser("prepare", help="plan or upsert both canaries")
+    prepare = subparsers.add_parser("prepare", help="plan or upsert canaries")
     prepare.add_argument(
         "--apply", action="store_true", help="create/update unscheduled canary machines"
     )
     prepare.add_argument("--output", type=Path)
+    prepare.add_argument(
+        "--cohort",
+        dest="cohorts",
+        action="append",
+        choices=sorted(CANARIES),
+        help="prepare only this cohort; repeat to select more than one",
+    )
 
     start = subparsers.add_parser("start", help="launch one fresh canary execution")
     start.add_argument("cohort", choices=sorted(CANARIES))
@@ -102,6 +139,19 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--allow-running", action="store_true", help="emit provisional evidence"
     )
+
+    evaluate_gold = subparsers.add_parser(
+        "evaluate-gold", help="evaluate the matched Ticket 29 gold cohort"
+    )
+    evaluate_gold.add_argument("--control-report", required=True, type=Path)
+    evaluate_gold.add_argument(
+        "--candidate-report",
+        dest="candidate_reports",
+        required=True,
+        action="append",
+        type=Path,
+    )
+    evaluate_gold.add_argument("--output", type=Path)
     return parser
 
 
@@ -238,7 +288,9 @@ def add_unbounded_residual_sync(
         .get("ContainerOverrides", [])
     )
     if len(containers) != 1:
-        raise ValueError("residual Publish Relationships has an unexpected container override")
+        raise ValueError(
+            "residual Publish Relationships has an unexpected container override"
+        )
     legacy = (
         "States.Array('mdm', 'publish-relationships', "
         "'--generation-id', $$.Execution.Name, "
@@ -342,8 +394,7 @@ def fargate_usage(
         "requested_vcpu_hours": vcpu_hours,
         "requested_memory_gib_hours": memory_gib_hours,
         "estimated_compute_cost_usd": (
-            vcpu_hours * FARGATE_VCPU_HOUR_USD
-            + memory_gib_hours * FARGATE_GIB_HOUR_USD
+            vcpu_hours * FARGATE_VCPU_HOUR_USD + memory_gib_hours * FARGATE_GIB_HOUR_USD
         ),
     }
 
@@ -369,9 +420,7 @@ def extract_task_attempts(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for event in events:
         event_type = event.get("type")
         if event_type == "TaskSucceeded":
-            raw_terminal = (event.get("taskSucceededEventDetails") or {}).get(
-                "output"
-            )
+            raw_terminal = (event.get("taskSucceededEventDetails") or {}).get("output")
         elif event_type == "TaskFailed":
             raw_terminal = (event.get("taskFailedEventDetails") or {}).get("cause")
         else:
@@ -448,7 +497,10 @@ def extract_json_documents(messages: list[str]) -> list[dict[str, Any]]:
 
 
 def evaluate_execution(
-    *, execution_status: str, tasks: list[dict[str, Any]]
+    *,
+    execution_status: str,
+    tasks: list[dict[str, Any]],
+    cluster_overlap: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Apply the fail-closed execution-local Ticket 03/04 gates."""
     failures: list[str] = []
@@ -457,6 +509,11 @@ def evaluate_execution(
         failures.append(f"execution status is {execution_status}, not SUCCEEDED")
     if not tasks:
         failures.append("no ECS task attempts found in execution history")
+    if cluster_overlap:
+        failures.append(
+            f"canary was not isolated: {len(cluster_overlap)} other cluster task(s) "
+            "overlapped the execution"
+        )
     for task in tasks:
         state = task["state"]
         if task.get("retry_ordinal", 1) > 1:
@@ -490,6 +547,231 @@ def evaluate_execution(
     return {"passed": not failures, "failures": failures, "warnings": warnings}
 
 
+def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
+    from edgar_warehouse.serving.targets.snowflake import GOLD_EXPORT_MAP
+
+    tasks = evidence.get("tasks") or []
+    if len(tasks) != 1 or tasks[0].get("state") != "RunWarehouseTask":
+        raise ValueError("gold evidence must contain exactly one RunWarehouseTask")
+    documents = tasks[0].get("application_evidence") or []
+
+    def single_event(name: str) -> dict[str, Any]:
+        matches = [document for document in documents if document.get("event") == name]
+        if len(matches) != 1:
+            raise ValueError(f"gold evidence must contain exactly one {name} event")
+        return matches[0]
+
+    single_event("gold_publish_started")
+    event = single_event("gold_build_completed")
+    published = single_event("gold_publish_completed")
+    manifest = event.get("gold_manifest") or []
+    if not manifest:
+        raise ValueError("gold_build_completed is missing its manifest")
+    normalized_manifest = []
+    for entry in manifest:
+        required = ("table_name", "row_count", "parquet_sha256", "byte_size")
+        missing = [key for key in required if entry.get(key) is None]
+        if missing:
+            raise ValueError(
+                f"gold manifest entry is missing {missing}: {entry.get('table_name')}"
+            )
+        normalized_manifest.append({key: entry[key] for key in required})
+    normalized_manifest.sort(key=lambda entry: str(entry["table_name"]))
+    row_counts = event.get("gold_row_counts") or {}
+    manifest_counts = {
+        str(entry["table_name"]): int(entry["row_count"])
+        for entry in normalized_manifest
+    }
+    if row_counts != manifest_counts:
+        raise ValueError("gold row counts do not match the durable manifest")
+    snowflake_counts = event.get("snowflake_export_counts") or {}
+    expected_snowflake_counts = {
+        export_name: manifest_counts[source_name]
+        for export_name, source_name in GOLD_EXPORT_MAP.items()
+        if source_name in manifest_counts
+    }
+    if snowflake_counts != expected_snowflake_counts:
+        raise ValueError(
+            "Snowflake export counts do not match the canonical gold export mapping"
+        )
+    table_count = event.get("table_count")
+    if table_count != len(normalized_manifest):
+        raise ValueError("attempted and committed gold table counts do not match")
+    if published.get("gold_row_counts") != row_counts:
+        raise ValueError("completed gold row counts do not match the durable manifest")
+    if published.get("snowflake_export_counts") != snowflake_counts:
+        raise ValueError("completed Snowflake export counts do not match the manifest")
+    record_funnel = {
+        "output_tables": sorted(manifest_counts),
+        "attempted_gold_tables": table_count,
+        "committed_gold_tables": len(normalized_manifest),
+        "committed_gold_rows": sum(manifest_counts.values()),
+        "exported_serving_tables": len(snowflake_counts),
+        "exported_serving_rows": sum(snowflake_counts.values()),
+        "skipped_rejected_deduplicated": "not_applicable",
+    }
+    source_output_sha256 = _json_hash(
+        {
+            "manifest": normalized_manifest,
+            "snowflake_export_counts": snowflake_counts,
+        }
+    )
+    return {
+        "output_sha256": source_output_sha256,
+        "record_funnel": record_funnel,
+        "manifest": normalized_manifest,
+        "gold_row_counts": row_counts,
+        "snowflake_export_counts": snowflake_counts,
+    }
+
+
+def evaluate_gold_cohort(
+    *,
+    control: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    cohort_overlap: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Apply Ticket 29's matched-output, duration, and cost gates offline."""
+    if len(candidates) != 2:
+        raise ValueError("Ticket 29 requires exactly two candidate reports")
+    if cohort_overlap is None:
+        raise ValueError("full cohort-window overlap evidence is required")
+    validate_gold_report_order(control=control, candidates=candidates)
+    performance_failures: list[str] = []
+    if cohort_overlap:
+        performance_failures.append("gold cohort overlapped other cluster work")
+    run_specs = [
+        ("control", control, "gold-control", "large", 0),
+        ("candidate 1", candidates[0], "gold", "medium", 1),
+        ("candidate 2", candidates[1], "gold", "medium", 1),
+    ]
+    images: set[str] = set()
+    source_hashes: set[str] = set()
+    outputs: list[dict[str, Any]] = []
+    structural_recovery_parity_passed = True
+    for (
+        label,
+        evidence,
+        expected_cohort,
+        expected_profile,
+        expected_changes,
+    ) in run_specs:
+        launch = evidence.get("launch_contract") or {}
+        if launch.get("ticket") != 29 or launch.get("cohort") != expected_cohort:
+            performance_failures.append(
+                f"{label} has the wrong Ticket 29 cohort identity"
+            )
+        task_definition = str(launch.get("candidate_task_definition_arn") or "")
+        if f"edgartools-prod-{expected_profile}:" not in task_definition:
+            performance_failures.append(
+                f"{label} is not on warehouse {expected_profile}"
+            )
+        images.add(str(launch.get("image") or ""))
+        source_hashes.add(str(launch.get("source_definition_hash") or ""))
+        if (
+            launch.get("changed_reference_count") != expected_changes
+            or launch.get("compatibility_overlays") != []
+            or launch.get("covered_states") != ["RunWarehouseTask"]
+        ):
+            performance_failures.append(
+                f"{label} does not preserve structural recovery parity"
+            )
+            structural_recovery_parity_passed = False
+        concurrency = launch.get("concurrency_context") or {}
+        if concurrency.get("allow_concurrent") or concurrency.get("active_task_arns"):
+            performance_failures.append(f"{label} allowed concurrent cluster work")
+        if evidence.get("cluster_overlap") is None:
+            performance_failures.append(
+                f"{label} is missing full-window cluster isolation evidence"
+            )
+        elif evidence["cluster_overlap"]:
+            performance_failures.append(f"{label} overlapped other cluster work")
+        local_gates = evidence.get("execution_local_gates") or {}
+        if not local_gates.get("passed"):
+            performance_failures.append(f"{label} failed execution-local gates")
+        output = _gold_output_identity(evidence)
+        outputs.append(output)
+    if "" in images or len(images) != 1:
+        performance_failures.append(
+            "candidate and control image identities do not match"
+        )
+    if "" in source_hashes or len(source_hashes) != 1:
+        performance_failures.append(
+            "candidate and control source definitions do not match"
+        )
+    output_parity_passed = not any(output != outputs[0] for output in outputs[1:])
+    if not output_parity_passed:
+        performance_failures.append(
+            "gold manifest or Snowflake export output parity failed"
+        )
+
+    control_duration = float(control["execution"]["duration_seconds"])
+    candidate_durations = [
+        float(candidate["execution"]["duration_seconds"]) for candidate in candidates
+    ]
+    candidate_duration_p95 = _percentile(candidate_durations, 0.95)
+    duration_regression = (candidate_duration_p95 / control_duration - 1) * 100
+    if duration_regression > 5:
+        performance_failures.append(
+            f"candidate p95 duration regression {duration_regression:.2f}% exceeds 5%"
+        )
+
+    control_cost = float(control["estimated_compute_cost_usd"])
+    candidate_costs = [
+        float(candidate["estimated_compute_cost_usd"]) for candidate in candidates
+    ]
+    candidate_cost_p95 = _percentile(candidate_costs, 0.95)
+    cost_improvement = (1 - candidate_cost_p95 / control_cost) * 100
+    if cost_improvement < 10:
+        performance_failures.append(
+            f"candidate p95 cost improvement {cost_improvement:.2f}% is below 10%"
+        )
+    input_envelope_evidence = {
+        "passed": False,
+        "status": "not_captured",
+        "source_system": "EDGARTOOLS_SILVER",
+    }
+    sizing_failures = [
+        *performance_failures,
+        "matched Snowflake input envelope was not captured",
+    ]
+    recovery_evidence = {"passed": False, "status": "not_exercised"}
+    failures = [*sizing_failures, "recovery behavior was not exercised"]
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "performance_gates_passed": not performance_failures,
+        "performance_failures": performance_failures,
+        "sizing_gates_passed": not sizing_failures,
+        "sizing_failures": sizing_failures,
+        "control_duration_seconds": control_duration,
+        "candidate_duration_seconds": candidate_durations,
+        "candidate_duration_p95_seconds": candidate_duration_p95,
+        "duration_regression_percent": duration_regression,
+        "control_cost_usd": control_cost,
+        "candidate_cost_usd": candidate_costs,
+        "candidate_cost_p95_usd": candidate_cost_p95,
+        "cost_improvement_percent": cost_improvement,
+        "output_identity_summary": {
+            "mode": "exact_gold_output",
+            "sha256": outputs[0]["output_sha256"],
+        },
+        "input_envelope_evidence": input_envelope_evidence,
+        "cohort_overlap": cohort_overlap,
+        "record_funnel": outputs[0]["record_funnel"],
+        "structural_recovery_parity": {
+            "passed": structural_recovery_parity_passed,
+            "mode": "same_asl_except_task_definition",
+        },
+        "recovery_evidence": recovery_evidence,
+        "idempotency": {
+            "passed": output_parity_passed,
+            "mode": "exact_repeated_output_manifest",
+        },
+        "output_identity": outputs[0],
+    }
+
+
 def validate_attempt_sequence(
     executions: list[dict[str, Any]], *, cohort: str, attempt: int
 ) -> None:
@@ -501,27 +783,113 @@ def validate_attempt_sequence(
     ]
     if running:
         raise ValueError(f"cohort execution is still RUNNING: {running[0]}")
-    current_prefix = f"ticket28-{cohort}-{attempt}-"
+    execution_prefix = CANARIES[cohort]["execution_prefix"]
+    current_prefix = f"{execution_prefix}-{attempt}-"
     if any(execution["name"].startswith(current_prefix) for execution in executions):
         raise ValueError(f"attempt {attempt} has already been used for {cohort}")
     if attempt == 1:
         return
-    prior_prefix = f"ticket28-{cohort}-{attempt - 1}-"
+    prior_prefix = f"{execution_prefix}-{attempt - 1}-"
     if not any(execution["name"].startswith(prior_prefix) for execution in executions):
         raise ValueError(f"prior attempt {attempt - 1} is absent for {cohort}")
+
+
+def validate_gold_launch_order(
+    executions: list[dict[str, Any]],
+    *,
+    cohort: str,
+    expected_control_state_machine_arn: str | None = None,
+) -> None:
+    """Require a fresh large control followed by at most two medium runs."""
+    if cohort not in {"gold", "gold-control"}:
+        return
+    running = [
+        execution for execution in executions if execution["status"] == "RUNNING"
+    ]
+    if running:
+        raise ValueError(
+            f"gold cohort execution is still RUNNING: {running[0]['name']}"
+        )
+    if cohort == "gold-control":
+        return
+    ordered = sorted(executions, key=lambda item: _parse_datetime(item["startDate"]))
+    controls = [
+        execution
+        for execution in ordered
+        if execution["name"].startswith(CANARIES["gold-control"]["execution_prefix"])
+    ]
+    if not controls:
+        raise ValueError("gold candidate requires a fresh large control")
+    latest_control = controls[-1]
+    if latest_control["status"] != "SUCCEEDED":
+        raise ValueError(
+            f"latest large control is {latest_control['status']}, not SUCCEEDED"
+        )
+    if (
+        not expected_control_state_machine_arn
+        or latest_control.get("stateMachineArn") != expected_control_state_machine_arn
+    ):
+        raise ValueError(
+            "latest large control does not use the current immutable definition"
+        )
+    control_started = _parse_datetime(latest_control["startDate"])
+    candidates_after_control = [
+        execution
+        for execution in ordered
+        if execution["name"].startswith(f"{CANARIES['gold']['execution_prefix']}-")
+        and not execution["name"].startswith(
+            CANARIES["gold-control"]["execution_prefix"]
+        )
+        and _parse_datetime(execution["startDate"]) > control_started
+    ]
+    if len(candidates_after_control) >= 2:
+        raise ValueError(
+            "gold cohort already has two medium candidates; run a fresh large control"
+        )
+
+
+def validate_gold_report_order(
+    *, control: dict[str, Any], candidates: list[dict[str, Any]]
+) -> None:
+    """Require non-overlapping control, candidate 1, candidate 2 reports."""
+    if len(candidates) != 2:
+        raise ValueError("Ticket 29 requires exactly two candidate reports")
+    control_stop = _parse_datetime(control["execution"]["stop_date"])
+    candidate_1_start = _parse_datetime(candidates[0]["execution"]["start_date"])
+    candidate_1_stop = _parse_datetime(candidates[0]["execution"]["stop_date"])
+    candidate_2_start = _parse_datetime(candidates[1]["execution"]["start_date"])
+    if control_stop > candidate_1_start:
+        raise ValueError("control must stop before candidate 1 starts")
+    if candidate_1_stop > candidate_2_start:
+        raise ValueError("candidate 1 must stop before candidate 2 starts")
 
 
 def sequencing_cohorts(cohort: str) -> tuple[str, ...]:
     """Return cohorts that must never overlap at the Step Functions level."""
     if cohort in {"residual", "residual-control"}:
         return ("residual", "residual-control")
+    if cohort in {"gold", "gold-control"}:
+        return ("gold", "gold-control")
     return (cohort,)
 
 
+def execution_name(cohort: str, *, attempt: int, timestamp: str) -> str:
+    """Build the ticket-bound, never-reused execution identity."""
+    return f"{CANARIES[cohort]['execution_prefix']}-{attempt}-{timestamp}"
+
+
+def launch_concurrency_context(
+    active_task_arns: list[str], *, allow_concurrent: bool
+) -> dict[str, Any]:
+    """Record any explicitly accepted cluster overlap in launch evidence."""
+    return {
+        "allow_concurrent": allow_concurrent,
+        "active_task_arns": sorted(set(active_task_arns)),
+    }
+
+
 @contextmanager
-def residual_launch_lock(
-    cli: AwsCli, *, env: str, account: str
-) -> Iterator[None]:
+def residual_launch_lock(cli: AwsCli, *, env: str, account: str) -> Iterator[None]:
     """Serialize candidate/control check+start with a durable S3 lock.
 
     The object has no automatic expiry. A crashed operator leaves a safe,
@@ -776,6 +1144,7 @@ def _definition_plan(
     )
     return {
         "cohort": cohort,
+        "ticket": config["ticket"],
         "canary_name": canary_name,
         "source_state_machine_arn": source_arn,
         "source_definition_hash": _json_hash(definition),
@@ -893,7 +1262,7 @@ def _ensure_immutable_canary(cli: AwsCli, plan: dict[str, Any]) -> str:
             *args,
             "--tags",
             "key=managed-by,value=ecs-sizing-canary",
-            "key=ticket,value=28",
+            f"key=ticket,value={plan['ticket']}",
         )
         arn = result["stateMachineArn"]
     cli.call(
@@ -903,7 +1272,7 @@ def _ensure_immutable_canary(cli: AwsCli, plan: dict[str, Any]) -> str:
         arn,
         "--tags",
         "key=managed-by,value=ecs-sizing-canary",
-        "key=ticket,value=28",
+        f"key=ticket,value={plan['ticket']}",
     )
     return arn
 
@@ -929,9 +1298,10 @@ def _write_json(path: Path | None, payload: Any) -> None:
 
 def prepare(cli: AwsCli, args: argparse.Namespace) -> int:
     account = _account(cli)
+    cohorts = args.cohorts or list(DEFAULT_CANARIES)
     plans = [
         _definition_plan(cli, env=args.env, account=account, cohort=cohort)
-        for cohort in sorted(CANARIES)
+        for cohort in cohorts
     ]
     result: dict[str, Any] = {
         "mode": "apply" if args.apply else "dry-run",
@@ -975,6 +1345,25 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
         validate_attempt_sequence(
             sequence_executions, cohort=args.cohort, attempt=args.attempt
         )
+        expected_control_state_machine_arn = None
+        if args.cohort == "gold":
+            control_plan = _definition_plan(
+                cli,
+                env=args.env,
+                account=account,
+                cohort="gold-control",
+            )
+            control_machine = _find_state_machine(cli, control_plan["canary_name"])
+            if not control_machine:
+                raise RuntimeError(
+                    "current immutable gold control is absent; run prepare --apply"
+                )
+            expected_control_state_machine_arn = control_machine["stateMachineArn"]
+        validate_gold_launch_order(
+            sequence_executions,
+            cohort=args.cohort,
+            expected_control_state_machine_arn=expected_control_state_machine_arn,
+        )
         cluster = _cluster_name(args.env)
         active_tasks: list[str] = []
         for desired_status in ("RUNNING", "PENDING"):
@@ -1006,7 +1395,7 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
                 "rerun prepare --apply"
             )
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        name = f"ticket28-{args.cohort}-{args.attempt}-{timestamp}"
+        name = execution_name(args.cohort, attempt=args.attempt, timestamp=timestamp)
         started = cli.call(
             "stepfunctions",
             "start-execution",
@@ -1020,6 +1409,9 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
     launch_manifest = {
         **_public_plan(current_plan),
         "attempt": args.attempt,
+        "concurrency_context": launch_concurrency_context(
+            active_tasks, allow_concurrent=args.allow_concurrent
+        ),
         "execution_arn": started["executionArn"],
         "start_date": started["startDate"],
         "state_machine_arn": machine["stateMachineArn"],
@@ -1059,6 +1451,98 @@ def _parse_datetime(value: str | float | datetime) -> datetime:
         seconds = value / 1000 if value > 10_000_000_000 else value
         return datetime.fromtimestamp(seconds, tz=UTC)
     return datetime.fromisoformat(value).astimezone(UTC)
+
+
+def overlapping_cluster_tasks(
+    tasks: list[dict[str, Any]],
+    *,
+    start: datetime,
+    end: datetime,
+    excluded_task_arns: set[str],
+) -> list[dict[str, Any]]:
+    """Return other ECS tasks whose lifetimes intersect the canary window."""
+    overlaps: list[dict[str, Any]] = []
+    for task in tasks:
+        task_arn = str(task.get("taskArn") or "")
+        if not task_arn or task_arn in excluded_task_arns or not task.get("createdAt"):
+            continue
+        created = _parse_datetime(task["createdAt"])
+        stopped_raw = task.get("stoppedAt")
+        stopped = _parse_datetime(stopped_raw) if stopped_raw else None
+        if created > end or (stopped is not None and stopped < start):
+            continue
+        container_overrides = (task.get("overrides") or {}).get(
+            "containerOverrides"
+        ) or []
+        command = container_overrides[0].get("command") if container_overrides else []
+        overlaps.append(
+            {
+                "task_arn": task_arn,
+                "task_definition_arn": task.get("taskDefinitionArn"),
+                "created_at": task["createdAt"],
+                "stopped_at": stopped_raw,
+                "command": command or [],
+            }
+        )
+    return sorted(overlaps, key=lambda task: str(task["task_arn"]))
+
+
+def _cluster_overlap(
+    cli: AwsCli,
+    *,
+    cluster: str,
+    start: datetime,
+    end: datetime,
+    excluded_task_arns: set[str],
+) -> list[dict[str, Any]]:
+    task_arns: set[str] = set()
+    for status in ("RUNNING", "PENDING", "STOPPED"):
+        token: str | None = None
+        while True:
+            list_args = [
+                "ecs",
+                "list-tasks",
+                "--cluster",
+                cluster,
+                "--desired-status",
+                status,
+            ]
+            if token:
+                list_args += ["--next-token", token]
+            page = cli.call(*list_args)
+            task_arns.update(page.get("taskArns", []))
+            token = page.get("nextToken")
+            if not token:
+                break
+    tasks: list[dict[str, Any]] = []
+    sorted_arns = sorted(task_arns)
+    for offset in range(0, len(sorted_arns), 100):
+        page = cli.call(
+            "ecs",
+            "describe-tasks",
+            "--cluster",
+            cluster,
+            "--tasks",
+            *sorted_arns[offset : offset + 100],
+        )
+        tasks.extend(page.get("tasks", []))
+    return overlapping_cluster_tasks(
+        tasks,
+        start=start,
+        end=end,
+        excluded_task_arns=excluded_task_arns,
+    )
+
+
+def validate_overlap_evidence_freshness(
+    *, window_start: datetime, captured_at: datetime
+) -> None:
+    """Fail closed before ECS stopped-task discovery can become stale."""
+    if captured_at - window_start > OVERLAP_EVIDENCE_MAX_AGE:
+        raise ValueError(
+            "terminal canary reports must be captured within 30 minutes of stop "
+            "for full-window ECS overlap evidence"
+        )
 
 
 def _normalize_terminal_task(task: dict[str, Any]) -> dict[str, Any]:
@@ -1101,6 +1585,7 @@ def _insights_rows(
     start: datetime,
     end: datetime,
 ) -> list[dict]:
+    rows: list[dict[str, Any]] = []
     for ingestion_attempt in range(3):
         query = (
             "fields @timestamp, CpuUtilized, MemoryUtilized "
@@ -1120,7 +1605,7 @@ def _insights_rows(
             query,
         )
         query_id = started["queryId"]
-        rows: list[dict[str, Any]] = []
+        rows = []
         for _ in range(60):
             result = cli.call("logs", "get-query-results", "--query-id", query_id)
             if result["status"] == "Complete":
@@ -1307,16 +1792,33 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
         _describe_attempt(cli, cluster=cluster, attempt=attempt) for attempt in attempts
     ]
     validate_report_contract(execution, launch, tasks)
-    gates = evaluate_execution(execution_status=status, tasks=tasks)
     start_date = _parse_datetime(execution["startDate"])
     stop_date = (
         _parse_datetime(execution["stopDate"])
         if execution.get("stopDate")
         else datetime.now(UTC)
     )
+    captured_at = datetime.now(UTC)
+    if status in TERMINAL_STATUSES:
+        validate_overlap_evidence_freshness(
+            window_start=start_date,
+            captured_at=captured_at,
+        )
+    cluster_overlap = _cluster_overlap(
+        cli,
+        cluster=cluster,
+        start=start_date,
+        end=stop_date,
+        excluded_task_arns={str(task["task_arn"]) for task in tasks},
+    )
+    gates = evaluate_execution(
+        execution_status=status,
+        tasks=tasks,
+        cluster_overlap=cluster_overlap,
+    )
     evidence = {
         "schema_version": 1,
-        "captured_at": datetime.now(UTC).isoformat(),
+        "captured_at": captured_at.isoformat(),
         "launch_contract": launch,
         "execution": {
             "arn": args.execution_arn,
@@ -1328,6 +1830,7 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
             "duration_seconds": (stop_date - start_date).total_seconds(),
         },
         "tasks": tasks,
+        "cluster_overlap": cluster_overlap,
         "fargate_pricing": {
             "operating_system": "Linux",
             "cpu_architecture": "x86_64",
@@ -1353,6 +1856,48 @@ def report(cli: AwsCli, args: argparse.Namespace) -> int:
     return 0 if gates["passed"] else 2
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read evidence {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise TypeError(f"evidence {path} must contain a JSON object")
+    return payload
+
+
+def evaluate_gold_reports(cli: AwsCli, args: argparse.Namespace) -> int:
+    control = _read_json(args.control_report)
+    candidates = [_read_json(path) for path in args.candidate_reports]
+    if len(candidates) != 2:
+        raise ValueError("Ticket 29 requires exactly two candidate reports")
+    cohort_start = _parse_datetime(control["execution"]["start_date"])
+    cohort_end = _parse_datetime(candidates[-1]["execution"]["stop_date"])
+    validate_overlap_evidence_freshness(
+        window_start=cohort_start,
+        captured_at=datetime.now(UTC),
+    )
+    task_arns = {
+        str(task["task_arn"])
+        for report in [control, *candidates]
+        for task in report.get("tasks") or []
+    }
+    cohort_overlap = _cluster_overlap(
+        cli,
+        cluster=_cluster_name(args.env),
+        start=cohort_start,
+        end=cohort_end,
+        excluded_task_arns=task_arns,
+    )
+    result = evaluate_gold_cohort(
+        control=control,
+        candidates=candidates,
+        cohort_overlap=cohort_overlap,
+    )
+    _write_json(args.output, result)
+    return 0 if result["passed"] else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1362,8 +1907,10 @@ def main(argv: list[str] | None = None) -> int:
             return prepare(cli, args)
         if args.command == "start":
             return start(cli, args)
-        return report(cli, args)
-    except (RuntimeError, ValueError) as exc:
+        if args.command == "report":
+            return report(cli, args)
+        return evaluate_gold_reports(cli, args)
+    except (RuntimeError, TypeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 3
 

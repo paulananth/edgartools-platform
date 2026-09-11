@@ -1,0 +1,30 @@
+{
+  "attempt": 3,
+  "canary_definition_hash": "93f9dca1e9313ffd1167e8e3370c1208ef826a7856efea78ca5debb29cd1d0c4",
+  "canary_name": "canary-ticket29-gold-medium-93f9dca1e931",
+  "candidate_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:294",
+  "changed_reference_count": 1,
+  "cohort": "gold",
+  "compatibility_overlays": [],
+  "concurrency_context": {
+    "active_task_arns": [],
+    "allow_concurrent": false
+  },
+  "covered_states": [
+    "RunWarehouseTask"
+  ],
+  "execution_arn": "arn:aws:states:us-east-1:690839588395:execution:canary-ticket29-gold-medium-93f9dca1e931:ticket29-gold-3-20260910T232130Z",
+  "expected_task_states": [
+    "RunWarehouseTask"
+  ],
+  "image": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-images@sha256:239612ad9c39a6d9fb6c6398f8c24e23aa0972a2b3bf396d13f258830a05542a",
+  "source_definition_hash": "5d92be2d3a665c70ec484ef163eba66211e1a582a89d5e4232b95ee0e819d6cc",
+  "source_state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-gold-refresh",
+  "source_task_definition_arn": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-large:289",
+  "start_date": "2026-09-10T19:21:32.595000-04:00",
+  "state_machine_arn": "arn:aws:states:us-east-1:690839588395:stateMachine:canary-ticket29-gold-medium-93f9dca1e931",
+  "task_definition_contract": {
+    "RunWarehouseTask": "arn:aws:ecs:us-east-1:690839588395:task-definition/edgartools-prod-medium:294"
+  },
+  "ticket": 29
+}

@@ -1,0 +1,128 @@
+{
+  "candidate_cost_p95_usd": 0.0013950607999999999,
+  "candidate_cost_usd": [
+    0.0014080079999999999,
+    0.001149064
+  ],
+  "candidate_duration_p95_seconds": 103.36064999999999,
+  "candidate_duration_seconds": [
+    104.216,
+    87.109
+  ],
+  "cohort_overlap": [],
+  "control_cost_usd": 0.002718912,
+  "control_duration_seconds": 103.823,
+  "cost_improvement_percent": 48.6904761904762,
+  "duration_regression_percent": -0.4453252169557831,
+  "failures": [
+    "matched Snowflake input envelope was not captured",
+    "recovery behavior was not exercised"
+  ],
+  "idempotency": {
+    "mode": "exact_repeated_output_manifest",
+    "passed": true
+  },
+  "input_envelope_evidence": {
+    "passed": false,
+    "source_system": "EDGARTOOLS_SILVER",
+    "status": "not_captured"
+  },
+  "output_identity": {
+    "gold_row_counts": {
+      "sec_adv_firm_roster": 47457,
+      "sec_adv_private_fund": 414968,
+      "sec_auditor_report_evidence": 0,
+      "sec_employment_event": 7676,
+      "sec_subsidiary_evidence": 0
+    },
+    "manifest": [
+      {
+        "byte_size": 408882,
+        "parquet_sha256": "3497a968a9efafa10d6dda6334efbf3e49db3bd74e5fff83881eabfa73a8ac42",
+        "row_count": 47457,
+        "table_name": "sec_adv_firm_roster"
+      },
+      {
+        "byte_size": 15378184,
+        "parquet_sha256": "1e6c763ba3b7f7e2bcb03ecb7e67983888e4e0b155613733d922c903a6e4eeb1",
+        "row_count": 414968,
+        "table_name": "sec_adv_private_fund"
+      },
+      {
+        "byte_size": 3139,
+        "parquet_sha256": "eb72bda0cf7c43464ecd53638ec18f829ca5658402fd0c091afee31b9f152f20",
+        "row_count": 0,
+        "table_name": "sec_auditor_report_evidence"
+      },
+      {
+        "byte_size": 173469,
+        "parquet_sha256": "d077e0acccdfa1e61758d7fecc91d0a15f183dc2a9dad9fe777f769da51b8c0b",
+        "row_count": 7676,
+        "table_name": "sec_employment_event"
+      },
+      {
+        "byte_size": 2356,
+        "parquet_sha256": "1f842f693093ebcc2454fe60b84680ecca46bbc5d1a6222ceda3714e3d3f0441",
+        "row_count": 0,
+        "table_name": "sec_subsidiary_evidence"
+      }
+    ],
+    "output_sha256": "bb81b0541ca9042ffb77562b8ba7cee6d51e5c33c82317c8b44f6bdcac6963a3",
+    "record_funnel": {
+      "attempted_gold_tables": 5,
+      "committed_gold_rows": 470101,
+      "committed_gold_tables": 5,
+      "exported_serving_rows": 470101,
+      "exported_serving_tables": 5,
+      "output_tables": [
+        "sec_adv_firm_roster",
+        "sec_adv_private_fund",
+        "sec_auditor_report_evidence",
+        "sec_employment_event",
+        "sec_subsidiary_evidence"
+      ],
+      "skipped_rejected_deduplicated": "not_applicable"
+    },
+    "snowflake_export_counts": {
+      "sec_adv_firm_roster": 47457,
+      "sec_adv_private_fund": 414968,
+      "sec_auditor_report_evidence": 0,
+      "sec_employment_event": 7676,
+      "sec_subsidiary_evidence": 0
+    }
+  },
+  "output_identity_summary": {
+    "mode": "exact_gold_output",
+    "sha256": "bb81b0541ca9042ffb77562b8ba7cee6d51e5c33c82317c8b44f6bdcac6963a3"
+  },
+  "passed": false,
+  "performance_failures": [],
+  "performance_gates_passed": true,
+  "record_funnel": {
+    "attempted_gold_tables": 5,
+    "committed_gold_rows": 470101,
+    "committed_gold_tables": 5,
+    "exported_serving_rows": 470101,
+    "exported_serving_tables": 5,
+    "output_tables": [
+      "sec_adv_firm_roster",
+      "sec_adv_private_fund",
+      "sec_auditor_report_evidence",
+      "sec_employment_event",
+      "sec_subsidiary_evidence"
+    ],
+    "skipped_rejected_deduplicated": "not_applicable"
+  },
+  "recovery_evidence": {
+    "passed": false,
+    "status": "not_exercised"
+  },
+  "sizing_failures": [
+    "matched Snowflake input envelope was not captured"
+  ],
+  "sizing_gates_passed": false,
+  "structural_recovery_parity": {
+    "mode": "same_asl_except_task_definition",
+    "passed": true
+  }
+}
