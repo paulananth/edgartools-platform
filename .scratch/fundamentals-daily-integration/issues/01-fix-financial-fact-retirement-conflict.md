@@ -1,7 +1,7 @@
 # 01 — Fix the `sec_financial_fact`/`sec_accounting_flag` retirement publish-conflict bug
 
 Type: task
-Status: open
+Status: done
 
 **Prerequisite for Ticket 03** (entity-facts writes into these two tables;
 shipping the refresh trigger without this fix would just make the standing
@@ -54,12 +54,57 @@ Instead:
 
 ## Acceptance
 
-- [ ] A live `sec_financial_fact`/`sec_accounting_flag` retirement can
+- [x] A live `sec_financial_fact`/`sec_accounting_flag` retirement can
       publish to canonical silver without a `SemanticMergeConflictError`,
       verified against a real populated canonical copy (not just unit
       tests) — closes CLAUDE.md's open "Part B" gap in the "sec_financial_fact
-      retirement publish-conflict" 5-whys entry.
-- [ ] `/gof-refactor-reviewer` consulted before editing
+      retirement publish-conflict" 5-whys entry. Satisfied via
+      `test_genuine_retirement_via_retire_method_now_publishes` and
+      `test_genuine_value_conflict_alongside_retirement_still_blocks`
+      (real `SilverDatabase`/DuckDB engines and the real
+      `merge_candidate_into_canonical` function, not mocks) — accepted as
+      sufficient per user confirmation rather than a separate live-AWS
+      verification run.
+- [x] `/gof-refactor-reviewer` consulted before editing
       `silver_protection.py`/`silver_store.py` (repo hard rule).
-- [ ] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
+- [x] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
       considered ready.
+
+## Answer
+
+Fixed (branch `claude/fundamentals-daily-ticket01-retirement-conflict-fix`,
+commits `44b1e3e2` + `479d3e75`). All 4 "What to build" steps implemented
+as specified, re-derived against current code since the ticket's own line
+citations were stale (confirmed and documented, not silently
+worked around).
+
+One necessary addition beyond the ticket's literal text, called out
+explicitly in the commit and confirmed correct/required by all three
+review axes: `_comparable_columns` also excludes
+`retirement_authority_column`, the same way it already excludes
+`authority_column` — without this, the new column's own independently-set
+`now()` values would always show up as "differing," permanently defeating
+the "only retirement_columns differ" subset check the whole mechanism
+depends on.
+
+A `/gof-refactor-reviewer` consult before implementation found direct
+precedent in this file's own git history (`4e78725d`, the identical
+"exclude a per-table tiebreak column from same-key comparison" shape,
+previously applied to `authority_column` itself) — this fix isn't a new
+pattern, it's the established one applied a second time. The full 3-axis
+`/code-review` found zero blocking findings; Standards and GoF both
+independently flagged that CLAUDE.md's own "sec_financial_fact retirement
+publish-conflict" 5-whys entry still described Part B as open — fixed in
+a follow-up commit, since this repo's own 5-whys convention requires
+documenting only the final conclusion once a fix lands.
+
+Live-AWS verification (vs. the real test-level proof already in place,
+using real `SilverDatabase`/DuckDB engines and the real
+`merge_candidate_into_canonical` function) was explicitly considered and
+declined by the user as unnecessary for closing this ticket.
+
+Full repo suite green except the 8 pre-existing, already-documented
+Postgres-integration schema-drift failures noted throughout CLAUDE.md.
+
+Ready for [Ticket 03](03-entity-facts-refresh-trigger.md), which was
+blocked on this fix landing.

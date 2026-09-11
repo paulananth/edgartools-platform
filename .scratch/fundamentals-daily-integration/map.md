@@ -95,6 +95,13 @@ and financial facts on a daily cadence instead of only whenever
   Ticket 100 and left unresolved there). User decided: fix it here, as
   [Ticket 06](issues/06-fix-adv-bulk-select-limit-plateau.md), alongside
   this map's other `daily_incremental` incremental-scoping work.
+- [Fix the sec_financial_fact/sec_accounting_flag retirement publish-conflict bug](issues/01-fix-financial-fact-retirement-conflict.md)
+  — closed CLAUDE.md's open "Part B" gap: a new `retirement_state_observed_at`
+  column (migration 011) gives a genuine retirement its own tiebreak column
+  instead of permanently tying on `ingested_at` and aborting the whole
+  silver publish. Prerequisite for Ticket 03, now unblocked. 3-axis code
+  review clean (0 blocking findings); CLAUDE.md's own 5-whys entry updated
+  to reflect the resolution.
 - [Fix `resolve_advisers_bulk`/`resolve_funds_bulk`'s unordered `LIMIT` plateau](issues/06-fix-adv-bulk-select-limit-plateau.md)
   — ported `run_companies`' growing-window fix (release-readiness Ticket
   94), extracting the shared helper into a new `bounded_fetch.py` module so
