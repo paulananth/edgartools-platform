@@ -100,7 +100,9 @@ select
     l.property_plant_equipment_net,
     l.shares_outstanding,
     l.gross_profit,
+    l.ebitda,
     l.ebit,
+    l.eps_diluted,
 
     -- V1 accounting-only factors.
     l.working_capital,
@@ -129,6 +131,7 @@ select
 
     -- V2 profitability and returns factors (Phase 2).
     {{ safe_ratio('l.gross_profit', 'l.revenue') }} as gross_margin,
+    l.ebitda_margin,
     {{ safe_ratio('l.ebit', 'l.revenue') }} as operating_margin,
     {{ safe_ratio('l.net_income', 'l.revenue') }} as net_margin,
     {{ safe_ratio_signed('l.net_income', 'l.total_equity') }} as return_on_equity,

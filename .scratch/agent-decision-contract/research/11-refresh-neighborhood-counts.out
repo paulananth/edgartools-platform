@@ -1,0 +1,163 @@
+SELECT 'pointer' AS probe,
+       p.POINTER_ID::VARCHAR AS k1,
+       p.ACTIVE_GENERATION_ID::VARCHAR AS k2,
+       p.ACTIVATED_AT::VARCHAR AS k3,
+       g.NODE_COUNT::VARCHAR AS n1,
+       g.EDGE_COUNT::VARCHAR AS n2
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_ACTIVE_POINTER p
+LEFT JOIN EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_GENERATION g
+  ON g.GENERATION_ID = p.ACTIVE_GENERATION_ID
+WHERE p.POINTER_ID = 'active';
++------------------------------------------------------------------------------+
+| PROBE   | K1     | K2                 | K3                 | N1     | N2     |
+|---------+--------+--------------------+--------------------+--------+--------|
+| pointer | active | ae0db138-2aeb-4e69 | 2026-09-10         | 233647 | 575485 |
+|         |        | -87ba-f812da92b2eb | 16:15:24.458 -0700 |        |        |
++------------------------------------------------------------------------------+
+
+SELECT 'edge_is_insider' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_IS_INSIDER;
++-----------------------+
+| PROBE           | N1  |
+|-----------------+-----|
+| edge_is_insider | 902 |
++-----------------------+
+
+SELECT 'edge_employed_by' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_EMPLOYED_BY;
++-------------------------+
+| PROBE            | N1   |
+|------------------+------|
+| edge_employed_by | 4313 |
++-------------------------+
+
+SELECT 'edge_institutional_holds' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_INSTITUTIONAL_HOLDS;
++-------------------------------+
+| PROBE                    | N1 |
+|--------------------------+----|
+| edge_institutional_holds | 97 |
++-------------------------------+
+
+SELECT 'edge_audited_by' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_AUDITED_BY;
++----------------------+
+| PROBE           | N1 |
+|-----------------+----|
+| edge_audited_by | 0  |
++----------------------+
+
+SELECT 'edge_has_parent' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_HAS_PARENT_COMPANY;
++----------------------+
+| PROBE           | N1 |
+|-----------------+----|
+| edge_has_parent | 0  |
++----------------------+
+
+SELECT 'edge_holds' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_HOLDS;
++------------------+
+| PROBE      | N1  |
+|------------+-----|
+| edge_holds | 395 |
++------------------+
+
+SELECT 'edge_company_holds' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_COMPANY_HOLDS;
++---------------------------+
+| PROBE              | N1   |
+|--------------------+------|
+| edge_company_holds | 3148 |
++---------------------------+
+
+SELECT 'gold_institutional_holdings' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.INSTITUTIONAL_HOLDINGS;
++---------------------------------------+
+| PROBE                       | N1      |
+|-----------------------------+---------|
+| gold_institutional_holdings | 6799919 |
++---------------------------------------+
+
+SELECT 'gold_ownership_holdings' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.OWNERSHIP_HOLDINGS;
++---------------------------------+
+| PROBE                   | N1    |
+|-------------------------+-------|
+| gold_ownership_holdings | 42507 |
++---------------------------------+
+
+SELECT 'gold_executive_records' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EXECUTIVE_RECORDS;
++--------------------------------+
+| PROBE                  | N1    |
+|------------------------+-------|
+| gold_executive_records | 14755 |
++--------------------------------+
+
+SELECT 'gold_financial_factors' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.FINANCIAL_FACTORS;
++-------------------------------+
+| PROBE                  | N1   |
+|------------------------+------|
+| gold_financial_factors | 5056 |
++-------------------------------+
+
+SELECT 'source_auditor' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SOURCE.SEC_AUDITOR_REPORT_EVIDENCE;
++---------------------+
+| PROBE          | N1 |
+|----------------+----|
+| source_auditor | 0  |
++---------------------+
+
+SELECT 'silver_auditor' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_AUDITOR_REPORT_EVIDENCE;
++---------------------+
+| PROBE          | N1 |
+|----------------+----|
+| silver_auditor | 0  |
++---------------------+
+
+SELECT 'silver_subsidiary' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_SUBSIDIARY_EVIDENCE;
++------------------------+
+| PROBE             | N1 |
+|-------------------+----|
+| silver_subsidiary | 0  |
++------------------------+
+
+SELECT 'silver_employment_event' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_SILVER.SEC_EMPLOYMENT_EVENT;
++--------------------------------+
+| PROBE                   | N1   |
+|-------------------------+------|
+| silver_employment_event | 7676 |
++--------------------------------+
+
+SELECT 'mdm_company_active' AS probe, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.MDM_COMPANY_ENTITY
+WHERE LOWER(COALESCE(TRACKING_STATUS, '')) = 'active';
++----------------------------+
+| PROBE              | N1    |
+|--------------------+-------|
+| mdm_company_active | 63197 |
++----------------------------+
+
+SELECT 'gold_company' AS probe, COUNT(*)::VARCHAR AS n1 FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY;
++----------------------+
+| PROBE        | N1    |
+|--------------+-------|
+| gold_company | 73691 |
++----------------------+
+
+SELECT 'ih_has_issuer_cik' AS probe, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'EDGARTOOLS_GOLD'
+  AND TABLE_NAME = 'INSTITUTIONAL_HOLDINGS'
+  AND COLUMN_NAME ILIKE '%ISSUER%CIK%';
++------------------------+
+| PROBE             | N1 |
+|-------------------+----|
+| ih_has_issuer_cik | 0  |
++------------------------+
+
+SELECT 'oh_owner_cols' AS probe, COLUMN_NAME AS k1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'EDGARTOOLS_GOLD'
+  AND TABLE_NAME = 'OWNERSHIP_HOLDINGS'
+  AND (COLUMN_NAME ILIKE '%OWNER%' OR COLUMN_NAME ILIKE '%PERSON%' OR COLUMN_NAME ILIKE '%ACCESSION%')
+ORDER BY COLUMN_NAME;
++-------------------------------------------+
+| PROBE         | K1                        |
+|---------------+---------------------------|
+| oh_owner_cols | ACCESSION_NUMBER          |
+| oh_owner_cols | OWNERSHIP_DIRECT_INDIRECT |
+| oh_owner_cols | OWNER_INDEX               |
++-------------------------------------------+
+

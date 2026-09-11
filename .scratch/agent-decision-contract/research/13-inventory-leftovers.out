@@ -1,0 +1,87 @@
+SELECT 'is_person_of' AS probe, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_EDGE_IS_PERSON_OF;
++-------------------+
+| PROBE        | N1 |
+|--------------+----|
+| is_person_of | 0  |
++-------------------+
+
+SELECT 'node_auditfirm' AS probe, COUNT(*)::VARCHAR AS n1
+FROM EDGARTOOLS_PROD.NEO4J_GRAPH_MIGRATION.GRAPH_NODE_AUDITFIRM;
++---------------------+
+| PROBE          | N1 |
+|----------------+----|
+| node_auditfirm | 0  |
++---------------------+
+
+SELECT 'dashboard_objs' AS probe, TABLE_NAME AS k1
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA IN ('EDGARTOOLS_DASHBOARD','MDM_GRAPH_REVIEW_DASHBOARD','EDGARTOOLS_DECISION','PUBLIC')
+ORDER BY TABLE_SCHEMA, TABLE_NAME;
+No data
+
+SHOW STREAMLITS IN DATABASE EDGARTOOLS_PROD;
++------------------------------------------------------------------------------+
+|     |     |     |     |     |     |     |     |     |     | idl |     |      |
+|     |     |     |     |     |     |     |     |     |     | e_a |     |      |
+|     |     |     |     |     |     |     |     |     |     | uto |     |      |
+|     |     |     |     |     |     |     |     |     |     | _sh |     |      |
+|     |     |     |     |     |     |     |     |     |     | utd |     |      |
+|     |     |     |     |     |     |     |     |     |     | own |     | arti |
+|     |     | dat |     |     |     |     | que |     | own | _ti | sch | fact |
+| cre |     | aba | sch |     |     |     | ry_ |     | er_ | me_ | edu | _rep |
+| ate |     | se_ | ema |     | com |     | war |     | rol | sec | led | osit |
+| d_o | nam | nam | _na | tit | men | own | eho | url | e_t | ond | _ta | orie |
+| n   | e   | e   | me  | le  | t   | er  | use | _id | ype | s   | sks | s    |
+|-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+------|
+| 202 | EDG | EDG | EDG | Edg | rel | EDG | EDG | e4v | ROL | Non | Non | []   |
+| 6-0 | ART | ART | ART | arT | eas | ART | ART | kvc | E   | e   | e   |      |
+| 8-1 | OOL | OOL | OOL | ool | e=s | OOL | OOL | ive |     |     |     |      |
+| 8   | S_D | S_P | S_D | s   | ha- | S_P | S_P | h4i |     |     |     |      |
+| 05: | ASH | ROD | ASH | War | 478 | ROD | ROD | f7y |     |     |     |      |
+| 09: | BOA |     | BOA | eho | 9d4 | _DA | _RE | au6 |     |     |     |      |
+| 28. | RD  |     | RD  | use | 1ff | SHB | ADE | k4  |     |     |     |      |
+| 605 |     |     |     |     | b59 | OAR | R_W |     |     |     |     |      |
+| 000 |     |     |     | Das | ;so | D_O | H   |     |     |     |     |      |
+| -07 |     |     |     | hbo | urc | WNE |     |     |     |     |     |      |
+| :00 |     |     |     | ard | e_s | R   |     |     |     |     |     |      |
+|     |     |     |     |     | ha2 |     |     |     |     |     |     |      |
+|     |     |     |     |     | 56= |     |     |     |     |     |     |      |
+|     |     |     |     |     | 55e |     |     |     |     |     |     |      |
+|     |     |     |     |     | 538 |     |     |     |     |     |     |      |
+|     |     |     |     |     | 2bd |     |     |     |     |     |     |      |
+|     |     |     |     |     | 42e |     |     |     |     |     |     |      |
+|     |     |     |     |     | b62 |     |     |     |     |     |     |      |
+|     |     |     |     |     | fe3 |     |     |     |     |     |     |      |
+|     |     |     |     |     | 542 |     |     |     |     |     |     |      |
+|     |     |     |     |     | b26 |     |     |     |     |     |     |      |
+|     |     |     |     |     | 63c |     |     |     |     |     |     |      |
+|     |     |     |     |     | 2af |     |     |     |     |     |     |      |
+|     |     |     |     |     | 1bd |     |     |     |     |     |     |      |
+|     |     |     |     |     | d31 |     |     |     |     |     |     |      |
+|     |     |     |     |     | 07b |     |     |     |     |     |     |      |
+|     |     |     |     |     | d1e |     |     |     |     |     |     |      |
+|     |     |     |     |     | 454 |     |     |     |     |     |     |      |
+|     |     |     |     |     | b6c |     |     |     |     |     |     |      |
+|     |     |     |     |     | 0ad |     |     |     |     |     |     |      |
+|     |     |     |     |     | 3d1 |     |     |     |     |     |     |      |
+|     |     |     |     |     | 790 |     |     |     |     |     |     |      |
+|     |     |     |     |     | 73a |     |     |     |     |     |     |      |
+|     |     |     |     |     | 75d |     |     |     |     |     |     |      |
+|     |     |     |     |     | b   |     |     |     |     |     |     |      |
+| 202 | MDM | EDG | MDM | Edg | Edg | ACC | EDG | pfr | ROL | Non | Non | []   |
+| 6-0 | _GR | ART | _GR | arT | arT | OUN | ART | nqw | E   | e   | e   |      |
+| 8-1 | APH | OOL | APH | ool | ool | TAD | OOL | sm5 |     |     |     |      |
+| 8   | _DA | S_P | _RE | s   | s   | MIN | S_P | u3z |     |     |     |      |
+| 03: | SHB | ROD | VIE | MDM | pro |     | ROD | kzp |     |     |     |      |
+| 43: | OAR |     | W_D | Gra | d   |     | _RE | 3pl |     |     |     |      |
+| 17. | D   |     | ASH | ph  | gol |     | ADE | ux  |     |     |     |      |
+| 313 |     |     | BOA | Rev | d-m |     | R_W |     |     |     |     |      |
+| 000 |     |     | RD  | iew | irr |     | H   |     |     |     |     |      |
+| -07 |     |     |     |     | or  |     |     |     |     |     |     |      |
+| :00 |     |     |     |     | das |     |     |     |     |     |     |      |
+|     |     |     |     |     | hbo |     |     |     |     |     |     |      |
+|     |     |     |     |     | ard |     |     |     |     |     |     |      |
+|     |     |     |     |     | .   |     |     |     |     |     |     |      |
++------------------------------------------------------------------------------+
+

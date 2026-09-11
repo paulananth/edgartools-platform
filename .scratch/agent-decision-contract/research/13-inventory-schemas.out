@@ -1,0 +1,278 @@
+SELECT SCHEMA_NAME
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.SCHEMATA
+ORDER BY SCHEMA_NAME;
++----------------------------+
+| SCHEMA_NAME                |
+|----------------------------|
+| EDGARTOOLS_DASHBOARD       |
+| EDGARTOOLS_DECISION        |
+| EDGARTOOLS_GOLD            |
+| EDGARTOOLS_SILVER          |
+| EDGARTOOLS_SILVER_LANDING  |
+| EDGARTOOLS_SOURCE          |
+| INFORMATION_SCHEMA         |
+| MDM                        |
+| MDM_GRAPH_REVIEW_DASHBOARD |
+| NEO4J_GRAPH_MIGRATION      |
+| PUBLIC                     |
++----------------------------+
+
+SELECT TABLE_SCHEMA, TABLE_TYPE, TABLE_NAME, ROW_COUNT
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA NOT IN ('INFORMATION_SCHEMA')
+ORDER BY TABLE_SCHEMA, TABLE_TYPE, TABLE_NAME;
++------------------------------------------------------------------------------+
+| TABLE_SCHEMA             | TABLE_TYPE | TABLE_NAME               | ROW_COUNT |
+|--------------------------+------------+--------------------------+-----------|
+| EDGARTOOLS_GOLD          | BASE TABLE | ACCOUNTING_FLAGS         | 0         |
+| EDGARTOOLS_GOLD          | BASE TABLE | ADVISER_DISCLOSURES      | 0         |
+| EDGARTOOLS_GOLD          | BASE TABLE | ADVISER_OFFICES          | 1         |
+| EDGARTOOLS_GOLD          | BASE TABLE | ADV_FUND_COUNT_RECONCILI | 24372     |
+|                          |            | ATION                    |           |
+| EDGARTOOLS_GOLD          | BASE TABLE | COMPANY                  | 73691     |
+| EDGARTOOLS_GOLD          | BASE TABLE | CONSENSUS_ESTIMATES      | 0         |
+| EDGARTOOLS_GOLD          | BASE TABLE | EARNINGS_CALENDAR        | 0         |
+| EDGARTOOLS_GOLD          | BASE TABLE | EARNINGS_RELEASES        | 918       |
+| EDGARTOOLS_GOLD          | BASE TABLE | EXECUTIVE_RECORDS        | 14755     |
+| EDGARTOOLS_GOLD          | BASE TABLE | FILING_ACTIVITY          | 6773967   |
+| EDGARTOOLS_GOLD          | BASE TABLE | FILING_DETAIL            | 6773967   |
+| EDGARTOOLS_GOLD          | BASE TABLE | FINANCIAL_DERIVED        | 5056      |
+| EDGARTOOLS_GOLD          | BASE TABLE | FINANCIAL_FACTORS        | 5056      |
+| EDGARTOOLS_GOLD          | BASE TABLE | FINANCIAL_FACTS          | 434805    |
+| EDGARTOOLS_GOLD          | BASE TABLE | GUIDANCE_FACTS           | 0         |
+| EDGARTOOLS_GOLD          | BASE TABLE | INSTITUTIONAL_HOLDINGS   | 6799919   |
+| EDGARTOOLS_GOLD          | BASE TABLE | MDM_ADVISER              | 24449     |
+| EDGARTOOLS_GOLD          | BASE TABLE | MDM_COMPANY_ENTITY       | 68949     |
+| EDGARTOOLS_GOLD          | BASE TABLE | MDM_FUND                 | 130615    |
+| EDGARTOOLS_GOLD          | BASE TABLE | MDM_PERSON               | 6364      |
+| EDGARTOOLS_GOLD          | BASE TABLE | MDM_SECURITY             | 3270      |
+| EDGARTOOLS_GOLD          | BASE TABLE | OWNERSHIP_ACTIVITY       | 81438     |
+| EDGARTOOLS_GOLD          | BASE TABLE | OWNERSHIP_HOLDINGS       | 42507     |
+| EDGARTOOLS_GOLD          | BASE TABLE | PRIVATE_FUNDS            | 414968    |
+| EDGARTOOLS_GOLD          | BASE TABLE | TICKER_REFERENCE         | 10473     |
+| EDGARTOOLS_GOLD          | BASE TABLE | TRANSCRIPT_EVENTS        | 0         |
+| EDGARTOOLS_GOLD          | VIEW       | EDGARTOOLS_GOLD_STATUS   | None      |
+| EDGARTOOLS_GOLD          | VIEW       | MDM_COMPANY              | None      |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_ACCOUNTING_FLAG      | 0         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_ADV_DISCLOSURE_EVENT | 0         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_ADV_FILING           | 61223     |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_ADV_FIRM_ROSTER      | 47457     |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_ADV_OFFICE           | 1         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_ADV_PRIVATE_FUND     | 414968    |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_AUDITOR_REPORT_EVIDE | 0         |
+|                          |            | NCE                      |           |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_COMPANY              | 73691     |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_COMPANY_ADDRESS      | 147382    |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_COMPANY_FILING       | 6773967   |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_COMPANY_FORMER_NAME  | 14101     |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_COMPANY_SUBMISSION_F | 3982      |
+|                          |            | ILE                      |           |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_COMPANY_TICKER       | 20946     |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_CURRENT_FILING_FEED  | 0         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_EARNINGS_RELEASE     | 918       |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_EMPLOYMENT_EVENT     | 7676      |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_EXECUTIVE_RECORD     | 14755     |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_FILING_ATTACHMENT    | 436287    |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_FILING_TEXT          | 0         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_FINANCIAL_DERIVED    | 5056      |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_FINANCIAL_FACT       | 434805    |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_GUIDANCE_FACT        | 0         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_OWNERSHIP_DERIVATIVE | 2969      |
+|                          |            | _TXN                     |           |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_OWNERSHIP_NON_DERIVA | 78469     |
+|                          |            | TIVE_TXN                 |           |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_OWNERSHIP_REPORTING_ | 59030     |
+|                          |            | OWNER                    |           |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_PCAOB_FIRM_IDENTITY  | 0         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_RAW_OBJECT           | 372225    |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_SUBSIDIARY_EVIDENCE  | 0         |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_THIRTEENF_FILING     | 14364     |
+| EDGARTOOLS_SILVER        | BASE TABLE | SEC_THIRTEENF_HOLDING    | 6799919   |
+| EDGARTOOLS_SILVER        | VIEW       | SEC_GUIDANCE_FACT_REJECT | None      |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_ACCOUNTING_FLAG      | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_ADV_DISCLOSURE_EVENT | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_ADV_FILING           | 110741    |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_ADV_FIRM_ROSTER      | 47457     |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_ADV_OFFICE           | 1         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_ADV_PRIVATE_FUND     | 1224185   |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_AUDITOR_REPORT_EVIDE | 0         |
+| G                        |            | NCE                      |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_COMPANY              | 271283    |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_COMPANY_ADDRESS      | 304220    |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_COMPANY_FILING       | 17868976  |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_COMPANY_FORMER_NAME  | 31934     |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_COMPANY_SUBMISSION_F | 10218     |
+| G                        |            | ILE                      |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_COMPANY_TICKER       | 166280    |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_CURRENT_FILING_FEED  | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_EARNINGS_RELEASE     | 918       |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_EMPLOYMENT_EVENT     | 11221     |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_EXECUTIVE_RECORD     | 14755     |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_FILING_ATTACHMENT    | 452389    |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_FILING_TEXT          | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_FINANCIAL_DERIVED    | 5056      |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_FINANCIAL_FACT       | 434805    |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_GUIDANCE_FACT        | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_GUIDANCE_FACT_REJECT | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_OWNERSHIP_DERIVATIVE | 4708      |
+| G                        |            | _TXN                     |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_OWNERSHIP_NON_DERIVA | 108163    |
+| G                        |            | TIVE_TXN                 |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_OWNERSHIP_REPORTING_ | 61752     |
+| G                        |            | OWNER                    |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_PCAOB_FIRM_IDENTITY  | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_RAW_OBJECT           | 388965    |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_SUBSIDIARY_EVIDENCE  | 0         |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_THIRTEENF_FILING     | 14364     |
+| G                        |            |                          |           |
+| EDGARTOOLS_SILVER_LANDIN | BASE TABLE | SEC_THIRTEENF_HOLDING    | 6799919   |
+| G                        |            |                          |           |
+| EDGARTOOLS_SOURCE        | BASE TABLE | ACCOUNTING_FLAG          | 0         |
+| EDGARTOOLS_SOURCE        | BASE TABLE | ADVISER_DISCLOSURES      | 0         |
+| EDGARTOOLS_SOURCE        | BASE TABLE | ADVISER_OFFICES          | 1         |
+| EDGARTOOLS_SOURCE        | BASE TABLE | COMPANY                  | 58205     |
+| EDGARTOOLS_SOURCE        | BASE TABLE | CONSENSUS_ESTIMATES      | 0         |
+| EDGARTOOLS_SOURCE        | BASE TABLE | EARNINGS_CALENDAR        | 0         |
+| EDGARTOOLS_SOURCE        | BASE TABLE | EARNINGS_RELEASE         | 918       |
+| EDGARTOOLS_SOURCE        | BASE TABLE | EXECUTIVE_RECORD         | 14755     |
+| EDGARTOOLS_SOURCE        | BASE TABLE | FILING_ACTIVITY          | 6523841   |
+| EDGARTOOLS_SOURCE        | BASE TABLE | FILING_DETAIL            | 6523841   |
+| EDGARTOOLS_SOURCE        | BASE TABLE | GUIDANCE_FACTS           | 0         |
+| EDGARTOOLS_SOURCE        | BASE TABLE | OWNERSHIP_ACTIVITY       | 81455     |
+| EDGARTOOLS_SOURCE        | BASE TABLE | OWNERSHIP_HOLDINGS       | 51046     |
+| EDGARTOOLS_SOURCE        | BASE TABLE | PRIVATE_FUNDS            | 414968    |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_ADV_FIRM_ROSTER      | 47457     |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_ADV_PRIVATE_FUND     | 414968    |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_AUDITOR_REPORT_EVIDE | 0         |
+|                          |            | NCE                      |           |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_EMPLOYMENT_EVENT     | 7676      |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_FINANCIAL_DERIVED    | 5056      |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_FINANCIAL_FACT       | 434805    |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_SUBSIDIARY_EVIDENCE  | 0         |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SEC_THIRTEENF_HOLDING    | 6799919   |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SNOWFLAKE_REFRESH_STATUS | 35        |
+| EDGARTOOLS_SOURCE        | BASE TABLE | SNOWFLAKE_RUN_MANIFEST_I | 36        |
+|                          |            | NBOX                     |           |
+| EDGARTOOLS_SOURCE        | BASE TABLE | TICKER_REFERENCE         | 10398     |
+| EDGARTOOLS_SOURCE        | BASE TABLE | TRANSCRIPT_EVENTS        | 0         |
+| MDM                      | BASE TABLE | MDM_ADVISER              | 12873     |
+| MDM                      | BASE TABLE | MDM_CHANGE_LOG           | 584589    |
+| MDM                      | BASE TABLE | MDM_COMPANY              | 4426      |
+| MDM                      | BASE TABLE | MDM_ENTITY               | 233647    |
+| MDM                      | BASE TABLE | MDM_ENTITY_ATTRIBUTE_STA | 0         |
+|                          |            | GE                       |           |
+| MDM                      | BASE TABLE | MDM_ENTITY_TYPE_DEFINITI | 6         |
+|                          |            | ON                       |           |
+| MDM                      | BASE TABLE | MDM_FIELD_SURVIVORSHIP   | 0         |
+| MDM                      | BASE TABLE | MDM_FUND                 | 127583    |
+| MDM                      | BASE TABLE | MDM_MATCH_REVIEW         | 0         |
+| MDM                      | BASE TABLE | MDM_MATCH_THRESHOLD      | 0         |
+| MDM                      | BASE TABLE | MDM_NORMALIZATION_RULE   | 0         |
+| MDM                      | BASE TABLE | MDM_PERSON               | 4146      |
+| MDM                      | BASE TABLE | MDM_RELATIONSHIP_INSTANC | 684224    |
+|                          |            | E                        |           |
+| MDM                      | BASE TABLE | MDM_RELATIONSHIP_PROPERT | 0         |
+|                          |            | Y_DEF                    |           |
+| MDM                      | BASE TABLE | MDM_RELATIONSHIP_SOURCE_ | 0         |
+|                          |            | MAPPING                  |           |
+| MDM                      | BASE TABLE | MDM_RELATIONSHIP_TYPE    | 11        |
+| MDM                      | BASE TABLE | MDM_SECURITY             | 3082      |
+| MDM                      | BASE TABLE | MDM_SOURCE_PRIORITY      | 0         |
+| MDM                      | BASE TABLE | MDM_SOURCE_REF           | 0         |
+| NEO4J_GRAPH_MIGRATION    | BASE TABLE | GRAPH_ACTIVE_POINTER     | 1         |
+| NEO4J_GRAPH_MIGRATION    | BASE TABLE | GRAPH_GENERATION         | 20        |
+| NEO4J_GRAPH_MIGRATION    | BASE TABLE | MDM_GRAPH_EDGES          | 5352688   |
+| NEO4J_GRAPH_MIGRATION    | BASE TABLE | MDM_GRAPH_NODES          | 2052673   |
+| NEO4J_GRAPH_MIGRATION    | BASE TABLE | MDM_GRAPH_VERIFY_BFS_SMO | 0         |
+|                          |            | KE                       |           |
+| NEO4J_GRAPH_MIGRATION    | BASE TABLE | MDM_GRAPH_VERIFY_WCC_SMO | 233647    |
+|                          |            | KE                       |           |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_APP_EDGES          | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_APP_NODES          | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGES              | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_AUDITED_BY    | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_COMPANY_HOLDS | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_COUNTS        | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_EMPLOYED_BY   | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_HAS_PARENT_CO | None      |
+|                          |            | MPANY                    |           |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_HOLDS         | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_INSTITUTIONAL | None      |
+|                          |            | _HOLDS                   |           |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_ISSUED_BY     | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_IS_ENTITY_OF  | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_IS_INSIDER    | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_IS_PERSON_OF  | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_EDGE_MANAGES_FUND  | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_ENTITY_MERGE_LINEA | None      |
+|                          |            | GE                       |           |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODES              | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODE_ADVISER       | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODE_AUDITFIRM     | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODE_COMPANY       | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODE_COUNTS        | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODE_FUND          | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODE_PERSON        | None      |
+| NEO4J_GRAPH_MIGRATION    | VIEW       | GRAPH_NODE_SECURITY      | None      |
++------------------------------------------------------------------------------+
+
+SELECT TABLE_SCHEMA, TABLE_NAME
+FROM EDGARTOOLS_PROD.INFORMATION_SCHEMA.VIEWS
+WHERE TABLE_SCHEMA NOT IN ('INFORMATION_SCHEMA')
+ORDER BY TABLE_SCHEMA, TABLE_NAME;
++--------------------------------------------------------+
+| TABLE_SCHEMA          | TABLE_NAME                     |
+|-----------------------+--------------------------------|
+| EDGARTOOLS_GOLD       | EDGARTOOLS_GOLD_STATUS         |
+| EDGARTOOLS_GOLD       | MDM_COMPANY                    |
+| EDGARTOOLS_SILVER     | SEC_GUIDANCE_FACT_REJECT       |
+| NEO4J_GRAPH_MIGRATION | GRAPH_APP_EDGES                |
+| NEO4J_GRAPH_MIGRATION | GRAPH_APP_NODES                |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGES                    |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_AUDITED_BY          |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_COMPANY_HOLDS       |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_COUNTS              |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_EMPLOYED_BY         |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_HAS_PARENT_COMPANY  |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_HOLDS               |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_INSTITUTIONAL_HOLDS |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_ISSUED_BY           |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_IS_ENTITY_OF        |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_IS_INSIDER          |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_IS_PERSON_OF        |
+| NEO4J_GRAPH_MIGRATION | GRAPH_EDGE_MANAGES_FUND        |
+| NEO4J_GRAPH_MIGRATION | GRAPH_ENTITY_MERGE_LINEAGE     |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODES                    |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODE_ADVISER             |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODE_AUDITFIRM           |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODE_COMPANY             |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODE_COUNTS              |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODE_FUND                |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODE_PERSON              |
+| NEO4J_GRAPH_MIGRATION | GRAPH_NODE_SECURITY            |
++--------------------------------------------------------+
+

@@ -47,6 +47,13 @@ PURE_SEC_FEATURE_KEYS: tuple[str, ...] = (
     "roic",
 )
 
+# Contract key → gold FINANCIAL_FACTORS column. Do not map ebitda_margin
+# onto operating_margin (different metric).
+GOLD_FEATURE_COLUMN_ALIASES: Mapping[str, str] = {
+    "roe": "return_on_equity",
+    "roa": "return_on_assets",
+}
+
 FORBIDDEN_MARKET_FIELDS: frozenset[str] = frozenset(
     {
         "price",
@@ -222,21 +229,27 @@ def _vector_and_coverage(
             # not_applicable (not a hard gap).
             return _empty_vector(), COVERAGE_NOT_APPLICABLE
         return _empty_vector(), COVERAGE_UNAVAILABLE
-    vector = _feature_vector(period)
+    vector = pure_sec_feature_vector(period)
     if any(v is not None for v in vector.values()):
         return vector, COVERAGE_PRESENT
     return vector, COVERAGE_EMPTY
 
 
-def _feature_vector(period: Mapping[str, Any]) -> dict[str, Any]:
+def pure_sec_feature_vector(period: Mapping[str, Any]) -> dict[str, Any]:
+    """Project a gold/factor row onto the 19-key contract vector.
+
+    Gold ``return_on_equity`` / ``return_on_assets`` bind to ``roe`` / ``roa``.
+    Missing keys stay null (null ≠ zero). Market-price fields are dropped.
+    """
     out: dict[str, Any] = {}
     for key in PURE_SEC_FEATURE_KEYS:
         if key in FORBIDDEN_MARKET_FIELDS:
             continue
-        if key not in period:
-            out[key] = None
-            continue
         value = period.get(key)
+        if value is None:
+            gold_name = GOLD_FEATURE_COLUMN_ALIASES.get(key)
+            if gold_name is not None:
+                value = period.get(gold_name)
         # Preserve explicit null — never coerce to 0.
         out[key] = value
     return out

@@ -6,6 +6,7 @@ from edgar_warehouse.serving.dashboard_query_registry import (
     AGENT_VIEW_QUERIES,
     registered_query,
 )
+from edgar_warehouse.serving.subject_feature_screen import PURE_SEC_FEATURE_KEYS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_SQL = (
@@ -56,6 +57,23 @@ def test_feature_screen_uses_tracked_active_subjects_not_all_gold_companies() ->
     assert "= 'ACTIVE'" in sql
     assert "PLACEHOLDER" not in sql
     assert "MIRRORS WAREHOUSE_ACTIVE" not in sql
+
+
+def test_feature_screen_projects_contract_keys_from_gold_financial_factors() -> None:
+    sql = FEATURE_SCREEN_SQL.read_text(encoding="utf-8")
+    upper = sql.upper()
+    assert "RETURN_ON_EQUITY AS FY_ROE" in upper
+    assert "RETURN_ON_ASSETS AS FY_ROA" in upper
+    assert "FY.EBITDA AS FY_EBITDA" in upper
+    assert "FY.EPS_DILUTED AS FY_EPS_DILUTED" in upper
+    assert "FY.EBITDA_MARGIN AS FY_EBITDA_MARGIN" in upper
+    assert "OPERATING_MARGIN AS FY_EBITDA_MARGIN" not in upper
+    assert "INNER JOIN FY ON FY.CIK = F.CIK" not in upper
+    assert "FY.PERIOD_END IS NULL OR F.PERIOD_END > FY.PERIOD_END" in upper
+    for key in PURE_SEC_FEATURE_KEYS:
+        assert f"FY_{key.upper()}" in upper
+        assert f"INTERIM_{key.upper()}" in upper
+    assert "AND FY.TOTAL_ASSETS IS NULL THEN 'EMPTY'" not in upper
 
 
 def test_reader_gets_only_public_contract_views() -> None:
