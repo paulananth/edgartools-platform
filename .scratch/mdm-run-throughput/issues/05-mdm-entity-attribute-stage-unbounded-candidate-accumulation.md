@@ -151,9 +151,48 @@ green). Full repo suite: 3250 passed, 7 skipped, only the 8 pre-existing,
 already-documented unrelated `tests/integration/
 test_acquisition_ledger_postgres.py`/`test_conflict_postgres.py` failures.
 
-**Not yet deployed or backfilled against real prod** as of this entry --
-implemented and reviewed, no image rebuild or live run has happened for
-this fix yet.
+**Deployed and backfilled against real prod, 2026-09-11.** Write-time
+guard shipped via PR #587 (`edgartools-prod-mdm-large:197`). The backfill
+CLI's first real-prod run exposed a second, independent performance bug
+not caught by any prior review: `collapse_entity`/`run_backfill` issued
+one Postgres round trip per entity for the SELECT and one more **per
+collapsed group** for the DELETE (~4.8 groups/entity live-measured), each
+a flat ~57ms cross-region round trip -- the real (write) run measured
+~2.8 entities/sec against 139,349 candidate entities, projecting ~14h,
+and was killed mid-run after 26,500 entities / 160,993 rows deleted
+(safe -- it commits every `batch_size`, and a restart's
+`find_collapsible_entity_ids` naturally skips already-collapsed entities).
+
+Fixed in PR #588 (`edgartools-prod-mdm-large:198`): new
+`collapse_entities_batch()` does one `SELECT ... entity_id IN (...)` and
+one bulk `DELETE ... stage_id IN (...)` per whole batch (500 entities)
+instead of per-entity/per-group round trips; `collapse_entity()` is now a
+thin wrapper over it; `run_backfill()`'s dry-run branch pages at the same
+`batch_size` boundary instead of fetching the whole unbounded candidate
+list up front (the shape that made the *first* prod dry-run -- pure
+correctness validation -- take 2h16m54s on its own). Also added `--limit`
+so a future validation pass never needs to repeat that mistake (a
+`--dry-run --limit 50` smoke test against the fixed image completed in
+4.5s and correctly bounded to 50 entities). Both fixes went through a
+pre-code `/gof-refactor-reviewer` consult plus the mandatory post-diff
+3-axis `/code-review`, which caught two more real, evidenced issues
+before merge: the missing `--limit` flag (Standards axis, against this
+repo's own note written earlier the same session) and duplicated
+SQL-statement-capture test boilerplate across 3 new tests (GoF axis,
+fixed by extracting a local `_capture_statements()` helper). 793 MDM
+tests green.
+
+**Live-verified end-to-end, real numbers not estimates:**
+- Real-run throughput: ~2.8 entities/sec (unbatched) &rarr; **~87
+  entities/sec** (batched), a ~31x speedup. The batched real run finished
+  the remaining 112,349 entities in **17m34s** (exit 0), vs. the ~14h the
+  unbatched design projected for the full table.
+- `mdm_entity_attribute_stage` row count: **2,577,622 &rarr; 1,732,055**
+  (measured directly via live Postgres query before and after, across
+  both the killed partial run and the completed batched run) -- a delta
+  of **845,567 rows**, an exact match to the completed dry-run's
+  independently-computed `rows_deleted` prediction (845,567). No drift
+  between predicted and actual.
 
 ## Not yet specified / open follow-up
 
