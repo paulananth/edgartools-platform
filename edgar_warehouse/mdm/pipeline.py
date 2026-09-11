@@ -154,6 +154,46 @@ RELATIONSHIP_TYPES = (
     "INSTITUTIONAL_HOLDS",  # Adviser → Security   (13F holdings)
 )
 
+# Recognized relationship-closing pattern names -- see docs/adr/0008-
+# name-relationship-closing-patterns.md for the full selection criteria
+# behind each (relationship-closing-pattern-framework wayfinder map,
+# Ticket 01). A new relationship type must be classified against one of
+# these before it's added to RELATIONSHIP_TYPES, rather than growing a
+# fifth bespoke closing mechanism -- enforced by
+# tests/mdm/test_relationship_closing_pattern_registry.py.
+KNOWN_RELATIONSHIP_CLOSING_PATTERNS = frozenset({
+    "value_signals_disposal",
+    "property_differs_from_prior",
+    "periodic_snapshot_diff",
+    "no_versioning_needed",
+})
+
+# Every RELATIONSHIP_TYPES member classified against one pattern above.
+# This registry documents intended pattern, not a guarantee the current
+# implementation is bug-free -- AUDITED_BY is registered as
+# property_differs_from_prior despite its own inline closer (in
+# _derive_audited_by) still missing the confirmed_chronologically_after
+# guard IS_INSIDER/EMPLOYED_BY already have; see
+# mdm-relationship-versioning-gap Ticket 11.
+RELATIONSHIP_CLOSING_PATTERNS: dict[str, str] = {
+    "IS_INSIDER":           "property_differs_from_prior",
+    "HOLDS":                "value_signals_disposal",
+    "COMPANY_HOLDS":        "value_signals_disposal",
+    "ISSUED_BY":            "no_versioning_needed",
+    "IS_ENTITY_OF":         "no_versioning_needed",
+    # HAS_PARENT_COMPANY currently derives zero relationships in prod (a
+    # separate, already-known bug) -- registered under the pattern its
+    # sec_subsidiary_evidence properties shape (parent_scope,
+    # immediate_parent_known, jurisdiction) implies once fixed, not "none",
+    # so this registry doesn't need revisiting when that bug is resolved.
+    "HAS_PARENT_COMPANY":   "property_differs_from_prior",
+    "MANAGES_FUND":         "periodic_snapshot_diff",
+    "IS_PERSON_OF":         "no_versioning_needed",
+    "EMPLOYED_BY":          "property_differs_from_prior",
+    "AUDITED_BY":           "property_differs_from_prior",
+    "INSTITUTIONAL_HOLDS":  "periodic_snapshot_diff",
+}
+
 # INSTITUTIONAL_HOLDS reads sec_thirteenf_holding -- the largest silver table
 # (large fund managers report tens of thousands of positions per quarter) --
 # in CIK-range chunks rather than one unbounded silver.fetch() (D-03, TODOS.md).

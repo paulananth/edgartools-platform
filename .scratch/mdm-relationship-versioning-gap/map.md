@@ -74,18 +74,16 @@ mdm-run-throughput's Tickets 04/06/07 did.
   ticket. Also unresolved: whether Ticket 05's Postgres-side backfill must
   explicitly trigger a `sync-graph` re-run afterward, or whether that's
   implied/automatic.
-- Root design for how per-period-boundary relationship types (anything
-  where the same source reports a new point-in-time snapshot repeatedly --
-  13F quarters, executive-compensation fiscal years, insider-status
-  filings) SHOULD version and close prior evidence, as a single coherent
-  pattern rather than one bespoke closing rule per relationship type. The
-  existing `HOLDS`/`COMPANY_HOLDS` zero-shares close and
-  `INSTITUTIONAL_HOLDS` cross-period diff-and-close are two structurally
-  different bespoke mechanisms already, and `IS_INSIDER`/`EMPLOYED_BY` need
-  a third (there is no "shares reach zero" or "latest 13F CUSIP set"
-  equivalent for insider-role or executive-compensation evidence -- a role
-  change or comp update is signalled purely by the new filing's own
-  differing property values on an already-fixed pair).
+- ~~Root design for how per-period-boundary relationship types SHOULD
+  version and close prior evidence, as a single coherent pattern rather
+  than one bespoke closing rule per relationship type~~ -- graduated into
+  its own map,
+  [relationship-closing-pattern-framework](../relationship-closing-pattern-framework/map.md).
+  That charting session also found a live, unrelated bug in this map's
+  own domain while investigating: see
+  [Ticket 11](issues/11-audited-by-closing-lacks-chronological-guard.md)
+  (`_derive_audited_by`'s inline closer lacks the chronological guard
+  Tickets 02/03 already added for IS_INSIDER/EMPLOYED_BY).
 
 ## Out of scope
 

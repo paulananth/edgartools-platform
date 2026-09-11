@@ -68,3 +68,21 @@ Net working estimate, subject to Ticket 07 landing first: **one genuinely
 new relationship type** (fund-holds-its-own-constituents), **one open
 reuse-vs-extend question** (fund-to-adviser), and the rest resolved via
 plain FK attributes rather than new graph relationship types.
+
+**Cross-reference (added by a sibling map, does not resolve this
+ticket):** [relationship-closing-pattern-framework](../../relationship-closing-pattern-framework/map.md)'s
+[Ticket 03](../../relationship-closing-pattern-framework/issues/03-validate-against-nport-fund-holds.md)
+is now resolved -- confirmed `FUND_HOLDS` should use the
+`periodic_snapshot_diff` closing pattern (`docs/adr/0008-name-
+relationship-closing-patterns.md`), the same one `INSTITUTIONAL_HOLDS`/
+`MANAGES_FUND` already use, since N-PORT reports a fund's full current
+holdings each quarter -- same reporting shape as 13F. **One real
+implementation requirement surfaced by that validation, not yet
+satisfied by anything in this map**: whoever implements `FUND_HOLDS`
+needs its own N-PORT-specific amendment-supersession dedup (an
+`NPORT-P`/`NPORT-P/A` equivalent of 13F's `base_sql` restatement filter)
+*before* applying the closing pattern -- the pattern itself does not
+dedupe amendments, it assumes its input already is deduped. This map's
+own Ticket 01 already flagged N-PORT has "no built-in amendment-
+supersession logic" -- that gap is exactly what a `FUND_HOLDS`
+implementation would need to close first.
