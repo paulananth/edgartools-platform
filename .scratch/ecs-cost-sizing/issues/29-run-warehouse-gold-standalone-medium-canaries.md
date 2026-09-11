@@ -121,12 +121,13 @@ definition or profile reference was changed. The earlier control-3/candidate-2
 pair is diagnostic only because its reporting window expired before the cohort
 could be completed.
 
-## Input-envelope seam implemented (2026-09-11) — deployment and evidence pending
+## Input-envelope seam deployed (2026-09-11) — cohort evidence pending
 
-The missing input-envelope capability is implemented on
-`codex/ticket29-snowflake-input-envelope`, but this statement is code/test
-readiness only: no image has been published, no canary definition has been
-applied, and no new production evidence has been collected.
+PR #592 merged the input-envelope capability as `9e3a2056`. The warehouse-only
+production rollout was built from `90503518e246` and published as immutable tag
+`warehouse-sha-90503518e246`, resolving to digest
+`sha256:d65919e42c047504d107bcf8be15251833d6fd09c2aa46eaafcda5f4f5a54dca`.
+MDM definitions and all schedules were excluded from the rollout.
 
 The Ticket 29 canary clone now appends
 `--input-snapshot-at $.input_snapshot_at` to the otherwise unchanged
@@ -145,13 +146,32 @@ both candidates to have identical envelope identities. Query IDs remain audit
 provenance and are deliberately excluded from cross-run equality because each
 Snowflake statement receives a distinct ID.
 
-Before the next cohort, publish/deploy one immutable image containing this
-change, prepare both current-image canary definitions, choose one timestamp a
-few seconds in the past but within all five tables' Time Travel retention, and
-pass that exact value to the Large control and both Medium candidates. Gate 1
-closes only when `evaluate-gold` reports
-`input_envelope_evidence.passed=true`; exercised recovery remains the final
-independent blocker.
+The deploy registered warehouse task revisions `small:295`, `medium:299`, and
+`large:294`, all bound to that digest, and updated the production
+`targeted-resync` and `gold-refresh` state machines. A Fargate `--help` smoke
+task (`73b8ee15e17b484e900663db06d944d6`) exited zero on the deployed digest and
+CloudWatch captured the expected CLI output. No ECS task remained running after
+verification; the daily incremental refresh and backstop schedules remained
+disabled.
+
+The dry-run and apply passes prepared these immutable, unscheduled definitions:
+
+- Medium candidate: `canary-ticket29-gold-medium-2249fd847d6b`, using
+  `edgartools-prod-medium:299`;
+- Large control: `canary-ticket29-gold-large-control-722683f62290`, using
+  `edgartools-prod-large:294`.
+
+Both definitions use the same deployed image and append the frozen-input
+overlay. Neither has an EventBridge rule or execution history. Deployment and
+definition preparation therefore do not count as sizing evidence.
+
+For the next cohort, choose one timestamp a few seconds in the past but within
+all five tables' Time Travel retention and pass that exact value to the Large
+control and both sequential Medium candidates. Gate 1 closes only when
+`evaluate-gold` reports `input_envelope_evidence.passed=true`; exercised
+recovery remains the final independent blocker. Any later image rollout
+invalidates these prepared definition identities and requires a fresh
+dry-run/apply pair before launch.
 
 Local verification on 2026-09-11: `1597 passed, 6 skipped`, plus 29 passing
 subtests, for `tests/unit tests/architecture`.
