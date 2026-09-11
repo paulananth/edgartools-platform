@@ -42,6 +42,7 @@ FARGATE_VCPU_HOUR_USD = 0.0404784
 FARGATE_GIB_HOUR_USD = 0.004446
 FARGATE_PRICING_SOURCE = "https://aws.amazon.com/fargate/pricing/"
 FARGATE_PRICING_CAPTURED_AT = "2026-09-10"
+GOLD_INPUT_OVERLAY = "gold input pinned to $.input_snapshot_at"
 CANARIES = {
     "gold": {
         "ticket": 29,
@@ -126,6 +127,13 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("cohort", choices=sorted(CANARIES))
     start.add_argument("--attempt", required=True, type=int)
     start.add_argument("--output", type=Path)
+    start.add_argument(
+        "--input-snapshot-at",
+        help=(
+            "Timezone-aware Snowflake snapshot shared by the Ticket 29 "
+            "control and both candidates"
+        ),
+    )
     start.add_argument(
         "--allow-concurrent",
         action="store_true",
@@ -212,6 +220,45 @@ def rewrite_task_definitions(
             states[name]["Parameters"]["TaskDefinition"] = candidate_arn
             changes += 1
     return rewritten, changes
+
+
+def add_gold_input_snapshot_arg(definition: dict[str, Any]) -> dict[str, Any]:
+    """Pin the Gold canary command to the snapshot supplied at launch."""
+    rewritten = copy.deepcopy(definition)
+    try:
+        overrides = rewritten["States"]["RunWarehouseTask"]["Parameters"][
+            "Overrides"
+        ]["ContainerOverrides"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("gold task has no container command override") from exc
+    if len(overrides) != 1:
+        raise ValueError("gold task must have exactly one container command override")
+    expected = "States.Array('gold-refresh', '--run-id', $$.Execution.Name)"
+    if overrides[0].get("Command.$") != expected:
+        raise ValueError("gold task command drifted from the expected source command")
+    overrides[0]["Command.$"] = (
+        "States.Array('gold-refresh', '--run-id', $$.Execution.Name, "
+        "'--input-snapshot-at', $.input_snapshot_at)"
+    )
+    return rewritten
+
+
+def normalize_gold_input_snapshot_at(value: str) -> str:
+    """Normalize a user-supplied Ticket 29 snapshot to canonical UTC."""
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("Ticket 29 requires --input-snapshot-at")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"invalid Gold input snapshot timestamp: {value!r}") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("Gold input snapshot timestamp must be timezone-aware")
+    return (
+        parsed.astimezone(UTC)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def add_unbounded_sync_route(definition: dict[str, Any]) -> dict[str, Any]:
@@ -625,6 +672,91 @@ def _gold_output_identity(evidence: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _gold_input_identity(evidence: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate one run's repeated frozen-input evidence and return identity."""
+    from edgar_warehouse.serving.source_dimensional_export import GOLD_INPUT_COLUMNS
+
+    tasks = evidence.get("tasks") or []
+    if len(tasks) != 1:
+        return None
+    documents = tasks[0].get("application_evidence") or []
+    event_names = {
+        "gold_publish_started",
+        "gold_build_completed",
+        "gold_publish_completed",
+    }
+    events = [document for document in documents if document.get("event") in event_names]
+    if len(events) != 3 or any(
+        sum(document.get("event") == name for document in events) != 1
+        for name in event_names
+    ):
+        return None
+    envelopes = [event.get("gold_input_envelope") for event in events]
+    if any(not isinstance(envelope, dict) for envelope in envelopes):
+        return None
+    if any(envelope != envelopes[0] for envelope in envelopes[1:]):
+        return None
+    envelope = dict(envelopes[0])
+    query_ids = envelope.pop("query_ids", None)
+    claimed_sha256 = envelope.pop("envelope_sha256", None)
+    if (
+        envelope.get("schema_version") != 1
+        or envelope.get("source_system") != "EDGARTOOLS_SILVER"
+        or not envelope.get("account")
+        or not envelope.get("database")
+        or envelope.get("schema") != "EDGARTOOLS_SILVER"
+        or not envelope.get("snapshot_at")
+    ):
+        return None
+    try:
+        if normalize_gold_input_snapshot_at(envelope["snapshot_at"]) != envelope[
+            "snapshot_at"
+        ]:
+            return None
+    except ValueError:
+        return None
+    tables = envelope.get("tables")
+    if not isinstance(tables, list):
+        return None
+    normalized_tables: list[dict[str, Any]] = []
+    for entry in tables:
+        if not isinstance(entry, dict):
+            return None
+        table_name = str(entry.get("table_name") or "")
+        if table_name not in GOLD_INPUT_COLUMNS:
+            return None
+        try:
+            row_count = int(entry["row_count"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if row_count < 0 or entry.get("selected_columns") != list(
+            GOLD_INPUT_COLUMNS[table_name]
+        ):
+            return None
+        normalized_tables.append(
+            {
+                "table_name": table_name,
+                "row_count": row_count,
+                "selected_columns": entry["selected_columns"],
+            }
+        )
+    normalized_tables.sort(key=lambda entry: entry["table_name"])
+    if [entry["table_name"] for entry in normalized_tables] != sorted(
+        GOLD_INPUT_COLUMNS
+    ):
+        return None
+    envelope["tables"] = normalized_tables
+    if claimed_sha256 != _json_hash(envelope):
+        return None
+    if (
+        not isinstance(query_ids, dict)
+        or set(query_ids) != set(GOLD_INPUT_COLUMNS)
+        or any(not str(value or "").strip() for value in query_ids.values())
+    ):
+        return None
+    return {**envelope, "envelope_sha256": claimed_sha256}
+
+
 def evaluate_gold_cohort(
     *,
     control: dict[str, Any],
@@ -648,6 +780,7 @@ def evaluate_gold_cohort(
     images: set[str] = set()
     source_hashes: set[str] = set()
     outputs: list[dict[str, Any]] = []
+    input_identities: list[dict[str, Any] | None] = []
     structural_recovery_parity_passed = True
     for (
         label,
@@ -668,9 +801,14 @@ def evaluate_gold_cohort(
             )
         images.add(str(launch.get("image") or ""))
         source_hashes.add(str(launch.get("source_definition_hash") or ""))
+        expected_overlays = (
+            [GOLD_INPUT_OVERLAY]
+            if expected_cohort in {"gold", "gold-control"}
+            else []
+        )
         if (
             launch.get("changed_reference_count") != expected_changes
-            or launch.get("compatibility_overlays") != []
+            or launch.get("compatibility_overlays") != expected_overlays
             or launch.get("covered_states") != ["RunWarehouseTask"]
         ):
             performance_failures.append(
@@ -691,6 +829,14 @@ def evaluate_gold_cohort(
             performance_failures.append(f"{label} failed execution-local gates")
         output = _gold_output_identity(evidence)
         outputs.append(output)
+        input_identity = _gold_input_identity(evidence)
+        input_identities.append(input_identity)
+        if input_identity is not None and launch.get("input_snapshot_at") != (
+            input_identity["snapshot_at"]
+        ):
+            performance_failures.append(
+                f"{label} launch snapshot does not match runtime evidence"
+            )
     if "" in images or len(images) != 1:
         performance_failures.append(
             "candidate and control image identities do not match"
@@ -726,15 +872,32 @@ def evaluate_gold_cohort(
         performance_failures.append(
             f"candidate p95 cost improvement {cost_improvement:.2f}% is below 10%"
         )
-    input_envelope_evidence = {
-        "passed": False,
-        "status": "not_captured",
-        "source_system": "EDGARTOOLS_SILVER",
-    }
-    sizing_failures = [
-        *performance_failures,
-        "matched Snowflake input envelope was not captured",
-    ]
+    input_failures: list[str] = []
+    if any(identity is None for identity in input_identities):
+        input_failures.append("matched Snowflake input envelope was not captured")
+        input_envelope_evidence = {
+            "passed": False,
+            "status": "not_captured",
+            "source_system": "EDGARTOOLS_SILVER",
+        }
+    elif any(identity != input_identities[0] for identity in input_identities[1:]):
+        input_failures.append("Snowflake input envelopes do not match")
+        input_envelope_evidence = {
+            "passed": False,
+            "status": "mismatched",
+            "source_system": "EDGARTOOLS_SILVER",
+        }
+    else:
+        matched_identity = input_identities[0]
+        assert matched_identity is not None
+        input_envelope_evidence = {
+            "passed": True,
+            "status": "matched",
+            "source_system": "EDGARTOOLS_SILVER",
+            "snapshot_at": matched_identity["snapshot_at"],
+            "envelope_sha256": matched_identity["envelope_sha256"],
+        }
+    sizing_failures = [*performance_failures, *input_failures]
     recovery_evidence = {"passed": False, "status": "not_exercised"}
     failures = [*sizing_failures, "recovery behavior was not exercised"]
     return {
@@ -886,6 +1049,22 @@ def launch_concurrency_context(
         "allow_concurrent": allow_concurrent,
         "active_task_arns": sorted(set(active_task_arns)),
     }
+
+
+def canary_execution_input(
+    cohort: str, input_snapshot_at: str | None
+) -> dict[str, Any]:
+    """Build the launch input and enforce Ticket 29's frozen-source contract."""
+    execution_input = dict(CANARIES[cohort]["input"])
+    if cohort in {"gold", "gold-control"}:
+        execution_input["input_snapshot_at"] = normalize_gold_input_snapshot_at(
+            input_snapshot_at
+        )
+    elif input_snapshot_at:
+        raise ValueError(
+            "--input-snapshot-at is only valid for Ticket 29 Gold cohorts"
+        )
+    return execution_input
 
 
 @contextmanager
@@ -1131,6 +1310,9 @@ def _definition_plan(
             compatibility_overlays.append(
                 "legacy 200000 per-type graph cap removed before candidate verify"
             )
+    elif cohort in {"gold", "gold-control"}:
+        rewritten = add_gold_input_snapshot_arg(rewritten)
+        compatibility_overlays.append(GOLD_INPUT_OVERLAY)
     canary_definition_hash = _json_hash(rewritten)
     canary_name = f"{config['name']}-{canary_definition_hash[:12]}"
     expected_task_states = (
@@ -1396,6 +1578,10 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
             )
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         name = execution_name(args.cohort, attempt=args.attempt, timestamp=timestamp)
+        execution_input = canary_execution_input(
+            args.cohort, args.input_snapshot_at
+        )
+        input_snapshot_at = execution_input.get("input_snapshot_at")
         started = cli.call(
             "stepfunctions",
             "start-execution",
@@ -1404,7 +1590,7 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
             "--name",
             name,
             "--input",
-            json.dumps(CANARIES[args.cohort]["input"], separators=(",", ":")),
+            json.dumps(execution_input, separators=(",", ":")),
         )
     launch_manifest = {
         **_public_plan(current_plan),
@@ -1413,6 +1599,7 @@ def start(cli: AwsCli, args: argparse.Namespace) -> int:
             active_tasks, allow_concurrent=args.allow_concurrent
         ),
         "execution_arn": started["executionArn"],
+        "input_snapshot_at": input_snapshot_at,
         "start_date": started["startDate"],
         "state_machine_arn": machine["stateMachineArn"],
     }

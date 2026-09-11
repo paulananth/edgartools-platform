@@ -58,6 +58,14 @@ _FACT_GUIDANCE_SCHEMA = GOLD_SCHEMAS['_FACT_GUIDANCE_SCHEMA']
 _FACT_CONSENSUS_ESTIMATE_SCHEMA = GOLD_SCHEMAS['_FACT_CONSENSUS_ESTIMATE_SCHEMA']
 _FACT_TRANSCRIPT_EVENT_SCHEMA = GOLD_SCHEMAS['_FACT_TRANSCRIPT_EVENT_SCHEMA']
 
+GOLD_INPUT_COLUMNS: dict[str, tuple[str, ...]] = {
+    "SEC_SUBSIDIARY_EVIDENCE": tuple(_SEC_SUBSIDIARY_EVIDENCE_SCHEMA.names),
+    "SEC_AUDITOR_REPORT_EVIDENCE": tuple(_SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA.names),
+    "SEC_EMPLOYMENT_EVENT": tuple(_SEC_EMPLOYMENT_EVENT_SCHEMA.names),
+    "SEC_ADV_FIRM_ROSTER": tuple(_SEC_ADV_FIRM_ROSTER_SCHEMA.names),
+    "SEC_ADV_PRIVATE_FUND": tuple(_SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA.names),
+}
+
 
 def _empty(schema: pa.Schema) -> pa.Table:
     return pa.table({field.name: pa.array([], type=field.type) for field in schema}, schema=schema)
@@ -86,7 +94,115 @@ def _table_from_records(schema: pa.Schema, records: list[dict[str, Any]]) -> pa.
     )
 
 
-def _fetch_snowflake_silver_arrow(query: str) -> pa.Table | None:
+def normalize_gold_input_snapshot_at(value: str) -> str:
+    """Return one canonical UTC timestamp safe to embed in Time Travel SQL."""
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("gold input snapshot timestamp is required")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"invalid gold input snapshot timestamp: {value!r}") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("gold input snapshot timestamp must be timezone-aware")
+    return (
+        parsed.astimezone(UTC)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def _query_at_snapshot(query: str, *, table_name: str, snapshot_at: str | None) -> str:
+    if snapshot_at is None:
+        return query
+    normalized = normalize_gold_input_snapshot_at(snapshot_at)
+    marker = f"FROM {table_name}"
+    if query.count(marker) != 1:
+        raise ValueError(
+            f"expected exactly one {marker!r} marker in Snowflake Gold query"
+        )
+    return query.replace(
+        marker,
+        (
+            f"{marker} AT (TIMESTAMP => "
+            f"'{normalized}'::TIMESTAMP_TZ)"
+        ),
+    )
+
+
+def _input_envelope_hash(identity: dict[str, Any]) -> str:
+    payload = json.dumps(
+        identity,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def capture_gold_input_envelope(snapshot_at: str) -> dict[str, Any]:
+    """Capture the five-table Snowflake input identity at one frozen instant."""
+    from edgar_warehouse.mdm.export import silver_connection_settings
+
+    normalized = normalize_gold_input_snapshot_at(snapshot_at)
+    settings = silver_connection_settings()
+    connection = settings.connect()
+    table_entries: list[dict[str, Any]] = []
+    query_ids: dict[str, str] = {}
+    try:
+        for table_name, columns in sorted(GOLD_INPUT_COLUMNS.items()):
+            cursor = connection.cursor()
+            try:
+                query = _query_at_snapshot(
+                    f"SELECT COUNT(*) AS ROW_COUNT FROM {table_name}",
+                    table_name=table_name,
+                    snapshot_at=normalized,
+                )
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                if len(rows) != 1 or len(rows[0]) != 1:
+                    raise RuntimeError(
+                        f"unexpected input-envelope count result for {table_name}"
+                    )
+                query_id = str(getattr(cursor, "sfqid", "") or "").strip()
+                if not query_id:
+                    raise RuntimeError(
+                        f"Snowflake did not return a query id for {table_name}"
+                    )
+                table_entries.append(
+                    {
+                        "table_name": table_name,
+                        "row_count": int(rows[0][0]),
+                        "selected_columns": list(columns),
+                    }
+                )
+                query_ids[table_name] = query_id
+            finally:
+                cursor.close()
+    finally:
+        connection.close()
+
+    identity = {
+        "schema_version": 1,
+        "source_system": "EDGARTOOLS_SILVER",
+        "account": str(settings.account),
+        "database": str(settings.database),
+        "schema": str(settings.schema),
+        "snapshot_at": normalized,
+        "tables": table_entries,
+    }
+    return {
+        **identity,
+        "envelope_sha256": _input_envelope_hash(identity),
+        "query_ids": query_ids,
+    }
+
+
+def _fetch_snowflake_silver_arrow(
+    query: str,
+    *,
+    table_name: str,
+    input_snapshot_at: str | None = None,
+) -> pa.Table | None:
     """Run `query` against the live EDGARTOOLS_SILVER Snowflake schema and
     return the result as a `pa.Table` with lowercased column names
     (Snowflake's connector returns uppercase names for unquoted identifiers
@@ -125,7 +241,13 @@ def _fetch_snowflake_silver_arrow(query: str) -> pa.Table | None:
     try:
         cursor = connection.cursor()
         try:
-            cursor.execute(query)
+            cursor.execute(
+                _query_at_snapshot(
+                    query,
+                    table_name=table_name,
+                    snapshot_at=input_snapshot_at,
+                )
+            )
             table = cursor.fetch_arrow_all()
             if table is None:
                 return None
@@ -148,7 +270,9 @@ def _cast_to_schema(table: pa.Table | None, schema: pa.Schema) -> pa.Table:
     return table.select(schema.names).cast(schema)
 
 
-def _build_sec_subsidiary_evidence() -> pa.Table:
+def _build_sec_subsidiary_evidence(
+    *, input_snapshot_at: str | None = None
+) -> pa.Table:
     table = _fetch_snowflake_silver_arrow(
         """
         SELECT
@@ -166,7 +290,9 @@ def _build_sec_subsidiary_evidence() -> pa.Table:
             source_sha256,
             parser_version
         FROM SEC_SUBSIDIARY_EVIDENCE
-        """
+        """,
+        table_name="SEC_SUBSIDIARY_EVIDENCE",
+        input_snapshot_at=input_snapshot_at,
     )
     table = _cast_to_schema(table, _SEC_SUBSIDIARY_EVIDENCE_SCHEMA)
     return table.sort_by(
@@ -180,7 +306,9 @@ def _build_sec_subsidiary_evidence() -> pa.Table:
     )
 
 
-def _build_sec_auditor_report_evidence() -> pa.Table:
+def _build_sec_auditor_report_evidence(
+    *, input_snapshot_at: str | None = None
+) -> pa.Table:
     table = _fetch_snowflake_silver_arrow(
         """
         SELECT
@@ -202,7 +330,9 @@ def _build_sec_auditor_report_evidence() -> pa.Table:
             latest_amendment,
             parser_version
         FROM SEC_AUDITOR_REPORT_EVIDENCE
-        """
+        """,
+        table_name="SEC_AUDITOR_REPORT_EVIDENCE",
+        input_snapshot_at=input_snapshot_at,
     )
     table = _cast_to_schema(table, _SEC_AUDITOR_REPORT_EVIDENCE_SCHEMA)
     return table.sort_by(
@@ -215,7 +345,7 @@ def _build_sec_auditor_report_evidence() -> pa.Table:
     )
 
 
-def _build_sec_employment_event() -> pa.Table:
+def _build_sec_employment_event(*, input_snapshot_at: str | None = None) -> pa.Table:
     table = _fetch_snowflake_silver_arrow(
         """
         SELECT
@@ -230,7 +360,9 @@ def _build_sec_employment_event() -> pa.Table:
             effective_date,
             parser_version
         FROM SEC_EMPLOYMENT_EVENT
-        """
+        """,
+        table_name="SEC_EMPLOYMENT_EVENT",
+        input_snapshot_at=input_snapshot_at,
     )
     table = _cast_to_schema(table, _SEC_EMPLOYMENT_EVENT_SCHEMA)
     return table.sort_by(
@@ -243,7 +375,7 @@ def _build_sec_employment_event() -> pa.Table:
     )
 
 
-def _build_sec_adv_firm_roster() -> pa.Table:
+def _build_sec_adv_firm_roster(*, input_snapshot_at: str | None = None) -> pa.Table:
     table = _fetch_snowflake_silver_arrow(
         """
         SELECT
@@ -260,7 +392,9 @@ def _build_sec_adv_firm_roster() -> pa.Table:
             source_sha256,
             parser_version
         FROM SEC_ADV_FIRM_ROSTER
-        """
+        """,
+        table_name="SEC_ADV_FIRM_ROSTER",
+        input_snapshot_at=input_snapshot_at,
     )
     table = _cast_to_schema(table, _SEC_ADV_FIRM_ROSTER_SCHEMA)
     return table.sort_by(
@@ -269,7 +403,9 @@ def _build_sec_adv_firm_roster() -> pa.Table:
     )
 
 
-def _build_sec_adv_private_fund_passthrough() -> pa.Table:
+def _build_sec_adv_private_fund_passthrough(
+    *, input_snapshot_at: str | None = None
+) -> pa.Table:
     table = _fetch_snowflake_silver_arrow(
         """
         SELECT
@@ -291,7 +427,9 @@ def _build_sec_adv_private_fund_passthrough() -> pa.Table:
             source_sha256,
             parser_version
         FROM SEC_ADV_PRIVATE_FUND
-        """
+        """,
+        table_name="SEC_ADV_PRIVATE_FUND",
+        input_snapshot_at=input_snapshot_at,
     )
     table = _cast_to_schema(table, _SEC_ADV_PRIVATE_FUND_PASSTHROUGH_SCHEMA)
     return table.sort_by(
@@ -314,25 +452,29 @@ def _timed(name: str, fn: Callable[[], pa.Table]) -> pa.Table:
     return result
 
 
-def _source_export_table_builders() -> list[tuple[str, Callable[[], pa.Table]]]:
+def _source_export_table_builders(
+    *, input_snapshot_at: str | None = None
+) -> list[tuple[str, Callable[[], pa.Table]]]:
     # Every table here has no dbt gold model of its own, so it still reads
     # Snowflake's EDGARTOOLS_SILVER directly instead of a local DuckDB
     # `conn` -- see _fetch_snowflake_silver_arrow.
     return [
-        ("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence()),
-        ("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence()),
-        ("sec_employment_event",           lambda: _build_sec_employment_event()),
+        ("sec_subsidiary_evidence",        lambda: _build_sec_subsidiary_evidence(input_snapshot_at=input_snapshot_at)),
+        ("sec_auditor_report_evidence",    lambda: _build_sec_auditor_report_evidence(input_snapshot_at=input_snapshot_at)),
+        ("sec_employment_event",           lambda: _build_sec_employment_event(input_snapshot_at=input_snapshot_at)),
         # Firm Roster completeness cross-check (ticket 03). "sec_adv_private_fund"
         # here is a distinct name from "fact_adv_private_fund" above -- that one
         # is the existing CIK-keyed dimensional PRIVATE_FUNDS gold table; this
         # one is a raw CRD-keyed passthrough export of the same silver table,
         # added because the dimensional table has no CRD column.
-        ("sec_adv_firm_roster",            lambda: _build_sec_adv_firm_roster()),
-        ("sec_adv_private_fund",           lambda: _build_sec_adv_private_fund_passthrough()),
+        ("sec_adv_firm_roster",            lambda: _build_sec_adv_firm_roster(input_snapshot_at=input_snapshot_at)),
+        ("sec_adv_private_fund",           lambda: _build_sec_adv_private_fund_passthrough(input_snapshot_at=input_snapshot_at)),
     ]
 
 
-def iter_source_export_tables() -> Iterator[tuple[str, pa.Table]]:
+def iter_source_export_tables(
+    *, input_snapshot_at: str | None = None
+) -> Iterator[tuple[str, pa.Table]]:
     """Yield each gold table one at a time instead of materializing the whole
     gold layer in memory simultaneously.
 
@@ -346,7 +488,14 @@ def iter_source_export_tables() -> Iterator[tuple[str, pa.Table]]:
     # Drop unreachable allocations left by the preceding ingestion phase before
     # the first export load. The source reader itself remains caller-owned.
     _release_source_export_memory()
-    for name, fn in _source_export_table_builders():
+    normalized_snapshot = (
+        normalize_gold_input_snapshot_at(input_snapshot_at)
+        if input_snapshot_at is not None
+        else None
+    )
+    for name, fn in _source_export_table_builders(
+        input_snapshot_at=normalized_snapshot
+    ):
         table = _timed(name, fn)
         try:
             yield name, table
@@ -358,7 +507,9 @@ def iter_source_export_tables() -> Iterator[tuple[str, pa.Table]]:
             _release_source_export_memory()
 
 
-def build_source_export() -> dict[str, pa.Table]:
+def build_source_export(
+    *, input_snapshot_at: str | None = None
+) -> dict[str, pa.Table]:
     """Materialize the whole gold layer as a dict.
 
     Holds every gold table in memory simultaneously — only safe for callers
@@ -366,7 +517,7 @@ def build_source_export() -> dict[str, pa.Table]:
     validation, tests). See iter_source_export_tables() for why memory-critical
     callers must not use this.
     """
-    return dict(iter_source_export_tables())
+    return dict(iter_source_export_tables(input_snapshot_at=input_snapshot_at))
 
 
 def _write_parquet(table: pa.Table, storage_root: Any, relative_path: str) -> dict[str, Any]:

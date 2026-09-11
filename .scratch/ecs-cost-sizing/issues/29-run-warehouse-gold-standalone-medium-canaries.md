@@ -121,6 +121,41 @@ definition or profile reference was changed. The earlier control-3/candidate-2
 pair is diagnostic only because its reporting window expired before the cohort
 could be completed.
 
+## Input-envelope seam implemented (2026-09-11) — deployment and evidence pending
+
+The missing input-envelope capability is implemented on
+`codex/ticket29-snowflake-input-envelope`, but this statement is code/test
+readiness only: no image has been published, no canary definition has been
+applied, and no new production evidence has been collected.
+
+The Ticket 29 canary clone now appends
+`--input-snapshot-at $.input_snapshot_at` to the otherwise unchanged
+`gold-refresh` command. The runtime normalizes that timezone-aware value to UTC,
+uses the same Snowflake Time Travel timestamp for all five direct
+`EDGARTOOLS_SILVER` reads, and captures an envelope containing the Snowflake
+account/database/schema, exact source-table and selected-column allowlist,
+per-table row counts, query IDs, and a deterministic SHA-256 identity. The
+envelope is repeated in the three Gold lifecycle events and stored in durable
+pipeline-run metrics.
+
+The offline evaluator independently validates the envelope schema, allowlist,
+counts, selected columns, query-ID presence, and claimed digest; binds the
+runtime snapshot back to the launch manifest; and requires the control plus
+both candidates to have identical envelope identities. Query IDs remain audit
+provenance and are deliberately excluded from cross-run equality because each
+Snowflake statement receives a distinct ID.
+
+Before the next cohort, publish/deploy one immutable image containing this
+change, prepare both current-image canary definitions, choose one timestamp a
+few seconds in the past but within all five tables' Time Travel retention, and
+pass that exact value to the Large control and both Medium candidates. Gate 1
+closes only when `evaluate-gold` reports
+`input_envelope_evidence.passed=true`; exercised recovery remains the final
+independent blocker.
+
+Local verification on 2026-09-11: `1597 passed, 6 skipped`, plus 29 passing
+subtests, for `tests/unit tests/architecture`.
+
 ## Parked (2026-09-01)
 
 Per operator direction, stop this cohort and restart it only after all Step
