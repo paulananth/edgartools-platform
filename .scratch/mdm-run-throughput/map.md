@@ -45,11 +45,7 @@ with their own cost model" -- that map's own Out of scope section flagged
   measured the same rigorous way ticket-style (real `mdm_progress` log
   deltas) as company's 62,190/2.16s baseline was. Decision 2's fix should
   make this easy to re-measure live once deployed and re-run.
-- Whether the currently-running prod `bronze_seed_silver_gold` execution
-  (started before decision 2's image was built) should be restarted to pick
-  up the fix, vs. letting it finish on the old single-threaded code and
-  applying the fix starting with the next execution -- an operational
-  deploy-timing call, not a design question this map tracks.
+
 ## Out of scope
 
 - `run_advisers`/`run_funds` -- already implemented as a bulk/batched
