@@ -328,6 +328,13 @@ Image tags (role-prefixed: `warehouse-*` / `mdm-*`):
   not demonstrated.
   Keep `mdm-large` operational for this workload; do not infer that
   `mdm-small` is safe or change production references from this cohort.
+- Ticket 29's current-image `warehouse.gold_standalone` cohort passed exact
+  five-table/470,101-row output parity, cross-run idempotency, full-window
+  no-overlap, p95 duration (0.45% faster), and estimated compute-cost (48.69%
+  lower) gates on `warehouse-medium`. This does not approve the downgrade:
+  matched Snowflake input-envelope identity and exercised recovery evidence
+  are still missing. Keep `warehouse-large` operational; do not update
+  production references or start the bake window from this cohort.
 - The current-image unbounded `sync-graph` canary on `mdm-large` passed its
   execution-local gates. This does not approve the residual-security profile
   downgrade.
@@ -339,6 +346,9 @@ Image tags (role-prefixed: `warehouse-*` / `mdm-*`):
 - Canonical Ticket 28 analysis and durable evidence live in
   `.scratch/ecs-cost-sizing/issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md`
   and `.scratch/ecs-cost-sizing/evidence/ticket28/`.
+- Canonical Ticket 29 analysis and durable evidence live in
+  `.scratch/ecs-cost-sizing/issues/29-run-warehouse-gold-standalone-medium-canaries.md`
+  and `.scratch/ecs-cost-sizing/evidence/ticket29/`.
 
 ## Warehouse Commands
 
