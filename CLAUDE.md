@@ -1428,7 +1428,7 @@ unit tests can all pass while never exercising the one precondition (a genuinely
 table) that matters in production — an empty-table-only test suite is unproven for exactly
 the thing migrations exist to do.
 
-## sec_financial_fact retirement publish-conflict 5-whys (partially resolved 2026-08-27)
+## sec_financial_fact retirement publish-conflict 5-whys (fully resolved 2026-09-11)
 
 **Problem:** immediately after the migration 010 fix above unblocked local schema evolution, the
 same Ticket 46 verification run's `daily-incremental` still failed (exit 2) — this time at the
@@ -1481,20 +1481,35 @@ fix anything; those columns carry real business content that a genuine future ca
 update, so blocking on a real conflict there is *currently correct*, just currently permanent
 because of part B.
 
-**Part B is an open design question, not fixed here** — user explicitly scoped it out mid-session
-rather than have it decided unilaterally. Candidate resolution policies considered but not chosen:
-bump `ingested_at` (or a new field) on retirement so the existing authority-column mechanism
-naturally resolves it (changes `ingested_at`'s semantic meaning elsewhere); a dedicated
-`valid_to`/`is_current` resolver mirroring the existing narrow `mdm_entity_id`-regression-guard
-precedent (`silver_protection.py`'s "candidate wins on comparable columns but never drags
-`mdm_entity_id` backward" special case); something else. Needs its own decision session before
-retirement can actually publish to prod canonical silver.
+**Part B resolved (fundamentals-daily-integration map, Ticket 01, 2026-09-11):** a new column,
+`retirement_state_observed_at` (migration 011, same `requires_transaction=False`/populated-table-
+tested shape as migration 010), is now set to `now()` everywhere `retire_financial_facts_not_in_
+snapshot`/`retire_accounting_flags_not_in_snapshot` and their `merge_financial_facts`/
+`merge_accounting_flags` reinstatement counterparts touch `is_current`/`valid_to`. `ProtectedTablePolicy`
+gained two new optional fields — `retirement_authority_column`, `retirement_columns` — populated
+only for `sec_financial_fact`/`sec_accounting_flag` (every other table's registry entry is
+byte-for-byte unchanged). `_resolve_conflict` now falls back to `retirement_authority_column` when
+the primary `authority_column` ties **and** every genuinely differing comparable column is a
+member of `retirement_columns` (`valid_to`, `is_current`) — the dedicated resolver this entry
+previously listed as a candidate, not the `ingested_at`-semantics-changing alternative (deliberately
+rejected, per this ticket's own "don't touch `ingested_at`'s existing semantics" instruction).
+`_comparable_columns` also excludes `retirement_authority_column`, the same way it already excludes
+`authority_column` — necessary so the new column's own independently-set `now()` values don't
+themselves always show up as "differing" and defeat the subset check. A genuine *value* conflict
+alongside a retirement (e.g. `value` also differs) still correctly aborts as ambiguous — retirement
+is not a free pass for an unrelated content conflict.
 
-Tests: 3 new (`tests/unit/test_silver_financial_fact_retirement_provenance.py`) — the first-publish
-false-conflict regression (fails before the fix, passes after — verified both ways), a
-valid_from-only-difference-does-not-block-or-get-copied case, and a **positive control** proving a
-genuine retirement conflict still correctly blocks (i.e. confirming `is_current`/`valid_to` were
-not accidentally exempted alongside `valid_from`). Full repo suite green.
+Tests: migration 010's own populated-table lesson repeated for migration 011
+(`test_silver_store_schema_migration.py`); 4 new/updated tests in
+`test_silver_financial_fact_retirement_provenance.py` (a real retirement via
+`retire_financial_facts_not_in_snapshot` now publishes; a genuine value conflict alongside a
+retirement still blocks; the pre-existing raw-SQL-bypass regression test, clarified to note it
+specifically tests bypassing the sanctioned write path); a new `TestResolveConflictRetirementFallback`
+with 4 direct unit tests of `_resolve_conflict` in isolation. Reviewed via `/gof-refactor-reviewer`
+before implementation — direct precedent found in this file's own history (`4e78725d`, the identical
+"exclude a per-table tiebreak column from same-key comparison" shape, previously applied to
+`authority_column` itself). Full repo suite green except the 8 pre-existing, already-documented
+Postgres-integration schema-drift failures noted elsewhere in this file.
 
 ## daily_incremental multi-hour runtime after Bookkeeping Postgres cutover 5-whys (CORRECTED — not one-time, see bottom, 2026-09-01)
 

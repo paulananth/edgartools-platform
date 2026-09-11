@@ -30,6 +30,7 @@ _EXPECTED_SCHEMA_MIGRATIONS = [
     "008_pipeline_run_lease_backstop_overdue",
     "009_mdm_entity_id_columns",
     "010_company_facts_retirement_columns",
+    "011_financial_fact_retirement_state_observed_at",
 ]
 
 # Pre-PR-#57 DDL (PK omits period_end) for sec_financial_fact / sec_financial_derived.
@@ -780,6 +781,143 @@ def test_migration_010_adds_retirement_columns_to_populated_tables(tmp_path):
         recorded_again = db2.fetch(
             "SELECT migration_name FROM schema_migration "
             "WHERE migration_name = '010_company_facts_retirement_columns'"
+        )
+        assert len(recorded_again) == 1
+    finally:
+        db2.close()
+
+
+_OLD_FINANCIAL_FACT_PRE_RETIREMENT_STATE_OBSERVED_AT_DDL = """
+CREATE TABLE sec_financial_fact (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    fiscal_period       TEXT NOT NULL,
+    period_end          DATE NOT NULL,
+    period_start        DATE NOT NULL,
+    form_type           TEXT NOT NULL,
+    concept             TEXT NOT NULL,
+    value               DOUBLE,
+    unit                TEXT,
+    decimals            INTEGER,
+    segment             TEXT NOT NULL DEFAULT 'consolidated',
+    parser_version      TEXT,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    valid_from          TIMESTAMPTZ DEFAULT NOW(),
+    valid_to            TIMESTAMPTZ,
+    is_current          BOOLEAN DEFAULT TRUE,
+    PRIMARY KEY (cik, accession_number, concept, fiscal_period, segment, period_end, period_start)
+);
+"""
+
+_OLD_ACCOUNTING_FLAG_PRE_RETIREMENT_STATE_OBSERVED_AT_DDL = """
+CREATE TABLE sec_accounting_flag (
+    cik                 BIGINT NOT NULL,
+    accession_number    TEXT NOT NULL,
+    fiscal_year         INTEGER NOT NULL,
+    period_end          DATE,
+    form_type           TEXT NOT NULL,
+    auditor_name        TEXT,
+    auditor_pcaob_id    TEXT,
+    auditor_location    TEXT,
+    icfr_attestation    BOOLEAN,
+    auditor_changed     BOOLEAN,
+    beneish_m_score     DOUBLE,
+    altman_z_score      DOUBLE,
+    piotroski_f_score   INTEGER,
+    valid_from          TIMESTAMPTZ DEFAULT NOW(),
+    valid_to            TIMESTAMPTZ,
+    is_current          BOOLEAN DEFAULT TRUE,
+    PRIMARY KEY (cik, accession_number)
+);
+"""
+
+
+def _build_pre_retirement_state_observed_at_store(db_path: str) -> None:
+    """Build a post-migration-010, pre-migration-011 store with at least one
+    existing row in each table -- same DuckDB row-backfill-on-ADD-COLUMN
+    risk migration 010's own test locks down, this time for migration 011's
+    ADD COLUMN (retirement_state_observed_at).
+    """
+    conn = duckdb.connect(db_path)
+    try:
+        conn.execute(_OLD_FINANCIAL_FACT_PRE_RETIREMENT_STATE_OBSERVED_AT_DDL)
+        conn.execute(_OLD_ACCOUNTING_FLAG_PRE_RETIREMENT_STATE_OBSERVED_AT_DDL)
+        conn.execute(
+            """
+            INSERT INTO sec_financial_fact
+                (cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
+                 form_type, concept, value, unit, decimals, segment, parser_version)
+            VALUES (320193, '0000320193-24-000123', 2024, 'FY', '2024-09-28', '2023-09-30',
+                    '10-K', 'us-gaap/Revenues', 391035000000, 'USD', 0,
+                    'consolidated', 'pre-retirement-state-observed-at-test')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO sec_accounting_flag (cik, accession_number, fiscal_year, form_type)
+            VALUES (320193, '0000320193-24-000123', 2024, '10-K')
+            """
+        )
+    finally:
+        conn.close()
+
+
+def test_migration_011_adds_retirement_state_observed_at_to_populated_tables(tmp_path):
+    """Regression coverage mirroring migration 010's own populated-table
+    test above (fundamentals-daily-integration map, Ticket 01) -- migration
+    011 (_add_financial_fact_retirement_state_observed_at) issues its own
+    DEFAULT-bearing ADD COLUMN against these same two tables, so it carries
+    the identical DuckDB row-backfill-on-ADD-COLUMN commit-conflict risk
+    migration 010 already hit in prod. requires_transaction=False (same as
+    migration 010) is what keeps this safe.
+    """
+    db_path = str(tmp_path / "silver.duckdb")
+    _build_pre_retirement_state_observed_at_store(db_path)
+
+    # This must not raise -- before the fix, this shape of migration crashed
+    # with _duckdb.TransactionException (migration 010's own incident).
+    db = SilverDatabase(db_path)
+    try:
+        fact_columns = {
+            row[1] for row in db._conn.execute("PRAGMA table_info('sec_financial_fact')").fetchall()
+        }
+        flag_columns = {
+            row[1] for row in db._conn.execute("PRAGMA table_info('sec_accounting_flag')").fetchall()
+        }
+        assert "retirement_state_observed_at" in fact_columns
+        assert "retirement_state_observed_at" in flag_columns
+
+        # The pre-existing row survived the migration (no data loss) and was
+        # backfilled to "its retirement state was last observed at migration
+        # time" -- the documented backfill semantics.
+        fact_row = db.fetch(
+            "SELECT retirement_state_observed_at FROM sec_financial_fact "
+            "WHERE accession_number = '0000320193-24-000123'"
+        )[0]
+        assert fact_row["retirement_state_observed_at"] is not None
+
+        flag_row = db.fetch(
+            "SELECT retirement_state_observed_at FROM sec_accounting_flag "
+            "WHERE accession_number = '0000320193-24-000123'"
+        )[0]
+        assert flag_row["retirement_state_observed_at"] is not None
+
+        recorded = db.fetch(
+            "SELECT migration_name FROM schema_migration "
+            "WHERE migration_name = '011_financial_fact_retirement_state_observed_at'"
+        )
+        assert len(recorded) == 1
+    finally:
+        db.close()
+
+    # A second open against the now-migrated store must still be a clean
+    # no-op.
+    db2 = SilverDatabase(db_path)
+    try:
+        recorded_again = db2.fetch(
+            "SELECT migration_name FROM schema_migration "
+            "WHERE migration_name = '011_financial_fact_retirement_state_observed_at'"
         )
         assert len(recorded_again) == 1
     finally:

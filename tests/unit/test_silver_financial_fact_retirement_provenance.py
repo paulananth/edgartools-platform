@@ -25,9 +25,16 @@ Fixed two ways:
 
 Deliberately does NOT exempt valid_to/is_current -- a genuine retirement
 conflict (candidate retires a row canonical still shows current) must still
-be flagged. See CLAUDE.md's "sec_financial_fact retirement publish-conflict"
-5-whys: how such a conflict *should* resolve is a separate, still-open
-design question this fix does not attempt to answer.
+be flagged as a conflict. But "flagged as a conflict" no longer means
+"permanently ambiguous, always aborts": fundamentals-daily-integration map
+Ticket 01 resolved the previously-open design question below by giving
+sec_financial_fact/sec_accounting_flag a second, narrower tiebreak column,
+retirement_state_observed_at (migration 011), consulted by _resolve_conflict
+only when the primary authority_column (ingested_at) ties AND every
+genuinely differing column is one of the table's declared retirement_columns
+(valid_to/is_current). A genuine *value* conflict (e.g. `value` also
+differs) alongside a retirement still correctly aborts as ambiguous --
+proven below alongside the resolved-retirement case.
 """
 
 from __future__ import annotations
@@ -171,11 +178,14 @@ def test_valid_from_only_difference_does_not_block_or_get_copied(tmp_path: Path)
 
 
 def test_genuine_retirement_conflict_still_blocks_publication(tmp_path: Path) -> None:
-    """Deliberately NOT fixed by this change: a real retirement (candidate
-    sets is_current=FALSE/valid_to, canonical still shows the row current)
-    must still raise SemanticMergeConflictError. Proves valid_to/is_current
-    were NOT accidentally exempted alongside valid_from -- how this should
-    actually resolve is a separate, open design question (CLAUDE.md).
+    """A real retirement performed by a raw UPDATE that bypasses
+    retire_financial_facts_not_in_snapshot (and so never touches
+    retirement_state_observed_at) must still raise
+    SemanticMergeConflictError -- proves valid_to/is_current were NOT
+    accidentally exempted alongside valid_from, and that Ticket 01's
+    retirement_authority_column fallback only fires when the sanctioned
+    write path actually advances it, not for any arbitrary same-key
+    difference on those two columns.
     """
     canonical_path = tmp_path / "canonical.duckdb"
     canonical_db = SilverDatabase(str(canonical_path))
@@ -207,3 +217,154 @@ def test_genuine_retirement_conflict_still_blocks_publication(tmp_path: Path) ->
 
     assert "sec_financial_fact" in str(excinfo.value)
     assert "is_current" in str(excinfo.value) or "valid_to" in str(excinfo.value)
+
+
+def test_genuine_retirement_via_retire_method_now_publishes(tmp_path: Path) -> None:
+    """Ticket 01 (fundamentals-daily-integration map), closing CLAUDE.md's
+    'sec_financial_fact retirement publish-conflict' 5-whys Part B: a real
+    retirement performed through retire_financial_facts_not_in_snapshot (the
+    sanctioned write path, which now advances retirement_state_observed_at
+    alongside is_current/valid_to) must publish cleanly instead of
+    permanently aborting on the ingested_at tie.
+    """
+    canonical_path = tmp_path / "canonical.duckdb"
+    canonical_db = SilverDatabase(str(canonical_path))
+    canonical_db._conn.execute(
+        f"""
+        INSERT INTO sec_financial_fact ({_FACT_INSERT_COLUMNS})
+        VALUES (320193, '0000320193-24-000123', 2024, 'FY', '2024-09-28', '2023-09-30',
+                '10-K', 'us-gaap/Revenues', 391035000000, 'USD', 0, 'consolidated', 'test',
+                '2026-01-01 00:00:00+00')
+        """
+    )
+    canonical_db.close()
+
+    candidate_path = tmp_path / "candidate.duckdb"
+    import shutil
+
+    shutil.copy(canonical_path, candidate_path)
+    candidate_db = SilverDatabase(str(candidate_path))
+    # The fact is absent from this fresh snapshot -- retire_financial_facts_
+    # not_in_snapshot's real production call shape (empty fact_keys retires
+    # everything current for the CIK).
+    candidate_db.retire_financial_facts_not_in_snapshot(cik=320193, fact_keys=[], sync_run_id="test-run")
+    candidate_db.close()
+
+    output_path = tmp_path / "merged.duckdb"
+    # Must not raise -- before this fix, this exact shape aborted the whole
+    # publish with a "434805 ambiguous same-key conflict(s)"-style error.
+    result = merge_candidate_into_canonical(candidate_path, canonical_path, output_path)
+
+    assert result.rows_updated.get("sec_financial_fact", 0) == 1
+
+    conn = duckdb.connect(str(output_path))
+    try:
+        row = conn.execute(
+            "SELECT is_current, valid_to FROM sec_financial_fact "
+            "WHERE accession_number = '0000320193-24-000123'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row[0] is False  # the retirement won, not canonical's stale is_current=TRUE
+    assert row[1] is not None
+
+
+def test_genuine_value_conflict_alongside_retirement_still_blocks(tmp_path: Path) -> None:
+    """A retirement is not a free pass for an unrelated content conflict:
+    if `value` also genuinely differs between canonical and candidate (not
+    just retirement state), the differing-columns set is no longer a subset
+    of retirement_columns, so this must still abort as ambiguous even
+    though retirement_state_observed_at correctly advanced.
+    """
+    canonical_path = tmp_path / "canonical.duckdb"
+    canonical_db = SilverDatabase(str(canonical_path))
+    canonical_db._conn.execute(
+        f"""
+        INSERT INTO sec_financial_fact ({_FACT_INSERT_COLUMNS})
+        VALUES (320193, '0000320193-24-000123', 2024, 'FY', '2024-09-28', '2023-09-30',
+                '10-K', 'us-gaap/Revenues', 391035000000, 'USD', 0, 'consolidated', 'test',
+                '2026-01-01 00:00:00+00')
+        """
+    )
+    canonical_db.close()
+
+    candidate_path = tmp_path / "candidate.duckdb"
+    import shutil
+
+    shutil.copy(canonical_path, candidate_path)
+    candidate_db = SilverDatabase(str(candidate_path))
+    # A genuine value correction on top of the retirement -- differing now
+    # includes `value`, not just valid_to/is_current.
+    candidate_db._conn.execute(
+        "UPDATE sec_financial_fact SET value = 999999999 WHERE cik = 320193"
+    )
+    candidate_db.retire_financial_facts_not_in_snapshot(cik=320193, fact_keys=[], sync_run_id="test-run")
+    candidate_db.close()
+
+    output_path = tmp_path / "merged.duckdb"
+    with pytest.raises(SemanticMergeConflictError) as excinfo:
+        merge_candidate_into_canonical(candidate_path, canonical_path, output_path)
+
+    assert "sec_financial_fact" in str(excinfo.value)
+    assert "value" in str(excinfo.value)
+
+
+class TestResolveConflictRetirementFallback:
+    """Direct unit coverage of _resolve_conflict's retirement_authority_column
+    fallback (Ticket 01), isolated from the full merge_candidate_into_canonical
+    seam the tests above exercise."""
+
+    def test_falls_back_to_retirement_authority_column_on_authority_tie(self) -> None:
+        from edgar_warehouse.silver_protection import PROTECTED_TABLE_REGISTRY, _resolve_conflict
+
+        policy = PROTECTED_TABLE_REGISTRY["sec_financial_fact"]
+        canonical_row = {"ingested_at": 100, "is_current": True, "valid_to": None,
+                          "retirement_state_observed_at": 1}
+        candidate_row = {"ingested_at": 100, "is_current": False, "valid_to": 200,
+                          "retirement_state_observed_at": 2}
+
+        winner = _resolve_conflict(policy, canonical_row, candidate_row,
+                                    differing=("is_current", "valid_to"))
+
+        assert winner == "candidate"
+
+    def test_stays_ambiguous_when_differing_includes_non_retirement_column(self) -> None:
+        from edgar_warehouse.silver_protection import PROTECTED_TABLE_REGISTRY, _resolve_conflict
+
+        policy = PROTECTED_TABLE_REGISTRY["sec_financial_fact"]
+        canonical_row = {"ingested_at": 100, "is_current": True, "valid_to": None,
+                          "value": 1.0, "retirement_state_observed_at": 1}
+        candidate_row = {"ingested_at": 100, "is_current": False, "valid_to": 200,
+                          "value": 2.0, "retirement_state_observed_at": 2}
+
+        winner = _resolve_conflict(policy, canonical_row, candidate_row,
+                                    differing=("is_current", "valid_to", "value"))
+
+        assert winner is None
+
+    def test_stays_ambiguous_when_retirement_authority_column_also_ties(self) -> None:
+        from edgar_warehouse.silver_protection import PROTECTED_TABLE_REGISTRY, _resolve_conflict
+
+        policy = PROTECTED_TABLE_REGISTRY["sec_financial_fact"]
+        canonical_row = {"ingested_at": 100, "is_current": True, "valid_to": None,
+                          "retirement_state_observed_at": 5}
+        candidate_row = {"ingested_at": 100, "is_current": False, "valid_to": 200,
+                          "retirement_state_observed_at": 5}
+
+        winner = _resolve_conflict(policy, canonical_row, candidate_row,
+                                    differing=("is_current", "valid_to"))
+
+        assert winner is None
+
+    def test_unaffected_for_tables_without_retirement_authority_column(self) -> None:
+        from edgar_warehouse.silver_protection import PROTECTED_TABLE_REGISTRY, _resolve_conflict
+
+        policy = PROTECTED_TABLE_REGISTRY["sec_financial_derived"]
+        assert policy.retirement_authority_column is None
+
+        canonical_row = {"ingested_at": 100, "revenue": 1.0}
+        candidate_row = {"ingested_at": 100, "revenue": 2.0}
+
+        winner = _resolve_conflict(policy, canonical_row, candidate_row, differing=("revenue",))
+
+        assert winner is None

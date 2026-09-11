@@ -95,6 +95,12 @@ def test_accounting_flag_score_backfill_only_records_on_real_match(tmp_path):
     score_row = recorded[1]
     assert score_row.pop("ingested_at") is not None
     assert score_row.pop("valid_from") is not None
+    # retirement_state_observed_at (fundamentals-daily-integration map,
+    # Ticket 01): update_accounting_flag_scores uses RETURNING * by design
+    # (see its own docstring -- "no separate column list to keep in sync"),
+    # so this new column is picked up automatically, same as valid_from/
+    # valid_to/is_current already were.
+    assert score_row.pop("retirement_state_observed_at") is not None
     assert score_row == {
         "cik": 320193,
         "accession_number": "0001-25-000001",
