@@ -2257,6 +2257,47 @@ fail against the pre-fix code and pass after (verified via `git stash`, not just
 touching `warehouse_orchestrator.py`/`sec_client.py` green (394 passed). **Not yet
 deployed** as of this entry — the prod images running `daily_incremental` predate this fix.
 
+## daily_incremental same-run_id retry redid ~95 minutes of work before failing on a known block (fixed 2026-09-12)
+
+**Problem:** release-readiness Ticket 74 documented a `daily_incremental` retry
+(`daily-incremental-ticket70-verify-1785720814`) that retried 4 times, each attempt burning
+~85 minutes redoing the full daily-index/submissions-bronze/silver-apply phases, before
+failing identically at the final artifact-fetch step every time on two accessions already
+known `terminal_repair_required` from the first attempt.
+
+**Root cause:** `prepare_resume`'s terminal-repair check (the thing that would have caught
+this) only runs inside `_run_configured_form_artifact_pipeline`, itself only reached after
+`_run_submissions_bronze_then_silver` — the ~95-minute phase — already completes. Every
+retry under the same Step Functions `run_id` re-hit the identical, already-known block only
+after paying that cost again.
+
+**Fix:** a new, read-only `check_unresolved_terminal_repairs(storage, *, run_id)`
+(`edgar_warehouse/application/daily_artifact_resume.py`) reads the existing run-scoped
+manifest a prior attempt would have written (if any) and re-checks its frozen accessions
+for unresolved `terminal_repair_required` markers, reusing `prepare_resume`'s own
+`_list_outcome_statuses`/`_valid_repair_attestation` helpers. Called at the very top of
+`_capture_bronze_raw`'s `daily-incremental` branch (`warehouse_orchestrator.py`), gated the
+same way `prepare_resume`'s own call site is (`recurring_mode and hasattr(context,
+"storage_root")`), before the daily-index loop or `_run_submissions_bronze_then_silver` ever
+run. A first attempt (no manifest yet) is a no-op; a retry with unresolved markers now fails
+in seconds instead of ~95 minutes.
+
+**Lesson:** the error message's own remediation text needed a second pass at review — an
+early draft told the operator to "repair via `record_repair_attestation`," but Ticket 74's
+own investigation had already proven attestation alone never unblocks a retry (the
+underlying bronze bytes must be corrected out-of-band first); the message now says so
+explicitly. A gate that fires correctly but tells the operator to do the wrong next thing is
+still a defect.
+
+Tests: 4 new in `tests/unit/test_daily_artifact_resume.py`, 4 new in
+`tests/unit/test_daily_incremental_terminal_repair_gate.py` (mirrors
+`test_daily_incremental_gated_capture.py`'s own patching convention at the
+`_capture_bronze_raw` seam) — the key regression test confirmed to fail against the pre-fix
+code (`git apply`/revert round trip, not just read) before passing after. Full `tests/unit/`
+suite green (1119 passed, 8 skipped). This closes only "Done when" item 3 of Ticket 74 —
+items 1 (how to repair the two known stale accessions) and 2 (a proactive scan for other
+pre-2026-07-31 stale objects) remain open. **Not yet deployed** as of this entry.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live

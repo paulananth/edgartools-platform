@@ -140,3 +140,19 @@ resume/retry loop should gate expensive earlier phases (submissions
 bronze/silver) on a cheap up-front check for pre-existing unresolved terminal
 markers, instead of redoing ~95 minutes of work before discovering a block
 that was already known at the start of the attempt.
+
+## Item 3 resolved (2026-09-12)
+
+Implemented the up-front gate: a new, read-only `check_unresolved_terminal_repairs(storage,
+*, run_id)` (`edgar_warehouse/application/daily_artifact_resume.py`) reads the existing
+run-scoped manifest a prior attempt would have written (if any) and re-checks its frozen
+accessions for unresolved `terminal_repair_required` markers, reusing `prepare_resume`'s own
+`_list_outcome_statuses`/`_valid_repair_attestation` helpers. Called at the very top of
+`_capture_bronze_raw`'s `daily-incremental` branch (`warehouse_orchestrator.py`), gated
+identically to `prepare_resume`'s own call site (`recurring_mode and hasattr(context,
+"storage_root")`), strictly before the daily-index loop and `_run_submissions_bronze_then_silver`
+(the ~95-minute phase). A first attempt (no manifest yet) is a no-op; a same-run_id retry with
+unresolved markers now fails in seconds instead of ~95 minutes. Full write-up:
+CLAUDE.md's "daily_incremental same-run_id retry redid ~95 minutes of work before failing on
+a known block" entry. Branch: `claude/gate-daily-incremental-on-terminal-repair-markers`.
+**Not yet deployed** as of this entry. Items 1 and 2 remain open.

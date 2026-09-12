@@ -1611,6 +1611,33 @@ def _capture_bronze_raw(
             raise WarehouseRuntimeError(
                 "--recurring-index-lookback-days must be a non-negative integer"
             )
+        if recurring_lookback_days and hasattr(context, "storage_root"):
+            # release-readiness Ticket 74: a same-run_id retry whose prior
+            # attempt left unresolved terminal-repair markers would otherwise
+            # redo the ~95-minute daily-index/submissions-silver phases below
+            # only to hit this exact block's own check deep inside
+            # _run_configured_form_artifact_pipeline (prepare_resume, called
+            # from _run_submissions_bronze_then_silver). Check up front and
+            # fail fast instead.
+            from edgar_warehouse.application.daily_artifact_resume import (
+                check_unresolved_terminal_repairs,
+            )
+
+            unresolved_repairs = check_unresolved_terminal_repairs(
+                context.storage_root, run_id=sync_run_id
+            )
+            if unresolved_repairs:
+                raise WarehouseRuntimeError(
+                    f"daily-incremental run {sync_run_id!r} has "
+                    f"{len(unresolved_repairs)} unresolved terminal-repair "
+                    "accession(s) from a prior attempt under this run_id. "
+                    "record_repair_attestation alone does not unblock a "
+                    "retry under the same run_id -- the underlying bronze "
+                    "content must be corrected out-of-band first (see "
+                    "release-readiness Ticket 74's own repair write-up); "
+                    "otherwise retry under a fresh run_id once corrected: "
+                    f"{unresolved_repairs}"
+                )
         business_date_start = date.fromisoformat(scope["business_date_start"])
         business_date_end = date.fromisoformat(scope["business_date_end"])
         if recurring_lookback_days:
