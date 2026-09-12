@@ -468,6 +468,42 @@ class BootstrapFundamentalsWiringTests(unittest.TestCase):
             rc = bootstrap_fundamentals.execute(_Args())
         self.assertEqual(rc, 2)
 
+    def test_unavailable_snowflake_source_hard_fails_not_silently_degrades(self) -> None:
+        """duckdb-retirement-cutover Ticket 17: per-filing/thirteenf/entity-facts
+        all require a real Snowflake-backed source (db is never hydrated in
+        production). A connection failure must hard-fail (exit 2), matching
+        this command's existing convention for resolve_edgar_identity/
+        open_silver_database above -- falling back to db instead would
+        silently reproduce this ticket's own bug (unbounded re-fetch/re-scan)
+        conditionally on Snowflake being unreachable."""
+        from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+        class _Args:
+            cik_list = [320193]
+            mode = "entity-facts"
+            run_id = "test-run"
+            silver_root = None
+            cik_offset = 0
+            cik_limit = None
+
+        with patch.dict(
+            "os.environ",
+            {"EDGAR_IDENTITY": "EdgarTools Platform test@example.com"},
+            clear=True,
+        ), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.silver_support.session.open_silver_database",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals"
+            "._open_fundamentals_silver_source",
+            return_value=None,
+        ):
+            rc = bootstrap_fundamentals.execute(_Args())
+        self.assertEqual(rc, 2)
+
 
 # ---------------------------------------------------------------------------
 # 8. MDM graph registry — Snowflake-side wiring for new relationships
@@ -846,19 +882,19 @@ class BranchBSourceReaderTests(unittest.TestCase):
         fake_source = MagicMock()
         # filing_date must be within the Item 5.02 agent lookback (default 2y);
         # empty/missing items mark the 8-K as an ambiguous 5.02 candidate.
+        # Ticket 02/17: the 2nd call is the sec_fundamentals_processed_accession
+        # bulk-prefetch -- this now reads via `source` (duckdb-retirement-
+        # cutover Ticket 17: the real Snowflake-backed reader in production),
+        # not `db` (local, unhydrated write target). Empty means "not yet
+        # processed".
         fake_source.fetch.side_effect = [
             [{"accession_number": "0001-test", "cik": 320193, "form": "8-K",
               "filing_date": "2025-06-01", "items": "2.02"}],
+            [],
             [{"raw_object_id": "raw-1", "is_primary": True}],
             [{"raw_object_id": "raw-1", "storage_path": "s3://bucket/doc.htm"}],
         ]
         fake_db = MagicMock()
-        # Ticket 02: db.fetch is now legitimately called once, to bulk-prefetch
-        # sec_fundamentals_processed_accession -- this is fundamentals' own
-        # write-side bookkeeping (read back via the same db that writes it),
-        # not the Branch A filing/attachment/raw-object metadata this test
-        # class is otherwise about. Empty result means "not yet processed".
-        fake_db.fetch.return_value = []
         fake_db.merge_earnings_releases.return_value = 1
         fake_db.merge_executive_records.return_value = 0
 
@@ -878,8 +914,7 @@ class BranchBSourceReaderTests(unittest.TestCase):
         self.assertEqual(metrics["filings_scanned"], 1)
         self.assertEqual(metrics["filings_parsed"], 1)
         self.assertEqual(metrics["rows_earnings_release"], 1)
-        fake_db.fetch.assert_called_once()
-        self.assertIn("sec_fundamentals_processed_accession", fake_db.fetch.call_args[0][0])
+        fake_db.fetch.assert_not_called()
         fake_db.merge_earnings_releases.assert_called_once()
         fake_db.mark_fundamentals_accession_processed.assert_called_once_with(
             mode="per-filing", accession_number="0001-test",
@@ -895,6 +930,7 @@ class BranchBSourceReaderTests(unittest.TestCase):
         source.fetch.side_effect = [
             [{"accession_number": "0000320193-19-000073", "cik": 320193, "form": "8-K",
               "filing_date": "2019-05-01", "items": "2.02"}],
+            [],  # sec_fundamentals_processed_accession bulk-prefetch: not yet processed
             [
                 {"raw_object_id": "primary", "is_primary": True,
                  "document_name": "a8-kq320196292019.htm", "document_type": "8-K"},
@@ -906,7 +942,6 @@ class BranchBSourceReaderTests(unittest.TestCase):
             [{"raw_object_id": "earnings", "storage_path": "s3://bucket/ex99-1.htm"}],
         ]
         db = MagicMock()
-        db.fetch.return_value = []
         db.merge_earnings_releases.return_value = 1
         db.merge_executive_records.return_value = 0
         db.merge_guidance_facts.return_value = 0

@@ -185,10 +185,29 @@ def execute(args: Any) -> int:
          resolved_from=("cik_list" if raw_cik_list else "silver_tracking_state"),
          silver_root=context.silver_root.root)
 
-    # per-filing and thirteenf read Branch A filing/attachment/raw-object
-    # metadata from the same canonical silver database they write Branch B rows
-    # to. entity-facts needs no source read because it calls the SEC API directly.
-    source = db if mode in ("per-filing", "thirteenf") else None
+    # duckdb-retirement-cutover Ticket 17: per-filing/thirteenf/entity-facts
+    # all need to READ real Branch A filing/attachment/raw-object metadata
+    # and prior fundamentals output -- `db` (local DuckDB) is never
+    # hydrated in production (Ticket 10 removed hydration entirely), so it
+    # can never answer those reads. `source` is a read-only Snowflake
+    # reader against the same live data; `db` stays the write target for
+    # all three modes, unchanged.
+    #
+    # Hard-fail (not silently degrade) when this connection can't be
+    # established, matching this function's own convention for every other
+    # real dependency (resolve_edgar_identity, open_silver_database) above.
+    # A pre-code /gof-refactor-reviewer consult flagged that falling back to
+    # `db` here would reproduce this exact ticket's bug -- unbounded
+    # re-fetch/re-scan -- conditionally on Snowflake being unreachable,
+    # instead of fixing it: strictly worse than a loud failure, since it
+    # would be an intermittent regression instead of an always-on one.
+    source = None
+    if mode in ("per-filing", "thirteenf", "entity-facts"):
+        source = _open_fundamentals_silver_source()
+        if source is None:
+            db.close()
+            _err("bootstrap-fundamentals: fundamentals silver source (Snowflake) unavailable")
+            return 2
 
     try:
         if mode == "per-filing":
@@ -215,6 +234,7 @@ def execute(args: Any) -> int:
                 identity=identity,
                 sync_run_id=run_id,
                 force=bool(getattr(args, "force", False)),
+                source=source,
             )
             metrics.update(run_metrics)
 
@@ -291,10 +311,20 @@ def execute(args: Any) -> int:
             db.close()
         except Exception:
             pass
+        if source is not None:
+            try:
+                source.close()
+            except Exception:
+                pass
         _err(f"bootstrap-fundamentals failed: {exc}")
         return 2
 
     db.close()
+    if source is not None:
+        try:
+            source.close()
+        except Exception:
+            pass
 
     # A run-scoped Daily Identity Refresh persists only its immutable CIK delta.
     # The dedicated reducer is the sole canonical publisher for that run.
@@ -369,6 +399,37 @@ def execute(args: Any) -> int:
              k: v for k, v in metrics.items() if isinstance(v, int)
          })
     return 0
+
+
+def _open_fundamentals_silver_source() -> Any | None:
+    """Read-only Snowflake reader for per-filing/thirteenf/entity-facts's
+    skip-check and Branch A filing-metadata reads.
+
+    duckdb-retirement-cutover Ticket 17: ``db`` (local DuckDB) is never
+    hydrated in production, so it can never answer "does this filing/CIK
+    already exist". Reuses ``SnowflakeSilverReader.connect()``'s default
+    settings (``EDGARTOOLS_PROD_MDM_SILVER_READER``) -- despite its name,
+    that role is the only one granted schema-wide read access to
+    ``EDGARTOOLS_SILVER``, and ``SnowflakeSilverReader`` was already
+    designed as a general ``.fetch()`` read seam, not an MDM-exclusive one
+    (its own module docstring). Minting a second, identically-scoped
+    read-only role would duplicate this one for no security benefit.
+
+    Returns ``None`` on any connection failure. The caller hard-fails
+    (``return 2``) rather than falling back to ``db`` -- ``db`` is empty in
+    production, so a fallback would reproduce this exact ticket's bug
+    (unbounded re-fetch/re-scan) conditionally on Snowflake being
+    unreachable instead of fixing it, matching this command's existing
+    convention for every other real dependency (``resolve_edgar_identity``,
+    ``open_silver_database``).
+    """
+    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+    try:
+        return SnowflakeSilverReader.connect()
+    except Exception as exc:
+        _err(f"fundamentals silver source unavailable: {exc}")
+        return None
 
 
 def _build_silver_context(

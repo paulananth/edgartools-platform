@@ -229,8 +229,12 @@ def run_bootstrap_fundamentals_per_filing(
             metrics["filings_scanned"] = len(filings)
 
     if not release_mode and filings:
+        # duckdb-retirement-cutover Ticket 17: read via source (the real
+        # Snowflake-backed reader in production), not db (local, unhydrated
+        # write target) -- source is guaranteed non-None here since filings
+        # is only non-empty when source produced rows above.
         already_processed = _get_processed_accessions(
-            db, mode="per-filing",
+            source, mode="per-filing",
             accession_numbers=[row["accession_number"] for row in filings],
         )
         if already_processed:
@@ -403,10 +407,14 @@ def run_bootstrap_fundamentals_per_filing(
 def run_bootstrap_entity_facts(
     *,
     cik_list: list[int],
-    db,                     # SilverDatabase instance
+    db,                     # SilverDatabase instance -- write target
     identity: str,          # SEC User-Agent string
     sync_run_id: str,
     force: bool = False,
+    source=None,            # read-only reader for the skip checks below;
+                            # falls back to db when not supplied (tests,
+                            # ad-hoc local calls) -- see duckdb-retirement-
+                            # cutover Ticket 17.
 ) -> dict[str, int]:
     """Fetch SEC companyfacts JSON for each CIK and write to silver.
 
@@ -415,6 +423,13 @@ def run_bootstrap_entity_facts(
 
     Ticket 04: when ``force`` is false and silver already has financial facts for
     the CIK at the current facts parser_version, skip the companyfacts network call.
+
+    Ticket 17 (duckdb-retirement-cutover): the two skip checks below
+    (``has_companyfacts_at_version``, ``get_ciks_with_new_qualifying_filing``)
+    read via ``source`` when supplied -- in production this is a
+    Snowflake-backed reader, since ``db`` (local DuckDB) is never hydrated
+    and would make both checks permanently return "not found". ``db`` stays
+    the write target either way.
 
     Ticket 03 (fundamentals-daily-integration map): that gate is a pure
     one-time-per-parser-version check -- once a CIK has facts at the current
@@ -446,13 +461,14 @@ def run_bootstrap_entity_facts(
         "rows_accounting_flag": 0,
     }
 
+    read_source = source if source is not None else db
     ciks_with_new_filing = (
-        set() if force else get_ciks_with_new_qualifying_filing(db, cik_list=cik_list)
+        set() if force else get_ciks_with_new_qualifying_filing(read_source, cik_list=cik_list)
     )
 
     for cik in cik_list:
         already_has_facts = not force and has_companyfacts_at_version(
-            db, cik=int(cik), facts_parser_version=str(FACTS_PARSER_VERSION)
+            read_source, cik=int(cik), facts_parser_version=str(FACTS_PARSER_VERSION)
         )
         if already_has_facts and int(cik) not in ciks_with_new_filing:
             metrics["ciks_skipped"] += 1
@@ -583,8 +599,10 @@ def run_bootstrap_thirteenf(
         metrics["filings_scanned"] = len(filings)
 
     if not release_mode and filings:
+        # duckdb-retirement-cutover Ticket 17: read via source, not db --
+        # see run_bootstrap_fundamentals_per_filing's identical comment.
         already_processed = _get_processed_accessions(
-            db, mode="thirteenf",
+            source, mode="thirteenf",
             accession_numbers=[row["accession_number"] for row in filings],
         )
         if already_processed:

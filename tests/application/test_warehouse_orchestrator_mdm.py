@@ -1822,6 +1822,10 @@ def test_bootstrap_fundamentals_skips_upload_without_storage_root(
     ) as mock_upload, patch(
         "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
         return_value=MagicMock(),
+    ), patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals"
+        "._open_fundamentals_silver_source",
+        return_value=MagicMock(),
     ):
         mock_db = MagicMock()
         mock_open.return_value = mock_db
@@ -1866,6 +1870,10 @@ def test_bootstrap_fundamentals_uses_unified_silver_database(
         return_value=0,
     ), patch(
         "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+        return_value=MagicMock(),
+    ), patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals"
+        "._open_fundamentals_silver_source",
         return_value=MagicMock(),
     ):
         mock_db = MagicMock()
@@ -1916,6 +1924,10 @@ def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(
         side_effect=WarehouseRuntimeError("S3 write failed"),
     ), patch(
         "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+        return_value=MagicMock(),
+    ), patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals"
+        "._open_fundamentals_silver_source",
         return_value=MagicMock(),
     ):
         mock_db = MagicMock()
@@ -1970,6 +1982,10 @@ def test_bootstrap_fundamentals_upload_success_sets_metrics(
         return_value=upload_record,
     ), patch(
         "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+        return_value=MagicMock(),
+    ), patch(
+        "edgar_warehouse.application.commands.bootstrap_fundamentals"
+        "._open_fundamentals_silver_source",
         return_value=MagicMock(),
     ):
         mock_db = MagicMock()

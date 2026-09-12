@@ -113,6 +113,23 @@ and financial facts on a daily cadence instead of only whenever
   red-before/green-after via `git stash`; full `tests/mdm/` suite and full
   repo suite green, no new failures. Not yet committed.
 
+- **Tickets 02/03 implemented** (accession-level dedup for per-filing/
+  thirteenf, per-CIK refresh-trigger watermark for entity-facts) — logically
+  correct, real-DuckDB-backed unit tests green, 3-axis `/code-review` clean,
+  PR [#603](https://github.com/paulananth/edgartools-platform/pull/603)
+  open. **Live verification blocked**, not by this work but by a separate,
+  bigger pre-existing bug found while attempting it — see
+  [duckdb-retirement-cutover Ticket 17](../duckdb-retirement-cutover/issues/17-repoint-bootstrap-fundamentals-reads-to-snowflake.md):
+  `bootstrap-fundamentals` reads per-filing/thirteenf filing metadata and
+  entity-facts' existing skip check from a local DuckDB that nothing has
+  hydrated since 2026-09-07 (duckdb-retirement-cutover Ticket 10's own
+  cutover). Confirmed live: per-filing sees zero filings for a CIK with
+  1,006 real ones in Snowflake; entity-facts re-fetches every CIK's
+  companyfacts on every run regardless of whether it already has current
+  data. Tickets 02/03's own skip logic composes correctly with the
+  *existing* gates, but neither can be meaningfully verified live until
+  Ticket 17 repoints those reads to Snowflake `EDGARTOOLS_SILVER`.
+
 <!-- tickets 01-05 below convert the approved plan; none has been worked through this map yet -->
 
 ## Not yet specified

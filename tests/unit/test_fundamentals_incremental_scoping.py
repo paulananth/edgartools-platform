@@ -90,9 +90,9 @@ class PerFilingSkipsAlreadyProcessedTests(unittest.TestCase):
         source.fetch.side_effect = [
             [{"accession_number": "already-done", "cik": 1, "form": "8-K",
               "filing_date": "2025-06-01", "items": "2.02"}],
+            [{"accession_number": "already-done"}],
         ]
         db = MagicMock()
-        db.fetch.return_value = [{"accession_number": "already-done"}]
 
         with patch("edgar_warehouse.parsers.get_parser") as mock_get_parser:
             metrics = run_bootstrap_fundamentals_per_filing(
@@ -118,11 +118,11 @@ class PerFilingSkipsAlreadyProcessedTests(unittest.TestCase):
                 {"accession_number": "brand-new", "cik": 1, "form": "8-K",
                  "filing_date": "2025-06-02", "items": "2.02"},
             ],
+            [{"accession_number": "already-done"}],
             [{"raw_object_id": "raw-1", "is_primary": True}],
             [{"raw_object_id": "raw-1", "storage_path": "s3://bucket/doc.htm"}],
         ]
         db = MagicMock()
-        db.fetch.return_value = [{"accession_number": "already-done"}]
         db.merge_earnings_releases.return_value = 1
         db.merge_executive_records.return_value = 0
         db.merge_guidance_facts.return_value = 0
@@ -156,9 +156,9 @@ class ThirteenfSkipsAlreadyProcessedTests(unittest.TestCase):
         source.fetch.side_effect = [
             [{"accession_number": "already-done", "cik": 9, "report_date": "2024-03-31",
               "filing_date": "2024-05-01", "form": "13F-HR"}],
+            [{"accession_number": "already-done"}],
         ]
         db = MagicMock()
-        db.fetch.return_value = [{"accession_number": "already-done"}]
 
         metrics = run_bootstrap_thirteenf(
             cik_list=[9], source=source, db=db, sync_run_id="run-1",
@@ -181,6 +181,7 @@ class ThirteenfSkipsAlreadyProcessedTests(unittest.TestCase):
                 {"accession_number": "brand-new", "cik": 9, "report_date": "2024-06-30",
                  "filing_date": "2024-08-01", "form": "13F-HR"},
             ],
+            [{"accession_number": "already-done"}],
             [
                 {"raw_object_id": "cover", "is_primary": True, "description": "PRIMARY"},
                 {"raw_object_id": "table", "is_primary": False,
@@ -190,7 +191,6 @@ class ThirteenfSkipsAlreadyProcessedTests(unittest.TestCase):
             [{"raw_object_id": "cover", "storage_path": "s3://bucket/cover.xml"}],
         ]
         db = MagicMock()
-        db.fetch.return_value = [{"accession_number": "already-done"}]
         db.merge_thirteenf_filings.return_value = 1
         db.merge_thirteenf_holdings.return_value = 1
 

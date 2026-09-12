@@ -1207,17 +1207,29 @@ class SilverDatabase:
         crash-and-retry never see an accession marked processed without its
         real rows having landed, and this method has no way to enforce that
         ordering itself.
+
+        Recorded to the landing export directly (not via @track_landing_row,
+        which expects a ``row: dict`` argument this method doesn't take) --
+        same reasoning as update_accounting_flag_scores above: this is the
+        table's only writer, so building the row here is no extra cost.
         """
-        self._conn.execute(
+        row = self._conn.execute(
             """
             INSERT INTO sec_fundamentals_processed_accession
                 (mode, accession_number, processed_at)
             VALUES (?, ?, now())
             ON CONFLICT (mode, accession_number) DO UPDATE SET
                 processed_at = excluded.processed_at
+            RETURNING mode, accession_number, processed_at
             """,
             [mode, accession_number],
-        )
+        ).fetchone()
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and row is not None:
+            landing_export.record(
+                "sec_fundamentals_processed_accession",
+                [{"mode": row[0], "accession_number": row[1], "processed_at": row[2]}],
+            )
 
     def mark_entity_facts_refreshed(self, cik: int) -> None:
         """Record that entity-facts successfully refreshed this CIK just now.
@@ -1226,17 +1238,27 @@ class SilverDatabase:
         this only after every real output row for the CIK has already been
         written and returned, same ordering contract as
         mark_fundamentals_accession_processed above.
+
+        Recorded to the landing export directly, same reasoning as
+        mark_fundamentals_accession_processed above.
         """
-        self._conn.execute(
+        row = self._conn.execute(
             """
             INSERT INTO sec_entity_facts_refresh_watermark
                 (cik, entity_facts_refreshed_at)
             VALUES (?, now())
             ON CONFLICT (cik) DO UPDATE SET
                 entity_facts_refreshed_at = excluded.entity_facts_refreshed_at
+            RETURNING cik, entity_facts_refreshed_at
             """,
             [int(cik)],
-        )
+        ).fetchone()
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and row is not None:
+            landing_export.record(
+                "sec_entity_facts_refresh_watermark",
+                [{"cik": row[0], "entity_facts_refreshed_at": row[1]}],
+            )
 
     def _widen_adv_fund_index_to_bigint(self) -> None:
         """``CREATE TABLE IF NOT EXISTS`` never widens an existing store's column type.
