@@ -1150,6 +1150,156 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertEqual(completed["conflict_skipped_count"], 5)
         self.assertEqual(completed["errors"], 5)
 
+    def test_recurring_mode_oversized_response_does_not_abort_pipeline(self) -> None:
+        # Production regression 2026-09-12: daily-incremental-ticket05-verify-
+        # 1789220276 failed the entire recurring run ("recurring artifact
+        # pipeline had 1 failed candidates and 0 terminal repair candidates")
+        # because one legitimate 65.5MB XBRL zip (13F-HR accession
+        # 0001590976-26-000048, MBUU) exceeded sec_client.py's response-size
+        # guard. That guard is correct to reject the oversized fetch -- no
+        # retry ever shrinks the document -- but a single isolated,
+        # permanently-unresolvable per-document condition should not fail an
+        # entire multi-thousand-accession recurring run, the same way an
+        # immutable-object conflict (ticket 93, above) doesn't.
+        from edgar_warehouse.application.errors import WarehouseRuntimeError
+
+        oversized = WarehouseRuntimeError(
+            "SEC response exceeded size limit for "
+            "https://www.sec.gov/Archives/edgar/data/1590976/"
+            "000159097626000048/0001590976-26-000048-xbrl.zip: 65561979 bytes"
+        )
+        success_result = {
+            "raw_writes": [{"source_name": "filing_document"}],
+            "attachment_count": 1,
+            "network_fetches": 1,
+        }
+        events: list[tuple[str, dict]] = []
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=[oversized, success_result],
+            ),
+            patch("time.sleep"),
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+        ):
+            result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                bookkeeping=_BulkNoOpBookkeeping(),
+                sync_run_id="daily-run",
+                accession_numbers=["13f-1", "proxy-1"],
+                accession_boundary={"13f-1", "proxy-1"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                recurring_mode=True,
+            )
+
+        self.assertEqual(result["oversized_skipped_count"], 1)
+        self.assertEqual(result["processed_accessions"], 1)
+        self.assertNotIn("filing_artifact_circuit_open", [name for name, _ in events])
+        self.assertNotIn("filing_artifact_pipeline_partial", [name for name, _ in events])
+        completed = next(
+            fields for name, fields in events if name == "filing_artifact_pipeline_completed"
+        )
+        self.assertEqual(completed["circuit_breaker_disposition"], "closed")
+        self.assertEqual(completed["oversized_skipped_count"], 1)
+        self.assertEqual(completed["errors"], 1)
+
+    def test_recurring_mode_immutable_conflict_does_not_abort_pipeline(self) -> None:
+        # Same fatal-check gap as the oversized-response regression above,
+        # for the other isolated per-document disposition: an
+        # immutable-object conflict was already excluded from tripping the
+        # circuit breaker (ticket 93, above) but was never excluded from this
+        # function's own final recurring-mode check, which counts *any*
+        # nonzero `errors` as fatal regardless of disposition -- so a single
+        # conflict would still have aborted an entire recurring run.
+        from edgar_warehouse.application.errors import WarehouseRuntimeError
+
+        conflict = WarehouseRuntimeError(
+            "immutable object 'filings/sec/cik=1800/accession=x/primary/f.xml' "
+            "already exists with different content"
+        )
+        success_result = {
+            "raw_writes": [{"source_name": "filing_document"}],
+            "attachment_count": 1,
+            "network_fetches": 1,
+        }
+        events: list[tuple[str, dict]] = []
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=[conflict, success_result],
+            ),
+            patch("time.sleep"),
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+        ):
+            result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                bookkeeping=_BulkNoOpBookkeeping(),
+                sync_run_id="daily-run",
+                accession_numbers=["13f-1", "proxy-1"],
+                accession_boundary={"13f-1", "proxy-1"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                recurring_mode=True,
+            )
+
+        self.assertEqual(result["conflict_skipped_count"], 1)
+        self.assertEqual(result["processed_accessions"], 1)
+        completed = next(
+            fields for name, fields in events if name == "filing_artifact_pipeline_completed"
+        )
+        self.assertEqual(completed["circuit_breaker_disposition"], "closed")
+        self.assertEqual(completed["conflict_skipped_count"], 1)
+
+    def test_recurring_mode_unclassified_error_still_aborts_pipeline(self) -> None:
+        # Guards the fail-closed default: an unclassified, non-transient
+        # error (neither an immutable-object conflict nor an oversized
+        # response) must still fail the whole recurring run, exactly as
+        # before -- the two fixes above narrow the exemption to known-safe,
+        # individually-recoverable dispositions, they don't loosen the
+        # general fail-closed guarantee for anything else.
+        events: list[tuple[str, dict]] = []
+        with (
+            patch(
+                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
+                side_effect=ValueError("genuinely unexpected parse failure"),
+            ),
+            patch("time.sleep"),
+            patch.object(
+                warehouse_orchestrator,
+                "_emit_pipeline_event",
+                side_effect=lambda name, **fields: events.append((name, fields)),
+            ),
+            self.assertRaisesRegex(Exception, "recurring artifact pipeline had 1 failed candidates"),
+        ):
+            warehouse_orchestrator._run_configured_form_artifact_pipeline(
+                context=SimpleNamespace(identity="tester@example.com"),
+                db=_ConfiguredFormDb(),
+                bookkeeping=_BulkNoOpBookkeeping(),
+                sync_run_id="daily-run",
+                accession_numbers=["13f-1"],
+                accession_boundary={"13f-1"},
+                artifact_policy="all_attachments",
+                parser_policy="branch_b_deferred",
+                force=False,
+                recurring_mode=True,
+            )
+
+        self.assertIn("filing_artifact_pipeline_partial", [name for name, _ in events])
+        self.assertNotIn("filing_artifact_pipeline_completed", [name for name, _ in events])
+
     def test_release_artifact_pipeline_busts_edgartools_filing_cache_on_content_error(self) -> None:
         """Production regression: accession 0000009631-13-000012.
 
