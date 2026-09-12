@@ -1,7 +1,7 @@
 # 04 — Step Functions wiring for the three fundamentals modes
 
 Type: task
-Status: open
+Status: done
 
 **Blocked by:** 01 (retirement fix), 02 (accession-level scoping), 03
 (entity-facts refresh trigger) — needs all three ready so the new states
@@ -49,13 +49,46 @@ generated JSON is unaffected.
 
 ## Acceptance
 
-- [ ] Generated `daily_incremental` JSON has all three new states correctly
+- [x] Generated `daily_incremental` JSON has all three new states correctly
       placed, task-profiled, and Catch-wired.
-- [ ] `bootstrap`/`daily_identity_refresh`'s generated JSON confirmed
-      unaffected by this change.
-- [ ] New structural tests pass; all pre-existing tests in
-      `test_daily_incremental_state_machine.py` still pass.
-- [ ] `/gof-refactor-reviewer` consulted before editing
+- [x] `bootstrap`/`daily_identity_refresh`'s generated JSON confirmed
+      unaffected by this change — found moot: `bootstrap` was already fully
+      retired (state-machine-consolidation ticket 06) and there is no
+      separate `daily_identity_refresh` state machine at all;
+      `write_warehouse_mdm_gold_definition` has exactly one caller today
+      (`daily_incremental`), confirmed via grep and independently
+      re-verified by the Spec-axis review.
+- [x] New structural tests pass; all pre-existing tests in
+      `test_daily_incremental_state_machine.py` still pass (34/34, 30
+      pre-existing + 4 new).
+- [x] `/gof-refactor-reviewer` consulted before editing
       `deploy-aws-application.sh` (repo hard rule).
-- [ ] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
+- [x] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
       considered ready.
+
+## Answer
+
+Implemented by reusing `fundamentals_mode_stage()`'s existing `windowed=False`
+code path (`infra/scripts/pipeline_stage_helpers.py`) — already built and
+unit-tested in anticipation of this exact shape, just never invoked until
+now. Three new states (`FetchEntityFacts`, `FetchPerFilingFundamentals`,
+`FetchThirteenFHoldings`) inserted between `CaptureAndVerifyNewFilings` and
+the existing ADV-bulk/Firm-Roster chain, on `wh_large_arn`, with AD-13
+non-fatal Catch-and-continue — matching `load_history`'s own
+Stage-1B-before-Stage-1C ordering exactly.
+
+3-axis `/code-review` found no hard violations and no real Spec gaps.
+Standards and GoF independently converged on the same real, cheap-to-fix
+issue: the definition's top-level `Comment` string's renumbering inherited
+a pre-existing execution-order bug (labeled `ReleaseSecFetchLease` as
+happening before `AdvBulkFetch`, when the real wiring runs ADV bulk/Firm
+Roster first) — fixed in a follow-up commit. Full daily_incremental +
+load_history structural test suites (93 tests) and the full repo suite
+(3416 passed, 7 skipped, only the 8 pre-existing Postgres-integration
+failures noted throughout CLAUDE.md) green after the fix.
+
+Committed to branch `claude/fundamentals-daily-integration-ticket04-stepfn-wiring`
+(commits `742f3e7e` + `9165c690`). Not yet pushed, opened as a PR, deployed,
+or live-verified against a real `daily_incremental` execution — that's
+[Ticket 05](05-end-to-end-verification.md)'s Step 3, still blocked pending
+the user's go-ahead to push/merge/deploy.
