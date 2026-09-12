@@ -1,4 +1,4 @@
-"""Ticket 01: READY-gated Mongo Decision Projection publisher (mocked store)."""
+"""Mongo Decision Projection publisher: READY write (ticket 01) and in-place hide (ticket 02)."""
 
 from __future__ import annotations
 
@@ -27,14 +27,24 @@ from edgar_warehouse.serving.subject_feature_screen import (
 )
 
 
-class _RecordingStore:
+class _MemoryStore:
     def __init__(self) -> None:
+        self._docs: dict[tuple[str, str, object], dict] = {}
         self.replaced: list[tuple[str, str, dict]] = []
 
     def replace_document(
         self, database: str, collection: str, document: dict
     ) -> None:
-        self.replaced.append((database, collection, dict(document)))
+        stored = dict(document)
+        self._docs[(database, collection, stored["_id"])] = stored
+        self.replaced.append((database, collection, stored))
+
+    def list_documents(self, database: str, collection: str) -> list[dict]:
+        return [
+            dict(doc)
+            for (db, col, _), doc in self._docs.items()
+            if db == database and col == collection
+        ]
 
 
 def _ok_watermark(**overrides):
@@ -68,7 +78,7 @@ def _issuer(cik: int = 320193, watermark=None):
 
 class PublishReadyIssuerDocumentsTests(unittest.TestCase):
     def test_not_ready_publication_writes_nothing(self) -> None:
-        store = _RecordingStore()
+        store = _MemoryStore()
         result = publish_ready_issuer_documents(
             store,
             publication_status="draft",
@@ -80,7 +90,7 @@ class PublishReadyIssuerDocumentsTests(unittest.TestCase):
         self.assertEqual(result.skip_reason, "publication_not_ready")
 
     def test_not_agent_grade_watermark_writes_nothing(self) -> None:
-        store = _RecordingStore()
+        store = _MemoryStore()
         wm = _ok_watermark(graph_parity_ok=False)
         result = publish_ready_issuer_documents(
             store,
@@ -93,7 +103,7 @@ class PublishReadyIssuerDocumentsTests(unittest.TestCase):
         self.assertEqual(result.skip_reason, "not_agent_grade")
 
     def test_ready_writes_bundle_and_feature_screen_for_one_cik(self) -> None:
-        store = _RecordingStore()
+        store = _MemoryStore()
         clock = datetime(2026, 9, 11, 20, 0, tzinfo=UTC)
         wm = _ok_watermark(
             bronze_persist_used=True,
@@ -153,3 +163,84 @@ class PublishReadyIssuerDocumentsTests(unittest.TestCase):
         self.assertIn("fy_features", screen)
         self.assertNotIn("rows", screen)
         self.assertNotIn("universe_size", screen)
+
+
+class HideRetiredGenerationTests(unittest.TestCase):
+    def test_pointer_move_fail_closes_prior_generation_in_place(self) -> None:
+        store = _MemoryStore()
+        gen1 = _ok_watermark(graph_generation_id="gen-1")
+        publish_ready_issuer_documents(
+            store,
+            publication_status="ready",
+            watermark_components=gen1,
+            issuers=(_issuer(cik=320193, watermark=gen1),),
+        )
+        gen1_sections = store.list_documents(
+            DATABASE_NAME, COLLECTION_ISSUER_BUNDLE
+        )[0]["sections"]
+
+        gen2 = _ok_watermark(graph_generation_id="gen-2", gold_run_id="gold-2")
+        result = publish_ready_issuer_documents(
+            store,
+            publication_status="ready",
+            watermark_components=gen2,
+            issuers=(_issuer(cik=1, watermark=gen2),),
+        )
+        self.assertEqual(result.documents_hidden, 2)
+        self.assertEqual(result.documents_written, 2)
+
+        apple = next(
+            doc
+            for doc in store.list_documents(DATABASE_NAME, COLLECTION_ISSUER_BUNDLE)
+            if doc["_id"] == 320193
+        )
+        self.assertFalse(apple["agent_grade"])
+        self.assertEqual(apple["readiness_state"], "not_ready")
+        self.assertEqual(
+            apple["decision_watermark"]["graph_generation_id"], "gen-1"
+        )
+        self.assertEqual(apple["sections"], gen1_sections)
+
+        apple_screen = next(
+            doc
+            for doc in store.list_documents(DATABASE_NAME, COLLECTION_FEATURE_SCREEN)
+            if doc["_id"] == 320193
+        )
+        self.assertFalse(apple_screen["agent_grade"])
+        self.assertEqual(apple_screen["readiness_state"], "not_ready")
+        self.assertIn("fy_features", apple_screen)
+
+        fresh = next(
+            doc
+            for doc in store.list_documents(DATABASE_NAME, COLLECTION_ISSUER_BUNDLE)
+            if doc["_id"] == 1
+        )
+        self.assertTrue(fresh["agent_grade"])
+        self.assertEqual(fresh["readiness_state"], "agent_ready")
+        self.assertEqual(
+            fresh["decision_watermark"]["graph_generation_id"], "gen-2"
+        )
+        self.assertEqual(len(store.list_documents(DATABASE_NAME, COLLECTION_ISSUER_BUNDLE)), 2)
+        self.assertEqual(len(store.list_documents(DATABASE_NAME, COLLECTION_FEATURE_SCREEN)), 2)
+
+    def test_empty_issuer_list_still_hides_retired_generation(self) -> None:
+        store = _MemoryStore()
+        gen1 = _ok_watermark(graph_generation_id="gen-1")
+        publish_ready_issuer_documents(
+            store,
+            publication_status="ready",
+            watermark_components=gen1,
+            issuers=(_issuer(watermark=gen1),),
+        )
+        gen2 = _ok_watermark(graph_generation_id="gen-2")
+        result = publish_ready_issuer_documents(
+            store,
+            publication_status="ready",
+            watermark_components=gen2,
+            issuers=(),
+        )
+        self.assertEqual(result.documents_written, 0)
+        self.assertEqual(result.documents_hidden, 2)
+        leftover = store.list_documents(DATABASE_NAME, COLLECTION_ISSUER_BUNDLE)[0]
+        self.assertFalse(leftover["agent_grade"])
+        self.assertEqual(leftover["readiness_state"], "not_ready")

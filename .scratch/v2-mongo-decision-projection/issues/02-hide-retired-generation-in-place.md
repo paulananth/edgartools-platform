@@ -9,7 +9,7 @@ watermark. Payload stays. A v2 agent that requires both flags abstains.
 
 **Status:** ready-for-agent
 
-- [ ] Pointer / READY move fail-closes prior-generation docs in place
-- [ ] Documents are not deleted
-- [ ] New READY generation can still be written as agent-grade
-- [ ] Tests remain mocked (no Atlas)
+- [x] Pointer / READY move fail-closes prior-generation docs in place
+- [x] Documents are not deleted
+- [x] New READY generation can still be written as agent-grade
+- [x] Tests remain mocked (no Atlas)

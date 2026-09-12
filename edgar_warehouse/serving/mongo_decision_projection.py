@@ -23,12 +23,14 @@ DATABASE_NAME = "edgartools_decision"
 COLLECTION_ISSUER_BUNDLE = "issuer_subject_bundle"
 COLLECTION_FEATURE_SCREEN = "subject_feature_screen"
 READINESS_AGENT_READY = "agent_ready"
+READINESS_NOT_READY = "not_ready"
 PROJECTED_FROM = "snowflake_decision_contract"
 
 
 @dataclass(frozen=True)
 class MongoPublishResult:
     documents_written: int
+    documents_hidden: int = 0
     skip_reason: str | None = None
 
 
@@ -37,6 +39,11 @@ class MongoDecisionStore(Protocol):
         self, database: str, collection: str, document: Mapping[str, Any]
     ) -> None:
         """Upsert one document. Identity is ``document['_id']`` (int CIK)."""
+
+    def list_documents(
+        self, database: str, collection: str
+    ) -> Sequence[Mapping[str, Any]]:
+        """Return current documents in one collection (no deletes)."""
 
 
 def bronze_content_digest(hashes: Sequence[str]) -> str:
@@ -71,6 +78,11 @@ def publish_ready_issuer_documents(
     if not grade.agent_grade:
         return MongoPublishResult(documents_written=0, skip_reason="not_agent_grade")
 
+    current_generation = str(
+        (grade.watermark.graph_generation_id if grade.watermark else "")
+    )
+    hidden = _hide_retired_generation(store, current_generation)
+
     clock = now if now is not None else datetime.now(UTC)
     shared = _shared_identity(watermark_components, grade, clock)
     written = 0
@@ -92,7 +104,27 @@ def publish_ready_issuer_documents(
         store.replace_document(DATABASE_NAME, COLLECTION_FEATURE_SCREEN, screen_doc)
         written += 1
 
-    return MongoPublishResult(documents_written=written, skip_reason=None)
+    return MongoPublishResult(
+        documents_written=written, documents_hidden=hidden, skip_reason=None
+    )
+
+
+def _hide_retired_generation(store: MongoDecisionStore, current_generation: str) -> int:
+    """Stamp prior generations not_ready in place. Never deletes."""
+    hidden = 0
+    for collection in (COLLECTION_ISSUER_BUNDLE, COLLECTION_FEATURE_SCREEN):
+        for doc in store.list_documents(DATABASE_NAME, collection):
+            wm = doc.get("decision_watermark") or {}
+            if str(wm.get("graph_generation_id") or "") == current_generation:
+                continue
+            if doc.get("readiness_state") != READINESS_AGENT_READY:
+                continue
+            updated = dict(doc)
+            updated["agent_grade"] = False
+            updated["readiness_state"] = READINESS_NOT_READY
+            store.replace_document(DATABASE_NAME, collection, updated)
+            hidden += 1
+    return hidden
 
 
 def _shared_identity(
