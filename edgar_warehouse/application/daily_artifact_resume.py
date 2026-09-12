@@ -85,6 +85,31 @@ def prepare_resume(
     return pending, repair_required, manifest
 
 
+def check_unresolved_terminal_repairs(storage: StorageLocation, *, run_id: str) -> list[str]:
+    """Cheap up-front check for a prior attempt's unresolved terminal-repair markers.
+
+    Reads the manifest a previous attempt under this exact ``run_id`` would
+    have written via `prepare_resume` (if any) and re-checks its frozen
+    `selected_accessions` for `terminal_repair_required` outcomes lacking a
+    valid repair attestation -- without re-running daily-index/accession
+    selection or the expensive submissions bronze/silver phase that
+    otherwise precedes `prepare_resume`'s own, identical check. Returns an
+    empty list on a first attempt (no manifest yet) or once every prior
+    terminal-repair marker has been attested.
+    """
+    try:
+        manifest = _read_json(storage, manifest_path(run_id))
+    except WarehouseRuntimeError:
+        return []
+    outcome_statuses = _list_outcome_statuses(storage, run_id)
+    unresolved: list[str] = []
+    for accession in manifest.get("selected_accessions", []):
+        statuses = outcome_statuses.get(sanitize_accession_for_path(accession), frozenset())
+        if "terminal_repair_required" in statuses and not _valid_repair_attestation(storage, run_id, accession, manifest):
+            unresolved.append(accession)
+    return unresolved
+
+
 def record_succeeded(storage: StorageLocation, *, run_id: str, accession: str, manifest: Mapping[str, Any]) -> None:
     _write_outcome(storage, run_id=run_id, accession=accession, status="succeeded", manifest=manifest)
 
