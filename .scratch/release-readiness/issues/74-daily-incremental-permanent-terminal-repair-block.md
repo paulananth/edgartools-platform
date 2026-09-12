@@ -1,6 +1,7 @@
 Type: task
-Status: partially resolved (items 1 and 3 done; item 2 -- the proactive scan
-for other pre-2026-07-31 stale objects -- remains open)
+Status: resolved (all three "Done when" items settled -- items 1 and 3
+implemented, item 2 explicitly decided against in favor of passive
+detection, see "Item 2 resolved" below)
 
 ## Question
 
@@ -151,6 +152,29 @@ bronze bytes themselves, which the investigation above proved was the only
 option that could actually work. Item (3) is now also resolved, per the
 "Item 3 resolved" section below. Only item (2) -- the proactive scan for
 other pre-2026-07-31 stale objects -- remains genuinely open.
+
+## Item 2 resolved (2026-09-12): no proactive scan, accepted risk mitigated by item 3
+
+Decision: do not build a proactive bucket scan for other pre-2026-07-31 stale
+bronze objects. Considered and rejected two active alternatives -- a scoped
+scan bounded to CIKs/accessions actually eligible for near-term re-selection,
+and a full S3 Inventory-based bucket scan -- in favor of passive detection.
+
+Rationale: item 3's up-front gate (this ticket, PR #610) already turns the
+expensive failure mode this ticket exists to prevent (~85 minutes redone per
+attempt, 4 attempts) into a cheap one (fails in seconds on a same-run_id
+retry). What remains after item 3 is only the *first* encounter of a given
+stale object within a *fresh* run_id -- which costs one normal run's worth of
+artifact-fetch time to discover (not a multi-hour blind-retry loop), and is
+then repaired with the same one-off manual byte-correction pattern already
+proven for the first two accessions (see "Repair performed" above). A
+proactive scan would spend real scan cost today to save, at most, the
+difference between "discovered during a normal run" and "discovered by a
+scan run ahead of time" -- for an unmeasured, likely small number of
+remaining pre-2026-07-31 objects, most of which may never be re-selected
+before their content ages out of daily-incremental's 7-day recurring window
+relevance entirely. Accepted as the lower-cost path; revisit only if a
+second live case surfaces the pattern is more common than assumed.
 
 ## Item 3 resolved (2026-09-12)
 
