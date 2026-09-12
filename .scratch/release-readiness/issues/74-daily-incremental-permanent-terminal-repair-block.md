@@ -1,5 +1,6 @@
 Type: task
-Status: open
+Status: partially resolved (items 1 and 3 done; item 2 -- the proactive scan
+for other pre-2026-07-31 stale objects -- remains open)
 
 ## Question
 
@@ -140,6 +141,16 @@ resume/retry loop should gate expensive earlier phases (submissions
 bronze/silver) on a cheap up-front check for pre-existing unresolved terminal
 markers, instead of redoing ~95 minutes of work before discovering a block
 that was already known at the start of the attempt.
+
+**Status correction (2026-09-12):** item (1) is resolved -- see "Repair
+performed (2026-08-03...)" above, which predates this "Done when" section and
+was never reflected in it. The actual resolution was neither of the two
+options this line originally posed (a CLI command or attestation alone) --
+it was a third path, a deliberate one-off direct correction of the stale
+bronze bytes themselves, which the investigation above proved was the only
+option that could actually work. Item (3) is now also resolved, per the
+"Item 3 resolved" section below. Only item (2) -- the proactive scan for
+other pre-2026-07-31 stale objects -- remains genuinely open.
 
 ## Item 3 resolved (2026-09-12)
 
