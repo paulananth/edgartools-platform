@@ -110,6 +110,30 @@ def _emit(event: str, **kwargs: Any) -> None:
     print(json.dumps(doc, sort_keys=True), file=sys.stderr, flush=True)
 
 
+def _get_processed_accessions(db: Any, *, mode: str, accession_numbers: list[str]) -> set[str]:
+    """Bulk-prefetch which of ``accession_numbers`` are already marked processed
+    for ``mode`` in sec_fundamentals_processed_accession (Ticket 02,
+    fundamentals-daily-integration map). One query for the whole batch, not
+    one per accession. This table is fundamentals' own write-side
+    bookkeeping (written by db.mark_fundamentals_accession_processed), so
+    it's read via ``db``, not ``source`` -- unlike filing/attachment/raw-
+    object metadata, which is Branch A domain content and always comes from
+    ``source`` (see BranchBSourceReaderTests in test_fundamentals_modules.py).
+    """
+    if not accession_numbers:
+        return set()
+    placeholders = ", ".join("?" * len(accession_numbers))
+    rows = db.fetch(
+        f"""
+        SELECT accession_number
+        FROM sec_fundamentals_processed_accession
+        WHERE mode = ? AND accession_number IN ({placeholders})
+        """,
+        [mode, *accession_numbers],
+    )
+    return {row["accession_number"] for row in rows}
+
+
 def run_bootstrap_fundamentals_per_filing(
     *,
     cik_list: list[int],
@@ -135,6 +159,7 @@ def run_bootstrap_fundamentals_per_filing(
         "filings_scanned": 0,
         "filings_parsed": 0,
         "filings_skipped": 0,
+        "filings_already_processed": 0,
         "rows_earnings_release": 0,
         "rows_executive_record": 0,
         "rows_employment_event": 0,
@@ -201,6 +226,20 @@ def run_bootstrap_fundamentals_per_filing(
                     skipped_count=skipped_item_502,
                     min_filing_date=item_502_min.isoformat(),
                 )
+            metrics["filings_scanned"] = len(filings)
+
+    if not release_mode and filings:
+        # duckdb-retirement-cutover Ticket 17: read via source (the real
+        # Snowflake-backed reader in production), not db (local, unhydrated
+        # write target) -- source is guaranteed non-None here since filings
+        # is only non-empty when source produced rows above.
+        already_processed = _get_processed_accessions(
+            source, mode="per-filing",
+            accession_numbers=[row["accession_number"] for row in filings],
+        )
+        if already_processed:
+            filings = [row for row in filings if row["accession_number"] not in already_processed]
+            metrics["filings_already_processed"] = len(already_processed)
             metrics["filings_scanned"] = len(filings)
 
     for filing in filings:
@@ -352,6 +391,14 @@ def run_bootstrap_fundamentals_per_filing(
                 "status": terminal_status,
                 "reason": terminal_reason,
             })
+        # Ticket 02: marker write is strictly the last statement for this
+        # accession -- every real output row above has already executed and
+        # returned, so a crash before this line leaves no marker (safe,
+        # idempotent reprocess on retry) and a crash can never land the
+        # marker ahead of the real rows.
+        db.mark_fundamentals_accession_processed(
+            mode="per-filing", accession_number=accession_number,
+        )
         metrics["filings_parsed"] += 1
 
     return metrics
@@ -360,10 +407,14 @@ def run_bootstrap_fundamentals_per_filing(
 def run_bootstrap_entity_facts(
     *,
     cik_list: list[int],
-    db,                     # SilverDatabase instance
+    db,                     # SilverDatabase instance -- write target
     identity: str,          # SEC User-Agent string
     sync_run_id: str,
     force: bool = False,
+    source=None,            # read-only reader for the skip checks below;
+                            # falls back to db when not supplied (tests,
+                            # ad-hoc local calls) -- see duckdb-retirement-
+                            # cutover Ticket 17.
 ) -> dict[str, int]:
     """Fetch SEC companyfacts JSON for each CIK and write to silver.
 
@@ -373,10 +424,28 @@ def run_bootstrap_entity_facts(
     Ticket 04: when ``force`` is false and silver already has financial facts for
     the CIK at the current facts parser_version, skip the companyfacts network call.
 
+    Ticket 17 (duckdb-retirement-cutover): the two skip checks below
+    (``has_companyfacts_at_version``, ``get_ciks_with_new_qualifying_filing``)
+    read via ``source`` when supplied -- in production this is a
+    Snowflake-backed reader, since ``db`` (local DuckDB) is never hydrated
+    and would make both checks permanently return "not found". ``db`` stays
+    the write target either way.
+
+    Ticket 03 (fundamentals-daily-integration map): that gate is a pure
+    one-time-per-parser-version check -- once a CIK has facts at the current
+    version, it is skipped forever, even after a genuinely new 10-K/10-Q
+    arrives. get_ciks_with_new_qualifying_filing carves those CIKs back out
+    of the skip on an ordinary (non-version-bump) day; a parser-version bump
+    still forces everyone through unaffected, since has_companyfacts_at_version
+    alone is already False for every CIK in that case.
+
     Returns row counts per table written plus network_fetches / silver_skips.
     """
     from edgar_warehouse.infrastructure.edgartools_sec_gateway import fetch_companyfacts_json
-    from edgar_warehouse.infrastructure.silver_once import has_companyfacts_at_version
+    from edgar_warehouse.infrastructure.silver_once import (
+        get_ciks_with_new_qualifying_filing,
+        has_companyfacts_at_version,
+    )
     from edgar_warehouse.parsers.financials import PARSER_VERSION as FACTS_PARSER_VERSION
     from edgar_warehouse.parsers.financials import parse_entity_facts
     from edgar_warehouse.parsers.financials_derived import compute_derived_for_accession
@@ -392,10 +461,16 @@ def run_bootstrap_entity_facts(
         "rows_accounting_flag": 0,
     }
 
+    read_source = source if source is not None else db
+    ciks_with_new_filing = (
+        set() if force else get_ciks_with_new_qualifying_filing(read_source, cik_list=cik_list)
+    )
+
     for cik in cik_list:
-        if not force and has_companyfacts_at_version(
-            db, cik=int(cik), facts_parser_version=str(FACTS_PARSER_VERSION)
-        ):
+        already_has_facts = not force and has_companyfacts_at_version(
+            read_source, cik=int(cik), facts_parser_version=str(FACTS_PARSER_VERSION)
+        )
+        if already_has_facts and int(cik) not in ciks_with_new_filing:
             metrics["ciks_skipped"] += 1
             metrics["silver_skips"] += 1
             _emit(
@@ -454,6 +529,10 @@ def run_bootstrap_entity_facts(
                 _emit("derived_compute_error", cik=cik, accession=accn,
                       fiscal_period=fp, error=str(exc))
 
+        # Ticket 03: marker write is strictly the last statement for this
+        # CIK -- every real output write above has already executed and
+        # returned, so a crash mid-CIK never advances its watermark.
+        db.mark_entity_facts_refreshed(int(cik))
         metrics["ciks_processed"] += 1
 
     return metrics
@@ -486,6 +565,7 @@ def run_bootstrap_thirteenf(
         "filings_scanned": 0,
         "filings_parsed": 0,
         "filings_skipped": 0,
+        "filings_already_processed": 0,
         "rows_thirteenf_holding": 0,
         "rows_thirteenf_filing": 0,
         "candidate_outcomes": [],
@@ -517,6 +597,18 @@ def run_bootstrap_thirteenf(
         if release_mode and missing:
             raise WarehouseRuntimeError(f"required 13F candidates missing from filing manifest: {missing}")
         metrics["filings_scanned"] = len(filings)
+
+    if not release_mode and filings:
+        # duckdb-retirement-cutover Ticket 17: read via source, not db --
+        # see run_bootstrap_fundamentals_per_filing's identical comment.
+        already_processed = _get_processed_accessions(
+            source, mode="thirteenf",
+            accession_numbers=[row["accession_number"] for row in filings],
+        )
+        if already_processed:
+            filings = [row for row in filings if row["accession_number"] not in already_processed]
+            metrics["filings_already_processed"] = len(already_processed)
+            metrics["filings_scanned"] = len(filings)
 
     for filing in filings:
         accession_number = filing["accession_number"]
@@ -675,6 +767,14 @@ def run_bootstrap_thirteenf(
                 "status": "applicable_loaded",
                 "reason": "effective_holdings_loaded",
             })
+        # Ticket 02: marker write is strictly the last statement for this
+        # accession -- merge_thirteenf_holdings above loops one row at a
+        # time internally and autocommits each, so a crash mid-loop leaves
+        # a partial holdings set with no marker (safe: ON CONFLICT DO
+        # UPDATE fixes it on retry). See run_bootstrap_fundamentals_per_filing.
+        db.mark_fundamentals_accession_processed(
+            mode="thirteenf", accession_number=accession_number,
+        )
         metrics["filings_parsed"] += 1
 
     return metrics

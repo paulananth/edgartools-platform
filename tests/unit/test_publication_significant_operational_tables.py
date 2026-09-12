@@ -105,9 +105,21 @@ def _checkpoint_row(business_date: str) -> dict:
 
 
 def test_publication_significant_tables_are_a_narrow_subset() -> None:
-    """The fix must be scoped to evidenced tables only, not blanket-widened."""
+    """The fix must be scoped to evidenced tables only, not blanket-widened.
+
+    fundamentals-daily-integration map Tickets 02/03 added a second
+    evidenced pair (sec_fundamentals_processed_accession,
+    sec_entity_facts_refresh_watermark) -- same reasoning as the original
+    two: each is the entire point of the command that writes it, not
+    genuinely-fine-to-lose bookkeeping like pipeline_run/sec_sync_run.
+    """
     assert PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES == frozenset(
-        {"sec_daily_index_checkpoint", "stg_daily_index_filing"}
+        {
+            "sec_daily_index_checkpoint",
+            "stg_daily_index_filing",
+            "sec_fundamentals_processed_accession",
+            "sec_entity_facts_refresh_watermark",
+        }
     )
 
 
@@ -251,3 +263,40 @@ def test_merge_still_ignores_pipeline_run_content(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert count == 0
+
+
+def test_merge_copies_fundamentals_processed_accession_into_canonical(tmp_path: Path) -> None:
+    """fundamentals-daily-integration map Tickets 02/03: same regression shape
+    as test_merge_copies_checkpoint_only_candidate_content_into_canonical
+    above, but for the newer pair -- without this pair's own registration,
+    every dedup/watermark row bootstrap-fundamentals writes would silently
+    never reach canonical, defeating both tickets' entire mechanism."""
+    canonical_path = tmp_path / "canonical.duckdb"
+    SilverDatabase(str(canonical_path)).close()
+
+    candidate_path = tmp_path / "candidate.duckdb"
+    candidate_db = SilverDatabase(str(candidate_path))
+    candidate_db.mark_fundamentals_accession_processed(
+        mode="per-filing", accession_number="0001-test",
+    )
+    candidate_db.mark_entity_facts_refreshed(320193)
+    candidate_db.close()
+
+    output_path = tmp_path / "merged.duckdb"
+    result = merge_candidate_into_canonical(candidate_path, canonical_path, output_path)
+
+    assert "sec_fundamentals_processed_accession" in result.tables_merged
+    assert "sec_entity_facts_refresh_watermark" in result.tables_merged
+
+    conn = duckdb.connect(str(output_path))
+    try:
+        processed = conn.execute(
+            "SELECT mode, accession_number FROM sec_fundamentals_processed_accession"
+        ).fetchall()
+        watermarks = conn.execute(
+            "SELECT cik FROM sec_entity_facts_refresh_watermark"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert processed == [("per-filing", "0001-test")]
+    assert watermarks == [(320193,)]

@@ -373,6 +373,17 @@ CREATE TABLE IF NOT EXISTS sec_employment_event (
 );
 ALTER TABLE sec_employment_event ALTER COLUMN parse_sequence DROP NOT NULL;
 
+-- fundamentals-daily-integration map, Ticket 03 / duckdb-retirement-cutover
+-- Ticket 17. Reflects edgar_warehouse.silver_store._DDL's
+-- sec_entity_facts_refresh_watermark table.
+CREATE TABLE IF NOT EXISTS sec_entity_facts_refresh_watermark (
+    cik BIGINT NOT NULL,
+    entity_facts_refreshed_at TIMESTAMP_TZ,
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
+    , PRIMARY KEY (parse_sequence)
+);
+ALTER TABLE sec_entity_facts_refresh_watermark ALTER COLUMN parse_sequence DROP NOT NULL;
+
 CREATE TABLE IF NOT EXISTS sec_executive_record (
     cik BIGINT NOT NULL,
     accession_number TEXT NOT NULL,
@@ -485,6 +496,18 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     , PRIMARY KEY (parse_sequence)
 );
 ALTER TABLE sec_financial_fact ALTER COLUMN parse_sequence DROP NOT NULL;
+
+-- fundamentals-daily-integration map, Ticket 02 / duckdb-retirement-cutover
+-- Ticket 17. Reflects edgar_warehouse.silver_store._DDL's
+-- sec_fundamentals_processed_accession table.
+CREATE TABLE IF NOT EXISTS sec_fundamentals_processed_accession (
+    mode TEXT NOT NULL,
+    accession_number TEXT NOT NULL,
+    processed_at TIMESTAMP_TZ,
+    parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
+    , PRIMARY KEY (parse_sequence)
+);
+ALTER TABLE sec_fundamentals_processed_accession ALTER COLUMN parse_sequence DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sec_guidance_fact (
     fact_key BIGINT NOT NULL,

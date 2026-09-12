@@ -708,6 +708,9 @@ def test_release_mode_item502_unresolved_records_accepted_terminal_status() -> N
         def merge_guidance_fact_rejects(self, rows, run_id):
             return 0
 
+        def mark_fundamentals_accession_processed(self, mode, accession_number):
+            pass
+
     db = FakeSource()
     content = (b"Item 5.02 Departure of Directors. The Board named the following "
                b"to committees and other matters were discussed at length.")

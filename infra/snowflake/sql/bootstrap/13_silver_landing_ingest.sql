@@ -146,12 +146,14 @@ const tables = [
   "sec_company_filing", "sec_company_former_name",
   "sec_company_submission_file", "sec_company_ticker",
   "sec_current_filing_feed", "sec_earnings_release", "sec_employment_event",
-  "sec_executive_record", "sec_filing_attachment", "sec_filing_text",
-  "sec_financial_derived", "sec_financial_fact", "sec_guidance_fact",
-  "sec_guidance_fact_reject", "sec_ownership_derivative_txn",
-  "sec_ownership_non_derivative_txn", "sec_ownership_reporting_owner",
-  "sec_pcaob_firm_identity", "sec_raw_object", "sec_subsidiary_evidence",
-  "sec_thirteenf_filing", "sec_thirteenf_holding",
+  "sec_entity_facts_refresh_watermark", "sec_executive_record",
+  "sec_filing_attachment", "sec_filing_text", "sec_financial_derived",
+  "sec_financial_fact", "sec_fundamentals_processed_accession",
+  "sec_guidance_fact", "sec_guidance_fact_reject",
+  "sec_ownership_derivative_txn", "sec_ownership_non_derivative_txn",
+  "sec_ownership_reporting_owner", "sec_pcaob_firm_identity",
+  "sec_raw_object", "sec_subsidiary_evidence", "sec_thirteenf_filing",
+  "sec_thirteenf_holding",
 ];
 
 const results = [];
