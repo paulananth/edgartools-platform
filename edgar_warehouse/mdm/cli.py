@@ -47,6 +47,25 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     check_fence.set_defaults(handler=_logged_handler("check-fence", _handle_check_fence))
 
+    # manages-fund-duplicate-rows map, Ticket 03: alert if a MANAGES_FUND
+    # relationship_id ever gets a *new* duplicate active-row group again,
+    # after Ticket 01 found the known 140,907-group backlog was a one-time
+    # historical event from now-dead code, not an ongoing bug. Exits
+    # non-zero on any new-group finding, same "execution-failure alarm
+    # doubles as a signal" convention as check-fence.
+    check_manages_fund_duplicates = mdm_sub.add_parser(
+        "check-manages-fund-duplicates",
+        help=(
+            "Detect new MANAGES_FUND duplicate active-row groups "
+            "(manages-fund-duplicate-rows map, Ticket 03)"
+        ),
+    )
+    check_manages_fund_duplicates.set_defaults(
+        handler=_logged_handler(
+            "check-manages-fund-duplicates", _handle_check_manages_fund_duplicates
+        )
+    )
+
     # Ticket 20: version and activate the Acquisition Universe.
     reg_open = mdm_sub.add_parser(
         "registry-open-draft",
@@ -332,6 +351,39 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     backfill_quarantine.set_defaults(
         handler=_logged_handler(
             "backfill-quarantined-relationships", _handle_backfill_quarantined_relationships
+        )
+    )
+
+    backfill_manages_fund_duplicates = mdm_sub.add_parser(
+        "backfill-manages-fund-duplicates",
+        help=(
+            "Resolve the existing ~140,907-relationship_id MANAGES_FUND "
+            "duplicate-active-row backlog (manages-fund-duplicate-rows map, "
+            "Ticket 05). Every row in an affected group is confirmed "
+            "byte-identical evidence -- a deterministic keeper (smallest "
+            "instance_id) is kept, every other row is superseded. Does not "
+            "touch the Snowflake graph; the next regularly-scheduled "
+            "sync-graph run is sufficient."
+        ),
+    )
+    backfill_manages_fund_duplicates.add_argument(
+        "--batch-size", type=int, default=500,
+        help="Relationship_ids to process per commit batch (ignored in --dry-run)",
+    )
+    backfill_manages_fund_duplicates.add_argument(
+        "--dry-run", action="store_true", default=False,
+        help="Report what would change without mutating anything",
+    )
+    backfill_manages_fund_duplicates.add_argument(
+        "--limit", type=int, default=None,
+        help=(
+            "Bound the total relationship_ids examined -- use for a first "
+            "pass against real prod data before an unbounded run."
+        ),
+    )
+    backfill_manages_fund_duplicates.set_defaults(
+        handler=_logged_handler(
+            "backfill-manages-fund-duplicates", _handle_backfill_manages_fund_duplicates
         )
     )
 
@@ -1903,6 +1955,41 @@ def _handle_check_fence(args) -> int:
     return 0 if result.is_clean else 1
 
 
+def _handle_check_manages_fund_duplicates(args) -> int:
+    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.mdm.manages_fund_duplicate_monitor import (
+        check_manages_fund_duplicates,
+    )
+
+    result = check_manages_fund_duplicates(get_engine())
+
+    for group in result.new_duplicate_groups:
+        emit_mdm_event(
+            "mdm_manages_fund_new_duplicate_group_detected",
+            relationship_id=group.relationship_id,
+            active_count=group.active_count,
+            latest_created_at=group.latest_created_at.isoformat(),
+        )
+    emit_mdm_event(
+        "mdm_manages_fund_duplicate_check_result",
+        new_duplicate_group_count=len(result.new_duplicate_groups),
+    )
+
+    payload = {
+        "new_duplicate_groups": [
+            {
+                "relationship_id": group.relationship_id,
+                "active_count": group.active_count,
+                "latest_created_at": group.latest_created_at.isoformat(),
+            }
+            for group in result.new_duplicate_groups
+        ],
+        "is_clean": result.is_clean,
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if result.is_clean else 1
+
+
 def _coverage_spec_from_dict(raw: dict) -> Any:
     from edgar_warehouse.acquisition.registry_ledger import CoverageSpec
 
@@ -2154,6 +2241,28 @@ def _handle_backfill_quarantined_relationships(args) -> int:
         "skipped_ambiguous_order": summary.skipped_ambiguous_order,
         "skipped_ambiguous_date": summary.skipped_ambiguous_date,
         "skipped_multiple_conflicts": summary.skipped_multiple_conflicts,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_backfill_manages_fund_duplicates(args) -> int:
+    from edgar_warehouse.mdm.manages_fund_duplicate_backfill import run_backfill
+
+    session = _session()
+    try:
+        summary = run_backfill(
+            session,
+            batch_size=args.batch_size,
+            dry_run=args.dry_run,
+            limit=args.limit,
+        )
+    finally:
+        session.close()
+    print(json.dumps({
+        "dry_run": args.dry_run,
+        "limit": args.limit,
+        "relationship_ids_examined": summary.relationship_ids_examined,
+        "rows_superseded": summary.rows_superseded,
     }, indent=2, sort_keys=True))
     return 0
 

@@ -196,6 +196,31 @@ Options:
                                     --configure-reconciliation-backstop-schedule enable. Same
                                     role shape as --publication-drain-scheduler-role-arn
                                     (EventBridge -> StartExecution on this one state machine).
+  --configure-manages-fund-duplicate-monitor-schedule <enable|disable>
+                                    Off-by-default operator control (manages-fund-duplicate-
+                                    rows map, Ticket 03) for the recurring `mdm check-manages-
+                                    fund-duplicates` check: creates/updates (enable) or removes
+                                    (disable) one EventBridge rule invoking
+                                    edgartools-<env>-mdm-utility with
+                                    {"mode": "mdm_check_manages_fund_duplicates"} once daily.
+                                    Never runs as a side effect of an ordinary deploy; run this
+                                    flag alone, after an explicit operator go. Exits
+                                    immediately after configuring.
+  --manages-fund-duplicate-monitor-scheduler-role-arn <arn>
+                                    IAM role ARN EventBridge assumes to start
+                                    edgartools-<env>-mdm-utility for the manages-fund-
+                                    duplicate-monitor schedule. Required with
+                                    --configure-manages-fund-duplicate-monitor-schedule enable.
+                                    Same role shape as --fence-monitor-scheduler-role-arn
+                                    (EventBridge -> StartExecution on this one state machine).
+  --configure-manages-fund-duplicate-monitor-alarm <enable|disable>
+                                    Explicitly create/update or remove the manages-fund-
+                                    duplicate-monitor alarm on mdm_manages_fund_duplicate_
+                                    check_result's new_duplicate_group_count, firing on any
+                                    nonzero value OR on the check never having run at all
+                                    (treat-missing-data=breaching). Same SNS topic as
+                                    --configure-daily-incremental-alarms. This standalone
+                                    action never deploys workloads or enables schedules.
   -h, --help                        Show this help.
 USAGE
 }
@@ -303,6 +328,9 @@ CONFIGURE_PUBLICATION_DRAIN_SCHEDULE=""
 PUBLICATION_DRAIN_SCHEDULER_ROLE_ARN=""
 CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE=""
 RECONCILIATION_BACKSTOP_SCHEDULER_ROLE_ARN=""
+CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULE=""
+MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULER_ROLE_ARN=""
+CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_ALARM=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -369,6 +397,9 @@ while [[ $# -gt 0 ]]; do
     --configure-reconciliation-backstop-schedule) CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE="${2:?}"; shift 2 ;;
     --reconciliation-backstop-scheduler-role-arn) RECONCILIATION_BACKSTOP_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     --configure-fence-monitor-alarm) CONFIGURE_FENCE_MONITOR_ALARM="${2:?}"; shift 2 ;;
+    --configure-manages-fund-duplicate-monitor-schedule) CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULE="${2:?}"; shift 2 ;;
+    --manages-fund-duplicate-monitor-scheduler-role-arn) MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
+    --configure-manages-fund-duplicate-monitor-alarm) CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_ALARM="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -404,6 +435,15 @@ if ! is_empty "$CONFIGURE_FENCE_MONITOR_ALARM"; then
   esac
   if [[ "$CONFIGURE_FENCE_MONITOR_ALARM" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
     fail "--operator-alert-topic-arn is required with --configure-fence-monitor-alarm enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_ALARM"; then
+  case "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_ALARM" in
+    enable|disable) ;;
+    *) fail "--configure-manages-fund-duplicate-monitor-alarm must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_ALARM" == "enable" ]] && is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
+    fail "--operator-alert-topic-arn is required with --configure-manages-fund-duplicate-monitor-alarm enable"
   fi
 fi
 if is_empty "$RUNNER_ROLE_NAME_PREFIX"; then
@@ -461,6 +501,15 @@ if ! is_empty "$CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE"; then
   esac
   if [[ "$CONFIGURE_RECONCILIATION_BACKSTOP_SCHEDULE" == "enable" ]] && is_empty "$RECONCILIATION_BACKSTOP_SCHEDULER_ROLE_ARN"; then
     fail "--reconciliation-backstop-scheduler-role-arn is required with --configure-reconciliation-backstop-schedule enable"
+  fi
+fi
+if ! is_empty "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULE"; then
+  case "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULE" in
+    enable|disable) ;;
+    *) fail "--configure-manages-fund-duplicate-monitor-schedule must be enable or disable" ;;
+  esac
+  if [[ "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULE" == "enable" ]] && is_empty "$MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULER_ROLE_ARN"; then
+    fail "--manages-fund-duplicate-monitor-scheduler-role-arn is required with --configure-manages-fund-duplicate-monitor-schedule enable"
   fi
 fi
 
@@ -930,6 +979,27 @@ configure_fence_monitor_schedule() {
     "rate(4 hours)" "Ticket 44 (change-propagation map): recurring mdm check-fence drift check"
 }
 
+# manages-fund-duplicate-rows map, Ticket 03: run `mdm check-manages-fund-duplicates`
+# (mode mdm_check_manages_fund_duplicates on the same consolidated mdm_utility
+# machine, mirroring configure_fence_monitor_schedule immediately above) so a
+# recurrence of the one-time historical duplicate-insert event Ticket 01
+# found (and could not conclusively root-cause in the now-dead code that
+# caused it) gets caught quickly.
+#
+# Sizing rationale for "once daily" (not copying fence-monitor's 4-hour
+# cadence): unlike an out-of-band credential rotation, a new MANAGES_FUND
+# row can only be written by a relationship-derivation run
+# (`mdm infer-relationships`/`derive-relationships`), which itself runs at
+# most a few times a day as part of `daily_incremental`/`load_history`'s
+# RunMdmChain -- checking more often than that cadence has nothing new to
+# find. Once a day comfortably catches a regression within one business
+# day at negligible cost (one grouped read-only query on the mdm-small task
+# profile).
+configure_manages_fund_duplicate_monitor_schedule() {
+  configure_scheduled_utility_rule "$1" "$2" "manages-fund-duplicate-monitor" "manages-fund-duplicate-monitor-sfn" "mdm_check_manages_fund_duplicates" \
+    "rate(1 day)" "manages-fund-duplicate-rows map (Ticket 03): recurring mdm check-manages-fund-duplicates check"
+}
+
 # Ticket 36 (change-propagation map): the scheduled consumer side of the
 # MDM->graph publication outbox (edgar_warehouse/mdm/publication.py). The
 # producer side (MDMPipeline.run_all -> request_publication, one request per
@@ -979,23 +1049,38 @@ if ! is_empty "$CONFIGURE_FENCE_MONITOR_SCHEDULE"; then
   exit 0
 fi
 
-# Configures one CloudWatch Logs metric filter + one alarm on a single
-# mdm_fence_check_result field. $1=log group, $2=filter name, $3=metric
-# name, $4=JSON path into the log event (e.g. $.leak_count), $5=alarm name,
-# $6=alarm description, $7=SNS topic ARN. treat-missing-data=breaching is
-# load-bearing, not a default: "the check never ran at all" (a schedule
-# silently disabled, an IAM permission broken) is exactly the failure
-# Ticket 44 exists to catch, the same reason ticket-05's mdm-entity-backfill
-# alarm above uses it, not just "it ran and found something."
-put_fence_monitor_metric_and_alarm() {
+if ! is_empty "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULE"; then
+  configure_manages_fund_duplicate_monitor_schedule "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULE" "$MANAGES_FUND_DUPLICATE_MONITOR_SCHEDULER_ROLE_ARN"
+  exit 0
+fi
+
+# Configures one CloudWatch Logs metric filter + one alarm on a single log
+# event field, for any MDM utility check whose CLI handler emits a summary
+# event on every run (mirroring _handle_check_fence's own convention). $1=log
+# group, $2=filter name, $3=metric name, $4=JSON path into the log event
+# (e.g. $.leak_count), $5=alarm name, $6=alarm description, $7=SNS topic ARN,
+# $8=summary event name (e.g. mdm_fence_check_result), $9=period in seconds
+# -- must match (or exceed) the check's own schedule interval, since a
+# shorter period than the check actually runs at would spuriously breach on
+# every gap between runs. treat-missing-data=breaching is load-bearing, not
+# a default: "the check never ran at all" (a schedule silently disabled, an
+# IAM permission broken) is exactly the failure this class of check exists
+# to catch, the same reason ticket-05's mdm-entity-backfill alarm above uses
+# it, not just "it ran and found something." Originally named
+# put_fence_monitor_metric_and_alarm and hardcoded to Ticket 44's own event
+# name/period; generalized (manages-fund-duplicate-rows map, Ticket 03) to
+# a second caller with a different event and schedule cadence rather than
+# duplicating an near-identical function.
+put_mdm_check_metric_and_alarm() {
   local log_group_name="$1" filter_name="$2" metric_name="$3" json_path="$4"
   local alarm_name="$5" alarm_description="$6" topic_arn="$7"
+  local event_name="$8" period_seconds="$9"
   local metric_namespace="EdgarTools/MDM"
 
   aws_cli logs put-metric-filter \
     --log-group-name "$log_group_name" \
     --filter-name "$filter_name" \
-    --filter-pattern '{ $.event = "mdm_fence_check_result" }' \
+    --filter-pattern "{ \$.event = \"${event_name}\" }" \
     --metric-transformations \
       "metricName=${metric_name},metricNamespace=${metric_namespace},metricValue=\$${json_path},defaultValue=0"
   aws_cli cloudwatch put-metric-alarm \
@@ -1003,7 +1088,7 @@ put_fence_monitor_metric_and_alarm() {
     --alarm-description "$alarm_description" \
     --namespace "$metric_namespace" \
     --metric-name "$metric_name" \
-    --statistic Sum --period 14400 --evaluation-periods 1 \
+    --statistic Sum --period "$period_seconds" --evaluation-periods 1 \
     --threshold 0 --comparison-operator GreaterThanThreshold \
     --treat-missing-data breaching \
     --alarm-actions "$topic_arn"
@@ -1040,21 +1125,56 @@ configure_fence_monitor_alarm() {
 
   require_confirmed_operator_alert_topic "$topic_arn"
 
-  put_fence_monitor_metric_and_alarm \
+  put_mdm_check_metric_and_alarm \
     "$log_group_name" "$filter_name_leak" "FenceMonitorLeakCount" '.leak_count' \
     "$alarm_name_leak" \
     "application/snowflake_write regained access to a Ticket-30-fenced acquisition-ledger/registry table, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
-    "$topic_arn"
-  put_fence_monitor_metric_and_alarm \
+    "$topic_arn" "mdm_fence_check_result" 14400
+  put_mdm_check_metric_and_alarm \
     "$log_group_name" "$filter_name_gap" "FenceMonitorAccessGapCount" '.access_gap_count' \
     "$alarm_name_gap" \
     "A fenced acquisition-ledger/registry table's own owning role lost its SELECT access, or the fence-monitor check hasn't run at all (Ticket 44, change-propagation map)" \
-    "$topic_arn"
+    "$topic_arn" "mdm_fence_check_result" 14400
   log "Configured fence-monitor CloudWatch Logs metric filters and alarms"
+}
+
+# manages-fund-duplicate-rows map, Ticket 03: one metric filter + alarm on
+# mdm_manages_fund_duplicate_check_result's new_duplicate_group_count field
+# -- a single failure signal (unlike fence-monitor's two independent ones),
+# so one alarm suffices. Period matches the check's own once-daily schedule
+# (86400s) -- see configure_manages_fund_duplicate_monitor_schedule's own
+# sizing rationale for why a shorter period would be meaningless here.
+configure_manages_fund_duplicate_monitor_alarm() {
+  local action="$1" topic_arn="$2"
+  local log_group_name
+  log_group_name="$(first_nonempty "$LOG_GROUP_NAME" "/aws/ecs/${NAME_PREFIX}-warehouse")"
+  local filter_name="${NAME_PREFIX}-manages-fund-duplicate-monitor-new-group-count"
+  local alarm_name="${NAME_PREFIX}-manages-fund-duplicate-monitor-detected"
+
+  if [[ "$action" == "disable" ]]; then
+    aws_cli cloudwatch delete-alarms --alarm-names "$alarm_name"
+    aws_cli logs delete-metric-filter --log-group-name "$log_group_name" --filter-name "$filter_name" 2>/dev/null || true
+    log "Deleted manages-fund-duplicate-monitor alarm and metric filter"
+    return 0
+  fi
+
+  require_confirmed_operator_alert_topic "$topic_arn"
+
+  put_mdm_check_metric_and_alarm \
+    "$log_group_name" "$filter_name" "ManagesFundNewDuplicateGroupCount" '.new_duplicate_group_count' \
+    "$alarm_name" \
+    "A MANAGES_FUND relationship_id got a new duplicate active-row group, or the manages-fund-duplicate-monitor check hasn't run at all (manages-fund-duplicate-rows map, Ticket 03)" \
+    "$topic_arn" "mdm_manages_fund_duplicate_check_result" 86400
+  log "Configured manages-fund-duplicate-monitor CloudWatch Logs metric filter and alarm"
 }
 
 if ! is_empty "$CONFIGURE_FENCE_MONITOR_ALARM"; then
   configure_fence_monitor_alarm "$CONFIGURE_FENCE_MONITOR_ALARM" "$OPERATOR_ALERT_TOPIC_ARN"
+  exit 0
+fi
+
+if ! is_empty "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_ALARM"; then
+  configure_manages_fund_duplicate_monitor_alarm "$CONFIGURE_MANAGES_FUND_DUPLICATE_MONITOR_ALARM" "$OPERATOR_ALERT_TOPIC_ARN"
   exit 0
 fi
 
@@ -1751,8 +1871,10 @@ task_definition_for_mdm_workflow() {
   case "$1" in
     # mdm_check_fence (Ticket 44, change-propagation map): a handful of
     # read-only has_table_privilege/pg_class queries -- the same "small" size
-    # every other cheap, non-full-universe MDM command uses.
-    mdm_migrate|mdm_check_connectivity|mdm_check_fence|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
+    # every other cheap, non-full-universe MDM command uses. mdm_check_manages_fund_duplicates
+    # (manages-fund-duplicate-rows map, Ticket 03) is the same shape: one
+    # grouped read-only query against mdm_relationship_instance.
+    mdm_migrate|mdm_check_connectivity|mdm_check_fence|mdm_check_manages_fund_duplicates|mdm_verify_graph|mdm_counts|mdm_seed_universe) printf '%s\n' "$TASK_DEF_MDM_SMALL_ARN" ;;
     # mdm_publication_drain (Ticket 36, change-propagation map) calls both the
     # sync-graph and verify-graph machinery in one invocation -- sized like
     # mdm_sync_graph (medium), not the smaller mdm_verify_graph-alone cost.
@@ -1916,6 +2038,7 @@ mdm_workflow_command_expression() {
       ;;
     mdm_verify_graph) printf '%s\n' "States.Array('mdm', 'reconcile')" ;;
     mdm_check_fence) printf '%s\n' "States.Array('mdm', 'check-fence')" ;;
+    mdm_check_manages_fund_duplicates) printf '%s\n' "States.Array('mdm', 'check-manages-fund-duplicates')" ;;
     mdm_publication_drain) printf '%s\n' "States.Array('mdm', 'publication-drain')" ;;
     mdm_reconciliation_backstop) printf '%s\n' "States.Array('mdm', 'reconcile-backstop', '--run-id', \$\$.Execution.Name)" ;;
     mdm_counts) printf '%s\n' "States.Array('mdm', 'counts')" ;;
@@ -2426,7 +2549,7 @@ write_mdm_utility_definition() {
   local output_file="$1"
   local workflows_json="[" first="true" workflow task_arn default_cmd limit_cmd unbounded_cmd unbounded_relationship_cmd relationship_cmd relationship_limit_cmd limit_per_type_cmd entry
 
-  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence mdm_publication_drain mdm_reconciliation_backstop; do
+  for workflow in mdm_migrate mdm_check_connectivity mdm_run mdm_backfill_relationships mdm_sync_graph mdm_verify_graph mdm_counts mdm_check_fence mdm_check_manages_fund_duplicates mdm_publication_drain mdm_reconciliation_backstop; do
     task_arn="$(task_definition_for_mdm_workflow "$workflow")"
     default_cmd="$(mdm_workflow_command_expression "$workflow")"
     limit_cmd="$(mdm_workflow_limit_command_expression "$workflow")"
