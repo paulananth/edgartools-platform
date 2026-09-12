@@ -47,6 +47,25 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     )
     check_fence.set_defaults(handler=_logged_handler("check-fence", _handle_check_fence))
 
+    # manages-fund-duplicate-rows map, Ticket 03: alert if a MANAGES_FUND
+    # relationship_id ever gets a *new* duplicate active-row group again,
+    # after Ticket 01 found the known 140,907-group backlog was a one-time
+    # historical event from now-dead code, not an ongoing bug. Exits
+    # non-zero on any new-group finding, same "execution-failure alarm
+    # doubles as a signal" convention as check-fence.
+    check_manages_fund_duplicates = mdm_sub.add_parser(
+        "check-manages-fund-duplicates",
+        help=(
+            "Detect new MANAGES_FUND duplicate active-row groups "
+            "(manages-fund-duplicate-rows map, Ticket 03)"
+        ),
+    )
+    check_manages_fund_duplicates.set_defaults(
+        handler=_logged_handler(
+            "check-manages-fund-duplicates", _handle_check_manages_fund_duplicates
+        )
+    )
+
     # Ticket 20: version and activate the Acquisition Universe.
     reg_open = mdm_sub.add_parser(
         "registry-open-draft",
@@ -1896,6 +1915,41 @@ def _handle_check_fence(args) -> int:
         ],
         "access_gaps": [
             {"table": gap.table, "role": gap.role} for gap in result.access_gaps
+        ],
+        "is_clean": result.is_clean,
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if result.is_clean else 1
+
+
+def _handle_check_manages_fund_duplicates(args) -> int:
+    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.mdm.manages_fund_duplicate_monitor import (
+        check_manages_fund_duplicates,
+    )
+
+    result = check_manages_fund_duplicates(get_engine())
+
+    for group in result.new_duplicate_groups:
+        emit_mdm_event(
+            "mdm_manages_fund_new_duplicate_group_detected",
+            relationship_id=group.relationship_id,
+            active_count=group.active_count,
+            latest_created_at=group.latest_created_at.isoformat(),
+        )
+    emit_mdm_event(
+        "mdm_manages_fund_duplicate_check_result",
+        new_duplicate_group_count=len(result.new_duplicate_groups),
+    )
+
+    payload = {
+        "new_duplicate_groups": [
+            {
+                "relationship_id": group.relationship_id,
+                "active_count": group.active_count,
+                "latest_created_at": group.latest_created_at.isoformat(),
+            }
+            for group in result.new_duplicate_groups
         ],
         "is_clean": result.is_clean,
     }

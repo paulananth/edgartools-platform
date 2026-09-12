@@ -9,7 +9,8 @@ entries and .scratch/state-machine-consolidation/issues/
 02-decide-consolidation-mechanism-for-shared-mdm-tail.md. mdm_check_fence
 (Ticket 44, change-propagation map) joined the set later, reusing this same
 consolidated machine instead of a bespoke new one -- see that ticket's
-Answer.
+Answer. mdm_check_manages_fund_duplicates (manages-fund-duplicate-rows map,
+Ticket 03) joined the same way.
 
 Generates the real JSON by sourcing the actual bash functions (no
 duplicated/hand-maintained copy of the state machine shape), mirroring
@@ -42,6 +43,7 @@ _EXPECTED_MODES = {
     "mdm_verify_graph",
     "mdm_counts",
     "mdm_check_fence",
+    "mdm_check_manages_fund_duplicates",
     "mdm_publication_drain",
     "mdm_reconciliation_backstop",
 }
@@ -213,6 +215,7 @@ def test_no_override_workflows_route_straight_to_a_single_task_state(definition:
     # one Task state, no Choice wrapping.
     for mode in (
         "mdm_migrate", "mdm_check_connectivity", "mdm_counts", "mdm_check_fence",
+        "mdm_check_manages_fund_duplicates",
         "mdm_publication_drain", "mdm_reconciliation_backstop",
     ):
         start = next(
