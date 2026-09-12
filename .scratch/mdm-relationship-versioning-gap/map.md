@@ -101,16 +101,28 @@ mdm-run-throughput's Tickets 04/06/07 did.
 - **Correction (2026-09-09, Ticket 08): the identical claim for
   `MANAGES_FUND` was wrong in spirit, even though narrowly true.**
   "Immune to quarantine" was true (0% quarantined) but was read as "immune
-  to this bug class" -- it isn't. `MANAGES_FUND` shares `ISSUED_BY`'s
-  empty-`properties` call shape, but that means its conflict discriminator
-  can *never* fire, so it never even reaches the quarantine check that
-  would otherwise catch a conflicting write -- it silently accumulates
-  duplicate simultaneously-active rows instead (140,907 relationship_ids
-  confirmed live, ~13x this map's own 199K-row destination). This is a
-  distinct, larger, previously-hidden bug -- ruled out of scope for *this*
-  map (different root cause: write-time conflict-blindness, not a
-  backfill-design gap) and needs its own future wayfinder map, not folded
-  in here.
+  to this bug class" -- it isn't. It silently accumulates duplicate
+  simultaneously-active rows instead (140,907 relationship_ids confirmed
+  live, ~13x this map's own 199K-row destination). This is a distinct,
+  larger, previously-hidden bug -- ruled out of scope for *this* map
+  (different root cause: a write-time issue, not a backfill-design gap)
+  and needs its own future wayfinder map, not folded in here.
+- **Second correction (2026-09-12, [manages-fund-duplicate-rows](../manages-fund-duplicate-rows/map.md)):
+  the first correction's own stated root cause was also wrong.**
+  `_derive_manages_fund`'s real, live code path does NOT pass an empty
+  `properties` dict -- confirmed via direct code read (`git log -L` on the
+  `ensure_relationship` call in `_derive_manages_fund_batch`) that a full
+  properties dict (`private_fund_id`/`source_filing_id`/`source_section`/
+  `reporting_role`/`evidence_fingerprint`) has been passed since a
+  2026-08 commit predating this claim -- the empty-properties fallback
+  path exists but only fires in a degenerate zero-ADV-data branch,
+  confirmed live to have written only 17 rows total, nowhere near
+  140,907. Direct MDM Postgres sampling instead found every duplicated
+  `relationship_id` has 2-4 rows with byte-identical properties/validity
+  window/`source_system`/`source_accession`/`created_at` (down to the
+  microsecond) -- `ensure_relationship`'s own identical-evidence merge
+  check is failing to dedupe these inserts, for reasons not yet
+  root-caused. See the new map for the corrected investigation.
 - Reducing the underlying MDM Postgres cross-region latency
   (mdm-run-throughput map's own out-of-scope item) -- unrelated to this
   map's root cause.
