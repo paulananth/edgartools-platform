@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 01
 
 ## Question
@@ -34,4 +34,26 @@ Use `/grilling` and `/domain-modeling` per this map's Notes.
 
 ## Answer
 
-_(pending)_
+Grilled over one round, user-agreed on all three points.
+
+1. **Circumstantial evidence accepted as sufficient — no code fix needed.**
+   3+ weeks of clean production writes (4,116 new rows, 0 new duplicate
+   groups) since the CRD-batching refactor (`869003da`) is strong enough
+   evidence, especially since the refactor's own structural change
+   (per-CRD-batch priming + per-batch commits, replacing one unconditional
+   whole-type prime with no interim commits) is a plausible sufficient
+   cause regardless of the exact old mechanism — a long-lived single
+   transaction over the whole universe is exactly the shape that would
+   let stale cache visibility go unnoticed, and per-batch commits close
+   that window. Demanding a positive reproduction of now-dead code has a
+   real cost not justified here.
+2. **Ticket 03 repurposed, not closed**: from "implement + deploy a
+   write-time fix" to a lightweight live-monitoring check (mirroring this
+   repo's existing `mdm check-fence` precedent for "verify a fixed
+   assumption stays true") that alerts if any *new* MANAGES_FUND
+   relationship_id ever gets a duplicate active row again — cheap
+   insurance against the unconfirmed-mechanism gap in Ticket 01's finding.
+3. **Ticket 04's backlog-cleanup design is unaffected** — still a simple
+   dedup pass (every sampled group was clean/conflict-free), and no
+   longer needs to wait on Ticket 03's monitoring check (unblocked, see
+   that ticket).
