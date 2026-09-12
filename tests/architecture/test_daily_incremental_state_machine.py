@@ -326,8 +326,82 @@ def test_daily_incremental_no_dedicated_gold_refresh_for_company_identity(
     assert gold_refresh_states == ["FactPublishtoGold"]
 
 
-# -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 02):
-# AdvBulkFetch stage between CaptureAndVerifyNewFilings and Mastering -------------------------
+# -- fundamentals-daily-integration wayfinder map, ticket 04: FetchEntityFacts/
+# FetchPerFilingFundamentals/FetchThirteenFHoldings between CaptureAndVerifyNewFilings
+# and the existing AdvBulkFetch/FirmRoster chain -------------------------------------
+
+
+def test_fundamentals_modes_run_after_capture_before_adv_bulk_and_mdm(
+    daily_definition: dict,
+) -> None:
+    order = _linear_order_with_choice(daily_definition, prefer=_LEASE_ACQUIRED_PREFER)
+    for name in (
+        "CaptureAndVerifyNewFilings",
+        "FetchEntityFacts",
+        "FetchPerFilingFundamentals",
+        "FetchThirteenFHoldings",
+        "DatasetPeriodCheck",
+    ):
+        assert name in order
+    assert order.index("CaptureAndVerifyNewFilings") < order.index("FetchEntityFacts")
+    assert order.index("FetchEntityFacts") < order.index("FetchPerFilingFundamentals")
+    assert order.index("FetchPerFilingFundamentals") < order.index("FetchThirteenFHoldings")
+    # Runs before the existing ADV-bulk/Firm-Roster chain (DatasetPeriodCheck is
+    # its entry point) -- matches write_load_history_definition's own
+    # Stage-1B-before-Stage-1C ordering.
+    assert order.index("FetchThirteenFHoldings") < order.index("DatasetPeriodCheck")
+
+
+def test_fundamentals_command_shapes_have_no_window_params(daily_definition: dict) -> None:
+    """windowed=False (not load_history's CIK-windowed Distributed Map) --
+    a single flat task per mode, no --cik-offset/--cik-limit. Tickets 02/03's
+    own incremental scoping keeps the daily working set small enough that
+    one ECS task invocation per mode suffices."""
+    for state_name, mode in (
+        ("FetchEntityFacts", "entity-facts"),
+        ("FetchPerFilingFundamentals", "per-filing"),
+        ("FetchThirteenFHoldings", "thirteenf"),
+    ):
+        state = daily_definition["States"][state_name]
+        assert state["Type"] == "Task", f"{state_name} should be a flat Task, not a Map"
+        assert "ItemReader" not in state
+        assert "ItemProcessor" not in state
+        cmd = _command_of(daily_definition, state_name)
+        assert "'bootstrap-fundamentals'" in cmd
+        assert f"'--mode', '{mode}'" in cmd
+        assert "--cik-offset" not in cmd
+        assert "--cik-limit" not in cmd
+
+
+def test_fundamentals_modes_use_large_task_definition(daily_definition: dict) -> None:
+    """Same OOM-driven choice as load_history's own three Stage 1B modes
+    (ecs-cost-sizing ticket 20) -- these three modes share the identical
+    merge_candidate_into_canonical publish-step risk regardless of which
+    pipeline invokes them."""
+    for state_name in ("FetchEntityFacts", "FetchPerFilingFundamentals", "FetchThirteenFHoldings"):
+        assert daily_definition["States"][state_name]["Parameters"]["TaskDefinition"] == "arn:wh-large", (
+            f"{state_name} should run on wh_large_arn"
+        )
+
+
+def test_fundamentals_modes_ad13_catch_routes_to_next_stage_not_lease_failure(
+    daily_definition: dict,
+) -> None:
+    """AD-13 non-fatal Catch-and-continue (fundamentals_mode_stage's fixed
+    behavior) -- a failure in any of these three modes routes to the next
+    stage, not into ReleaseSecFetchLeaseAfterFailure/SecFetchTaskFailed the
+    way a genuine CaptureAndVerifyNewFilings failure does."""
+    states = daily_definition["States"]
+    expected = {
+        "FetchEntityFacts": "FetchPerFilingFundamentals",
+        "FetchPerFilingFundamentals": "FetchThirteenFHoldings",
+        "FetchThirteenFHoldings": "DatasetPeriodCheck",
+    }
+    for state_name, next_stage in expected.items():
+        catch = states[state_name]["Catch"]
+        assert catch == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": next_stage}]
+        assert states[state_name]["Next"] == next_stage
+        assert states[state_name]["ResultPath"] is None
 
 
 def _linear_order_with_choice(definition: dict, prefer: dict[str, str] | None = None) -> list[str]:
@@ -366,6 +440,12 @@ def _linear_order_with_choice(definition: dict, prefer: dict[str, str] | None = 
         order.append(name)
         name = next_of(name, states[name])
     return order
+
+
+# -- ADV fetch pipeline wiring spec (.scratch/adv-fetch-pipeline-wiring, ticket 02):
+# AdvBulkFetch stage between FetchThirteenFHoldings and Mastering (was between
+# CaptureAndVerifyNewFilings and Mastering before fundamentals-daily-integration
+# ticket 04 inserted the fundamentals modes ahead of it) -------------------------
 
 
 def test_fetch_adv_bulk_stage_runs_after_run_warehouse_task_before_mdm_run(
