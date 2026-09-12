@@ -1,5 +1,5 @@
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 01
 
 **No longer blocked by 03** — [Ticket 02](02-decide-write-time-fix-mechanism.md)
@@ -34,4 +34,48 @@ Use `/grilling` and `/domain-modeling` per this map's Notes.
 
 ## Answer
 
-_(pending)_
+Resolved via `/grilling`, all 6 questions accepted as recommended. Also
+verified live (not just the map's 5-sample) before grilling: **all**
+140,907 duplicate-active-row groups, including the 3,960 that also have a
+quarantined row, have fully byte-identical active rows (`properties`,
+`valid_from_date`, `valid_to_date`, `source_system`, `source_accession`)
+— zero exceptions. The simple-dedup design fully holds across the whole
+backlog; it does not need widening.
+
+1. **Kept-row selection:** the ticket's own "keep the earliest
+   `instance_id`" premise is corrected — `instance_id` is a random UUIDv4
+   (`database.py:71`, no temporal ordering) and every row in a group
+   shares one identical `created_at` to the microsecond, so there is no
+   meaningful "earliest." Pick deterministically (`min(instance_id)` as a
+   plain string sort) purely for idempotent reruns — which row survives
+   has zero semantic effect, since all evidence fields are identical.
+2. **Marking mechanism:** use the existing, currently-uncalled
+   `supersede_relationship_version(session, old_id, new_id)` helper
+   (`graph.py:644`) — set `superseded_by_version_id` only. Do not call
+   `close_relationship_version`/set `valid_to_date`: `is_active` is never
+   flipped to `False` anywhere in this codebase for
+   `mdm_relationship_instance` rows (verified — zero write-sites do it);
+   "genuinely current" is `is_active=TRUE AND quarantined=FALSE AND
+   superseded_by_version_id IS NULL` per `snowflake_graph.py`'s own
+   `_active_relationship_filter` docstring. These rows never had a real
+   "stopped being true" moment — a `valid_to_date` would misleadingly
+   imply one.
+3. **Scope:** all 140,907 relationship_ids, including the 3,960 with a
+   quarantined row (their active-row sets are equally clean duplicates).
+   Explicitly do not touch/un-quarantine/reconsider the quarantined rows
+   themselves — that stays `mdm-relationship-versioning-gap`'s domain if
+   ever revisited.
+4. **Implementation shape:** a new, dedicated write-capable
+   module/CLI command, separate from Ticket 03's read-only monitor —
+   mirroring the existing `mdm check-fence` (read) vs.
+   `relationship_quarantine_backfill.py` (write) split.
+5. **Rollout:** a bounded `--limit`/dry-run-then-small-batch first pass
+   before the full 140,907-row run, even though the data shape carries no
+   risk — insurance against a script-level bug, per this repo's own
+   documented `--dry-run` lesson.
+6. **Graph resync:** none forced — the next regularly-scheduled
+   `sync-graph`/`publish-relationships` run is sufficient; no active
+   workflow depends on immediate reflection.
+
+Graduates into [Ticket 05](05-implement-and-run-manages-fund-duplicate-backfill.md)
+for the actual implementation + rollout.

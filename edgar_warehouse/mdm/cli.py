@@ -354,6 +354,39 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         )
     )
 
+    backfill_manages_fund_duplicates = mdm_sub.add_parser(
+        "backfill-manages-fund-duplicates",
+        help=(
+            "Resolve the existing ~140,907-relationship_id MANAGES_FUND "
+            "duplicate-active-row backlog (manages-fund-duplicate-rows map, "
+            "Ticket 05). Every row in an affected group is confirmed "
+            "byte-identical evidence -- a deterministic keeper (smallest "
+            "instance_id) is kept, every other row is superseded. Does not "
+            "touch the Snowflake graph; the next regularly-scheduled "
+            "sync-graph run is sufficient."
+        ),
+    )
+    backfill_manages_fund_duplicates.add_argument(
+        "--batch-size", type=int, default=500,
+        help="Relationship_ids to process per commit batch (ignored in --dry-run)",
+    )
+    backfill_manages_fund_duplicates.add_argument(
+        "--dry-run", action="store_true", default=False,
+        help="Report what would change without mutating anything",
+    )
+    backfill_manages_fund_duplicates.add_argument(
+        "--limit", type=int, default=None,
+        help=(
+            "Bound the total relationship_ids examined -- use for a first "
+            "pass against real prod data before an unbounded run."
+        ),
+    )
+    backfill_manages_fund_duplicates.set_defaults(
+        handler=_logged_handler(
+            "backfill-manages-fund-duplicates", _handle_backfill_manages_fund_duplicates
+        )
+    )
+
     backfill_issuer_links = mdm_sub.add_parser(
         "backfill-security-issuer-links",
         help=(
@@ -2208,6 +2241,28 @@ def _handle_backfill_quarantined_relationships(args) -> int:
         "skipped_ambiguous_order": summary.skipped_ambiguous_order,
         "skipped_ambiguous_date": summary.skipped_ambiguous_date,
         "skipped_multiple_conflicts": summary.skipped_multiple_conflicts,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def _handle_backfill_manages_fund_duplicates(args) -> int:
+    from edgar_warehouse.mdm.manages_fund_duplicate_backfill import run_backfill
+
+    session = _session()
+    try:
+        summary = run_backfill(
+            session,
+            batch_size=args.batch_size,
+            dry_run=args.dry_run,
+            limit=args.limit,
+        )
+    finally:
+        session.close()
+    print(json.dumps({
+        "dry_run": args.dry_run,
+        "limit": args.limit,
+        "relationship_ids_examined": summary.relationship_ids_examined,
+        "rows_superseded": summary.rows_superseded,
     }, indent=2, sort_keys=True))
     return 0
 
