@@ -505,6 +505,179 @@ class BootstrapFundamentalsWiringTests(unittest.TestCase):
         self.assertEqual(rc, 2)
 
 
+class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
+    """duckdb-retirement-cutover Ticket 18: bootstrap_fundamentals.py never
+    wired a LandingExportBuffer into its SilverDatabase, so every write it
+    made never reached the Snowflake landing zone even after Ticket 17 fixed
+    the read side. Confirmed live via a stale MAX(ingested_at) query against
+    a table this command had just supposedly written to."""
+
+    _ENV = {
+        "EDGAR_IDENTITY": "EdgarTools Platform test@example.com",
+        "SILVER_LANDING_EXPORT_ROOT": "s3://test-bucket/warehouse/artifacts/silver_landing",
+    }
+
+    class _Args:
+        cik_list = [320193]
+        mode = "entity-facts"
+        run_id = "test-run"
+        silver_root = None
+        cik_offset = 0
+        cik_limit = None
+
+    def test_build_silver_context_resolves_landing_export_root(self) -> None:
+        from edgar_warehouse.application.commands.bootstrap_fundamentals import (
+            _build_silver_context,
+        )
+        with patch.dict("os.environ", self._ENV, clear=True):
+            context = _build_silver_context(identity=self._ENV["EDGAR_IDENTITY"], silver_root_override="")
+        self.assertIsNotNone(context.silver_landing_export_root)
+        self.assertEqual(
+            context.silver_landing_export_root.root,
+            "s3://test-bucket/warehouse/artifacts/silver_landing",
+        )
+
+    def test_build_silver_context_leaves_landing_export_root_none_when_unset(self) -> None:
+        from edgar_warehouse.application.commands.bootstrap_fundamentals import (
+            _build_silver_context,
+        )
+        env = dict(self._ENV)
+        del env["SILVER_LANDING_EXPORT_ROOT"]
+        with patch.dict("os.environ", env, clear=True):
+            context = _build_silver_context(identity=env["EDGAR_IDENTITY"], silver_root_override="")
+        self.assertIsNone(context.silver_landing_export_root)
+
+    def test_open_silver_database_receives_landing_export_buffer(self) -> None:
+        from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+        captured: dict[str, Any] = {}
+
+        def _fake_open_silver_database(silver_root: Any, *, landing_export: Any = None) -> Any:
+            captured["landing_export"] = landing_export
+            return MagicMock()
+
+        with patch.dict("os.environ", self._ENV, clear=True), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.silver_support.session.open_silver_database",
+            side_effect=_fake_open_silver_database,
+        ), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals"
+            "._open_fundamentals_silver_source",
+            return_value=None,
+        ):
+            bootstrap_fundamentals.execute(self._Args())
+
+        from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
+        self.assertIsInstance(captured.get("landing_export"), LandingExportBuffer)
+
+    def test_write_landing_export_flushed_before_success(self) -> None:
+        from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+        fake_db = MagicMock()
+        write_calls: list[dict[str, Any]] = []
+
+        def _fake_write_landing_export(buffer: Any, export_root: Any, **kwargs: Any) -> dict[str, int]:
+            write_calls.append({"buffer": buffer, "export_root": export_root, **kwargs})
+            return {"sec_financial_fact": 3}
+
+        with patch.dict("os.environ", self._ENV, clear=True), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.silver_support.session.open_silver_database",
+            return_value=fake_db,
+        ), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals"
+            "._open_fundamentals_silver_source",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
+            return_value={},
+        ), patch(
+            "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
+            return_value=0,
+        ), patch(
+            "edgar_warehouse.serving.silver_landing_writer.write_landing_export",
+            side_effect=_fake_write_landing_export,
+        ):
+            rc = bootstrap_fundamentals.execute(self._Args())
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(write_calls), 1)
+        self.assertEqual(write_calls[0]["command_name"], "bootstrap-fundamentals")
+        self.assertEqual(write_calls[0]["run_id"], "test-run")
+        # Flushed before db.close() was called on the success path.
+        fake_db.close.assert_called_once()
+
+    def test_landing_export_flush_failure_returns_exit_code_1(self) -> None:
+        """A flush failure must fail the run, not silently drop the buffer --
+        that would reproduce this exact ticket's bug intermittently."""
+        from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+        fake_db = MagicMock()
+
+        with patch.dict("os.environ", self._ENV, clear=True), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.silver_support.session.open_silver_database",
+            return_value=fake_db,
+        ), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals"
+            "._open_fundamentals_silver_source",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
+            return_value={},
+        ), patch(
+            "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
+            return_value=0,
+        ), patch(
+            "edgar_warehouse.serving.silver_landing_writer.write_landing_export",
+            side_effect=RuntimeError("landing export flush failed"),
+        ):
+            rc = bootstrap_fundamentals.execute(self._Args())
+
+        self.assertEqual(rc, 1)
+        fake_db.close.assert_called_once()
+
+    def test_no_landing_export_flush_when_root_unset(self) -> None:
+        """No SILVER_LANDING_EXPORT_ROOT configured -> no buffer, no flush
+        call at all (matches every other silver-writing command's behavior
+        when this env var isn't set)."""
+        from edgar_warehouse.application.commands import bootstrap_fundamentals
+
+        env = dict(self._ENV)
+        del env["SILVER_LANDING_EXPORT_ROOT"]
+        fake_db = MagicMock()
+
+        with patch.dict("os.environ", env, clear=True), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.silver_support.session.open_silver_database",
+            return_value=fake_db,
+        ), patch(
+            "edgar_warehouse.application.commands.bootstrap_fundamentals"
+            "._open_fundamentals_silver_source",
+            return_value=MagicMock(),
+        ), patch(
+            "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
+            return_value={},
+        ), patch(
+            "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
+            return_value=0,
+        ), patch(
+            "edgar_warehouse.serving.silver_landing_writer.write_landing_export",
+        ) as mock_write:
+            rc = bootstrap_fundamentals.execute(self._Args())
+
+        self.assertEqual(rc, 0)
+        mock_write.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # 8. MDM graph registry — Snowflake-side wiring for new relationships
 # ---------------------------------------------------------------------------

@@ -117,6 +117,15 @@ def execute(args: Any) -> int:
     context = _build_silver_context(identity=identity, silver_root_override=silver_root_override)
 
     from edgar_warehouse.silver_support.session import open_silver_database
+    # duckdb-retirement-cutover Ticket 18: without this buffer, every write
+    # this command makes lands only in the local, throwaway `db` and never
+    # reaches the Snowflake landing zone -- see _execute_warehouse_bronze_capture
+    # in warehouse_orchestrator.py for the same construct-then-flush shape
+    # every other silver-writing command already uses.
+    from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
+    landing_export = (
+        LandingExportBuffer() if context.silver_landing_export_root is not None else None
+    )
     try:
         # DuckDB Retirement Cutover Ticket 10: hydration removed entirely.
         # _resolve_fundamentals_ciks (both the --cik-list and windowed cases)
@@ -125,7 +134,7 @@ def execute(args: Any) -> int:
         # is no longer written by any command (see
         # _publish_silver_database_if_remote's docstring), so there is
         # nothing left to hydrate from.
-        db = open_silver_database(context.silver_root)
+        db = open_silver_database(context.silver_root, landing_export=landing_export)
     except Exception as exc:
         _err(f"Failed to open silver database: {exc}")
         return 2
@@ -319,6 +328,36 @@ def execute(args: Any) -> int:
         _err(f"bootstrap-fundamentals failed: {exc}")
         return 2
 
+    # duckdb-retirement-cutover Ticket 18: flush before declaring success, and
+    # hard-fail (not silently drop) on a flush error -- silently discarding
+    # the buffer here would reproduce this exact ticket's bug intermittently,
+    # on every run where the flush happens to fail. Mirrors
+    # _execute_warehouse_bronze_capture's own "flush landing export, then
+    # declare success" ordering, and this file's own existing "Failed to
+    # upload silver database to remote storage" pattern below.
+    if landing_export is not None:
+        from edgar_warehouse.serving.silver_landing_writer import write_landing_export
+        try:
+            landing_export_counts = write_landing_export(
+                landing_export,
+                context.silver_landing_export_root,
+                run_id=run_id,
+                business_date=started_at.date().isoformat(),
+                command_name="bootstrap-fundamentals",
+                environment_name=context.environment_name,
+                now=datetime.now(UTC),
+            )
+        except Exception as exc:
+            db.close()
+            if source is not None:
+                try:
+                    source.close()
+                except Exception:
+                    pass
+            _err(f"Failed to write silver landing export: {exc}")
+            return 1
+        metrics["silver_landing_export_row_counts"] = landing_export_counts
+
     db.close()
     if source is not None:
         try:
@@ -443,6 +482,13 @@ def _build_silver_context(
         silver_root_override=silver_root_override,
     )
     storage_root = StorageLocation(storage_root_uri or silver_root_uri)
+    # duckdb-retirement-cutover Ticket 18: this builder previously never
+    # resolved SILVER_LANDING_EXPORT_ROOT, so the LandingExportBuffer wiring
+    # below was always a no-op in production -- every write this command
+    # made (sec_earnings_release, sec_executive_record, sec_financial_fact,
+    # sec_thirteenf_holding, etc.) never reached the Snowflake landing zone.
+    # Same env var command_context_factory.build_warehouse_context reads.
+    silver_landing_export_root_uri = os.environ.get("SILVER_LANDING_EXPORT_ROOT", "").strip()
     return WarehouseCommandContext(
         bronze_root=StorageLocation(
             os.environ.get("WAREHOUSE_BRONZE_ROOT", "").strip() or storage_root.root
@@ -453,6 +499,11 @@ def _build_silver_context(
         environment_name=os.environ.get("WAREHOUSE_ENVIRONMENT", "dev"),
         identity=identity,
         runtime_mode=os.environ.get("WAREHOUSE_RUNTIME_MODE", "bronze_capture"),
+        silver_landing_export_root=(
+            StorageLocation(silver_landing_export_root_uri)
+            if silver_landing_export_root_uri
+            else None
+        ),
     )
 
 

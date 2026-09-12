@@ -129,6 +129,20 @@ and financial facts on a daily cadence instead of only whenever
   data. Tickets 02/03's own skip logic composes correctly with the
   *existing* gates, but neither can be meaningfully verified live until
   Ticket 17 repoints those reads to Snowflake `EDGARTOOLS_SILVER`.
+- **Ticket 17's own live verification surfaced a second, independent gap on
+  the write side** — see
+  [duckdb-retirement-cutover Ticket 18](../duckdb-retirement-cutover/issues/18-bootstrap-fundamentals-never-wires-landing-export-buffer.md):
+  `bootstrap-fundamentals` never wired a `LandingExportBuffer` into its
+  `SilverDatabase` at all, so every write it makes (not just Tickets 02/03's
+  two new tables — every existing fundamentals table) never reached the
+  Snowflake landing zone, confirmed via a stale `MAX(ingested_at)` query
+  against `SEC_EXECUTIVE_RECORD` after a run that logged 20 new rows for
+  that same table. Fixed by resolving `SILVER_LANDING_EXPORT_ROOT` in
+  `bootstrap_fundamentals.py`'s own context builder (it never had, unlike
+  the shared `command_context_factory`) and porting the same
+  construct-then-flush pattern `_execute_warehouse_bronze_capture` already
+  uses. Tickets 02/03's own live verification depends on this landing too,
+  not just Ticket 17's read-side fix.
 
 <!-- tickets 01-05 below convert the approved plan; none has been worked through this map yet -->
 
