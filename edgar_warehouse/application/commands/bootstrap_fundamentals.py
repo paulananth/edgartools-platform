@@ -348,7 +348,13 @@ def execute(args: Any) -> int:
                 now=datetime.now(UTC),
             )
         except Exception as exc:
-            db.close()
+            # Guard close() itself (matching the mode-dispatch except block
+            # above) so a close failure can't mask this more informative
+            # error message behind an unhandled exception instead.
+            try:
+                db.close()
+            except Exception:
+                pass
             if source is not None:
                 try:
                     source.close()

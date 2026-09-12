@@ -576,9 +576,18 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
         from edgar_warehouse.application.commands import bootstrap_fundamentals
 
         fake_db = MagicMock()
+        events: list[str] = []
+        captured_open_kwargs: dict[str, Any] = {}
         write_calls: list[dict[str, Any]] = []
 
+        def _fake_open_silver_database(silver_root: Any, *, landing_export: Any = None) -> Any:
+            captured_open_kwargs["landing_export"] = landing_export
+            return fake_db
+
+        fake_db.close.side_effect = lambda: events.append("db.close")
+
         def _fake_write_landing_export(buffer: Any, export_root: Any, **kwargs: Any) -> dict[str, int]:
+            events.append("write_landing_export")
             write_calls.append({"buffer": buffer, "export_root": export_root, **kwargs})
             return {"sec_financial_fact": 3}
 
@@ -587,7 +596,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             return_value=MagicMock(),
         ), patch(
             "edgar_warehouse.silver_support.session.open_silver_database",
-            return_value=fake_db,
+            side_effect=_fake_open_silver_database,
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"
             "._open_fundamentals_silver_source",
@@ -608,8 +617,11 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
         self.assertEqual(len(write_calls), 1)
         self.assertEqual(write_calls[0]["command_name"], "bootstrap-fundamentals")
         self.assertEqual(write_calls[0]["run_id"], "test-run")
+        # The buffer flushed is the exact same instance open_silver_database
+        # received -- not a different/fresh buffer.
+        self.assertIs(write_calls[0]["buffer"], captured_open_kwargs["landing_export"])
         # Flushed before db.close() was called on the success path.
-        fake_db.close.assert_called_once()
+        self.assertEqual(events, ["write_landing_export", "db.close"])
 
     def test_landing_export_flush_failure_returns_exit_code_1(self) -> None:
         """A flush failure must fail the run, not silently drop the buffer --
