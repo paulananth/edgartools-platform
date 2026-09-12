@@ -143,6 +143,15 @@ and financial facts on a daily cadence instead of only whenever
   construct-then-flush pattern `_execute_warehouse_bronze_capture` already
   uses. Tickets 02/03's own live verification depends on this landing too,
   not just Ticket 17's read-side fix.
+- **Tickets 02/03 now fully live-verified end-to-end (2026-09-11/12)** —
+  after Ticket 17 (read), Ticket 18 (write), and a third mechanical fix
+  (`LOAD_SILVER_LANDING()`'s hardcoded table list, noted in Ticket 17's
+  closing evidence) all landed together. Per-filing: run 1 against CIK
+  908311 processed 15 filings; run 2 showed `filings_already_processed: 15,
+  filings_parsed: 0`. Entity-facts: run 1 fetched (`network_fetches: 1`) and
+  wrote a refresh watermark; run 2 skipped (`silver_skips: 1,
+  network_fetches: 0`). Every step confirmed via a direct Snowflake query,
+  not just task logs. PR #603 ready to merge pending CI.
 
 <!-- tickets 01-05 below convert the approved plan; none has been worked through this map yet -->
 

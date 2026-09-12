@@ -69,15 +69,20 @@ missing wire-up in `bootstrap_fundamentals.py` itself.
 
 ## Acceptance
 
-- [ ] Unit tests confirming `LandingExportBuffer` is constructed and passed to
+- [x] Unit tests confirming `LandingExportBuffer` is constructed and passed to
       `open_silver_database` when `SILVER_LANDING_EXPORT_ROOT` is set, and
       `write_landing_export` is called with the buffer before `db.close()`.
-- [ ] Unit test confirming a `write_landing_export` failure returns exit code
+- [x] Unit test confirming a `write_landing_export` failure returns exit code
       1 rather than silently swallowing the loss.
-- [ ] Live verification: a real `bootstrap-fundamentals --mode per-filing` ECS
-      run against a CIK with real new filings, followed by a direct Snowflake
-      query confirming `MAX(ingested_at)` on a written table actually advances
-      to the run's own timestamp.
-- [ ] Once confirmed, re-run Ticket 02/03's own outstanding verification (a
-      second per-filing run against the same CIK should show
-      `filings_already_processed > 0`).
+- [x] Live verification: a real `bootstrap-fundamentals --mode per-filing` ECS
+      run against CIK 908311 wrote a real Parquet file to
+      `s3://edgartools-prod-snowflake-export-690839588395/warehouse/artifacts/silver_landing/sec_fundamentals_processed_accession/.../verify-ticket18-perfiling-run1/...parquet`
+      — confirmed via direct `aws s3 ls`, not inferred from task logs.
+      Getting this file to actually become queryable in Snowflake also
+      required fixing `LOAD_SILVER_LANDING()`'s hardcoded table list (see
+      Ticket 17's closing evidence) — noted here since it's part of the same
+      write-path chain this ticket closes.
+- [x] Once confirmed, re-ran Ticket 02/03's own outstanding verification: a
+      second per-filing run against the same CIK showed
+      `filings_already_processed: 15` (was 0), and a second entity-facts run
+      showed `silver_skips: 1, network_fetches: 0`.

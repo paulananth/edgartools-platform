@@ -78,22 +78,66 @@ be meaningfully verified in production until this lands.)
 
 ## Acceptance
 
-- [ ] A live `bootstrap-fundamentals --mode per-filing` run against a real
+- [x] A live `bootstrap-fundamentals --mode per-filing` run against a real
       CIK with a known filing on file (e.g. CIK 908311) processes it
       (`filings_scanned > 0`, `filings_parsed > 0`), not `filings_scanned: 0`.
-- [ ] A live `bootstrap-fundamentals --mode entity-facts` run against a CIK
+      Confirmed 2026-09-11: `filings_scanned: 156, filings_parsed: 15`.
+- [x] A live `bootstrap-fundamentals --mode entity-facts` run against a CIK
       that already has facts at the current parser_version and no new
       qualifying filing skips the network call (`silver_skips: 1,
-      network_fetches: 0`).
+      network_fetches: 0`). Confirmed 2026-09-11 against CIK 908311, run 2:
+      `silver_skips: 1, network_fetches: 0, ciks_skipped: 1`.
 - [ ] A live `bootstrap-fundamentals --mode thirteenf` run against a real
-      13F-HR filer CIK processes it.
-- [ ] fundamentals-daily-integration Ticket 02's skip-already-processed
+      13F-HR filer CIK processes it. Not yet run — per-filing and
+      entity-facts exercise the identical `source` read seam this ticket
+      fixed, so this is now believed low-risk, but not independently
+      confirmed.
+- [x] fundamentals-daily-integration Ticket 02's skip-already-processed
       behavior and Ticket 03's new-qualifying-filing trigger both verified
       live end-to-end (first run processes/fetches, second run skips, and
       the skip state is confirmed to have actually persisted to Snowflake,
-      not just the local task's own disk).
-- [ ] `/gof-refactor-reviewer` consulted before editing
+      not just the local task's own disk). Confirmed 2026-09-11: per-filing
+      run 1 processed 15 filings; run 2 showed `filings_already_processed:
+      15, filings_parsed: 0`. Entity-facts run 1 fetched (`network_fetches:
+      1`) and wrote a watermark row; run 2 skipped (`silver_skips: 1,
+      network_fetches: 0`). Both confirmed to have reached Snowflake via a
+      direct `EDGARTOOLS_SILVER`/`EDGARTOOLS_SILVER_LANDING` query, not
+      inferred from task logs alone.
+- [x] `/gof-refactor-reviewer` consulted before editing
       `bootstrap_fundamentals.py`/`fundamentals_ingest.py`/`silver_store.py`
       (repo hard rule).
-- [ ] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
+- [x] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
       considered ready.
+
+## Closing evidence (2026-09-11/12) — two further gaps this verification surfaced
+
+Getting the above criteria to actually pass live required two more fixes
+beyond this ticket's original read-side scope, both found only because live
+verification (not unit tests) was the acceptance bar:
+
+1. **Write side never reached Snowflake at all** — `bootstrap_fundamentals.py`
+   never wired a `LandingExportBuffer`, so every write (not just this
+   ticket's read fix, but every one of bootstrap-fundamentals's tables) was
+   silently discarded on every run since Ticket 10's cutover. Chartered and
+   fixed as
+   [Ticket 18](18-bootstrap-fundamentals-never-wires-landing-export-buffer.md).
+2. **`LOAD_SILVER_LANDING()`'s hardcoded table list was never updated** when
+   this ticket added `sec_fundamentals_processed_accession`/
+   `sec_entity_facts_refresh_watermark` to the landing schema — the Parquet
+   files landed in S3 correctly (Ticket 18's fix worked), but the scheduled
+   ingest procedure (`infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql`)
+   never attempted to `COPY INTO` either new table, exactly the failure mode
+   its own header comment warns about ("hand-edit both together... both
+   files are hand-maintained"). Fixed directly (not its own ticket — a
+   mechanical two-string addition to an already-documented maintenance
+   list, not a design decision) and live-verified: `LOAD_SILVER_LANDING()`
+   now loads both tables, confirmed via a direct row count in
+   `EDGARTOOLS_SILVER_LANDING` and a manual `ALTER DYNAMIC TABLE ... REFRESH`
+   showing the rows collapse into `EDGARTOOLS_SILVER` correctly.
+
+All three fixes (Tickets 17, 18, and this landing-ingest-list fix) were
+required together before the live loop actually closed — none alone was
+sufficient, matching this file's own repeated lesson (CLAUDE.md's "MDM
+Postgres migration-011 schema drift" entry and others) that a fix isn't
+verified until proven against the real, current end-to-end path, not an
+intermediate layer.
