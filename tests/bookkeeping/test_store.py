@@ -432,6 +432,62 @@ class TestDiscoveryCheckpoint:
         assert row["status"] == "succeeded"
         assert row["finished_at"] is not None
 
+    def test_finish_dedupes_input(self, store: BookkeepingStore) -> None:
+        store.claim_discovery_ciks([1], discovery_source="daily", run_id="run-1", claimed_at=_now())
+        # Must not raise (e.g. a duplicate-key conflict from issuing the same
+        # scope_key twice within one bulk INSERT's VALUES list).
+        store.finish_discovery_ciks(
+            [1, 1], discovery_source="daily", run_id="run-1", status="succeeded", finished_at=_now()
+        )
+        assert store.get_discovery_checkpoint("cik", "1")["status"] == "succeeded"
+
+    def test_finish_empty_input(self, store: BookkeepingStore) -> None:
+        store.finish_discovery_ciks(
+            [], discovery_source="daily", run_id="run-1", status="succeeded", finished_at=_now()
+        )
+
+    def test_finish_batches_round_trips_not_one_per_cik(
+        self, store: BookkeepingStore, session: Session, monkeypatch
+    ) -> None:
+        """Regression guard for the live 2026-09-07 finding: finish_discovery_ciks
+        is claim_discovery_ciks' immediate sibling (same table, same
+        on_conflict_do_update shape) and had the exact same one-row-per-round-trip
+        bug claim_discovery_ciks was already fixed for -- confirmed live as a
+        10.4-minute silent gap in a real daily_incremental execution's
+        CloudWatch logs (10,517 CIKs, ~59ms/round trip, zero log output in
+        between). Chunk size is monkeypatched small so this test proves the
+        chunking behavior itself without needing thousands of rows."""
+        from sqlalchemy import event
+
+        monkeypatch.setattr(BookkeepingStore, "_DISCOVERY_CLAIM_CHUNK_SIZE", 10)
+        ciks = list(range(1, 251))  # 250 CIKs, chunk size 10 -> 25 chunks
+        store.claim_discovery_ciks(ciks, discovery_source="daily", run_id="run-1", claimed_at=_now())
+
+        engine = session.get_bind()
+        statements: list[str] = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _capture)
+        try:
+            store.finish_discovery_ciks(
+                ciks, discovery_source="daily", run_id="run-1", status="succeeded", finished_at=_now()
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture)
+
+        for cik in (1, 125, 250):
+            assert store.get_discovery_checkpoint("cik", str(cik))["status"] == "succeeded"
+        # 25 chunked upsert statements -- not 250 (one round trip per CIK,
+        # what the original per-row loop cost).
+        assert len(statements) <= 30, (
+            f"expected ~25 batched statements (25 upsert chunks for 250 CIKs "
+            f"at chunk size 10), got {len(statements)} -- "
+            "finish_discovery_ciks may have regressed to one round trip per CIK"
+        )
+        assert len(statements) < len(ciks)
+
     def test_get_missing_returns_none(self, store: BookkeepingStore) -> None:
         assert store.get_discovery_checkpoint("cik", "999") is None
 
