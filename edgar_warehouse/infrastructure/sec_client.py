@@ -14,7 +14,13 @@ from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 
-DEFAULT_MAX_RESPONSE_BYTES = 50 * 1024 * 1024
+# 2026-09-12: a legitimate SEC filing (13F-HR accession 0001590976-26-000048's
+# XBRL zip, MBUU) was observed at 65,561,979 bytes -- over the previous 50MB
+# default, which had no documented sizing rationale (introduced as an
+# arbitrary safety ceiling in commit b881dc57, not tuned against real filing
+# sizes). Raised to give real headroom above an observed real-world anomaly;
+# still bounded well under the warehouse ECS tasks' 8192MB memory profile.
+DEFAULT_MAX_RESPONSE_BYTES = 150 * 1024 * 1024
 ALLOWED_HOSTS = frozenset({
     "www.sec.gov", "sec.gov", "data.sec.gov",
     # IAPD's advFilingData bulk feed (ADV pipeline, ticket 06) -- the

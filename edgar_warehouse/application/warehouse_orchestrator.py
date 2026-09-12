@@ -3700,6 +3700,30 @@ def _is_immutable_object_conflict(exc: BaseException) -> bool:
     return False
 
 
+def _is_oversized_response_error(exc: BaseException) -> bool:
+    """Classify a legitimate-but-oversized SEC response as a per-document skip.
+
+    A single document exceeding WAREHOUSE_SEC_MAX_RESPONSE_BYTES
+    (sec_client.py) is a permanent, isolated condition -- no retry changes
+    the document's size -- distinct from a transient network failure or a
+    signal that the run itself is unhealthy. Mirrors
+    _is_immutable_object_conflict's skip-and-continue disposition.
+    """
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if "exceeded size limit" in str(current).lower():
+            return True
+        for nested in (getattr(current, "__cause__", None), getattr(current, "__context__", None)):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+    return False
+
+
 def _reset_edgartools_client_after_pool_timeout(exc: BaseException) -> bool:
     """Discard edgartools' process-wide client when its connection pool is exhausted."""
     pending: list[BaseException] = [exc]
@@ -3938,6 +3962,7 @@ def _run_configured_form_artifact_pipeline(
     errors = 0
     consecutive_errors = 0
     conflict_skipped_count = 0
+    oversized_skipped_count = 0
     circuit_opened = False
     retry_count = 0
     processed_accessions = 0
@@ -4193,9 +4218,20 @@ def _run_configured_form_artifact_pipeline(
             # unrelated, healthy candidates while still exiting 0. Still counted in
             # `errors`/logged via filing_artifact_failed below, just excluded from
             # the streak that trips the breaker -- mirrors ticket 87's
-            # skip-and-continue isolation for targeted-resync.
+            # skip-and-continue isolation for targeted-resync. Also excluded
+            # (together with oversized-response skips below) from the
+            # recurring-mode fatal check further down -- both are isolated,
+            # individually-recoverable per-document dispositions, not a signal
+            # that the run itself is unhealthy.
             if _is_immutable_object_conflict(exc):
                 conflict_skipped_count += 1
+                consecutive_errors = 0
+            elif _is_oversized_response_error(exc):
+                # A single document over WAREHOUSE_SEC_MAX_RESPONSE_BYTES is
+                # permanent (no retry shrinks it) and isolated to this one
+                # accession -- same disposition as an immutable-object conflict,
+                # not a systemic failure that should abort the whole run.
+                oversized_skipped_count += 1
                 consecutive_errors = 0
             else:
                 consecutive_errors += 1
@@ -4268,7 +4304,15 @@ def _run_configured_form_artifact_pipeline(
                 run_id=sync_run_id,
                 **capture_network.as_dict(),
             )
-    if recurring_mode and (errors or repair_required):
+    # conflict_skipped_count/oversized_skipped_count are isolated,
+    # individually-recoverable per-document dispositions (byte-drift on an
+    # already-captured document; a single legitimate document over
+    # WAREHOUSE_SEC_MAX_RESPONSE_BYTES) -- neither is evidence the run itself
+    # is unhealthy, so neither should abort a recurring-mode run on its own.
+    # unresolved_errors is what's left after excluding those two dispositions;
+    # any other, unclassified error keeps failing the run closed as before.
+    unresolved_errors = errors - conflict_skipped_count - oversized_skipped_count
+    if recurring_mode and (unresolved_errors or repair_required):
         remaining_accessions = len(selected_accessions) - processed_accessions
         emit_partial(
             reason="candidate_failures",
@@ -4276,7 +4320,7 @@ def _run_configured_form_artifact_pipeline(
             remaining=remaining_accessions,
         )
         raise WarehouseRuntimeError(
-            f"recurring artifact pipeline had {errors} failed candidates and "
+            f"recurring artifact pipeline had {unresolved_errors} failed candidates and "
             f"{len(repair_required)} terminal repair candidates"
         )
     network_metrics = capture_network.as_dict()
@@ -4293,6 +4337,7 @@ def _run_configured_form_artifact_pipeline(
         remaining_accessions=len(selected_accessions) - processed_accessions,
         circuit_breaker_disposition="open" if circuit_opened else "closed",
         conflict_skipped_count=conflict_skipped_count,
+        oversized_skipped_count=oversized_skipped_count,
         duration_seconds=(datetime.now(UTC) - artifact_started_at).total_seconds(),
         run_id=sync_run_id,
         **network_metrics,
@@ -4305,6 +4350,7 @@ def _run_configured_form_artifact_pipeline(
         "retry_count": retry_count,
         "fast_parse_skips": fast_parse_skips,
         "conflict_skipped_count": conflict_skipped_count,
+        "oversized_skipped_count": oversized_skipped_count,
         "attempted_accessions": attempted_accessions,
         "processed_accessions": processed_accessions,
         "remaining_accessions": len(selected_accessions) - processed_accessions,

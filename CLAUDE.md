@@ -2198,6 +2198,65 @@ run-task`, check `aws stepfunctions list-state-machines` first — a
 purpose-built, already-proven state machine for the exact task can exist
 without being referenced anywhere in CLAUDE.md's own architecture docs.
 
+## A single oversized SEC document aborted an entire daily_incremental run (fixed 2026-09-12)
+
+**Problem:** `daily-incremental-ticket05-verify-1789220276` (a `daily_incremental` prod
+verification run) failed with `pipeline_failed`: "recurring artifact pipeline had 1 failed
+candidates and 0 terminal repair candidates" — after processing 7,051 CIKs' snapshots and
+correctly bounding the daily-index accession union (10,489 accessions, 8,167 seeded
+candidates), the whole run aborted over exactly one candidate.
+
+1. Symptom: `filing_artifact_failed` showed
+   `WarehouseRuntimeError('SEC response exceeded size limit for
+   .../0001590976-26-000048-xbrl.zip: 65561979 bytes')` — a real, legitimate 65.5MB XBRL
+   zip (13F-HR accession 0001590976-26-000048, ticker MBUU), not a malformed response.
+2. Why does one oversized document fail the whole run? `sec_client.py`'s
+   `download_sec_conditionally` hard-rejects any response over
+   `WAREHOUSE_SEC_MAX_RESPONSE_BYTES` (default 50MB) — correct on its own (no retry ever
+   shrinks a document), but `_run_configured_form_artifact_pipeline`'s except-block had no
+   classification for this error type, so it just incremented the generic `errors` counter.
+3. Why did that abort the entire run instead of just skipping the one candidate? The
+   function's own final check — `if recurring_mode and (errors or repair_required): raise`
+   — treats *any* nonzero `errors` as fatal, with no carve-out for a permanently-unresolvable,
+   single-document condition that has nothing to do with the run's overall health.
+4. Why wasn't this already handled, given the near-identical immutable-object-conflict case
+   (ticket 87/93, above) exists? That fix only excluded immutable-conflict from the
+   mid-loop circuit-breaker streak ("still counted in `errors`... just excluded from the
+   streak that trips the breaker") — it never touched this final post-loop check, so
+   immutable-object-conflict had the identical latent gap: a single isolated,
+   individually-recoverable per-document skip could still abort an entire recurring run.
+   This had simply never been observed live for that error type before this investigation.
+5. **Root cause:** the function conflated two different questions under one `errors`
+   counter — "is this run unhealthy" (worth a fail-closed abort, the intended behavior from
+   the Daily accession-expansion 5-whys fix, above) and "did any individual document fail"
+   (which includes known-safe, permanent, single-document dispositions that were never meant
+   to be systemic-failure signals in the first place).
+
+**Fix:** added `_is_oversized_response_error(exc)` (mirrors `_is_immutable_object_conflict`'s
+shape) and a new `oversized_skipped_count`, classified the same way immutable-conflict
+already is — isolated, resets `consecutive_errors`, doesn't trip the circuit breaker. The
+final recurring-mode check now computes `unresolved_errors = errors -
+conflict_skipped_count - oversized_skipped_count` and only aborts on that (any other,
+unclassified error keeps failing the run closed exactly as before — this narrows the
+exemption to two known-safe dispositions, it doesn't loosen the general fail-closed
+guarantee). Also raised `DEFAULT_MAX_RESPONSE_BYTES` 50MB → 150MB (`sec_client.py`) — the
+original 50MB had no documented sizing rationale (an arbitrary refactor-era default, never
+tuned against real filing sizes) and a real, legitimate filing already exceeded it; 150MB
+still bounds runaway/malformed responses well under the warehouse ECS tasks' 8192MB memory
+profile.
+
+Tests: `tests/unit/test_submission_phase_order.py` gained 3 cases —
+`test_recurring_mode_oversized_response_does_not_abort_pipeline` (the live regression, plus
+`oversized_skipped_count` plumbed through the completed event and return dict),
+`test_recurring_mode_immutable_conflict_does_not_abort_pipeline` (closes the identical
+latent gap for the existing immutable-conflict path, never previously covered in
+`recurring_mode`), and `test_recurring_mode_unclassified_error_still_aborts_pipeline` (guards
+that a genuinely unknown error still fails the run closed, unchanged). All 3 confirmed to
+fail against the pre-fix code and pass after (verified via `git stash`, not just read).
+`tests/unit/test_submission_phase_order.py` full file green (38 passed); every test file
+touching `warehouse_orchestrator.py`/`sec_client.py` green (394 passed). **Not yet
+deployed** as of this entry — the prod images running `daily_incremental` predate this fix.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
