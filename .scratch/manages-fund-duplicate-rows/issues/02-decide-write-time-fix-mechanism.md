@@ -4,21 +4,31 @@ Blocked by: 01
 
 ## Question
 
-Using Ticket 01's root-cause finding, decide the actual fix mechanism for
-`ensure_relationship`'s (or `_derive_manages_fund_batch`'s) failure to
-dedupe identical-evidence inserts:
+**Reshaped by Ticket 01's finding:** the write-time bug appears to already
+be gone — a side effect of the unrelated OOM-driven CRD-batching refactor
+(`869003da`, 2026-08-21) — with zero recurrence across 140,907 historical
+duplicate groups and 4,116 new rows written in the 3+ weeks since. The
+exact mechanism inside the old, now-replaced code wasn't conclusively
+pinned down. So the real decision here is narrower than originally
+scoped:
 
-1. Should the fix live in `ensure_relationship` itself (a shared fix
-   benefiting every relationship type, if the mechanism turns out to be
-   general), or scoped to `_derive_manages_fund`/`_derive_manages_fund_batch`
-   specifically (if the mechanism is batching-specific, per Ticket 01's
-   finding)?
-2. Does the fix change `GraphSyncEngine`'s caching/priming contract in a
-   way other callers (the other 10 relationship types' `_derive_*`
-   methods) need to be re-verified against, or is it fully isolated?
-3. What test proves the fix — a regression test reproducing the exact
-   live shape (same adviser+fund pair, same properties, processed twice
-   within one call), at whatever seam Ticket 01 finds the failure at?
+1. **Is the circumstantial evidence (0 new duplicates in 3+ weeks of
+   continued writes) sufficient to conclude the write-time bug is already
+   fixed, with no new code needed** — making Ticket 03 a no-op or a small
+   monitoring/confirmation task instead of an implementation task? Or does
+   this need a positive reproduction (rebuild the old code path in a test
+   harness and prove it fails, then prove the new code doesn't) before
+   being trusted?
+2. If a positive test IS wanted despite not knowing the exact old-code
+   mechanism: is a live-shaped regression test even constructible without
+   that mechanism, or would it necessarily just re-assert "the new code
+   doesn't duplicate obvious cases" (weaker than a true regression test
+   that fails on the old code and passes on the new)?
+3. Assuming no code fix is needed: should Ticket 03 be closed/skipped
+   outright, or repurposed as a lightweight live-monitoring addition
+   (e.g., a periodic check/alert for new MANAGES_FUND duplicate groups)
+   so a real regression would be caught quickly if this reasoning turns
+   out wrong?
 
 Use `/grilling` and `/domain-modeling` per this map's Notes.
 

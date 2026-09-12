@@ -72,15 +72,11 @@ Two parts, both required to close this out:
 
 ## Decisions so far
 
-(none yet — charting session only; first ticket is research, not yet resolved)
+- [Root-cause identical-evidence merge failure](issues/01-root-cause-identical-evidence-merge-failure.md) — This is a one-time historical event, not an ongoing bug: all 140,907 duplicate groups' active rows share the exact same `created_at` instant (2026-08-19 15:50:30 UTC), and zero groups have an active duplicate created after the 2026-08-21 CRD-batching refactor that superseded the old code path, despite 4,116 new rows written since. The exact mechanism inside the now-replaced old code wasn't conclusively pinned down (further root-causing dead code isn't a good use of time), but the practical, decisive evidence holds regardless. Confirmed distinct from `mdm-relationship-versioning-gap`'s 5 other affected types, which all show ongoing duplication spread across many days through 2026-09-08 — that map's already-diagnosed chain-versioning gap, not this one. Reshapes Ticket 02: may not need a code fix at all, just confirmation before going straight to backlog cleanup.
 
 ## Not yet specified
 
-- Whether any of the other 5 relationship types
-  (INSTITUTIONAL_HOLDS/COMPANY_HOLDS/EMPLOYED_BY/IS_INSIDER/HOLDS) share
-  whatever mechanism is found to cause MANAGES_FUND's bug — not assumed,
-  since the quarantine-ratio signature looks distinct (see Notes above).
-  Worth a quick check once Ticket 01's root cause is known, not before.
+(none — Ticket 01 confirmed this is isolated to MANAGES_FUND, not shared with the other 5 types)
 
 ## Out of scope
 
