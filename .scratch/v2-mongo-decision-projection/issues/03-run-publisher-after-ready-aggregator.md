@@ -9,6 +9,6 @@ no Atlas secrets.
 
 **Status:** ready-for-agent
 
-- [ ] Publisher is not called from the observe-only aggregator body
-- [ ] READY completion is the gate before Mongo writes
-- [ ] Agent View Mode still reads Snowflake Decision Contract objects only
+- [x] Publisher is not called from the observe-only aggregator body
+- [x] READY completion is the gate before Mongo writes
+- [x] Agent View Mode still reads Snowflake Decision Contract objects only
