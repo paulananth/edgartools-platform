@@ -1,7 +1,13 @@
 # 18 — bootstrap-fundamentals never wires a LandingExportBuffer (write side of Ticket 17's bug)
 
 **Type:** bugfix
-**Status:** ready-for-agent
+**Status:** done — merged in PR [#603](https://github.com/paulananth/edgartools-platform/pull/603)
+(commit `6813190c` on `main`), deployed to prod, live-verified twice (once
+pre-deploy against a throwaway task-def revision, once post-deploy against
+the real `edgartools-prod-large:299`). A third gap in the same chain
+(`LOAD_SILVER_LANDING()`'s hardcoded ingest table list, commit `3612522d`)
+was fixed directly rather than as its own ticket — mechanical, already
+covered by this ticket's own live verification.
 
 ## What was found
 

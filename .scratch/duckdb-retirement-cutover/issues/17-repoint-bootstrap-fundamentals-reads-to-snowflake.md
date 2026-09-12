@@ -1,5 +1,10 @@
 # 17 — Repoint bootstrap-fundamentals's local-DuckDB reads to Snowflake
 
+**Status:** done — merged in PR [#603](https://github.com/paulananth/edgartools-platform/pull/603)
+(commit `6813190c` on `main`), deployed to prod, live-verified twice (once
+pre-deploy against a throwaway task-def revision, once post-deploy against
+the real `edgartools-prod-large:299`).
+
 **What was found:** live during fundamentals-daily-integration map Tickets
 02/03's live-AWS verification (2026-09-11), a real `bootstrap-fundamentals
 --mode per-filing` run against a CIK with a real, confirmed 8-K on file
