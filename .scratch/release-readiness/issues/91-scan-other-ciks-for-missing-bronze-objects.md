@@ -64,9 +64,13 @@ targeted a curated list of major issuers, not a random slice of the
 universe. This is scoping evidence, not proof of the scripts' actual target
 list.
 
-Raw scan output (full missing-row detail per CIK, not just counts) preserved
-in this session's scratchpad (`scan_results.json`) for whoever picks up the
-follow-up backfill.
+Raw scan output (full missing-row detail per CIK, not just counts) was
+written to this session's scratchpad during the investigation, but that
+directory is session-scoped and will not survive into a future session —
+whoever picks up Ticket 103 will need to regenerate the per-object missing
+list by re-running the same method (query `sec_raw_object` for the affected
+CIK, list its bronze S3 prefix, diff), not by reading a stale path from this
+entry.
 
 ## Follow-up
 
