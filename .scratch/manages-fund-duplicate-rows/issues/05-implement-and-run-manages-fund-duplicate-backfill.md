@@ -30,9 +30,9 @@ read-only `manages_fund_duplicate_monitor.py`, that resolves the existing
 
 ## Acceptance
 
-- [ ] `--dry-run --limit N` reports correct counts against real prod data
+- [x] `--dry-run --limit N` reports correct counts against real prod data
       for a small N, without writing anything.
-- [ ] Real run with a small `--limit` verified live against prod: exactly
+- [x] Real run with a small `--limit` verified live against prod: exactly
       the targeted groups' loser rows get `superseded_by_version_id` set
       to the keeper's `instance_id`; `is_active`/`valid_to_date` untouched
       on every row; quarantined rows untouched.
@@ -85,11 +85,36 @@ fixture pattern). Broader regression sweep: `tests/mdm/` + `tests/architecture/`
 pre-existing, unrelated Postgres-integration schema-drift failures
 documented elsewhere in CLAUDE.md), 12 skipped.
 
+**Live-prod verification, done in two bounded steps (2026-09-12), each
+with explicit go-ahead:**
+
+1. `--dry-run --limit 20` against real prod: reported
+   `relationship_ids_examined=20`, `rows_superseded=60` (would-be), zero
+   writes (confirmed via the SQL event log — SELECT statements only).
+2. Real run, `--limit 20` (same 20 groups, keyset-ordered from the start
+   with no `after`): reported `relationship_ids_examined=20`,
+   `rows_superseded=60` — exact match to the dry-run's prediction.
+   Verified directly against Postgres afterward, not just trusting the
+   CLI's own report:
+   - Remaining MANAGES_FUND duplicate backlog dropped by exactly 20:
+     140,907 -> 140,887.
+   - Exactly 20 relationship_ids now have any superseded row, totaling
+     exactly 60 superseded rows.
+   - Every touched group has exactly 1 remaining non-superseded row (the
+     keeper) and exactly 1 distinct supersession target — no partial or
+     double-superseding.
+   - Zero `is_active` flips, zero `valid_to_date` writes, zero
+     quarantined rows touched, across every touched group.
+   - The surviving row in every touched group is provably the
+     lexicographically smallest `instance_id` in its group, exactly as
+     designed.
+   The DSN was fetched from `edgartools-prod/mdm/postgres_dsn` directly
+   into a scratch file each time, read from that file first thing in each
+   script, never printed, and deleted immediately after use (both times).
+
 **Not yet done, and deliberately not attempted without further explicit
-go-ahead:** the three live-prod verification acceptance boxes above. This
-backfill performs real writes (`superseded_by_version_id`) against
-production MDM Postgres — running the bounded `--dry-run`/`--limit`
-passes and eventually the full unbounded run against real prod data is a
-separate step requiring explicit confirmation, not implied by
-implementation completion. SQLite-based unit-test coverage is what has
-been verified so far; live-prod execution has not.
+go-ahead:** the full, unbounded backlog run (remaining ~140,887 groups).
+This is the same mechanism already twice-verified live above, just at
+full scale — a larger production write than either prior step, so it
+still needs its own explicit confirmation rather than being implied by
+the small run's success.
