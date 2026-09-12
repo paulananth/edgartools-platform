@@ -10,7 +10,20 @@ agent-grade documents.
 
 **Status:** ready-for-human
 
+Operator path is in-repo (mocked tests + wizard). Live cluster checkboxes
+stay open until a human runs the wizard against Atlas.
+
 - [ ] M0 cluster exists with the accepted database and collections
 - [ ] Read-only agent user cannot write
 - [ ] Publisher write user can upsert
 - [ ] One smoke publish; read-only find returns agent-grade docs
+
+## Comments
+
+- 2026-09-11 Implementation: `PyMongoDecisionStore` adapter (injected
+  client; pymongo lazy), `$jsonSchema` + generation index,
+  `run_mongo_decision_smoke` (publisher write / agent find / agent write
+  rejected), operator wizard
+  `infra/scripts/provision-atlas-decision-projection.sh` writing local
+  `.env` only (no GitHub secrets). Run:
+  `bash infra/scripts/provision-atlas-decision-projection.sh`
