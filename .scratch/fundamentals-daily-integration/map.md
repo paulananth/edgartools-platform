@@ -113,47 +113,39 @@ and financial facts on a daily cadence instead of only whenever
   red-before/green-after via `git stash`; full `tests/mdm/` suite and full
   repo suite green, no new failures. Not yet committed.
 
-- **Tickets 02/03 implemented** (accession-level dedup for per-filing/
-  thirteenf, per-CIK refresh-trigger watermark for entity-facts) — logically
-  correct, real-DuckDB-backed unit tests green, 3-axis `/code-review` clean,
-  PR [#603](https://github.com/paulananth/edgartools-platform/pull/603)
-  open. **Live verification blocked**, not by this work but by a separate,
-  bigger pre-existing bug found while attempting it — see
-  [duckdb-retirement-cutover Ticket 17](../duckdb-retirement-cutover/issues/17-repoint-bootstrap-fundamentals-reads-to-snowflake.md):
-  `bootstrap-fundamentals` reads per-filing/thirteenf filing metadata and
-  entity-facts' existing skip check from a local DuckDB that nothing has
-  hydrated since 2026-09-07 (duckdb-retirement-cutover Ticket 10's own
-  cutover). Confirmed live: per-filing sees zero filings for a CIK with
-  1,006 real ones in Snowflake; entity-facts re-fetches every CIK's
-  companyfacts on every run regardless of whether it already has current
-  data. Tickets 02/03's own skip logic composes correctly with the
-  *existing* gates, but neither can be meaningfully verified live until
-  Ticket 17 repoints those reads to Snowflake `EDGARTOOLS_SILVER`.
-- **Ticket 17's own live verification surfaced a second, independent gap on
-  the write side** — see
-  [duckdb-retirement-cutover Ticket 18](../duckdb-retirement-cutover/issues/18-bootstrap-fundamentals-never-wires-landing-export-buffer.md):
-  `bootstrap-fundamentals` never wired a `LandingExportBuffer` into its
-  `SilverDatabase` at all, so every write it makes (not just Tickets 02/03's
-  two new tables — every existing fundamentals table) never reached the
-  Snowflake landing zone, confirmed via a stale `MAX(ingested_at)` query
-  against `SEC_EXECUTIVE_RECORD` after a run that logged 20 new rows for
-  that same table. Fixed by resolving `SILVER_LANDING_EXPORT_ROOT` in
-  `bootstrap_fundamentals.py`'s own context builder (it never had, unlike
-  the shared `command_context_factory`) and porting the same
-  construct-then-flush pattern `_execute_warehouse_bronze_capture` already
-  uses. Tickets 02/03's own live verification depends on this landing too,
-  not just Ticket 17's read-side fix.
-- **Tickets 02/03 now fully live-verified end-to-end (2026-09-11/12)** —
-  after Ticket 17 (read), Ticket 18 (write), and a third mechanical fix
-  (`LOAD_SILVER_LANDING()`'s hardcoded table list, noted in Ticket 17's
-  closing evidence) all landed together. Per-filing: run 1 against CIK
-  908311 processed 15 filings; run 2 showed `filings_already_processed: 15,
-  filings_parsed: 0`. Entity-facts: run 1 fetched (`network_fetches: 1`) and
-  wrote a refresh watermark; run 2 skipped (`silver_skips: 1,
-  network_fetches: 0`). Every step confirmed via a direct Snowflake query,
-  not just task logs. PR #603 ready to merge pending CI.
+- [Accession-level incremental scoping for per-filing/thirteenf](issues/02-accession-level-incremental-scoping.md)
+  — `sec_fundamentals_processed_accession` dedup table, bulk-prefetched
+  before iterating candidates. Fully live-verified end-to-end after two
+  prerequisite fixes surfaced by that same verification (below).
+- [Entity-facts incremental refresh trigger](issues/03-entity-facts-refresh-trigger.md)
+  — `sec_entity_facts_refresh_watermark`, composes with (doesn't replace)
+  the existing `has_companyfacts_at_version` parser-version gate. Fully
+  live-verified end-to-end alongside Ticket 02.
+- **Live-verifying Tickets 02/03 surfaced two further, unrelated
+  pre-existing bugs**, both chartered and fixed as their own tickets on the
+  `duckdb-retirement-cutover` map (not this one, since they're bugs in
+  `bootstrap-fundamentals`'s general Snowflake plumbing, not specific to
+  the new dedup/watermark tables): read side —
+  [Ticket 17](../duckdb-retirement-cutover/issues/17-repoint-bootstrap-fundamentals-reads-to-snowflake.md)
+  (`bootstrap-fundamentals` read from a local DuckDB nothing had hydrated
+  since the Ticket 10 cutover); write side —
+  [Ticket 18](../duckdb-retirement-cutover/issues/18-bootstrap-fundamentals-never-wires-landing-export-buffer.md)
+  (no writes reached Snowflake at all, for any table, ever). A third,
+  purely mechanical gap (`LOAD_SILVER_LANDING()`'s hardcoded ingest table
+  list never updated for the two new tables) was fixed directly, folded
+  into Ticket 17's own closing evidence rather than chartered separately.
+- **All four fixes merged as PR [#603](https://github.com/paulananth/edgartools-platform/pull/603)**
+  (commit `6813190c` on `main`) and deployed to prod
+  (`edgartools-prod-large:299` and siblings). Live-verified twice: once
+  pre-deploy diagnosing the read/write bugs, once post-deploy confirming
+  the real prod task definitions carry the fix — both times showing
+  `filings_already_processed: 15`/`silver_skips: 1, network_fetches: 0` for
+  CIK 908311.
 
-<!-- tickets 01-05 below convert the approved plan; none has been worked through this map yet -->
+<!-- tickets 01-05 convert the approved plan. 01/02/03/06 done (see above);
+     04 (Step Functions wiring into daily_incremental) and 05 (end-to-end
+     verification, blocked on 04) remain open -- 04 is the map's actual
+     frontier ticket. -->
 
 ## Not yet specified
 

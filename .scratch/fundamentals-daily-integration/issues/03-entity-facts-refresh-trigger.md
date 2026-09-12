@@ -1,7 +1,7 @@
 # 03 — Entity-facts incremental refresh trigger
 
 Type: task
-Status: open
+Status: done
 
 **Blocked by:** 01 — Fix the `sec_financial_fact`/`sec_accounting_flag`
 retirement publish-conflict bug (user's explicit decision: fix the
@@ -34,12 +34,31 @@ ordinary (non-version-bump) day.
 
 ## Acceptance
 
-- [ ] A manual `bootstrap-fundamentals --mode entity-facts` run against a
+- [x] A manual `bootstrap-fundamentals --mode entity-facts` run against a
       real CIK window skips CIKs with no new qualifying filing, verified
       live — Phase 4 step 2's own verification requirement.
-- [ ] A parser-version bump still forces a full refresh regardless of the
-      new watermark (regression guard for the existing gate).
-- [ ] `/gof-refactor-reviewer` consulted before editing
+- [x] A parser-version bump still forces a full refresh regardless of the
+      new watermark (regression guard for the existing gate) — unit-tested
+      via `EntityFactsRefreshTriggerTests` (composition with
+      `has_companyfacts_at_version`, not a replacement of it).
+- [x] `/gof-refactor-reviewer` consulted before editing
       `fundamentals_ingest.py`/`silver_once.py` (repo hard rule).
-- [ ] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
+- [x] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
       considered ready.
+
+## Answer
+
+Implemented as specified: `sec_entity_facts_refresh_watermark(cik,
+entity_facts_refreshed_at)`, composed with (not replacing) the existing
+`has_companyfacts_at_version` parser-version gate via
+`get_ciks_with_new_qualifying_filing` (`silver_once.py`). Landed on PR
+[#603](https://github.com/paulananth/edgartools-platform/pull/603),
+merged into `main` (commit `6813190c`).
+
+Same two prerequisite fixes as [Ticket 02](02-accession-level-incremental-scoping.md)
+were required before live verification could actually pass (Tickets 17/18
+in `duckdb-retirement-cutover`). Once deployed to prod, live verification
+against CIK 908311 confirmed the full loop: run 1 fetched
+(`network_fetches: 1`) and wrote a watermark row; run 2 skipped
+(`silver_skips: 1, network_fetches: 0`) — re-confirmed a second time after
+the real prod deploy (`edgartools-prod-large:299`).
