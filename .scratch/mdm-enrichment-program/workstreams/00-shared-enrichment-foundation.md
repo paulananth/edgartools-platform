@@ -13,6 +13,9 @@ versions, review states, replay, observability, security, and retention hooks.
 
 ## Required decisions and evidence
 
+- Authoritative source archive, member-file, cadence, domain route, and recovery
+  inventory from the
+  [source-file pipeline catalog](../source-file-pipeline-catalog.md).
 - Schema boundaries for source publications, records, candidates, accepted
   links, conflicts, deferred domains, mappings, and stewardship decisions.
 - Change Ledger authority, S3 path catalog, Snowflake native-pull boundary, and
