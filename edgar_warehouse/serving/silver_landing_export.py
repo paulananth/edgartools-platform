@@ -8,11 +8,12 @@ earlier run, defeating "append-only" the moment two runs overlap in
 content). `SilverDatabase` is the single chokepoint every one of those
 methods lives on, so this buffer attaches there via decorators
 (`track_landing_rows`/`track_landing_row` below) rather than requiring
-changes at every external call site. `update_accounting_flag_scores`
-(silver_store.py) records into the buffer directly instead of via a
-decorator -- see its docstring for why (silver-retirement-integrity
-Ticket 04: it must record the full post-update row, not just its own
-scalar arguments).
+changes at every external call site. The three fundamentals tables whose
+local DuckDB copy is dead (`merge_financial_facts`/`merge_financial_derived`/
+`merge_accounting_flags`, silver-merge-engine-migration Tickets 02/03)
+record into the buffer directly via `_record_landing_passthrough` rather
+than a decorator, so the recorded row carries the write-time columns
+DuckDB used to supply (`ingested_at`, the Ticket 33 validity trio).
 
 Opt-in and a complete no-op by default: `SilverDatabase(db_path)` with no
 `landing_export` argument behaves exactly as it does today -- every

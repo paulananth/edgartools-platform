@@ -17,6 +17,11 @@ already-published accessions hit exactly this wall.
 Each table's merge function must now advance ``ingested_at`` on every
 ``DO UPDATE``, so a genuine re-processing of an existing row is
 authoritative over what's already published.
+
+sec_financial_fact/sec_financial_derived/sec_accounting_flag are no longer
+covered here: their local DuckDB merge is gone (silver-merge-engine-migration
+Tickets 02/03) and their landing rows carry a per-write ``ingested_at`` --
+see test_fundamentals_landing_passthrough.py.
 """
 
 from __future__ import annotations
@@ -49,106 +54,6 @@ def test_merge_earnings_release_bumps_ingested_at_on_update(tmp_path):
         row["revenue_gaap"] = 2298500000.0  # corrected value, same key
         db.merge_earnings_releases([row], "run-2")
         second = _ingested_at(db, "sec_earnings_release", "cik = ? AND accession_number = ?", [8818, "acc-1"])
-
-        assert second > first
-    finally:
-        db.close()
-
-
-def test_merge_financial_facts_bumps_ingested_at_on_update(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        row = {
-            "cik": 8818, "accession_number": "acc-1", "fiscal_year": 2026,
-            "fiscal_period": "Q1", "period_end": "2026-03-31", "period_start": "2026-01-01",
-            "form_type": "10-Q", "concept": "us-gaap/Revenues", "value": 100.0,
-            "unit": "USD", "decimals": -6, "segment": "consolidated", "parser_version": "1",
-        }
-        db.merge_financial_facts([row], "run-1")
-        first = _ingested_at(
-            db, "sec_financial_fact",
-            "cik = ? AND accession_number = ? AND concept = ? AND fiscal_period = ? "
-            "AND segment = ? AND period_end = ? AND period_start = ?",
-            [8818, "acc-1", "us-gaap/Revenues", "Q1", "consolidated", "2026-03-31", "2026-01-01"],
-        )
-
-        time.sleep(0.01)
-        row["value"] = 200.0
-        db.merge_financial_facts([row], "run-2")
-        second = _ingested_at(
-            db, "sec_financial_fact",
-            "cik = ? AND accession_number = ? AND concept = ? AND fiscal_period = ? "
-            "AND segment = ? AND period_end = ? AND period_start = ?",
-            [8818, "acc-1", "us-gaap/Revenues", "Q1", "consolidated", "2026-03-31", "2026-01-01"],
-        )
-
-        assert second > first
-    finally:
-        db.close()
-
-
-def test_merge_financial_derived_bumps_ingested_at_on_update(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        row = {
-            "cik": 8818, "accession_number": "acc-1", "fiscal_year": 2026,
-            "fiscal_period": "Q1", "period_end": "2026-03-31", "form_type": "10-Q",
-            "revenue": 100.0, "parser_version": "1",
-        }
-        db.merge_financial_derived([row], "run-1")
-        first = _ingested_at(
-            db, "sec_financial_derived",
-            "cik = ? AND accession_number = ? AND fiscal_period = ? AND period_end = ?",
-            [8818, "acc-1", "Q1", "2026-03-31"],
-        )
-
-        time.sleep(0.01)
-        row["revenue"] = 200.0
-        db.merge_financial_derived([row], "run-2")
-        second = _ingested_at(
-            db, "sec_financial_derived",
-            "cik = ? AND accession_number = ? AND fiscal_period = ? AND period_end = ?",
-            [8818, "acc-1", "Q1", "2026-03-31"],
-        )
-
-        assert second > first
-    finally:
-        db.close()
-
-
-def test_merge_accounting_flags_bumps_ingested_at_on_update(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        row = {
-            "cik": 8818, "accession_number": "acc-1", "fiscal_year": 2026,
-            "form_type": "10-K", "auditor_name": "Firm A", "parser_version": "1",
-        }
-        db.merge_accounting_flags([row], "run-1")
-        first = _ingested_at(db, "sec_accounting_flag", "cik = ? AND accession_number = ?", [8818, "acc-1"])
-
-        time.sleep(0.01)
-        row["auditor_name"] = "Firm B"
-        db.merge_accounting_flags([row], "run-2")
-        second = _ingested_at(db, "sec_accounting_flag", "cik = ? AND accession_number = ?", [8818, "acc-1"])
-
-        assert second > first
-    finally:
-        db.close()
-
-
-def test_update_accounting_flag_scores_bumps_ingested_at(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        row = {
-            "cik": 8818, "accession_number": "acc-1", "fiscal_year": 2026,
-            "form_type": "10-K", "parser_version": "1",
-        }
-        db.merge_accounting_flags([row], "run-1")
-        first = _ingested_at(db, "sec_accounting_flag", "cik = ? AND accession_number = ?", [8818, "acc-1"])
-
-        time.sleep(0.01)
-        db.update_accounting_flag_scores(8818, "acc-1", 1.5, 2.5, 3)
-        second = _ingested_at(db, "sec_accounting_flag", "cik = ? AND accession_number = ?", [8818, "acc-1"])
 
         assert second > first
     finally:

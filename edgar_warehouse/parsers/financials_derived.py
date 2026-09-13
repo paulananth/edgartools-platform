@@ -22,8 +22,8 @@ ordered preference list for each metric.  First non-null value wins.
 Forensic scores
 ---------------
 Beneish M / Altman Z / Piotroski F live exclusively on sec_accounting_flag,
-computed by ``accounting_flags.backfill_accounting_flags`` after the full
-fiscal-year history is loaded.  They are NOT denormalised to per-quarter rows
+computed by ``accounting_flags.score_accounting_flags`` over the company's
+full fiscal-year history, in memory, per CIK.  They are NOT denormalised to per-quarter rows
 here because they are annual constructs.
 """
 
@@ -284,7 +284,7 @@ def compute_derived_for_accession(
 
     # Forensic scores (Beneish M / Altman Z / Piotroski F) live ONLY on
     # sec_accounting_flag — they are annual constructs computed cross-period in
-    # accounting_flags.backfill_accounting_flags.  Not denormalised here.
+    # accounting_flags.score_accounting_flags.  Not denormalised here.
 
     # If no derived values could be computed, omit the row (no point writing a null row)
     non_null_count = sum(

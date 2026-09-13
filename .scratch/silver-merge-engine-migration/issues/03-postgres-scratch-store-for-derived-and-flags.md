@@ -1,60 +1,55 @@
-# 03 — Build the Postgres-backed scratch store for `merge_accounting_flags`/`merge_financial_derived`
+# 03 — Score accounting flags in memory; make `merge_accounting_flags`/`merge_financial_derived` landing-only
 
 **Type:** task
 
+**Status:** resolved (2026-09-13). Originally titled "Build the Postgres-backed scratch store
+for merge_accounting_flags/merge_financial_derived" — superseded before any code was written,
+see [Ticket 01](01-choose-replacement-engine-and-migration-order.md)'s third CORRECTION section
+for the grilling that replaced it. File name kept so existing links resolve.
+
 ## Question
 
-[Ticket 01](01-choose-replacement-engine-and-migration-order.md)'s Final Answer decided:
-`sec_accounting_flag`/`sec_financial_derived`'s local DuckDB merge writes move to a new,
-dedicated Postgres-backed scratch store (not `BookkeepingStore` itself, not an in-process
-Python accumulator), reusing the same Postgres connection/instance/DSN convention as
-`BookkeepingStore` (the `bookkeeping` database on the `EDGARTOOLS_PROD_MDM` Snowflake-hosted
-Postgres instance). Rows are upserted by business key, never purged.
+`backfill_accounting_flags` read `sec_financial_derived` back from local DuckDB and UPDATEd
+`sec_accounting_flag` there — the one genuine in-process reader that kept these two tables'
+local DuckDB writes alive. But every row it read had been produced moments earlier, in the
+same `run_bootstrap_entity_facts` loop iteration, from a companyfacts payload that carries the
+company's full filing history. Move the scoring in-process and the read-back disappears; the
+two merge methods then become landing-only passthroughs, the same shape as Ticket 02.
 
-**What to build:**
+## What was built
 
-- A new store class (name/module location not pre-decided — natural candidates: alongside
-  `edgar_warehouse/bookkeeping/store.py` as a sibling, or colocated with
-  `fundamentals_ingest.py`; consult `/gof-refactor-reviewer` before deciding, per this map's
-  Notes) exposing at minimum:
-  - An upsert for `sec_financial_derived` rows (mirrors `merge_financial_derived`'s current
-    column set — see `silver_store.py:3358`'s staging DDL for the full 33-column shape —
-    keyed the same way DuckDB's `ON CONFLICT` clause is, business-key not surrogate).
-  - An upsert for `sec_accounting_flag` rows (mirrors `merge_accounting_flags`'s current
-    shape, `silver_store.py:3599`).
-  - A read matching `backfill_accounting_flags`'s existing query shape: `sec_financial_derived`
-    rows for one CIK, `fiscal_period = 'FY'`, ordered by `fiscal_year` — same columns that
-    function's cross-period Beneish/Altman/Piotroski math reads today.
-  - An update matching `update_accounting_flag_scores`'s existing contract: matched by
-    `(cik, accession_number)`, COALESCEs `None` against the existing stored value (preserve
-    this exact semantic — `accounting_flags.py`'s own comment explains why: a `None` for an
-    earlier fiscal year must not clobber a previously-computed score).
-- Migration/schema DDL for the new table(s), following this repo's existing Postgres migration
-  conventions (see `edgar_warehouse/bookkeeping/migrations/` or `mdm/migrations/` for the
-  pattern to mirror) — idempotent, populated-table-tested per the migration-010/011 lesson in
-  CLAUDE.md (test against a table that already has rows, not just an empty one).
-- Rewire `fundamentals_ingest.run_bootstrap_entity_facts` to call the new store's upserts
-  instead of `db.merge_accounting_flags`/`db.merge_financial_derived`, and rewire
-  `bootstrap_fundamentals.py`'s `backfill_accounting_flags` call site (and
-  `accounting_flags.backfill_accounting_flags` itself) to read from the new store instead of
-  `silver.fetch(...)` against local DuckDB.
-- `landing_export.record(...)` calls for both tables must be preserved exactly as they are
-  today (unaffected by the storage-engine swap — they already receive the same Python row
-  dicts before/independent of any DuckDB write).
-- Confirm no other caller reads `sec_accounting_flag`/`sec_financial_derived` from local DuckDB
-  within the same process before removing those DuckDB writes — repeat the same
-  exhaustive-grep discipline Ticket 01's investigation used (the gap that caused this whole
-  ticket's back-and-forth was checking known callers instead of grepping every table for every
-  reader before declaring something dead).
+- `parsers/accounting_flags.py`: `backfill_accounting_flags(cik, silver)` replaced by a pure
+  `score_accounting_flags(flag_rows, derived_rows) -> (scored_flag_rows, updated)`. It keeps
+  the old read-back-and-UPDATE semantics: derived rows folded per
+  (accession_number, fiscal_period, period_end) with first-seen fiscal_year/form_type and
+  last-seen metrics (the old ON CONFLICT split); FY rows only, ordered by fiscal_year, with
+  the prior-year chain advancing on every FY row; a None score never clobbers an earlier
+  score for the same accession (the old COALESCE); `updated` counts only real matches
+  (Ticket 42).
+- `fundamentals_ingest.run_bootstrap_entity_facts`: per CIK, facts → derived (collected) →
+  score → flags → marker. A scoring failure logs `accounting_flags_backfill_error` and still
+  writes the unscored flags. `accounting_flags_updated` is a run metric now.
+- `bootstrap_fundamentals.py`: the post-run backfill loop is gone.
+- `silver_store.py`: `merge_financial_facts`/`merge_financial_derived`/`merge_accounting_flags`
+  share `_record_landing_passthrough` (landing-only; old values_fn defaults applied; NOT NULL
+  columns read from the live DDL and enforced by raising; facts/flags stamped with
+  `ingested_at` + the Ticket 33 validity trio). `update_accounting_flag_scores`,
+  `retire_financial_facts_not_in_snapshot`, `retire_accounting_flags_not_in_snapshot` and
+  `_finalize_retirement` deleted. The DuckDB DDL for all three tables stays (schema migrations
+  and `PROTECTED_TABLE_REGISTRY` still reference it; `merge_candidate_into_canonical`'s
+  `silver_event_reducer` caller is untouched).
+- `company_facts_silver_acceptance.py`: read-back "verification" and retire calls removed;
+  a producer settles VERIFIED once its rows are recorded.
 
-**"Done" bar** (per Ticket 01): equivalent regression coverage to the existing tests exercising
-`merge_accounting_flags`/`merge_financial_derived`/`backfill_accounting_flags`/
-`update_accounting_flag_scores` (update for the new store, don't delete the coverage), a
-Postgres-backed integration test proving the upsert/read/update round trip against a real
-(not SQLite-mocked) Postgres instance — per CLAUDE.md's repeated lesson that SQLite can't model
-real constraint-timing/upsert semantics — plus a live-verified production write.
+Behaviour changes, all agreed in grilling: a scored flag lands as one complete row per
+accession instead of two (same collapsed result); a CIK the skip gate skips keeps its last
+scores in silver; the company-facts retirement feature is gone until rebuilt against
+Snowflake silver (fog on the map).
 
-## Blocked by: [Ticket 02](02-delete-merge-financial-facts-local-write.md) is not a hard
-dependency (the two tickets touch different tables), but doing 02 first is recommended per
-Ticket 01's migration order (simpler, lower-risk, ships first, and de-risks the shared
-`_merge_rows_bulk` code path before touching the harder pairing here).
+Tests: `tests/unit/test_accounting_flags_scoring.py`, `test_fundamentals_landing_passthrough.py`,
+`test_entity_facts_scoring_wiring.py` (new); acceptance/command/migration/provenance/landing
+tests rewritten for the new contract; `test_accounting_flags_update_masking.py` and
+`test_financial_fact_retirement.py` deleted (their coverage moved into the new files).
+
+**Not yet live-verified** — the "done" bar's production write needs a prod entity-facts run
+after deploy; see the map.

@@ -321,3 +321,46 @@ above deletes/item 2 moves off DuckDB — their fate isn't decided by this ticke
 own look once the split above actually lands (their only caller is dormant/unscheduled today,
 per the 09-12 finding, which may make this low urgency, but "unscheduled today" isn't the same
 as "safe to ignore" if that driver is ever wired in).
+
+## CORRECTION (2026-09-13, third round, at implementation time): item 2's Postgres scratch store is wrong — superseded by in-memory scoring
+
+Caught by the operator when implementation of Ticket 03 started ("ticket 01 is wrong for
+storing prior-year financial numbers such as revenue, total assets or net income" in a
+Postgres scratch store). The Final answer above kept `sec_accounting_flag`/
+`sec_financial_derived` on a durable store because `backfill_accounting_flags` read the
+derived rows back and UPDATEd the flag rows — but it never asked *where those rows came from*.
+They come from the same SEC companyfacts payload the same `run_bootstrap_entity_facts` loop
+iteration just parsed, and that payload carries the company's **entire** filing history
+(every fiscal year), not just the new filing. So every input the cross-period Beneish/Altman/
+Piotroski math needs is already in memory, per CIK, before any write happens. A store —
+Postgres, DuckDB, anything — was only ever a detour back to data the process was already
+holding.
+
+Grilled with the operator (three rounds, all agreed):
+
+- **Scoring is in-memory, per company**, inside the per-CIK loop: a pure
+  `score_accounting_flags(flag_rows, derived_rows)` replaces `backfill_accounting_flags` +
+  `update_accounting_flag_scores`; the scored flag rows are what `merge_accounting_flags`
+  records. No Postgres scratch store, no new store class, no migration.
+- **No new Snowflake silver table.** The operator's condition was "if the in-memory value is
+  calculated per company it is fine; if not, the final number goes to a new silver table." It
+  is per company, and the final numbers already land in `EDGARTOOLS_SILVER.SEC_ACCOUNTING_FLAG`
+  (scores) and `SEC_FINANCIAL_DERIVED` (metrics) via the landing export + dbt collapse.
+- **A CIK the skip gate skips keeps its last scores in silver** — same as the DuckDB design
+  behaved; a company's history only changes when it files, and a new filing lets it through
+  the gate, which rescores its full history.
+- **`retire_financial_facts_not_in_snapshot`/`retire_accounting_flags_not_in_snapshot` are
+  deleted** (the "new fog" item above, resolved): they found rows to retire by reading local
+  DuckDB, which nothing writes anymore; their only caller (company-facts acceptance) has no
+  landing export wiring and a no-op publish, so its retirements never reached Snowflake even
+  before. Acceptance now marks a producer VERIFIED once its rows are recorded. Retirement
+  against Snowflake silver (via the existing Ticket 35 Silver Landing Retirement Record
+  mechanism, which needs the prior membership read from Snowflake) is fog on the map.
+- **A row missing a NOT NULL column raises before recording** (keeps DuckDB's fail-loud
+  behaviour; Snowflake landing's NOT NULL would otherwise reject the whole Parquet file).
+- **`ingested_at` is stamped per write on fact and flag landing rows** (DuckDB used to supply
+  it via DEFAULT; gold `accounting_flags` outputs it). Derived rows stay as they are today.
+
+Net effect on the Final answer: item 1 (Ticket 02, delete + passthrough) stands; item 2
+(Ticket 03) becomes "delete + passthrough as well, with the scoring moved in-process" — the
+whole entity-facts trio is now the same shape. Ticket 03's body rewritten to match.

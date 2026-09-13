@@ -617,9 +617,10 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
     -- CIK is retired by closing its interval (is_current=FALSE,
     -- valid_to=<retirement time>) rather than being deleted, per
     -- spec.md's "RETIRE ... never physically deletes history" rule.
-    -- valid_from marks first capture; reinstatement (the same business key
-    -- reappears in a later complete snapshot) reopens the same row via
-    -- merge_financial_facts's ON CONFLICT branch rather than a new row.
+    -- valid_from marks first capture. Retirement/reinstatement no longer
+    -- happen locally (silver-merge-engine-migration Ticket 02: this table
+    -- is landing-only); the columns stay for schema-migration history and
+    -- merge_candidate_into_canonical's remaining live caller.
     valid_from          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     valid_to            TIMESTAMPTZ,
     is_current          BOOLEAN NOT NULL DEFAULT TRUE,
@@ -769,7 +770,7 @@ CREATE TABLE IF NOT EXISTS sec_accounting_flag (
     auditor_location    TEXT,           -- dei_AuditorLocation
     icfr_attestation    BOOLEAN,        -- dei_IcfrAuditorAttestationFlag
     auditor_changed     BOOLEAN,        -- TRUE if auditor_pcaob_id differs from prior fiscal year
-    -- Forensic scores (computed cross-period by accounting_flags.backfill_accounting_flags;
+    -- Forensic scores (computed cross-period by accounting_flags.score_accounting_flags;
     -- this table is the single source of truth — they are NOT denormalised to
     -- sec_financial_derived because they are annual constructs).
     beneish_m_score     DOUBLE,
@@ -945,6 +946,7 @@ class SilverDatabase:
         # single-threaded bronze/silver capture path, so this lock doesn't
         # add contention there.
         self._fetch_lock = threading.Lock()
+        self._required_columns_cache: dict[str, tuple[str, ...]] = {}
         # Opt-in, silver-snowflake-migration map Ticket 01: when set, every
         # merge_*/upsert_* method below also records its rows here via the
         # @track_landing_* decorators, for a later flush to the Snowflake
@@ -1210,8 +1212,8 @@ class SilverDatabase:
 
         Recorded to the landing export directly (not via @track_landing_row,
         which expects a ``row: dict`` argument this method doesn't take) --
-        same reasoning as update_accounting_flag_scores above: this is the
-        table's only writer, so building the row here is no extra cost.
+        this is the table's only writer, so building the row here is no
+        extra cost.
         """
         row = self._conn.execute(
             """
@@ -1428,9 +1430,9 @@ class SilverDatabase:
     def fetch(self, sql: str, params: list | None = None) -> list[dict[str, Any]]:
         """Execute a SQL query and return results as a list of dicts.
 
-        API-compatible with ``ShardedSilverReader.fetch`` so CIK-level
-        post-processors (e.g. ``accounting_flags.backfill_accounting_flags``)
-        can read from either a single writable shard or a multi-shard reader.
+        API-compatible with ``ShardedSilverReader.fetch`` so a reader-agnostic
+        caller can read from either a single writable shard or a multi-shard
+        reader.
 
         Parameters
         ----------
@@ -3144,364 +3146,101 @@ class SilverDatabase:
     # Fundamentals namespace — Branch B silver tables
     # ------------------------------------------------------------------
 
-    def merge_financial_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        # Not @track_landing_rows here (Ticket 33): that decorator forwards
-        # the caller's rows unmodified, which lack is_current/valid_to/
-        # valid_from entirely -- if left unpatched, every ordinary
-        # (non-retiring) write would land in Snowflake landing with
-        # is_current=NULL forever, since only retire_financial_facts_
-        # not_in_snapshot's RETURNING readback ever populated those columns.
-        # Any row present in this call is, by construction, current as of
-        # this write -- is_current=True/valid_to=None need no DB read-back,
-        # they're deterministic. valid_from is set to this write's own time
-        # rather than DuckDB's true first-insert value (a deliberate,
-        # last-write-wins simplification for the landing/dbt collapse only
-        # -- DuckDB's own valid_from column stays genuinely first-insert-wins,
-        # see the ON CONFLICT clause below, which never touches it).
-        count = self._merge_rows_bulk(
-            staging_table="stg_sec_financial_fact",
-            staging_ddl="""
-                CREATE TEMP TABLE IF NOT EXISTS stg_sec_financial_fact (
-                    seq                 BIGINT,
-                    cik                 BIGINT,
-                    accession_number    TEXT,
-                    fiscal_year         INTEGER,
-                    fiscal_period       TEXT,
-                    period_end          DATE,
-                    period_start        DATE,
-                    form_type           TEXT,
-                    concept             TEXT,
-                    value               DOUBLE,
-                    unit                TEXT,
-                    decimals            INTEGER,
-                    segment             TEXT,
-                    parser_version      TEXT
-                )
-            """,
-            insert_first_sql="""
-                INSERT INTO sec_financial_fact
-                    (cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
-                     form_type, concept, value, unit, decimals, segment, parser_version)
-                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
-                       form_type, concept, value, unit, decimals, segment, parser_version
-                FROM stg_sec_financial_fact
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end, period_start
-                    ORDER BY seq ASC
-                ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end, period_start) DO NOTHING
-            """,
-            insert_last_sql="""
-                INSERT INTO sec_financial_fact
-                    (cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
-                     form_type, concept, value, unit, decimals, segment, parser_version)
-                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, period_start,
-                       form_type, concept, value, unit, decimals, segment, parser_version
-                FROM stg_sec_financial_fact
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, concept, fiscal_period, segment, period_end, period_start
-                    ORDER BY seq DESC
-                ) = 1
-                ON CONFLICT (cik, accession_number, concept, fiscal_period, segment, period_end, period_start) DO UPDATE SET
-                    value = excluded.value,
-                    decimals = excluded.decimals,
-                    parser_version = excluded.parser_version,
-                    ingested_at = now(),
-                    -- Ticket 33: a fact reappearing in this fresh snapshot
-                    -- is reinstated if a prior snapshot had retired it --
-                    -- reopens the existing row rather than needing a
-                    -- separate retire_financial_facts_not_in_snapshot call
-                    -- to notice the reversal. A no-op for a fact that was
-                    -- never retired (already is_current=TRUE/valid_to=NULL).
-                    is_current = TRUE,
-                    valid_to = NULL,
-                    -- Ticket 01 (fundamentals-daily-integration map): every
-                    -- write that touches is_current/valid_to also bumps this
-                    -- column, so retire_financial_facts_not_in_snapshot's own
-                    -- write and this reinstatement share one consistent
-                    -- "when did retirement state last change" clock.
-                    retirement_state_observed_at = now()
-            """,
-            rows=rows,
-            values_fn=lambda r: [
-                r["cik"], r["accession_number"], r.get("fiscal_year"),
-                r["fiscal_period"], r.get("period_end"),
-                r.get("period_start", _INSTANT_FACT_PERIOD_START_SENTINEL),
-                r.get("form_type", ""),
-                r["concept"], r.get("value"), r.get("unit"),
-                r.get("decimals"), r.get("segment", "consolidated"),
-                r.get("parser_version"),
-            ],
-        )
-        landing_export = getattr(self, "landing_export", None)
-        if landing_export is not None and rows:
-            now = datetime.now(UTC)
-            landing_export.record(
-                "sec_financial_fact",
-                [dict(r, valid_from=now, valid_to=None, is_current=True) for r in rows],
-            )
-        return count
-
-    _FINANCIAL_FACT_ROW_COLUMNS = (
-        "cik", "accession_number", "fiscal_year", "fiscal_period", "period_end",
-        "period_start", "form_type", "concept", "value", "unit", "decimals",
-        "segment", "parser_version", "valid_from", "valid_to", "is_current",
-        "retirement_state_observed_at",
-    )
-
-    def retire_financial_facts_not_in_snapshot(
-        self, cik: int, fact_keys: list[tuple], sync_run_id: str
+    def _record_landing_passthrough(
+        self,
+        table_name: str,
+        rows: list[dict[str, Any]],
+        *,
+        defaults: dict[str, Any],
+        stamp: dict[str, Any],
     ) -> int:
-        """Close the validity interval of every currently-current
-        sec_financial_fact row for `cik` that is absent from `fact_keys`
-        (Ticket 33, change-propagation map).
+        """Landing-only write for a table whose local DuckDB copy is dead
+        (silver-merge-engine-migration Tickets 02/03): nothing reads these
+        tables back in-process since DuckDB Retirement Cutover Ticket 10
+        made the local store ephemeral, so the QUALIFY/ON CONFLICT merge
+        they used to run computed a result nothing consumed. The dbt silver
+        models collapse the raw landing rows with the same first-insert/
+        last-write semantics the DuckDB upsert had.
 
-        `fact_keys` is the fresh, COMPLETE company-facts snapshot's full
-        membership set for this CIK -- (accession_number, concept,
-        fiscal_period, segment, period_end, period_start) tuples, matching
-        `_finalize_company_facts_candidate`'s own `fact_keys` list exactly.
-
-        The comparison basis is this table's own is_current=TRUE rows for
-        the CIK -- always exactly the prior complete snapshot's membership
-        set, because nothing but this method and merge_financial_facts's
-        ON CONFLICT reinstatement branch ever mutates is_current, and
-        nothing reaches Silver unless CAPTURED with a complete payload
-        (company_facts_silver_acceptance's existing negative gate). A fact
-        retired here and present again in a later snapshot is reinstated by
-        merge_financial_facts's own ON CONFLICT branch, not by this method.
-
-        Never physically deletes -- closes the interval instead
-        (is_current=FALSE, valid_to=<retirement time>), per spec.md's
-        "RETIRE ... never physically deletes history" rule. Retired rows
-        are pushed into landing_export (when configured) so the Snowflake
-        landing zone's append-only, latest-write-wins collapse reflects the
-        retirement too, mirroring `replace_company_tickers`'s manual
-        landing_export.record call for the same reason (this UPDATE's
-        row shape doesn't fit @track_landing_rows's `rows` bound-arg
-        convention).
+        `defaults` mirrors the old values_fn's `r.get(col, default)` fills
+        exactly -- applied only when the key is absent, never over an
+        explicit None. `stamp` adds write-time columns the landing schema
+        carries but the caller doesn't supply (facts/flags: `ingested_at` +
+        the Ticket 33 validity trio; derived: nothing, its landing rows are
+        recorded as given). A row that would have violated this table's
+        NOT NULL DDL raises here instead of failing the Snowflake load of
+        its whole Parquet file later -- the same fail-loud behaviour the
+        DuckDB INSERT had.
         """
-        now = datetime.now(UTC)
-        row_columns_sql = ", ".join(self._FINANCIAL_FACT_ROW_COLUMNS)
-        if not fact_keys:
-            # Complete-empty scope: a real CIK can lose every fact it had
-            # (e.g. all prior filings withdrawn) -- retire everything current.
-            retired = self._conn.execute(
-                f"""
-                UPDATE sec_financial_fact
-                SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
-                WHERE cik = ? AND is_current = TRUE
-                RETURNING {row_columns_sql}
-                """,
-                [now, now, cik],
-            ).fetchall()
-        else:
-            self._conn.execute(
-                """
-                CREATE TEMP TABLE IF NOT EXISTS stg_financial_fact_retain_keys (
-                    accession_number TEXT, concept TEXT, fiscal_period TEXT,
-                    segment TEXT, period_end DATE, period_start DATE
-                )
-                """
-            )
-            try:
-                columns = list(zip(*fact_keys))
-                col_names = [f"c{i}" for i in range(len(columns))]
-                arrow_table = pa.table(dict(zip(col_names, columns)))
-                self._conn.register("_retain_keys_src", arrow_table)
-                try:
-                    self._conn.execute(
-                        f"INSERT INTO stg_financial_fact_retain_keys "
-                        f"SELECT * FROM _retain_keys_src"
-                    )
-                finally:
-                    self._conn.unregister("_retain_keys_src")
-                retired = self._conn.execute(
-                    f"""
-                    UPDATE sec_financial_fact
-                    SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
-                    WHERE cik = ?
-                      AND is_current = TRUE
-                      AND NOT EXISTS (
-                          SELECT 1 FROM stg_financial_fact_retain_keys k
-                          WHERE k.accession_number = sec_financial_fact.accession_number
-                            AND k.concept = sec_financial_fact.concept
-                            AND k.fiscal_period = sec_financial_fact.fiscal_period
-                            AND k.segment = sec_financial_fact.segment
-                            AND k.period_end = sec_financial_fact.period_end
-                            AND k.period_start = sec_financial_fact.period_start
-                      )
-                    RETURNING {row_columns_sql}
-                    """,
-                    [now, now, cik],
-                ).fetchall()
-            finally:
-                self._conn.execute("DELETE FROM stg_financial_fact_retain_keys")
-
-        return self._finalize_retirement("sec_financial_fact", self._FINANCIAL_FACT_ROW_COLUMNS, retired)
-
-    def _finalize_retirement(
-        self, table_name: str, row_columns: tuple[str, ...], retired: list[tuple]
-    ) -> int:
-        """Shared tail for retire_financial_facts_not_in_snapshot/
-        retire_accounting_flags_not_in_snapshot (Ticket 33): turn a
-        RETURNING result into row dicts and push them to landing_export.
-        """
-        if not retired:
+        if not rows:
             return 0
-        retired_rows = [dict(zip(row_columns, row)) for row in retired]
+        required = self._required_columns(table_name)
+        recorded = []
+        for row in rows:
+            full = {**defaults, **row, **stamp}
+            missing = [c for c in required if full.get(c) is None]
+            if missing:
+                raise ValueError(
+                    f"{table_name} row is missing NOT NULL column(s) {missing}: {row!r}"
+                )
+            recorded.append(full)
         landing_export = getattr(self, "landing_export", None)
         if landing_export is not None:
-            landing_export.record(table_name, retired_rows)
-        return len(retired_rows)
+            landing_export.record(table_name, recorded)
+        return len(recorded)
 
-    @track_landing_rows("sec_financial_derived")
+    def _required_columns(self, table_name: str) -> tuple[str, ...]:
+        """NOT NULL columns, read from the live DDL so the check can never
+        drift from `_DDL`. Defaulted ones count too -- DuckDB rejected an
+        explicit NULL there as well, and `defaults`/`stamp` are what supply
+        them now. Fails closed on an empty result
+        (a misspelled table, or its DuckDB DDL dropped later in this map):
+        every landing-only table has at least cik/accession_number NOT NULL,
+        so "nothing required" can only mean the lookup itself is broken."""
+        if table_name not in self._required_columns_cache:
+            columns = tuple(
+                r[0]
+                for r in self._conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'main' AND table_name = ? "
+                    "AND is_nullable = 'NO' ORDER BY ordinal_position",
+                    [table_name],
+                ).fetchall()
+            )
+            if not columns:
+                raise ValueError(f"{table_name}: no NOT NULL columns found in the DuckDB DDL")
+            self._required_columns_cache[table_name] = columns
+        return self._required_columns_cache[table_name]
+
+    @staticmethod
+    def _current_row_stamp() -> dict[str, Any]:
+        """Write-time columns for sec_financial_fact/sec_accounting_flag
+        landing rows: any row present in a write is current as of that
+        write (is_current=True/valid_to=None need no read-back); valid_from
+        is this write's time, a deliberate last-write-wins simplification
+        for the landing/dbt collapse (Ticket 33). ingested_at was DuckDB's
+        DEFAULT NOW() and the gold accounting_flags model outputs it."""
+        now = datetime.now(UTC)
+        return {"ingested_at": now, "valid_from": now, "valid_to": None, "is_current": True}
+
+    def merge_financial_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
+        return self._record_landing_passthrough(
+            "sec_financial_fact",
+            rows,
+            defaults={
+                "period_start": _INSTANT_FACT_PERIOD_START_SENTINEL,
+                "form_type": "",
+                "segment": "consolidated",
+            },
+            stamp=self._current_row_stamp(),
+        )
+
     def merge_financial_derived(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows_bulk(
-            staging_table="stg_sec_financial_derived",
-            staging_ddl="""
-                CREATE TEMP TABLE IF NOT EXISTS stg_sec_financial_derived (
-                    seq                  BIGINT,
-                    cik                  BIGINT,
-                    accession_number     TEXT,
-                    fiscal_year          INTEGER,
-                    fiscal_period        TEXT,
-                    period_end           DATE,
-                    form_type            TEXT,
-                    revenue              DOUBLE,
-                    gross_profit         DOUBLE,
-                    ebitda               DOUBLE,
-                    ebit                 DOUBLE,
-                    net_income           DOUBLE,
-                    eps_diluted          DOUBLE,
-                    total_assets         DOUBLE,
-                    total_liabilities    DOUBLE,
-                    total_equity         DOUBLE,
-                    cash_and_equivalents DOUBLE,
-                    total_debt           DOUBLE,
-                    current_assets       DOUBLE,
-                    current_liabilities  DOUBLE,
-                    accounts_receivable  DOUBLE,
-                    inventory            DOUBLE,
-                    selling_general_admin_expense DOUBLE,
-                    retained_earnings    DOUBLE,
-                    depreciation_amortization DOUBLE,
-                    property_plant_equipment_net DOUBLE,
-                    shares_outstanding   DOUBLE,
-                    operating_cash_flow  DOUBLE,
-                    capex                DOUBLE,
-                    free_cash_flow       DOUBLE,
-                    gross_margin         DOUBLE,
-                    ebitda_margin        DOUBLE,
-                    net_margin           DOUBLE,
-                    roic                 DOUBLE,
-                    roe                  DOUBLE,
-                    roa                  DOUBLE,
-                    parser_version       TEXT
-                )
-            """,
-            insert_first_sql="""
-                INSERT INTO sec_financial_derived
-                    (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
-                     revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
-                     total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                     total_debt, current_assets, current_liabilities, accounts_receivable,
-                     inventory, selling_general_admin_expense, retained_earnings,
-                     depreciation_amortization, property_plant_equipment_net,
-                     shares_outstanding, operating_cash_flow, capex, free_cash_flow,
-                     gross_margin, ebitda_margin, net_margin, roic, roe, roa,
-                     parser_version)
-                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
-                       revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
-                       total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                       total_debt, current_assets, current_liabilities, accounts_receivable,
-                       inventory, selling_general_admin_expense, retained_earnings,
-                       depreciation_amortization, property_plant_equipment_net,
-                       shares_outstanding, operating_cash_flow, capex, free_cash_flow,
-                       gross_margin, ebitda_margin, net_margin, roic, roe, roa,
-                       parser_version
-                FROM stg_sec_financial_derived
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, fiscal_period, period_end
-                    ORDER BY seq ASC
-                ) = 1
-                ON CONFLICT (cik, accession_number, fiscal_period, period_end) DO NOTHING
-            """,
-            insert_last_sql="""
-                INSERT INTO sec_financial_derived
-                    (cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
-                     revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
-                     total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                     total_debt, current_assets, current_liabilities, accounts_receivable,
-                     inventory, selling_general_admin_expense, retained_earnings,
-                     depreciation_amortization, property_plant_equipment_net,
-                     shares_outstanding, operating_cash_flow, capex, free_cash_flow,
-                     gross_margin, ebitda_margin, net_margin, roic, roe, roa,
-                     parser_version)
-                SELECT cik, accession_number, fiscal_year, fiscal_period, period_end, form_type,
-                       revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
-                       total_assets, total_liabilities, total_equity, cash_and_equivalents,
-                       total_debt, current_assets, current_liabilities, accounts_receivable,
-                       inventory, selling_general_admin_expense, retained_earnings,
-                       depreciation_amortization, property_plant_equipment_net,
-                       shares_outstanding, operating_cash_flow, capex, free_cash_flow,
-                       gross_margin, ebitda_margin, net_margin, roic, roe, roa,
-                       parser_version
-                FROM stg_sec_financial_derived
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY cik, accession_number, fiscal_period, period_end
-                    ORDER BY seq DESC
-                ) = 1
-                ON CONFLICT (cik, accession_number, fiscal_period, period_end) DO UPDATE SET
-                    revenue = excluded.revenue,
-                    gross_profit = excluded.gross_profit,
-                    ebitda = excluded.ebitda,
-                    ebit = excluded.ebit,
-                    net_income = excluded.net_income,
-                    eps_diluted = excluded.eps_diluted,
-                    total_assets = excluded.total_assets,
-                    total_liabilities = excluded.total_liabilities,
-                    total_equity = excluded.total_equity,
-                    cash_and_equivalents = excluded.cash_and_equivalents,
-                    total_debt = excluded.total_debt,
-                    current_assets = excluded.current_assets,
-                    current_liabilities = excluded.current_liabilities,
-                    accounts_receivable = excluded.accounts_receivable,
-                    inventory = excluded.inventory,
-                    selling_general_admin_expense = excluded.selling_general_admin_expense,
-                    retained_earnings = excluded.retained_earnings,
-                    depreciation_amortization = excluded.depreciation_amortization,
-                    property_plant_equipment_net = excluded.property_plant_equipment_net,
-                    shares_outstanding = excluded.shares_outstanding,
-                    operating_cash_flow = excluded.operating_cash_flow,
-                    capex = excluded.capex,
-                    free_cash_flow = excluded.free_cash_flow,
-                    gross_margin = excluded.gross_margin,
-                    ebitda_margin = excluded.ebitda_margin,
-                    net_margin = excluded.net_margin,
-                    roic = excluded.roic,
-                    roe = excluded.roe,
-                    roa = excluded.roa,
-                    parser_version = excluded.parser_version,
-                    ingested_at = now()
-            """,
-            rows=rows,
-            values_fn=lambda r: [
-                r["cik"], r["accession_number"], r.get("fiscal_year"),
-                r["fiscal_period"], r.get("period_end"), r.get("form_type", ""),
-                r.get("revenue"), r.get("gross_profit"), r.get("ebitda"),
-                r.get("ebit"), r.get("net_income"), r.get("eps_diluted"),
-                r.get("total_assets"), r.get("total_liabilities"), r.get("total_equity"),
-                r.get("cash_and_equivalents"), r.get("total_debt"),
-                r.get("current_assets"), r.get("current_liabilities"),
-                r.get("accounts_receivable"), r.get("inventory"),
-                r.get("selling_general_admin_expense"), r.get("retained_earnings"),
-                r.get("depreciation_amortization"),
-                r.get("property_plant_equipment_net"), r.get("shares_outstanding"),
-                r.get("operating_cash_flow"), r.get("capex"), r.get("free_cash_flow"),
-                r.get("gross_margin"), r.get("ebitda_margin"), r.get("net_margin"),
-                r.get("roic"), r.get("roe"), r.get("roa"),
-                r.get("parser_version"),
-            ],
+        return self._record_landing_passthrough(
+            "sec_financial_derived",
+            rows,
+            defaults={"form_type": ""},
+            stamp={},
         )
 
     @track_landing_rows("sec_earnings_release")
@@ -3597,151 +3336,12 @@ class SilverDatabase:
         return count
 
     def merge_accounting_flags(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        # Not @track_landing_rows -- same reasoning as merge_financial_facts
-        # above (Ticket 33).
-        count = self._merge_rows(
-            """
-            INSERT INTO sec_accounting_flag
-                (cik, accession_number, fiscal_year, period_end, form_type,
-                 auditor_name, auditor_pcaob_id, auditor_location, icfr_attestation,
-                 auditor_changed, beneish_m_score, altman_z_score, piotroski_f_score,
-                 parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (cik, accession_number) DO UPDATE SET
-                auditor_name = excluded.auditor_name,
-                auditor_pcaob_id = excluded.auditor_pcaob_id,
-                auditor_location = excluded.auditor_location,
-                icfr_attestation = excluded.icfr_attestation,
-                auditor_changed = excluded.auditor_changed,
-                beneish_m_score = COALESCE(excluded.beneish_m_score, sec_accounting_flag.beneish_m_score),
-                altman_z_score = COALESCE(excluded.altman_z_score, sec_accounting_flag.altman_z_score),
-                piotroski_f_score = COALESCE(excluded.piotroski_f_score, sec_accounting_flag.piotroski_f_score),
-                parser_version = excluded.parser_version,
-                ingested_at = now(),
-                -- Ticket 33: same reinstatement-on-reappearance as
-                -- merge_financial_facts above.
-                is_current = TRUE,
-                valid_to = NULL,
-                -- Ticket 01 (fundamentals-daily-integration map): same
-                -- reasoning as merge_financial_facts above.
-                retirement_state_observed_at = now()
-            """,
+        return self._record_landing_passthrough(
+            "sec_accounting_flag",
             rows,
-            lambda r: [
-                r["cik"], r["accession_number"], r["fiscal_year"],
-                r.get("period_end"), r.get("form_type", "10-K"),
-                r.get("auditor_name"), r.get("auditor_pcaob_id"),
-                r.get("auditor_location"), r.get("icfr_attestation"),
-                r.get("auditor_changed"),
-                r.get("beneish_m_score"), r.get("altman_z_score"),
-                r.get("piotroski_f_score"),
-                r.get("parser_version"),
-            ],
+            defaults={"form_type": "10-K"},
+            stamp=self._current_row_stamp(),
         )
-        landing_export = getattr(self, "landing_export", None)
-        if landing_export is not None and rows:
-            now = datetime.now(UTC)
-            landing_export.record(
-                "sec_accounting_flag",
-                [dict(r, valid_from=now, valid_to=None, is_current=True) for r in rows],
-            )
-        return count
-
-    _ACCOUNTING_FLAG_ROW_COLUMNS = (
-        "cik", "accession_number", "fiscal_year", "period_end", "form_type",
-        "auditor_name", "auditor_pcaob_id", "auditor_location", "icfr_attestation",
-        "auditor_changed", "beneish_m_score", "altman_z_score", "piotroski_f_score",
-        "parser_version", "valid_from", "valid_to", "is_current",
-        "retirement_state_observed_at",
-    )
-
-    def retire_accounting_flags_not_in_snapshot(
-        self, cik: int, accession_numbers: list[str], sync_run_id: str
-    ) -> int:
-        """sec_accounting_flag's sibling of retire_financial_facts_not_in_snapshot
-        (Ticket 33) -- one row per (cik, accession_number), so the retained
-        set is a plain accession_number list rather than a multi-column key
-        tuple; no Arrow staging table needed at this row volume (one flag
-        row per 10-K, not per XBRL fact).
-        """
-        now = datetime.now(UTC)
-        row_columns_sql = ", ".join(self._ACCOUNTING_FLAG_ROW_COLUMNS)
-        if not accession_numbers:
-            retired = self._conn.execute(
-                f"""
-                UPDATE sec_accounting_flag
-                SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
-                WHERE cik = ? AND is_current = TRUE
-                RETURNING {row_columns_sql}
-                """,
-                [now, now, cik],
-            ).fetchall()
-        else:
-            placeholders = ", ".join("?" * len(accession_numbers))
-            retired = self._conn.execute(
-                f"""
-                UPDATE sec_accounting_flag
-                SET is_current = FALSE, valid_to = ?, retirement_state_observed_at = ?
-                WHERE cik = ?
-                  AND is_current = TRUE
-                  AND accession_number NOT IN ({placeholders})
-                RETURNING {row_columns_sql}
-                """,
-                [now, now, cik, *accession_numbers],
-            ).fetchall()
-
-        return self._finalize_retirement("sec_accounting_flag", self._ACCOUNTING_FLAG_ROW_COLUMNS, retired)
-
-    def update_accounting_flag_scores(
-        self,
-        cik: int,
-        accession_number: str,
-        beneish_m_score: float | None,
-        altman_z_score: float | None,
-        piotroski_f_score: int | None,
-    ) -> bool:
-        """Back-fill forensic scores into an existing sec_accounting_flag row.
-
-        Returns True iff a row actually matched and was updated. Ticket 42
-        found this call previously reported no way to distinguish "updated a
-        real row" from "matched nothing" -- the caller's success counter
-        silently counted the latter as a win. RETURNING makes the distinction
-        explicit rather than relying on "didn't raise" as a proxy for success.
-
-        Records the *complete* post-update row to the landing export, not
-        just the three backfilled score columns -- silver-retirement-integrity
-        Ticket 04 found that the dbt collapse for this table only
-        coalesce-preserves those three columns, so a thin row (only the
-        columns this call happens to touch) would win the per-key `QUALIFY`
-        once it had the highest `parse_sequence` and silently null out every
-        other column (`auditor_name`, `fiscal_year`, `period_end`,
-        `valid_from`, `valid_to`, `is_current`, etc.) in
-        `EDGARTOOLS_SILVER.SEC_ACCOUNTING_FLAG`. `RETURNING *` gets the full
-        row for free from the same UPDATE (including whatever columns exist
-        today, e.g. Ticket 33's validity-interval trio, with no separate
-        column list to keep in sync), so this costs no extra round trip.
-        """
-        cursor = self._conn.execute(
-            """
-            UPDATE sec_accounting_flag
-            SET beneish_m_score   = COALESCE(?, beneish_m_score),
-                altman_z_score    = COALESCE(?, altman_z_score),
-                piotroski_f_score = COALESCE(?, piotroski_f_score),
-                ingested_at       = now()
-            WHERE cik = ? AND accession_number = ?
-            RETURNING *
-            """,
-            [beneish_m_score, altman_z_score, piotroski_f_score,
-             int(cik), accession_number],
-        )
-        matched = cursor.fetchall()
-        if not matched:
-            return False
-        landing_export = getattr(self, "landing_export", None)
-        if landing_export is not None:
-            columns = [desc[0] for desc in cursor.description]
-            landing_export.record("sec_accounting_flag", [dict(zip(columns, matched[0]))])
-        return True
 
     @track_landing_rows("sec_executive_record")
     def merge_executive_records(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:

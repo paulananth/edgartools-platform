@@ -1814,9 +1814,6 @@ def test_bootstrap_fundamentals_skips_upload_without_storage_root(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
     ), patch(
-        "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
-        return_value=0,
-    ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
         return_value=None,
     ) as mock_upload, patch(
@@ -1866,9 +1863,6 @@ def test_bootstrap_fundamentals_uses_unified_silver_database(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
     ), patch(
-        "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
-        return_value=0,
-    ), patch(
         "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
         return_value=MagicMock(),
     ), patch(
@@ -1916,9 +1910,6 @@ def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(
     ), patch(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
-    ), patch(
-        "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
-        return_value=0,
     ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
         side_effect=WarehouseRuntimeError("S3 write failed"),
@@ -1974,9 +1965,6 @@ def test_bootstrap_fundamentals_upload_success_sets_metrics(
     ), patch(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
-    ), patch(
-        "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
-        return_value=0,
     ), patch(
         "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_if_remote",
         return_value=upload_record,

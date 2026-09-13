@@ -49,7 +49,9 @@ except where a table's specifics genuinely need a fresh design pass.
 ## Decisions so far
 
 - [Decide silver_store.py's DuckDB merge-engine fate](../duckdb-retirement-cutover/issues/20-decide-silver-store-merge-engine-fate.md) — reimplement on another engine (not keep DuckDB permanently), scoped as a real per-table migration project, not a single engine swap. Decided 2026-09-12.
-- [Choose the replacement engine and migration order](issues/01-choose-replacement-engine-and-migration-order.md) — resolved 2026-09-13 (second grilling round, after two "confirmed dead compute" claims were each found incomplete — see the ticket's own history). `sec_financial_fact` (`merge_financial_facts`) has no confirmed in-process reader: delete its local DuckDB write, passthrough to `landing_export` unchanged (Ticket 02). `sec_accounting_flag`/`sec_financial_derived` are genuinely load-bearing in-process (`backfill_accounting_flags` reads the derived rows back and depends on the flag row's existence) — full DuckDB removal is required regardless (operator's explicit call), so these move to a new, dedicated Postgres-backed scratch store reusing the bookkeeping Postgres instance/connection, upserted by business key, never purged (Ticket 03). `mark_entity_facts_refreshed` stays off this map entirely. `per-filing`/`thirteenf` modes confirmed this session to NOT share the read-back shape — likely simple delete-and-passthrough like Ticket 02, to be individually confirmed per table.
+- [Choose the replacement engine and migration order](issues/01-choose-replacement-engine-and-migration-order.md) — resolved 2026-09-13 after three rounds (two "confirmed dead compute" claims and one Postgres-scratch-store answer were each found wrong before code was written — see the ticket's own history). Final shape: the whole entity-facts trio (`sec_financial_fact`, `sec_financial_derived`, `sec_accounting_flag`) is delete-and-passthrough to `landing_export`; the one in-process reader (`backfill_accounting_flags`) only ever re-read data the same per-CIK loop iteration had just produced from a full-history companyfacts payload, so its scoring moved in-memory instead of onto a store. No Postgres scratch store, no new Snowflake table. `mark_entity_facts_refreshed` stays off this map. `per-filing`/`thirteenf` confirmed to NOT share a read-back shape — delete-and-passthrough each, to be confirmed per table.
+- [Delete `merge_financial_facts`'s local DuckDB write](issues/02-delete-merge-financial-facts-local-write.md) — resolved 2026-09-13. Landing-only via a shared `_record_landing_passthrough`; NOT NULL enforced by raising; `ingested_at` + validity trio stamped per write; acceptance read-back deleted (VERIFIED on record); DuckDB DDL kept.
+- [Score accounting flags in memory; flags/derived landing-only](issues/03-postgres-scratch-store-for-derived-and-flags.md) — resolved 2026-09-13. Pure `score_accounting_flags` inside `run_bootstrap_entity_facts`'s per-CIK loop replaces `backfill_accounting_flags`/`update_accounting_flag_scores`; `retire_*_not_in_snapshot` deleted. Not yet live-verified.
 
 ## Not yet specified
 
@@ -68,11 +70,17 @@ except where a table's specifics genuinely need a fresh design pass.
   ticket each, same shape as Ticket 02, but not yet ticketed pending Tickets 02/03 landing
   first per Ticket 01's migration order.
 - `company-identity` mode's own merge-method specifics — not yet investigated at all.
-- `retire_financial_facts_not_in_snapshot`/`retire_accounting_flags_not_in_snapshot`'s fate
-  once Tickets 02/03 land (surfaced by Ticket 01's Final Answer, not yet ticketed) — these
-  Ticket-33 retirement writes operate on exactly the tables Tickets 02/03 move off local
-  DuckDB; their only caller is dormant/unscheduled today, which may lower urgency but doesn't
-  settle the question.
+- Company-facts retirement against Snowflake silver: `retire_financial_facts_not_in_snapshot`/
+  `retire_accounting_flags_not_in_snapshot` were deleted with Tickets 02/03 (they could only
+  find rows in local DuckDB, and their sole caller never reached Snowflake anyway). The Ticket
+  35 Silver Landing Retirement Record mechanism (`silver_landing_retirement` + the
+  `silver_not_retired` dbt macro, already live for the reference catalog) is the natural
+  home, but it needs the prior snapshot's membership read from Snowflake silver — not
+  specified. Same fog covers wiring `drive_company_facts_discovery.py` to a landing export at
+  all (it has none today, so its writes go nowhere).
+- Live verification of Tickets 02/03: a prod entity-facts run after deploy showing
+  `SEC_FINANCIAL_FACT`/`SEC_FINANCIAL_DERIVED`/`SEC_ACCOUNTING_FLAG` landing rows (scores
+  populated) — the "done" bar both tickets still owe.
 
 ## Out of scope
 

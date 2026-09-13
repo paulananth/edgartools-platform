@@ -1,5 +1,5 @@
-"""Accounting flags post-processor — back-fills Beneish/Altman/Piotroski
-scores into sec_accounting_flag from sec_financial_derived.
+"""Accounting flags post-processor — computes Beneish/Altman/Piotroski
+scores for sec_accounting_flag rows from sec_financial_derived rows.
 
 # WHY-CUSTOM: cross-period forensic scoring (Beneish M, Altman Z, Piotroski F)
 # and auditor-change detection.  These are CIK-level computations across
@@ -12,106 +12,106 @@ scores into sec_accounting_flag from sec_financial_derived.
 Architecture note
 -----------------
 This module does NOT go through the standard ``get_parser()`` per-filing dispatch.
-It is a CIK-level post-processor called *after* both sec_financial_fact and
-sec_financial_derived have been populated for a company.
-
-It reads sec_financial_derived rows and sec_accounting_flag rows for a given CIK,
-computes cross-period forensic scores, and writes back to sec_accounting_flag.
+It is a CIK-level post-processor, called once per company by
+``fundamentals_ingest.run_bootstrap_entity_facts`` after that company's
+facts have been parsed and its derived rows computed, in the same loop
+iteration -- SEC's companyfacts payload carries a company's full filing
+history, so every fiscal year the cross-period math needs is already in
+memory. Pure: it takes the flag and derived row dicts, returns scored flag
+row dicts, and touches no store (silver-merge-engine-migration Ticket 03
+replaced the previous read-back from local DuckDB, which is never hydrated
+anymore, and its COALESCE UPDATE against sec_accounting_flag).
 
 The cross-period Beneish model uses consecutive (FY-1, FY) fact pairs.
 Altman and Piotroski improvements over single-period versions use prior-year deltas.
-
-Usage (called by bootstrap_fundamentals orchestrator after entity-facts parse):
-    from edgar_warehouse.parsers.accounting_flags import backfill_accounting_flags
-
-    updated = backfill_accounting_flags(cik=320193, silver=db)
-    # returns number of sec_accounting_flag rows updated
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 PARSER_NAME = "accounting_flags_v1"
 PARSER_VERSION = "1"
 
-if TYPE_CHECKING:
-    from edgar_warehouse.silver_store import SilverDatabase
+_SCORE_COLUMNS = ("beneish_m_score", "altman_z_score", "piotroski_f_score")
+# What this module itself needs to key, filter and order a derived row; a
+# row lacking one can't be placed in the fiscal-year chain. (The landing
+# write enforces the table's full NOT NULL set separately.)
+_DERIVED_REQUIRED = ("accession_number", "fiscal_year", "fiscal_period", "period_end")
+# Immutable under merge_financial_derived's old ON CONFLICT clause (and the
+# dbt silver model's first_seen CTE): first occurrence per key wins.
+_DERIVED_FIRST_SEEN = ("fiscal_year", "form_type")
 
 
-def backfill_accounting_flags(cik: int, silver: "SilverDatabase") -> int:
-    """Back-fill forensic scores for all annual filings of one company.
+def score_accounting_flags(
+    flag_rows: list[dict[str, Any]],
+    derived_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Score one company's annual filings.
 
-    Reads sec_financial_derived FY rows for the CIK ordered by fiscal_year,
-    then computes cross-period Beneish, Altman (with prior-year deltas), and
-    full Piotroski F-score (9 signals) and upserts into sec_accounting_flag.
+    Returns ``(scored_flag_rows, updated)``: a copy of every flag row (in
+    input order), with forensic scores filled in wherever an FY derived row
+    shares its accession_number, and the number of (FY derived row, flag
+    row) matches -- the old ``backfill_accounting_flags`` count, which per
+    Ticket 42 only counts a real match, never a no-op attempt.
 
-    Returns the number of sec_accounting_flag rows updated.
+    Semantics carried over from the DuckDB read-back-and-UPDATE:
+
+    - derived rows are collapsed per (accession_number, fiscal_period,
+      period_end): fiscal_year/form_type first-seen, metrics last-seen;
+    - only ``fiscal_period = 'FY'`` rows participate, ordered by
+      fiscal_year, and the prior-year chain advances on every FY row --
+      even one with no flag row to score;
+    - a ``None`` score never clobbers a score already set for the same
+      accession (COALESCE), so an earlier fiscal year's missing Beneish
+      input leaves a later-computed score untouched.
     """
-    derived_rows: list[dict[str, Any]] = silver.fetch(
-        """
-        SELECT accession_number, fiscal_year, period_end, form_type,
-               revenue, gross_profit, ebitda, ebit, net_income, eps_diluted,
-               total_assets, total_liabilities, total_equity, cash_and_equivalents,
-               total_debt, current_assets, current_liabilities, accounts_receivable,
-               inventory, selling_general_admin_expense, retained_earnings,
-               depreciation_amortization, property_plant_equipment_net,
-               shares_outstanding, operating_cash_flow, capex, free_cash_flow,
-               gross_margin, ebitda_margin, net_margin, roic, roe, roa
-        FROM sec_financial_derived
-        WHERE cik = ? AND fiscal_period = 'FY'
-        ORDER BY fiscal_year
-        """,
-        [int(cik)],
-    )
-
-    if not derived_rows:
-        return 0
+    flags_by_accession: dict[str, dict[str, Any]] = {}
+    scored = []
+    for row in flag_rows:
+        copy = dict(row)
+        scored.append(copy)
+        flags_by_accession.setdefault(copy["accession_number"], copy)
 
     updated = 0
     prev: dict[str, Any] | None = None
-
-    for row in derived_rows:
-        accession = row["accession_number"]
-        fiscal_year = row["fiscal_year"]
-
-        # ── Cross-period Beneish (uses current + prior year) ─────────────────
+    for row in _annual_rows(derived_rows):
         beneish = _beneish_cross_period(row, prev)
-
-        # ── Enhanced Altman with prior-year delta signals ─────────────────────
         altman = _altman_enhanced(row, prev)
-
-        # ── Full Piotroski (9 signals with prior-year deltas) ─────────────────
         piotroski = _piotroski_full(row, prev)
-
-        # ── Auditor change detection ──────────────────────────────────────────
-        # (auditor_changed is already set by the financials.py parser via DEI facts;
-        # we don't overwrite it here — only set forensic scores)
-
-        # update_accounting_flag_scores COALESCEs None against the existing
-        # sec_accounting_flag value, so a None here (e.g. no prior year for
-        # Beneish on the earliest fiscal year) leaves any previously-computed
-        # score untouched rather than clobbering it.
-        # Ticket 42: a DuckDB UPDATE against zero matching rows does not raise --
-        # only count a real, matched write, not merely "the call didn't error"
-        # (the prior version silently counted the base-row-missing case as a
-        # success, masking a structural gap upstream in parse_entity_facts).
-        try:
-            matched = silver.update_accounting_flag_scores(
-                cik=int(cik),
-                accession_number=accession,
-                beneish_m_score=beneish,
-                altman_z_score=altman,
-                piotroski_f_score=piotroski,
-            )
-        except Exception:
-            matched = False  # Row may not exist yet; orchestrator writes it after entity-facts parse
-        if matched:
+        # auditor_changed is set by the financials.py parser via DEI facts;
+        # not overwritten here -- only forensic scores.
+        flag = flags_by_accession.get(row["accession_number"])
+        if flag is not None:
+            for column, score in zip(_SCORE_COLUMNS, (beneish, altman, piotroski)):
+                if score is not None:
+                    flag[column] = score
             updated += 1
-
         prev = row
 
-    return updated
+    return scored, updated
+
+
+def _annual_rows(derived_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """FY derived rows, collapsed per business key and ordered by fiscal_year.
+
+    The collapse key is sec_financial_derived's (accession_number,
+    fiscal_period, period_end) with fiscal_period fixed to 'FY' by the
+    filter, matching the dbt silver model's partition.
+    """
+    folded: dict[tuple, dict[str, Any]] = {}
+    for row in derived_rows:
+        if any(row.get(column) is None for column in _DERIVED_REQUIRED):
+            continue
+        if row["fiscal_period"] != "FY":
+            continue
+        key = (row["accession_number"], row["period_end"])
+        existing = folded.get(key)
+        if existing is None:
+            folded[key] = dict(row)
+            continue
+        existing.update({k: v for k, v in row.items() if k not in _DERIVED_FIRST_SEEN})
+    return sorted(folded.values(), key=lambda r: r["fiscal_year"])
 
 
 # ---------------------------------------------------------------------------

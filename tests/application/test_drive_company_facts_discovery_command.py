@@ -140,24 +140,20 @@ def test_drive_company_facts_discovery_captures_and_publishes_end_to_end(
     assert outcome["silver_outcome"] == "PUBLISHED"
     assert outcome["silver_error"] is None
 
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    verify_db = open_silver_database(silver_root)
-    try:
-        rows = verify_db.fetch(
-            "SELECT concept, value FROM sec_financial_fact WHERE cik = ?", [320193]
-        )
-        assert rows == [{"concept": "Assets", "value": 1000.0}]
-    finally:
-        verify_db.close()
+    # No local DuckDB read-back: sec_financial_fact is landing-only now
+    # (silver-merge-engine-migration Ticket 02). This driver opens its
+    # SilverDatabase without a landing export (fog on that map), so the
+    # settled, VERIFIED producer outcomes are the evidence this test can
+    # assert -- the same processing-ledger facts the driver itself gates on.
+    assert outcome["processing_disposition"] is not None
 
     run_manifest_path = (
         tmp_path / "bronze" / "runs" / "drive-company-facts-discovery"
         / "run-company-facts-1" / "run_manifest.json"
     )
     assert run_manifest_path.exists()
+    manifest = json.loads(run_manifest_path.read_text())
+    assert json.dumps(manifest).count('"silver_settled": 1') == 1
 
 
 def test_drive_company_facts_discovery_replay_performs_no_second_network_fetch(
