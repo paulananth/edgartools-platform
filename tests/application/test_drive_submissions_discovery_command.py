@@ -192,9 +192,9 @@ def test_drive_submissions_discovery_captures_main_and_pagination_end_to_end(
     silver_root = StorageLocation(str(tmp_path / "silver"))
     verify_db = open_silver_database(silver_root)
     try:
-        company = verify_db.get_company(320193)
-        assert company is not None
-        assert company["entity_name"] == "Apple Inc."
+        # sec_company is landing-only (silver-merge-engine-migration Ticket
+        # 06b) and this driver opens no landing export, so there is no company
+        # row to read back; test_submissions_silver_acceptance.py covers it.
         recent_filing = verify_db.get_filing("0000320193-26-000001")
         assert recent_filing is not None
         pagination_filing = verify_db.get_filing("0000320193-19-000042")

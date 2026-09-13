@@ -350,10 +350,13 @@ def _finalize_main_candidate(
     )
 
     if SUBMISSIONS_COMPANY_PRODUCER_NAME in pending_producer_names:
-        company_row = silver.get_company(cik)
+        # sec_company is landing-only (silver-merge-engine-migration Ticket
+        # 06b): there is no local row to read back, so this settles on the
+        # company row stage_submission recorded. An individual filer records
+        # none and still FAILS.
         outcome = (
             ExpectedProducerOutcome.VERIFIED
-            if company_row is not None
+            if staged["company_rows_written"] > 0
             else ExpectedProducerOutcome.FAILED
         )
         decision = finalizer.record_producer_outcome(
@@ -364,7 +367,7 @@ def _finalize_main_candidate(
             failure_detail=(
                 None
                 if outcome is ExpectedProducerOutcome.VERIFIED
-                else f"sec_company read-back for cik={cik} found no row after stage_submission"
+                else f"stage_submission recorded no sec_company row for cik={cik}"
             ),
         )
 

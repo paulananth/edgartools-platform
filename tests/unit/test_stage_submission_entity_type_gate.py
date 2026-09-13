@@ -3,13 +3,17 @@ entityType='other' marks an individual/insider filer (Form 3/4/5/144/13D/13G
 filer), not a reporting company. stage_submission must not write these rows
 into sec_company/sec_company_address/sec_company_former_name -- their real
 filing history in sec_company_filing is untouched (that table is a plain
-per-CIK filing log, not a company-universe claim)."""
+per-CIK filing log, not a company-universe claim).
+
+The company tables are landing-only (silver-merge-engine-migration Ticket
+06b), so these tests assert on the rows recorded for landing."""
 
 from __future__ import annotations
 
 from edgar_warehouse.loaders.bronze_submission_extractors import (
     is_reporting_company_entity_type,
 )
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_store import SilverDatabase
 
 
@@ -58,7 +62,8 @@ def _columns(entries: list[dict]) -> dict:
 
 
 def test_stage_submission_skips_company_rows_for_individual_filer(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    landing = LandingExportBuffer()
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=landing)
     try:
         main_payload = {
             "name": "Zuckerberg Mark",
@@ -84,13 +89,11 @@ def test_stage_submission_skips_company_rows_for_individual_filer(tmp_path):
             load_mode="daily_incremental",
         )
 
-        assert db.get_company(1548760) is None
-        assert db.get_addresses(1548760) == []
-
-        former_names = db.fetch(
-            "SELECT * FROM sec_company_former_name WHERE cik = ?", [1548760]
-        )
-        assert former_names == []
+        recorded = landing.tables()
+        assert "sec_company" not in recorded
+        assert "sec_company_address" not in recorded
+        assert "sec_company_former_name" not in recorded
+        assert result["company_rows_written"] == 0
 
         # Real filing history (Form 4, an ownership filing) is untouched --
         # this is a plain per-CIK filing log, not a company-universe claim.
@@ -105,7 +108,8 @@ def test_stage_submission_skips_company_rows_for_individual_filer(tmp_path):
 
 
 def test_stage_submission_still_writes_company_rows_for_real_company(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    landing = LandingExportBuffer()
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=landing)
     try:
         main_payload = {
             "name": "Test Co",
@@ -121,7 +125,7 @@ def test_stage_submission_still_writes_company_rows_for_real_company(tmp_path):
             "filings": {"recent": _columns([_filing_entry("acc-2", "10-K")])},
         }
 
-        db.stage_submission(
+        result = db.stage_submission(
             cik=320193,
             main_payload=main_payload,
             pagination_payloads=[],
@@ -130,9 +134,12 @@ def test_stage_submission_still_writes_company_rows_for_real_company(tmp_path):
             load_mode="daily_incremental",
         )
 
-        company = db.get_company(320193)
-        assert company is not None
-        assert company["entity_type"] == "operating"
-        assert len(db.get_addresses(320193)) == 1
+        recorded = landing.tables()
+        assert [row["entity_type"] for row in recorded["sec_company"]] == ["operating"]
+        assert len(recorded["sec_company_address"]) == 1
+        assert result["company_rows_written"] == 1
+        # Nothing reaches local DuckDB for the company tables.
+        for table in ("sec_company", "sec_company_address", "sec_company_former_name"):
+            assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
     finally:
         db.close()

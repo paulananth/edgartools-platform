@@ -12,16 +12,12 @@ from __future__ import annotations
 
 import pytest
 
-from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_store import SilverDatabase
-from tests.support.silver_rows import CountingConnection
+from tests.support.silver_rows import CountingConnection, open_landing_db
 
 
 @pytest.fixture()
 def db(tmp_path):
-    landing = LandingExportBuffer()
-    database = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=landing)
-    database.landing = landing
+    database = open_landing_db(tmp_path)
     try:
         yield database
     finally:
@@ -154,7 +150,7 @@ def test_rows_land_with_last_sync_run_id_and_never_touch_local_duckdb(db, method
     count = getattr(db, method)([make_row(last_sync_run_id="stale")], "run-1")
 
     assert count == 1
-    recorded = db.landing.tables()[table][0]
+    recorded = db.landing_export.tables()[table][0]
     # The old values_fn always wrote the call's sync_run_id, whatever the row said.
     assert recorded["last_sync_run_id"] == "run-1"
     assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
@@ -163,13 +159,13 @@ def test_rows_land_with_last_sync_run_id_and_never_touch_local_duckdb(db, method
 @pytest.mark.parametrize(("method", "table", "make_row"), _WRITERS)
 def test_empty_rows_record_nothing(db, method, table, make_row):
     assert getattr(db, method)([], "run-1") == 0
-    assert db.landing.total_row_count() == 0
+    assert db.landing_export.total_row_count() == 0
 
 
 def test_current_filing_feed_stamps_last_synced_at(db):
     db.merge_current_filing_feed([_feed_row()], "run-1")
 
-    assert db.landing.tables()["sec_current_filing_feed"][0]["last_synced_at"] is not None
+    assert db.landing_export.tables()["sec_current_filing_feed"][0]["last_synced_at"] is not None
 
 
 def test_current_filing_feed_still_skips_rows_without_an_accession_number(db):
@@ -180,7 +176,7 @@ def test_current_filing_feed_still_skips_rows_without_an_accession_number(db):
     )
 
     assert count == 1
-    assert db.landing.row_count("sec_current_filing_feed") == 1
+    assert db.landing_export.row_count("sec_current_filing_feed") == 1
 
 
 def test_duplicate_keys_are_passed_through_for_the_dbt_collapse(db):
@@ -195,7 +191,7 @@ def test_duplicate_keys_are_passed_through_for_the_dbt_collapse(db):
     )
 
     assert count == 2
-    assert [r["adviser_name"] for r in db.landing.tables()["sec_adv_filing"]] == ["A", "B"]
+    assert [r["adviser_name"] for r in db.landing_export.tables()["sec_adv_filing"]] == ["A", "B"]
 
 
 def test_evidence_writers_keep_the_old_absent_key_defaults(db):
@@ -211,10 +207,10 @@ def test_evidence_writers_keep_the_old_absent_key_defaults(db):
     db.merge_subsidiary_evidence([subsidiary], "run-1")
     db.merge_auditor_report_evidence([auditor], "run-1")
 
-    recorded_subsidiary = db.landing.tables()["sec_subsidiary_evidence"][0]
+    recorded_subsidiary = db.landing_export.tables()["sec_subsidiary_evidence"][0]
     assert recorded_subsidiary["immediate_parent_known"] is False
     assert recorded_subsidiary["parser_version"] == "subsidiary_exhibit_v1"
-    assert db.landing.tables()["sec_auditor_report_evidence"][0]["parser_version"] == "auditor_evidence_v1"
+    assert db.landing_export.tables()["sec_auditor_report_evidence"][0]["parser_version"] == "auditor_evidence_v1"
 
 
 @pytest.mark.parametrize(
@@ -234,7 +230,7 @@ def test_row_missing_a_not_null_column_raises_before_recording(db, method, row):
     with pytest.raises(ValueError, match="NOT NULL"):
         getattr(db, method)([row], "run-1")
 
-    assert db.landing.total_row_count() == 0
+    assert db.landing_export.total_row_count() == 0
 
 
 def test_adv_private_fund_window_does_no_per_row_duckdb_io(db):
@@ -249,5 +245,5 @@ def test_adv_private_fund_window_does_no_per_row_duckdb_io(db):
         db._conn = counting.wrapped
 
     assert count == 20_000
-    assert db.landing.row_count("sec_adv_private_fund") == 20_000
+    assert db.landing_export.row_count("sec_adv_private_fund") == 20_000
     assert counting.executes <= 1

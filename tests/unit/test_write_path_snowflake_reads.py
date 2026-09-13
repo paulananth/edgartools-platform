@@ -33,6 +33,49 @@ def test_company_identity_ciks_snowflake_intersects_tracked_and_eligible():
     assert sorted(params[:half]) == sorted(params[half:]) == [100, 200, 300]
 
 
+def test_company_identity_ciks_snowflake_eligibility_sql_against_real_silver_schema(tmp_path):
+    """The eligibility boundary itself, executed: active operating companies
+    and active entities present in the canonical company_tickers snapshot are
+    in; an 'other' entity without a ticker and anything untracked are out.
+    Runs the real SQL against a real SilverDatabase-backed DuckDB (same schema
+    as EDGARTOOLS_SILVER) through a reader whose fetch delegates to it --
+    the MagicMock tests above only prove plumbing. Replaces the test of the
+    deleted local get_company_identity_ciks (silver-merge-engine-migration
+    Ticket 06b)."""
+    from edgar_warehouse.silver_store import SilverDatabase
+    from tests.support.silver_rows import insert_silver_rows
+
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    try:
+        insert_silver_rows(
+            db,
+            "sec_company",
+            [
+                {"cik": 100, "entity_name": "Operating Co", "entity_type": "operating"},
+                {"cik": 200, "entity_name": "Ticker Co", "entity_type": "other"},
+                {"cik": 300, "entity_name": "Other Entity", "entity_type": "other"},
+                {"cik": 400, "entity_name": "Untracked Co", "entity_type": "operating"},
+            ],
+        )
+        db.replace_company_tickers(
+            [
+                {"cik": 200, "ticker": "TICK", "exchange": "NYSE"},
+                {"cik": 400, "ticker": "UNTR", "exchange": "NASDAQ"},
+            ],
+            "ticker-run",
+            source_name="company_tickers",
+        )
+        reader = MagicMock()
+        reader.fetch.side_effect = db.fetch
+        with patch.object(SnowflakeSilverReader, "connect", return_value=reader):
+            # 400 is eligible but not tracked; 300 is tracked but not eligible.
+            result = warehouse_orchestrator._company_identity_ciks_snowflake({100, 200, 300})
+    finally:
+        db.close()
+
+    assert result == [100, 200]
+
+
 def test_company_identity_ciks_snowflake_short_circuits_on_empty_tracked_set():
     with patch.object(SnowflakeSilverReader, "connect") as connect:
         result = warehouse_orchestrator._company_identity_ciks_snowflake(set())

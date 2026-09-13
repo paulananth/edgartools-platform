@@ -16,9 +16,8 @@ import time
 
 import pytest
 
-from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_store import SilverDatabase
-from tests.support.silver_rows import CountingConnection
+from tests.support.silver_rows import CountingConnection, open_landing_db
 
 
 def _fact_row(**overrides):
@@ -72,9 +71,7 @@ def _derived_row(**overrides):
 
 @pytest.fixture()
 def db(tmp_path):
-    landing = LandingExportBuffer()
-    database = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=landing)
-    database.landing = landing
+    database = open_landing_db(tmp_path)
     try:
         yield database
     finally:
@@ -93,14 +90,14 @@ def test_rows_go_to_the_landing_export_and_never_local_duckdb(db, method, table,
     count = getattr(db, method)([row], "run-1")
 
     assert count == 1
-    assert db.landing.row_count(table) == 1
+    assert db.landing_export.row_count(table) == 1
     assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
 
 
 @pytest.mark.parametrize("method", ["merge_financial_facts", "merge_financial_derived", "merge_accounting_flags"])
 def test_empty_rows_record_nothing(db, method):
     assert getattr(db, method)([], "run-1") == 0
-    assert db.landing.total_row_count() == 0
+    assert db.landing_export.total_row_count() == 0
 
 
 def test_duplicate_keys_are_passed_through_for_the_dbt_collapse(db):
@@ -109,7 +106,7 @@ def test_duplicate_keys_are_passed_through_for_the_dbt_collapse(db):
     count = db.merge_financial_facts([_fact_row(value=1.0), _fact_row(value=2.0)], "run-1")
 
     assert count == 2
-    assert [r["value"] for r in db.landing.tables()["sec_financial_fact"]] == [1.0, 2.0]
+    assert [r["value"] for r in db.landing_export.tables()["sec_financial_fact"]] == [1.0, 2.0]
 
 
 @pytest.mark.parametrize(
@@ -125,7 +122,7 @@ def test_facts_and_flags_carry_current_state_and_ingested_at(db, method, table, 
     are stamped per write -- never left for the collapse to NULL."""
     getattr(db, method)([row], "run-1")
 
-    recorded = db.landing.tables()[table][0]
+    recorded = db.landing_export.tables()[table][0]
     assert recorded["is_current"] is True
     assert recorded["valid_to"] is None
     assert recorded["valid_from"] is not None
@@ -139,7 +136,7 @@ def test_derived_rows_are_recorded_as_given(db):
 
     db.merge_financial_derived([row], "run-1")
 
-    assert db.landing.tables()["sec_financial_derived"] == [row]
+    assert db.landing_export.tables()["sec_financial_derived"] == [row]
 
 
 def test_old_values_fn_defaults_are_applied(db):
@@ -152,11 +149,11 @@ def test_old_values_fn_defaults_are_applied(db):
     db.merge_financial_facts([fact], "run-1")
     db.merge_accounting_flags([flag], "run-1")
 
-    recorded_fact = db.landing.tables()["sec_financial_fact"][0]
+    recorded_fact = db.landing_export.tables()["sec_financial_fact"][0]
     assert recorded_fact["period_start"] == "0001-01-01"
     assert recorded_fact["form_type"] == ""
     assert recorded_fact["segment"] == "consolidated"
-    assert db.landing.tables()["sec_accounting_flag"][0]["form_type"] == "10-K"
+    assert db.landing_export.tables()["sec_accounting_flag"][0]["form_type"] == "10-K"
 
 
 def test_scored_flag_row_lands_complete(db):
@@ -166,7 +163,7 @@ def test_scored_flag_row_lands_complete(db):
         [_flag_row(beneish_m_score=1.5, altman_z_score=2.5, piotroski_f_score=3)], "run-1"
     )
 
-    recorded = db.landing.tables()["sec_accounting_flag"][0]
+    recorded = db.landing_export.tables()["sec_accounting_flag"][0]
     assert recorded["auditor_name"] == "Ernst & Young LLP"
     assert recorded["beneish_m_score"] == 1.5
     assert recorded["piotroski_f_score"] == 3
@@ -192,7 +189,7 @@ def test_a_row_missing_a_not_null_column_raises_before_recording(db, method, row
     with pytest.raises(ValueError, match="NOT NULL"):
         getattr(db, method)([row], "run-1")
 
-    assert db.landing.total_row_count() == 0
+    assert db.landing_export.total_row_count() == 0
 
 
 def test_no_landing_export_is_a_noop(tmp_path):
@@ -209,7 +206,7 @@ def test_required_columns_fail_closed_on_an_unknown_table(db):
     with pytest.raises(ValueError, match="no NOT NULL columns"):
         db._record_landing_passthrough("sec_no_such_table", [{"cik": 1}], defaults={}, stamp={})
 
-    assert db.landing.total_row_count() == 0
+    assert db.landing_export.total_row_count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +290,7 @@ def test_earnings_release_presence_flags_keep_the_old_bool_coercion(db):
 
     db.merge_earnings_releases([absent, _earnings_row(has_non_gaap=None, has_guidance=1)], "run-1")
 
-    recorded = db.landing.tables()["sec_earnings_release"]
+    recorded = db.landing_export.tables()["sec_earnings_release"]
     assert [(r["has_non_gaap"], r["has_guidance"]) for r in recorded] == [(False, True), (False, True)]
 
 
@@ -305,7 +302,7 @@ def test_guidance_fact_keeps_the_old_coercions_and_defaults(db):
 
     db.merge_guidance_facts([row], "run-1")
 
-    recorded = db.landing.tables()["sec_guidance_fact"][0]
+    recorded = db.landing_export.tables()["sec_guidance_fact"][0]
     assert recorded["accession_number"] == ""
     assert recorded["is_non_gaap"] is False
     assert recorded["confidence"] == "medium"
@@ -314,7 +311,7 @@ def test_guidance_fact_keeps_the_old_coercions_and_defaults(db):
 def test_guidance_fact_reject_keeps_the_empty_accession_coercion(db):
     db.merge_guidance_fact_rejects([_guidance_reject_row(accession_number=None)], "run-1")
 
-    assert db.landing.tables()["sec_guidance_fact_reject"][0]["accession_number"] == ""
+    assert db.landing_export.tables()["sec_guidance_fact_reject"][0]["accession_number"] == ""
 
 
 @pytest.mark.parametrize(
@@ -331,7 +328,7 @@ def test_per_filing_row_missing_a_not_null_column_raises_before_recording(db, me
     with pytest.raises(ValueError, match="NOT NULL"):
         getattr(db, method)([row], "run-1")
 
-    assert db.landing.total_row_count() == 0
+    assert db.landing_export.total_row_count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +378,7 @@ def test_ingested_at_rows_land_and_never_touch_local_duckdb(db, method, table, m
     count = getattr(db, method)([make_row()], "run-1")
 
     assert count == 1
-    recorded = db.landing.tables()[table][0]
+    recorded = db.landing_export.tables()[table][0]
     assert recorded["ingested_at"] is not None
     # No validity trio on these tables -- that stamp is facts/flags only.
     assert "is_current" not in recorded
@@ -398,7 +395,7 @@ def test_ingested_at_advances_on_every_write(db, method, table, make_row):
     time.sleep(0.01)
     getattr(db, method)([make_row()], "run-2")
 
-    first, second = (row["ingested_at"] for row in db.landing.tables()[table])
+    first, second = (row["ingested_at"] for row in db.landing_export.tables()[table])
     assert second > first
 
 
@@ -410,7 +407,7 @@ def test_thirteenf_filing_keeps_the_old_coercions_and_defaults(db):
 
     db.merge_thirteenf_filings([row], "run-1")
 
-    recorded = db.landing.tables()["sec_thirteenf_filing"][0]
+    recorded = db.landing_export.tables()["sec_thirteenf_filing"][0]
     assert recorded["confidential_omission"] is False
     assert recorded["effective_status"] == "effective"
     assert recorded["parser_version"] == "1"
@@ -429,7 +426,7 @@ def test_thirteenf_row_missing_a_not_null_column_raises_before_recording(db, met
     with pytest.raises(ValueError, match="NOT NULL"):
         getattr(db, method)([row], "run-1")
 
-    assert db.landing.total_row_count() == 0
+    assert db.landing_export.total_row_count() == 0
 
 
 def test_thirteenf_holdings_batch_of_a_large_filer_does_no_per_row_duckdb_io(db):
@@ -448,5 +445,5 @@ def test_thirteenf_holdings_batch_of_a_large_filer_does_no_per_row_duckdb_io(db)
         db._conn = counting.wrapped
 
     assert count == 20_000
-    assert db.landing.row_count("sec_thirteenf_holding") == 20_000
+    assert db.landing_export.row_count("sec_thirteenf_holding") == 20_000
     assert counting.executes <= 1

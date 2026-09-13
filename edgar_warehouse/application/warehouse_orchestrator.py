@@ -6591,7 +6591,8 @@ def _company_identity_ciks_snowflake(tracked_ciks: set[int]) -> list[int]:
     EDGARTOOLS_SILVER directly instead, mirroring MDM's reader cutover
     (Ticket 05, edgar_warehouse/silver_support/snowflake_reader.py). Same
     SQL/UNION shape SilverDatabase.get_company_identity_ciks used against
-    local DuckDB -- that method is now dead code, left for Ticket 12's sweep.
+    local DuckDB (deleted by silver-merge-engine-migration Ticket 06b, once
+    sec_company itself became landing-only).
     """
     if not tracked_ciks:
         return []

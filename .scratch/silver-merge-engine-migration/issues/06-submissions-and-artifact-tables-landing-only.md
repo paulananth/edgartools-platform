@@ -169,3 +169,53 @@ Resolved 2026-09-13 in code; live verification still owed.
   PCAOB) showing landing rows with `last_sync_run_id` populated;
 - the pre-existing all-NULL-column `pa.Table.from_pylist` risk in `silver_landing_writer.py`
   has no landing-writer test (the deleted bulk test covered the DuckDB side only).
+
+## 06b Answer
+
+Resolved 2026-09-13 in code; live verification still owed.
+
+- `merge_company`, `merge_addresses`, `merge_former_names`, `merge_submission_files` call
+  `_record_landing_passthrough`. Stamps: company, address and submission file use a new
+  `_synced_now_stamp(sync_run_id)` (`last_sync_run_id` + `last_synced_at`, which also replaced
+  the current filing feed's inline copy); former names use `_sync_run_stamp` alone, since that
+  table has no `last_synced_at`. `merge_company` keeps `first_sync_run_id` as an absent-key
+  default of the call's `sync_run_id`. Every old `row["key"]` lookup is a NOT NULL column except
+  `former_name` (nullable; the old `row["former_name"]` only required the key, and DuckDB took
+  a `None` value). `stage_former_name_loader` always sets that key, so the only caller is
+  unchanged — the same "callers build complete rows" decision as 06a.
+- **`stage_submission`** no longer runs its two per-CIK DELETEs (`sec_company_former_name`,
+  `sec_company_submission_file`): they only ever cleared local DuckDB, and those tables are
+  now always empty there. The DELETEs never reached landing (`@track_landing_rows` recorded
+  merge rows only), so a former name or submission file SEC later drops from a payload
+  already stayed in silver before this change — pre-existing, not introduced. Retiring such
+  rows belongs with the Silver Landing Retirement Record fog on the map. `stage_submission`
+  now also returns `company_rows_written`.
+- **Read-back deleted:** the dormant `drive-submissions-discovery` acceptance driver verified
+  its company producer with `get_company(cik)`; it now settles VERIFIED when
+  `stage_submission` recorded a company row (an individual filer records none and still
+  FAILS). Its `get_filing` half stays until 06d.
+- **Dead code deleted:** `get_company`, `get_addresses`, `get_former_names`,
+  `get_submission_files`, `session.reset_submission_state`, and `get_company_identity_ciks`
+  (its Snowflake replacement `_company_identity_ciks_snowflake` has been the production path
+  since Cutover Ticket 05; the local version could only ever return an empty set now).
+- **Collapse keys verified:** the four dbt silver models partition on `cik`,
+  `(cik, address_type)`, `(cik, ordinal)`, `(cik, file_name)` — the old `ON CONFLICT` keys.
+  The only column the old `DO UPDATE SET` never touched is `sec_company.first_sync_run_id`
+  (first-insert-wins in DuckDB, last-seen in dbt; the default makes it the latest run's id
+  on every re-stage). Pre-existing.
+- The stamps fix no live gap: nothing downstream filters these tables on
+  `last_sync_run_id`/`last_synced_at`/`first_sync_run_id`.
+- Tests: `test_company_submission_landing_passthrough.py` (landing-only + stamp override,
+  `last_synced_at` present or absent per table, the `first_sync_run_id` default, NOT NULL
+  raising). The entity-type gate, submissions acceptance and company-identity tests assert on
+  landing rows (the last one reads back the Parquet the command flushes); the discovery
+  command test drops its company read-back (that driver opens no landing export). The
+  identity-window test of the deleted reader is replaced by
+  `test_company_identity_ciks_snowflake_eligibility_sql_against_real_silver_schema`, which
+  runs the Snowflake replacement's SQL against a real seeded DuckDB (the operating-or-
+  ticker boundary was otherwise only mocked). The three passthrough test files share
+  `tests/support/silver_rows.open_landing_db`.
+
+**Still owed:** a live `daily_incremental` run showing `SEC_COMPANY`/`SEC_COMPANY_ADDRESS`/
+`SEC_COMPANY_FORMER_NAME`/`SEC_COMPANY_SUBMISSION_FILE` landing rows with `last_sync_run_id`
+populated.
