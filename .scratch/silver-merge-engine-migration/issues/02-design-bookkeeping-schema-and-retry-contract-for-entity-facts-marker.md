@@ -1,18 +1,19 @@
-# 02 — Design the BookkeepingStore schema and retry-read contract for the per-CIK marker
+# 02 — Design the BookkeepingStore schema and retry-read contract for the `entity-facts` marker
 
 **Type:** grilling
 
-**Status:** superseded (2026-09-13) — moved to the
-[Silver Merge-Engine Migration map](../../silver-merge-engine-migration/map.md)'s
-[Ticket 02](../../silver-merge-engine-migration/issues/02-design-bookkeeping-schema-and-retry-contract-for-entity-facts-marker.md),
-per that map's own Ticket 01 scope-convergence decision (this marker's move is absorbed as
-that map's first migration slice, rather than two maps independently designing the same
-move). Content unchanged, continue there.
+**Status:** open
+
+**Moved here from the bootstrap-fundamentals-crash-resume map** (its own Ticket 02) as part
+of [Ticket 01](01-choose-replacement-engine-and-migration-order.md)'s scope-convergence
+decision — this map absorbs `mark_entity_facts_refreshed`'s move as its first migration
+slice, rather than two maps independently designing the same move. Content carried over
+unchanged; only this header and the "Blocked by" line are new.
 
 ## Question
 
-[Ticket 01](01-design-per-cik-durability-mechanism.md) decided the per-CIK
-completion marker moves into `BookkeepingStore`/Postgres. This ticket
+The bootstrap-fundamentals-crash-resume map's [Ticket 01](../../bootstrap-fundamentals-crash-resume/issues/01-design-per-cik-durability-mechanism.md)
+decided the per-CIK completion marker moves into `BookkeepingStore`/Postgres. This ticket
 designs the concrete shape:
 
 - **Schema:** does this reuse an existing table (`company_sync_state` has a
@@ -43,9 +44,11 @@ designs the concrete shape:
   version, across all time." Conflating them risks silently skipping a
   CIK a future, unrelated run genuinely needs to process.)
 
-## Blocked by:
+Resolve via `/grilling` + `/domain-modeling`, per this map's Notes.
 
-None — [Ticket 01](01-design-per-cik-durability-mechanism.md) is resolved.
+## Blocked by
+
+None — [Ticket 01](01-choose-replacement-engine-and-migration-order.md) is resolved.
 
 ## Answer
 

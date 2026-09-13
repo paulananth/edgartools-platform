@@ -2,14 +2,14 @@
 
 **Type:** task
 
-**Status:** superseded (2026-09-13) — moved to the
-[Silver Merge-Engine Migration map](../../silver-merge-engine-migration/map.md)'s
-[Ticket 03](../../silver-merge-engine-migration/issues/03-wire-entity-facts-mode-to-durable-marker.md),
-same scope-convergence decision as Ticket 02. Content unchanged, continue there.
+**Status:** open
+
+**Moved here from the bootstrap-fundamentals-crash-resume map** (its own Ticket 03), same
+scope-convergence decision as [Ticket 02](02-design-bookkeeping-schema-and-retry-contract-for-entity-facts-marker.md).
 
 ## Question
 
-Implement [Ticket 02](02-design-bookkeeping-schema-and-retry-contract.md)'s
+Implement [Ticket 02](02-design-bookkeeping-schema-and-retry-contract-for-entity-facts-marker.md)'s
 design against `run_bootstrap_entity_facts` (`fundamentals_ingest.py:407`)
 and `_resolve_fundamentals_ciks` (`bootstrap_fundamentals.py:536`):
 
@@ -25,7 +25,9 @@ and `_resolve_fundamentals_ciks` (`bootstrap_fundamentals.py:536`):
   consecutive OOM-equivalent crashes) resumes correctly and completes
   within roughly one window's worth of work, not 3x it.
 
-## Blocked by: 02
+## Blocked by
+
+[Ticket 02](02-design-bookkeeping-schema-and-retry-contract-for-entity-facts-marker.md)
 
 ## Answer
 

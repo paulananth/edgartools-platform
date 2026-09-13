@@ -41,6 +41,7 @@ except where noted `grilling`.
 ## Decisions so far
 
 - [Design the per-CIK durability mechanism](issues/01-design-per-cik-durability-mechanism.md) — the marker moves into `BookkeepingStore`/Postgres (cheap per-row commits), not periodic re-upload of the local SilverDatabase file (cost scales with file size x flush count, and fights the post-DuckDB-retirement direction where Postgres bookkeeping is already the durable source of truth for tracking state). Decided 2026-09-12.
+- Tickets 02/03 (schema design + implementation of the marker's move) superseded and moved to the [Silver Merge-Engine Migration map](../silver-merge-engine-migration/map.md) — that map's own Ticket 01 decided to absorb this marker's move as its first migration slice, since it's the same kind of DuckDB-to-Postgres move the rest of that map is doing for the bulk merge engine. Continue this specific piece there, not here. Decided 2026-09-13.
 
 ## Not yet specified
 
