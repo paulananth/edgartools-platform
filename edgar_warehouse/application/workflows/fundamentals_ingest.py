@@ -787,10 +787,10 @@ def run_bootstrap_thirteenf(
                 "reason": "effective_holdings_loaded",
             })
         # Ticket 02: marker write is strictly the last statement for this
-        # accession -- merge_thirteenf_holdings above loops one row at a
-        # time internally and autocommits each, so a crash mid-loop leaves
-        # a partial holdings set with no marker (safe: ON CONFLICT DO
-        # UPDATE fixes it on retry). See run_bootstrap_fundamentals_per_filing.
+        # accession -- every real output write above has already executed
+        # and returned, so a crash before this line leaves no marker (safe:
+        # the retry re-appends the same rows to landing and the dbt silver
+        # model collapses them). See run_bootstrap_fundamentals_per_filing.
         db.mark_fundamentals_accession_processed(
             mode="thirteenf", accession_number=accession_number,
         )

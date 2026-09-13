@@ -3166,11 +3166,11 @@ class SilverDatabase:
         exactly -- applied only when the key is absent, never over an
         explicit None. `stamp` adds write-time columns the landing schema
         carries but the caller doesn't supply (facts/flags: `ingested_at` +
-        the Ticket 33 validity trio; per-filing tables: `ingested_at`;
-        derived: nothing, its landing rows are recorded as given). A
-        `values_fn` coercion that replaced a present value -- `bool(...)`,
-        `or ""` -- is applied by the caller before this call, since
-        `defaults` only fills absent keys.
+        the Ticket 33 validity trio; per-filing and 13F tables:
+        `ingested_at`; derived: nothing, its landing rows are recorded as
+        given). A `values_fn` coercion that replaced a present value --
+        `bool(...)`, `or ""` -- is applied by the caller before this call,
+        since `defaults` only fills absent keys.
 
         A row that would have violated this table's NOT NULL DDL raises here
         instead of failing the Snowflake load of its whole Parquet file
@@ -3311,60 +3311,17 @@ class SilverDatabase:
             "sec_employment_event", rows, defaults={}, stamp=self._ingested_at_stamp()
         )
 
-    @track_landing_rows("sec_thirteenf_holding")
     def merge_thirteenf_holdings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_thirteenf_holding
-                (cik, accession_number, holding_index, period_of_report,
-                 cusip, issuer_name, security_title, shares_held, market_value,
-                 security_class, put_call, discretion_type,
-                 voting_auth_sole, voting_auth_shared, voting_auth_none,
-                 parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (cik, accession_number, holding_index) DO UPDATE SET
-                shares_held = excluded.shares_held,
-                market_value = excluded.market_value,
-                security_class = excluded.security_class,
-                parser_version = excluded.parser_version,
-                ingested_at = now()
-            """,
-            rows,
-            lambda r: [
-                r["cik"], r["accession_number"], r["holding_index"],
-                r.get("period_of_report"), r.get("cusip"), r.get("issuer_name"),
-                r.get("security_title"), r.get("shares_held"), r.get("market_value"),
-                r.get("security_class"), r.get("put_call"), r.get("discretion_type"),
-                r.get("voting_auth_sole"), r.get("voting_auth_shared"),
-                r.get("voting_auth_none"), r.get("parser_version"),
-            ],
+        return self._record_landing_passthrough(
+            "sec_thirteenf_holding", rows, defaults={}, stamp=self._ingested_at_stamp()
         )
 
-    @track_landing_rows("sec_thirteenf_filing")
     def merge_thirteenf_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_thirteenf_filing
-                (accession_number, cik, period_of_report, filing_date, form,
-                 amendment_type, confidential_omission, effective_status,
-                 superseded_by_accession, parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (accession_number) DO UPDATE SET
-                amendment_type = excluded.amendment_type,
-                confidential_omission = excluded.confidential_omission,
-                effective_status = excluded.effective_status,
-                superseded_by_accession = excluded.superseded_by_accession,
-                parser_version = excluded.parser_version,
-                ingested_at = now()
-            """,
-            rows,
-            lambda r: [
-                r["accession_number"], r["cik"], r["period_of_report"],
-                r["filing_date"], r["form"], r.get("amendment_type"),
-                bool(r.get("confidential_omission", False)),
-                r.get("effective_status", "effective"),
-                r.get("superseded_by_accession"), r.get("parser_version", "1"),
-            ],
+        return self._record_landing_passthrough(
+            "sec_thirteenf_filing",
+            [{**r, "confidential_omission": bool(r.get("confidential_omission", False))} for r in rows],
+            defaults={"effective_status": "effective", "parser_version": "1"},
+            stamp=self._ingested_at_stamp(),
         )
 
     def _merge_rows(

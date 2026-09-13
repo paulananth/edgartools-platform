@@ -1368,14 +1368,19 @@ class TestRunRelationships:
             "INSERT INTO sec_company (cik, entity_name) VALUES (?, ?)",
             [999002, "Real Schema Manager LLC"],
         )
-        db.merge_thirteenf_filings([{
+        # Raw inserts: these two tables are landing-only now (silver-merge-
+        # engine-migration Ticket 05), and this test guards the derive
+        # step's SQL against the real DuckDB schema, not a writer.
+        from tests.support.silver_rows import insert_silver_rows
+
+        insert_silver_rows(db, "sec_thirteenf_filing", [{
             "accession_number": "real-schema-manager",
             "cik": 999002, "period_of_report": "2024-03-31",
             "filing_date": "2024-05-15", "form": "13F-HR",
             "amendment_type": None, "confidential_omission": False,
             "parser_version": "1",
-        }], "test-run")
-        db.merge_thirteenf_holdings([{
+        }])
+        insert_silver_rows(db, "sec_thirteenf_holding", [{
             "cik": 999002, "accession_number": "real-schema-manager",
             "holding_index": 1, "period_of_report": "2024-03-31",
             "cusip": "037833100", "issuer_name": "Apple Inc",
@@ -1384,7 +1389,7 @@ class TestRunRelationships:
             "put_call": None, "discretion_type": "SOLE",
             "voting_auth_sole": None, "voting_auth_shared": None,
             "voting_auth_none": None, "parser_version": "1",
-        }], "test-run")
+        }])
         db.close()
 
         summary = MDMPipeline(session=session, silver=SilverDatabase(str(silver_path))).derive_relationships(

@@ -469,7 +469,7 @@ def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp
 
     shard_path = tmp_path / "shard-0.duckdb"
     db = SilverDatabase(str(shard_path))
-    db.merge_thirteenf_filings([{
+    insert_silver_rows(db, "sec_thirteenf_filing", [{
         "accession_number": "0001-13F",
         "cik": 1,
         "period_of_report": "2026-03-31",
@@ -478,7 +478,7 @@ def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp
         "amendment_type": None,
         "confidential_omission": False,
         "parser_version": "1",
-    }], "test-run")
+    }])
     insert_silver_rows(db, "sec_employment_event", [{
         "accession_number": "0002-8K",
         "event_index": 1,
