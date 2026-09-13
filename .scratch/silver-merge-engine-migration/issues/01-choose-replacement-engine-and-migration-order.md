@@ -137,6 +137,60 @@ Presented to the user for confirmation before writing the final Answer below —
 `grilling` (HITL), so the decision is recorded once the user has weighed in, not decided
 unilaterally from this evidence alone.
 
+## CORRECTION (2026-09-12, same day): "dead compute everywhere" above is wrong — retracted before any code was touched
+
+The user invoked `/implement` on this ticket, treating the finding above as confirmed. Before
+editing `merge_financial_facts`/`merge_accounting_flags`/`merge_financial_derived`, an
+`advisor()` consult flagged two things this ticket's own investigation had not checked, and
+both turned out to be real, disqualifying gaps:
+
+1. **`accounting_flags.backfill_accounting_flags`** (called from `bootstrap_fundamentals.py`'s
+   live `entity-facts` branch, immediately after `run_bootstrap_entity_facts` returns, in the
+   *same process, same `db` connection*) does
+   `silver.fetch("SELECT ... FROM sec_financial_derived WHERE cik = ? AND fiscal_period = 'FY'
+   ORDER BY fiscal_year", ...)` — a direct, in-process read of exactly what
+   `merge_financial_derived` just wrote. This is real, live-path consumption the "Further
+   finding" above never checked (it verified `financials_derived.py`'s own *inputs* aren't a
+   read-back, but never checked whether something *later in the same command* reads the
+   *output* table back). Cross-period Beneish/Altman/Piotroski scoring needs multiple fiscal
+   years' worth of `sec_financial_derived` rows visible at once, ordered — that's exactly what
+   the local DuckDB write provides within one run.
+2. **`backfill_accounting_flags` also calls `silver.update_accounting_flag_scores(cik=...,
+   accession_number=...)`** — an `UPDATE` matched by `(cik, accession_number)` against
+   `sec_accounting_flag`. Per that function's own comment ("Row may not exist yet; orchestrator
+   writes it after entity-facts parse"), the row it updates is the one
+   `merge_accounting_flags` creates earlier in the same run. `merge_accounting_flags`'s local
+   write is a real prerequisite for this UPDATE to match anything.
+
+So two of the three entity-facts merge methods are genuinely load-bearing, in-process, on the
+**currently live** production path — unaffected by Ticket 10's hydration removal, because the
+dependency is *within one run*, not across runs (nothing here needs the local db hydrated from
+a prior run or published to a later one — it only needs to survive from one call to the next
+within the same process). `merge_financial_fact`'s own table (`sec_financial_fact`) still has
+no confirmed in-process reader on the live path, but the three methods are migrated as one unit
+(per this ticket's own Q2 framing — they already share one per-CIK loop), so this blocks
+touching any of them together.
+
+**This reframes the actual question, back to something closer to the ticket's original
+framing, but sharper:** the requirement is no longer "replicate DuckDB's `QUALIFY ROW_NUMBER()`/
+`ON CONFLICT` dedup semantics somewhere durable" (Ticket 10 already proved nothing durable
+needs that) — it's "hold parsed/derived rows for one CIK across one run, and let a later step
+in the *same process* read them back." That's a much smaller requirement, and opens a third,
+genuinely live candidate the original framing under-weighted: an **in-process Python
+accumulator** (no SQL engine at all — the derived rows and accounting-flag rows are already
+Python dicts before `merge_*` ever runs; `backfill_accounting_flags` could read them from a
+plain per-CIK list/dict passed through the call chain instead of a DB round-trip, in-process or
+not). This needs its own grilling round before any code changes: does an in-process accumulator
+cover `backfill_accounting_flags`'s cross-period ordering need cleanly, or does keeping DuckDB
+itself as a pure ephemeral per-run scratch store (already exactly what it is post-Ticket-10,
+just never named as an intentional design) remain simpler than building a new mechanism for a
+requirement DuckDB already satisfies incidentally?
+
+**No code was edited this session.** `/implement`'s work was correctly redirected into this
+correction instead, per `advisor()`'s guidance, before touching `silver_store.py`. Status
+remains REOPENED — this ticket needs another grilling round on the narrower question above
+before any deletion or migration proceeds.
+
 ## Answer
 
 Resolved via a 3-round grilling session with the operator, 2026-09-13.
