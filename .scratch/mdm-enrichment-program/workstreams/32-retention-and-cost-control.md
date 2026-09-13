@@ -31,3 +31,8 @@ through the Change Ledger after every required consumer checkpoint and required
 Snowflake and graph verification passes. Do not create a cold archive copy for
 a delta. A failed or incomplete required consumer blocks deletion, not the
 progress of an independent publication family.
+
+Raw-byte deletion never removes or rewrites Normalized Source Evidence, Change
+Ledger or Bookkeeping history, stewardship decisions, temporal MDM history,
+manifests, hashes, lineage, MDM Commit Evidence, or deletion evidence. These
+records remain permanent so current state remains explainable.

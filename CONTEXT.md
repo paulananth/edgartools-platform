@@ -265,8 +265,8 @@ The evidence-backed closure of a current enrichment link, projection, mapping, o
 _Avoid_: Physical deletion, absence-as-retirement, silent successor rebinding
 
 **Enrichment Evidence Retention**:
-Preservation of normalized source evidence, manifests, hashes, run lineage, and stewardship decisions independently from the storage class or reviewed expiry of superseded raw source archives.
-_Avoid_: Keep every byte hot forever, delete audit lineage with raw files, key-only S3 deletion
+Permanent preservation of Normalized Source Evidence, Change Ledger and Bookkeeping history, stewardship decisions, temporal MDM history, manifests, hashes, run lineage, MDM Commit Evidence, and deletion records independently from deletion of superseded raw source bytes.
+_Avoid_: Treating never looking back as permission to erase control or MDM history, keeping every byte forever, deleting audit lineage with raw files, key-only S3 deletion
 
 **Enrichment Planning Complete**:
 The state in which every mandatory and conditional enrichment workstream has an explicit destination, dependencies, authority, evidence requirements, release gates, and terminal outcome path, with no hidden design decision.

@@ -66,7 +66,9 @@ implementation work is created or production publication is authorized.
   only the latest verified complete publication per family; authorized deletion
   removes superseded bytes while permanent lineage and deletion evidence remain.
   Delta bytes stay temporary until every required consumer and downstream check
-  passes, then are deleted without entering the archive.
+  passes, then are deleted without entering the archive. Normalized evidence,
+  control history, stewardship decisions, and temporal MDM history remain
+  permanent even when their source bytes are deleted.
 
 ## Deferred follow-up
 
