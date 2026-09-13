@@ -69,6 +69,10 @@ implementation work is created or production publication is authorized.
   passes, then are deleted without entering the archive. Normalized evidence,
   control history, stewardship decisions, and temporal MDM history remain
   permanent even when their source bytes are deleted.
+- [Add the Branch domain boundary](issues/10-add-branch-domain-boundary.md)
+  — extend the existing separate-domain model with `branch` and `mdm_branch`,
+  and link an accepted Branch to its separately accepted head office through
+  directional `IS_INTERNATIONAL_BRANCH_OF` evidence.
 
 ## Deferred follow-up
 
