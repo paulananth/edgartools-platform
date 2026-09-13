@@ -28,7 +28,7 @@ The missing work is not another pattern. It is a precise data contract for publi
 
 | Theme | Observation | Implication |
 | --- | --- | --- |
-| Program boundary | 26 workstreams separate shared capture from domain publication | Preserve this boundary; do not build a generic legal-entity publisher |
+| Program boundary | 26 workstreams separate shared capture from domain publication | Preserve consumer-specific publishers; use the common entity route only where no distinct domain behavior is justified |
 | Existing design | Six source families already use registry-selected policies behind one capture Facade | Extend the proven seam rather than create a parallel framework |
 | Pattern choice | Publication behavior varies at runtime; the invariant transaction does not | Strategy fits; Template Method does not |
 | Evidence model | Fetch decisions and source revisions are durable, but there is no multi-artifact publication aggregate | Add a publication identity and inventory above artifact rows |
@@ -39,13 +39,13 @@ The missing work is not another pattern. It is a precise data contract for publi
 
 ### Review scope
 
-The review covered the accepted parent map, five resolved program decisions, the shared-foundation charter, the Company child decisions, three ADRs, the acquisition ledger and registry seams, MDM evidence/run/checkpoint models, path catalog, command registration, and focused contract tests. It inventoried six installed source-family policies, eight migrated acquisition commands, and four MDM commands that produce run-bound evidence. No application, schema, AWS, Snowflake, schedule, backfill, or production change was made.
+At the time it ran, the review covered the accepted parent map, five resolved program decisions, the shared-foundation charter, the Company child decisions, three ADRs, the acquisition ledger and registry seams, MDM evidence/run/checkpoint models, path catalog, command registration, and focused contract tests. It inventoried six installed source-family policies, eight migrated acquisition commands, and four MDM commands that produce run-bound evidence. Later Wayfinder decisions refine the current map without changing the historical review scope. No application, schema, AWS, Snowflake, schedule, backfill, or production change was made.
 
 ## Key findings
 
 ### 1. The source-grained / consumer-grained split is the correct architecture
 
-The accepted design separates one immutable source capture from multiple domain consumers. That is the load-bearing decision. GLEIF Level 1, relationship, exception, and mapping records share a publication source but not a single publication meaning. Company, Security, Fund, Branch, Adviser, Audit Firm, Government, International Organization, Sole Proprietor, and Market/Venue consumers have different identity and relationship authority.
+The accepted design separates one immutable source capture from multiple domain consumers. That is the load-bearing decision. GLEIF Level 1, relationship, exception, and mapping records share a publication source but not a single publication meaning. Company, Security, Fund, Branch, Adviser, Audit Firm, Government, Sole Proprietor, and Market/Venue consumers have different identity and relationship authority. International Organization evidence instead uses the common entity registry with its exact GLEIF source classification preserved; it does not receive a dedicated domain table solely because GLEIF exposes the category.
 
 This split also establishes the right failure boundary: a Security consumer may fail or roll back without advancing the Fund checkpoint, and a captured unsupported endpoint remains evidence rather than being coerced into Company. The design should preserve source-wide capture, source-family checkpoints, and consumer-owned publication transactions as three separate concepts.
 

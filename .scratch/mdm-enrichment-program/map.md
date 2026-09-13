@@ -77,6 +77,10 @@ implementation work is created or production publication is authorized.
   — add `government_entity` and `mdm_government_entity`; retain LEI and
   applicable QCC/GEM identifiers as governed source references without
   coercing the entity into Company or inferring ownership.
+- [Route International Organizations through the common entity registry](issues/12-route-international-organizations-through-common-entity.md)
+  — keep the GLEIF category and all accepted evidence in Release 1, but do not
+  create a dedicated domain table or coerce it into Company or Government
+  Entity.
 
 ## Deferred follow-up
 
@@ -94,7 +98,7 @@ implementation work is created or production publication is authorized.
 - [Branch legal-entity enrichment](workstreams/04-branch-legal-entity.md)
 - [Adviser and audit-firm legal-entity enrichment](workstreams/05-adviser-audit-firm.md)
 - [Government legal-entity enrichment](workstreams/06-government-legal-entity.md)
-- [International-organization enrichment](workstreams/07-international-organization.md)
+- [International-organization common-entity route](workstreams/07-international-organization.md)
 - [Sole-proprietor and Person boundary](workstreams/08-sole-proprietor-person-boundary.md)
 - [Market and trading-venue enrichment](workstreams/09-market-trading-venue.md)
 - [ISIN-to-LEI mapping](workstreams/10-isin-mapping.md)

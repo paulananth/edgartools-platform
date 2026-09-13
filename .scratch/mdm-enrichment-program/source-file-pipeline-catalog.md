@@ -48,10 +48,11 @@ Consumer transaction + Consumer Checkpoint + MDM Commit Evidence
 ```
 
 GLEIF Evidence Capture downloads each source archive once. Company, Security,
-Fund, Branch, Adviser, Audit Firm, Government Entity, International
-Organization, Sole Proprietor, and Market/Trading Venue consumers read the same
-Normalized Source Evidence. They do not download private copies of a shared
-GLEIF publication.
+Fund, Branch, Adviser, Audit Firm, Government Entity, Sole Proprietor, and
+Market/Trading Venue consumers read the same Normalized Source Evidence. The
+shared foundation also routes International Organization evidence into the
+common MDM entity registry. No route downloads a private copy of a shared GLEIF
+publication.
 
 ## 1. Global LEI Index publication files
 
@@ -260,14 +261,17 @@ Input evidence:
 
 The consumer does not classify this evidence as Company.
 
-### International-Organization Enrichment
+### International-Organization common-entity route
 
 Input evidence:
 
 - Level 1 records with the accepted International Organization category.
 - Applicable RR-CDF and reporting-exception evidence.
 
-Unsupported endpoints remain Deferred Domain Evidence.
+The shared foundation preserves the exact GLEIF classification and accepted
+legal-entity evidence in the common MDM entity registry. It does not create an
+International Organization domain table or coerce the record into Company or
+Government Entity. Unsupported endpoints remain Deferred Domain Evidence.
 
 ### Sole-Proprietor business-capacity boundary
 
