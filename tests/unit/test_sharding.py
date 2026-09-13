@@ -465,6 +465,7 @@ def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp
     """
     from edgar_warehouse.silver_store import SilverDatabase
     from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+    from tests.support.silver_rows import insert_silver_rows
 
     shard_path = tmp_path / "shard-0.duckdb"
     db = SilverDatabase(str(shard_path))
@@ -478,7 +479,7 @@ def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp
         "confidential_omission": False,
         "parser_version": "1",
     }], "test-run")
-    db.merge_employment_events([{
+    insert_silver_rows(db, "sec_employment_event", [{
         "accession_number": "0002-8K",
         "event_index": 1,
         "cik": 2,
@@ -489,7 +490,7 @@ def test_sharded_silver_reader_exposes_thirteenf_filing_and_employment_event(tmp
         "compensation_amount": None,
         "effective_date": "2026-04-01",
         "parser_version": "1",
-    }], "test-run")
+    }])
     db.close()
 
     reader = ShardedSilverReader([str(shard_path)])
@@ -548,10 +549,11 @@ def test_sharded_silver_reader_exposes_guidance_fact_tables(tmp_path) -> None:
     """
     from edgar_warehouse.silver_store import SilverDatabase
     from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+    from tests.support.silver_rows import insert_silver_rows
 
     shard_path = tmp_path / "shard-0.duckdb"
     db = SilverDatabase(str(shard_path))
-    db.merge_guidance_facts([{
+    insert_silver_rows(db, "sec_guidance_fact", [{
         "fact_key": 1,
         "cik": 1,
         "ticker": "ACME",
@@ -574,15 +576,15 @@ def test_sharded_silver_reader_exposes_guidance_fact_tables(tmp_path) -> None:
         "excerpt": None,
         "confidence": "high",
         "parser_version": "1",
-    }], "test-run")
-    db.merge_guidance_fact_rejects([{
+    }])
+    insert_silver_rows(db, "sec_guidance_fact_reject", [{
         "cik": 1,
         "accession_number": "0001-8K",
         "metric": "revenue",
         "reject_reason": "low_gt_high",
         "raw_payload": "{}",
         "parser_version": "1",
-    }], "test-run")
+    }])
     db.close()
 
     reader = ShardedSilverReader([str(shard_path)])

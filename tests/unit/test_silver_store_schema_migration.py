@@ -20,18 +20,13 @@ import duckdb
 import pytest
 
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.silver_rows import insert_silver_rows
 
 
 def _insert_rows(db: SilverDatabase, table: str, rows: list[dict]) -> int:
-    for row in rows:
-        if table == "sec_financial_fact":
-            row = {"period_start": "0001-01-01", **row}
-        columns = ", ".join(row)
-        placeholders = ", ".join("?" * len(row))
-        db._conn.execute(
-            f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", list(row.values())
-        )
-    return len(rows)
+    if table == "sec_financial_fact":
+        rows = [{"period_start": "0001-01-01", **row} for row in rows]
+    return insert_silver_rows(db, table, rows)
 
 
 _EXPECTED_SCHEMA_MIGRATIONS = [

@@ -3166,11 +3166,15 @@ class SilverDatabase:
         exactly -- applied only when the key is absent, never over an
         explicit None. `stamp` adds write-time columns the landing schema
         carries but the caller doesn't supply (facts/flags: `ingested_at` +
-        the Ticket 33 validity trio; derived: nothing, its landing rows are
-        recorded as given). A row that would have violated this table's
-        NOT NULL DDL raises here instead of failing the Snowflake load of
-        its whole Parquet file later -- the same fail-loud behaviour the
-        DuckDB INSERT had.
+        the Ticket 33 validity trio; per-filing tables: `ingested_at`;
+        derived: nothing, its landing rows are recorded as given). A
+        `values_fn` coercion that replaced a present value -- `bool(...)`,
+        `or ""` -- is applied by the caller before this call, since
+        `defaults` only fills absent keys.
+
+        A row that would have violated this table's NOT NULL DDL raises here
+        instead of failing the Snowflake load of its whole Parquet file
+        later -- the same fail-loud behaviour the DuckDB INSERT had.
         """
         if not rows:
             return 0
@@ -3213,15 +3217,23 @@ class SilverDatabase:
         return self._required_columns_cache[table_name]
 
     @staticmethod
-    def _current_row_stamp() -> dict[str, Any]:
+    def _ingested_at_stamp() -> dict[str, Any]:
+        """ingested_at was DuckDB's DEFAULT NOW() and every ON CONFLICT
+        branch's `ingested_at = now()`; landing rows now carry it per write.
+        Gold models output it and MDM's EMPLOYED_BY derivation filters
+        sec_executive_record/sec_employment_event on it as a watermark."""
+        return {"ingested_at": datetime.now(UTC)}
+
+    @classmethod
+    def _current_row_stamp(cls) -> dict[str, Any]:
         """Write-time columns for sec_financial_fact/sec_accounting_flag
-        landing rows: any row present in a write is current as of that
-        write (is_current=True/valid_to=None need no read-back); valid_from
-        is this write's time, a deliberate last-write-wins simplification
-        for the landing/dbt collapse (Ticket 33). ingested_at was DuckDB's
-        DEFAULT NOW() and the gold accounting_flags model outputs it."""
-        now = datetime.now(UTC)
-        return {"ingested_at": now, "valid_from": now, "valid_to": None, "is_current": True}
+        landing rows: `ingested_at` plus the Ticket 33 validity trio. Any row
+        present in a write is current as of that write (is_current=True/
+        valid_to=None need no read-back); valid_from is this write's time, a
+        deliberate last-write-wins simplification for the landing/dbt
+        collapse."""
+        stamp = cls._ingested_at_stamp()
+        return {**stamp, "valid_from": stamp["ingested_at"], "valid_to": None, "is_current": True}
 
     def merge_financial_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._record_landing_passthrough(
@@ -3243,97 +3255,43 @@ class SilverDatabase:
             stamp={},
         )
 
-    @track_landing_rows("sec_earnings_release")
     def merge_earnings_releases(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_earnings_release
-                (cik, accession_number, filing_date, fiscal_year, fiscal_quarter,
-                 period_end, revenue_gaap, net_income_gaap, eps_gaap_diluted,
-                 has_non_gaap, has_guidance, parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (cik, accession_number) DO UPDATE SET
-                fiscal_year = excluded.fiscal_year,
-                fiscal_quarter = excluded.fiscal_quarter,
-                period_end = excluded.period_end,
-                revenue_gaap = excluded.revenue_gaap,
-                net_income_gaap = excluded.net_income_gaap,
-                eps_gaap_diluted = excluded.eps_gaap_diluted,
-                has_non_gaap = excluded.has_non_gaap,
-                has_guidance = excluded.has_guidance,
-                parser_version = excluded.parser_version,
-                ingested_at = now()
-            """,
-            rows,
-            lambda r: [
-                r["cik"], r["accession_number"], r.get("filing_date"),
-                r.get("fiscal_year"), r.get("fiscal_quarter"),
-                r.get("period_end"), r.get("revenue_gaap"), r.get("net_income_gaap"),
-                r.get("eps_gaap_diluted"),
-                bool(r.get("has_non_gaap", False)),
-                bool(r.get("has_guidance", False)),
-                r.get("parser_version"),
+        return self._record_landing_passthrough(
+            "sec_earnings_release",
+            [
+                {
+                    **r,
+                    "has_non_gaap": bool(r.get("has_non_gaap", False)),
+                    "has_guidance": bool(r.get("has_guidance", False)),
+                }
+                for r in rows
             ],
+            defaults={},
+            stamp=self._ingested_at_stamp(),
         )
 
-    @track_landing_rows("sec_guidance_fact")
     def merge_guidance_facts(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_guidance_fact
-                (fact_key, cik, ticker, company_key, accession_number, metric,
-                 period_type, fiscal_year, fiscal_quarter, period_end,
-                 value_low, value_mid, value_high, unit, currency,
-                 is_non_gaap, as_of, source_system, source_ref, excerpt,
-                 confidence, parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (cik, metric, fiscal_year, fiscal_quarter, as_of,
-                         accession_number, is_non_gaap, source_system) DO UPDATE SET
-                fact_key = excluded.fact_key,
-                ticker = excluded.ticker,
-                company_key = excluded.company_key,
-                period_type = excluded.period_type,
-                period_end = excluded.period_end,
-                value_low = excluded.value_low,
-                value_mid = excluded.value_mid,
-                value_high = excluded.value_high,
-                unit = excluded.unit,
-                currency = excluded.currency,
-                source_ref = excluded.source_ref,
-                excerpt = excluded.excerpt,
-                confidence = excluded.confidence,
-                parser_version = excluded.parser_version,
-                ingested_at = now()
-            """,
-            rows,
-            lambda r: [
-                r["fact_key"], r["cik"], r.get("ticker"), r.get("company_key"),
-                r.get("accession_number") or "", r["metric"], r["period_type"],
-                r["fiscal_year"], r["fiscal_quarter"], r.get("period_end"),
-                r.get("value_low"), r.get("value_mid"), r.get("value_high"),
-                r.get("unit"), r.get("currency"), bool(r.get("is_non_gaap", False)),
-                r["as_of"], r["source_system"], r.get("source_ref"), r.get("excerpt"),
-                r.get("confidence", "medium"), r.get("parser_version"),
+        return self._record_landing_passthrough(
+            "sec_guidance_fact",
+            [
+                {
+                    **r,
+                    "accession_number": r.get("accession_number") or "",
+                    "is_non_gaap": bool(r.get("is_non_gaap", False)),
+                }
+                for r in rows
             ],
+            defaults={"confidence": "medium"},
+            stamp=self._ingested_at_stamp(),
         )
 
-    @track_landing_rows("sec_guidance_fact_reject")
     def merge_guidance_fact_rejects(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        count = 0
-        for row in rows:
-            self._conn.execute(
-                """
-                INSERT INTO sec_guidance_fact_reject
-                    (cik, accession_number, metric, reject_reason, raw_payload, parser_version)
-                VALUES (?,?,?,?,?,?)
-                """,
-                [
-                    row["cik"], row.get("accession_number") or "", row.get("metric"),
-                    row["reject_reason"], row.get("raw_payload"), row.get("parser_version"),
-                ],
-            )
-            count += 1
-        return count
+        return self._record_landing_passthrough(
+            "sec_guidance_fact_reject",
+            [{**r, "accession_number": r.get("accession_number") or ""} for r in rows],
+            defaults={},
+            stamp=self._ingested_at_stamp(),
+        )
 
     def merge_accounting_flags(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         return self._record_landing_passthrough(
@@ -3343,62 +3301,14 @@ class SilverDatabase:
             stamp=self._current_row_stamp(),
         )
 
-    @track_landing_rows("sec_executive_record")
     def merge_executive_records(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_executive_record
-                (cik, accession_number, fiscal_year, exec_name, exec_role,
-                 total_comp, base_salary, bonus, stock_awards, option_awards,
-                 non_equity_incentive, parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (cik, accession_number, exec_name) DO UPDATE SET
-                exec_role = excluded.exec_role,
-                total_comp = excluded.total_comp,
-                base_salary = excluded.base_salary,
-                bonus = excluded.bonus,
-                stock_awards = excluded.stock_awards,
-                option_awards = excluded.option_awards,
-                non_equity_incentive = excluded.non_equity_incentive,
-                parser_version = excluded.parser_version,
-                ingested_at = now()
-            """,
-            rows,
-            lambda r: [
-                r["cik"], r["accession_number"], r.get("fiscal_year"),
-                r["exec_name"], r.get("exec_role"),
-                r.get("total_comp"), r.get("base_salary"), r.get("bonus"),
-                r.get("stock_awards"), r.get("option_awards"),
-                r.get("non_equity_incentive"),
-                r.get("parser_version"),
-            ],
+        return self._record_landing_passthrough(
+            "sec_executive_record", rows, defaults={}, stamp=self._ingested_at_stamp()
         )
 
-    @track_landing_rows("sec_employment_event")
     def merge_employment_events(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_employment_event
-                (accession_number, event_index, cik, event_type, person_name,
-                 exec_role, previous_role, compensation_amount, effective_date, parser_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT (accession_number, event_index) DO UPDATE SET
-                event_type = excluded.event_type,
-                person_name = excluded.person_name,
-                exec_role = excluded.exec_role,
-                previous_role = excluded.previous_role,
-                compensation_amount = excluded.compensation_amount,
-                effective_date = excluded.effective_date,
-                parser_version = excluded.parser_version,
-                ingested_at = now()
-            """,
-            rows,
-            lambda r: [
-                r["accession_number"], r["event_index"], r["cik"], r["event_type"],
-                r["person_name"], r.get("exec_role"), r.get("previous_role"),
-                r.get("compensation_amount"),
-                r["effective_date"], r["parser_version"],
-            ],
+        return self._record_landing_passthrough(
+            "sec_employment_event", rows, defaults={}, stamp=self._ingested_at_stamp()
         )
 
     @track_landing_rows("sec_thirteenf_holding")
