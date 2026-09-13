@@ -2,10 +2,11 @@
 
 **Type:** task
 
-**Status:** superseded (2026-09-13) — moved to the
-[Silver Merge-Engine Migration map](../../silver-merge-engine-migration/map.md)'s
-[Ticket 03](../../silver-merge-engine-migration/issues/03-wire-entity-facts-mode-to-durable-marker.md),
-same scope-convergence decision as Ticket 02. Content unchanged, continue there.
+**Status:** open — reverted back here (2026-09-13) after a brief, mistaken move to
+`silver-merge-engine-migration`; see [Ticket 02](02-design-bookkeeping-schema-and-retry-contract.md)'s
+correction note. Implements the existing resume-ledger pattern
+(`edgar_warehouse/mdm/company_resume.py`/`daily_artifact_resume.py` precedent), per-item
+granularity, no new BookkeepingStore schema.
 
 ## Question
 

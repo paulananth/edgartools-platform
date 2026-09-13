@@ -28,7 +28,45 @@ Resolve via `/grilling` + `/domain-modeling`, per this map's own Notes.
 
 **Blocked by:** none — this is the map's frontier ticket.
 
-**Status:** resolved
+**Status:** REOPENED (2026-09-13) — see correction below. The engine-choice answer (Postgres)
+is now in doubt; the scope/marker-absorption answer was wrong and reverted.
+
+**CORRECTION (2026-09-13):**
+
+1. **Scope/marker absorption reverted.** The `mark_entity_facts_refreshed` marker does NOT
+   belong on this map — it's a crash-resume/idempotency concern, not a merge/dedup-compute
+   concern, and it already has an existing, proven solution (the pipeline-resumability map's
+   resume-ledger pattern, live in `company_resume.py`/`daily_artifact_resume.py`). Moved back
+   to the bootstrap-fundamentals-crash-resume map as a `task` (design question dissolved —
+   just apply the existing pattern). This map's Tickets 02/03 (which briefly held this) are
+   deleted.
+2. **Engine choice (Postgres) is now suspect.** Investigating the reverted marker exposed a
+   fact that directly undermines the original Q1 framing: `merge_financial_facts`'s
+   `landing_export.record(...)` call ships the **raw, pre-merge, undeduped `rows`** to the
+   Snowflake landing zone — not DuckDB's `QUALIFY ROW_NUMBER()`/`ON CONFLICT`-deduped output.
+   And the dbt silver model (`infra/snowflake/dbt/edgartools_gold/models/silver/
+   sec_financial_fact.sql`) independently re-implements the **identical** first-seen/
+   last-seen `QUALIFY ROW_NUMBER()` dedup logic directly against those raw landing rows
+   (its own comment: "matches silver_store.py's merge_financial_facts two-pass upsert
+   exactly"). This means DuckDB's local merge/dedup SQL may be computing a result that is
+   **never consumed by anything** — the local ephemeral DuckDB file is discarded at task end
+   (Ticket 10), and the real, authoritative dedup for what reaches canonical
+   `EDGARTOOLS_SILVER` already happens in dbt/Snowflake, independently of DuckDB's work.
+
+   **If confirmed**, the right fix is not "port the merge SQL to Postgres" — it's "delete the
+   local DuckDB merge/dedup call entirely, write parsed rows straight to `landing_export`."
+   Dramatically simpler than a Postgres port, and much closer to "duckdb actually gone."
+
+   **Not yet confirmed — the one open question before re-deciding:** does anything else
+   *within the same task process* read the local DuckDB `sec_financial_fact` table
+   post-merge (e.g. `financials_derived.py`'s `sec_financial_derived` computation, or an
+   in-process idempotency check)? If yes, the local merge/dedup still does real, necessary
+   work for *this task's own* downstream steps, independent of what reaches Snowflake, and
+   the Postgres-vs-delete question needs re-litigating with that constraint in mind. If no,
+   the merge call is provably dead compute and can simply be deleted.
+
+This ticket is reopened pending that check — do not resume table-by-table migration
+(Tickets 02+) until it's answered.
 
 ## Answer
 
