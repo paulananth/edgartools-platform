@@ -5,30 +5,32 @@ mirroring ``submissions_silver_acceptance.py``'s shape but single-phase (one
 producer pair per CIK, not two Silver scopes split across main/pagination
 candidates).
 
-Retirement (Ticket 33, change-propagation map): ``sec_financial_fact`` and
-``sec_accounting_flag`` both gained ``valid_from``/``valid_to``/
-``is_current`` columns (``silver_store.py``'s schema migration
-``010_company_facts_retirement_columns``). A business key present in a
-prior complete snapshot but absent from a fresh, verified-written one is
-retired by closing its validity interval (``is_current=FALSE``,
-``valid_to=<retirement time>``) via ``SilverDatabase.
-retire_financial_facts_not_in_snapshot``/``retire_accounting_flags_not_in_snapshot``
--- never a physical DELETE, per the change-propagation spec's "RETIRE ...
-never physically deletes history" rule. The comparison basis is each
-table's own ``is_current=TRUE`` rows for the CIK (always exactly the prior
-complete snapshot's membership set, since nothing else mutates
-``is_current``), a per-CIK full-scope comparison, run only after this
-snapshot's own write is confirmed VERIFIED. A retired key that reappears in
-a later snapshot is reinstated by the merge methods' own ``ON CONFLICT``
-branch, not by the retire call. Bullet 3 ("missing, partial, or failed
-snapshots cannot retire prior facts or become the current Silver
-authority") is satisfied the same way Ticket 21 satisfies its analogous
-bullet plus this retirement gate: nothing reaches Silver unless the
-candidate is CAPTURED with a complete payload
-(``CompanyFactsPolicy.is_complete``), a snapshot whose ``ContentImpact`` is
-unchanged seals with empty expected producers touching nothing, and a
-FAILED write (read-back mismatch) skips retirement entirely rather than
-retiring against an unconfirmed fact_keys set.
+Retirement (Ticket 33, change-propagation map) used to close the validity
+interval of a business key absent from a fresh complete snapshot by reading
+the prior snapshot's ``is_current=TRUE`` rows back from local DuckDB. That
+read-back died with silver-merge-engine-migration Tickets 02/03: local
+DuckDB is ephemeral (DuckDB Retirement Cutover Ticket 10), so
+``merge_financial_facts``/``merge_accounting_flags`` now only record rows
+to the landing export and nothing local holds the prior membership set.
+The retire methods and the read-back "verification" (which could only ever
+find an empty table) were removed with it. A landing-based retirement
+(the Silver Landing Retirement Record mechanism, Ticket 35, which needs
+the prior membership read from Snowflake silver) is tracked as fog on the
+silver-merge-engine-migration map, not built here. Bullet 3 ("missing,
+partial, or failed snapshots cannot retire prior facts or become the
+current Silver authority") still holds by the same negative gate as
+Ticket 21: nothing reaches the landing export unless the candidate is
+CAPTURED with a complete payload (``CompanyFactsPolicy.is_complete``), and
+a snapshot whose ``ContentImpact`` is unchanged seals with empty expected
+producers touching nothing.
+
+A producer settles VERIFIED once its rows are recorded: with no local
+store to read back, the record call raising is the only failure mode, and
+that isolates as a per-candidate error in ``drive_company_facts_silver_
+acceptance``. Note the driver (``drive_company_facts_discovery.py``) opens
+its ``SilverDatabase`` without a landing export today, so its writes go
+nowhere -- already true of its DuckDB writes since Ticket 10 made the
+publish step a no-op; wiring it is that dormant driver's own follow-up.
 
 Bullet 2 ("Scope Completion includes the authoritative member count and
 ordered digest") is a *recording* requirement, not a deletion one: each
@@ -43,10 +45,10 @@ change-propagation spec classifies it as a "derived projection" that "consumes
 committed base-silver publications ... never uncommitted landing output" --
 computing it inside this same acceptance step (as the legacy
 ``run_bootstrap_entity_facts`` does) would violate that. It is left for a
-separate downstream step, out of this ticket's scope. ``backfill_accounting_
-flags`` (cross-period forensic scoring, reads back a CIK's whole stored
-history) is likewise out of scope -- structurally the same shape as the
-``backfill-mdm-entity-ids`` sweep, not a producer of this snapshot's scope.
+separate downstream step, out of this ticket's scope. Cross-period forensic
+scoring (``score_accounting_flags``, run per CIK inside
+``run_bootstrap_entity_facts``) is likewise out of scope -- not a producer
+of this snapshot's scope.
 
 Deliberately does not touch ``silver_store.py``'s existing merge methods --
 reuses ``merge_financial_facts``/``merge_accounting_flags`` exactly as the
@@ -257,65 +259,19 @@ def _finalize_company_facts_candidate(
     if not pending_producer_names:
         return decision
 
-    if COMPANY_FACTS_FACT_PRODUCER_NAME in pending_producer_names:
-        silver.merge_financial_facts(fact_rows, decision_id)
-        written_accessions = sorted({r["accession_number"] for r in fact_rows})
-        if written_accessions:
-            placeholders = ", ".join("?" * len(written_accessions))
-            present = silver.fetch(
-                f"SELECT DISTINCT accession_number FROM sec_financial_fact "
-                f"WHERE cik = ? AND accession_number IN ({placeholders})",
-                [cik, *written_accessions],
-            )
-            verified = {r["accession_number"] for r in present} == set(written_accessions)
-        else:
-            # Complete-empty scope: a real CIK can have zero XBRL facts
-            # (e.g. a newly registered company). Zero written, zero
-            # expected, so this settles VERIFIED trivially -- not a failure.
-            verified = True
-        if verified:
-            # Ticket 33: only retire once this snapshot's own facts are
-            # confirmed durably written -- a FAILED write must not retire
-            # anything, since we can't yet trust fact_keys reflects what's
-            # actually in Silver.
-            silver.retire_financial_facts_not_in_snapshot(cik, fact_keys, decision_id)
+    writes = (
+        (COMPANY_FACTS_FACT_PRODUCER_NAME, silver.merge_financial_facts, fact_rows),
+        (COMPANY_FACTS_FLAG_PRODUCER_NAME, silver.merge_accounting_flags, flag_rows),
+    )
+    for producer_name, write, rows in writes:
+        if producer_name not in pending_producer_names:
+            continue
+        write(rows, decision_id)
         decision = finalizer.record_producer_outcome(
             decision.processing_decision_id,
-            COMPANY_FACTS_FACT_PRODUCER_NAME,
-            outcome=ExpectedProducerOutcome.VERIFIED if verified else ExpectedProducerOutcome.FAILED,
-            verified_reference=f"{cik}/company-facts" if verified else None,
-            failure_detail=(
-                None
-                if verified
-                else f"sec_financial_fact read-back for cik={cik} did not find all written accessions"
-            ),
-        )
-
-    if COMPANY_FACTS_FLAG_PRODUCER_NAME in pending_producer_names:
-        silver.merge_accounting_flags(flag_rows, decision_id)
-        written_flag_accessions = sorted({r["accession_number"] for r in flag_rows})
-        if written_flag_accessions:
-            placeholders = ", ".join("?" * len(written_flag_accessions))
-            present = silver.fetch(
-                f"SELECT accession_number FROM sec_accounting_flag "
-                f"WHERE cik = ? AND accession_number IN ({placeholders})",
-                [cik, *written_flag_accessions],
-            )
-            verified = {r["accession_number"] for r in present} == set(written_flag_accessions)
-        else:
-            verified = True
-        if verified:
-            silver.retire_accounting_flags_not_in_snapshot(cik, written_flag_accessions, decision_id)
-        decision = finalizer.record_producer_outcome(
-            decision.processing_decision_id,
-            COMPANY_FACTS_FLAG_PRODUCER_NAME,
-            outcome=ExpectedProducerOutcome.VERIFIED if verified else ExpectedProducerOutcome.FAILED,
-            verified_reference=f"{cik}/company-facts" if verified else None,
-            failure_detail=(
-                None
-                if verified
-                else f"sec_accounting_flag read-back for cik={cik} did not find all written accessions"
-            ),
+            producer_name,
+            outcome=ExpectedProducerOutcome.VERIFIED,
+            verified_reference=f"{cik}/company-facts",
         )
 
     return decision

@@ -1,6 +1,10 @@
 """Ticket 22: assert durable external evidence (sec_financial_fact/
 sec_accounting_flag rows), not concrete classes -- same discipline as
 test_submissions_silver_acceptance.py's own header comment.
+
+The durable evidence is the landing export (silver-merge-engine-migration
+Ticket 02): local DuckDB is never written or read back for these tables
+anymore, so the harness attaches a LandingExportBuffer and asserts on it.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from edgar_warehouse.acquisition.models import AcquisitionBase
 from edgar_warehouse.acquisition.processing import ProcessingLedger, SilverFinalizer, SilverOutcome
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_store import SilverDatabase
 
 
@@ -48,7 +53,7 @@ def _engine():
 def _harness(tmp_path: Path):
     engine = _engine()
     AcquisitionBase.metadata.create_all(engine)
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    silver = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     bronze_root = StorageLocation(str(tmp_path / "bronze"))
     return (
         AcquisitionLedger(engine),
@@ -214,10 +219,11 @@ def test_finalize_writes_and_verifies_sec_financial_fact_and_sec_accounting_flag
     producer_names = {p.producer_name for p in decision.expected_producers}
     assert producer_names == {"sec_financial_fact", "sec_accounting_flag"}
 
-    rows = silver.fetch(
-        "SELECT concept, value FROM sec_financial_fact WHERE cik = ?", [320193]
-    )
-    assert rows == [{"concept": "Assets", "value": 1000.0}]
+    facts = silver.landing_export.tables()["sec_financial_fact"]
+    assert [(r["cik"], r["concept"], r["value"]) for r in facts] == [(320193, "Assets", 1000.0)]
+    assert facts[0]["is_current"] is True
+    # Nothing local anymore -- the landing export is the only write.
+    assert silver.fetch("SELECT COUNT(*) AS n FROM sec_financial_fact")[0]["n"] == 0
 
 
 def test_finalize_settles_a_complete_empty_facts_scope(tmp_path: Path) -> None:
@@ -332,13 +338,14 @@ def test_finalize_second_identical_capture_is_no_impact_and_publishes_with_no_pr
     assert second_decision.expected_producers == ()
 
 
-def test_a_second_complete_snapshot_missing_a_fact_key_retires_it_deterministically(
+def test_a_second_complete_snapshot_with_different_content_records_its_own_membership(
     tmp_path: Path,
 ) -> None:
-    """Ticket 33's own regression scenario: a second complete snapshot
-    missing a fact key the first snapshot had produces a deterministic,
-    verified 'retired' outcome for that key, and the row's history remains
-    queryable, not deleted.
+    """Formerly Ticket 33's retirement scenario (a second snapshot missing a
+    fact key retired it in local DuckDB). Retirement went with the local
+    read-back (silver-merge-engine-migration Ticket 02): a second, different
+    snapshot now records exactly its own rows to the landing export and
+    settles VERIFIED, with no local state consulted.
     """
 
     ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
@@ -359,17 +366,9 @@ def test_a_second_complete_snapshot_missing_a_fact_key_retires_it_deterministica
         ),
     )
     assert first_result.outcomes[0].processing_decision.silver_outcome is SilverOutcome.PUBLISHED
-    initial_rows = silver.fetch(
-        "SELECT concept, is_current FROM sec_financial_fact WHERE cik = ? ORDER BY concept",
-        [320193],
-    )
-    assert initial_rows == [
-        {"concept": "Assets", "is_current": True},
-        {"concept": "Revenues", "is_current": True},
-    ]
+    landing = silver.landing_export
+    assert sorted(r["concept"] for r in landing.tables()["sec_financial_fact"]) == ["Assets", "Revenues"]
 
-    # A fresh, complete snapshot no longer reports Revenues -- different
-    # bytes, so this is a real content change, not a NO_IMPACT replay.
     second_payload = json.dumps(_one_concept_facts_payload()).encode("utf-8")
     second_decision_id = _captured_decision(
         ledger, bronze_root,
@@ -391,24 +390,11 @@ def test_a_second_complete_snapshot_missing_a_fact_key_retires_it_deterministica
         p for p in second_decision.expected_producers if p.producer_name == "sec_financial_fact"
     )
     assert fact_producer.outcome.value == "VERIFIED"
-
-    rows = silver.fetch(
-        "SELECT concept, is_current, valid_to FROM sec_financial_fact "
-        "WHERE cik = ? ORDER BY concept",
-        [320193],
-    )
-    by_concept = {r["concept"]: r for r in rows}
-    assert by_concept["Assets"]["is_current"] is True
-    assert by_concept["Assets"]["valid_to"] is None
-    assert by_concept["Revenues"]["is_current"] is False
-    assert by_concept["Revenues"]["valid_to"] is not None
-
-    # Never physically deleted -- still queryable by value.
-    retired_value = silver.fetch(
-        "SELECT value FROM sec_financial_fact WHERE cik = ? AND concept = 'Revenues'",
-        [320193],
-    )
-    assert retired_value == [{"value": 500.0}]
+    assert "count=1" in fact_producer.scope_reference
+    # Append-only: the first snapshot's rows stay, the second adds only its own.
+    assert sorted(r["concept"] for r in landing.tables()["sec_financial_fact"]) == [
+        "Assets", "Assets", "Revenues",
+    ]
 
 
 def test_drive_rejects_a_required_producers_set_it_cannot_serve(tmp_path: Path) -> None:

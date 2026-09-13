@@ -115,10 +115,10 @@ def parse_entity_facts(
                         "auditor_pcaob_id": None,
                         "auditor_location": None,
                         "icfr_attestation": None,
-                        "auditor_changed": None,  # computed by accounting_flags.backfill
-                        "beneish_m_score": None,  # computed by accounting_flags.backfill
-                        "altman_z_score": None,   # computed by accounting_flags.backfill
-                        "piotroski_f_score": None,  # computed by accounting_flags.backfill
+                        "auditor_changed": None,  # computed by accounting_flags.score_accounting_flags
+                        "beneish_m_score": None,  # computed by accounting_flags.score_accounting_flags
+                        "altman_z_score": None,   # computed by accounting_flags.score_accounting_flags
+                        "piotroski_f_score": None,  # computed by accounting_flags.score_accounting_flags
                         "parser_version": PARSER_VERSION,
                     }
 

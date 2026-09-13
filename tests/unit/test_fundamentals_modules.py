@@ -605,9 +605,6 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
             return_value={},
         ), patch(
-            "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
-            return_value=0,
-        ), patch(
             "edgar_warehouse.serving.silver_landing_writer.write_landing_export",
             side_effect=_fake_write_landing_export,
         ):
@@ -644,9 +641,6 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
             return_value={},
         ), patch(
-            "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
-            return_value=0,
-        ), patch(
             "edgar_warehouse.serving.silver_landing_writer.write_landing_export",
             side_effect=RuntimeError("landing export flush failed"),
         ):
@@ -678,9 +672,6 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
         ), patch(
             "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
             return_value={},
-        ), patch(
-            "edgar_warehouse.parsers.accounting_flags.backfill_accounting_flags",
-            return_value=0,
         ), patch(
             "edgar_warehouse.serving.silver_landing_writer.write_landing_export",
         ) as mock_write:

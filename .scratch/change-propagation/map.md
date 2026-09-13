@@ -191,6 +191,18 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 
 ## Not yet specified
 
+- **The `drive-*-discovery` drivers write to nowhere today (noted 2026-09-13 by the
+  silver-merge-engine-migration map):** all five open a local `SilverDatabase` with no
+  `LandingExportBuffer`, and their `_publish_silver_database_with_retry` is a permanent no-op
+  since DuckDB Retirement Cutover Ticket 10 — so a CAPTURED candidate's Silver write reaches
+  neither DuckDB canonical nor the Snowflake landing zone. That map deliberately does not
+  delete or rewire them (Ticket 27 owns their future); when a family's driver is cut over,
+  it needs the same `LandingExportBuffer` + `write_landing_export` wiring
+  `bootstrap_fundamentals.py` got in duckdb-retirement-cutover Ticket 18. The company-facts
+  driver's read-back "verification" was already replaced by VERIFIED-on-record there
+  (silver-merge-engine-migration Ticket 02); `reference_catalog_silver_acceptance.py` still has
+  the same read-back shape and will lose it in that map's Ticket 06.
+
 - Exact production canary thresholds and live rollout gates; these become
   specifiable after the acceptance artifact and migration sequence are locked.
 - A shared, cross-family `RETIRE` evidence shape — today each family

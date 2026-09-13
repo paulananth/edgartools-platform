@@ -89,6 +89,20 @@ def _insert_fact(conn: duckdb.DuckDBPyConnection, *, ingested_at: str) -> None:
     )
 
 
+def _retire_all_current(db: SilverDatabase, *, cik: int) -> None:
+    """The write shape retire_financial_facts_not_in_snapshot used to issue
+    (is_current/valid_to closed, retirement_state_observed_at advanced).
+    That method is gone -- local DuckDB is never read back anymore
+    (silver-merge-engine-migration Ticket 02) -- but the publish-side merge
+    semantics it exercised still guard merge_candidate_into_canonical's
+    remaining live caller (silver_event_reducer.py)."""
+    db._conn.execute(
+        "UPDATE sec_financial_fact SET is_current = FALSE, valid_to = now(), "
+        "retirement_state_observed_at = now() WHERE cik = ? AND is_current = TRUE",
+        [cik],
+    )
+
+
 def test_first_publish_after_ticket_33_backfills_without_false_conflict(tmp_path: Path) -> None:
     """The exact regression: canonical predates Ticket 33 entirely, candidate
     already ran the local migration. Must merge cleanly (not raise
@@ -179,7 +193,7 @@ def test_valid_from_only_difference_does_not_block_or_get_copied(tmp_path: Path)
 
 def test_genuine_retirement_conflict_still_blocks_publication(tmp_path: Path) -> None:
     """A real retirement performed by a raw UPDATE that bypasses
-    retire_financial_facts_not_in_snapshot (and so never touches
+    the sanctioned retirement write shape (and so never touches
     retirement_state_observed_at) must still raise
     SemanticMergeConflictError -- proves valid_to/is_current were NOT
     accidentally exempted alongside valid_from, and that Ticket 01's
@@ -222,10 +236,9 @@ def test_genuine_retirement_conflict_still_blocks_publication(tmp_path: Path) ->
 def test_genuine_retirement_via_retire_method_now_publishes(tmp_path: Path) -> None:
     """Ticket 01 (fundamentals-daily-integration map), closing CLAUDE.md's
     'sec_financial_fact retirement publish-conflict' 5-whys Part B: a real
-    retirement performed through retire_financial_facts_not_in_snapshot (the
-    sanctioned write path, which now advances retirement_state_observed_at
-    alongside is_current/valid_to) must publish cleanly instead of
-    permanently aborting on the ingested_at tie.
+    retirement that advances retirement_state_observed_at alongside
+    is_current/valid_to must publish cleanly instead of permanently
+    aborting on the ingested_at tie.
     """
     canonical_path = tmp_path / "canonical.duckdb"
     canonical_db = SilverDatabase(str(canonical_path))
@@ -244,10 +257,9 @@ def test_genuine_retirement_via_retire_method_now_publishes(tmp_path: Path) -> N
 
     shutil.copy(canonical_path, candidate_path)
     candidate_db = SilverDatabase(str(candidate_path))
-    # The fact is absent from this fresh snapshot -- retire_financial_facts_
-    # not_in_snapshot's real production call shape (empty fact_keys retires
-    # everything current for the CIK).
-    candidate_db.retire_financial_facts_not_in_snapshot(cik=320193, fact_keys=[], sync_run_id="test-run")
+    # The fact is absent from this fresh snapshot -- retire everything
+    # current for the CIK.
+    _retire_all_current(candidate_db, cik=320193)
     candidate_db.close()
 
     output_path = tmp_path / "merged.duckdb"
@@ -298,7 +310,7 @@ def test_genuine_value_conflict_alongside_retirement_still_blocks(tmp_path: Path
     candidate_db._conn.execute(
         "UPDATE sec_financial_fact SET value = 999999999 WHERE cik = 320193"
     )
-    candidate_db.retire_financial_facts_not_in_snapshot(cik=320193, fact_keys=[], sync_run_id="test-run")
+    _retire_all_current(candidate_db, cik=320193)
     candidate_db.close()
 
     output_path = tmp_path / "merged.duckdb"

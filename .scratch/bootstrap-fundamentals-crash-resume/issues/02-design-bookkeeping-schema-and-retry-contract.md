@@ -1,8 +1,35 @@
 # 02 — Design the BookkeepingStore schema and retry-read contract for the per-CIK marker
 
-**Type:** grilling
+**Type:** task (downgraded from `grilling` 2026-09-13 — see correction below)
 
-**Status:** open
+**Status:** resolved (2026-09-13)
+
+**CORRECTION (2026-09-13):** this was briefly moved to a new `silver-merge-engine-migration`
+map on the premise that it was "the same DuckDB-to-Postgres move" as the bulk merge engine.
+That premise was wrong on two counts: (1) this marker is a crash-resume/idempotency concern,
+not a merge/dedup-compute concern, so it doesn't share the bulk engine's Postgres-vs-DuckDB
+question at all; (2) **this exact problem is already solved and live in this codebase** —
+the [pipeline-resumability map](../../pipeline-resumability/map.md)'s
+[Ticket 02](../../pipeline-resumability/issues/02-design-resume-from-stage-mechanism.md)
+already designed a "resume ledger" pattern (frozen candidate snapshot + batched/per-item
+outcome flushes, stored as S3 objects, not a database table at all), with **three existing
+implementations**: `edgar_warehouse/mdm/company_resume.py` (MDM's `run_companies`, batched
+flushes — ~62,190 companies made per-item markers unacceptable, ~62K S3 objects/run),
+`edgar_warehouse/application/daily_artifact_resume.py` (per-item), and
+`batch_silver_resume.py` (per-batch). Moved back here (reverting the merge-engine-migration
+move), downgraded from a design question to a task: apply this existing pattern directly.
+
+## Answer
+
+No new schema. Reuse the existing resume-ledger pattern. Given `entity-facts` mode's typical
+CIK-window size (a single Step Functions Map item, not MDM's full ~62,190-company universe),
+a **per-item marker** (mirroring `daily_artifact_resume.py`'s granularity, not
+`company_resume.py`'s batched one) is the right granularity — object count per window stays
+small. Concretely: freeze the resolved CIK window as a snapshot once per `run_id` (mirrors
+`company_resume.py.write_snapshot`), write one outcome marker per successfully-processed CIK
+(mirrors `daily_artifact_resume.py`'s per-item shape), and on any retry under the same
+`run_id`, filter the frozen snapshot against already-flushed outcomes before the loop starts —
+never re-derive the candidate set live. Implementation is [Ticket 03](03-wire-entity-facts-mode-to-durable-marker.md).
 
 ## Question
 

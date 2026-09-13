@@ -16,7 +16,8 @@ Calls the SEC ``/api/xbrl/companyfacts/CIK{cik:010}.json`` endpoint for each
 CIK in the batch.  Dispatches through ``parse_entity_facts``.
 Writes to: sec_financial_fact, sec_accounting_flag.
 Then calls ``compute_derived_for_accession()`` per accession to populate
-sec_financial_derived, and ``backfill_accounting_flags()`` to add forensic scores.
+sec_financial_derived, and ``score_accounting_flags()`` (in memory, per CIK)
+to add forensic scores before the flag rows are written.
 
 thirteenf
 ---------
@@ -446,6 +447,7 @@ def run_bootstrap_entity_facts(
         get_ciks_with_new_qualifying_filing,
         has_companyfacts_at_version,
     )
+    from edgar_warehouse.parsers.accounting_flags import score_accounting_flags
     from edgar_warehouse.parsers.financials import PARSER_VERSION as FACTS_PARSER_VERSION
     from edgar_warehouse.parsers.financials import parse_entity_facts
     from edgar_warehouse.parsers.financials_derived import compute_derived_for_accession
@@ -459,6 +461,7 @@ def run_bootstrap_entity_facts(
         "rows_financial_fact": 0,
         "rows_financial_derived": 0,
         "rows_accounting_flag": 0,
+        "accounting_flags_updated": 0,
     }
 
     read_source = source if source is not None else db
@@ -498,12 +501,10 @@ def run_bootstrap_entity_facts(
         metrics["rows_financial_fact"] += db.merge_financial_facts(
             parsed.get("sec_financial_fact", []), sync_run_id
         )
-        metrics["rows_accounting_flag"] += db.merge_accounting_flags(
-            parsed.get("sec_accounting_flag", []), sync_run_id
-        )
 
         # Compute derived metrics per (accession, fiscal_period) group
         fact_rows = parsed.get("sec_financial_fact", [])
+        derived_rows: list[dict] = []
         accession_groups: dict[tuple, list[dict]] = {}
         for row in fact_rows:
             key = (
@@ -522,12 +523,30 @@ def run_bootstrap_entity_facts(
                     fiscal_period=fp, period_end=pe, form_type=ft,
                     fact_rows=group,
                 )
+                group_rows = derived.get("sec_financial_derived", [])
                 metrics["rows_financial_derived"] += db.merge_financial_derived(
-                    derived.get("sec_financial_derived", []), sync_run_id
+                    group_rows, sync_run_id
                 )
+                derived_rows.extend(group_rows)
             except Exception as exc:
                 _emit("derived_compute_error", cik=cik, accession=accn,
                       fiscal_period=fp, error=str(exc))
+
+        # silver-merge-engine-migration Ticket 03: cross-period forensic
+        # scoring happens here, per CIK, on the derived rows just computed
+        # -- the companyfacts payload carries the company's full filing
+        # history, so nothing needs reading back from a store. A scoring
+        # failure must not lose the auditor data: the unscored flags are
+        # written as-is (the old post-run backfill behaved the same way).
+        flag_rows = parsed.get("sec_accounting_flag", [])
+        try:
+            flag_rows, flags_updated = score_accounting_flags(flag_rows, derived_rows)
+            metrics["accounting_flags_updated"] += flags_updated
+        except Exception as exc:
+            # Event name kept from the old bootstrap_fundamentals backfill
+            # loop so existing log consumers keep matching.
+            _emit("accounting_flags_backfill_error", cik=cik, error=str(exc))
+        metrics["rows_accounting_flag"] += db.merge_accounting_flags(flag_rows, sync_run_id)
 
         # Ticket 03: marker write is strictly the last statement for this
         # CIK -- every real output write above has already executed and

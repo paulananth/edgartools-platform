@@ -2,7 +2,11 @@
 
 **Type:** task
 
-**Status:** open
+**Status:** open — reverted back here (2026-09-13) after a brief, mistaken move to
+`silver-merge-engine-migration`; see [Ticket 02](02-design-bookkeeping-schema-and-retry-contract.md)'s
+correction note. Implements the existing resume-ledger pattern
+(`edgar_warehouse/mdm/company_resume.py`/`daily_artifact_resume.py` precedent), per-item
+granularity, no new BookkeepingStore schema.
 
 ## Question
 

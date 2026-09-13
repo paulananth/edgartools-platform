@@ -245,17 +245,11 @@ def execute(args: Any) -> int:
                 force=bool(getattr(args, "force", False)),
                 source=source,
             )
+            # Cross-period forensic scoring now runs inside
+            # run_bootstrap_entity_facts, per CIK (silver-merge-engine-
+            # migration Ticket 03); accounting_flags_updated arrives with
+            # the other run metrics.
             metrics.update(run_metrics)
-
-            # After entity-facts, back-fill cross-period forensic scores
-            from edgar_warehouse.parsers.accounting_flags import backfill_accounting_flags
-            flags_updated = 0
-            for cik in cik_list:
-                try:
-                    flags_updated += backfill_accounting_flags(cik=cik, silver=db)
-                except Exception as exc:
-                    _log("accounting_flags_backfill_error", cik=cik, error=str(exc))
-            metrics["accounting_flags_updated"] = flags_updated
 
         elif mode == "thirteenf":
             from edgar_warehouse.application.workflows.fundamentals_ingest import (

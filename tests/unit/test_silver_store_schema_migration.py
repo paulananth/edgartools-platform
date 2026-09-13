@@ -3,11 +3,13 @@
 PR #57 added `period_end` to the primary key of `sec_financial_fact` and
 `sec_financial_derived`. `CREATE TABLE IF NOT EXISTS` does not alter an
 existing table's constraints, so a `silver.duckdb` created before that PR
-retains the old PK and `merge_financial_facts`/`merge_financial_derived`'s
-`ON CONFLICT (..., period_end)` clauses raise a binder error. These tests
-build an old-PK store, open it via `SilverDatabase`, and confirm the
-migration in `_ensure_schema_evolution`/`_migrate_financial_period_end_pk`
-repairs it before any merge is attempted.
+retains the old PK. These tests build an old-PK store, open it via
+`SilverDatabase`, and confirm the migration in
+`_ensure_schema_evolution`/`_migrate_financial_period_end_pk` repairs it
+(rows that differ only in the new PK column insert as distinct rows). The
+inserts are raw SQL because no production writer touches these DuckDB
+tables anymore (silver-merge-engine-migration Tickets 02/03) -- the
+migration itself, not a writer, is what these tests still guard.
 """
 
 from __future__ import annotations
@@ -18,6 +20,14 @@ import duckdb
 import pytest
 
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.silver_rows import insert_silver_rows
+
+
+def _insert_rows(db: SilverDatabase, table: str, rows: list[dict]) -> int:
+    if table == "sec_financial_fact":
+        rows = [{"period_start": "0001-01-01", **row} for row in rows]
+    return insert_silver_rows(db, table, rows)
+
 
 _EXPECTED_SCHEMA_MIGRATIONS = [
     "001_financial_period_end_pk",
@@ -230,10 +240,10 @@ def test_migration_adds_period_end_to_pk_and_preserves_old_rows_with_backups(tmp
     assert "sec_financial_derived" in caplog.text
 
 
-def test_merge_financial_facts_succeeds_after_migration(tmp_path):
+def test_insert_with_period_end_succeeds_after_migration(tmp_path):
     """The exact failure mode from the codex P1 finding: two rows sharing the
     old-PK columns but with different period_end (current vs. comparative
-    prior period) must upsert cleanly, not raise a binder error.
+    prior period) must insert as two rows, not collide on the old PK.
     """
     db_path = str(tmp_path / "silver.duckdb")
     _build_old_pk_store(db_path)
@@ -271,7 +281,7 @@ def test_merge_financial_facts_succeeds_after_migration(tmp_path):
             },
         ]
 
-        count = db.merge_financial_facts(rows, sync_run_id="test-sync")
+        count = _insert_rows(db, "sec_financial_fact", rows)
         assert count == 2
 
         stored = db.fetch(
@@ -406,7 +416,7 @@ def test_migration_adds_period_start_to_pk_and_preserves_old_rows_with_backup(tm
     assert "sec_financial_fact" in caplog.text
 
 
-def test_merge_financial_facts_with_period_start_succeeds_after_migration(tmp_path):
+def test_insert_with_period_start_succeeds_after_migration(tmp_path):
     """The QTD/YTD collision case Stage 2 resolves: two rows sharing every
     Stage 1 PK column (including period_end) but with different period_start
     (3-month vs. 6-month window ending on the same date) must upsert as two
@@ -450,7 +460,7 @@ def test_merge_financial_facts_with_period_start_succeeds_after_migration(tmp_pa
             },
         ]
 
-        count = db.merge_financial_facts(rows, sync_run_id="test-sync")
+        count = _insert_rows(db, "sec_financial_fact", rows)
         assert count == 2
 
         stored = db.fetch(
@@ -499,11 +509,13 @@ def test_factor_input_columns_are_added_without_dropping_rows(tmp_path):
         ):
             assert column in columns
 
-        db.merge_financial_derived(
+        _insert_rows(
+            db,
+            "sec_financial_derived",
             [
                 {
                     "cik": 320193,
-                    "accession_number": "0000320193-24-000123",
+                    "accession_number": "0000320193-24-000999",
                     "fiscal_year": 2024,
                     "fiscal_period": "FY",
                     "period_end": "2024-09-28",
@@ -521,12 +533,12 @@ def test_factor_input_columns_are_added_without_dropping_rows(tmp_path):
                     "parser_version": "factor-test",
                 }
             ],
-            sync_run_id="test-sync",
         )
         stored = db.fetch(
             """
             SELECT current_assets, current_liabilities, shares_outstanding
             FROM sec_financial_derived
+            WHERE accession_number = '0000320193-24-000999'
             """
         )[0]
         assert stored["current_assets"] == 152987000000
