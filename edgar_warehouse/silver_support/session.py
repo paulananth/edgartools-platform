@@ -45,7 +45,3 @@ def open_silver_shard(
 
     return SilverDatabase(path, landing_export=landing_export)
 
-
-def reset_submission_state(db: Any, cik: int) -> None:
-    db._conn.execute("DELETE FROM sec_company_former_name WHERE cik = ?", [cik])
-    db._conn.execute("DELETE FROM sec_company_submission_file WHERE cik = ?", [cik])

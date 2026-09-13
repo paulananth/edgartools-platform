@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pyarrow.parquet as pq
 import pytest
 
 from edgar_warehouse.application import warehouse_orchestrator
@@ -63,8 +64,10 @@ def test_company_identity_mode_stages_company_and_ticker_only(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     storage_root = tmp_path / "warehouse"
+    landing_root = tmp_path / "landing"
     monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
     monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("SILVER_LANDING_EXPORT_ROOT", str(landing_root))
     monkeypatch.delenv("WAREHOUSE_BRONZE_ROOT", raising=False)
     monkeypatch.delenv("WAREHOUSE_SILVER_ROOT", raising=False)
 
@@ -88,11 +91,6 @@ def test_company_identity_mode_stages_company_and_ticker_only(
 
     db = open_silver_database(StorageLocation(str(storage_root)))
     try:
-        company = db.get_company(CIK)
-        assert company is not None
-        assert company["entity_name"] == "APPLE INC"
-        assert company["sic"] == "3571"
-
         ticker_rows = db.fetch(
             "SELECT * FROM sec_company_ticker WHERE cik = ?", [CIK]
         )
@@ -109,6 +107,18 @@ def test_company_identity_mode_stages_company_and_ticker_only(
         # asserted here.
     finally:
         db.close()
+
+    # sec_company is landing-only (silver-merge-engine-migration Ticket 06b):
+    # the company row reaches silver through the landing export this command
+    # flushes, so read it back from the Parquet it wrote.
+    company_files = [
+        path for path in landing_root.rglob("*.parquet") if "/sec_company/" in path.as_posix()
+    ]
+    assert len(company_files) == 1, "expected exactly one sec_company landing Parquet"
+    company_rows = pq.read_table(company_files[0]).to_pylist()
+    assert [(row["cik"], row["entity_name"], row["sic"]) for row in company_rows] == [
+        (CIK, "APPLE INC", "3571")
+    ]
 
 
 def test_company_identity_mode_rejects_release_mode() -> None:

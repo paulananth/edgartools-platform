@@ -41,6 +41,7 @@ from edgar_warehouse.acquisition.submissions_silver_acceptance import (
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
 def _engine():
@@ -54,7 +55,9 @@ def _engine():
 def _harness(tmp_path: Path):
     engine = _engine()
     AcquisitionBase.metadata.create_all(engine)
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    # sec_company is landing-only (silver-merge-engine-migration Ticket
+    # 06b): assert on the rows recorded for landing.
+    silver = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     bronze_root = StorageLocation(str(tmp_path / "bronze"))
     return (
         AcquisitionLedger(engine),
@@ -211,9 +214,8 @@ def test_finalize_writes_and_verifies_sec_company_and_sec_company_filing(tmp_pat
         assert producer.outcome is ExpectedProducerOutcome.VERIFIED
 
     # Durable external evidence.
-    company = silver.get_company(320193)
-    assert company is not None
-    assert company["entity_name"] == "Apple Inc."
+    company_rows = silver.landing_export.tables()["sec_company"]
+    assert [row["entity_name"] for row in company_rows] == ["Apple Inc."]
     filing = silver.get_filing("0000320193-26-000001")
     assert filing is not None
     assert filing["cik"] == 320193
@@ -285,7 +287,7 @@ def test_main_candidate_is_skipped_while_pagination_is_incomplete(tmp_path: Path
     # layer either (this module only finalizes CAPTURED decisions).
     assert result.pagination_outcomes == ()
     # No revision was materialized for main, and no sec_company row exists.
-    assert silver.get_company(320193) is None
+    assert "sec_company" not in silver.landing_export.tables()
 
 
 def test_pagination_candidate_writes_and_verifies_sec_company_filing(tmp_path: Path) -> None:

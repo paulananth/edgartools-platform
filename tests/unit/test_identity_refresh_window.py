@@ -44,67 +44,6 @@ def _fake_index_result(impacted_ciks: list[int]) -> dict:
     }
 
 
-def test_company_identity_universe_is_active_operating_or_current_sec_ticker(
-    tmp_path,
-) -> None:
-    """The reusable scheduled-identity boundary includes active operating
-    entities and active tracked CIKs in the canonical company_tickers snapshot,
-    while excluding other and non-active entities.
-
-    DuckDB Retirement Cutover Ticket 13: tracking status now comes from the
-    bookkeeping store, not DuckDB silver -- seeded here via a real
-    BookkeepingStore instead of SilverDatabase.upsert_company_sync_state.
-    """
-    from edgar_warehouse.bookkeeping.database import Base as BookkeepingBase
-    from edgar_warehouse.bookkeeping.store import BookkeepingStore
-    from edgar_warehouse.silver_store import SilverDatabase
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session as SqlaSession
-    from sqlalchemy.pool import StaticPool
-
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    BookkeepingBase.metadata.create_all(engine)
-    bookkeeping_session = SqlaSession(engine)
-    bookkeeping = BookkeepingStore(bookkeeping_session)
-    for cik, status in (
-        (100, "active"),
-        (200, "active"),
-        (300, "active"),
-        (400, "paused"),
-    ):
-        bookkeeping.upsert_company_sync_state({"cik": cik, "tracking_status": status})
-    bookkeeping_session.commit()
-
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
-    try:
-        db.merge_company(
-            [
-                {"cik": 100, "entity_name": "Operating Co", "entity_type": "operating"},
-                {"cik": 200, "entity_name": "Ticker Co", "entity_type": "other"},
-                {"cik": 300, "entity_name": "Other Entity", "entity_type": "other"},
-                {"cik": 400, "entity_name": "Paused Co", "entity_type": "operating"},
-            ],
-            "seed-run",
-        )
-        db.replace_company_tickers(
-            [
-                {"cik": 200, "ticker": "TICK", "exchange": "NYSE"},
-                {"cik": 400, "ticker": "PAUS", "exchange": "NASDAQ"},
-            ],
-            "ticker-run",
-            source_name="company_tickers",
-        )
-
-        assert db.get_company_identity_ciks("active", bookkeeping=bookkeeping) == [100, 200]
-    finally:
-        db.close()
-        bookkeeping_session.close()
-
-
 def test_reference_sync_returns_canonical_ticker_snapshot_identity(tmp_path) -> None:
     """Scheduled identity evidence can bind eligibility to the exact captured
     company_tickers object instead of an untracked refetch or mutable count."""

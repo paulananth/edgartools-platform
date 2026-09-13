@@ -1726,190 +1726,44 @@ class SilverDatabase:
     # sec_company (silver merge)
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_company")
     def merge_company(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        """Upsert staged company rows into sec_company. Returns row count."""
-        now = datetime.now(UTC)
-        count = 0
-        for row in rows:
-            self._conn.execute(
-                """
-                INSERT INTO sec_company
-                    (cik, entity_name, entity_type, sic, sic_description,
-                     state_of_incorporation, state_of_incorporation_desc,
-                     fiscal_year_end, ein, description, category,
-                     first_sync_run_id, last_sync_run_id, last_synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (cik) DO UPDATE SET
-                    entity_name = excluded.entity_name,
-                    entity_type = excluded.entity_type,
-                    sic = excluded.sic,
-                    sic_description = excluded.sic_description,
-                    state_of_incorporation = excluded.state_of_incorporation,
-                    state_of_incorporation_desc = excluded.state_of_incorporation_desc,
-                    fiscal_year_end = excluded.fiscal_year_end,
-                    ein = excluded.ein,
-                    description = excluded.description,
-                    category = excluded.category,
-                    last_sync_run_id = excluded.last_sync_run_id,
-                    last_synced_at = excluded.last_synced_at
-                """,
-                [
-                    row["cik"],
-                    row.get("entity_name"),
-                    row.get("entity_type"),
-                    row.get("sic"),
-                    row.get("sic_description"),
-                    row.get("state_of_incorporation"),
-                    row.get("state_of_incorporation_desc"),
-                    row.get("fiscal_year_end"),
-                    row.get("ein"),
-                    row.get("description"),
-                    row.get("category"),
-                    row.get("first_sync_run_id", sync_run_id),
-                    sync_run_id,
-                    now,
-                ],
-            )
-            count += 1
-        return count
-
-    def get_company(self, cik: int) -> dict[str, Any] | None:
-        result = self._conn.execute(
-            "SELECT * FROM sec_company WHERE cik = ?", [cik]
-        ).fetchone()
-        if result is None:
-            return None
-        cols = [d[0] for d in self._conn.description]
-        return dict(zip(cols, result))
+        """Record staged company rows for landing. Returns row count."""
+        return self._record_landing_passthrough(
+            "sec_company",
+            rows,
+            defaults={"first_sync_run_id": sync_run_id},
+            stamp=self._synced_now_stamp(sync_run_id),
+        )
 
     # ------------------------------------------------------------------
     # sec_company_address
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_company_address")
     def merge_addresses(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        now = datetime.now(UTC)
-        count = 0
-        for row in rows:
-            self._conn.execute(
-                """
-                INSERT INTO sec_company_address
-                    (cik, address_type, street1, street2, city,
-                     state_or_country, zip_code, country,
-                     last_sync_run_id, last_synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (cik, address_type) DO UPDATE SET
-                    street1 = excluded.street1,
-                    street2 = excluded.street2,
-                    city = excluded.city,
-                    state_or_country = excluded.state_or_country,
-                    zip_code = excluded.zip_code,
-                    country = excluded.country,
-                    last_sync_run_id = excluded.last_sync_run_id,
-                    last_synced_at = excluded.last_synced_at
-                """,
-                [
-                    row["cik"],
-                    row["address_type"],
-                    row.get("street1"),
-                    row.get("street2"),
-                    row.get("city"),
-                    row.get("state_or_country"),
-                    row.get("zip_code"),
-                    row.get("country"),
-                    sync_run_id,
-                    now,
-                ],
-            )
-            count += 1
-        return count
-
-    def get_addresses(self, cik: int) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT * FROM sec_company_address WHERE cik = ?", [cik]
-        ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        return self._record_landing_passthrough(
+            "sec_company_address", rows, defaults={}, stamp=self._synced_now_stamp(sync_run_id)
+        )
 
     # ------------------------------------------------------------------
     # sec_company_former_name
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_company_former_name")
     def merge_former_names(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        count = 0
-        for row in rows:
-            self._conn.execute(
-                """
-                INSERT INTO sec_company_former_name
-                    (cik, former_name, date_changed, ordinal, last_sync_run_id)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (cik, ordinal) DO UPDATE SET
-                    former_name = excluded.former_name,
-                    date_changed = excluded.date_changed,
-                    last_sync_run_id = excluded.last_sync_run_id
-                """,
-                [
-                    row["cik"],
-                    row["former_name"],
-                    row.get("date_changed"),
-                    row["ordinal"],
-                    sync_run_id,
-                ],
-            )
-            count += 1
-        return count
-
-    def get_former_names(self, cik: int) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT * FROM sec_company_former_name WHERE cik = ? ORDER BY ordinal",
-            [cik],
-        ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        return self._record_landing_passthrough(
+            "sec_company_former_name", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
+        )
 
     # ------------------------------------------------------------------
     # sec_company_submission_file
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_company_submission_file")
     def merge_submission_files(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        now = datetime.now(UTC)
-        count = 0
-        for row in rows:
-            self._conn.execute(
-                """
-                INSERT INTO sec_company_submission_file
-                    (cik, file_name, filing_count, filing_from, filing_to,
-                     last_sync_run_id, last_synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (cik, file_name) DO UPDATE SET
-                    filing_count = excluded.filing_count,
-                    filing_from = excluded.filing_from,
-                    filing_to = excluded.filing_to,
-                    last_sync_run_id = excluded.last_sync_run_id,
-                    last_synced_at = excluded.last_synced_at
-                """,
-                [
-                    row["cik"],
-                    row["file_name"],
-                    row.get("filing_count"),
-                    row.get("filing_from"),
-                    row.get("filing_to"),
-                    sync_run_id,
-                    now,
-                ],
-            )
-            count += 1
-        return count
-
-    def get_submission_files(self, cik: int) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT * FROM sec_company_submission_file WHERE cik = ?", [cik]
-        ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        return self._record_landing_passthrough(
+            "sec_company_submission_file",
+            rows,
+            defaults={},
+            stamp=self._synced_now_stamp(sync_run_id),
+        )
 
     # ------------------------------------------------------------------
     # sec_company_filing
@@ -2061,7 +1915,8 @@ class SilverDatabase:
         recent_limit: int | None = None,
         filing_min_date: Any = None,
     ) -> dict[str, Any]:
-        """Stage one company's full submission into silver: reset lists, run loaders, merge all tables."""
+        """Stage one company's full submission: run loaders, record the company
+        tables for landing, merge the filing rows locally."""
         with self._shard_advisory_lock():
             return self._stage_submission_locked(
                 cik=cik,
@@ -2119,11 +1974,9 @@ class SilverDatabase:
             filing_min_date,
         )
 
-        self._conn.execute("DELETE FROM sec_company_former_name WHERE cik = ?", [cik])
-        self._conn.execute("DELETE FROM sec_company_submission_file WHERE cik = ?", [cik])
-
         rows_written = 0
-        rows_written += self.merge_company(company_rows, sync_run_id)
+        company_rows_written = self.merge_company(company_rows, sync_run_id)
+        rows_written += company_rows_written
         rows_written += self.merge_addresses(address_rows, sync_run_id)
         rows_written += self.merge_former_names(former_name_rows, sync_run_id)
         rows_written += self.merge_submission_files(manifest_rows, sync_run_id)
@@ -2151,6 +2004,7 @@ class SilverDatabase:
 
         return {
             "rows_written": rows_written,
+            "company_rows_written": company_rows_written,
             "recent_rows": recent_rows,
             "manifest_rows": manifest_rows,
             "recent_accessions": [
@@ -2169,7 +2023,7 @@ class SilverDatabase:
             "sec_current_filing_feed",
             [r for r in rows if r.get("accession_number")],
             defaults={},
-            stamp={**self._sync_run_stamp(sync_run_id), "last_synced_at": datetime.now(UTC)},
+            stamp=self._synced_now_stamp(sync_run_id),
         )
 
     # ------------------------------------------------------------------
@@ -2580,47 +2434,6 @@ class SilverDatabase:
         cols = [d[0] for d in self._conn.description]
         return [dict(zip(cols, row)) for row in rows]
 
-    def get_company_identity_ciks(
-        self,
-        tracking_status_filter: str = "active",
-        *,
-        bookkeeping: "BookkeepingStore",
-    ) -> list[int]:
-        """Return tracked CIKs eligible for scheduled company identity refresh.
-
-        Eligibility is deliberately narrower than the filing/relationship
-        universe: an entity must be operating or present in the canonical
-        SEC ``company_tickers`` snapshot.
-
-        DuckDB Retirement Cutover Ticket 13: the tracked-CIK set now comes
-        from the bookkeeping store (``sec_company_sync_state`` moved off
-        DuckDB silver onto Postgres) -- eligibility is still checked against
-        DuckDB silver's own ``sec_company``/``sec_company_ticker`` tables,
-        and the two sets are intersected here in Python since they can no
-        longer be joined in one query across two databases.
-        """
-        tracked_ciks = set(bookkeeping.get_tracked_ciks(tracking_status_filter))
-        if not tracked_ciks:
-            return []
-        cik_list = list(tracked_ciks)
-        placeholders = ", ".join("?" for _ in cik_list)
-        rows = self._conn.execute(
-            f"""
-            SELECT DISTINCT company.cik AS cik
-            FROM sec_company AS company
-            WHERE LOWER(TRIM(COALESCE(company.entity_type, ''))) = 'operating'
-              AND company.cik IN ({placeholders})
-            UNION
-            SELECT DISTINCT ticker.cik AS cik
-            FROM sec_company_ticker AS ticker
-            WHERE ticker.source_name = 'company_tickers'
-              AND ticker.cik IN ({placeholders})
-            """,
-            cik_list + cik_list,
-        ).fetchall()
-        eligible_ciks = {int(row[0]) for row in rows}
-        return sorted(tracked_ciks & eligible_ciks)
-
     # ------------------------------------------------------------------
     # sec_reconcile_finding
     # ------------------------------------------------------------------
@@ -2772,8 +2585,9 @@ class SilverDatabase:
         explicit None. `stamp` adds write-time columns the landing schema
         carries but the caller doesn't supply (facts/flags: `ingested_at` +
         the Ticket 33 validity trio; per-filing and 13F tables:
-        `ingested_at`; ADV, relationship-source evidence and the current
-        filing feed: `last_sync_run_id`, the feed also `last_synced_at`;
+        `ingested_at`; company submission, ADV and relationship-source
+        evidence tables and the current filing feed: `last_sync_run_id`,
+        plus `last_synced_at` where the table has it;
         derived: nothing, its landing rows are recorded as given). A
         `values_fn` coercion that replaced a present value -- `bool(...)`,
         `or ""` -- is applied by the caller before this call, since
@@ -2834,10 +2648,16 @@ class SilverDatabase:
     @staticmethod
     def _sync_run_stamp(sync_run_id: str) -> dict[str, Any]:
         """`last_sync_run_id` for tables that record which sync run last
-        wrote a row (ADV, relationship-source evidence, the current filing
-        feed). The old `values_fn`s always wrote the call's `sync_run_id`,
+        wrote a row (company submission, ADV and relationship-source evidence
+        tables, the current filing feed). The old `values_fn`s always wrote the call's `sync_run_id`,
         whatever the row said, so this overrides a row-supplied value."""
         return {"last_sync_run_id": sync_run_id}
+
+    @classmethod
+    def _synced_now_stamp(cls, sync_run_id: str) -> dict[str, Any]:
+        """`last_sync_run_id` plus `last_synced_at` (now), for tables that
+        also record when a sync last wrote the row."""
+        return {**cls._sync_run_stamp(sync_run_id), "last_synced_at": datetime.now(UTC)}
 
     @classmethod
     def _current_row_stamp(cls) -> dict[str, Any]:
