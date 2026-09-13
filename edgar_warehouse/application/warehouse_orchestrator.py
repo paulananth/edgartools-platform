@@ -74,7 +74,6 @@ from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.serving.silver_landing_writer import write_landing_export
-from edgar_warehouse.silver_protection import compute_silver_fingerprint
 from edgar_warehouse.silver_support.session import open_silver_database
 
 if TYPE_CHECKING:
@@ -1077,55 +1076,15 @@ def _open_silver_database(
     return open_silver_database(silver_root, landing_export=landing_export)
 
 
-def _protected_fingerprint_sidecar_path(local_path: Path) -> Path:
-    """Local-only sidecar recording ``compute_silver_fingerprint``'s output at
-    hydration time, so ``_publish_silver_database_if_remote`` can cheaply tell
-    whether anything actually changed since (release-readiness ticket 79).
-    """
-    return local_path.with_name(local_path.name + ".protected-fingerprint.json")
-
-
-def _write_fingerprint_sidecar(local_path: Path, fingerprint: dict[str, Any]) -> None:
-    _protected_fingerprint_sidecar_path(local_path).write_text(
-        json.dumps(fingerprint, sort_keys=True), encoding="utf-8"
-    )
-
-
-def _read_fingerprint_sidecar(local_path: Path) -> dict[str, Any] | None:
-    sidecar_path = _protected_fingerprint_sidecar_path(local_path)
-    try:
-        return json.loads(sidecar_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, ValueError):
-        return None
-
-
 def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> None:
     if not context.storage_root.is_remote or context.silver_root.is_remote:
         return
     remote_path = context.storage_root.join("silver", "sec", "silver.duckdb")
     local_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    # Delete any stale sidecar from a prior invocation up front (e.g. a reused
-    # ECS task volume) so "sidecar present" always means "this process
-    # successfully hydrated", never leftover state from an earlier run.
-    _protected_fingerprint_sidecar_path(local_path).unlink(missing_ok=True)
     try:
         context.storage_root.download_file("silver/sec/silver.duckdb", local_path)
     except (FileNotFoundError, OSError):
         return
-    # Snapshot the hydration-time fingerprint before any caller opens the
-    # database and runs schema DDL, so the sidecar reflects exactly what was
-    # downloaded from canonical -- the baseline every later publish attempt
-    # in this process compares itself against. Deliberately fail-open: a
-    # fingerprint failure (e.g. not a valid DuckDB file) must never break
-    # hydration itself -- worst case is just no sidecar, which is the same
-    # safe "always do the real merge" default as remote canonical not
-    # existing yet.
-    try:
-        fingerprint = compute_silver_fingerprint(local_path)
-    except Exception:
-        fingerprint = None
-    if fingerprint is not None:
-        _write_fingerprint_sidecar(local_path, fingerprint)
     _emit_pipeline_event(
         "silver_database_hydrated",
         path=remote_path,
@@ -1168,12 +1127,14 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     cutover Ticket 12), but the function itself is NOT dead overall: it has
     a separate, live caller in ``application/silver_event_reducer.py`` --
     an earlier version of this docstring claimed otherwise without checking
-    that caller, corrected here (Ticket 12). ``compute_silver_fingerprint``/
-    the fingerprint-sidecar helpers
-    are NOT dead: ``_hydrate_silver_database_from_storage`` still calls them,
-    and that function itself is still called from the four read-only
-    reconciliation tools this ticket deliberately leaves alone (see the
-    ticket file's own note on those).
+    that caller, corrected here (Ticket 12). The fingerprint-sidecar helpers
+    this docstring used to mention (``_read_fingerprint_sidecar``/
+    ``_write_fingerprint_sidecar``) were deleted (Ticket 20): once this
+    function became a permanent no-op, nothing ever read the sidecar again,
+    so ``_hydrate_silver_database_from_storage``/``_hydrate_shard_for_window``
+    writing one was pure dead weight. ``compute_silver_fingerprint`` itself
+    is untouched -- it still has a real, separate caller in
+    ``PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`` fingerprinting.
     """
     return None
 
@@ -1285,32 +1246,10 @@ def _hydrate_shard_for_window(
     relative_path = default_path_resolver().shard_path(shard_index)
     remote_path = context.storage_root.join(relative_path)
 
-    # Delete any stale sidecar from a prior invocation up front (e.g. a
-    # reused ECS task volume), matching _hydrate_silver_database_from_storage's
-    # own safeguard -- "sidecar present" must always mean "this process
-    # successfully hydrated this shard", never leftover state.
-    _protected_fingerprint_sidecar_path(local_path).unlink(missing_ok=True)
-
     try:
         context.storage_root.download_file(relative_path, local_path)
     except (FileNotFoundError, OSError):
         return None
-
-    # Snapshot the hydration-time fingerprint (release-readiness ticket 79's
-    # skip-if-unchanged optimization, ported here 2026-08-19): this was read
-    # by _publish_shard_if_remote's skip-if-unchanged fast path, which
-    # avoided the merge/publish cycle's real memory/network cost on a
-    # provable no-op. That function was deleted (duckdb-retirement-cutover
-    # Ticket 12: confirmed zero live callers), so this sidecar is currently
-    # write-only -- left in place rather than removed in the same pass, see
-    # that ticket's file for the follow-up note. Fail-open on any fingerprint
-    # error, matching the monolith path's own handling.
-    try:
-        fingerprint = compute_silver_fingerprint(local_path)
-    except Exception:
-        fingerprint = None
-    if fingerprint is not None:
-        _write_fingerprint_sidecar(local_path, fingerprint)
 
     _emit_pipeline_event(
         "silver_shard_hydrated",
