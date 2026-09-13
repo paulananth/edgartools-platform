@@ -284,32 +284,6 @@ _PER_FILING_WRITERS = [
 ]
 
 
-@pytest.mark.parametrize(("method", "table", "make_row"), _PER_FILING_WRITERS)
-def test_per_filing_rows_land_with_ingested_at_and_never_touch_local_duckdb(db, method, table, make_row):
-    count = getattr(db, method)([make_row()], "run-1")
-
-    assert count == 1
-    recorded = db.landing.tables()[table][0]
-    assert recorded["ingested_at"] is not None
-    # No validity trio on these tables -- that stamp is facts/flags only.
-    assert "is_current" not in recorded
-    assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
-
-
-@pytest.mark.parametrize(("method", "table", "make_row"), _PER_FILING_WRITERS)
-def test_per_filing_ingested_at_advances_on_every_write(db, method, table, make_row):
-    """The intent of the retired DuckDB bump tests (release-readiness Ticket
-    98): re-processing the same business key must carry a newer ingested_at
-    than the prior write -- MDM's EMPLOYED_BY watermark and the gold models
-    read it."""
-    getattr(db, method)([make_row()], "run-1")
-    time.sleep(0.01)
-    getattr(db, method)([make_row()], "run-2")
-
-    first, second = (row["ingested_at"] for row in db.landing.tables()[table])
-    assert second > first
-
-
 def test_earnings_release_presence_flags_keep_the_old_bool_coercion(db):
     """The old `_merge_rows` values_fn was bool(r.get(flag, False)): absent or
     None -> False, truthy -> True."""
@@ -357,3 +331,136 @@ def test_per_filing_row_missing_a_not_null_column_raises_before_recording(db, me
         getattr(db, method)([row], "run-1")
 
     assert db.landing.total_row_count() == 0
+
+
+# ---------------------------------------------------------------------------
+# silver-merge-engine-migration Ticket 05: the two 13F tables
+# (bootstrap-fundamentals --mode thirteenf). sec_thirteenf_holding is the
+# platform's highest-volume table (6.8M rows in prod), so this section also
+# pins the passthrough's cost on a realistic per-filing batch.
+# ---------------------------------------------------------------------------
+
+
+def _holding_row(**overrides):
+    base = {
+        "cik": 1067983, "accession_number": "0000950123-26-000123", "holding_index": 1,
+        "period_of_report": "2026-03-31", "cusip": "037833100", "issuer_name": "Apple Inc",
+        "security_title": "COM", "shares_held": 400000000.0, "market_value": 70000000000.0,
+        "security_class": "equity", "put_call": None, "discretion_type": "SOLE",
+        "voting_auth_sole": 400000000.0, "voting_auth_shared": 0.0, "voting_auth_none": 0.0,
+        "parser_version": "1",
+    }
+    base.update(overrides)
+    return base
+
+
+def _thirteenf_filing_row(**overrides):
+    base = {
+        "accession_number": "0000950123-26-000123", "cik": 1067983,
+        "period_of_report": "2026-03-31", "filing_date": "2026-05-15", "form": "13F-HR",
+        "amendment_type": None, "confidential_omission": False, "parser_version": "1",
+    }
+    base.update(overrides)
+    return base
+
+
+_THIRTEENF_WRITERS = [
+    ("merge_thirteenf_holdings", "sec_thirteenf_holding", _holding_row),
+    ("merge_thirteenf_filings", "sec_thirteenf_filing", _thirteenf_filing_row),
+]
+
+
+# Tables stamped with `ingested_at` only: the per-filing tables (Ticket 04)
+# and the 13F tables (Ticket 05).
+_INGESTED_AT_WRITERS = _PER_FILING_WRITERS + _THIRTEENF_WRITERS
+
+
+@pytest.mark.parametrize(("method", "table", "make_row"), _INGESTED_AT_WRITERS)
+def test_ingested_at_rows_land_and_never_touch_local_duckdb(db, method, table, make_row):
+    count = getattr(db, method)([make_row()], "run-1")
+
+    assert count == 1
+    recorded = db.landing.tables()[table][0]
+    assert recorded["ingested_at"] is not None
+    # No validity trio on these tables -- that stamp is facts/flags only.
+    assert "is_current" not in recorded
+    assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
+
+
+@pytest.mark.parametrize(("method", "table", "make_row"), _INGESTED_AT_WRITERS)
+def test_ingested_at_advances_on_every_write(db, method, table, make_row):
+    """The intent of the retired DuckDB bump tests (release-readiness Ticket
+    98): re-processing the same business key must carry a newer ingested_at
+    than the prior write -- MDM's EMPLOYED_BY and INSTITUTIONAL_HOLDS
+    watermarks and the gold models read it."""
+    getattr(db, method)([make_row()], "run-1")
+    time.sleep(0.01)
+    getattr(db, method)([make_row()], "run-2")
+
+    first, second = (row["ingested_at"] for row in db.landing.tables()[table])
+    assert second > first
+
+
+def test_thirteenf_filing_keeps_the_old_coercions_and_defaults(db):
+    """The old `_merge_rows` values_fn: bool(confidential_omission),
+    effective_status default 'effective', parser_version default '1'."""
+    row = _thirteenf_filing_row(confidential_omission=None)
+    del row["parser_version"]
+
+    db.merge_thirteenf_filings([row], "run-1")
+
+    recorded = db.landing.tables()["sec_thirteenf_filing"][0]
+    assert recorded["confidential_omission"] is False
+    assert recorded["effective_status"] == "effective"
+    assert recorded["parser_version"] == "1"
+
+
+@pytest.mark.parametrize(
+    ("method", "row"),
+    [
+        ("merge_thirteenf_holdings", _holding_row(period_of_report=None)),
+        ("merge_thirteenf_holdings", _holding_row(holding_index=None)),
+        ("merge_thirteenf_filings", _thirteenf_filing_row(filing_date=None)),
+        ("merge_thirteenf_filings", _thirteenf_filing_row(form=None)),
+    ],
+)
+def test_thirteenf_row_missing_a_not_null_column_raises_before_recording(db, method, row):
+    with pytest.raises(ValueError, match="NOT NULL"):
+        getattr(db, method)([row], "run-1")
+
+    assert db.landing.total_row_count() == 0
+
+
+class _CountingConnection:
+    """Wraps the DuckDB connection to count execute() calls."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self.executes = 0
+
+    def execute(self, *args, **kwargs):
+        self.executes += 1
+        return self._conn.execute(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def test_thirteenf_holdings_batch_of_a_large_filer_does_no_per_row_duckdb_io(db):
+    """Ticket 05's volume check. A large 13F-HR filer reports a few thousand
+    holdings per quarter; the very largest (broker-dealer aggregators) reach
+    tens of thousands. The old path executed one DuckDB INSERT per row. The
+    passthrough must be a plain per-row dict build: at most the one cached
+    NOT NULL lookup, however many rows -- a regression to per-row I/O shows
+    up here as a count, not as a flaky timing."""
+    rows = [_holding_row(holding_index=i, cusip=f"{i:09d}") for i in range(1, 20_001)]
+    counting = _CountingConnection(db._conn)
+    db._conn = counting
+    try:
+        count = db.merge_thirteenf_holdings(rows, "run-1")
+    finally:
+        db._conn = counting._conn
+
+    assert count == 20_000
+    assert db.landing.row_count("sec_thirteenf_holding") == 20_000
+    assert counting.executes <= 1
