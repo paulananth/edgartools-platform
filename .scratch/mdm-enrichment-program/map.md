@@ -60,7 +60,9 @@ implementation work is created or production publication is authorized.
 - [Set run, transaction, and artifact-transition authority](issues/08-set-run-transaction-and-artifact-transition-authority.md)
   — join Bookkeeping, Change Ledger, and MDM Commit Evidence by one `run_id`;
   commit bounded consumer batches atomically; and move verified temporary
-  Bronze bytes into the low-cost immutable Source Artifact Archive.
+  Bronze bytes into the low-cost immutable Source Artifact Archive. Operational
+  recovery redownloads the newest complete Source Publication through the
+  Change Ledger and never waits for an archive restore.
 
 ## Deferred follow-up
 
