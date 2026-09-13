@@ -35,7 +35,11 @@ writing) — each of those lands its own portion of the 56-file list as part
 of its own scope; this ticket needs the accurate remainder, not a stale
 count.
 
-**Status:** blocked
+**Status:** superseded by [Ticket 12](12-duckdb-retirement-cleanup.md) (2026-09-12) — Ticket 10
+deployed and Ticket 11 resolved GO, so the architectural blocker this ticket's addendum
+identified (bulk-write methods with no SQLite equivalent) is now moot: Ticket 12 deletes those
+production methods wholesale, and their test files are deleted/updated in that same pass rather
+than ported separately here.
 
 - [ ] Re-survey the 56-file DuckDB-touching test list against what Tickets
       01–03/13–15, 05–07, and the `dbt-gold-silver-rewiring` chain already
