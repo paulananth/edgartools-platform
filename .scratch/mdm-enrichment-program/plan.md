@@ -81,6 +81,8 @@ Specify and prove the reusable contracts before any consumer implementation:
   S3 location or storage-class transition;
 - independent family checkpoints, delta-gap recovery, full reconciliation, and
   deterministic replay;
+- current-state disaster recovery from the newest ledger-authorized complete
+  Source Publication, without an operational dependency on archive restore;
 - normalized source-grain evidence with temporal versions and record hashes;
 - accepted-link, candidate, conflict, deferred-domain, and retirement states;
 - stewardship decisions that never imply an entity merge;

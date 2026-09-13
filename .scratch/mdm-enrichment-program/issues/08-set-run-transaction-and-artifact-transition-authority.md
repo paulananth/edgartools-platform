@@ -47,4 +47,13 @@ separate future migration with fresh parity, replay, recovery, retention, cost,
 and production rollout evidence. Shared foundation work must not silently alter
 the existing SEC storage contract.
 
+Archive restore is not an operational replay or disaster-recovery dependency.
+The product needs the most recent authoritative state, not a historical source
+snapshot. Recovery therefore creates a ledger-authorized request for the newest
+complete Source Publication and rebuilds current state from that publication.
+It never waits for the Source Artifact Archive. If the new baseline cannot prove
+continuity with the former Ledger Epoch, the ledger records a new baseline and
+does not claim historical continuity. Frozen offline fixtures, not production
+archive restores, provide deterministic parser and transition tests.
+
 Accepted by the user during the 2026-09-13 Wayfinder session.
