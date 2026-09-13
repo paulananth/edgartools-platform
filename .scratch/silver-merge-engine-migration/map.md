@@ -33,11 +33,22 @@ except where a table's specifics genuinely need a fresh design pass.
 - `mark_entity_facts_refreshed`'s move (schema design + implementation) is absorbed into this
   map as Tickets 02/03, moved here from the crash-resume map's own Tickets 02/03 per Ticket
   01's scope-convergence decision — see that map's Decisions-so-far for the pointer back.
+- **Overlap discovered 2026-09-12: this map's destination question was largely already
+  decided at a higher level.** The `duckdb-retirement` wayfinder map (`.scratch/duckdb-
+  retirement/`, decision-only, resolved/handed off 2026-08-28) already decided the write
+  path retires to "Snowflake landing zone only" — no replacement local merge engine of any
+  kind — and its implementation arm, `duckdb-retirement-cutover`, already shipped that
+  cutover live (Ticket 10, 2026-09-12). This map (spawned from `duckdb-retirement-cutover`'s
+  own Ticket 20) was chartered without checking whether its parent map had already settled
+  the question one level up. If Ticket 01's "delete, don't port" recommendation is confirmed,
+  this map's remaining scope shrinks to cleanup (deleting now-dead merge calls table by
+  table) rather than a genuine engine migration — worth revisiting whether this map should
+  keep existing separately or fold into `duckdb-retirement-cutover`'s own remaining tickets.
 
 ## Decisions so far
 
 - [Decide silver_store.py's DuckDB merge-engine fate](../duckdb-retirement-cutover/issues/20-decide-silver-store-merge-engine-fate.md) — reimplement on another engine (not keep DuckDB permanently), scoped as a real per-table migration project, not a single engine swap. Decided 2026-09-12.
-- [Choose the replacement engine and migration order](issues/01-choose-replacement-engine-and-migration-order.md) — REOPENED 2026-09-13. Original answer (Postgres; absorb the `mark_entity_facts_refreshed` marker here) partly reverted: the marker move doesn't belong on this map at all (already solved by the pipeline-resumability map's resume-ledger pattern — sent back to the crash-resume map as a task, not a design question). Engine choice itself is now suspect: evidence found that dbt's `sec_financial_fact` silver model already independently re-implements the identical dedup logic against raw (undeduped) landing rows, meaning DuckDB's local merge may be dead compute rather than something to port. See the ticket's own correction for the one open question (does anything in-process read the local merged table?) that decides between "delete the merge" and "port it."
+- [Choose the replacement engine and migration order](issues/01-choose-replacement-engine-and-migration-order.md) — REOPENED, pending user confirmation 2026-09-12. Original answer (Postgres; absorb the `mark_entity_facts_refreshed` marker here) reverted: the marker move belongs on the crash-resume map (already solved by the pipeline-resumability map's resume-ledger pattern), not here. The engine-choice question itself is now answered by evidence, not opinion: DuckDB Retirement Cutover's Ticket 10 (atomic write-path cutover, live 2026-09-12) already severed every code path — legacy and the newer, not-yet-scheduled Acquisition Ledger path alike — from ever reading back what the local merge computes; combined with dbt's `sec_financial_fact` model independently re-implementing the same dedup against raw landing rows, the local merge/dedup engine is confirmed dead compute everywhere, not just on one path. Recommendation on file: delete the local merge calls rather than port them to Postgres. Awaiting user sign-off before writing the final Answer (this is a `grilling`/HITL ticket).
 
 ## Not yet specified
 
