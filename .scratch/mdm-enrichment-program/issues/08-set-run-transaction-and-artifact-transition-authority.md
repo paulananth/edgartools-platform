@@ -40,4 +40,11 @@ checksums, and later storage-class transitions. A downstream stage starts only
 from a ledger-authorized and verified predecessor. S3 listings and Bookkeeping
 status never authorize processing.
 
+This target applies only to the new enrichment pipelines in Release 1. Existing
+SEC acquisition pipelines continue to follow ADR 0006 and retain their durable
+Bronze Artifact behavior. They may move to temporary Bronze only through a
+separate future migration with fresh parity, replay, recovery, retention, cost,
+and production rollout evidence. Shared foundation work must not silently alter
+the existing SEC storage contract.
+
 Accepted by the user during the 2026-09-13 Wayfinder session.

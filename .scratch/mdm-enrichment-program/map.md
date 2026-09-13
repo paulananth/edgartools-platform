@@ -62,6 +62,13 @@ implementation work is created or production publication is authorized.
   commit bounded consumer batches atomically; and move verified temporary
   Bronze bytes into the low-cost immutable Source Artifact Archive.
 
+## Deferred follow-up
+
+- [Migrate existing SEC Bronze later](issues/09-defer-existing-sec-bronze-migration.md)
+  — Release 1 changes only new enrichment pipelines. ADR 0006 remains active
+  for existing SEC pipelines until a separate migration proves no-loss parity,
+  replay, recovery, retention, cost, and rollback.
+
 ## Program workstreams
 
 - [Shared enrichment foundation](workstreams/00-shared-enrichment-foundation.md)
@@ -115,3 +122,5 @@ research and specification decisions; uncertainty is not hidden here.
 - Human-person enrichment from LEI evidence. The sole-proprietor workstream must
   decide the business-capacity boundary without asserting that an LEI identifies
   a natural person for unrelated purposes.
+- Changing existing SEC pipelines from durable Bronze to temporary staging.
+  That is a separately gated future migration, not part of enrichment Release 1.
