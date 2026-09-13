@@ -19,6 +19,9 @@ replay, observability, security, and retention hooks.
   [source-file pipeline catalog](../source-file-pipeline-catalog.md).
 - Schema boundaries for source publications, records, candidates, accepted
   links, conflicts, deferred domains, mappings, and stewardship decisions.
+- Generic legal-entity registry representation and source-classification
+  history for accepted records, such as GLEIF International Organizations,
+  that do not justify a dedicated domain table or consumer.
 - Bookkeeping Root Run, Change Ledger transition authority, S3 path and
   storage-class journal, Snowflake native-pull boundary, and Snowflake Postgres
   bounded consumer transaction/run binding.

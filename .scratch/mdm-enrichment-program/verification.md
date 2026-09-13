@@ -7,7 +7,8 @@ schedule, backfill, or production mutation.
 ## Result
 
 PASS. The parent program is planning-complete at the requested resolution. It
-defines 26 workstream charters, five accepted decision records, one
+defines 26 workstream charters, 11 accepted decision records, one deferred
+decision record, one
 dependency-ordered plan, one specification ownership index, one architecture
 decision, and the shared glossary additions.
 
@@ -16,8 +17,8 @@ decision, and the shared glossary additions.
 - Shared GLEIF Level 1, relationship, exception, mapping, run, replay,
   stewardship, observability, security, retention, and cost foundation.
 - Company, Security, Fund, Branch, Adviser/Audit Firm, Government Entity,
-  International Organization, Sole Proprietor/Person boundary, and Market/Venue
-  consumers.
+  Sole Proprietor/Person boundary, and Market/Venue consumers, plus the
+  International Organization common-entity classification route.
 - ISIN, BIC, MIC, OpenCorporates, S&P CIQ, QCC, and GEM mapping families.
 - Conditional market-data, sanctions, ESG, credit, and commercial-company
   source decisions.

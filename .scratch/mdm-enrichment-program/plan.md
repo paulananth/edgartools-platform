@@ -145,9 +145,11 @@ consumer cannot roll back or advance another consumer's checkpoint.
 
 - [Bind accepted GLEIF identities to Adviser and Audit Firm](workstreams/05-adviser-audit-firm.md)
   without coercing them into Company.
-- Add explicit [Government Entity](workstreams/06-government-legal-entity.md)
-  and [International Organization](workstreams/07-international-organization.md)
-  consumers.
+- Add the explicit [Government Entity](workstreams/06-government-legal-entity.md)
+  consumer. Route the
+  [International Organization](workstreams/07-international-organization.md)
+  GLEIF category through the common MDM entity registry without a dedicated
+  domain table or consumer.
 - Resolve the [Sole Proprietor versus Person business-capacity boundary](workstreams/08-sole-proprietor-person-boundary.md)
   before any publication.
 - Add a [Market/Trading Venue domain](workstreams/09-market-trading-venue.md)
