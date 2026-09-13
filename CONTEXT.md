@@ -117,8 +117,8 @@ One immutable source byte sequence addressed by its canonical content identity; 
 _Avoid_: Payload copy per poll, mutable latest object, request ID as content identity
 
 **Temporary Bronze Stage**:
-The target enrichment architecture's short-lived S3 landing location for exact source bytes while their hash, declared member inventory, parser contract, and archive write are verified; it is not durable processing authority or the long-term system of record.
-_Avoid_: Permanent hot Bronze storage, starting downstream work from an S3 listing, deleting the temporary object before archive verification
+The new-enrichment-pipeline architecture's short-lived S3 landing location for exact source bytes while their hash, declared member inventory, parser contract, and archive write are verified; it is not durable processing authority or the long-term system of record. Existing SEC pipelines retain ADR 0006's durable Bronze contract until a separate migration is accepted.
+_Avoid_: Applying this contract silently to existing SEC pipelines, permanent hot Bronze storage for new enrichment, starting downstream work from an S3 listing, deleting the temporary object before archive verification
 
 **Source Artifact Archive**:
 The low-cost immutable S3 system of record for exact source bytes after Temporary Bronze Stage verification; the Change Ledger records its content identity, location, storage class, checksum parity, transition time, and every later physical storage transition.
