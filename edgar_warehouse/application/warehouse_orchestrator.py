@@ -8,7 +8,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 import uuid
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -75,7 +74,7 @@ from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.serving.silver_landing_writer import write_landing_export
-from edgar_warehouse.silver_protection import compute_silver_fingerprint, merge_candidate_into_canonical
+from edgar_warehouse.silver_protection import compute_silver_fingerprint
 from edgar_warehouse.silver_support.session import open_silver_database
 
 if TYPE_CHECKING:
@@ -544,11 +543,15 @@ def _execute_warehouse_bronze_capture(
     # (append-only, one Parquet file per run, no shared mutable object), so
     # every command now opens the same monolith silver database (see Ticket
     # 10's note immediately below for why "hydrates" no longer applies). The
-    # shared shard-file infrastructure itself (_read_shard_manifest,
-    # _hydrate_shard_for_window, open_silver_shard, _publish_shard_if_remote)
-    # is left in place -- load_history's read path and the mdm-ahead-of-silver
-    # backfill sweep still call it directly; see
-    # .scratch/duckdb-retirement/issues/04-decide-bootstrap-batch-sharding-fate.md.
+    # shared shard-file read infrastructure itself (_read_shard_manifest,
+    # _hydrate_shard_for_window, open_silver_shard) is left in place -- the
+    # mdm-ahead-of-silver parity/backfill read path still calls it directly;
+    # see .scratch/duckdb-retirement/issues/04-decide-bootstrap-batch-sharding-fate.md.
+    # The shard-file WRITE side (_publish_shard_if_remote and its retry
+    # wrapper) was deleted (duckdb-retirement-cutover Ticket 12): confirmed
+    # zero live callers, since bootstrap-batch sharding itself was retired
+    # (Ticket 06) before this write path was ever exercised in a mixed
+    # concurrent-writer scenario that would have needed the retry.
     #
     # DuckDB Retirement Cutover Ticket 10: hydration removed. Canonical
     # silver/sec/silver.duckdb is no longer written by any command (see
@@ -1158,11 +1161,15 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
 
     Kept as a named function (not deleted) since ``_publish_silver_database_
     with_retry`` and every one of this function's own callers still call it
-    by name -- rewiring or deleting them is Ticket 12's sweep, not this
-    ticket's. ``merge_candidate_into_canonical`` is now dead from this call
-    site (its only other caller, ``_publish_shard_if_remote``, already had
-    zero real callers before this ticket -- see CLAUDE.md's shard-publish
-    5-whys). ``compute_silver_fingerprint``/the fingerprint-sidecar helpers
+    by name -- rewiring or deleting them was out of scope for Ticket 10.
+    ``merge_candidate_into_canonical`` is dead from THIS call site
+    specifically (its sibling caller here, ``_publish_shard_if_remote``, was
+    confirmed to have zero real callers and deleted -- duckdb-retirement-
+    cutover Ticket 12), but the function itself is NOT dead overall: it has
+    a separate, live caller in ``application/silver_event_reducer.py`` --
+    an earlier version of this docstring claimed otherwise without checking
+    that caller, corrected here (Ticket 12). ``compute_silver_fingerprint``/
+    the fingerprint-sidecar helpers
     are NOT dead: ``_hydrate_silver_database_from_storage`` still calls them,
     and that function itself is still called from the four read-only
     reconciliation tools this ticket deliberately leaves alone (see the
@@ -1290,15 +1297,13 @@ def _hydrate_shard_for_window(
         return None
 
     # Snapshot the hydration-time fingerprint (release-readiness ticket 79's
-    # skip-if-unchanged optimization, ported here 2026-08-19): most
-    # "Clean and Merge Filings" (formerly BatchSilver) batches during a reprocessing pass write zero new rows
-    # (already-captured bronze, nothing to add), and _publish_shard_if_remote
-    # now merges via merge_candidate_into_canonical on every publish with an
-    # existing baseline -- a real memory/network cost bootstrap-batch's
-    # medium (4096MB) profile has been observed OOMing near even without
-    # this addition (see this repo's own Stage 14 execution history), so
-    # skipping the whole merge/publish cycle on a provable no-op matters
-    # here, not just as a cost optimization. Fail-open on any fingerprint
+    # skip-if-unchanged optimization, ported here 2026-08-19): this was read
+    # by _publish_shard_if_remote's skip-if-unchanged fast path, which
+    # avoided the merge/publish cycle's real memory/network cost on a
+    # provable no-op. That function was deleted (duckdb-retirement-cutover
+    # Ticket 12: confirmed zero live callers), so this sidecar is currently
+    # write-only -- left in place rather than removed in the same pass, see
+    # that ticket's file for the follow-up note. Fail-open on any fingerprint
     # error, matching the monolith path's own handling.
     try:
         fingerprint = compute_silver_fingerprint(local_path)
@@ -1333,194 +1338,6 @@ def _hydrate_all_shards(context: WarehouseCommandContext) -> list[str | None]:
         _hydrate_shard_for_window(context, shard_index)
         for shard_index in range(manifest["shard_count"])
     ]
-
-
-def _publish_shard_if_remote(
-    context: WarehouseCommandContext,
-    shard_index: int,
-) -> dict[str, Any] | None:
-    """Merge the local shard candidate into canonical and publish it, safely.
-
-    ETag-guarded via the shared ``stage_and_promote`` primitive (decoupled-
-    bronze-pipeline ticket 01/09's identified gap: this previously called
-    ``upload_file`` directly -- a blind overwrite with no version check at
-    all). A concurrent writer to the same shard between this call's baseline
-    read and its promote raises ``PromotionConflictError``.
-
-    Merges via ``merge_candidate_into_canonical`` (the same function
-    ``_publish_silver_database_if_remote`` uses for the monolith) whenever a
-    canonical version of this shard already exists, instead of blindly
-    uploading the local file's raw bytes -- see this function's own
-    ``_publish_shard_if_remote_with_retry`` wrapper for why a blind overwrite
-    is unsafe here (multiple concurrent writers legitimately land on the same
-    shard index). New shards (no canonical object yet) skip the merge and
-    upload the local candidate directly, matching the monolith path's
-    ``baseline.exists`` branch.
-
-    Also ports the monolith's skip-if-unchanged optimization (release-
-    readiness ticket 79): a fingerprint comparison against
-    ``_hydrate_shard_for_window``'s hydration-time snapshot skips the entire
-    S3/merge cycle for a provable no-op, before any remote call at all.
-
-    Parameters
-    ----------
-    context:
-        The warehouse command context.
-    shard_index:
-        The zero-based shard index to publish.
-
-    Returns
-    -------
-    dict | None
-        A write-record dict (``layer``, ``shard_index``, ``path``,
-        ``size_bytes``, ``source_version``, ``canonical_version``,
-        ``tables_merged``, and ``skipped: True`` on the no-op fast path) if
-        published, or ``None`` if storage is local.
-
-    Raises
-    ------
-    WarehouseRuntimeError
-        If the local shard file does not exist.
-    PromotionConflictError
-        If the shard's canonical object changed since this call's baseline
-        read. Retryable -- see ``_publish_shard_if_remote_with_retry``.
-    """
-    if not context.storage_root.is_remote:
-        return None
-
-    local_path = Path(
-        context.silver_root.join("silver", "sec", "shards", f"shard-{shard_index}.duckdb")
-    )
-    if not local_path.exists():
-        raise WarehouseRuntimeError(
-            f"Shard {shard_index} not found at {local_path}"
-        )
-
-    relative_path = default_path_resolver().shard_path(shard_index)
-
-    # Skip-if-unchanged (ported from _publish_silver_database_if_remote,
-    # release-readiness ticket 79): before any S3 call, compare the current
-    # fingerprint against the one snapshotted at hydration time
-    # (_hydrate_shard_for_window). If identical, nothing this process wrote
-    # can differ from canonical, so the whole download-canonical/merge/
-    # upload/promote cycle -- newly real memory pressure against
-    # bootstrap-batch's medium (4096MB) profile once this shard's merge
-    # branch exists at all, see this function's own module-level context --
-    # is skipped as a provable no-op. Missing sidecar (new shard, or
-    # hydration wrote nothing) never causes a skip, only a provably-matching
-    # fingerprint does.
-    hydration_fingerprint = _read_fingerprint_sidecar(local_path)
-    if hydration_fingerprint is not None:
-        try:
-            current_fingerprint = compute_silver_fingerprint(local_path)
-        except Exception:
-            current_fingerprint = None
-        if current_fingerprint is not None and current_fingerprint == hydration_fingerprint:
-            _emit_pipeline_event(
-                "silver_shard_publish_skipped_noop",
-                shard_index=shard_index,
-                relative_path=relative_path,
-                protected_tables=sorted(current_fingerprint["protected"]),
-            )
-            return {
-                "layer": "silver_shard",
-                "shard_index": shard_index,
-                "path": context.storage_root.join(relative_path),
-                "relative_path": relative_path,
-                "size_bytes": local_path.stat().st_size,
-                "source_version": None,
-                "staged_checksum": None,
-                "canonical_version": None,
-                "tables_merged": [],
-                "skipped": True,
-            }
-
-    baseline = context.storage_root.read_object_version(relative_path)
-    tables_merged: tuple[str, ...] = ()
-
-    if baseline.exists:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            canonical_local = Path(tmp_dir) / "canonical.duckdb"
-            canonical_local.write_bytes(read_bytes(context.storage_root.join(relative_path)))
-            merged_local = Path(tmp_dir) / "merged.duckdb"
-            merge_result = merge_candidate_into_canonical(local_path, canonical_local, merged_local)
-            tables_merged = merge_result.tables_merged
-            payload = merged_local.read_bytes()
-    else:
-        payload = local_path.read_bytes()
-
-    promotion = context.storage_root.stage_and_promote(
-        relative_path, payload, expected_etag=baseline.etag
-    )
-    return {
-        "layer": "silver_shard",
-        "shard_index": shard_index,
-        "path": promotion.canonical_path,
-        "relative_path": relative_path,
-        "size_bytes": len(payload),
-        "source_version": baseline.etag,
-        "staged_checksum": hashlib.md5(payload).hexdigest(),
-        "canonical_version": promotion.new_version.etag,
-        "tables_merged": list(tables_merged),
-    }
-
-
-def _publish_shard_if_remote_with_retry(
-    context: WarehouseCommandContext,
-    shard_index: int,
-) -> dict[str, Any] | None:
-    """Retry _publish_shard_if_remote on a lost promotion race.
-
-    Regression (silver-snowflake-migration map, 2026-08-19): the CIK-sharded
-    architecture's shard count (4) is fixed independently of
-    ``one_click_data_refresh``'s ``Clean and Merge Filings`` (formerly BatchSilver) Distributed Map
-    concurrency (``MaxConcurrency: 20``), so multiple concurrent Map items
-    routinely land on the same shard index -- contradicting this function's
-    former docstring claim that "each shard is owned by exactly one writer."
-    Three real prod executions hit the identical
-    ``PromotionConflictError``-on-``shard-0.duckdb`` failure at this
-    concurrency (see the silver-snowflake-migration map's "Motivating
-    evidence" and Ticket 12's Progress notes); with
-    ``ToleratedFailurePercentage: 0`` on that Map, a single unretried
-    conflict aborts the entire release.
-
-    Mirrors ``_publish_silver_database_with_retry``'s exact pattern (same
-    env vars, same unbounded-by-default policy, same exponential backoff
-    with jitter): on ``PromotionConflictError``, ``_publish_shard_if_remote``
-    itself re-reads the current canonical baseline and re-merges the local
-    candidate into it (see that function's ``merge_candidate_into_canonical``
-    branch), so simply calling it again re-runs the full read-merge-stage-
-    promote cycle against whatever the conflicting writer just published --
-    no separate re-merge step is needed here.
-    """
-    from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
-
-    configured_attempts = int(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "0"))
-    max_attempts = configured_attempts if configured_attempts > 0 else None
-    backoff_base_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "1.0"))
-    backoff_max_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_MAX_SECONDS", "30.0"))
-    attempt = 0
-    while True:
-        attempt += 1
-        try:
-            return _publish_shard_if_remote(context, shard_index)
-        except PromotionConflictError as exc:
-            if max_attempts is not None and attempt >= max_attempts:
-                raise
-            import random
-            import time as _time
-
-            exponential_delay = backoff_base_seconds * (2 ** min(attempt - 1, 20))
-            delay = min(backoff_max_seconds, exponential_delay) * (0.5 + random.random() / 2)
-            _emit_pipeline_event(
-                "silver_shard_publish_conflict_retry",
-                shard_index=shard_index,
-                attempt=attempt,
-                max_attempts=max_attempts or "unbounded",
-                retry_delay_seconds=delay,
-                error=str(exc),
-            )
-            _time.sleep(delay)
 
 
 def _run_filing_artifact_gated_capture(

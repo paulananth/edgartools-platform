@@ -352,9 +352,6 @@ def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
             "edgar_warehouse.application.warehouse_orchestrator._hydrate_shard_for_window",
         ) as mock_hydrate_shard,
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_shard_if_remote_with_retry",
-        ) as mock_publish_shard,
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
             return_value=None,
         ) as mock_monolith_publish,
@@ -375,11 +372,12 @@ def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
             arguments={"cik_list": chunk_ciks},
         )
 
-    # The shard manifest is never consulted, no shard is ever hydrated or
-    # published, and no shard-open code path runs at all.
+    # The shard manifest is never consulted, no shard is ever hydrated, and
+    # no shard-open code path runs at all. (_publish_shard_if_remote_with_retry
+    # no longer exists -- deleted, confirmed zero live callers, by
+    # duckdb-retirement-cutover Ticket 12.)
     mock_read_manifest.assert_not_called()
     mock_hydrate_shard.assert_not_called()
-    mock_publish_shard.assert_not_called()
     # The monolith open/publish path runs unconditionally instead. Hydrate
     # is never called for any command post-Ticket-10 (see the docstring above).
     mock_monolith_hydrate.assert_not_called()
