@@ -30,9 +30,6 @@ Capture Facade -> exact ZIP in Temporary Bronze Stage -> Change Ledger
 Verify archive hash, member inventory, CDF/parser contract, and record count
         |
         v
-Move exact ZIP to low-cost immutable Source Artifact Archive
-        |
-        v
 Normalized Source Evidence
         |
         +--> domain Consumer Candidate
@@ -44,6 +41,10 @@ Consumer transaction + Consumer Checkpoint + MDM Commit Evidence
         |
         +--> Snowflake export
         `--> graph publication
+        |
+        +--> complete publication: retain as latest Source Artifact Archive copy
+        `--> delta publication: delete Temporary Bronze only after every required
+             consumer and downstream verification passes
 ```
 
 GLEIF Evidence Capture downloads each source archive once. Company, Security,
@@ -323,7 +324,10 @@ Each Source Publication must record:
 - declared archive inventory and expected member names;
 - archive byte count, content type, raw evidence hash, and read-back result;
 - Temporary Bronze Stage identity and verified Source Artifact Archive object,
-  storage class, transition time, and checksum parity;
+  when the artifact is a complete publication, including storage class,
+  transition time, and checksum parity;
+- for a delta, every required Consumer Checkpoint and downstream verification
+  that must pass before Change-Ledger-authorized temporary-object deletion;
 - every later physical location or storage-class transition and its authorized
   retention decision;
 - format, CDF or mapping contract, parser version, and normalized record count;

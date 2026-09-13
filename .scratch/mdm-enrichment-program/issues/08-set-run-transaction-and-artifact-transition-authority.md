@@ -65,4 +65,13 @@ deletion record remain permanent. S3 lifecycle age alone cannot authorize the
 deletion, and a partial or unverified replacement cannot supersede the retained
 complete publication.
 
+Daily and recovery delta bytes do not enter the Source Artifact Archive. They
+remain in the Temporary Bronze Stage until every consumer that declares the
+delta family as required has committed its Consumer Checkpoint and all required
+Snowflake and graph verification has passed. The retention operator then
+deletes the exact temporary object through the Change Ledger. A failed,
+deferred, or unverified consumer keeps the bytes available for retry. The
+manifest, raw hash, transition lineage, terminal record dispositions, MDM
+Commit Evidence, and deletion record remain permanent.
+
 Accepted by the user during the 2026-09-13 Wayfinder session.
