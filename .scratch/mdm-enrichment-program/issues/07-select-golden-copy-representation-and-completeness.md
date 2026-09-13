@@ -1,7 +1,7 @@
 # Select the Golden Copy representation and completeness boundary
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 06
 
 ## Question
@@ -16,8 +16,24 @@ reporting-exception checkpoints, define fail-closed behavior when discovery and
 download metadata disagree, and prevent equivalent encodings from becoming
 duplicate business publications.
 
-Recommendation: retain the exact XML ZIP as the normative, lossless production
-Bronze Artifact; treat the current JSON ZIP corpus as a frozen research fixture;
-model the GLEIF release set as three linked family publications so each family
-retains independent recovery while a consumer cannot advance until all of its
-declared required families are verified.
+## Answer
+
+Use the exact XML ZIP as the normative, lossless production artifact. The
+current JSON ZIP corpus remains a frozen research fixture. CSV and JSON copies
+of the same Golden Copy are not additional business publications and are not
+captured by the production path.
+
+Model the GLEIF release set as three linked publication families:
+
+1. Level 1 LEI legal-entity records advance independently.
+2. Level 2 Relationship Records and Level 2 Reporting Exceptions retain their
+   own artifact identities, but form one coordinated completeness unit. Neither
+   checkpoint advances unless both artifacts are verified.
+3. ISIN, BIC, MIC, OpenCorporates, QCC, and GEM identifier mappings are six
+   independent complete-snapshot families. Each owns its native cadence,
+   checkpoint, continuity proof, recovery, and domain route.
+
+A failure in one independent family cannot roll back or advance another. The
+coordinated Release 1 gate still waits for every mandatory family and consumer.
+
+Accepted by the user during the 2026-09-13 Wayfinder session.

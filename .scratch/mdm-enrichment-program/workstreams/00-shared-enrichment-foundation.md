@@ -8,8 +8,9 @@ Future spec: `docs/specs/mdm-enrichment/shared-foundation.md`
 ## Destination
 
 One AWS source-evidence path supports every enrichment source and consumer with
-immutable capture, source/run identity, independent checkpoints, temporal
-versions, review states, replay, observability, security, and retention hooks.
+temporary Bronze staging, a low-cost immutable Source Artifact Archive,
+source/run identity, independent checkpoints, temporal versions, review states,
+replay, observability, security, and retention hooks.
 
 ## Required decisions and evidence
 
@@ -18,8 +19,9 @@ versions, review states, replay, observability, security, and retention hooks.
   [source-file pipeline catalog](../source-file-pipeline-catalog.md).
 - Schema boundaries for source publications, records, candidates, accepted
   links, conflicts, deferred domains, mappings, and stewardship decisions.
-- Change Ledger authority, S3 path catalog, Snowflake native-pull boundary, and
-  Snowflake Postgres transaction/run binding.
+- Bookkeeping Root Run, Change Ledger transition authority, S3 path and
+  storage-class journal, Snowflake native-pull boundary, and Snowflake Postgres
+  bounded consumer transaction/run binding.
 - Delta continuity, full reconciliation, replay, migration, rollback, threat,
   cost, and TDD contracts.
 
