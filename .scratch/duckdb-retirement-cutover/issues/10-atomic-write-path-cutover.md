@@ -58,7 +58,18 @@ off DuckDB. Note Ticket 04 specifically: the bookkeeping Postgres instance
 must be live, not just coded, before this deploy — the write path cannot
 repoint to a store that doesn't exist yet.
 
-**Status:** code complete (2026-09-06); deploy pending operator
+**Status:** deployed (confirmed live 2026-09-12 — see correction below)
+
+**Correction (2026-09-12):** this "deploy pending operator" line was stale. The cutover has
+already shipped: the currently-registered prod `edgartools-prod-large` task definition
+(revision 302, registered 2026-09-12) runs image `warehouse-sha-cffe2a043680`, and
+`git merge-base --is-ancestor 29612b3d cffe2a04` confirms that commit descends from this
+ticket's own merge commit. Canonical `silver.duckdb`'s S3 `LastModified` independently confirms
+it: 2026-09-06 10:42:08, six days with zero writes as of this correction. The deploy happened
+as an unintentional side effect of an unrelated deploy (PR #607) rather than a deliberate,
+consciously-flipped cutover — meaning [Ticket 11](11-post-cutover-reconciliation-gate.md)'s
+reconciliation gate is now running retroactively, not pre-emptively. See that ticket for the
+reconciliation results.
 
 All 11 listed blockers are now closed (Ticket 05 landed 2026-09-06, PR #556,
 merge commit `d242144f`) — this ticket was unblocked and implemented in the

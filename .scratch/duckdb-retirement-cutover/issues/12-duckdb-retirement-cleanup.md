@@ -26,9 +26,13 @@ This is deliberately the **last** ticket — deleting old code before Ticket
 09's approval would remove the only known-good fallback if reconciliation
 finds a problem.
 
-**Blocked by:** [Ticket 11](11-post-cutover-reconciliation-gate.md)
+**Blocked by:** [Ticket 11](11-post-cutover-reconciliation-gate.md) — resolved 2026-09-12 (GO)
 
-**Status:** blocked
+**Status:** unblocked (2026-09-12) — ready to start. Note: [Ticket 09](09-complete-sqlite-test-port.md)'s
+remaining scope (test files covering the DuckDB bulk-write methods this ticket deletes, e.g.
+`merge_daily_index_filings`/`merge_filings`/`merge_adv_filings`'s `self._conn.register(...)`
+pattern) is subsumed here rather than tracked separately — deleting the production methods and
+updating/deleting their test files belongs in one PR, not two out-of-sync ones.
 
 - [ ] `silver_store.py`/`silver_protection.py`'s DuckDB-specific code is
       deleted
