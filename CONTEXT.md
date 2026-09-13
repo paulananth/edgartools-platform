@@ -121,8 +121,8 @@ The new-enrichment-pipeline architecture's short-lived S3 landing location for e
 _Avoid_: Applying this contract silently to existing SEC pipelines, permanent hot Bronze storage for new enrichment, starting downstream work from an S3 listing, deleting the temporary object before archive verification
 
 **Source Artifact Archive**:
-The low-cost immutable S3 audit store for exact source bytes after Temporary Bronze Stage verification; the Change Ledger records its content identity, location, storage class, checksum parity, transition time, and every later physical storage transition. Current-state replay and disaster recovery redownload the newest complete Source Publication and never wait for this archive.
-_Avoid_: Archive restore as an operational dependency, checksum-only historical replay claim, untracked lifecycle transition, mutable latest object, archive state as processing authority
+The low-cost immutable S3 audit store for the latest verified complete source bytes of each new enrichment publication family after Temporary Bronze Stage verification; the Change Ledger records content identity, location, storage class, checksum parity, transition time, and every later physical storage transition. A verified accepted replacement permits authorized deletion of superseded bytes while permanent manifests, hashes, lineage, MDM Commit Evidence, and deletion evidence remain. Current-state replay and disaster recovery redownload the newest complete Source Publication and never wait for this archive.
+_Avoid_: Retaining every superseded enrichment payload, deleting before replacement verification, S3 lifecycle age as deletion authority, archive restore as an operational dependency, checksum-only historical replay claim, untracked lifecycle transition, mutable latest object, archive state as processing authority
 
 **Raw Evidence Hash**:
 The digest of the exact source bytes that identifies one Bronze Artifact without claiming those bytes represent a business change.

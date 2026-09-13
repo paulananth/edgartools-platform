@@ -83,6 +83,9 @@ Specify and prove the reusable contracts before any consumer implementation:
   deterministic replay;
 - current-state disaster recovery from the newest ledger-authorized complete
   Source Publication, without an operational dependency on archive restore;
+- latest-complete-publication retention per enrichment family, with
+  Change-Ledger-authorized deletion of superseded bytes and permanent manifests,
+  hashes, lineage, MDM Commit Evidence, and deletion evidence;
 - normalized source-grain evidence with temporal versions and record hashes;
 - accepted-link, candidate, conflict, deferred-domain, and retirement states;
 - stewardship decisions that never imply an entity merge;

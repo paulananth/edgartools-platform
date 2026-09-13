@@ -19,3 +19,9 @@ Archive restore has no operational recovery service level: disaster recovery
 redownloads the newest complete Source Publication through the Change Ledger.
 The retention specification must therefore justify archived bytes as audit
 evidence rather than as a dependency of the current-state pipeline.
+
+For new enrichment families, retain only the latest verified complete source
+publication. A verified accepted replacement makes older raw bytes eligible for
+Change-Ledger-authorized deletion. Keep manifests, hashes, publication lineage,
+MDM Commit Evidence, and deletion evidence permanently. A lifecycle timer,
+partial delta, or unverified replacement never authorizes deletion.
