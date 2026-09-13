@@ -116,6 +116,14 @@ _Avoid_: Optional raw archive, changed-content-only capture, Bronze as processin
 One immutable source byte sequence addressed by its canonical content identity; multiple Source Captures may reference the same artifact while retaining distinct observation provenance.
 _Avoid_: Payload copy per poll, mutable latest object, request ID as content identity
 
+**Temporary Bronze Stage**:
+The target enrichment architecture's short-lived S3 landing location for exact source bytes while their hash, declared member inventory, parser contract, and archive write are verified; it is not durable processing authority or the long-term system of record.
+_Avoid_: Permanent hot Bronze storage, starting downstream work from an S3 listing, deleting the temporary object before archive verification
+
+**Source Artifact Archive**:
+The low-cost immutable S3 system of record for exact source bytes after Temporary Bronze Stage verification; the Change Ledger records its content identity, location, storage class, checksum parity, transition time, and every later physical storage transition.
+_Avoid_: Checksum-only replay claim, untracked lifecycle transition, mutable latest object, archive state as processing authority
+
 **Raw Evidence Hash**:
 The digest of the exact source bytes that identifies one Bronze Artifact without claiming those bytes represent a business change.
 _Avoid_: Domain hash, request identity, transport metadata as meaning
@@ -289,7 +297,7 @@ One immutable native release from an enrichment Source Authority, identified by 
 _Avoid_: Filename as publication identity, mutable latest URL as evidence, one file silently standing for a multi-file release, equivalent XML/JSON/CSV encodings treated as separate business releases
 
 **Enrichment Publication Artifact**:
-One declared source archive within an Enrichment Source Publication, retained through Bronze Persist with its archive hash, expected member inventory, source format, parser contract, and observed record count.
+One declared source archive within an Enrichment Source Publication, verified in the Temporary Bronze Stage and retained in the Source Artifact Archive with its archive hash, expected member inventory, source format, parser contract, observed record count, and Change Ledger transition history.
 _Avoid_: Extracted temporary file as source authority, undocumented side file, parser output as raw evidence, duplicate capture per MDM domain
 
 **GLEIF Candidate Backstop**:

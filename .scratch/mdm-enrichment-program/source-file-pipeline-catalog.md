@@ -24,10 +24,13 @@ GLEIF publication discovery
 Source Fetch Decision for each declared archive
         |
         v
-Capture Facade -> immutable ZIP as Bronze Artifact -> Change Ledger
+Capture Facade -> exact ZIP in Temporary Bronze Stage -> Change Ledger
         |
         v
 Verify archive hash, member inventory, CDF/parser contract, and record count
+        |
+        v
+Move exact ZIP to low-cost immutable Source Artifact Archive
         |
         v
 Normalized Source Evidence
@@ -55,9 +58,9 @@ GLEIF publishes three Golden Copy file families in XML, CSV, and JSON. It also
 publishes four time-window delta variants for each family. XML is the normative
 CDF representation. GLEIF produces JSON and CSV from XML, and CSV can limit
 repeated fields and omit extension information. The repository's frozen
-research evidence uses JSON ZIP files. The foundation specification must select
-one canonical production representation; it must not silently capture all
-equivalent encodings.
+research evidence uses JSON ZIP files. The accepted canonical production
+representation is the exact XML ZIP. Production does not capture equivalent
+JSON or CSV encodings as separate business publications.
 
 Production discovery must use the official latest-publication endpoint:
 
@@ -319,6 +322,10 @@ Each Source Publication must record:
 - discovery URL and immutable download URL;
 - declared archive inventory and expected member names;
 - archive byte count, content type, raw evidence hash, and read-back result;
+- Temporary Bronze Stage identity and verified Source Artifact Archive object,
+  storage class, transition time, and checksum parity;
+- every later physical location or storage-class transition and its authorized
+  retention decision;
 - format, CDF or mapping contract, parser version, and normalized record count;
 - license or terms version and mapping certification status when applicable;
 - root run, phase attempt, registry version, and Change Ledger evidence;

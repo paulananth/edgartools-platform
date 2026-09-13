@@ -54,6 +54,13 @@ implementation work is created or production publication is authorized.
 - [Inventory source files and pipeline routing](issues/06-inventory-source-files-and-pipeline-routing.md)
   — catalog the three Golden Copy families, their delta and recovery files,
   every approved mapping snapshot, and each domain or nonpublishing route.
+- [Select the Golden Copy representation and completeness boundary](issues/07-select-golden-copy-representation-and-completeness.md)
+  — use XML ZIP, coordinate Relationship Records with Reporting Exceptions,
+  and keep the six identifier mappings independently checkpointed.
+- [Set run, transaction, and artifact-transition authority](issues/08-set-run-transaction-and-artifact-transition-authority.md)
+  — join Bookkeeping, Change Ledger, and MDM Commit Evidence by one `run_id`;
+  commit bounded consumer batches atomically; and move verified temporary
+  Bronze bytes into the low-cost immutable Source Artifact Archive.
 
 ## Program workstreams
 

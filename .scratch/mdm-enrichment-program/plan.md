@@ -73,9 +73,12 @@ Owner: [Shared enrichment foundation](workstreams/00-shared-enrichment-foundatio
 Specify and prove the reusable contracts before any consumer implementation:
 
 - source registry, authority, license, cadence, and immutable publication identity;
-- S3 capture for Level 1, relationship, exception, and mapping families;
-- Change Ledger authorization and one run identity spanning source, MDM, export,
-  graph, and operator evidence;
+- temporary S3 Bronze staging and low-cost immutable Source Artifact Archive
+  retention for Level 1, relationship, exception, and mapping families;
+- a Bookkeeping Root Run and Change Ledger authorization joined by one run
+  identity spanning source, MDM, export, graph, and operator evidence;
+- Change Ledger records for every logical pipeline transition and every physical
+  S3 location or storage-class transition;
 - independent family checkpoints, delta-gap recovery, full reconciliation, and
   deterministic replay;
 - normalized source-grain evidence with temporal versions and record hashes;
