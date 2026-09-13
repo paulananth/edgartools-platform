@@ -73,6 +73,10 @@ implementation work is created or production publication is authorized.
   — extend the existing separate-domain model with `branch` and `mdm_branch`,
   and link an accepted Branch to its separately accepted head office through
   directional `IS_INTERNATIONAL_BRANCH_OF` evidence.
+- [Add the Government Entity domain boundary](issues/11-add-government-entity-domain-boundary.md)
+  — add `government_entity` and `mdm_government_entity`; retain LEI and
+  applicable QCC/GEM identifiers as governed source references without
+  coercing the entity into Company or inferring ownership.
 
 ## Deferred follow-up
 
