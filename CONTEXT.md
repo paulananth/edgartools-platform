@@ -232,6 +232,70 @@ _Avoid_: Shared writer role, self-approved output, coordinator as universal data
 The external publisher whose current source material defines what the platform may truthfully capture; for SEC-family data this is SEC or its designated source system.
 _Avoid_: Bronze as original publisher, Change Ledger as source-content authority, downstream table as source truth
 
+**MDM Enrichment Program**:
+The governed portfolio that adds source-grained external evidence to MDM through independently releasable domain consumers. It includes GLEIF and separately governed non-GLEIF sources without turning one source, consumer, or release into authority for another.
+_Avoid_: Monolithic enrichment pipeline, one big-bang release, inclusion as production authorization, mixing source authority across domains
+
+**MDM Enrichment Consumer**:
+An independently releasable projection of accepted external evidence into one supported MDM entity or relationship domain, with its own completeness, correctness, replay, rollback, and observability gates.
+_Avoid_: Generic all-entity consumer, shared release fate, source capture as automatic publication
+
+**Conditional Enrichment Source**:
+An enrichment source represented in the program but not authorized for implementation until its authority, license, coverage, cost, cadence, and usefulness gates pass.
+_Avoid_: Roadmap inclusion as ingestion approval, unlicensed production feed, implied mandatory delivery
+
+**Deferred Domain Evidence**:
+Captured external evidence whose semantics belong to an MDM domain that has no supported consumer or accepted local identity yet; it remains auditable and nonpublishing until that domain resolves it.
+_Avoid_: Generic placeholder entity, coercion into Company, dropped unsupported record
+
+**Enrichment Stewardship Decision**:
+An immutable, evidence-and-run-bound human resolution of an identity link, field conflict, relationship endpoint, or identifier-mapping conflict. It may authorize a source projection but never silently merges MDM entities.
+_Avoid_: Log-only review, mutable decision row, review acceptance as entity merge
+
+**Adjudicated Seed Link**:
+A previously reviewed external-identity link imported with its complete decision evidence and revalidated against the current source baseline and uniqueness rules before publication.
+_Avoid_: Trusted static mapping, population-wide auto-link rule, unvalidated historical approval
+
+**Enrichment Business Retirement**:
+The evidence-backed closure of a current enrichment link, projection, mapping, or relationship while preserving its historical versions and decisions. It requires an explicit source change or complete reconciliation; a partial delta's absence cannot retire evidence.
+_Avoid_: Physical deletion, absence-as-retirement, silent successor rebinding
+
+**Enrichment Evidence Retention**:
+Preservation of normalized source evidence, manifests, hashes, run lineage, and stewardship decisions independently from the storage class or reviewed expiry of superseded raw source archives.
+_Avoid_: Keep every byte hot forever, delete audit lineage with raw files, key-only S3 deletion
+
+**Enrichment Planning Complete**:
+The state in which every mandatory and conditional enrichment workstream has an explicit destination, dependencies, authority, evidence requirements, release gates, and terminal outcome path, with no hidden design decision.
+_Avoid_: Implementation complete, ticket list without decisions, roadmap as source approval
+
+**Enrichment Program Complete**:
+The state in which every mandatory enrichment consumer has production-bound evidence and every conditional source has either shipped through its gates or reached a documented defer-or-reject outcome with an objective review trigger.
+_Avoid_: Every investigated feed must ship, unresolved conditional research, one global big-bang release
+
+**Conditional Source Decision**:
+The evidence-backed `adopt`, trigger-bound `defer`, or reasoned `reject` outcome for a Conditional Enrichment Source after authority, license, coverage, value, identity safety, cadence, cost, replay, retention, and domain ownership are evaluated.
+_Avoid_: Indefinite investigation, access as approval, undocumented rejection
+
+**Company Legal-Entity Enrichment**:
+Additive legal identity, lifecycle, registration, and accounting-consolidation evidence for a Company from GLEIF. SEC remains the Source Authority for SEC filings and reported financials; GLEIF is the Source Authority for the published Global LEI Index evidence. Company MDM preserves both sources in one master view without turning GLEIF evidence into SEC evidence.
+_Avoid_: GLEIF as a financial-statement source, replacing CIK with LEI, collapsing accounting consolidation into generic ownership, mixing Fund or Branch records into Company MDM
+
+**GLEIF Daily Delta Refresh**:
+The once-daily capture and application of the 24-hour GLEIF Golden Copy deltas. It advances source evidence for changed LEIs, relationships, and reporting exceptions without rematching the complete MDM universe.
+_Avoid_: Three-times-daily polling, downloading a full Golden Copy every day, full-universe matching after every delta
+
+**GLEIF Evidence Capture**:
+The shared source evidence for all GLEIF Level 1 entities, Level 2 relationships, and reporting exceptions. Each MDM domain consumes only records whose entity and relationship semantics belong to that domain.
+_Avoid_: Filtering source capture to SEC companies, putting every LEI into Company MDM, downloading the same GLEIF publication separately for each domain
+
+**GLEIF Candidate Backstop**:
+The weekly re-evaluation of unresolved, unmatched, newly eligible, or materially changed MDM entities against current captured GLEIF evidence.
+_Avoid_: Daily full-universe rematch, treating no candidate as a permanent no-LEI claim
+
+**GLEIF Full Reconciliation**:
+The monthly comparison of the complete captured GLEIF Golden Copy with all in-scope MDM enrichment state, including records missed or retired across delta processing.
+_Avoid_: Daily full-snapshot load, delta-only authority without periodic completeness proof
+
 **Ledger-Gated Acquisition**:
 No new source request may begin while the Change Ledger is unavailable; evidence from an already authorized in-flight request remains unprocessable until its original ledger lineage is reconciled.
 _Avoid_: Local decision spool, Bronze fallback authority, ungated outage download
