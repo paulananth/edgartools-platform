@@ -149,13 +149,7 @@ def test_drive_adv_bulk_dataset_discovery_captures_and_publishes_end_to_end(
     assert outcome["silver_outcome"] == "PUBLISHED"
     assert outcome["silver_error"] is None
 
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    verify_db = open_silver_database(silver_root)
-    try:
-        rows = verify_db.fetch("SELECT accession_number, crd_number FROM sec_adv_filing")
-        assert rows == [{"accession_number": "iapd-adv:2115188", "crd_number": "129052"}]
-    finally:
-        verify_db.close()
+    # No local DuckDB read-back: sec_adv_filing is landing-only
+    # (silver-merge-engine-migration Ticket 06a), and this driver opens no
+    # landing export (the change-propagation map owns wiring one). The rows
+    # it records are covered by test_adv_bulk_dataset_silver_acceptance.py.

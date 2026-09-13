@@ -18,6 +18,7 @@ import pytest
 
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.silver_rows import CountingConnection
 
 
 def _fact_row(**overrides):
@@ -431,21 +432,6 @@ def test_thirteenf_row_missing_a_not_null_column_raises_before_recording(db, met
     assert db.landing.total_row_count() == 0
 
 
-class _CountingConnection:
-    """Wraps the DuckDB connection to count execute() calls."""
-
-    def __init__(self, conn):
-        self._conn = conn
-        self.executes = 0
-
-    def execute(self, *args, **kwargs):
-        self.executes += 1
-        return self._conn.execute(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._conn, name)
-
-
 def test_thirteenf_holdings_batch_of_a_large_filer_does_no_per_row_duckdb_io(db):
     """Ticket 05's volume check. A large 13F-HR filer reports a few thousand
     holdings per quarter; the very largest (broker-dealer aggregators) reach
@@ -454,12 +440,12 @@ def test_thirteenf_holdings_batch_of_a_large_filer_does_no_per_row_duckdb_io(db)
     NOT NULL lookup, however many rows -- a regression to per-row I/O shows
     up here as a count, not as a flaky timing."""
     rows = [_holding_row(holding_index=i, cusip=f"{i:09d}") for i in range(1, 20_001)]
-    counting = _CountingConnection(db._conn)
+    counting = CountingConnection(db._conn)
     db._conn = counting
     try:
         count = db.merge_thirteenf_holdings(rows, "run-1")
     finally:
-        db._conn = counting._conn
+        db._conn = counting.wrapped
 
     assert count == 20_000
     assert db.landing.row_count("sec_thirteenf_holding") == 20_000

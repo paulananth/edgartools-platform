@@ -103,10 +103,10 @@ def test_company_identity_mode_stages_company_and_ticker_only(
             "SELECT * FROM sec_ownership_reporting_owner WHERE 1=1"
         )
         assert ownership_rows == []
-        adv_rows = db.fetch("SELECT * FROM sec_adv_filing WHERE 1=1")
-        assert adv_rows == []
-        thirteenf_rows = db.fetch("SELECT * FROM sec_thirteenf_holding WHERE 1=1")
-        assert thirteenf_rows == []
+        # sec_adv_filing and sec_thirteenf_holding are landing-only
+        # (silver-merge-engine-migration Tickets 05/06a): an empty local
+        # DuckDB table no longer proves they were untouched, so they are not
+        # asserted here.
     finally:
         db.close()
 

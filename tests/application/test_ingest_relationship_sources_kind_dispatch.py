@@ -11,6 +11,7 @@ _write_manifest shape plus a real staged zip payload with a matching SHA-256.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import io
 import json
@@ -19,7 +20,6 @@ import zipfile
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
 from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
 _HEADER = (
@@ -43,10 +43,6 @@ def _context(tmp_path) -> WarehouseCommandContext:
     )
 
 
-def _db_path(context: WarehouseCommandContext) -> str:
-    return context.silver_root.join("silver", "sec", "silver.duckdb")
-
-
 def _write_manifest(tmp_path, payload: dict) -> str:
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -63,7 +59,9 @@ def _firm_roster_archive() -> bytes:
 
 
 def test_iapd_firm_roster_kind_dispatches_to_ingest_firm_roster_archive(tmp_path, monkeypatch) -> None:
-    context = _context(tmp_path)
+    context = dataclasses.replace(
+        _context(tmp_path), silver_landing_export_root=StorageLocation(str(tmp_path / "landing"))
+    )
     archive = _firm_roster_archive()
     sha256 = hashlib.sha256(archive).hexdigest()
     staged_path = tmp_path / "staged" / "ia07012026.zip"
@@ -91,16 +89,7 @@ def test_iapd_firm_roster_kind_dispatches_to_ingest_firm_roster_archive(tmp_path
     )
 
     assert result["status"] == "ok"
-    assert result["silver_table_counts"]["sec_adv_firm_roster"] == 1
-
-    db = SilverDatabase(_db_path(context))
-    try:
-        rows = db.fetch(
-            "SELECT adviser_crd_number, dataset_period, private_fund_count_7b1 "
-            "FROM sec_adv_firm_roster"
-        )
-        assert rows == [
-            {"adviser_crd_number": "1588", "dataset_period": "2026-07", "private_fund_count_7b1": 3}
-        ]
-    finally:
-        db.close()
+    # sec_adv_firm_roster is landing-only (silver-merge-engine-migration
+    # Ticket 06a): what reaches silver is the landing export, not local DuckDB.
+    # Row content is covered by test_adv_firm_roster_ingest.py.
+    assert result["silver_landing_export_row_counts"]["sec_adv_firm_roster"] == 1
