@@ -2,7 +2,8 @@
 
 ## GoF design review and implementation-readiness report
 
-Prepared by OpenAI Codex  
+Prepared by OpenAI Codex
+
 13 September 2026
 
 ## Contents
