@@ -28,8 +28,10 @@ Resolve via `/grilling` + `/domain-modeling`, per this map's own Notes.
 
 **Blocked by:** none — this is the map's frontier ticket.
 
-**Status:** REOPENED (2026-09-13) — see correction below. The engine-choice answer (Postgres)
-is now in doubt; the scope/marker-absorption answer was wrong and reverted.
+**Status:** resolved (2026-09-13) — see "Final answer" section below. (Previously REOPENED
+after the engine-choice answer was found suspect, then RE-REOPENED after a first attempted
+resolution was itself found incomplete — see the CORRECTION section and the "Final answer"
+section for the full history; only the "Final answer" section is current.)
 
 **CORRECTION (2026-09-13):**
 
@@ -191,7 +193,13 @@ correction instead, per `advisor()`'s guidance, before touching `silver_store.py
 remains REOPENED — this ticket needs another grilling round on the narrower question above
 before any deletion or migration proceeds.
 
-## Answer
+## Superseded answer (2026-09-13, first grilling round — see below for the actual resolution)
+
+The section immediately below this note was the original 3-round grilling answer
+(Postgres for everything, marker absorbed onto this map). It was itself superseded by the
+09-12 "Further finding"/CORRECTION chain above and is kept only for history — **do not
+implement from it.** The real, current resolution is the "Final answer" section further
+down.
 
 Resolved via a 3-round grilling session with the operator, 2026-09-13.
 
@@ -218,3 +226,98 @@ Resolved via a 3-round grilling session with the operator, 2026-09-13.
    (`test_silver_protection_scoped_merge.py`, `test_silver_financial_fact_retirement_
    provenance.py`, `test_silver_store_schema_migration.py`, etc. — kept as the executable
    spec, not deleted) plus a live-verified production write showing correct output.
+
+(NOTE: this whole section above is the superseded first-round answer described at its own
+top. This note repeats because the answer text above is left verbatim for history — the
+`mark_entity_facts_refreshed` scope-convergence in item 2 also never happened in practice;
+that marker was reverted back to the crash-resume map the same day, per the CORRECTION
+section above, and stayed there. Ignore items 2 and 3's marker-related claims entirely.)
+
+## Final answer (2026-09-13, second grilling round — this is the one to implement from)
+
+Re-grilled after the 09-12 correction proved `merge_financial_derived`/`merge_accounting_flags`
+are genuinely load-bearing in-process (via `backfill_accounting_flags`), narrowing the real
+question from "port the whole trio" to "how does the specific in-run dependency get satisfied
+without DuckDB." Two rounds with the operator:
+
+**Round 1 — is full DuckDB removal a hard requirement, or is ephemeral-scratch-DuckDB an
+acceptable outcome?** Operator: **full removal is required now.** No exception for a
+harmless, ephemeral use — the map's destination (`duckdb` out of `pyproject.toml`/`uv.lock`)
+stands as written.
+
+**Round 1, second question — mechanism:** operator chose **Postgres, reusing the existing
+bookkeeping Postgres connection** (the `bookkeeping` database on the `EDGARTOOLS_PROD_MDM`
+Snowflake-hosted Postgres instance, live since duckdb-retirement-cutover Ticket 04 — same
+instance MDM's own operational store lives on, different database) — not an in-process
+Python accumulator. Rejected the accumulator despite it being the objectively smaller
+implementation (the derived rows already exist as Python dicts before `merge_financial_derived`
+ever runs) — the operator's explicit choice, not something this investigation talked them out
+of.
+
+**Round 2 — two follow-up design questions, both resolved with the recommended option:**
+
+1. **Lifecycle:** rows are **upserted by business key, never purged**. This matches what the
+   existing DuckDB-per-process flow already does in effect: each run's local db starts empty
+   and only ever holds this run's own writes, so there was never any *cross-run* accumulation
+   to replicate — moving to a durable Postgres table changes that only if rows are never
+   updated in place. Upserting on the same `(cik, accession_number, fiscal_period, ...)` keys
+   the DuckDB tables already use avoids introducing an unbounded-growth failure mode DuckDB
+   never had. Revisit with an explicit purge step only if live measurement shows unwanted
+   accumulation — don't build that complexity speculatively.
+2. **Module boundary:** a **new, dedicated store class** (not added to `BookkeepingStore`
+   itself). `BookkeepingStore`'s stated scope is non-business-content bookkeeping (checkpoints,
+   leases, sync-state, run audit trail); these tables carry real, if temporary, financial-fact
+   shape — a different concern from what that class exists to hold. It reuses the *same*
+   Postgres connection/DSN/instance as `BookkeepingStore` (per Round 1's mechanism choice), just
+   as its own class — naming and exact module location left to the implementation ticket, not
+   decided here.
+
+**Scope split this resolution surfaces, not asked as a question (follows directly from
+already-established evidence, not a judgment call):**
+
+- **`merge_financial_facts` (`sec_financial_fact`) has no confirmed in-process reader anywhere**
+  (established across two prior investigation passes this session) — it does **not** need the
+  new Postgres scratch mechanism at all. Its local DuckDB write is deleted outright; the
+  existing `landing_export.record(...)` call inside it (which already ships the raw,
+  pre-merge rows, unchanged by this whole investigation) is preserved, just no longer nested
+  inside a DuckDB write — a direct call at the same point in the caller, not routed through
+  `SilverDatabase` at all.
+- **`merge_accounting_flags`/`merge_financial_derived` are the two tables that actually need
+  the new Postgres-backed scratch store**, because `backfill_accounting_flags` (called
+  immediately after, same process) reads `merge_financial_derived`'s output back for
+  cross-period scoring and requires `merge_accounting_flags`'s row to already exist for its own
+  `UPDATE` to match.
+- **`mark_entity_facts_refreshed` stays on the crash-resume map**, unaffected by any of this
+  (confirmed settled in the CORRECTION above and never revisited here).
+
+**Migration order (revised from the superseded answer's item 3, given the split above):**
+
+1. `merge_financial_facts` — pure deletion + landing-export passthrough. Simplest, no new
+   store needed, ships first as a quick, low-risk win.
+2. `merge_accounting_flags` + `merge_financial_derived` together, with `backfill_accounting_
+   flags` rewired to read from the new Postgres scratch store instead of local DuckDB — the
+   real work this ticket exists to unblock. These two are inherently coupled (one function
+   consumes both), so they move as one unit, not sequentially.
+3. `per-filing`/`thirteenf` modes' own merge methods — **confirmed this session (not assumed)**
+   that neither shares the entity-facts trio's in-process read-back shape: both
+   `run_bootstrap_fundamentals_per_filing`/`run_bootstrap_thirteenf` only ever write via
+   `db.merge_*`, with zero downstream read of what they just wrote within the same run. Each
+   can very likely just delete-and-passthrough-to-landing-export the same way
+   `merge_financial_facts` does — to be individually confirmed per table before deleting, not
+   assumed from this one similarity.
+4. `company-identity` mode — unchanged from the original framing: assess once reached, may be
+   trivial or nonexistent.
+
+**"Done" bar per table** (unchanged from the superseded answer, still correct): equivalent
+regression coverage to the existing merge tests (`test_silver_protection_scoped_merge.py`,
+`test_silver_financial_fact_retirement_provenance.py`, `test_silver_store_schema_migration.py`,
+etc. — kept as the executable spec, updated for the new behavior rather than deleted) plus a
+live-verified production write showing correct output.
+
+**New fog surfaced, not resolved here:** `retire_financial_facts_not_in_snapshot`/
+`retire_accounting_flags_not_in_snapshot` (Ticket 33's retirement writes,
+`company_facts_silver_acceptance.py`'s only caller) operate on the exact DuckDB tables item 1
+above deletes/item 2 moves off DuckDB — their fate isn't decided by this ticket and needs its
+own look once the split above actually lands (their only caller is dormant/unscheduled today,
+per the 09-12 finding, which may make this low urgency, but "unscheduled today" isn't the same
+as "safe to ignore" if that driver is ever wired in).

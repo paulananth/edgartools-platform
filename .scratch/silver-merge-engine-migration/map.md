@@ -30,9 +30,10 @@ except where a table's specifics genuinely need a fresh design pass.
 - Consult `/gof-refactor-reviewer` before any production-code edit (CLAUDE.md hard rule).
 - Run the full 3-axis `/code-review` (Standards/Spec/GoF) before any PR is ready (CLAUDE.md
   hard rule).
-- `mark_entity_facts_refreshed`'s move (schema design + implementation) is absorbed into this
-  map as Tickets 02/03, moved here from the crash-resume map's own Tickets 02/03 per Ticket
-  01's scope-convergence decision — see that map's Decisions-so-far for the pointer back.
+- `mark_entity_facts_refreshed` stays on the bootstrap-fundamentals-crash-resume map — the
+  scope-convergence idea noted here previously was tried and reverted the same day (see
+  Ticket 01's own CORRECTION section); this map's own Tickets 02/03 are unrelated new
+  tickets (the merge-engine build slices), not the marker.
 - **Overlap discovered 2026-09-12: this map's destination question was largely already
   decided at a higher level.** The `duckdb-retirement` wayfinder map (`.scratch/duckdb-
   retirement/`, decision-only, resolved/handed off 2026-08-28) already decided the write
@@ -48,7 +49,7 @@ except where a table's specifics genuinely need a fresh design pass.
 ## Decisions so far
 
 - [Decide silver_store.py's DuckDB merge-engine fate](../duckdb-retirement-cutover/issues/20-decide-silver-store-merge-engine-fate.md) — reimplement on another engine (not keep DuckDB permanently), scoped as a real per-table migration project, not a single engine swap. Decided 2026-09-12.
-- [Choose the replacement engine and migration order](issues/01-choose-replacement-engine-and-migration-order.md) — REOPENED 2026-09-12. Two rounds of "confirmed dead compute" claims this session both partly wrong: the marker move belongs on the crash-resume map (settled, correct), but the "delete the merge entirely" recommendation was retracted the same day before any code was touched — `backfill_accounting_flags` (live `entity-facts` path) reads `merge_financial_derived`'s output back in-process and depends on `merge_accounting_flags`'s row existing for its own UPDATE to match. Ticket 10's hydration removal doesn't cover this: the dependency is within one run, not across runs. Real open question now: does an in-process Python accumulator (no SQL engine) cleanly replace DuckDB's role as an ephemeral per-run scratch store here, or is DuckDB-as-scratch-store already the simplest thing satisfying it? Needs another grilling round.
+- [Choose the replacement engine and migration order](issues/01-choose-replacement-engine-and-migration-order.md) — resolved 2026-09-13 (second grilling round, after two "confirmed dead compute" claims were each found incomplete — see the ticket's own history). `sec_financial_fact` (`merge_financial_facts`) has no confirmed in-process reader: delete its local DuckDB write, passthrough to `landing_export` unchanged (Ticket 02). `sec_accounting_flag`/`sec_financial_derived` are genuinely load-bearing in-process (`backfill_accounting_flags` reads the derived rows back and depends on the flag row's existence) — full DuckDB removal is required regardless (operator's explicit call), so these move to a new, dedicated Postgres-backed scratch store reusing the bookkeeping Postgres instance/connection, upserted by business key, never purged (Ticket 03). `mark_entity_facts_refreshed` stays off this map entirely. `per-filing`/`thirteenf` modes confirmed this session to NOT share the read-back shape — likely simple delete-and-passthrough like Ticket 02, to be individually confirmed per table.
 
 ## Not yet specified
 
@@ -61,12 +62,17 @@ except where a table's specifics genuinely need a fresh design pass.
   upsert behavior need a concrete correctness contract before any replacement can be judged
   against it, not just "looks similar." Will likely graduate into its own design ticket once
   Tickets 02/03 (the marker move) prove out the basic Postgres-merge pattern.
-- The entity-facts trio's own migration design (schema shape for 3 tables with real dedup
-  logic, not just a marker) — not yet ticketed; graduates once Tickets 02/03 are resolved and
-  the basic pattern is proven.
-- Per-filing/thirteenf/company-identity modes' own merge-method specifics — not yet
-  investigated at all; order was set in Ticket 01, but nobody has read these modes' actual
-  merge code yet to know what each one requires.
+- Per-filing/thirteenf modes' own merge-method specifics — confirmed 2026-09-13 that neither
+  shares the entity-facts trio's in-process read-back shape (both only ever write via
+  `db.merge_*`, nothing reads it back within the same run) — likely a delete-and-passthrough
+  ticket each, same shape as Ticket 02, but not yet ticketed pending Tickets 02/03 landing
+  first per Ticket 01's migration order.
+- `company-identity` mode's own merge-method specifics — not yet investigated at all.
+- `retire_financial_facts_not_in_snapshot`/`retire_accounting_flags_not_in_snapshot`'s fate
+  once Tickets 02/03 land (surfaced by Ticket 01's Final Answer, not yet ticketed) — these
+  Ticket-33 retirement writes operate on exactly the tables Tickets 02/03 move off local
+  DuckDB; their only caller is dormant/unscheduled today, which may lower urgency but doesn't
+  settle the question.
 
 ## Out of scope
 
