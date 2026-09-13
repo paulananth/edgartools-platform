@@ -11,6 +11,7 @@ from edgar_warehouse.application.adv_firm_roster_ingest import (
     parse_firm_roster_archive,
 )
 from edgar_warehouse.application.errors import WarehouseRuntimeError
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_store import SilverDatabase
 
 _HEADER = (
@@ -257,17 +258,18 @@ def test_ingest_firm_roster_archive_writes_real_silver_rows(tmp_path) -> None:
         ),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     try:
         result = ingest_firm_roster_archive(
             db, archive, dataset_period="2026-07", source_sha256="abc123", sync_run_id="run-1"
         )
         assert result == {"firm_roster": 2}
 
-        stored = db.fetch(
-            "SELECT adviser_crd_number, dataset_period, private_funds_reported, "
-            "private_fund_count_7b1, hedge_fund_count, total_gross_assets_private_funds "
-            "FROM sec_adv_firm_roster ORDER BY adviser_crd_number"
+        # sec_adv_firm_roster is landing-only (silver-merge-engine-migration
+        # Ticket 06a): the rows ingest records are what silver receives.
+        stored = sorted(
+            db.landing_export.tables()["sec_adv_firm_roster"],
+            key=lambda row: row["adviser_crd_number"],
         )
         assert [row["adviser_crd_number"] for row in stored] == ["1588", "2288"]
         first = stored[0]
@@ -281,11 +283,14 @@ def test_ingest_firm_roster_archive_writes_real_silver_rows(tmp_path) -> None:
 
 
 def test_ingest_firm_roster_archive_reingest_is_idempotent(tmp_path) -> None:
+    """Re-ingesting a period records the same business key again; the dbt
+    silver model collapses landing on (adviser_crd_number, dataset_period),
+    so silver still holds one row."""
     archive = _archive({
         "IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_34622660.CSV": _HEADER + _roster_row(crd="1588"),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     try:
         first = ingest_firm_roster_archive(
             db, archive, dataset_period="2026-07", source_sha256="abc123", sync_run_id="run-1"
@@ -295,10 +300,11 @@ def test_ingest_firm_roster_archive_reingest_is_idempotent(tmp_path) -> None:
         )
         assert first == second == {"firm_roster": 1}
 
-        stored = db.fetch(
-            "SELECT adviser_crd_number, dataset_period FROM sec_adv_firm_roster"
-        )
-        assert len(stored) == 1
+        recorded = db.landing_export.tables()["sec_adv_firm_roster"]
+        assert {(row["adviser_crd_number"], row["dataset_period"]) for row in recorded} == {
+            ("1588", "2026-07")
+        }
+        assert [row["last_sync_run_id"] for row in recorded] == ["run-1", "run-2"]
     finally:
         db.close()
 
@@ -308,7 +314,7 @@ def test_ingest_firm_roster_archive_different_period_is_a_new_row(tmp_path) -> N
         "IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_34622660.CSV": _HEADER + _roster_row(crd="1588"),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     try:
         ingest_firm_roster_archive(
             db, archive, dataset_period="2026-06", source_sha256="abc123", sync_run_id="run-1"
@@ -317,9 +323,7 @@ def test_ingest_firm_roster_archive_different_period_is_a_new_row(tmp_path) -> N
             db, archive, dataset_period="2026-07", source_sha256="abc123", sync_run_id="run-2"
         )
 
-        stored = db.fetch(
-            "SELECT dataset_period FROM sec_adv_firm_roster ORDER BY dataset_period"
-        )
-        assert [row["dataset_period"] for row in stored] == ["2026-06", "2026-07"]
+        recorded = db.landing_export.tables()["sec_adv_firm_roster"]
+        assert sorted(row["dataset_period"] for row in recorded) == ["2026-06", "2026-07"]
     finally:
         db.close()

@@ -4813,6 +4813,10 @@ def _run_parse_adv_bronze(
     )
     from edgar_warehouse.parsers.adv import parse_adv
 
+    # Always empty in production: local DuckDB is never hydrated and
+    # sec_adv_filing is landing-only (silver-merge-engine-migration Ticket
+    # 06a), so this does not dedupe across runs. Within this run the set is
+    # kept current in Python below.
     already_parsed: set[str] = {
         row["accession_number"]
         for row in db.fetch("SELECT DISTINCT accession_number FROM sec_adv_filing")

@@ -514,10 +514,11 @@ def test_sharded_silver_reader_exposes_sec_adv_firm_roster(tmp_path) -> None:
     """
     from edgar_warehouse.silver_store import SilverDatabase
     from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
+    from tests.support.silver_rows import insert_silver_rows
 
     shard_path = tmp_path / "shard-0.duckdb"
     db = SilverDatabase(str(shard_path))
-    db.merge_adv_firm_roster([{
+    insert_silver_rows(db, "sec_adv_firm_roster", [{
         "adviser_crd_number": "1588",
         "dataset_period": "2026-07",
         "private_funds_reported": True,
@@ -530,7 +531,7 @@ def test_sharded_silver_reader_exposes_sec_adv_firm_roster(tmp_path) -> None:
         "private_fund_count_7b2": 0,
         "source_sha256": "abc123",
         "parser_version": "firm_roster_v1",
-    }], "test-run")
+    }])
     db.close()
 
     reader = ShardedSilverReader([str(shard_path)])

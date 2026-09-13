@@ -624,7 +624,9 @@ def test_migration_widens_fund_index_to_bigint_and_preserves_old_rows(tmp_path, 
 
         # A fund_index above the old SMALLINT ceiling (32767) must now succeed --
         # this is the actual production failure the migration exists to prevent.
-        count = db.merge_adv_private_funds(
+        count = insert_silver_rows(
+            db,
+            "sec_adv_private_fund",
             [
                 {
                     "accession_number": "iapd-adv:2",
@@ -632,7 +634,6 @@ def test_migration_widens_fund_index_to_bigint_and_preserves_old_rows(tmp_path, 
                     "fund_name": "NEW FUND",
                 }
             ],
-            sync_run_id="post-migration-test",
         )
         assert count == 1
         stored_new = db.fetch(

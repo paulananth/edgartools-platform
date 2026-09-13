@@ -14,6 +14,7 @@ from edgar_warehouse.application.adv_bulk_ingest import (
 )
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
 def _archive(files: dict[str, str]) -> bytes:
@@ -253,7 +254,7 @@ def test_ingest_scopes_fund_index_per_filing_not_per_archive(tmp_path) -> None:
         ),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     try:
         result = ingest_adv_bulk_archive(
             db,
@@ -264,9 +265,10 @@ def test_ingest_scopes_fund_index_per_filing_not_per_archive(tmp_path) -> None:
         )
         assert result == {"filings": 2, "funds": 3}
 
-        stored = db.fetch(
-            "SELECT accession_number, fund_index, fund_name FROM sec_adv_private_fund "
-            "ORDER BY accession_number, fund_index"
+        # sec_adv_private_fund is landing-only (silver-merge-engine-migration Ticket 06a).
+        stored = sorted(
+            db.landing_export.tables()["sec_adv_private_fund"],
+            key=lambda row: (row["accession_number"], row["fund_index"]),
         )
         assert [
             (row["accession_number"], row["fund_index"], row["fund_name"])

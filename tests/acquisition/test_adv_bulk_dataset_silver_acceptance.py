@@ -36,6 +36,7 @@ from edgar_warehouse.acquisition.processing import ProcessingLedger, SilverFinal
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
 def _harness(tmp_path: Path):
@@ -43,7 +44,9 @@ def _harness(tmp_path: Path):
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     AcquisitionBase.metadata.create_all(engine)
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    # These ADV tables are landing-only (silver-merge-engine-migration
+    # Ticket 06a): assert on the rows recorded for landing.
+    silver = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     bronze_root = StorageLocation(str(tmp_path / "bronze"))
     return (
         AcquisitionLedger(engine),
@@ -164,7 +167,10 @@ def test_adv_bulk_archive_settles_verified_and_writes_silver_rows(tmp_path: Path
     for producer in decision.expected_producers:
         assert producer.outcome.value == "VERIFIED"
 
-    rows = silver.fetch("SELECT accession_number, crd_number FROM sec_adv_filing")
+    rows = [
+        {"accession_number": row["accession_number"], "crd_number": row["crd_number"]}
+        for row in silver.landing_export.tables()["sec_adv_filing"]
+    ]
     assert rows == [{"accession_number": "iapd-adv:2115188", "crd_number": "129052"}]
 
 
@@ -192,7 +198,10 @@ def test_firm_roster_archive_settles_verified_and_writes_silver_row(tmp_path: Pa
     assert decision.silver_outcome is SilverOutcome.PUBLISHED
     assert decision.expected_producers[0].outcome.value == "VERIFIED"
 
-    rows = silver.fetch("SELECT adviser_crd_number, dataset_period FROM sec_adv_firm_roster")
+    rows = [
+        {"adviser_crd_number": row["adviser_crd_number"], "dataset_period": row["dataset_period"]}
+        for row in silver.landing_export.tables()["sec_adv_firm_roster"]
+    ]
     assert rows == [{"adviser_crd_number": "1588", "dataset_period": "2026-07"}]
 
 
@@ -291,8 +300,11 @@ def test_a_content_different_capture_for_the_same_period_supersedes_and_settles_
     for producer in decision_2.expected_producers:
         assert producer.outcome.value == "VERIFIED"
 
-    rows = silver.fetch("SELECT accession_number, crd_number FROM sec_adv_filing")
-    assert rows == [{"accession_number": "iapd-adv:2115188", "crd_number": "129099"}]
+    # Both captures land; the dbt silver model's last-write-wins collapse on
+    # accession_number leaves the superseding content, not a duplicate row.
+    recorded = silver.landing_export.tables()["sec_adv_filing"]
+    assert {row["accession_number"] for row in recorded} == {"iapd-adv:2115188"}
+    assert [row["crd_number"] for row in recorded] == ["129052", "129099"]
 
 
 def test_fails_closed_on_an_unsupported_required_producers_set(tmp_path: Path) -> None:

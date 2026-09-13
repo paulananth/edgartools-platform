@@ -1925,9 +1925,9 @@ class SilverDatabase:
         row-by-row execute() loop was the dominant cost of one_click_data_refresh's
         Clean and Merge Filings stage (~93% of per-batch time, measured live) -- per-statement
         parse/plan/exec overhead repeated per row against a growing table, not
-        anything sharding would fix. _merge_rows_bulk (already used by
-        merge_financial_facts/merge_financial_derived) stages all rows in one
-        executemany() then applies the upsert as two set-based SQL statements.
+        anything sharding would fix. _merge_rows_bulk stages all rows
+        in one executemany() then applies the upsert as two set-based SQL
+        statements.
         """
         if not rows:
             return 0
@@ -2163,64 +2163,14 @@ class SilverDatabase:
     # sec_current_filing_feed
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_current_filing_feed")
     def merge_current_filing_feed(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        now = datetime.now(UTC)
-        count = 0
-        for row in rows:
-            if not row.get("accession_number"):
-                continue
-            self._conn.execute(
-                """
-                INSERT INTO sec_current_filing_feed
-                    (accession_number, cik, form, company_name, filing_date,
-                     accepted_at, filing_href, index_href, summary, source_url,
-                     feed_published_at, raw_object_id, last_sync_run_id, last_synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (accession_number) DO UPDATE SET
-                    cik = excluded.cik,
-                    form = excluded.form,
-                    company_name = excluded.company_name,
-                    filing_date = excluded.filing_date,
-                    accepted_at = excluded.accepted_at,
-                    filing_href = excluded.filing_href,
-                    index_href = excluded.index_href,
-                    summary = excluded.summary,
-                    source_url = excluded.source_url,
-                    feed_published_at = excluded.feed_published_at,
-                    raw_object_id = excluded.raw_object_id,
-                    last_sync_run_id = excluded.last_sync_run_id,
-                    last_synced_at = excluded.last_synced_at
-                """,
-                [
-                    row["accession_number"],
-                    row.get("cik"),
-                    row.get("form"),
-                    row.get("company_name"),
-                    row.get("filing_date"),
-                    row.get("accepted_at"),
-                    row.get("filing_href"),
-                    row.get("index_href"),
-                    row.get("summary"),
-                    row.get("source_url"),
-                    row.get("feed_published_at"),
-                    row.get("raw_object_id"),
-                    sync_run_id,
-                    now,
-                ],
-            )
-            count += 1
-        return count
-
-    def get_current_filing_feed(self, accession_number: str) -> dict[str, Any] | None:
-        result = self._conn.execute(
-            "SELECT * FROM sec_current_filing_feed WHERE accession_number = ?",
-            [accession_number],
-        ).fetchone()
-        if result is None:
-            return None
-        cols = [d[0] for d in self._conn.description]
-        return dict(zip(cols, result))
+        # The old loop skipped (never raised on) a falsy accession_number.
+        return self._record_landing_passthrough(
+            "sec_current_filing_feed",
+            [r for r in rows if r.get("accession_number")],
+            defaults={},
+            stamp={**self._sync_run_stamp(sync_run_id), "last_synced_at": datetime.now(UTC)},
+        )
 
     # ------------------------------------------------------------------
     # ownership and ADV parser tables
@@ -2357,395 +2307,50 @@ class SilverDatabase:
             ],
         )
 
-    @track_landing_rows("sec_adv_filing")
     def merge_adv_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        """Bulk UPSERT into sec_adv_filing.
-
-        A single ingest-relationship-sources run over a multi-month
-        advFilingData rolling window stages tens of thousands of filing rows
-        at once (e.g. ~55K across a 13-month window). The prior row-by-row
-        execute() loop was the same known-slow pattern already fixed for
-        sec_company_filing in merge_filings (~93% of per-batch time,
-        measured live there) -- discovered here when a real production run
-        took many minutes with zero progress on the identical shape of
-        problem. _merge_rows_bulk stages all rows in one executemany() then
-        applies the upsert as two set-based SQL statements.
-        """
-        if not rows:
-            return 0
-        return self._merge_rows_bulk(
-            staging_table="stg_sec_adv_filing",
-            staging_ddl="""
-                CREATE TEMP TABLE IF NOT EXISTS stg_sec_adv_filing (
-                    seq              BIGINT,
-                    accession_number TEXT,
-                    cik              BIGINT,
-                    form             TEXT,
-                    adviser_name     TEXT,
-                    sec_file_number  TEXT,
-                    crd_number       TEXT,
-                    effective_date   DATE,
-                    filing_status    TEXT,
-                    filing_action    TEXT,
-                    source_format    TEXT,
-                    parser_version   TEXT,
-                    last_sync_run_id TEXT
-                )
-            """,
-            insert_first_sql="""
-                INSERT INTO sec_adv_filing
-                    (accession_number, cik, form, adviser_name, sec_file_number, crd_number,
-                     effective_date, filing_status, filing_action, source_format,
-                     parser_version, last_sync_run_id)
-                SELECT accession_number, cik, form, adviser_name, sec_file_number, crd_number,
-                       effective_date, filing_status, filing_action, source_format,
-                       parser_version, last_sync_run_id
-                FROM stg_sec_adv_filing
-                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq ASC) = 1
-                ON CONFLICT (accession_number) DO NOTHING
-            """,
-            insert_last_sql="""
-                INSERT INTO sec_adv_filing
-                    (accession_number, cik, form, adviser_name, sec_file_number, crd_number,
-                     effective_date, filing_status, filing_action, source_format,
-                     parser_version, last_sync_run_id)
-                SELECT accession_number, cik, form, adviser_name, sec_file_number, crd_number,
-                       effective_date, filing_status, filing_action, source_format,
-                       parser_version, last_sync_run_id
-                FROM stg_sec_adv_filing
-                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq DESC) = 1
-                ON CONFLICT (accession_number) DO UPDATE SET
-                    cik = excluded.cik,
-                    form = excluded.form,
-                    adviser_name = excluded.adviser_name,
-                    sec_file_number = excluded.sec_file_number,
-                    crd_number = excluded.crd_number,
-                    effective_date = excluded.effective_date,
-                    filing_status = excluded.filing_status,
-                    filing_action = excluded.filing_action,
-                    source_format = excluded.source_format,
-                    parser_version = excluded.parser_version,
-                    last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows=rows,
-            values_fn=lambda row: [
-                row["accession_number"],
-                row.get("cik"),
-                row.get("form"),
-                row.get("adviser_name"),
-                row.get("sec_file_number"),
-                row.get("crd_number"),
-                row.get("effective_date"),
-                row.get("filing_status"),
-                row.get("filing_action"),
-                row.get("source_format"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_adv_filing", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
-    @track_landing_rows("sec_adv_office")
     def merge_adv_offices(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_adv_office
-                (accession_number, office_index, office_name, city, state_or_country,
-                 country, is_headquarters, parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, office_index) DO UPDATE SET
-                office_name = excluded.office_name,
-                city = excluded.city,
-                state_or_country = excluded.state_or_country,
-                country = excluded.country,
-                is_headquarters = excluded.is_headquarters,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows,
-            lambda row: [
-                row["accession_number"],
-                row["office_index"],
-                row.get("office_name"),
-                row.get("city"),
-                row.get("state_or_country"),
-                row.get("country"),
-                row.get("is_headquarters"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_adv_office", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
-    @track_landing_rows("sec_adv_disclosure_event")
     def merge_adv_disclosure_events(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_adv_disclosure_event
-                (accession_number, event_index, disclosure_category, event_date,
-                 is_reported, description, parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, event_index) DO UPDATE SET
-                disclosure_category = excluded.disclosure_category,
-                event_date = excluded.event_date,
-                is_reported = excluded.is_reported,
-                description = excluded.description,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows,
-            lambda row: [
-                row["accession_number"],
-                row["event_index"],
-                row.get("disclosure_category"),
-                row.get("event_date"),
-                row.get("is_reported"),
-                row.get("description"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_adv_disclosure_event", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
-    @track_landing_rows("sec_adv_private_fund")
     def merge_adv_private_funds(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        """Bulk UPSERT into sec_adv_private_fund.
-
-        Same fix as merge_adv_filings: a multi-month advFilingData rolling
-        window stages hundreds of thousands of fund rows at once (e.g.
-        ~384K across a 13-month window) -- the row-by-row execute() loop
-        was the same known-slow pattern already fixed for sec_company_filing
-        in merge_filings.
-        """
-        if not rows:
-            return 0
-        return self._merge_rows_bulk(
-            staging_table="stg_sec_adv_private_fund",
-            staging_ddl="""
-                CREATE TEMP TABLE IF NOT EXISTS stg_sec_adv_private_fund (
-                    seq                   BIGINT,
-                    accession_number      TEXT,
-                    fund_index            BIGINT,
-                    filing_id             TEXT,
-                    adviser_crd_number    TEXT,
-                    private_fund_id       TEXT,
-                    reference_id          TEXT,
-                    schedule_section      TEXT,
-                    reporting_role        TEXT,
-                    filing_action         TEXT,
-                    fund_name             TEXT,
-                    fund_type             TEXT,
-                    jurisdiction          TEXT,
-                    aum_amount            DECIMAL(28,2),
-                    effective_date        DATE,
-                    source_dataset_period TEXT,
-                    source_sha256         TEXT,
-                    parser_version        TEXT,
-                    last_sync_run_id      TEXT
-                )
-            """,
-            insert_first_sql="""
-                INSERT INTO sec_adv_private_fund
-                    (accession_number, fund_index, filing_id, adviser_crd_number,
-                     private_fund_id, reference_id, schedule_section, reporting_role,
-                     filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
-                     source_dataset_period, source_sha256, parser_version, last_sync_run_id)
-                SELECT accession_number, fund_index, filing_id, adviser_crd_number,
-                       private_fund_id, reference_id, schedule_section, reporting_role,
-                       filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
-                       source_dataset_period, source_sha256, parser_version, last_sync_run_id
-                FROM stg_sec_adv_private_fund
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY accession_number, fund_index ORDER BY seq ASC
-                ) = 1
-                ON CONFLICT (accession_number, fund_index) DO NOTHING
-            """,
-            insert_last_sql="""
-                INSERT INTO sec_adv_private_fund
-                    (accession_number, fund_index, filing_id, adviser_crd_number,
-                     private_fund_id, reference_id, schedule_section, reporting_role,
-                     filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
-                     source_dataset_period, source_sha256, parser_version, last_sync_run_id)
-                SELECT accession_number, fund_index, filing_id, adviser_crd_number,
-                       private_fund_id, reference_id, schedule_section, reporting_role,
-                       filing_action, fund_name, fund_type, jurisdiction, aum_amount, effective_date,
-                       source_dataset_period, source_sha256, parser_version, last_sync_run_id
-                FROM stg_sec_adv_private_fund
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY accession_number, fund_index ORDER BY seq DESC
-                ) = 1
-                ON CONFLICT (accession_number, fund_index) DO UPDATE SET
-                    filing_id = excluded.filing_id,
-                    adviser_crd_number = excluded.adviser_crd_number,
-                    private_fund_id = excluded.private_fund_id,
-                    reference_id = excluded.reference_id,
-                    schedule_section = excluded.schedule_section,
-                    reporting_role = excluded.reporting_role,
-                    filing_action = excluded.filing_action,
-                    fund_name = excluded.fund_name,
-                    fund_type = excluded.fund_type,
-                    jurisdiction = excluded.jurisdiction,
-                    aum_amount = excluded.aum_amount,
-                    effective_date = excluded.effective_date,
-                    source_dataset_period = excluded.source_dataset_period,
-                    source_sha256 = excluded.source_sha256,
-                    parser_version = excluded.parser_version,
-                    last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows=rows,
-            values_fn=lambda row: [
-                row["accession_number"],
-                row["fund_index"],
-                row.get("filing_id"),
-                row.get("adviser_crd_number"),
-                row.get("private_fund_id"),
-                row.get("reference_id"),
-                row.get("schedule_section"),
-                row.get("reporting_role"),
-                row.get("filing_action"),
-                row.get("fund_name"),
-                row.get("fund_type"),
-                row.get("jurisdiction"),
-                row.get("aum_amount"),
-                row.get("effective_date"),
-                row.get("source_dataset_period"),
-                row.get("source_sha256"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_adv_private_fund", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
-    @track_landing_rows("sec_adv_firm_roster")
     def merge_adv_firm_roster(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        """UPSERT into sec_adv_firm_roster, a raw passthrough of the SEC Firm
-        Roster CSV's aggregate private-fund columns, keyed on
-        (adviser_crd_number, dataset_period). A monthly, modest-row-count
-        table (~17K firms), so the simple row-by-row _merge_rows loop is
-        used, mirroring merge_subsidiary_evidence rather than the
-        staging-table bulk path merge_adv_private_funds needs for its
-        much larger multi-hundred-thousand-row volumes.
-        """
-        return self._merge_rows(
-            """
-            INSERT INTO sec_adv_firm_roster
-                (adviser_crd_number, dataset_period, private_funds_reported,
-                 private_fund_count_7b1, any_hedge_funds, hedge_fund_count,
-                 any_pe_funds, pe_fund_count, total_gross_assets_private_funds,
-                 private_fund_count_7b2, source_sha256, parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (adviser_crd_number, dataset_period) DO UPDATE SET
-                private_funds_reported = excluded.private_funds_reported,
-                private_fund_count_7b1 = excluded.private_fund_count_7b1,
-                any_hedge_funds = excluded.any_hedge_funds,
-                hedge_fund_count = excluded.hedge_fund_count,
-                any_pe_funds = excluded.any_pe_funds,
-                pe_fund_count = excluded.pe_fund_count,
-                total_gross_assets_private_funds = excluded.total_gross_assets_private_funds,
-                private_fund_count_7b2 = excluded.private_fund_count_7b2,
-                source_sha256 = excluded.source_sha256,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows,
-            lambda row: [
-                row["adviser_crd_number"],
-                row["dataset_period"],
-                row["private_funds_reported"],
-                row["private_fund_count_7b1"],
-                row["any_hedge_funds"],
-                row.get("hedge_fund_count"),
-                row["any_pe_funds"],
-                row.get("pe_fund_count"),
-                row.get("total_gross_assets_private_funds"),
-                row["private_fund_count_7b2"],
-                row.get("source_sha256"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_adv_firm_roster", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
-    @track_landing_rows("sec_subsidiary_evidence")
     def merge_subsidiary_evidence(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_subsidiary_evidence
-                (accession_number, registrant_cik, document_name, document_type,
-                 row_ordinal, legal_name, jurisdiction, parent_scope,
-                 immediate_parent_known, effective_date, row_locator, source_sha256,
-                 parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, document_name, row_ordinal) DO UPDATE SET
-                legal_name = excluded.legal_name,
-                jurisdiction = excluded.jurisdiction,
-                parent_scope = excluded.parent_scope,
-                immediate_parent_known = excluded.immediate_parent_known,
-                effective_date = excluded.effective_date,
-                row_locator = excluded.row_locator,
-                source_sha256 = excluded.source_sha256,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
+        return self._record_landing_passthrough(
+            "sec_subsidiary_evidence",
             rows,
-            lambda row: [
-                row["accession_number"], row["registrant_cik"], row["document_name"],
-                row["document_type"], row["row_ordinal"], row["legal_name"],
-                row.get("jurisdiction"), row["parent_scope"],
-                row.get("immediate_parent_known", False), row["effective_date"],
-                row["row_locator"], row["source_sha256"],
-                row.get("parser_version", "subsidiary_exhibit_v1"), sync_run_id,
-            ],
+            defaults={"immediate_parent_known": False, "parser_version": "subsidiary_exhibit_v1"},
+            stamp=self._sync_run_stamp(sync_run_id),
         )
 
-    @track_landing_rows("sec_auditor_report_evidence")
     def merge_auditor_report_evidence(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_auditor_report_evidence
-                (accession_number, registrant_cik, form_type, document_name,
-                 audited_period_end, report_date, principal_firm_name,
-                 principal_firm_location, pcaob_firm_id, evidence_source,
-                 raw_locator, source_sha256, evidence_fingerprint,
-                 form_ap_filing_id, original_form_ap_filing_id, latest_amendment,
-                 parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, evidence_fingerprint) DO UPDATE SET
-                form_ap_filing_id = excluded.form_ap_filing_id,
-                original_form_ap_filing_id = excluded.original_form_ap_filing_id,
-                latest_amendment = excluded.latest_amendment,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
+        return self._record_landing_passthrough(
+            "sec_auditor_report_evidence",
             rows,
-            lambda row: [
-                row["accession_number"], row["registrant_cik"], row["form_type"],
-                row["document_name"], row["audited_period_end"], row["report_date"],
-                row["principal_firm_name"], row["principal_firm_location"],
-                row["pcaob_firm_id"], row["evidence_source"], row["raw_locator"],
-                row["source_sha256"], row["evidence_fingerprint"],
-                row.get("form_ap_filing_id"), row.get("original_form_ap_filing_id"),
-                row.get("latest_amendment"), row.get("parser_version", "auditor_evidence_v1"),
-                sync_run_id,
-            ],
+            defaults={"parser_version": "auditor_evidence_v1"},
+            stamp=self._sync_run_stamp(sync_run_id),
         )
 
-    @track_landing_rows("sec_pcaob_firm_identity")
     def merge_pcaob_firm_identities(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_pcaob_firm_identity
-                (pcaob_firm_id, canonical_name, city, state, country, status,
-                 snapshot_uri, snapshot_sha256, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (pcaob_firm_id, snapshot_sha256) DO UPDATE SET
-                canonical_name = excluded.canonical_name,
-                city = excluded.city,
-                state = excluded.state,
-                country = excluded.country,
-                status = excluded.status,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows,
-            lambda row: [
-                row["pcaob_firm_id"], row["canonical_name"], row.get("city"),
-                row.get("state"), row.get("country"), row.get("status"),
-                row["snapshot_uri"], row["snapshot_sha256"], sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_pcaob_firm_identity", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
     # ------------------------------------------------------------------
@@ -3143,7 +2748,7 @@ class SilverDatabase:
         return counts
 
     # ------------------------------------------------------------------
-    # Fundamentals namespace — Branch B silver tables
+    # Landing-only writers (silver-merge-engine-migration)
     # ------------------------------------------------------------------
 
     def _record_landing_passthrough(
@@ -3155,7 +2760,7 @@ class SilverDatabase:
         stamp: dict[str, Any],
     ) -> int:
         """Landing-only write for a table whose local DuckDB copy is dead
-        (silver-merge-engine-migration Tickets 02/03): nothing reads these
+        (silver-merge-engine-migration Tickets 02-06): nothing reads these
         tables back in-process since DuckDB Retirement Cutover Ticket 10
         made the local store ephemeral, so the QUALIFY/ON CONFLICT merge
         they used to run computed a result nothing consumed. The dbt silver
@@ -3167,10 +2772,12 @@ class SilverDatabase:
         explicit None. `stamp` adds write-time columns the landing schema
         carries but the caller doesn't supply (facts/flags: `ingested_at` +
         the Ticket 33 validity trio; per-filing and 13F tables:
-        `ingested_at`; derived: nothing, its landing rows are recorded as
-        given). A `values_fn` coercion that replaced a present value --
-        `bool(...)`, `or ""` -- is applied by the caller before this call,
-        since `defaults` only fills absent keys.
+        `ingested_at`; ADV, relationship-source evidence and the current
+        filing feed: `last_sync_run_id`, the feed also `last_synced_at`;
+        derived: nothing, its landing rows are recorded as given). A
+        `values_fn` coercion that replaced a present value -- `bool(...)`,
+        `or ""` -- is applied by the caller before this call, since
+        `defaults` only fills absent keys.
 
         A row that would have violated this table's NOT NULL DDL raises here
         instead of failing the Snowflake load of its whole Parquet file
@@ -3223,6 +2830,14 @@ class SilverDatabase:
         Gold models output it and MDM's EMPLOYED_BY derivation filters
         sec_executive_record/sec_employment_event on it as a watermark."""
         return {"ingested_at": datetime.now(UTC)}
+
+    @staticmethod
+    def _sync_run_stamp(sync_run_id: str) -> dict[str, Any]:
+        """`last_sync_run_id` for tables that record which sync run last
+        wrote a row (ADV, relationship-source evidence, the current filing
+        feed). The old `values_fn`s always wrote the call's `sync_run_id`,
+        whatever the row said, so this overrides a row-supplied value."""
+        return {"last_sync_run_id": sync_run_id}
 
     @classmethod
     def _current_row_stamp(cls) -> dict[str, Any]:
@@ -3354,7 +2969,7 @@ class SilverDatabase:
         The row-by-row loop in `_merge_rows` has per-column semantics on
         conflict: columns in the `ON CONFLICT DO UPDATE SET` clause take the
         *last* occurrence's value for a given primary key, while columns NOT
-        in that clause (e.g. `period_end`, `fiscal_year`) are set only on the
+        in that clause (e.g. `merge_filings`' first-seen columns) are set only on the
         row's *first-ever* insert and never overwritten afterwards. A single
         QUALIFY-deduped INSERT cannot reproduce this per-column mix, so two
         passes are used:
