@@ -53,6 +53,15 @@ see [docs/product-questions-and-dashboards.md](docs/product-questions-and-dashbo
 For current ingest/agent data-plane doctrine (silver SoE, edgartools-exclusive SEC I/O, optional bronze),
 see [docs/doctrine-data-plane.md](docs/doctrine-data-plane.md).
 
+### Research and planning
+
+- [GLEIF open-data augmentation research](docs/research/gleif-open-data-augmentation-2026-09-11.md)
+  inventories the official source products, semantics, and integration limits.
+- [GLEIF-to-MDM comparison](docs/research/gleif-mdm-comparison-2026-09-11.md)
+  defines the evidence model and records the measured comparison results.
+- [MDM enrichment program](.scratch/mdm-enrichment-program/map.md) maps the
+  dependency-ordered domain consumers, source decisions, and release gates.
+
 ## Quick Start
 
 See [docs/runbook.md](docs/runbook.md) for complete end-to-end setup.
