@@ -25,3 +25,9 @@ publication. A verified accepted replacement makes older raw bytes eligible for
 Change-Ledger-authorized deletion. Keep manifests, hashes, publication lineage,
 MDM Commit Evidence, and deletion evidence permanently. A lifecycle timer,
 partial delta, or unverified replacement never authorizes deletion.
+
+Daily and recovery delta bytes remain only in Temporary Bronze. Delete them
+through the Change Ledger after every required consumer checkpoint and required
+Snowflake and graph verification passes. Do not create a cold archive copy for
+a delta. A failed or incomplete required consumer blocks deletion, not the
+progress of an independent publication family.

@@ -65,6 +65,8 @@ implementation work is created or production publication is authorized.
   Change Ledger and never waits for an archive restore. The archive retains
   only the latest verified complete publication per family; authorized deletion
   removes superseded bytes while permanent lineage and deletion evidence remain.
+  Delta bytes stay temporary until every required consumer and downstream check
+  passes, then are deleted without entering the archive.
 
 ## Deferred follow-up
 

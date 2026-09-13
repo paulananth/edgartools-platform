@@ -86,6 +86,8 @@ Specify and prove the reusable contracts before any consumer implementation:
 - latest-complete-publication retention per enrichment family, with
   Change-Ledger-authorized deletion of superseded bytes and permanent manifests,
   hashes, lineage, MDM Commit Evidence, and deletion evidence;
+- temporary-only delta bytes retained through all required consumer and
+  downstream verification, then deleted without an archive copy;
 - normalized source-grain evidence with temporal versions and record hashes;
 - accepted-link, candidate, conflict, deferred-domain, and retirement states;
 - stewardship decisions that never imply an entity merge;
