@@ -46,6 +46,20 @@ except where a table's specifics genuinely need a fresh design pass.
   table) rather than a genuine engine migration — worth revisiting whether this map should
   keep existing separately or fold into `duckdb-retirement-cutover`'s own remaining tickets.
 
+- **Scope widened 2026-09-13 (grilled, accepted):** beyond the merge engine, this map now
+  carries everything between "entity-facts trio landing-only" and "`duckdb` out of
+  `pyproject`" — the remaining writers (Tickets 04–06), the confirmed-dead local readers
+  (Ticket 07), the DuckDB-vs-Snowflake parity tooling (Ticket 08), and the final dependency
+  removal (Ticket 09). Cross-map blockers wired on Ticket 09 rather than re-decided here:
+  duckdb-retirement-cutover Ticket 21 (old canonical S3 objects) and the
+  bootstrap-fundamentals-crash-resume marker move.
+- **The five `drive-*-discovery` drivers are NOT deleted by this map.** They open local DuckDB
+  and their publish is a no-op, so their writes go nowhere today — but the change-propagation
+  map (Ticket 27, "contract legacy acquisition bypasses") plans to retire the legacy capture
+  path *in their favour*. Their DuckDB dependency disappears as a side effect of Tickets 04–06
+  (every `merge_*` they call becomes landing-only); wiring a `LandingExportBuffer` into them is
+  that map's job, noted there.
+
 ## Decisions so far
 
 - [Decide silver_store.py's DuckDB merge-engine fate](../duckdb-retirement-cutover/issues/20-decide-silver-store-merge-engine-fate.md) — reimplement on another engine (not keep DuckDB permanently), scoped as a real per-table migration project, not a single engine swap. Decided 2026-09-12.
@@ -55,21 +69,11 @@ except where a table's specifics genuinely need a fresh design pass.
 
 ## Not yet specified
 
-- Whether `merge_candidate_into_canonical`'s still-live caller in
-  `application/silver_event_reducer.py:165` is folded into this same migration or stays an
-  independent DuckDB consumer regardless of what happens to the bulk-merge engine (DuckDB
-  Retirement Cutover Ticket 20's own open question, not yet resolved here).
-- What "equivalent semantics" actually requires proving for each table — DuckDB's
-  `QUALIFY ROW_NUMBER() OVER (...)` window-function dedup and `ON CONFLICT ... DO NOTHING`
-  upsert behavior need a concrete correctness contract before any replacement can be judged
-  against it, not just "looks similar." Will likely graduate into its own design ticket once
-  Tickets 02/03 (the marker move) prove out the basic Postgres-merge pattern.
-- Per-filing/thirteenf modes' own merge-method specifics — confirmed 2026-09-13 that neither
-  shares the entity-facts trio's in-process read-back shape (both only ever write via
-  `db.merge_*`, nothing reads it back within the same run) — likely a delete-and-passthrough
-  ticket each, same shape as Ticket 02, but not yet ticketed pending Tickets 02/03 landing
-  first per Ticket 01's migration order.
-- `company-identity` mode's own merge-method specifics — not yet investigated at all.
+- "Equivalent semantics" per table resolved in practice by Tickets 02/03, not as a separate
+  design ticket: the contract is the dbt silver model's collapse (`QUALIFY` partition key +
+  first-seen/last-seen column split), which must match the table's old `ON CONFLICT` key and
+  `DO UPDATE SET` list — Tickets 04–06 check that per table before switching, and only in-process
+  readers (none left after 03) needed the semantics reproduced in Python.
 - Company-facts retirement against Snowflake silver: `retire_financial_facts_not_in_snapshot`/
   `retire_accounting_flags_not_in_snapshot` were deleted with Tickets 02/03 (they could only
   find rows in local DuckDB, and their sole caller never reached Snowflake anyway). The Ticket
@@ -84,4 +88,9 @@ except where a table's specifics genuinely need a fresh design pass.
 
 ## Out of scope
 
-<!-- none yet -->
+- `application/silver_event_reducer.py` + `merge_candidate_into_canonical`'s redesign — the
+  decoupled-bronze-pipeline map's Phase 0 reducer merges per-event DuckDB deltas into a
+  canonical `silver.duckdb` that DuckDB Retirement Cutover Ticket 10 already retired; it is
+  "not wired to any live queue" by its own docstring. Whether Phase 0 is redone against the
+  Snowflake landing zone is that map's design question (noted there 2026-09-13). Here it is
+  only dead code that leaves with the engine in Ticket 09.

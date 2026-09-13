@@ -160,6 +160,16 @@ no further design work — Extract Function, not a pattern.
 
 ## Not yet specified
 
+- **Phase 0's premise is gone (noted 2026-09-13 by the silver-merge-engine-migration map):**
+  `application/silver_event_reducer.py` merges per-event DuckDB deltas into a canonical
+  `silver.duckdb` via `merge_candidate_into_canonical`, but DuckDB Retirement Cutover Ticket 10
+  (live 2026-09-12) made local DuckDB ephemeral and canonical `silver.duckdb` unwritten; the
+  silver-merge-engine-migration map's Ticket 09 deletes the reducer and `silver_protection.py`
+  with the `duckdb` dependency. If Phase 0's isolated-producer + single-reducer idea is still
+  wanted, it needs re-stating against the Snowflake landing zone (append-only Parquet + dbt
+  collapse — arguably already the "reducer") before that deletion lands, or after it as a
+  fresh design.
+
 (none — all three items graduated into tickets 12/13/14 once the target
 architecture locked with ticket 08's resolution, 2026-08-11)
 
