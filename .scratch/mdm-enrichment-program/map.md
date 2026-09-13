@@ -62,7 +62,9 @@ implementation work is created or production publication is authorized.
   commit bounded consumer batches atomically; and move verified temporary
   Bronze bytes into the low-cost immutable Source Artifact Archive. Operational
   recovery redownloads the newest complete Source Publication through the
-  Change Ledger and never waits for an archive restore.
+  Change Ledger and never waits for an archive restore. The archive retains
+  only the latest verified complete publication per family; authorized deletion
+  removes superseded bytes while permanent lineage and deletion evidence remain.
 
 ## Deferred follow-up
 

@@ -56,4 +56,13 @@ continuity with the former Ledger Epoch, the ledger records a new baseline and
 does not claim historical continuity. Frozen offline fixtures, not production
 archive restores, provide deterministic parser and transition tests.
 
+The Source Artifact Archive retains only the latest verified complete
+publication for each enrichment publication family. Once a replacement is
+verified complete and accepted, the retention operator may delete the
+superseded source bytes through an authorized Change Ledger transition. The
+source manifest, hashes, publication lineage, MDM Commit Evidence, and exact
+deletion record remain permanent. S3 lifecycle age alone cannot authorize the
+deletion, and a partial or unverified replacement cannot supersede the retained
+complete publication.
+
 Accepted by the user during the 2026-09-13 Wayfinder session.
