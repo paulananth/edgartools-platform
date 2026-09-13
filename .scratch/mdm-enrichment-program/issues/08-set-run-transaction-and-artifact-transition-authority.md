@@ -74,4 +74,10 @@ deferred, or unverified consumer keeps the bytes available for retry. The
 manifest, raw hash, transition lineage, terminal record dispositions, MDM
 Commit Evidence, and deletion record remain permanent.
 
+"Never looking back" applies to stored source bytes, not to the platform's
+explanation of current state. Normalized Source Evidence, Change Ledger and
+Bookkeeping history, stewardship decisions, temporal MDM history, manifests,
+hashes, lineage, MDM Commit Evidence, and deletion records remain permanent.
+Deleting source bytes must not delete, rewrite, or detach any of those records.
+
 Accepted by the user during the 2026-09-13 Wayfinder session.

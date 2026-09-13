@@ -88,6 +88,9 @@ Specify and prove the reusable contracts before any consumer implementation:
   hashes, lineage, MDM Commit Evidence, and deletion evidence;
 - temporary-only delta bytes retained through all required consumer and
   downstream verification, then deleted without an archive copy;
+- permanent normalized evidence, Change Ledger and Bookkeeping history,
+  stewardship decisions, temporal MDM history, manifests, hashes, lineage,
+  MDM Commit Evidence, and deletion evidence independent of raw-byte retention;
 - normalized source-grain evidence with temporal versions and record hashes;
 - accepted-link, candidate, conflict, deferred-domain, and retirement states;
 - stewardship decisions that never imply an entity merge;
