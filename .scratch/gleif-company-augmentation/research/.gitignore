@@ -1,0 +1,4 @@
+# Local immutable GLEIF bulk inputs are large and reproducible from the
+# URL/size/SHA-256 entries in 01-gleif-snapshot-manifest.json.
+*.json.zip
+*.json.zip.part
