@@ -288,6 +288,14 @@ _Avoid_: Three-times-daily polling, downloading a full Golden Copy every day, fu
 The shared source evidence for all GLEIF Level 1 entities, Level 2 relationships, and reporting exceptions. Each MDM domain consumes only records whose entity and relationship semantics belong to that domain.
 _Avoid_: Filtering source capture to SEC companies, putting every LEI into Company MDM, downloading the same GLEIF publication separately for each domain
 
+**Enrichment Source Publication**:
+One immutable native release from an enrichment Source Authority, identified by its publication identity, time, declared artifact inventory, hashes, source contract, and capture run. Linked file families may keep independent checkpoints while a consumer advances only after all of its required families are verified.
+_Avoid_: Filename as publication identity, mutable latest URL as evidence, one file silently standing for a multi-file release, equivalent XML/JSON/CSV encodings treated as separate business releases
+
+**Enrichment Publication Artifact**:
+One declared source archive within an Enrichment Source Publication, retained through Bronze Persist with its archive hash, expected member inventory, source format, parser contract, and observed record count.
+_Avoid_: Extracted temporary file as source authority, undocumented side file, parser output as raw evidence, duplicate capture per MDM domain
+
 **GLEIF Candidate Backstop**:
 The weekly re-evaluation of unresolved, unmatched, newly eligible, or materially changed MDM entities against current captured GLEIF evidence.
 _Avoid_: Daily full-universe rematch, treating no candidate as a permanent no-LEI claim

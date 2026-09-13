@@ -51,6 +51,9 @@ implementation work is created or production publication is authorized.
 - [Define completion and planning artifacts](issues/05-define-completion-and-artifacts.md)
   — planning and program completion are distinct, conditional sources must
   terminate in adopt/defer/reject, and every workstream owns a future spec.
+- [Inventory source files and pipeline routing](issues/06-inventory-source-files-and-pipeline-routing.md)
+  — catalog the three Golden Copy families, their delta and recovery files,
+  every approved mapping snapshot, and each domain or nonpublishing route.
 
 ## Program workstreams
 
@@ -82,8 +85,11 @@ implementation work is created or production publication is authorized.
 - [Program verification](workstreams/33-program-verification.md)
 
 See [the dependency-ordered plan](plan.md) and
-[specification ownership index](spec-index.md). The completed structural and
-scope audit is recorded in [plan verification](verification.md).
+[specification ownership index](spec-index.md). The
+[source-file pipeline catalog](source-file-pipeline-catalog.md) records the
+authoritative archive and member-file families for every proposed GLEIF path.
+The completed structural and scope audit is recorded in
+[plan verification](verification.md).
 
 ## Not yet specified
 
