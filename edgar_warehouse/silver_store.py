@@ -874,6 +874,31 @@ CREATE TABLE IF NOT EXISTS sec_thirteenf_filing (
     parser_version           TEXT NOT NULL,
     ingested_at              TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- fundamentals-daily-integration map, Ticket 02: accession-level dedup
+-- marker for the per-filing/thirteenf bootstrap-fundamentals modes. A
+-- brand-new table needs no ALTER-based schema migration on its own --
+-- IF NOT EXISTS already covers both fresh and already-existing stores
+-- (unlike migrations 010/011, which added columns to tables that already
+-- existed). Deliberately not keyed off the content tables themselves
+-- (e.g. "does a sec_thirteenf_holding row exist for this accession") --
+-- one 13F filing can produce many holding rows, so a partially-written
+-- filing would otherwise look "done" after only its first few rows landed.
+CREATE TABLE IF NOT EXISTS sec_fundamentals_processed_accession (
+    mode                TEXT NOT NULL,       -- 'per-filing' | 'thirteenf'
+    accession_number    TEXT NOT NULL,
+    processed_at        TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (mode, accession_number)
+);
+
+-- fundamentals-daily-integration map, Ticket 03: per-CIK watermark for the
+-- entity-facts refresh trigger. Composes with (does not replace)
+-- has_companyfacts_at_version's existing one-time-per-parser-version gate
+-- -- see run_bootstrap_entity_facts / get_ciks_with_new_qualifying_filing.
+CREATE TABLE IF NOT EXISTS sec_entity_facts_refresh_watermark (
+    cik                        BIGINT PRIMARY KEY,
+    entity_facts_refreshed_at TIMESTAMPTZ
+);
 """
 
 
@@ -1171,6 +1196,68 @@ class SilverDatabase:
             self._conn.execute(
                 f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
                 "retirement_state_observed_at TIMESTAMPTZ DEFAULT NOW()"
+            )
+
+    def mark_fundamentals_accession_processed(self, mode: str, accession_number: str) -> None:
+        """Record that ``mode`` (per-filing | thirteenf) fully wrote this accession.
+
+        Ticket 02 (fundamentals-daily-integration map). Callers must issue
+        this only after every real output row for the accession has already
+        been written and returned -- this table's whole purpose is letting a
+        crash-and-retry never see an accession marked processed without its
+        real rows having landed, and this method has no way to enforce that
+        ordering itself.
+
+        Recorded to the landing export directly (not via @track_landing_row,
+        which expects a ``row: dict`` argument this method doesn't take) --
+        same reasoning as update_accounting_flag_scores above: this is the
+        table's only writer, so building the row here is no extra cost.
+        """
+        row = self._conn.execute(
+            """
+            INSERT INTO sec_fundamentals_processed_accession
+                (mode, accession_number, processed_at)
+            VALUES (?, ?, now())
+            ON CONFLICT (mode, accession_number) DO UPDATE SET
+                processed_at = excluded.processed_at
+            RETURNING mode, accession_number, processed_at
+            """,
+            [mode, accession_number],
+        ).fetchone()
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and row is not None:
+            landing_export.record(
+                "sec_fundamentals_processed_accession",
+                [{"mode": row[0], "accession_number": row[1], "processed_at": row[2]}],
+            )
+
+    def mark_entity_facts_refreshed(self, cik: int) -> None:
+        """Record that entity-facts successfully refreshed this CIK just now.
+
+        Ticket 03 (fundamentals-daily-integration map). Callers must issue
+        this only after every real output row for the CIK has already been
+        written and returned, same ordering contract as
+        mark_fundamentals_accession_processed above.
+
+        Recorded to the landing export directly, same reasoning as
+        mark_fundamentals_accession_processed above.
+        """
+        row = self._conn.execute(
+            """
+            INSERT INTO sec_entity_facts_refresh_watermark
+                (cik, entity_facts_refreshed_at)
+            VALUES (?, now())
+            ON CONFLICT (cik) DO UPDATE SET
+                entity_facts_refreshed_at = excluded.entity_facts_refreshed_at
+            RETURNING cik, entity_facts_refreshed_at
+            """,
+            [int(cik)],
+        ).fetchone()
+        landing_export = getattr(self, "landing_export", None)
+        if landing_export is not None and row is not None:
+            landing_export.record(
+                "sec_entity_facts_refresh_watermark",
+                [{"cik": row[0], "entity_facts_refreshed_at": row[1]}],
             )
 
     def _widen_adv_fund_index_to_bigint(self) -> None:

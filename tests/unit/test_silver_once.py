@@ -109,6 +109,11 @@ class EntityFactsSkipTests(unittest.TestCase):
 
         class _Db:
             def fetch(self, query, params=None):
+                # Ticket 03: distinguish get_ciks_with_new_qualifying_filing's
+                # bulk query (no new filing -> empty) from
+                # has_companyfacts_at_version's (already has facts -> hit).
+                if "sec_entity_facts_refresh_watermark" in query:
+                    return []
                 return [{"ok": 1}]
 
             def merge_financial_facts(self, *a, **k):
@@ -150,6 +155,9 @@ class EntityFactsSkipTests(unittest.TestCase):
 
             def merge_financial_derived(self, rows, sync_run_id):
                 return len(rows)
+
+            def mark_entity_facts_refreshed(self, cik):
+                pass
 
         facts = {"cik": 320193, "facts": {}}
         with unittest.mock.patch(

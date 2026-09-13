@@ -1,7 +1,7 @@
 # 02 — Accession-level incremental scoping for per-filing/thirteenf
 
 Type: task
-Status: open
+Status: done
 
 **Blocked by:** none — independent of Ticket 01 (doesn't touch
 `sec_financial_fact`/`sec_accounting_flag`).
@@ -47,11 +47,31 @@ bulk-batching fix).
 
 ## Acceptance
 
-- [ ] A manual `bootstrap-fundamentals --mode per-filing` (and `--mode
+- [x] A manual `bootstrap-fundamentals --mode per-filing` (and `--mode
       thirteenf`) run against a real CIK window skips already-processed
       accessions on a second invocation, verified live (not just unit
       tests) — this is Phase 4 step 2's own verification requirement.
-- [ ] `/gof-refactor-reviewer` consulted before editing
+- [x] `/gof-refactor-reviewer` consulted before editing
       `fundamentals_ingest.py`/`silver_store.py` (repo hard rule).
-- [ ] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
+- [x] `/code-review` (Standards, Spec, GoF) run before this ticket's PR is
       considered ready.
+
+## Answer
+
+Implemented as specified: `sec_fundamentals_processed_accession` table
+(same `mode, accession_number, processed_at` shape), written atomically
+alongside each accession's real output rows, bulk-prefetched before
+iterating candidates. Landed on PR
+[#603](https://github.com/paulananth/edgartools-platform/pull/603),
+merged into `main` (commit `6813190c`).
+
+Live verification required two prerequisite fixes this ticket's own text
+didn't anticipate — `bootstrap-fundamentals` reading from a permanently
+unhydrated local DuckDB ([duckdb-retirement-cutover Ticket 17](../../duckdb-retirement-cutover/issues/17-repoint-bootstrap-fundamentals-reads-to-snowflake.md))
+and never writing to the Snowflake landing zone at all
+([Ticket 18](../../duckdb-retirement-cutover/issues/18-bootstrap-fundamentals-never-wires-landing-export-buffer.md)).
+Once both landed and were deployed to prod, live verification against CIK
+908311 confirmed the full loop: run 1 processed 15 filings; run 2 showed
+`filings_already_processed: 15, filings_parsed: 0` — re-confirmed a second
+time after the real prod deploy (`edgartools-prod-large:299`), not just
+against a throwaway verification task definition.

@@ -3975,7 +3975,7 @@ import json, pathlib, sys
  mdm_state_machine_arn, script_dir) = sys.argv[1:]
 sys.path.insert(0, script_dir)
 from mdm_tail_helper import call_mdm_machine
-from pipeline_stage_helpers import EcsNetworkContext, force_capable_fetch_stage
+from pipeline_stage_helpers import EcsNetworkContext, force_capable_fetch_stage, fundamentals_mode_stage
 
 subnets = json.loads(subnet_json)
 security_groups = json.loads(security_group_json)
@@ -4499,14 +4499,68 @@ stage0_company_identity_bounded = {
     "Catch": sec_fetch_task_catch(),
 }
 
+# FetchEntityFacts/FetchPerFilingFundamentals/FetchThirteenFHoldings
+# (fundamentals-daily-integration wayfinder map, ticket 04): brings
+# bootstrap-fundamentals's three Branch B modes into daily_incremental,
+# inserted between CaptureAndVerifyNewFilings and the existing ADV-bulk/
+# Firm-Roster chain -- matching write_load_history_definition's own
+# Stage-1B-before-Stage-1C ordering (Branch B fundamentals run before ADV
+# bulk/Firm Roster, both before MDM). run_wh was built above with
+# Next="Mastering" as the default for this function's general shape;
+# retarget it here since this branch only executes for daily_incremental.
+#
+# windowed=False (not load_history's windowed=True CIK-windowed Distributed
+# Map) -- a single flat ecs_state() per mode, no --cik-offset/--cik-limit.
+# fundamentals-daily-integration Tickets 02/03's own accession-level/CIK-level
+# incremental scoping (already live and deployed) keeps each mode's daily
+# working set small enough that one ECS task invocation suffices, unlike
+# load_history's full-universe bootstrap.
+#
+# wh_large_arn (not wh_medium_arn) -- same OOM-driven choice as
+# load_history's own three calls (ecs-cost-sizing ticket 20): these three
+# modes share the identical merge_candidate_into_canonical publish-step
+# risk regardless of which pipeline invokes them.
+#
+# AD-13 non-fatal Catch-and-continue is fundamentals_mode_stage's fixed
+# behavior (see its own docstring) -- a failure in any of these three modes
+# routes to the next stage, matching load_history's own
+# stage1b_entity_facts_catch/stage1b_per_filing_catch/stage1b_thirteenf_catch
+# convention, rather than a hard abort. Deliberately not also wrapped in
+# sec_fetch_task_catch() -- that catch exists to release the cross-command
+# sec_fetch_active lease on a genuine failure; fundamentals_mode_stage's own
+# catch already fully absorbs the error and lets the pipeline proceed, so
+# nothing here ever reaches an unhandled failure that needs the
+# lease-release path (matching load_history's own three call sites, which
+# don't layer sec_fetch_task_catch() on top either).
+fundamentals_entity_facts_daily = fundamentals_mode_stage(
+    "entity-facts", wh_large_arn, windowed=False, network=network,
+    outer_state_name="FetchEntityFacts",
+    next_on_success="FetchPerFilingFundamentals",
+    catch_next_state="FetchPerFilingFundamentals",
+)["FetchEntityFacts"]
+
+fundamentals_per_filing_daily = fundamentals_mode_stage(
+    "per-filing", wh_large_arn, windowed=False, network=network,
+    outer_state_name="FetchPerFilingFundamentals",
+    next_on_success="FetchThirteenFHoldings",
+    catch_next_state="FetchThirteenFHoldings",
+)["FetchPerFilingFundamentals"]
+
+fundamentals_thirteenf_daily = fundamentals_mode_stage(
+    "thirteenf", wh_large_arn, windowed=False, network=network,
+    outer_state_name="FetchThirteenFHoldings",
+    next_on_success="DatasetPeriodCheck",
+    catch_next_state="DatasetPeriodCheck",
+)["FetchThirteenFHoldings"]
+
 # AdvBulkFetch stage (adv-fetch-pipeline-wiring spec, ticket 02 — ADV Pipeline map
-# ticket 06 decisions 2/4), inserted between CaptureAndVerifyNewFilings and Mastering. Identical
+# ticket 06 decisions 2/4), inserted between FetchThirteenFHoldings and Mastering. Identical
 # shape to write_load_history_definition's own AdvBulkFetch stage (same "keep in
 # sync" duplication convention Stage0CompanyIdentity already established for this
 # file) — see that function's comments for the full rationale. run_wh was built
 # above with Next="Mastering" as the default for this function's general shape;
 # retarget it here since this branch only executes for daily_incremental.
-run_wh["Next"] = "DatasetPeriodCheck"
+run_wh["Next"] = "FetchEntityFacts"
 run_wh["ResultPath"] = None
 run_wh["Catch"] = sec_fetch_task_catch()
 
@@ -4643,11 +4697,17 @@ definition = {
         "(0a) AcquireSecFetchLease -- cross-command sec_fetch_active lease (ticket 84), "
         "(0b) CaptureCompanyIdentityBatches -- Company Identity capture, strict, runs "
         "before ownership/ADV so IS_INSIDER derivation sees resolved Company entities, "
-        "(1) bronze+silver capture, (1a) ReleaseSecFetchLease, (1b) AdvBulkFetch -- fetch-adv-bulk + "
+        "(1) bronze+silver capture, (1a) FetchEntityFacts/FetchPerFilingFundamentals/"
+        "FetchThirteenFHoldings -- fundamentals-daily-integration ticket 04: Branch B "
+        "earnings/executive records, 13F holdings, and XBRL entity-facts, incrementally "
+        "scoped (tickets 02/03) and AD-13 non-fatal on failure, matching load_history's "
+        "own Stage 1B ordering, "
+        "(1b) AdvBulkFetch -- fetch-adv-bulk + "
         "ingest-relationship-sources (adv-fetch-pipeline-wiring spec), then fetch-firm-roster "
         "+ ingest-relationship-sources (adv-firm-roster-crosscheck spec, ticket 02), both "
         "lenient, so MDM sees fresh ADV silver and the Firm Roster cross-check stays current, "
-        "(1c) SweepFilingText -- release-readiness ticket 101: extracts sec_filing_text for "
+        "(1c) ReleaseSecFetchLease, "
+        "(1d) SweepFilingText -- release-readiness ticket 101: extracts sec_filing_text for "
         "required-and-unprocessed periodic-reporting companies, reports (never deletes) "
         "cleanup candidates, "
         "(2) MDM entity resolution + Neo4j sync, (3) gold build + "
@@ -4674,6 +4734,9 @@ definition = {
         "CaptureCompanyIdentityBatches": stage0_company_identity_bounded,
         "PublishCompanyIdentityUpdates": reduce_identity_refresh,
         "CaptureAndVerifyNewFilings": run_wh,
+        "FetchEntityFacts": fundamentals_entity_facts_daily,
+        "FetchPerFilingFundamentals": fundamentals_per_filing_daily,
+        "FetchThirteenFHoldings": fundamentals_thirteenf_daily,
         "SweepFilingText":     sweep_filing_text,
         "DatasetPeriodCheck":   dataset_period_check,
         "DatasetPeriodDefault": dataset_period_default,

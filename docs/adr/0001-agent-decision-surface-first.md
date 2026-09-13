@@ -61,6 +61,8 @@ View Mode** vs **Explore Mode**; Agent View Mode may only project the contract.
   abstain; the platform does not place trades.
 - Explore Mode may use free gold SQL but must never be presented as what the
   agent saw.
+- v2 public-internet serving is a **Mongo Decision Projection**, not a
+  second v1 SoE: [0009-mongo-decision-projection.md](0009-mongo-decision-projection.md).
 
 Glossary: `CONTEXT.md` (Agent decision support section).
 Product decision table: `docs/product-questions-and-dashboards.md`.

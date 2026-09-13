@@ -370,6 +370,17 @@ EXCLUDED_OPERATIONAL_TABLES = frozenset(
         # ERDP-02 D6: append-only quarantine log for rejected guidance-fact
         # candidates -- no natural key (rows accumulate, never conflict).
         "sec_guidance_fact_reject",
+        # fundamentals-daily-integration map, Tickets 02/03: pure dedup/
+        # watermark bookkeeping for bootstrap-fundamentals -- no
+        # authority_column/business-key conflict semantics, same shape as
+        # sec_source_checkpoint above. Also registered in
+        # PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES below: unlike
+        # pipeline_run-style bookkeeping that's genuinely fine to lose, this
+        # IS the entire point of these two tickets -- see the "EXCLUDED_
+        # OPERATIONAL_TABLES silently dropped on merge" 5-whys in CLAUDE.md
+        # for why plain exclusion alone would silently drop every write.
+        "sec_fundamentals_processed_accession",
+        "sec_entity_facts_refresh_watermark",
     }
 )
 
@@ -396,6 +407,15 @@ PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES = frozenset(
     {
         "sec_daily_index_checkpoint",
         "stg_daily_index_filing",
+        # fundamentals-daily-integration map, Tickets 02/03 -- see the
+        # matching comment in EXCLUDED_OPERATIONAL_TABLES above. Each
+        # bootstrap-fundamentals task hydrates the full canonical table
+        # before adding new markers, so its candidate is always canonical's
+        # prior content plus this run's additions -- a blind full-table
+        # overwrite (this pass's existing behavior) is safe here for the
+        # same reason it's safe for the two tables above.
+        "sec_fundamentals_processed_accession",
+        "sec_entity_facts_refresh_watermark",
     }
 )
 

@@ -113,7 +113,39 @@ and financial facts on a daily cadence instead of only whenever
   red-before/green-after via `git stash`; full `tests/mdm/` suite and full
   repo suite green, no new failures. Not yet committed.
 
-<!-- tickets 01-05 below convert the approved plan; none has been worked through this map yet -->
+- [Accession-level incremental scoping for per-filing/thirteenf](issues/02-accession-level-incremental-scoping.md)
+  — `sec_fundamentals_processed_accession` dedup table, bulk-prefetched
+  before iterating candidates. Fully live-verified end-to-end after two
+  prerequisite fixes surfaced by that same verification (below).
+- [Entity-facts incremental refresh trigger](issues/03-entity-facts-refresh-trigger.md)
+  — `sec_entity_facts_refresh_watermark`, composes with (doesn't replace)
+  the existing `has_companyfacts_at_version` parser-version gate. Fully
+  live-verified end-to-end alongside Ticket 02.
+- **Live-verifying Tickets 02/03 surfaced two further, unrelated
+  pre-existing bugs**, both chartered and fixed as their own tickets on the
+  `duckdb-retirement-cutover` map (not this one, since they're bugs in
+  `bootstrap-fundamentals`'s general Snowflake plumbing, not specific to
+  the new dedup/watermark tables): read side —
+  [Ticket 17](../duckdb-retirement-cutover/issues/17-repoint-bootstrap-fundamentals-reads-to-snowflake.md)
+  (`bootstrap-fundamentals` read from a local DuckDB nothing had hydrated
+  since the Ticket 10 cutover); write side —
+  [Ticket 18](../duckdb-retirement-cutover/issues/18-bootstrap-fundamentals-never-wires-landing-export-buffer.md)
+  (no writes reached Snowflake at all, for any table, ever). A third,
+  purely mechanical gap (`LOAD_SILVER_LANDING()`'s hardcoded ingest table
+  list never updated for the two new tables) was fixed directly, folded
+  into Ticket 17's own closing evidence rather than chartered separately.
+- **All four fixes merged as PR [#603](https://github.com/paulananth/edgartools-platform/pull/603)**
+  (commit `6813190c` on `main`) and deployed to prod
+  (`edgartools-prod-large:299` and siblings). Live-verified twice: once
+  pre-deploy diagnosing the read/write bugs, once post-deploy confirming
+  the real prod task definitions carry the fix — both times showing
+  `filings_already_processed: 15`/`silver_skips: 1, network_fetches: 0` for
+  CIK 908311.
+
+<!-- tickets 01-05 convert the approved plan. 01/02/03/06 done (see above);
+     04 (Step Functions wiring into daily_incremental) and 05 (end-to-end
+     verification, blocked on 04) remain open -- 04 is the map's actual
+     frontier ticket. -->
 
 ## Not yet specified
 

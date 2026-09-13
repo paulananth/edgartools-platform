@@ -76,6 +76,42 @@ def has_companyfacts_at_version(db: Any, *, cik: int, facts_parser_version: str)
     return bool(rows)
 
 
+_ENTITY_FACTS_QUALIFYING_FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A")
+
+
+def get_ciks_with_new_qualifying_filing(db: Any, *, cik_list: list[int]) -> set[int]:
+    """CIKs with a 10-K/10-K-A/10-Q/10-Q-A filing newer than their entity-facts
+    refresh watermark (or no watermark at all -- first touch).
+
+    Ticket 03 (fundamentals-daily-integration map): composes with (does not
+    replace) has_companyfacts_at_version's existing one-time-per-parser-
+    version gate above -- see run_bootstrap_entity_facts. A single bulk
+    query for the whole cik_list, not one query per CIK.
+    """
+    fetch = getattr(db, "fetch", None)
+    if fetch is None or not cik_list:
+        return set()
+    placeholders = ", ".join("?" * len(cik_list))
+    forms_sql = ", ".join(f"'{f}'" for f in _ENTITY_FACTS_QUALIFYING_FORMS)
+    rows = fetch(
+        f"""
+        SELECT f.cik AS cik
+        FROM (
+            SELECT cik, MAX(filing_date) AS latest_qualifying_filing_date
+            FROM sec_company_filing
+            WHERE cik IN ({placeholders})
+              AND form IN ({forms_sql})
+            GROUP BY cik
+        ) f
+        LEFT JOIN sec_entity_facts_refresh_watermark w ON w.cik = f.cik
+        WHERE w.entity_facts_refreshed_at IS NULL
+           OR f.latest_qualifying_filing_date > w.entity_facts_refreshed_at
+        """,
+        [int(c) for c in cik_list],
+    )
+    return {int(row["cik"]) for row in rows}
+
+
 def daily_index_is_finalized(bookkeeping: Any, *, business_date: str) -> bool:
     """True when daily index checkpoint is succeeded/finalized for the date.
 

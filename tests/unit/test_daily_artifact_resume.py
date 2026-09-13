@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from edgar_warehouse.application.daily_artifact_resume import (
+    check_unresolved_terminal_repairs,
     prepare_resume,
     record_repair_attestation,
     record_succeeded,
@@ -80,3 +81,42 @@ def test_resume_batched_check_matches_per_candidate_categorization(tmp_path) -> 
 
     assert sorted(pending) == ["never-run", "terminal-attested"]
     assert repairs == ["terminal-unattested"]
+
+
+def test_check_unresolved_terminal_repairs_is_noop_on_first_attempt(tmp_path) -> None:
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    assert check_unresolved_terminal_repairs(storage, run_id="never-attempted") == []
+
+
+def test_check_unresolved_terminal_repairs_finds_prior_unattested_marker_without_running_pipeline(tmp_path) -> None:
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    accessions = ["succeeded-one", "terminal-unattested", "never-run"]
+    _, _, manifest = prepare_resume(storage, run_id="run-1", image_identity="sha256:image", daily_index_accessions=accessions, selected_accessions=accessions)
+    record_succeeded(storage, run_id="run-1", accession="succeeded-one", manifest=manifest)
+    record_terminal_repair(storage, run_id="run-1", accession="terminal-unattested", manifest=manifest, error_type="WarehouseRuntimeError", error="conflict")
+
+    unresolved = check_unresolved_terminal_repairs(storage, run_id="run-1")
+
+    assert unresolved == ["terminal-unattested"]
+
+
+def test_check_unresolved_terminal_repairs_clears_once_attested(tmp_path) -> None:
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    accessions = ["terminal-attested"]
+    _, _, manifest = prepare_resume(storage, run_id="run-1", image_identity="sha256:image", daily_index_accessions=accessions, selected_accessions=accessions)
+    record_terminal_repair(storage, run_id="run-1", accession="terminal-attested", manifest=manifest, error_type="WarehouseRuntimeError", error="conflict")
+    assert check_unresolved_terminal_repairs(storage, run_id="run-1") == ["terminal-attested"]
+
+    record_repair_attestation(storage, run_id="run-1", accession="terminal-attested", manifest=manifest, operator_identity="operator@example.com", repair_action="registered byte-exact content", conflict_evidence={"expected_sha256": "a" * 64})
+
+    assert check_unresolved_terminal_repairs(storage, run_id="run-1") == []
+
+
+def test_check_unresolved_terminal_repairs_ignores_a_different_run_id(tmp_path) -> None:
+    storage = StorageLocation(str(tmp_path / "warehouse"))
+    accessions = ["terminal-unattested"]
+    _, _, manifest = prepare_resume(storage, run_id="run-1", image_identity="sha256:image", daily_index_accessions=accessions, selected_accessions=accessions)
+    record_terminal_repair(storage, run_id="run-1", accession="terminal-unattested", manifest=manifest, error_type="WarehouseRuntimeError", error="conflict")
+
+    # A fresh run_id has no manifest of its own yet -- unrelated to run-1's marker.
+    assert check_unresolved_terminal_repairs(storage, run_id="run-2") == []

@@ -1,5 +1,7 @@
 Type: task
-Status: open
+Status: resolved (all three "Done when" items settled -- items 1 and 3
+implemented, item 2 explicitly decided against in favor of passive
+detection, see "Item 2 resolved" below)
 
 ## Question
 
@@ -140,3 +142,52 @@ resume/retry loop should gate expensive earlier phases (submissions
 bronze/silver) on a cheap up-front check for pre-existing unresolved terminal
 markers, instead of redoing ~95 minutes of work before discovering a block
 that was already known at the start of the attempt.
+
+**Status correction (2026-09-12):** item (1) is resolved -- see "Repair
+performed (2026-08-03...)" above, which predates this "Done when" section and
+was never reflected in it. The actual resolution was neither of the two
+options this line originally posed (a CLI command or attestation alone) --
+it was a third path, a deliberate one-off direct correction of the stale
+bronze bytes themselves, which the investigation above proved was the only
+option that could actually work. Item (3) is now also resolved, per the
+"Item 3 resolved" section below. Only item (2) -- the proactive scan for
+other pre-2026-07-31 stale objects -- remains genuinely open.
+
+## Item 2 resolved (2026-09-12): no proactive scan, accepted risk mitigated by item 3
+
+Decision: do not build a proactive bucket scan for other pre-2026-07-31 stale
+bronze objects. Considered and rejected two active alternatives -- a scoped
+scan bounded to CIKs/accessions actually eligible for near-term re-selection,
+and a full S3 Inventory-based bucket scan -- in favor of passive detection.
+
+Rationale: item 3's up-front gate (this ticket, PR #610) already turns the
+expensive failure mode this ticket exists to prevent (~85 minutes redone per
+attempt, 4 attempts) into a cheap one (fails in seconds on a same-run_id
+retry). What remains after item 3 is only the *first* encounter of a given
+stale object within a *fresh* run_id -- which costs one normal run's worth of
+artifact-fetch time to discover (not a multi-hour blind-retry loop), and is
+then repaired with the same one-off manual byte-correction pattern already
+proven for the first two accessions (see "Repair performed" above). A
+proactive scan would spend real scan cost today to save, at most, the
+difference between "discovered during a normal run" and "discovered by a
+scan run ahead of time" -- for an unmeasured, likely small number of
+remaining pre-2026-07-31 objects, most of which may never be re-selected
+before their content ages out of daily-incremental's 7-day recurring window
+relevance entirely. Accepted as the lower-cost path; revisit only if a
+second live case surfaces the pattern is more common than assumed.
+
+## Item 3 resolved (2026-09-12)
+
+Implemented the up-front gate: a new, read-only `check_unresolved_terminal_repairs(storage,
+*, run_id)` (`edgar_warehouse/application/daily_artifact_resume.py`) reads the existing
+run-scoped manifest a prior attempt would have written (if any) and re-checks its frozen
+accessions for unresolved `terminal_repair_required` markers, reusing `prepare_resume`'s own
+`_list_outcome_statuses`/`_valid_repair_attestation` helpers. Called at the very top of
+`_capture_bronze_raw`'s `daily-incremental` branch (`warehouse_orchestrator.py`), gated
+identically to `prepare_resume`'s own call site (`recurring_mode and hasattr(context,
+"storage_root")`), strictly before the daily-index loop and `_run_submissions_bronze_then_silver`
+(the ~95-minute phase). A first attempt (no manifest yet) is a no-op; a same-run_id retry with
+unresolved markers now fails in seconds instead of ~95 minutes. Full write-up:
+CLAUDE.md's "daily_incremental same-run_id retry redid ~95 minutes of work before failing on
+a known block" entry. Branch: `claude/gate-daily-incremental-on-terminal-repair-markers`.
+**Not yet deployed** as of this entry. Items 1 and 2 remain open.

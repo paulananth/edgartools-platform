@@ -2198,6 +2198,106 @@ run-task`, check `aws stepfunctions list-state-machines` first — a
 purpose-built, already-proven state machine for the exact task can exist
 without being referenced anywhere in CLAUDE.md's own architecture docs.
 
+## A single oversized SEC document aborted an entire daily_incremental run (fixed 2026-09-12)
+
+**Problem:** `daily-incremental-ticket05-verify-1789220276` (a `daily_incremental` prod
+verification run) failed with `pipeline_failed`: "recurring artifact pipeline had 1 failed
+candidates and 0 terminal repair candidates" — after processing 7,051 CIKs' snapshots and
+correctly bounding the daily-index accession union (10,489 accessions, 8,167 seeded
+candidates), the whole run aborted over exactly one candidate.
+
+1. Symptom: `filing_artifact_failed` showed
+   `WarehouseRuntimeError('SEC response exceeded size limit for
+   .../0001590976-26-000048-xbrl.zip: 65561979 bytes')` — a real, legitimate 65.5MB XBRL
+   zip (13F-HR accession 0001590976-26-000048, ticker MBUU), not a malformed response.
+2. Why does one oversized document fail the whole run? `sec_client.py`'s
+   `download_sec_conditionally` hard-rejects any response over
+   `WAREHOUSE_SEC_MAX_RESPONSE_BYTES` (default 50MB) — correct on its own (no retry ever
+   shrinks a document), but `_run_configured_form_artifact_pipeline`'s except-block had no
+   classification for this error type, so it just incremented the generic `errors` counter.
+3. Why did that abort the entire run instead of just skipping the one candidate? The
+   function's own final check — `if recurring_mode and (errors or repair_required): raise`
+   — treats *any* nonzero `errors` as fatal, with no carve-out for a permanently-unresolvable,
+   single-document condition that has nothing to do with the run's overall health.
+4. Why wasn't this already handled, given the near-identical immutable-object-conflict case
+   (ticket 87/93, above) exists? That fix only excluded immutable-conflict from the
+   mid-loop circuit-breaker streak ("still counted in `errors`... just excluded from the
+   streak that trips the breaker") — it never touched this final post-loop check, so
+   immutable-object-conflict had the identical latent gap: a single isolated,
+   individually-recoverable per-document skip could still abort an entire recurring run.
+   This had simply never been observed live for that error type before this investigation.
+5. **Root cause:** the function conflated two different questions under one `errors`
+   counter — "is this run unhealthy" (worth a fail-closed abort, the intended behavior from
+   the Daily accession-expansion 5-whys fix, above) and "did any individual document fail"
+   (which includes known-safe, permanent, single-document dispositions that were never meant
+   to be systemic-failure signals in the first place).
+
+**Fix:** added `_is_oversized_response_error(exc)` (mirrors `_is_immutable_object_conflict`'s
+shape) and a new `oversized_skipped_count`, classified the same way immutable-conflict
+already is — isolated, resets `consecutive_errors`, doesn't trip the circuit breaker. The
+final recurring-mode check now computes `unresolved_errors = errors -
+conflict_skipped_count - oversized_skipped_count` and only aborts on that (any other,
+unclassified error keeps failing the run closed exactly as before — this narrows the
+exemption to two known-safe dispositions, it doesn't loosen the general fail-closed
+guarantee). Also raised `DEFAULT_MAX_RESPONSE_BYTES` 50MB → 150MB (`sec_client.py`) — the
+original 50MB had no documented sizing rationale (an arbitrary refactor-era default, never
+tuned against real filing sizes) and a real, legitimate filing already exceeded it; 150MB
+still bounds runaway/malformed responses well under the warehouse ECS tasks' 8192MB memory
+profile.
+
+Tests: `tests/unit/test_submission_phase_order.py` gained 3 cases —
+`test_recurring_mode_oversized_response_does_not_abort_pipeline` (the live regression, plus
+`oversized_skipped_count` plumbed through the completed event and return dict),
+`test_recurring_mode_immutable_conflict_does_not_abort_pipeline` (closes the identical
+latent gap for the existing immutable-conflict path, never previously covered in
+`recurring_mode`), and `test_recurring_mode_unclassified_error_still_aborts_pipeline` (guards
+that a genuinely unknown error still fails the run closed, unchanged). All 3 confirmed to
+fail against the pre-fix code and pass after (verified via `git stash`, not just read).
+`tests/unit/test_submission_phase_order.py` full file green (38 passed); every test file
+touching `warehouse_orchestrator.py`/`sec_client.py` green (394 passed). **Not yet
+deployed** as of this entry — the prod images running `daily_incremental` predate this fix.
+
+## daily_incremental same-run_id retry redid ~95 minutes of work before failing on a known block (fixed 2026-09-12)
+
+**Problem:** release-readiness Ticket 74 documented a `daily_incremental` retry
+(`daily-incremental-ticket70-verify-1785720814`) that retried 4 times, each attempt burning
+~85 minutes redoing the full daily-index/submissions-bronze/silver-apply phases, before
+failing identically at the final artifact-fetch step every time on two accessions already
+known `terminal_repair_required` from the first attempt.
+
+**Root cause:** `prepare_resume`'s terminal-repair check (the thing that would have caught
+this) only runs inside `_run_configured_form_artifact_pipeline`, itself only reached after
+`_run_submissions_bronze_then_silver` — the ~95-minute phase — already completes. Every
+retry under the same Step Functions `run_id` re-hit the identical, already-known block only
+after paying that cost again.
+
+**Fix:** a new, read-only `check_unresolved_terminal_repairs(storage, *, run_id)`
+(`edgar_warehouse/application/daily_artifact_resume.py`) reads the existing run-scoped
+manifest a prior attempt would have written (if any) and re-checks its frozen accessions
+for unresolved `terminal_repair_required` markers, reusing `prepare_resume`'s own
+`_list_outcome_statuses`/`_valid_repair_attestation` helpers. Called at the very top of
+`_capture_bronze_raw`'s `daily-incremental` branch (`warehouse_orchestrator.py`), gated the
+same way `prepare_resume`'s own call site is (`recurring_mode and hasattr(context,
+"storage_root")`), before the daily-index loop or `_run_submissions_bronze_then_silver` ever
+run. A first attempt (no manifest yet) is a no-op; a retry with unresolved markers now fails
+in seconds instead of ~95 minutes.
+
+**Lesson:** the error message's own remediation text needed a second pass at review — an
+early draft told the operator to "repair via `record_repair_attestation`," but Ticket 74's
+own investigation had already proven attestation alone never unblocks a retry (the
+underlying bronze bytes must be corrected out-of-band first); the message now says so
+explicitly. A gate that fires correctly but tells the operator to do the wrong next thing is
+still a defect.
+
+Tests: 4 new in `tests/unit/test_daily_artifact_resume.py`, 4 new in
+`tests/unit/test_daily_incremental_terminal_repair_gate.py` (mirrors
+`test_daily_incremental_gated_capture.py`'s own patching convention at the
+`_capture_bronze_raw` seam) — the key regression test confirmed to fail against the pre-fix
+code (`git apply`/revert round trip, not just read) before passing after. Full `tests/unit/`
+suite green (1119 passed, 8 skipped). This closes only "Done when" item 3 of Ticket 74 —
+items 1 (how to repair the two known stale accessions) and 2 (a proactive scan for other
+pre-2026-07-31 stale objects) remain open. **Not yet deployed** as of this entry.
+
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
 `load_history` is the canonical way to load companies at scale. Its live
