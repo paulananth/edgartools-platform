@@ -31,7 +31,7 @@ implementation work is created or production publication is authorized.
 - The evidence-backed first child is the existing
   [GLEIF Company augmentation map](../gleif-company-augmentation/map.md).
 - Domain and authority separation is recorded by
-  [Use source-grained evidence and independently releasable MDM enrichment consumers](../../docs/adr/0009-independent-source-grained-mdm-enrichment-consumers.md),
+  [Use source-grained evidence and independently releasable MDM enrichment consumers](../../docs/adr/0010-independent-source-grained-mdm-enrichment-consumers.md),
   with canonical terms in the [repository glossary](../../CONTEXT.md).
 
 ## Decisions so far
