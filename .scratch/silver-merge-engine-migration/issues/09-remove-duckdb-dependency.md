@@ -10,7 +10,9 @@ migrations, `silver_protection.py` (`merge_candidate_into_canonical`, `PROTECTED
 — check what else imports the registry first; `test_silver_landing_export.py` uses it as the
 landing-scope list), `application/silver_event_reducer.py` (out of scope for redesign here —
 see the map's Out of scope; it leaves with the engine), `application/commands/migrate_silver_shards.py`,
-`silver_landing_historical_backfill.py`, `scripts/ops/*.py`'s three DuckDB diagnostics,
+`silver_landing_historical_backfill.py` (with `silver_support/sharded_reader.py`, its last
+user after Ticket 08, plus that reader's tests in `test_sharding.py`, `test_fundamentals_modules.py`
+and `test_adv_preflight.py`'s fixture), `scripts/ops/*.py`'s three DuckDB diagnostics,
 `scripts/build_relationship_release_manifest.py`, then `duckdb>=1.0.0` itself and the warehouse
 deps image (`uv.lock` change → rebuild both deps images per CLAUDE.md's table).
 

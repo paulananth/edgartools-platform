@@ -1858,8 +1858,6 @@ def test_bootstrap_fundamentals_uses_unified_silver_database(
     ), patch(
         "edgar_warehouse.silver_support.session.open_silver_database"
     ) as mock_open_database, patch(
-        "edgar_warehouse.silver_support.session.open_silver_shard"
-    ) as mock_open_shard, patch(
         "edgar_warehouse.application.workflows.fundamentals_ingest.run_bootstrap_entity_facts",
         return_value={"entity_facts_written": 1},
     ), patch(
@@ -1886,7 +1884,6 @@ def test_bootstrap_fundamentals_uses_unified_silver_database(
     assert rc == 0
     mock_open_database.assert_called_once()
     assert mock_open_database.call_args[0][0].root == str(tmp_path / "silver")
-    mock_open_shard.assert_not_called()
 
 
 def test_bootstrap_fundamentals_upload_failure_returns_exit_code_1(

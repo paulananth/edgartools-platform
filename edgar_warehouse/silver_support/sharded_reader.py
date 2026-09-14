@@ -4,6 +4,14 @@ ShardedSilverReader opens N shard DuckDB files in a single in-memory connection
 via ATTACH (READ_ONLY) and creates a UNION ALL view for every table in _TABLES.
 Callers can query unioned data through the .fetch() helper method.
 
+Remaining caller
+----------------
+``backfill-silver-landing-historical`` (``silver_landing_historical_backfill.py``)
+reads the retired canonical monolith through this reader and its
+``copy_table_to_parquet``. The MDM parity commands that also used it were
+deleted by silver-merge-engine-migration Ticket 08; this module goes with the
+backfill and the DuckDB engine in that map's Ticket 09.
+
 Duck-typing compatibility
 --------------------------
 ``edgar_warehouse.silver_support.access.get_connection(...)`` can use this

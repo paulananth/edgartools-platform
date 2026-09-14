@@ -258,8 +258,9 @@ _EXCLUDED_FROM_TARGET_SET = frozenset({"pipeline_run_lease"})
 # comparison. This module's own docstring above documented the reuse as
 # deliberate before this gap was found; it wasn't wrong to try, it was
 # incomplete -- the exact same shape as the bug found and fixed in
-# edgar_warehouse/mdm/silver_parity.py's RESOLVER_INPUT_TABLES (Ticket 05)
-# for a narrower 6-table subset, never ported to this sibling tool. Found
+# the MDM parity gate's RESOLVER_INPUT_TABLES (duckdb-retirement-cutover
+# Ticket 05; deleted with that gate by silver-merge-engine-migration
+# Ticket 08) for a narrower 6-table subset, never ported to this sibling tool. Found
 # live: 11 of 30 tables failed reconciliation's semantic_content_digest
 # check with identical key sets on both sides (zero missing/extra rows) --
 # a pure content-hash mismatch, not real data divergence.

@@ -10,7 +10,7 @@ captured before -- or without re-triggering -- that write path never gets a
 chance to flow into Snowflake silver. Originally scoped to just company
 metadata (duckdb-retirement map); widened here (silver-snowflake-migration
 map, Ticket 15) after confirming live that the identical gap affects most
-of PARITY_TABLES, not just company metadata: sec_adv_filing and
+of the silver tables, not just company metadata: sec_adv_filing and
 sec_financial_fact had zero Parquet exports ever land in S3 despite tens of
 thousands of DuckDB rows each.
 
@@ -141,11 +141,9 @@ def test_backfill_reads_the_current_monolith_not_a_stale_shard(tmp_path) -> None
     retired -- live prod still has stale (12+ day old) shard files sitting
     in S3 that would have silently been read instead of the current
     canonical monolith. Confirm the fixed code path reads the monolith path
-    specifically: seed data only there, assert it round-trips, and confirm
-    no shard-manifest/shard-*.duckdb lookup is attempted at all (no
-    monkeypatch of _hydrate_all_shards is installed in this test -- if the
-    code under test still called it, this test would fail with a real
-    network/filesystem error, not silently pass)."""
+    specifically: seed data only there and assert it round-trips. (The
+    shard-hydrate helper the old code called was deleted by
+    silver-merge-engine-migration Ticket 08.)"""
     monolith = _monolith_path(tmp_path)
     _seed_two_companies(monolith)
 
@@ -159,15 +157,13 @@ def test_backfill_reads_the_current_monolith_not_a_stale_shard(tmp_path) -> None
 
 
 def test_backfill_table_list_excludes_only_sec_company_ticker() -> None:
-    """sec_company_ticker is the one PARITY_TABLES entry deliberately left
-    out (its landing shape needs enrichment beyond a raw DuckDB row -- see
-    module docstring); everything else PARITY_TABLES tracks should be
-    covered, including tables well outside the original company-metadata
-    scope."""
-    from edgar_warehouse.mdm.silver_parity import PARITY_TABLES
-
+    """The backfill covers the 31 tables the deleted parity gate tracked,
+    except sec_company_ticker (its landing shape needs enrichment beyond a raw
+    DuckDB row -- see module docstring). The list used to be derived from
+    mdm/silver_parity.py's PARITY_TABLES; that module is deleted
+    (silver-merge-engine-migration Ticket 08), so the list lives here."""
     assert "sec_company_ticker" not in _BACKFILL_TABLES
-    assert set(_BACKFILL_TABLES) == set(PARITY_TABLES) - {"sec_company_ticker"}
+    assert len(_BACKFILL_TABLES) == len(set(_BACKFILL_TABLES)) == 30
     # Spot-check a few tables from outside the original four this backfill
     # used to be scoped to.
     for table in ("sec_adv_filing", "sec_thirteenf_holding", "sec_financial_fact", "sec_ownership_non_derivative_txn"):

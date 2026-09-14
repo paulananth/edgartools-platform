@@ -90,6 +90,13 @@ this ticket, since those methods turned out to be the live merge engine, not dea
 - [ ] The shared shard-file *read* infrastructure — NOT deleted, still used by
       `mdm/cli.py`'s parity-check path; the *write* side (`_publish_shard_if_remote`) is
       deleted (see above)
+
+      **Update 2026-09-14:** silver-merge-engine-migration
+      [Ticket 08](../../silver-merge-engine-migration/issues/08-delete-sharded-reader-and-parity-tooling.md)
+      deleted the parity commands, `mdm/cli.py`'s DuckDB reader path and the shard-hydrate
+      helpers. Ticket 19 and Ticket 21 name `table-reconcile`, which never used them.
+      `ShardedSilverReader` now survives only for `backfill-silver-landing-historical` and
+      leaves with it in that map's Ticket 09.
 - [ ] DuckDB file lifecycle disposition — moved to
       [Ticket 21](21-apply-duckdb-file-lifecycle-disposition.md), blocked on Ticket 19
 - [ ] `grep -r "import duckdb" edgar_warehouse/` / `tests/` returning zero results —

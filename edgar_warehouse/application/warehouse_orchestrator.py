@@ -523,11 +523,11 @@ def _execute_warehouse_bronze_capture(
     if command_name == "backfill-silver-landing-historical":
         # silver-snowflake-migration map, Ticket 15 (widened from the
         # original duckdb-retirement company-metadata-only backfill): one-time
-        # seed of every verify-silver-parity table except sec_company_ticker
+        # seed of the silver tables the old parity gate tracked (except sec_company_ticker)
         # into the landing zone -- see
         # edgar_warehouse/silver_landing_historical_backfill.py's module
-        # docstring. Reads every shard directly, same dispatch shape as
-        # backfill-mdm-entity-ids above.
+        # docstring. Reads the canonical monolith directly, same dispatch
+        # shape as backfill-mdm-entity-ids above.
         from edgar_warehouse.silver_landing_historical_backfill import (
             run_silver_landing_historical_backfill,
         )
@@ -542,10 +542,10 @@ def _execute_warehouse_bronze_capture(
     # (append-only, one Parquet file per run, no shared mutable object), so
     # every command now opens the same monolith silver database (see Ticket
     # 10's note immediately below for why "hydrates" no longer applies). The
-    # shared shard-file read infrastructure itself (_read_shard_manifest,
-    # _hydrate_shard_for_window, open_silver_shard) is left in place -- the
-    # mdm-ahead-of-silver parity/backfill read path still calls it directly;
-    # see .scratch/duckdb-retirement/issues/04-decide-bootstrap-batch-sharding-fate.md.
+    # shard-file read helpers (_hydrate_shard_for_window, _hydrate_all_shards,
+    # open_silver_shard) were deleted with the MDM parity commands that last
+    # read through them (silver-merge-engine-migration Ticket 08);
+    # _read_shard_manifest stays for seed-bronze-batches' _shard_partition_ciks.
     # The shard-file WRITE side (_publish_shard_if_remote and its retry
     # wrapper) was deleted (duckdb-retirement-cutover Ticket 12): confirmed
     # zero live callers, since bootstrap-batch sharding itself was retired
@@ -1131,9 +1131,9 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     this docstring used to mention (``_read_fingerprint_sidecar``/
     ``_write_fingerprint_sidecar``) were deleted (Ticket 20): once this
     function became a permanent no-op, nothing ever read the sidecar again,
-    so ``_hydrate_silver_database_from_storage``/``_hydrate_shard_for_window``
-    writing one was pure dead weight. ``compute_silver_fingerprint`` itself
-    is untouched -- it still has a real, separate caller in
+    so ``_hydrate_silver_database_from_storage`` (and the since-deleted
+    ``_hydrate_shard_for_window``) writing one was pure dead weight.
+    ``compute_silver_fingerprint`` itself is untouched -- it still has a real, separate caller in
     ``PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`` fingerprinting.
     """
     return None
@@ -1212,71 +1212,6 @@ def _read_shard_manifest(context: WarehouseCommandContext) -> dict:
     manifest_path = context.storage_root.join("silver", "sec", "shard-manifest.json")
     payload = read_bytes(manifest_path)
     return load_manifest(payload)
-
-
-def _hydrate_shard_for_window(
-    context: WarehouseCommandContext,
-    shard_index: int,
-) -> str | None:
-    """Download shard-{shard_index}.duckdb from remote storage to the local silver directory.
-
-    Parameters
-    ----------
-    context:
-        The warehouse command context carrying storage root paths.
-    shard_index:
-        The zero-based shard index to download.
-
-    Returns
-    -------
-    str | None
-        The local filesystem path to the downloaded shard, or ``None`` if the
-        shard does not yet exist in remote storage (new shard, no pre-existing
-        data).  Returns the local shard path directly for non-remote storage
-        contexts (no download needed).
-    """
-    local_path = Path(
-        context.silver_root.join("silver", "sec", "shards", f"shard-{shard_index}.duckdb")
-    )
-
-    if not context.storage_root.is_remote or context.silver_root.is_remote:
-        # Local storage — no download needed; return existing path.
-        return str(local_path)
-
-    relative_path = default_path_resolver().shard_path(shard_index)
-    remote_path = context.storage_root.join(relative_path)
-
-    try:
-        context.storage_root.download_file(relative_path, local_path)
-    except (FileNotFoundError, OSError):
-        return None
-
-    _emit_pipeline_event(
-        "silver_shard_hydrated",
-        shard_index=shard_index,
-        path=remote_path,
-        local_path=str(local_path),
-        size_bytes=local_path.stat().st_size,
-    )
-    return str(local_path)
-
-
-def _hydrate_all_shards(context: WarehouseCommandContext) -> list[str | None]:
-    """Download all shards listed in the shard manifest.
-
-    Used by gold-refresh and MDM commands that require the full silver dataset.
-
-    Returns
-    -------
-    list[str | None]
-        Local paths for each shard (in shard_index order).  An entry is
-        ``None`` if that shard does not yet exist in remote storage.
-    """
-    manifest = _read_shard_manifest(context)
-    return [
-        _hydrate_shard_for_window(context, shard_index)
-        for shard_index in range(manifest["shard_count"])
-    ]
 
 
 def _run_filing_artifact_gated_capture(

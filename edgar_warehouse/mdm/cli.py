@@ -195,40 +195,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     cov = mdm_sub.add_parser("coverage-report", help="Report silver vs MDM entity counts per domain")
     cov.set_defaults(handler=_logged_handler("coverage-report", _handle_coverage_report))
 
-    vsp = mdm_sub.add_parser(
-        "verify-silver-parity",
-        help=(
-            "Correctness gate before flipping MDM_SILVER_READ_TARGET=snowflake in prod "
-            "(silver-snowflake-migration map, Ticket 10): compares DuckDB silver against "
-            "EDGARTOOLS_SILVER row counts and sec_company CIK sets."
-        ),
-    )
-    vsp.set_defaults(handler=_logged_handler("verify-silver-parity", _handle_verify_silver_parity))
-
-    vrip = mdm_sub.add_parser(
-        "verify-resolver-input-parity",
-        help=(
-            "DuckDB Retirement Cutover Ticket 05's correctness evidence: digest-based "
-            "row parity between DuckDB silver and EDGARTOOLS_SILVER for each entity "
-            "type's real resolver input table(s), on a bounded case-selected sample."
-        ),
-    )
-    vrip.add_argument(
-        "--entity-type",
-        action="append",
-        default=None,
-        choices=["adviser", "company", "fund", "person", "security"],
-        help="Limit to one entity type; repeat for multiple. Default: all 5.",
-    )
-    vrip.add_argument("--sample-size", type=int, default=None, help="Rows sampled per table (default: 25)")
-    vrip.add_argument(
-        "--large-table-sample-size", type=int, default=None,
-        help="Rows sampled for the ownership transaction tables (default: 200)",
-    )
-    vrip.set_defaults(
-        handler=_logged_handler("verify-resolver-input-parity", _handle_verify_resolver_input_parity)
-    )
-
     # mdm-stage-renaming ticket 01: was "sync-graph"
     sync = mdm_sub.add_parser(
         "publish-relationships",
@@ -825,83 +791,12 @@ def _silver_reader():
     eventual removal). The MDM_SILVER_READ_TARGET env var (silver-snowflake-
     migration map, Ticket 12) that used to gate this call site between
     "duckdb" and "snowflake" is retired -- every value, including unset, now
-    reaches Snowflake. ``_duckdb_silver_reader()`` below is NOT deleted: the
-    verify-silver-parity and verify-resolver-input-parity commands still
-    need a live DuckDB reader to compare against, exactly the case this
-    ticket's own checklist anticipates ("deleted or left dead pending
-    [cleanup] ticket's final sweep").
+    reaches Snowflake. The DuckDB reader the parity commands kept alive is
+    deleted with those commands (silver-merge-engine-migration Ticket 08).
     """
     from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 
     return SnowflakeSilverReader.connect()
-
-
-def _duckdb_silver_reader():
-    """The DuckDB-shard/monolith reader, retired from ``_silver_reader()``'s
-    own call path by DuckDB Retirement Cutover Ticket 05. Kept reachable
-    only for ``verify-silver-parity``/``verify-resolver-input-parity``,
-    which need a live DuckDB reader and a live SnowflakeSilverReader side by
-    side to compare -- a parity check comparing Snowflake against itself
-    would be meaningless.
-    """
-    from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
-
-    duckdb_path = os.environ.get("MDM_SILVER_DUCKDB") or None
-    storage_root_env = os.environ.get("WAREHOUSE_STORAGE_ROOT", "").strip()
-
-    # Remote mode: WAREHOUSE_STORAGE_ROOT is an S3 URI (or similar remote)
-    if storage_root_env and "://" in storage_root_env:
-        from pathlib import Path as _Path
-
-        from edgar_warehouse.application.warehouse_orchestrator import (
-            _hydrate_all_shards,
-            _hydrate_silver_database_from_storage,
-        )
-        from edgar_warehouse.application.command_context_factory import build_warehouse_context
-
-        context = build_warehouse_context("mdm-run")
-        try:
-            local_paths = _hydrate_all_shards(context)
-        except (FileNotFoundError, OSError):
-            # First-load recovery (one_click_data_refresh) may have written a
-            # monolith silver.duckdb before any shard manifest exists -- mirror
-            # bootstrap-batch's shard_manifest_missing_monolith_fallback path
-            # (warehouse_orchestrator.py) instead of failing the MDM read.
-            _hydrate_silver_database_from_storage(context)
-            monolith_local_path = _Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-            if not monolith_local_path.exists():
-                return None
-            return ShardedSilverReader([str(monolith_local_path)])
-        shard_paths = [p for p in local_paths if p is not None]
-        if not shard_paths:
-            return None
-        return ShardedSilverReader(shard_paths)
-
-    # Legacy remote URI in MDM_SILVER_DUCKDB itself (older ECS task definition
-    # style). Keep this path independent of WarehouseSettings so local tests and
-    # repair commands can use an explicit silver source without full runtime env.
-    if duckdb_path is not None and "://" in duckdb_path:
-        from edgar_warehouse.infrastructure.object_storage import read_bytes
-
-        local_path = Path(os.environ.get("MDM_LOCAL_SILVER_DUCKDB", "/tmp/mdm-silver.duckdb"))
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(read_bytes(duckdb_path))
-        duckdb_path = str(local_path)
-
-    if duckdb_path is None:
-        return None
-
-    # Local directory containing shard-*.duckdb files
-    local_p = Path(duckdb_path)
-    if local_p.is_dir():
-        import glob
-        shard_files = sorted(glob.glob(str(local_p / "shard-*.duckdb")))
-        if not shard_files:
-            return None
-        return ShardedSilverReader(shard_files)
-
-    # Legacy single-file path (dev/testing): wrap as single-shard reader
-    return ShardedSilverReader([duckdb_path])
 
 
 def _open_snowflake_silver_reader(command_name: str) -> tuple:
@@ -921,23 +816,6 @@ def _open_snowflake_silver_reader(command_name: str) -> tuple:
         print(f"{command_name}: cannot open Snowflake silver reader -- {exc}", file=sys.stderr)
         return None, 1
     return reader, 0
-
-
-def _require_duckdb_silver_reader(command_name: str):
-    """Open the legacy DuckDB reader for the two verify-*-parity commands,
-    printing a uniform stderr message on failure. Both commands need this
-    side by side with a live Snowflake reader (to compare one against the
-    other), so they read via ``_duckdb_silver_reader()`` directly rather
-    than ``_silver_reader()``, which is Snowflake-only post-cutover.
-    """
-    reader = _duckdb_silver_reader()
-    if reader is None:
-        print(
-            f"{command_name}: MDM_SILVER_DUCKDB is required but is not set. "
-            "Set MDM_SILVER_DUCKDB to a local DuckDB path or s3:// URI.",
-            file=sys.stderr,
-        )
-    return reader
 
 
 # -- silver preflight helpers -----------------------------------------------
@@ -1296,96 +1174,6 @@ def _handle_coverage_report(args) -> int:
             f"{row['gap']:>{col_w['gap']}}  {row['reason']}"
         )
     return 0  # D-19: reporting tool, always exits 0
-
-
-def _handle_verify_silver_parity(args) -> int:
-    """Correctness gate before flipping MDM_SILVER_READ_TARGET=snowflake in
-    prod (silver-snowflake-migration map, Ticket 10/12). Mirrors
-    verify-graph's shape: build a real verifier, print its JSON payload,
-    exit 1 if not passed.
-
-    Deliberately builds both readers explicitly (_duckdb_silver_reader() /
-    SnowflakeSilverReader.connect()) rather than calling _silver_reader()
-    twice under two different env values -- this command's whole point is
-    comparing the two sources side by side, independent of whichever one
-    MDM_SILVER_READ_TARGET currently selects for other commands.
-    """
-    from edgar_warehouse.mdm.silver_parity import verify_silver_parity
-    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
-
-    duckdb_reader = _require_duckdb_silver_reader("verify-silver-parity")
-    if duckdb_reader is None:
-        return 1
-
-    try:
-        snowflake_reader = SnowflakeSilverReader.connect()
-    except Exception as exc:
-        print(f"verify-silver-parity: cannot open Snowflake silver reader -- {exc}", file=sys.stderr)
-        return 1
-
-    try:
-        result = verify_silver_parity(duckdb_reader, snowflake_reader)
-    finally:
-        duckdb_reader.close()
-        snowflake_reader.close()
-
-    print(json.dumps(result.payload, indent=2, sort_keys=True))
-    if not result.passed:
-        print("verify-silver-parity: DuckDB and Snowflake silver are not at parity", file=sys.stderr)
-        return 1
-    return 0
-
-
-def _handle_verify_resolver_input_parity(args) -> int:
-    """DuckDB Retirement Cutover Ticket 05's own correctness gate: mirrors
-    verify-silver-parity's shape exactly (build both readers explicitly,
-    print JSON, exit 1 if not passed) but compares resolver input rows via
-    content-hash digest rather than table row counts -- see
-    silver_parity.verify_resolver_input_parity's own docstring for why a
-    digest, and why this doesn't need to re-run MDM's resolvers twice.
-
-    This command is this ticket's automated fail-closed assertion (Decide
-    the Cutover Validation Standard's sign-off shape: the assertion gates a
-    required human approval, neither alone) -- running it against prod and
-    approving its result is a deploy-time step, not something this ticket
-    performs on its own.
-    """
-    from edgar_warehouse.mdm.silver_parity import verify_resolver_input_parity
-    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
-
-    duckdb_reader = _require_duckdb_silver_reader("verify-resolver-input-parity")
-    if duckdb_reader is None:
-        return 1
-
-    try:
-        snowflake_reader = SnowflakeSilverReader.connect()
-    except Exception as exc:
-        print(f"verify-resolver-input-parity: cannot open Snowflake silver reader -- {exc}", file=sys.stderr)
-        return 1
-
-    kwargs: dict[str, Any] = {}
-    if getattr(args, "entity_type", None):
-        kwargs["entity_types"] = list(args.entity_type)
-    if getattr(args, "sample_size", None) is not None:
-        kwargs["sample_size"] = int(args.sample_size)
-    if getattr(args, "large_table_sample_size", None) is not None:
-        kwargs["large_table_sample_size"] = int(args.large_table_sample_size)
-
-    try:
-        results = verify_resolver_input_parity(duckdb_reader, snowflake_reader, **kwargs)
-    finally:
-        duckdb_reader.close()
-        snowflake_reader.close()
-
-    payload = {entity_type: result.payload for entity_type, result in results.items()}
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    if not all(result.passed for result in results.values()):
-        print(
-            "verify-resolver-input-parity: DuckDB and Snowflake resolver input rows are not at parity",
-            file=sys.stderr,
-        )
-        return 1
-    return 0
 
 
 def _handle_publication_claim(args) -> int:
