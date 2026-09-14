@@ -22,6 +22,25 @@ Ticket 06d's in-run lookup (`_IN_RUN_LOOKUP_TABLES`, `_remember_in_run`, `_in_ru
 with them. It takes its row shape (every column, in order) from `_table_columns`, which reads the
 DuckDB DDL, so that column list needs a DuckDB-free source too.
 
+Two more DuckDB dependencies, found 2026-09-14 and not covered above:
+
+- **`compute-windows` uploads the local DuckDB file.** `_execute_warehouse_bronze_capture`
+  passes the local `silver/sec/silver.duckdb` to `persist_run_manifest` as
+  `reference_snapshot_file`, which copies its bytes to S3 as
+  `identity_refresh/runs/<run_id>/reference/reference_snapshot.duckdb` on every run. The
+  manifest check only reads the snapshot's `sha256` and `path`, never the file itself. Decide
+  what replaces it (a hash of the reference rows landed this run, or nothing) before the engine
+  goes; with no DuckDB file the upload raises "identity refresh reference snapshot is missing".
+- **`deploy-aws-application.sh` still injects `MDM_SILVER_DUCKDB`** (the `--mdm-silver-duckdb`
+  flag, its default `s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb`, and the MDM
+  task environment and `silver_duckdb` definition field). Nothing else in the repo reads it (only
+  historical `.planning/` notes mention it). Remove it with the engine.
+
+Also: `scripts/ops/` has five scripts that import `duckdb`, not three (`check-issued-by-coverage.py`,
+`check-neo4j-e2e.py`, `diagnose-mdm-run.py`, `diagnose-silver-anomalies.py`, `verify-counts.py`),
+and `table-reconcile` (`table_reconciliation/cli.py`) hydrates `silver.duckdb` to compare with
+Snowflake — it is the tool duckdb-retirement-cutover Ticket 19 needs, so it leaves after Ticket 21.
+
 **Blocked by:** [Ticket 07](07-delete-confirmed-dead-duckdb-readers.md),
 [Ticket 08](08-delete-sharded-reader-and-parity-tooling.md), duckdb-retirement-cutover
 [Ticket 21](../../duckdb-retirement-cutover/issues/21-apply-duckdb-file-lifecycle-disposition.md)
