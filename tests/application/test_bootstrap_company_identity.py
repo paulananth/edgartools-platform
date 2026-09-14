@@ -76,8 +76,6 @@ def test_company_identity_mode_stages_company_and_ticker_only(
         mode="company-identity",
         run_id="test-company-identity-run",
         silver_root=None,
-        release_mode=False,
-        candidate_manifest=None,
         cik_offset=0,
         cik_limit=None,
         force=False,
@@ -122,21 +120,6 @@ def test_company_identity_mode_stages_company_and_ticker_only(
     ], "company-identity mode must not land any ownership, ADV or 13F rows"
 
 
-def test_company_identity_mode_rejects_release_mode() -> None:
-    args = SimpleNamespace(
-        cik_list=[CIK],
-        mode="company-identity",
-        run_id="test-run",
-        silver_root=None,
-        release_mode=True,
-        candidate_manifest="s3://bucket/manifest.json",
-        cik_offset=0,
-        cik_limit=None,
-        force=False,
-    )
-    assert bootstrap_fundamentals.execute(args) == 2
-
-
 def test_company_identity_with_explicit_cik_list_skips_full_hydrate(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -163,8 +146,6 @@ def test_company_identity_with_explicit_cik_list_skips_full_hydrate(
         mode="company-identity",
         run_id="test-skip-hydrate-run",
         silver_root=None,
-        release_mode=False,
-        candidate_manifest=None,
         cik_offset=0,
         cik_limit=None,
         force=False,
@@ -205,8 +186,6 @@ def test_company_identity_without_cik_list_also_skips_hydrate(
         mode="company-identity",
         run_id="test-windowed-hydrate-run",
         silver_root=None,
-        release_mode=False,
-        candidate_manifest=None,
         cik_offset=0,
         cik_limit=None,
         force=False,

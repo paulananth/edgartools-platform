@@ -949,73 +949,6 @@ class BranchBSourceReaderTests(unittest.TestCase):
         self.assertEqual(metrics["filings_scanned"], 0)
         self.assertEqual(metrics["filings_parsed"], 0)
 
-    def test_release_mode_fails_when_primary_artifact_is_missing(self) -> None:
-        from edgar_warehouse.application.workflows.fundamentals_ingest import (
-            run_bootstrap_fundamentals_per_filing,
-        )
-        fake_source = MagicMock()
-        fake_source.fetch.side_effect = [
-            [{"accession_number": "required", "cik": 1, "form": "DEF 14A",
-              "filing_date": "2024-01-01"}],
-            [],
-        ]
-        with self.assertRaisesRegex(Exception, "required.*primary artifact"):
-            run_bootstrap_fundamentals_per_filing(
-                cik_list=[1], source=fake_source, db=MagicMock(), sync_run_id="release",
-                release_mode=True, candidate_accessions={"required"},
-            )
-
-    def test_release_mode_fails_when_13f_information_table_is_missing(self) -> None:
-        from edgar_warehouse.application.workflows.fundamentals_ingest import run_bootstrap_thirteenf
-        fake_source = MagicMock()
-        fake_source.fetch.side_effect = [
-            [{"accession_number": "required", "cik": 1, "report_date": "2024-03-31",
-              "filing_date": "2024-05-01"}],
-            [],
-        ]
-        with self.assertRaisesRegex(Exception, "required.*information table"):
-            run_bootstrap_thirteenf(
-                cik_list=[1], source=fake_source, db=MagicMock(), sync_run_id="release",
-                release_mode=True, candidate_accessions={"required"},
-            )
-
-    def test_release_thirteenf_emits_accession_terminal_outcome(self) -> None:
-        from edgar_warehouse.application.workflows.fundamentals_ingest import run_bootstrap_thirteenf
-
-        source = MagicMock()
-        source.fetch.side_effect = [
-            [{"accession_number": "13f", "cik": 9, "report_date": "2024-03-31",
-              "filing_date": "2024-05-01", "form": "13F-HR"}],
-            [
-                {"raw_object_id": "cover", "is_primary": True, "description": "PRIMARY"},
-                {"raw_object_id": "table", "is_primary": False,
-                 "description": "INFORMATION TABLE"},
-            ],
-            [{"raw_object_id": "table", "storage_path": "s3://bucket/table.xml"}],
-            [{"raw_object_id": "cover", "storage_path": "s3://bucket/cover.xml"}],
-        ]
-        db = MagicMock()
-        db.merge_thirteenf_filings.return_value = 1
-        db.merge_thirteenf_holdings.return_value = 1
-
-        with patch(
-            "edgar_warehouse.infrastructure.object_storage.read_bytes", return_value=b"<xml/>",
-        ), patch(
-            "edgar_warehouse.parsers.thirteenf.parse_thirteenf",
-            return_value={"sec_thirteenf_holding": [{"cusip": "123456789"}]},
-        ), patch(
-            "edgar_warehouse.parsers.thirteenf_cover.parse_thirteenf_cover",
-            return_value={"amendment_type": "original", "confidential_omission": False},
-        ):
-            metrics = run_bootstrap_thirteenf(
-                cik_list=[9], source=source, db=db, sync_run_id="release",
-                release_mode=True, candidate_accessions={"13f"},
-            )
-
-        self.assertEqual(metrics["candidate_outcomes"], [{
-            "accession_number": "13f", "status": "applicable_loaded",
-            "reason": "effective_holdings_loaded",
-        }])
 
     def test_per_filing_reads_filings_from_source_never_db(self) -> None:
         from edgar_warehouse.application.workflows.fundamentals_ingest import (
@@ -1137,41 +1070,6 @@ class BranchBSourceReaderTests(unittest.TestCase):
 
         self.assertEqual(parsed_contents, ["<table>Apple earnings</table>"])
         self.assertEqual(metrics["rows_earnings_release"], 1)
-
-    def test_release_per_filing_emits_accession_terminal_outcome(self) -> None:
-        from edgar_warehouse.application.workflows.fundamentals_ingest import (
-            run_bootstrap_fundamentals_per_filing,
-        )
-
-        source = MagicMock()
-        source.fetch.side_effect = [
-            [{"accession_number": "proxy", "cik": 1, "form": "DEF 14A",
-              "filing_date": "2024-01-05", "items": None}],
-            [{"raw_object_id": "raw-1", "is_primary": True}],
-            [{"raw_object_id": "raw-1", "storage_path": "s3://bucket/proxy.htm"}],
-        ]
-        db = MagicMock()
-        db.merge_earnings_releases.return_value = 0
-        db.merge_executive_records.return_value = 1
-
-        with patch(
-            "edgar_warehouse.parsers.get_parser",
-            return_value=lambda *a, **kw: {
-                "sec_earnings_release": [], "sec_executive_record": [{"person": "Ada"}],
-            },
-        ), patch(
-            "edgar_warehouse.infrastructure.object_storage.read_bytes",
-            return_value=b"<html>proxy</html>",
-        ):
-            metrics = run_bootstrap_fundamentals_per_filing(
-                cik_list=[1], source=source, db=db, sync_run_id="release",
-                release_mode=True, candidate_accessions={"proxy"},
-            )
-
-        self.assertEqual(metrics["candidate_outcomes"], [{
-            "accession_number": "proxy", "status": "applicable_loaded",
-            "reason": "executive_records_loaded",
-        }])
 
 
 # ---------------------------------------------------------------------------

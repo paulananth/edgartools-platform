@@ -347,7 +347,6 @@ class WarehousePathResolver:
             "fetch-adv-bulk",
             "fetch-firm-roster",
             "ingest-relationship-sources",
-            "reconcile-relationship-release",
             "capture-filing-artifact",
             "drive-filing-discovery-for-date",
             "drive-adv-filing-discovery-for-date",

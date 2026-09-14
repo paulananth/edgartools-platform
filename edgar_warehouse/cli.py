@@ -291,10 +291,6 @@ def _handle_fetch_firm_roster(args: argparse.Namespace) -> int:
     return run_command("fetch-firm-roster", args)
 
 
-def _handle_reconcile_relationship_release(args: argparse.Namespace) -> int:
-    return run_command("reconcile-relationship-release", args)
-
-
 def _handle_bootstrap_next(args: argparse.Namespace) -> int:
     return run_command("bootstrap-next", args)
 
@@ -1298,24 +1294,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     bootstrap_batch.add_argument(
-        "--release-mode",
-        action="store_true",
-        help="Fail closed on the bounded required relationship candidate manifest",
-    )
-    bootstrap_batch.add_argument(
-        "--candidate-manifest",
-        default=None,
-        help="Local or S3 JSON manifest containing required relationship candidates",
-    )
-    bootstrap_batch.add_argument(
-        "--repair-manifest",
-        default=None,
-        help="Local or S3 JSON manifest bounding accessions allowed for --force repair",
-    )
-    bootstrap_batch.add_argument(
         "--force",
         action="store_true",
-        help="Re-fetch only accessions authorized by --repair-manifest in release mode",
+        help="Re-fetch SEC artifacts even when they are already captured",
     )
     bootstrap_batch.add_argument(
         "--resume-ledger-run-id",
@@ -1404,44 +1385,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(fetch_firm_roster)
     fetch_firm_roster.set_defaults(handler=_handle_fetch_firm_roster)
-
-    reconcile_relationship_release = subparsers.add_parser(
-        "reconcile-relationship-release",
-        help="Fan in strict distributed batch ledgers and prove exact candidate completion.",
-    )
-    reconcile_relationship_release.add_argument(
-        "--candidate-manifest", required=True,
-        help="Local or S3 frozen relationship candidate manifest",
-    )
-    reconcile_relationship_release.add_argument(
-        "--attestations-json",
-        required=True,
-        help=(
-            "JSON object with five named Ticket 20 gate attestations: "
-            "warehouse, mdm, graph, release_data_operator, release_owner"
-        ),
-    )
-    reconcile_relationship_release.add_argument(
-        "--execution-arn",
-        default=None,
-        help="Optional Step Functions execution ARN bound into the evidence artifact",
-    )
-    reconcile_relationship_release.add_argument(
-        "--image-digest",
-        default=None,
-        help="Optional warehouse image digest bound into the evidence artifact",
-    )
-    reconcile_relationship_release.add_argument(
-        "--insider-coverage",
-        default=None,
-        help=(
-            "Optional path/URI to the insider_coverage JSON produced by "
-            "'mdm verify-insider-coverage --output ...' (Ticket 21). When "
-            "provided, evidence fail-closes on any unresolved insider."
-        ),
-    )
-    _add_run_id_arg(reconcile_relationship_release)
-    reconcile_relationship_release.set_defaults(handler=_handle_reconcile_relationship_release)
 
     bootstrap_next = subparsers.add_parser(
         "bootstrap-next",
@@ -1911,16 +1854,6 @@ def build_parser() -> argparse.ArgumentParser:
             "$WAREHOUSE_SILVER_ROOT, a local WAREHOUSE_STORAGE_ROOT, or "
             "/tmp/edgar-warehouse-silver for remote storage."
         ),
-    )
-    bootstrap_fundamentals.add_argument(
-        "--release-mode",
-        action="store_true",
-        help="Fail closed on every required candidate failure; requires --candidate-manifest",
-    )
-    bootstrap_fundamentals.add_argument(
-        "--candidate-manifest",
-        default=None,
-        help="Local or S3 JSON manifest containing the bounded release candidate accessions",
     )
     bootstrap_fundamentals.add_argument(
         "--identity-refresh-run-id",

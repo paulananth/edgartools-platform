@@ -1142,7 +1142,8 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
 def _publish_silver_database_with_retry(context: WarehouseCommandContext) -> dict[str, Any] | None:
     """Retry _publish_silver_database_if_remote on a lost promotion race.
 
-    Regression (2026-07-22): Ticket 20's strict release runs concurrent
+    Regression (2026-07-22): Ticket 20's strict release (deleted by
+    silver-merge-engine-migration Ticket 11) ran concurrent
     Distributed Map batches (MaxConcurrency=4) that all merge into and
     publish the same canonical silver.duckdb. PromotionConflictError's own
     docstring says it is "retryable: the staged object is left in place ...
@@ -1957,7 +1958,7 @@ def _capture_bronze_raw(
 
     if command_name == "compute-remaining-batches":
         # pipeline-resumability ticket 02: automatic resume-batch filtering
-        # for the default (non-release_mode) "Clean and Merge Filings" (formerly BatchSilver) path, ahead of the
+        # for the "Clean and Merge Filings" (formerly BatchSilver) path, ahead of the
         # Map so already-done batches never launch a Fargate task just to
         # self-skip. Reuses the frozen original run's cik_batches.jsonl
         # (never regenerated -- the candidate set a resume may use) plus its
@@ -1994,101 +1995,6 @@ def _capture_bronze_raw(
     if command_name == "bootstrap-batch":
         cik_list = list(arguments.get("cik_list") or [])
         include_pagination = bool(arguments.get("include_pagination", True))
-        release_mode = bool(arguments.get("release_mode", False))
-        candidate_manifest_path = str(arguments.get("candidate_manifest") or "").strip()
-        repair_manifest_path = str(arguments.get("repair_manifest") or "").strip()
-        required_accessions: set[str] | None = None
-        required_candidate_rows: dict[str, dict[str, Any]] | None = None
-        repair_accessions: set[str] | None = None
-        if release_mode:
-            if not candidate_manifest_path:
-                raise WarehouseRuntimeError(
-                    "bootstrap-batch --release-mode requires --candidate-manifest"
-                )
-            from edgar_warehouse.application.relationship_bulk_load import (
-                candidate_inventory_from_manifest,
-                select_required_accessions,
-            )
-
-            prefilled_accession_outcomes: dict[str, Any] = {}
-            freeze_prefix = ""
-            try:
-                candidate_payload = json.loads(
-                    read_bytes(candidate_manifest_path).decode("utf-8")
-                )
-                candidate_inventory = candidate_inventory_from_manifest(
-                    candidate_payload,
-                    ciks={int(cik) for cik in cik_list},
-                    require_strict_agent_windows=True,
-                )
-                required_candidates = [
-                    candidate
-                    for candidate in candidate_inventory.candidates
-                    if candidate.artifact_required
-                ]
-                required_accessions = {
-                    candidate.accession_number for candidate in required_candidates
-                }
-                required_candidate_rows = {
-                    candidate.accession_number: {
-                        "accession_number": candidate.accession_number,
-                        "cik": candidate.cik,
-                        "form": candidate.form,
-                        "filing_date": candidate.filing_date,
-                        "report_date": candidate.report_date,
-                        "items": (
-                            "5.02"
-                            if candidate.candidate_reason == "item_5_02_metadata"
-                            else None
-                        ),
-                    }
-                    for candidate in required_candidates
-                }
-                if repair_manifest_path:
-                    repair_payload = json.loads(
-                        read_bytes(repair_manifest_path).decode("utf-8")
-                    )
-                    repair_accessions = select_required_accessions(
-                        repair_payload, ciks={int(cik) for cik in cik_list}
-                    )
-                # P1: load durable per-accession terminals from prior runs of this freeze.
-                from edgar_warehouse.application.relationship_bulk_load import (
-                    load_terminal_accession_outcomes,
-                    release_freeze_prefix_from_path,
-                )
-
-                freeze_prefix = release_freeze_prefix_from_path(candidate_manifest_path)
-                prefilled_accession_outcomes = load_terminal_accession_outcomes(
-                    freeze_prefix=freeze_prefix,
-                    candidates=candidate_inventory.candidates,
-                    inventory_fingerprint=candidate_inventory.fingerprint,
-                    generation_id=sync_run_id,
-                    read_text=lambda path: read_bytes(path).decode("utf-8"),
-                )
-                # Explicit --force repair must re-process named accessions even if
-                # a prior terminal marker exists under this freeze.
-                if repair_accessions:
-                    for accession in repair_accessions:
-                        prefilled_accession_outcomes.pop(accession, None)
-                if prefilled_accession_outcomes:
-                    # Do not re-fetch artifacts or re-parse when a valid freeze
-                    # marker already proves a terminal outcome.
-                    required_accessions = {
-                        accession
-                        for accession in required_accessions
-                        if accession not in prefilled_accession_outcomes
-                    }
-                    _emit_pipeline_event(
-                        "release_accession_resume_loaded",
-                        resumed_count=len(prefilled_accession_outcomes),
-                        pending_required_count=len(required_accessions),
-                        freeze_prefix=freeze_prefix,
-                        run_id=sync_run_id,
-                    )
-            except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
-                raise WarehouseRuntimeError(
-                    f"bootstrap-batch could not read bounded release manifest: {exc}"
-                ) from exc
         result = _run_submissions_bronze_then_silver(
             context=context,
             db=db,
@@ -2100,15 +2006,7 @@ def _capture_bronze_raw(
             force=bool(arguments.get("force", False)),
             load_mode="bootstrap_batch",
             artifact_policy=str(arguments.get("artifact_policy") or "all_attachments"),
-            parser_policy=(
-                "branch_b_deferred"
-                if release_mode
-                else str(arguments.get("parser_policy") or "configured_forms")
-            ),
-            release_mode=release_mode,
-            required_accessions=required_accessions,
-            required_candidate_rows=required_candidate_rows,
-            repair_manifest_accessions=repair_accessions,
+            parser_policy=str(arguments.get("parser_policy") or "configured_forms"),
             ownership_lookback_years=arguments.get("ownership_lookback_years"),
             item_502_lookback_years=arguments.get("item_502_lookback_years"),
             fundamentals_lookback_years=arguments.get("fundamentals_lookback_years"),
@@ -2121,182 +2019,28 @@ def _capture_bronze_raw(
         metrics["rows_inserted"] += result["rows_written"]
         metrics["rows_skipped"] += result["rows_skipped"]
         _merge_capture_network_metrics(metrics, result)
-        if not release_mode:
-            # pipeline-resumability ticket 02: default-path done marker, a
-            # weaker-guarantee sibling of release_mode's own
-            # release_batch_done_marker below. Written under
-            # resume_ledger_run_id (defaults to this run's own sync_run_id
-            # when unset) rather than sync_run_id itself, so a LATER,
-            # separate execution can resume this exact run's ledger by
-            # passing --resume-ledger-run-id <this run's id> without
-            # colliding with sync_run_id's other uses (promotion, manifest
-            # paths, leases) -- see ticket 02's "Resolve --run-id vs.
-            # effective_run_id" note.
-            from edgar_warehouse.application.batch_silver_resume import (
-                write_default_batch_done_marker,
-            )
+        # pipeline-resumability ticket 02: default-path done marker. Written
+        # under resume_ledger_run_id (defaults to this run's own sync_run_id
+        # when unset) rather than sync_run_id itself, so a LATER, separate
+        # execution can resume this exact run's ledger by passing
+        # --resume-ledger-run-id <this run's id> without colliding with
+        # sync_run_id's other uses (promotion, manifest paths, leases) -- see
+        # ticket 02's "Resolve --run-id vs. effective_run_id" note.
+        from edgar_warehouse.application.batch_silver_resume import (
+            write_default_batch_done_marker,
+        )
 
-            resume_ledger_run_id = (
-                str(arguments.get("resume_ledger_run_id") or "").strip() or sync_run_id
-            )
-            marker_path = write_default_batch_done_marker(
-                bronze_root=context.bronze_root.root,
-                ciks=cik_list,
-                resume_ledger_run_id=resume_ledger_run_id,
-                completed_at=now.isoformat().replace("+00:00", "Z"),
-            )
-            metrics["default_batch_done_marker_path"] = marker_path
-            metrics["resume_ledger_run_id"] = resume_ledger_run_id
-        if release_mode:
-            from edgar_warehouse.application.relationship_bulk_load import (
-                CandidateOutcome,
-                accession_done_marker_path,
-                batch_done_marker_path,
-                batch_identity_for_ciks,
-                build_accession_done_marker,
-                build_batch_done_marker,
-                candidate_inventory_from_manifest,
-                reconcile_completion_ledger,
-                release_freeze_prefix_from_path,
-            )
-            from edgar_warehouse.infrastructure.object_storage import write_uri_text
-
-            inventory = candidate_inventory_from_manifest(
-                candidate_payload,
-                ciks={int(cik) for cik in cik_list},
-                require_strict_agent_windows=True,
-            )
-            pending_candidates = [
-                candidate
-                for candidate in inventory.candidates
-                if candidate.accession_number not in prefilled_accession_outcomes
-            ]
-            parser_outcomes = _run_release_branch_b_parsers(
-                db=db,
-                ciks=[int(cik) for cik in cik_list],
-                candidates=pending_candidates,
-                sync_run_id=sync_run_id,
-            )
-            artifact_outcomes = {
-                row["accession_number"]: row
-                for row in result.get("candidate_outcomes", [])
-            }
-            outcomes: list[CandidateOutcome] = []
-            newly_completed: list[CandidateOutcome] = []
-            for candidate in inventory.candidates:
-                resumed = prefilled_accession_outcomes.get(candidate.accession_number)
-                if resumed is not None:
-                    outcomes.append(resumed)
-                    continue
-                artifact = artifact_outcomes.get(candidate.accession_number)
-                if candidate.artifact_required and artifact is None:
-                    raise WarehouseRuntimeError(
-                        f"missing terminal outcome for required candidate {candidate.accession_number}"
-                    )
-                parser_outcome = parser_outcomes.get(candidate.accession_number)
-                if candidate.artifact_required and parser_outcome is None:
-                    raise WarehouseRuntimeError(
-                        f"missing parser outcome for required candidate {candidate.accession_number}"
-                    )
-                status = (
-                    str(parser_outcome["status"])
-                    if parser_outcome is not None
-                    else "not_applicable"
-                )
-                evidence_fingerprint = (
-                    hashlib.sha256(
-                        "|".join((
-                            str(artifact["evidence_fingerprint"]),
-                            status,
-                            str(parser_outcome.get("reason") or ""),
-                        )).encode("utf-8")
-                    ).hexdigest()
-                    if artifact is not None and parser_outcome is not None
-                    else candidate.fingerprint
-                )
-                outcome = CandidateOutcome(
-                    generation_id=sync_run_id,
-                    accession_number=candidate.accession_number,
-                    candidate_fingerprint=candidate.fingerprint,
-                    status=status,
-                    evidence_fingerprint=evidence_fingerprint,
-                )
-                outcomes.append(outcome)
-                newly_completed.append(outcome)
-            reconciliation = reconcile_completion_ledger(
-                inventory, outcomes, generation_id=sync_run_id
-            )
-            batch_identity = batch_identity_for_ciks(cik_list)
-            ledger_path = context.storage_root.write_json(
-                f"release-evidence/{sync_run_id}/bulk-load-ledger-batches/{batch_identity}.json",
-                {
-                    "generation_id": reconciliation.generation_id,
-                    "inventory_fingerprint": reconciliation.inventory_fingerprint,
-                    "terminal_counts": reconciliation.terminal_counts,
-                    "fingerprint": reconciliation.fingerprint,
-                    "outcomes": [outcome.__dict__ for outcome in outcomes],
-                },
-            )
-            metrics["bulk_load_ledger_path"] = ledger_path
-            metrics["bulk_load_ledger_fingerprint"] = reconciliation.fingerprint
-            metrics["release_accession_resumed_count"] = len(prefilled_accession_outcomes)
-            metrics["release_accession_newly_completed_count"] = len(newly_completed)
-            # P0: durable done marker under the freeze prefix so a later SF
-            # execution can feed only remaining batches (same freeze, new run_id).
-            freeze_prefix = freeze_prefix or release_freeze_prefix_from_path(
-                candidate_manifest_path
-            )
-            completed_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-            # P1: persist per-accession terminals for mid-batch resume next run.
-            for outcome in newly_completed:
-                marker_path = accession_done_marker_path(
-                    freeze_prefix, outcome.accession_number
-                )
-                write_uri_text(
-                    marker_path,
-                    json.dumps(
-                        build_accession_done_marker(
-                            accession_number=outcome.accession_number,
-                            candidate_fingerprint=outcome.candidate_fingerprint,
-                            inventory_fingerprint=reconciliation.inventory_fingerprint,
-                            status=outcome.status,
-                            evidence_fingerprint=outcome.evidence_fingerprint,
-                            generation_id=sync_run_id,
-                            completed_at=completed_at,
-                        ),
-                        indent=2,
-                        sort_keys=True,
-                    )
-                    + "\n",
-                )
-            marker_path = batch_done_marker_path(freeze_prefix, batch_identity)
-            marker_payload = build_batch_done_marker(
-                batch_identity=batch_identity,
-                ciks=cik_list,
-                generation_id=sync_run_id,
-                inventory_fingerprint=reconciliation.inventory_fingerprint,
-                ledger_path=ledger_path,
-                ledger_fingerprint=reconciliation.fingerprint,
-                terminal_counts=reconciliation.terminal_counts,
-                candidate_count=len(inventory.candidates),
-                completed_at=completed_at,
-            )
-            write_uri_text(
-                marker_path,
-                json.dumps(marker_payload, indent=2, sort_keys=True) + "\n",
-            )
-            metrics["release_batch_done_marker_path"] = marker_path
-            metrics["release_batch_identity"] = batch_identity
-            _emit_pipeline_event(
-                "release_batch_done_marker_written",
-                batch_identity=batch_identity,
-                marker_path=marker_path,
-                ledger_path=ledger_path,
-                candidate_count=len(inventory.candidates),
-                resumed_count=len(prefilled_accession_outcomes),
-                newly_completed_count=len(newly_completed),
-                run_id=sync_run_id,
-            )
+        resume_ledger_run_id = (
+            str(arguments.get("resume_ledger_run_id") or "").strip() or sync_run_id
+        )
+        marker_path = write_default_batch_done_marker(
+            bronze_root=context.bronze_root.root,
+            ciks=cik_list,
+            resume_ledger_run_id=resume_ledger_run_id,
+            completed_at=now.isoformat().replace("+00:00", "Z"),
+        )
+        metrics["default_batch_done_marker_path"] = marker_path
+        metrics["resume_ledger_run_id"] = resume_ledger_run_id
         return raw_writes, metrics
 
     if command_name == "ingest-relationship-sources":
@@ -2509,156 +2253,6 @@ def _capture_bronze_raw(
         metrics["firm_roster_fetch_sources_found"] = len(sources)
         metrics["firm_roster_fetch_latest_period"] = latest_period
         metrics["firm_roster_fetch_manifest_path"] = manifest_path
-        return raw_writes, metrics
-
-    if command_name == "reconcile-relationship-release":
-        manifest_path = str(arguments.get("candidate_manifest") or "").strip()
-        if not manifest_path:
-            raise WarehouseRuntimeError("--candidate-manifest is required")
-        try:
-            candidate_payload = json.loads(read_bytes(manifest_path).decode("utf-8"))
-            from edgar_warehouse.application.relationship_bulk_load import (
-                batch_identity_from_done_marker_name,
-                build_required_relationship_bulk_load_evidence,
-                candidate_inventory_from_manifest,
-                reconcile_completion_ledger_batches,
-                release_freeze_prefix_from_path,
-                validate_and_rebind_done_batch_ledger,
-            )
-            from edgar_warehouse.infrastructure.object_storage import (
-                list_uri_child_names,
-            )
-
-            inventory = candidate_inventory_from_manifest(
-                candidate_payload, require_strict_agent_windows=True
-            )
-            ledger_paths = context.storage_root.find_existing(
-                f"release-evidence/{sync_run_id}/bulk-load-ledger-batches/*.json"
-            )
-            batch_ledgers_by_identity = {
-                str(path).rsplit("/", 1)[-1].removesuffix(".json"):
-                    json.loads(read_bytes(path).decode("utf-8"))
-                for path in ledger_paths
-            }
-
-            # P0 resume runs only unfinished batches under a fresh execution
-            # name. Fan in prior ledgers exclusively through same-freeze done
-            # markers, validating all marker/ledger bindings before rebinding
-            # copied outcomes to this execution's evidence generation. A
-            # current-run ledger wins if an operator deliberately reran a
-            # previously completed batch.
-            freeze_prefix = release_freeze_prefix_from_path(manifest_path)
-            done_prefix = f"{freeze_prefix}batch_done/"
-            for marker_name in list_uri_child_names(done_prefix):
-                batch_identity = batch_identity_from_done_marker_name(marker_name)
-                if batch_identity is None or batch_identity in batch_ledgers_by_identity:
-                    continue
-                marker = json.loads(
-                    read_bytes(f"{done_prefix}{marker_name}").decode("utf-8")
-                )
-                if str(marker.get("batch_identity") or "") != batch_identity:
-                    raise WarehouseRuntimeError(
-                        f"batch done marker identity mismatch: {marker_name}"
-                    )
-                prior_ledger_path = str(marker.get("ledger_path") or "").strip()
-                if not prior_ledger_path:
-                    raise WarehouseRuntimeError(
-                        f"batch done marker has no ledger path: {marker_name}"
-                    )
-                prior_ledger = json.loads(
-                    read_bytes(prior_ledger_path).decode("utf-8")
-                )
-                batch_ledgers_by_identity[batch_identity] = (
-                    validate_and_rebind_done_batch_ledger(
-                        marker,
-                        prior_ledger,
-                        inventory_fingerprint=inventory.fingerprint,
-                        generation_id=sync_run_id,
-                    )
-                )
-            if not batch_ledgers_by_identity:
-                raise WarehouseRuntimeError("no distributed bulk-load batch ledgers found")
-            batch_ledgers = list(batch_ledgers_by_identity.values())
-            reconciliation = reconcile_completion_ledger_batches(
-                inventory, batch_ledgers, generation_id=sync_run_id
-            )
-            from edgar_warehouse.application.relationship_bulk_load import (
-                parse_attestations_json,
-            )
-
-            attestations_raw = arguments.get("attestations")
-            if attestations_raw is None:
-                attestations_raw = arguments.get("attestations_json")
-            # Enumerate the Release-Owner-accepted Item 5.02 unresolved
-            # candidates from the batch ledgers so evidence names every one
-            # (and the builder enforces the bounded rate fail-closed).
-            accepted_unresolved = sorted({
-                str(row.get("accession_number") or "")
-                for ledger in batch_ledgers
-                for row in (ledger.get("outcomes") or [])
-                if isinstance(row, dict)
-                and str(row.get("status") or "") == "unresolved_accepted"
-            } - {""})
-            item502_candidate_count = sum(
-                1 for c in inventory.candidates if c.form in ("8-K", "8-K/A")
-            )
-            # Ticket 21: optional insider-coverage artifact (produced by
-            # `mdm verify-insider-coverage --output ...`). When supplied,
-            # the evidence builder fail-closes on any unresolved insider.
-            insider_coverage_path = str(
-                arguments.get("insider_coverage") or ""
-            ).strip()
-            insider_coverage = (
-                json.loads(read_bytes(insider_coverage_path).decode("utf-8"))
-                if insider_coverage_path
-                else None
-            )
-            evidence = build_required_relationship_bulk_load_evidence(
-                generation_id=sync_run_id,
-                inventory_fingerprint=reconciliation.inventory_fingerprint,
-                watermark=inventory.watermark,
-                coverage_start=inventory.coverage_start,
-                coverage_by_document_type=inventory.coverage_by_document_type,
-                candidate_count=len(inventory.candidates),
-                terminal_counts=reconciliation.terminal_counts,
-                ledger_fingerprint=reconciliation.fingerprint,
-                batch_ledger_count=len(batch_ledgers),
-                attestations=parse_attestations_json(attestations_raw),
-                image_digest=str(arguments.get("image_digest") or "").strip() or None,
-                execution_arn=str(arguments.get("execution_arn") or "").strip() or None,
-                accepted_unresolved_accessions=accepted_unresolved,
-                item502_candidate_count=item502_candidate_count,
-                insider_coverage=insider_coverage,
-            )
-        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
-            if isinstance(exc, WarehouseRuntimeError):
-                raise
-            raise WarehouseRuntimeError(f"relationship release reconciliation failed: {exc}") from exc
-        output_path = context.storage_root.write_json(
-            f"release-evidence/{sync_run_id}/bulk-load-completion-ledger.json",
-            {
-                "generation_id": reconciliation.generation_id,
-                "inventory_fingerprint": reconciliation.inventory_fingerprint,
-                "candidate_count": len(inventory.candidates),
-                "batch_ledger_count": len(batch_ledgers),
-                "terminal_counts": reconciliation.terminal_counts,
-                "fingerprint": reconciliation.fingerprint,
-                "coverage_by_document_type": inventory.coverage_by_document_type,
-                "watermark": inventory.watermark.isoformat(),
-                "status": "pass",
-            },
-        )
-        evidence_path = context.storage_root.write_json(
-            f"release-evidence/{sync_run_id}/required_relationship_bulk_load_evidence.json",
-            evidence,
-        )
-        metrics["bulk_load_completion_ledger_path"] = output_path
-        metrics["bulk_load_completion_ledger_fingerprint"] = reconciliation.fingerprint
-        metrics["required_relationship_bulk_load_evidence_path"] = evidence_path
-        metrics["required_relationship_bulk_load_evidence_fingerprint"] = evidence[
-            "evidence_fingerprint"
-        ]
-        metrics["ticket20_pass_claim"] = evidence["pass_claim"]
         return raw_writes, metrics
 
     if command_name == "gold-refresh":
@@ -3079,11 +2673,9 @@ def _run_submissions_bronze_then_silver(
     recent_limit: int | None = None,
     artifact_policy: str = "none",
     parser_policy: str = "none",
-    release_mode: bool = False,
     recurring_mode: bool = False,
     required_accessions: set[str] | None = None,
     required_candidate_rows: Mapping[str, Mapping[str, Any]] | None = None,
-    repair_manifest_accessions: set[str] | None = None,
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
     filing_lookback_years: Any = None,
@@ -3095,10 +2687,6 @@ def _run_submissions_bronze_then_silver(
     skip_ownership_forms: bool = False,
 ) -> dict[str, Any]:
     """Capture every selected SEC submission into bronze before applying silver."""
-    if release_mode and recurring_mode:
-        raise WarehouseRuntimeError(
-            "submission processing cannot be both release and recurring mode"
-        )
     filing_min_date = _ownership_min_filing_date(_resolve_filing_lookback_years(filing_lookback_years))
     total_ciks = len(ciks)
     bronze_started_at = datetime.now(UTC)
@@ -3276,7 +2864,7 @@ def _run_submissions_bronze_then_silver(
         )
 
     observed_accessions = _dedupe_strings([*recent_accessions, *pagination_accessions])
-    if release_mode or recurring_mode:
+    if recurring_mode:
         required = set(required_accessions or ())
         missing = sorted(required - set(observed_accessions))
         if missing:
@@ -3291,18 +2879,16 @@ def _run_submissions_bronze_then_silver(
                     continue
                 seed_rows.append(dict(candidate_row))
             if unavailable_metadata:
-                candidate_kind = "daily-index" if recurring_mode else "relationship"
                 raise WarehouseRuntimeError(
-                    f"required {candidate_kind} candidates missing frozen index metadata: "
+                    "required daily-index candidates missing frozen index metadata: "
                     f"{unavailable_metadata}"
                 )
             if seed_rows:
                 rows_written += int(db.merge_filings(seed_rows, sync_run_id))
             unresolved = [accession for accession in missing if db.get_filing(accession) is None]
             if unresolved:
-                candidate_kind = "daily-index" if recurring_mode else "relationship"
                 raise WarehouseRuntimeError(
-                    f"required {candidate_kind} candidates could not be staged: {unresolved}"
+                    f"required daily-index candidates could not be staged: {unresolved}"
                 )
         artifact_accessions = [
             accession for accession in observed_accessions if accession in required
@@ -3344,10 +2930,8 @@ def _run_submissions_bronze_then_silver(
         artifact_policy=artifact_policy,
         parser_policy=parser_policy,
         force=force,
-        release_mode=release_mode,
         recurring_mode=recurring_mode,
         accession_boundary=(set(required_accessions or ()) if recurring_mode else None),
-        repair_manifest_accessions=repair_manifest_accessions,
         ownership_lookback_years=ownership_lookback_years,
         item_502_lookback_years=item_502_lookback_years,
         fundamentals_lookback_years=fundamentals_lookback_years,
@@ -3367,7 +2951,6 @@ def _run_submissions_bronze_then_silver(
         "rows_skipped": rows_skipped,
         "recent_accessions": _dedupe_strings(recent_accessions),
         "pagination_accessions": _dedupe_strings(pagination_accessions),
-        "candidate_outcomes": artifact_result.get("candidate_outcomes", []),
         "network_fetches": int(artifact_result.get("network_fetches", 0) or 0),
         "silver_skips": int(artifact_result.get("silver_skips", 0) or 0),
         "accessions_with_network": int(artifact_result.get("accessions_with_network", 0) or 0),
@@ -3396,7 +2979,7 @@ def _is_transient_artifact_error(exc: BaseException) -> bool:
     # 403 included: SEC EDGAR is unauthenticated, so a 403 on a validly-built
     # archive URL is its edge/WAF rate-limit signal, not a permission denial
     # (Ticket 20 regression 2026-07-21 -- a single 403 fetching a quarterly
-    # full-index file aborted an entire 116-batch strict release under 0%
+    # full-index file aborted an entire 116-batch strict release (since deleted) under 0%
     # tolerance; confirmed transient both by an immediate manual re-fetch
     # succeeding and by three concurrent sibling batches completing the same
     # window with zero errors, ruling out a sustained/concurrency-driven block).
@@ -3586,10 +3169,8 @@ def _run_configured_form_artifact_pipeline(
     artifact_policy: str,
     parser_policy: str,
     force: bool,
-    release_mode: bool = False,
     recurring_mode: bool = False,
     accession_boundary: set[str] | None = None,
-    repair_manifest_accessions: set[str] | None = None,
     ownership_lookback_years: Any = None,
     item_502_lookback_years: Any = None,
     fundamentals_lookback_years: Any = None,
@@ -3599,23 +3180,12 @@ def _run_configured_form_artifact_pipeline(
     adv_lookback_years: Any = None,
     skip_ownership_forms: bool = False,
 ) -> dict[str, Any]:
-    if release_mode and recurring_mode:
-        raise WarehouseRuntimeError(
-            "artifact processing cannot be both release and recurring mode"
-        )
     if recurring_mode and accession_boundary is None:
         raise WarehouseRuntimeError(
             "recurring artifact processing requires an exact daily-index accession boundary"
         )
-    if release_mode and force and not repair_manifest_accessions:
-        raise WarehouseRuntimeError("release --force requires an explicit bounded repair manifest")
     fetch_artifacts = _artifact_policy_fetches(artifact_policy)
-    branch_b_deferred = _normalize_policy(parser_policy) == "branch_b_deferred"
     run_parsers = _parser_policy_runs(parser_policy)
-    if release_mode and (not fetch_artifacts or not (run_parsers or branch_b_deferred)):
-        raise WarehouseRuntimeError(
-            "release mode requires artifact fetch and parser policies"
-        )
     _empty_network = {
         "network_fetches": 0,
         "silver_skips": 0,
@@ -3661,10 +3231,6 @@ def _run_configured_form_artifact_pipeline(
                 "daily artifact expansion-contract violation; configured candidates "
                 f"outside forced-index accession union: {out_of_union}"
             )
-    if release_mode and force:
-        unapproved = sorted(set(selected_accessions) - set(repair_manifest_accessions or ()))
-        if unapproved:
-            raise WarehouseRuntimeError(f"release force includes accessions outside repair manifest: {unapproved}")
     if not selected_accessions and not recurring_mode:
         return {"raw_writes": [], "rows_written": 0, "rows_skipped": 0, **_empty_network}
 
@@ -3704,7 +3270,6 @@ def _run_configured_form_artifact_pipeline(
     import time as _time
     _CONSECUTIVE_ERROR_LIMIT = int(os.environ.get("WAREHOUSE_ARTIFACT_CIRCUIT_BREAKER", "20"))
     raw_writes: list[dict[str, Any]] = []
-    candidate_outcomes: list[dict[str, str]] = []
     rows_written = 0
     errors = 0
     consecutive_errors = 0
@@ -3752,7 +3317,7 @@ def _run_configured_form_artifact_pipeline(
                 remaining_accessions=remaining_accessions,
                 run_id=sync_run_id,
             )
-            if release_mode or recurring_mode:
+            if recurring_mode:
                 emit_partial(
                     reason="circuit_open",
                     processed=processed_accessions,
@@ -3768,7 +3333,6 @@ def _run_configured_form_artifact_pipeline(
             # Ticket 03: silver-once ownership skip (accession + parser_version).
             # When silver already has a successful ownership parse at the current
             # parser_version and force is false, skip network + re-parse.
-            # strict_release still requires hashed evidence if raw objects missing.
             ownership_skip = False
             if not force:
                 filing_meta = db.get_filing(accession_number) or {}
@@ -3787,68 +3351,33 @@ def _run_configured_form_artifact_pipeline(
                         parser_name=parser_name,
                         parser_version=parser_version,
                     ):
-                        needs_evidence = False
-                        if release_mode:
-                            attachments = db.get_filing_attachments(accession_number)
-                            needs_evidence = not any(
-                                (db.get_raw_object(str(a.get("raw_object_id"))) or {}).get("sha256")
-                                for a in attachments
-                                if a.get("raw_object_id")
+                        ownership_skip = True
+                        fast_parse_skips += 1
+                        capture_network.record_artifact_result({"network_fetches": 0})
+                        consecutive_errors = 0
+                        processed_accessions += 1
+                        if (
+                            accession_index % progress_every == 0
+                            or accession_index == len(selected_accessions)
+                        ):
+                            _emit_pipeline_event(
+                                "filing_artifact_pipeline_progress",
+                                processed=accession_index,
+                                accession_count=len(selected_accessions),
+                                rows_written=rows_written,
+                                errors=errors,
+                                retry_count=retry_count,
+                                fast_parse_skips=fast_parse_skips,
+                                progress_every=progress_every,
+                                run_id=sync_run_id,
+                                **capture_network.as_dict(),
                             )
-                        if not needs_evidence:
-                            ownership_skip = True
-                            fast_parse_skips += 1
-                            capture_network.record_artifact_result({"network_fetches": 0})
-                            consecutive_errors = 0
-                            if release_mode:
-                                evidence_parts: list[str] = []
-                                for attachment in db.get_filing_attachments(accession_number):
-                                    raw_object_id = attachment.get("raw_object_id")
-                                    raw_object = (
-                                        db.get_raw_object(str(raw_object_id)) if raw_object_id else None
-                                    )
-                                    if raw_object and raw_object.get("sha256"):
-                                        evidence_parts.append(str(raw_object["sha256"]))
-                                if evidence_parts:
-                                    candidate_outcomes.append({
-                                        "accession_number": accession_number,
-                                        "status": (
-                                            "artifacts_loaded"
-                                            if branch_b_deferred
-                                            else "applicable_loaded"
-                                        ),
-                                        "evidence_fingerprint": hashlib.sha256(
-                                            "|".join(sorted(evidence_parts)).encode("utf-8")
-                                        ).hexdigest(),
-                                    })
-                            processed_accessions += 1
-                            if (
-                                accession_index % progress_every == 0
-                                or accession_index == len(selected_accessions)
-                            ):
-                                _emit_pipeline_event(
-                                    "filing_artifact_pipeline_progress",
-                                    processed=accession_index,
-                                    accession_count=len(selected_accessions),
-                                    rows_written=rows_written,
-                                    errors=errors,
-                                    retry_count=retry_count,
-                                    fast_parse_skips=fast_parse_skips,
-                                    progress_every=progress_every,
-                                    run_id=sync_run_id,
-                                    **capture_network.as_dict(),
-                                )
-                            continue
+                        continue
 
             if fetch_artifacts:
                 from edgar_warehouse.infrastructure.filing_artifact_service import refresh_filing_artifacts
 
-                if release_mode:
-                    artifact_attempts = max(
-                        1,
-                        int(os.environ.get("WAREHOUSE_RELEASE_ARTIFACT_ATTEMPTS", "3")),
-                    )
-                elif recurring_mode:
+                if recurring_mode:
                     artifact_attempts = max(
                         1,
                         int(os.environ.get("WAREHOUSE_RECURRING_ARTIFACT_ATTEMPTS", "3")),
@@ -3856,14 +3385,7 @@ def _run_configured_form_artifact_pipeline(
                 else:
                     artifact_attempts = 1
                 artifact_retry_base_seconds = float(
-                    os.environ.get(
-                        (
-                            "WAREHOUSE_RELEASE_ARTIFACT_RETRY_BASE_SECONDS"
-                            if release_mode
-                            else "WAREHOUSE_RECURRING_ARTIFACT_RETRY_BASE_SECONDS"
-                        ),
-                        "1.0",
-                    )
+                    os.environ.get("WAREHOUSE_RECURRING_ARTIFACT_RETRY_BASE_SECONDS", "1.0")
                 )
                 for artifact_attempt in range(1, artifact_attempts + 1):
                     try:
@@ -3921,26 +3443,7 @@ def _run_configured_form_artifact_pipeline(
                     bookkeeping=bookkeeping,
                     accession_number=accession_number,
                     sync_run_id=sync_run_id,
-                    fail_closed=release_mode,
                 )
-            if release_mode:
-                evidence_parts = []
-                for attachment in db.get_filing_attachments(accession_number):
-                    raw_object_id = attachment.get("raw_object_id")
-                    raw_object = db.get_raw_object(str(raw_object_id)) if raw_object_id else None
-                    if raw_object and raw_object.get("sha256"):
-                        evidence_parts.append(str(raw_object["sha256"]))
-                if not evidence_parts:
-                    raise WarehouseRuntimeError(
-                        f"required artifact candidate {accession_number} has no hashed evidence"
-                    )
-                candidate_outcomes.append({
-                    "accession_number": accession_number,
-                    "status": "artifacts_loaded" if branch_b_deferred else "applicable_loaded",
-                    "evidence_fingerprint": hashlib.sha256(
-                        "|".join(sorted(evidence_parts)).encode("utf-8")
-                    ).hexdigest(),
-                })
             if recurring_mode and resume_manifest is not None:
                 from edgar_warehouse.application.daily_artifact_resume import record_succeeded
 
@@ -3999,10 +3502,6 @@ def _run_configured_form_artifact_pipeline(
                     error_type=type(exc).__name__,
                     error=repr(exc),
                 )
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required artifact candidate {accession_number} failed"
-                ) from exc
             if recurring_mode and consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
                 remaining_accessions = len(selected_accessions) - processed_accessions
                 circuit_opened = True
@@ -4036,7 +3535,7 @@ def _run_configured_form_artifact_pipeline(
                 ) from exc
         # P2: mid-pass progress so operators can see resume/cache work without
         # waiting for the whole batch to finish (start/complete-only was silent
-        # for multi-hour "Strict Clean and Merge Filings" (formerly StrictBatchSilver) loops).
+        # for multi-hour Clean and Merge Filings loops).
         if accession_index % progress_every == 0 or accession_index == len(selected_accessions):
             _emit_pipeline_event(
                 "filing_artifact_pipeline_progress",
@@ -4092,7 +3591,6 @@ def _run_configured_form_artifact_pipeline(
         "raw_writes": raw_writes,
         "rows_written": rows_written,
         "rows_skipped": errors,
-        "candidate_outcomes": candidate_outcomes,
         "retry_count": retry_count,
         "fast_parse_skips": fast_parse_skips,
         "conflict_skipped_count": conflict_skipped_count,
@@ -4102,74 +3600,6 @@ def _run_configured_form_artifact_pipeline(
         "remaining_accessions": len(selected_accessions) - processed_accessions,
         **network_metrics,
     }
-
-
-def _run_release_branch_b_parsers(
-    *,
-    db: SilverDatabase,
-    ciks: list[int],
-    candidates: Iterable[Any],
-    sync_run_id: str,
-) -> dict[str, dict[str, str]]:
-    """Run strict Branch B parsers and return one terminal outcome per required accession."""
-    from edgar_warehouse.application.workflows.fundamentals_ingest import (
-        BRANCH_B_13F_FORMS,
-        BRANCH_B_FILING_FORMS,
-        run_bootstrap_fundamentals_per_filing,
-        run_bootstrap_thirteenf,
-    )
-
-    required = [candidate for candidate in candidates if candidate.artifact_required]
-    per_filing = {
-        candidate.accession_number
-        for candidate in required
-        if candidate.form in BRANCH_B_FILING_FORMS
-    }
-    thirteenf = {
-        candidate.accession_number
-        for candidate in required
-        if candidate.form in BRANCH_B_13F_FORMS
-    }
-    unsupported = sorted(
-        candidate.accession_number
-        for candidate in required
-        if candidate.form not in BRANCH_B_FILING_FORMS | BRANCH_B_13F_FORMS
-    )
-    if unsupported:
-        raise WarehouseRuntimeError(f"unsupported release relationship candidates: {unsupported}")
-
-    rows: list[dict[str, str]] = []
-    if per_filing:
-        metrics = run_bootstrap_fundamentals_per_filing(
-            cik_list=ciks,
-            source=db,
-            db=db,
-            sync_run_id=sync_run_id,
-            release_mode=True,
-            candidate_accessions=per_filing,
-        )
-        rows.extend(metrics.get("candidate_outcomes", []))
-    if thirteenf:
-        metrics = run_bootstrap_thirteenf(
-            cik_list=ciks,
-            source=db,
-            db=db,
-            sync_run_id=sync_run_id,
-            release_mode=True,
-            candidate_accessions=thirteenf,
-        )
-        rows.extend(metrics.get("candidate_outcomes", []))
-
-    outcomes: dict[str, dict[str, str]] = {}
-    for row in rows:
-        accession = str(row.get("accession_number") or "")
-        if not accession or accession in outcomes:
-            raise WarehouseRuntimeError(f"duplicate or invalid Branch B outcome: {accession}")
-        outcomes[accession] = row
-    missing = sorted((per_filing | thirteenf) - set(outcomes))
-    if missing:
-        raise WarehouseRuntimeError(f"missing Branch B terminal outcomes: {missing}")
-    return outcomes
 
 
 def _resolve_nonneg_lookback_years(
@@ -4890,7 +4320,7 @@ def _artifact_policy_fetches(policy: str) -> bool:
 
 def _parser_policy_runs(policy: str) -> bool:
     normalized = _normalize_policy(policy)
-    if normalized in {"none", "skip", "disabled", "off", "branch_b_deferred"}:
+    if normalized in {"none", "skip", "disabled", "off"}:
         return False
     if normalized == "configured_forms":
         return True
@@ -6275,7 +5705,6 @@ def _run_parse_pipeline(
     bookkeeping: "BookkeepingStore",
     accession_number: str,
     sync_run_id: str,
-    fail_closed: bool = False,
 ) -> int:
     filing = db.get_filing(accession_number)
     if filing is None:
@@ -6309,11 +5738,6 @@ def _run_parse_pipeline(
             return rows_written
         if form_family == "generic":
             bookkeeping.complete_parse_run(parse_run_id, status="skipped", rows_written=0)
-            if fail_closed:
-                raise WarehouseRuntimeError(
-                    f"no release parser registered for required accession {accession_number} "
-                    f"with form {form_type}"
-                )
             return 0
         payload = _read_primary_artifact_bytes(db, accession_number)
         from edgar_warehouse.parsers import get_parser
@@ -6342,10 +5766,6 @@ def _run_parse_pipeline(
             error_message=str(exc),
             rows_written=0,
         )
-        if fail_closed:
-            raise WarehouseRuntimeError(
-                f"parser failed for required accession {accession_number}: {exc}"
-            ) from exc
         return 0
 
 
@@ -7026,9 +6446,6 @@ def _resolve_scope(
             "cik_list": arguments.get("cik_list") or [],
             "include_pagination": arguments.get("include_pagination", True),
         }
-
-    if command_name == "reconcile-relationship-release":
-        return {"candidate_manifest": arguments.get("candidate_manifest")}
 
     if command_name == "ingest-relationship-sources":
         return {"source_manifest": arguments.get("source_manifest")}

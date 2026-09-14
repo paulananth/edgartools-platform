@@ -1652,13 +1652,12 @@ mdm_secrets = [
     {"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": snowflake_secret_arn},
     {"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn},
 ]
-# BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover Ticket 15): needed by
-# `mdm build-relationship-release-manifest`
-# (edgar_warehouse/scripts/build_relationship_release_manifest.py), which
-# runs on this MDM task profile and reads sec_company_sync_state from the
-# bookkeeping store, not a raw DuckDB connection. Optional/omitted (same
-# as the warehouse profile's own injection above) until the ARN is
-# provisioned for this environment.
+# BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover Ticket 15): added for
+# `mdm build-relationship-release-manifest`, which silver-merge-engine-migration
+# Ticket 11 deleted with release mode. Still injected (optional, same as the
+# warehouse profile's own injection above) when the ARN is provisioned;
+# whether another MDM command needs it is unchecked, and removing it would
+# change the MDM task definitions on the next deploy.
 if bookkeeping_postgres_dsn_secret_arn:
     mdm_secrets.append(
         {"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn}
@@ -4835,17 +4834,6 @@ batch_size_check = {
     "Default": "BatchSizeDefault",
 }
 
-release_mode_check = {
-    "Type": "Choice",
-    "Comment": "Route an explicitly requested Ticket 20 execution to the immutable manifest path.",
-    "Choices": [{
-        "Variable": "$.release_mode",
-        "BooleanEquals": True,
-        "Next": "StrictManifestCheck",
-    }],
-    "Default": "ResumeFromRunIdPresenceCheck",
-}
-
 def non_empty_string_clauses(variable):
     return [
         {"Variable": variable, "IsPresent": True},
@@ -4894,33 +4882,6 @@ resume_from_run_id_check = {
     "Default": "BatchSizeCheck",
 }
 
-strict_manifest_check = {
-    "Type": "Choice",
-    "Comment": "Strict release requires both immutable S3 keys before any workload starts.",
-    "Choices": [{
-        "And": sum((
-            non_empty_string_clauses(variable)
-            for variable in (
-                "$.candidate_manifest_key",
-                "$.candidate_batches_key",
-                "$.attestations.warehouse",
-                "$.attestations.mdm",
-                "$.attestations.graph",
-                "$.attestations.release_data_operator",
-                "$.attestations.release_owner",
-            )
-        ), []),
-        "Next": "Strict Clean and Merge Filings",
-    }],
-    "Default": "StrictInputMissing",
-}
-
-strict_input_missing = {
-    "Type": "Fail",
-    "Error": "StrictReleaseInputMissing",
-    "Cause": "release_mode requires immutable manifest keys and five named attestations",
-}
-
 batch_size_default = {
     "Type": "Pass",
     "Comment": "Inject default batch_size=100 when caller passed {} or omitted the key.",
@@ -4954,9 +4915,7 @@ seed_from_bronze["ResultPath"] = None
 # ItemReader below needs no branching, it always reads from
 # runs/{$$.Execution.Name}/cik_batches.jsonl regardless of which state
 # populated it. No Retry: a bad/missing --resume-ledger-run-id pointer is a
-# deterministic failure (retrying won't make the manifest exist), matching
-# strict mode's own "fail once, no blind retry" reasoning for
-# non-transient input errors.
+# deterministic failure (retrying won't make the manifest exist).
 compute_remaining_batches = ecs_state(wh_medium_arn,
     "States.Array('compute-remaining-batches', '--resume-ledger-run-id', $.resume_from_run_id, '--run-id', $$.Execution.Name)",
     next_state="Clean and Merge Filings", retry_secs=60)
@@ -5024,43 +4983,6 @@ batch_map = {
     "Next": "Mastering",
 }
 
-strict_batch = ecs_state(wh_medium_arn,
-    "States.Array('bootstrap-batch', '--cik-list', $.cik_list, '--artifact-policy', 'all_attachments', '--parser-policy', 'branch_b_deferred', '--release-mode', '--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), '--run-id', $.release_run_id)",
-    is_end=True)
-# Generic States.TaskFailed retries cannot distinguish a transient SEC/network
-# failure from a deterministic parser or manifest failure. Strict mode therefore
-# fails once and requires an explicit repair/replay decision.
-strict_batch.pop("Retry", None)
-
-strict_batch_map = {
-    "Type": "Map",
-    "MaxConcurrency": 2,
-    "Comment": "Ticket 20 strict candidate execution. Every batch is manifest-bounded and fail-closed. Lowered 4->2 2026-07-22: every concurrently-finishing batch merges into and publishes the same canonical silver.duckdb via an ETag-guarded promote, so N-way concurrency means an N-way race on that single object -- production hit this repeatedly at MaxConcurrency=4 (PromotionConflictError aborting an otherwise-complete batch). A retry loop now exists for the conflict (_publish_silver_database_with_retry), but lower concurrency reduces how often it's needed in the first place.",
-    "ToleratedFailurePercentage": 0,
-    "ItemReader": {
-        "Resource": "arn:aws:states:::s3:getObject",
-        "ReaderConfig": {"InputType": "JSONL", "MaxItems": 100000},
-        "Parameters": {
-            "Bucket": bronze_bucket_name,
-            "Key.$": "$.candidate_batches_key",
-        },
-    },
-    "ItemSelector": {
-        "cik_list.$": "$$.Map.Item.Value.cik_list",
-        "candidate_manifest_key.$": "$.candidate_manifest_key",
-        "release_run_id.$": "$$.Execution.Name",
-    },
-    "ItemProcessor": {
-        "ProcessorConfig": {"Mode": "DISTRIBUTED", "ExecutionType": "STANDARD"},
-        "StartAt": "RunStrictBatch",
-        "States": {"RunStrictBatch": strict_batch},
-    },
-    "ResultPath": None,
-    # Ticket 21: MDM must run before reconcile so IS_INSIDER versions exist for
-    # verify-insider-coverage, which reconcile binds into PASS evidence.
-    "Next": "StrictMastering",
-}
-
 # INVARIANT: No --limit on MDM commands here. one_click_data_refresh is always a full
 # bulk run (all CIKs found in bronze), not an incremental daily update.
 #
@@ -5086,88 +5008,8 @@ mdm_verify["Catch"] = [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next
 gold         = ecs_state(wh_large_arn,   "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is enforced
 # by wire_mdm_tail (state-machine-consolidation wayfinder map, ticket 02) —
-# see infra/scripts/mdm_tail_helper.py. The separate "strict" release-mode
-# branch below (Strict*) is untouched -- it has no sibling machine sharing
-# its shape, so there is nothing to deduplicate.
+# see infra/scripts/mdm_tail_helper.py.
 mdm_tail = wire_mdm_tail(mdm_export, mdm_sync, mdm_verify, gold_state=gold)
-
-# Ticket 21 chain (release_mode):
-#   Strict Clean and Merge Filings -> StrictMastering -> Backfill -> Idempotency
-#   -> StrictInsiderCoverage -> Reconcile (binds insider_coverage into PASS evidence)
-#   -> Export -> Sync -> VerifyCandidate -> Activate -> Verify -> Gold
-#
-# Insider coverage must run AFTER MDM derives persons + IS_INSIDER. Reconcile
-# must run AFTER insider coverage so bulk-load evidence cannot PASS without the
-# insider-scoped completeness block.
-insider_coverage_uri = (
-    "States.Format('s3://"
-    + warehouse_bucket_name
-    + "/warehouse/release-evidence/{}/insider_coverage.json', $$.Execution.Name)"
-)
-strict_mdm_run = ecs_state(mdm_medium_arn, "States.Array('mdm', 'mastering', '--entity-type', 'all', '--run-id', $$.Execution.Name)", next_state="Strict Infer Relationships")
-strict_mdm_backfill = ecs_state(mdm_medium_arn, "States.Array('mdm', 'infer-relationships', '--run-id', $$.Execution.Name)", next_state="StrictMdmIdempotency")
-strict_mdm_idempotency = ecs_state(
-    mdm_medium_arn,
-    "States.Array('mdm', 'infer-relationships', '--run-id', $$.Execution.Name)",
-    next_state="StrictInsiderCoverage",
-)
-strict_insider_coverage = ecs_state(
-    mdm_medium_arn,
-    "States.Array('mdm', 'verify-insider-coverage', '--output', " + insider_coverage_uri + ")",
-    next_state="ReconcileRelationshipRelease",
-    retry_secs=60,
-)
-# Fail closed on unresolved insiders (exit 1). No Catch.
-strict_insider_coverage.pop("Retry", None)
-strict_reconcile = ecs_state(
-    wh_medium_arn,
-    "States.Array("
-    "'reconcile-relationship-release', "
-    "'--candidate-manifest', States.Format('s3://" + bronze_bucket_name + "/{}', $.candidate_manifest_key), "
-    "'--run-id', $$.Execution.Name, "
-    "'--attestations-json', States.JsonToString($.attestations), "
-    "'--execution-arn', $$.Execution.Id, "
-    "'--insider-coverage', " + insider_coverage_uri + ")",
-    next_state="StrictPublish",
-    retry_secs=60,
-)
-strict_mdm_export = ecs_state(mdm_medium_arn, "States.Array('mdm', 'publish')", next_state="Strict Publish Relationships")
-# sync-graph publishes into an execution-scoped generation-id (not a fresh
-# random UUID each call, its no-flag default) so Strict Publish Relationships Idempotency's
-# second sync-graph call targets the SAME generation (a real idempotency
-# check, not a second unrelated one), and so Strict Reconcile Candidate/
-# StrictMdmActivate below can reference it deterministically. Before this,
-# nothing in any pipeline ever activated a generation, so the graph a
-# strict run just synced could never become the one StrictReconcile checks
-# (RSYNC-02 bootstrap gap).
-strict_mdm_sync = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'publish-relationships', '--generation-id', $$.Execution.Name)",
-    next_state="Strict Publish Relationships Idempotency")
-strict_mdm_sync_idempotency = ecs_state(mdm_medium_arn,
-    "States.Array('mdm', 'publish-relationships', '--generation-id', $$.Execution.Name)",
-    next_state="Strict Reconcile Candidate")
-# Verifies this run's candidate generation specifically (not the
-# currently-active one) -- on pass this promotes it 'building' -> 'verified',
-# the only status StrictMdmActivate's graph-activate accepts (07-05 RSYNC-02).
-# No Catch: Ticket 20 fails closed on graph parity (PR #139), so a candidate
-# that doesn't verify must fail the whole execution, not silently skip ahead.
-# --skip-native-app: GRAPH_APP_NODES/GRAPH_APP_EDGES (and therefore the Native
-# App's GRAPH_INFO/BFS/WCC capability checks) are views scoped to whatever
-# generation is currently ACTIVE, not the candidate passed via --generation-id
-# -- confirmed empirically 2026-07-23 (candidate check against them fails with
-# "Loading from an empty nodes table" before first activation, and passes only
-# after StrictMdmActivate flips the pointer). Running them here would test the
-# OLD active graph, not this candidate, and would deadlock a first-ever
-# activation forever. Capability is still checked for real by StrictReconcile
-# below, once this candidate is actually the active generation.
-strict_mdm_verify_candidate = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'reconcile', '--generation-id', $$.Execution.Name, '--skip-native-app')",
-    next_state="StrictMdmActivate")
-strict_mdm_activate = ecs_state(mdm_small_arn,
-    "States.Array('mdm', 'graph-activate', '--generation-id', $$.Execution.Name)",
-    next_state="StrictReconcile")
-strict_mdm_verify = ecs_state(mdm_small_arn, "States.Array('mdm', 'reconcile')", next_state="Strict Publish Business Data")
-strict_gold = ecs_state(wh_large_arn, "States.Array('gold-refresh', '--run-id', $$.Execution.Name)", is_end=True, retry_secs=60)
 
 definition = {
     "Comment": (
@@ -5185,24 +5027,8 @@ definition = {
         "(company_done markers), both keyed under the original run's namespace. "
         "Fails closed if the pointed-at run has no frozen manifest/snapshot."
     ),
-    "StartAt": "ReleaseModeCheck",
+    "StartAt": "ResumeFromRunIdPresenceCheck",
     "States": {
-        "ReleaseModeCheck": release_mode_check,
-        "StrictManifestCheck": strict_manifest_check,
-        "StrictInputMissing": strict_input_missing,
-        "Strict Clean and Merge Filings": strict_batch_map,
-        "StrictMastering": strict_mdm_run,
-        "Strict Infer Relationships": strict_mdm_backfill,
-        "StrictMdmIdempotency": strict_mdm_idempotency,
-        "StrictInsiderCoverage": strict_insider_coverage,
-        "ReconcileRelationshipRelease": strict_reconcile,
-        "StrictPublish": strict_mdm_export,
-        "Strict Publish Relationships": strict_mdm_sync,
-        "Strict Publish Relationships Idempotency": strict_mdm_sync_idempotency,
-        "Strict Reconcile Candidate": strict_mdm_verify_candidate,
-        "StrictMdmActivate": strict_mdm_activate,
-        "StrictReconcile": strict_mdm_verify,
-        "Strict Publish Business Data": strict_gold,
         "ResumeFromRunIdPresenceCheck": resume_from_run_id_presence_check,
         "ResumeFromRunIdDefault": resume_from_run_id_default,
         "ResumeFromRunIdCheck": resume_from_run_id_check,

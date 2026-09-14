@@ -495,111 +495,6 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 {"accession_number": "different-accession", "cik": 1001, "form": "4"}
             )
 
-    def test_release_submission_flow_sends_only_manifest_required_accessions(self) -> None:
-        def capture(**kwargs):
-            return [[{"cik": cik, "raw_writes": []} for cik in kwargs["ciks"]]]
-
-        def apply(**kwargs):
-            return {
-                "rows_written": 0,
-                "rows_skipped": 0,
-                "recent_accessions": ["required-proxy", "unrelated-8k"],
-                "pagination_accessions": ["required-13f"],
-            }
-
-        with (
-            patch.object(warehouse_orchestrator, "_capture_submission_bronze_snapshots", side_effect=capture),
-            patch.object(warehouse_orchestrator, "_apply_submission_snapshot_to_silver", side_effect=apply),
-            patch.object(
-                warehouse_orchestrator,
-                "_run_configured_form_artifact_pipeline",
-                return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
-            ) as artifact_pipeline,
-        ):
-            warehouse_orchestrator._run_submissions_bronze_then_silver(
-                context=object(), db=object(), bookkeeping=_BulkNoOpBookkeeping(), sync_run_id="release", ciks=[1001],
-                include_pagination=True, fetch_date=date(2026, 4, 25), force=False,
-                load_mode="bootstrap_batch", artifact_policy="all_attachments",
-                parser_policy="configured_forms", release_mode=True,
-                required_accessions={"required-proxy", "required-13f"},
-            )
-
-        self.assertEqual(
-            artifact_pipeline.call_args.kwargs["accession_numbers"],
-            ["required-proxy", "required-13f"],
-        )
-        self.assertTrue(artifact_pipeline.call_args.kwargs["release_mode"])
-
-    def test_release_submission_flow_seeds_index_only_candidate_for_direct_accession_fetch(self) -> None:
-        class IndexOnlyDb:
-            def __init__(self) -> None:
-                self.filings: dict[str, dict] = {}
-                self.merged: list[dict] = []
-
-            def get_filing(self, accession_number: str):
-                return self.filings.get(accession_number)
-
-            def merge_filings(self, rows: list[dict], sync_run_id: str) -> int:
-                self.merged.extend(rows)
-                self.filings.update({row["accession_number"]: row for row in rows})
-                return len(rows)
-
-        db = IndexOnlyDb()
-
-        with (
-            patch.object(
-                warehouse_orchestrator,
-                "_capture_submission_bronze_snapshots",
-                return_value=[[{"cik": 1001, "raw_writes": []}]],
-            ),
-            patch.object(
-                warehouse_orchestrator,
-                "_apply_submission_snapshot_to_silver",
-                return_value={
-                    "rows_written": 0,
-                    "rows_skipped": 0,
-                    "recent_accessions": [],
-                    "pagination_accessions": [],
-                },
-            ),
-            patch.object(
-                warehouse_orchestrator,
-                "_run_configured_form_artifact_pipeline",
-                return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
-            ) as artifact_pipeline,
-        ):
-            warehouse_orchestrator._run_submissions_bronze_then_silver(
-                context=object(),
-                db=db,
-                bookkeeping=_BulkNoOpBookkeeping(),
-                sync_run_id="release",
-                ciks=[1001],
-                include_pagination=True,
-                fetch_date=date(2026, 4, 25),
-                force=False,
-                load_mode="bootstrap_batch",
-                artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
-                release_mode=True,
-                required_accessions={"index-only-13f"},
-                required_candidate_rows={
-                    "index-only-13f": {
-                        "accession_number": "index-only-13f",
-                        "cik": 1001,
-                        "form": "13F-HR",
-                        "filing_date": date(2013, 8, 14),
-                        "report_date": None,
-                        "items": None,
-                    }
-                },
-            )
-
-        self.assertEqual(db.merged[0]["accession_number"], "index-only-13f")
-        self.assertEqual(db.merged[0]["form"], "13F-HR")
-        self.assertEqual(
-            artifact_pipeline.call_args.kwargs["accession_numbers"],
-            ["index-only-13f"],
-        )
 
     def test_cached_submission_still_returns_pagination_accessions(self) -> None:
         db = _CachedSubmissionDb()
@@ -896,7 +791,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["ownership-1", "generic-1", "13f-1"],
                 accession_boundary={"ownership-1", "generic-1", "13f-1"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
                 recurring_mode=True,
             )
@@ -944,7 +839,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["daily-ownership"],
                 accession_boundary={"daily-ownership"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
                 recurring_mode=True,
             )
@@ -952,21 +847,8 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertEqual(refresh.call_count, 1)
         self.assertEqual(refresh.call_args.kwargs["accession_number"], "daily-ownership")
 
-    def test_release_artifact_pipeline_fails_closed(self) -> None:
-        with patch(
-            "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
-            side_effect=RuntimeError("missing artifact"),
-        ):
-            with self.assertRaisesRegex(Exception, "ownership-1"):
-                warehouse_orchestrator._run_configured_form_artifact_pipeline(
-                    context=SimpleNamespace(identity="tester@example.com"),
-                    db=_ConfiguredFormDb(), bookkeeping=_BulkNoOpBookkeeping(), sync_run_id="release",
-                    accession_numbers=["ownership-1"],
-                    artifact_policy="all_attachments", parser_policy="configured_forms",
-                    force=False, release_mode=True,
-                )
 
-    def test_release_artifact_pipeline_retries_transient_timeout_per_accession(self) -> None:
+    def test_recurring_artifact_pipeline_retries_transient_timeout_per_accession(self) -> None:
         refresh_result = {
             "raw_writes": [{"source_name": "filing_document"}],
             "attachment_count": 1,
@@ -986,16 +868,17 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
-                release_mode=True,
+                recurring_mode=True,
+                accession_boundary={"13f-1"},
             )
 
         self.assertEqual(refresh.call_count, 2)
         sleep.assert_called_once_with(1.0)
-        self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
+        self.assertEqual(result["processed_accessions"], 1)
 
-    def test_release_artifact_pipeline_retries_http_client_pool_timeout(self) -> None:
+    def test_recurring_artifact_pipeline_retries_http_client_pool_timeout(self) -> None:
         class PoolTimeout(Exception):
             pass
 
@@ -1019,15 +902,16 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
-                release_mode=True,
+                recurring_mode=True,
+                accession_boundary={"13f-1"},
             )
 
         self.assertEqual(refresh.call_count, 2)
         close_clients.assert_called_once_with()
         sleep.assert_called_once_with(1.0)
-        self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
+        self.assertEqual(result["processed_accessions"], 1)
 
     def test_recurring_artifact_pipeline_resets_pool_before_bounded_retry(self) -> None:
         class PoolTimeout(Exception):
@@ -1060,7 +944,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["13f-1"],
                 accession_boundary={"13f-1"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
                 recurring_mode=True,
             )
@@ -1104,7 +988,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["13f-1"],
                 accession_boundary={"13f-1"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
                 recurring_mode=True,
             )
@@ -1140,7 +1024,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["ownership-1", "proxy-1"],
                 accession_boundary={"ownership-1", "proxy-1"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=True,
                 recurring_mode=True,
             )
@@ -1160,7 +1044,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         # individually-recoverable, not a systemic-failure signal. Live prod
         # reproduction: 43 consecutive conflicts tripped the breaker after
         # only 45/3149 accessions, silently abandoning the rest while still
-        # exiting 0. Non-recurring/non-release mode (bootstrap-batch's own
+        # exiting 0. Non-recurring mode (bootstrap-batch's own
         # shape) so a tripped breaker previously `break`-ed silently with no
         # raised exception -- this test proves the breaker no longer trips at
         # all for this error class, even far past the configured limit.
@@ -1198,7 +1082,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=accessions,
                 accession_boundary=set(accessions),
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=True,
             )
 
@@ -1263,7 +1147,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["13f-1", "proxy-1"],
                 accession_boundary={"13f-1", "proxy-1"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
                 recurring_mode=True,
             )
@@ -1319,7 +1203,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["13f-1", "proxy-1"],
                 accession_boundary={"13f-1", "proxy-1"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
                 recurring_mode=True,
             )
@@ -1361,7 +1245,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 accession_numbers=["13f-1"],
                 accession_boundary={"13f-1"},
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
                 recurring_mode=True,
             )
@@ -1369,7 +1253,7 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertIn("filing_artifact_pipeline_partial", [name for name, _ in events])
         self.assertNotIn("filing_artifact_pipeline_completed", [name for name, _ in events])
 
-    def test_release_artifact_pipeline_busts_edgartools_filing_cache_on_content_error(self) -> None:
+    def test_recurring_artifact_pipeline_busts_edgartools_filing_cache_on_content_error(self) -> None:
         """Production regression: accession 0000009631-13-000012.
 
         `edgar.get_by_accession_number` resolves via `get_filing_by_accession`, which
@@ -1403,17 +1287,18 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
-                release_mode=True,
+                recurring_mode=True,
+                accession_boundary={"13f-1"},
             )
 
         self.assertEqual(refresh.call_count, 2)
         cache_clear.assert_called_once_with()
         sleep.assert_called_once_with(1.0)
-        self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
+        self.assertEqual(result["processed_accessions"], 1)
 
-    def test_release_artifact_pipeline_retries_transient_filing_content_error(self) -> None:
+    def test_recurring_artifact_pipeline_retries_transient_filing_content_error(self) -> None:
         """Production regression: accession 0000950123-19-003980.
 
         edgartools' SGML fetch got HTML/XML back from SEC and silently degraded to a
@@ -1444,21 +1329,22 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                 sync_run_id="release",
                 accession_numbers=["13f-1"],
                 artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
+                parser_policy="none",
                 force=False,
-                release_mode=True,
+                recurring_mode=True,
+                accession_boundary={"13f-1"},
             )
 
         self.assertEqual(refresh.call_count, 2)
         sleep.assert_called_once_with(1.0)
-        self.assertEqual(result["candidate_outcomes"][0]["accession_number"], "13f-1")
+        self.assertEqual(result["processed_accessions"], 1)
 
-    def test_release_artifact_pipeline_does_not_retry_deterministic_failure(self) -> None:
+    def test_recurring_artifact_pipeline_does_not_retry_deterministic_failure(self) -> None:
         with patch(
             "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
             side_effect=ValueError("invalid filing metadata"),
         ) as refresh:
-            with self.assertRaisesRegex(Exception, "13f-1"):
+            with self.assertRaisesRegex(Exception, "1 failed candidates"):
                 warehouse_orchestrator._run_configured_form_artifact_pipeline(
                     context=SimpleNamespace(identity="tester@example.com"),
                     db=_ConfiguredFormDb(),
@@ -1466,117 +1352,14 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
                     sync_run_id="release",
                     accession_numbers=["13f-1"],
                     artifact_policy="all_attachments",
-                    parser_policy="branch_b_deferred",
+                    parser_policy="none",
                     force=False,
-                    release_mode=True,
+                    recurring_mode=True,
+                    accession_boundary={"13f-1"},
                 )
 
         self.assertEqual(refresh.call_count, 1)
 
-    def test_release_artifact_pipeline_rejects_disabled_fetch_or_parser_policy(self) -> None:
-        for artifact_policy, parser_policy in (
-            ("none", "configured_forms"),
-            ("all_attachments", "none"),
-        ):
-            with self.subTest(
-                artifact_policy=artifact_policy, parser_policy=parser_policy
-            ):
-                with self.assertRaisesRegex(Exception, "requires artifact fetch and parser"):
-                    warehouse_orchestrator._run_configured_form_artifact_pipeline(
-                        context=SimpleNamespace(identity="tester@example.com"),
-                        db=_ConfiguredFormDb(),
-                        bookkeeping=_BulkNoOpBookkeeping(),
-                        sync_run_id="release",
-                        accession_numbers=["ownership-1"],
-                        artifact_policy=artifact_policy,
-                        parser_policy=parser_policy,
-                        force=False,
-                        release_mode=True,
-                    )
-
-    def test_release_artifact_pipeline_can_defer_branch_b_parser_after_hash_capture(self) -> None:
-        with (
-            patch(
-                "edgar_warehouse.infrastructure.filing_artifact_service.refresh_filing_artifacts",
-                return_value={"raw_writes": [], "attachment_count": 1, "network_fetches": 0},
-            ),
-            patch.object(
-                warehouse_orchestrator,
-                "_run_parse_pipeline",
-                side_effect=AssertionError("generic parser must not handle Branch B release forms"),
-            ),
-        ):
-            result = warehouse_orchestrator._run_configured_form_artifact_pipeline(
-                context=SimpleNamespace(identity="tester@example.com"),
-                db=_ConfiguredFormDb(),
-                bookkeeping=_BulkNoOpBookkeeping(),
-                sync_run_id="release",
-                accession_numbers=["proxy-1"],
-                artifact_policy="all_attachments",
-                parser_policy="branch_b_deferred",
-                force=False,
-                release_mode=True,
-            )
-
-        self.assertEqual(result["candidate_outcomes"][0]["status"], "artifacts_loaded")
-
-    def test_release_parse_pipeline_rejects_generic_skip(self) -> None:
-        db = SimpleNamespace(
-            get_filing=lambda accession: {
-                "accession_number": accession, "form": "DEF 14A", "cik": 1001
-            },
-            start_parse_run=lambda row: None,
-            complete_parse_run=lambda *args, **kwargs: None,
-        )
-
-        with self.assertRaisesRegex(Exception, "no release parser"):
-            warehouse_orchestrator._run_parse_pipeline(
-                db=db,
-                bookkeeping=db,
-                accession_number="proxy-1",
-                sync_run_id="release",
-                fail_closed=True,
-            )
-
-    def test_release_batch_routes_branch_b_forms_to_their_strict_parsers(self) -> None:
-        candidates = [
-            SimpleNamespace(accession_number="proxy", form="DEF 14A", artifact_required=True),
-            SimpleNamespace(accession_number="13f", form="13F-HR", artifact_required=True),
-        ]
-        with (
-            patch(
-                "edgar_warehouse.application.workflows.fundamentals_ingest."
-                "run_bootstrap_fundamentals_per_filing",
-                return_value={"candidate_outcomes": [{
-                    "accession_number": "proxy", "status": "not_applicable",
-                    "reason": "no_relationship_rows",
-                }]},
-            ),
-            patch(
-                "edgar_warehouse.application.workflows.fundamentals_ingest."
-                "run_bootstrap_thirteenf",
-                return_value={"candidate_outcomes": [{
-                    "accession_number": "13f", "status": "applicable_loaded",
-                    "reason": "effective_holdings_loaded",
-                }]},
-            ),
-        ):
-            outcomes = warehouse_orchestrator._run_release_branch_b_parsers(
-                db=object(), ciks=[1, 9], candidates=candidates, sync_run_id="release",
-            )
-
-        self.assertEqual(outcomes["proxy"]["status"], "not_applicable")
-        self.assertEqual(outcomes["13f"]["status"], "applicable_loaded")
-
-    def test_release_force_requires_explicit_repair_manifest(self) -> None:
-        with self.assertRaisesRegex(Exception, "repair manifest"):
-            warehouse_orchestrator._run_configured_form_artifact_pipeline(
-                context=SimpleNamespace(identity="tester@example.com"),
-                db=_ConfiguredFormDb(), bookkeeping=_BulkNoOpBookkeeping(), sync_run_id="release",
-                accession_numbers=["ownership-1"],
-                artifact_policy="all_attachments", parser_policy="configured_forms",
-                force=True, release_mode=True,
-            )
 
     def test_bootstrap_batch_cli_defaults_to_artifact_and_parser_policies(self) -> None:
         args = cli.build_parser().parse_args(["bootstrap-batch", "--cik-list", "1001"])
@@ -1584,18 +1367,6 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
         self.assertEqual(args.artifact_policy, "all_attachments")
         self.assertEqual(args.parser_policy, "configured_forms")
 
-    def test_bootstrap_batch_cli_accepts_bounded_release_manifests(self) -> None:
-        args = cli.build_parser().parse_args([
-            "bootstrap-batch",
-            "--cik-list", "1001",
-            "--release-mode",
-            "--candidate-manifest", "s3://bucket/candidates.json",
-            "--repair-manifest", "s3://bucket/repairs.json",
-        ])
-
-        self.assertTrue(args.release_mode)
-        self.assertEqual(args.candidate_manifest, "s3://bucket/candidates.json")
-        self.assertEqual(args.repair_manifest, "s3://bucket/repairs.json")
 
     def test_bootstrap_batch_cli_accepts_resume_ledger_run_id(self) -> None:
         default_args = cli.build_parser().parse_args(["bootstrap-batch", "--cik-list", "1001"])
