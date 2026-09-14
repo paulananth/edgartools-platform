@@ -57,13 +57,13 @@ def test_company_identity_ciks_snowflake_eligibility_sql_against_real_silver_sch
                 {"cik": 400, "entity_name": "Untracked Co", "entity_type": "operating"},
             ],
         )
-        db.replace_company_tickers(
+        insert_silver_rows(
+            db,
+            "sec_company_ticker",
             [
-                {"cik": 200, "ticker": "TICK", "exchange": "NYSE"},
-                {"cik": 400, "ticker": "UNTR", "exchange": "NASDAQ"},
+                {"cik": 200, "ticker": "TICK", "exchange": "NYSE", "source_name": "company_tickers"},
+                {"cik": 400, "ticker": "UNTR", "exchange": "NASDAQ", "source_name": "company_tickers"},
             ],
-            "ticker-run",
-            source_name="company_tickers",
         )
         reader = MagicMock()
         reader.fetch.side_effect = db.fetch

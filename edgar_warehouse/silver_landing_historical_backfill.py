@@ -8,13 +8,14 @@ entirely whenever a CIK's submissions.json content hash is unchanged since its
 last sync -- true for nearly the whole already-loaded universe. Those four
 merges were the only places `sec_company`/`sec_company_address`/
 `sec_company_former_name`/`sec_company_submission_file` got tracked into the
-landing-zone buffer (via `@track_landing_rows`), so a CIK whose company
+landing-zone buffer (then via the `@track_landing_rows` decorator, deleted by
+silver-merge-engine-migration Ticket 06e), so a CIK whose company
 metadata was last written before the landing-zone write path existed never
 reached Snowflake silver through the ongoing incremental path.
 
 silver-snowflake-migration map, Ticket 15: the identical shape applies well
-beyond company metadata. Every `@track_landing_rows`/`@track_landing_row`
-write in `silver_store.py` only fires when its owning merge/upsert method
+beyond company metadata. Every landing write in `silver_store.py` (now
+`_record_landing_passthrough`) only fires when its owning merge/upsert method
 actually executes -- and most of those methods are themselves gated by an
 idempotent skip-if-unchanged/skip-if-already-loaded check (this repo's own
 "SEC data idempotency" policy: loaders skip already-captured artifacts by

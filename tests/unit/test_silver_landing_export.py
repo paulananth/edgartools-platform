@@ -16,9 +16,9 @@ def _landing_scoped_tables() -> set[str]:
 
 
 def test_landing_export_defaults_to_none_and_is_a_complete_noop(tmp_path):
-    """SilverDatabase(db_path) with no landing_export must behave exactly as
-    it did before this change -- every decorated method checks
-    self.landing_export is not None before doing anything."""
+    """SilverDatabase(db_path) with no landing_export must record nothing --
+    _record_landing_passthrough checks self.landing_export is not None
+    before recording."""
     db = SilverDatabase(str(tmp_path / "silver.duckdb"))
     try:
         assert db.landing_export is None
@@ -69,14 +69,11 @@ def test_upsert_singular_methods_record_a_single_row(tmp_path):
 
 def test_replace_company_tickers_records_the_enriched_row_not_the_raw_input(tmp_path):
     """replace_company_tickers enriches each caller-supplied {cik, ticker,
-    exchange} row internally (source_name, source_rank, last_sync_run_id,
-    last_synced_at added inside its own loop) before the DuckDB INSERT --
-    unlike every other landing-tracked method here, whose callers already
-    pass fully-shaped rows. Confirmed live (silver-snowflake-migration
-    issue 08) that recording the raw 3-column input instead of the
-    enriched row landed source_name (a NOT NULL column in the Snowflake
-    schema) as NULL on every row, which suspended LOAD_SILVER_LANDING_TASK.
-    The recorded row must carry every column the DuckDB INSERT does."""
+    exchange} row (source_name, source_rank, last_sync_run_id,
+    last_synced_at) before recording it. Confirmed live
+    (silver-snowflake-migration issue 08) that recording the raw 3-column
+    input instead landed source_name (a NOT NULL column in the Snowflake
+    schema) as NULL on every row, which suspended LOAD_SILVER_LANDING_TASK."""
     buffer = LandingExportBuffer()
     db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
     try:
@@ -120,14 +117,13 @@ def test_replace_company_tickers_skips_rows_missing_cik_or_ticker(tmp_path):
     assert recorded[0]["cik"] == 789019
 
 
-def test_every_landing_scoped_table_has_a_decorated_writer(tmp_path):
+def test_every_landing_scoped_table_has_a_wired_writer(tmp_path):
     """Regression guard for exactly the failure shape this migration keeps
     finding and fixing (pipeline_run_lease, sec_guidance_fact_reject,
     sec_accounting_flag's COALESCE columns): if a new landing-scoped table
-    is ever added to PROTECTED_TABLE_REGISTRY without also wiring a
-    @track_landing_rows/@track_landing_row decorator onto its writer, this
-    test fails loudly instead of silently shipping a table nothing ever
-    populates.
+    is ever added to PROTECTED_TABLE_REGISTRY without a writer that records
+    into the landing export, this test fails loudly instead of silently
+    shipping a table nothing ever populates.
 
     Drives every SilverDatabase writer whose name plausibly touches a
     landing-scoped table with a minimal row, then asserts the landing

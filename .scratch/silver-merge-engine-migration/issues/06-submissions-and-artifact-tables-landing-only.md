@@ -125,8 +125,9 @@ filing text moved to 06e.
 
 ### 06e — tickers and filing text (no same-run readers)
 
-**Status:** decided 2026-09-14 by grilling (see "06e Answer"); implementation open. Split off
-06d by its grilling (2026-09-13).
+**Status:** decided 2026-09-14 by grilling (see "06e Answer") and resolved in code the same day
+(see "06e implementation"); live verification still owed. Split off 06d by its grilling
+(2026-09-13).
 
 `replace_company_tickers`, `upsert_filing_text`. A straight landing-only switch, same shape as
 06a–06c.
@@ -144,8 +145,8 @@ filing text moved to 06e.
   `SilverDatabase.get_company_tickers`.
 - `sec_filing_text`'s dbt model partitions on `(accession_number, text_version)`, the old key.
 
-Order: 06a first (no reader touched), then 06b, then 06c. 06d is resolved in code; 06e is
-decided and waits on implementation.
+Order: 06a first (no reader touched), then 06b, then 06c. 06d and 06e are resolved in code;
+both still owe live verification.
 
 ## 06a Answer
 
@@ -469,3 +470,46 @@ the 06d lookup and `run_filing_text_sweep` reads Snowflake. The landing schema c
 tests, 3-axis review), then a live run showing `SEC_COMPANY_TICKER` landing rows from
 `seed-universe`. `SEC_FILING_TEXT` landing rows show only when the filing-text sweep or
 `targeted-resync --include-text` runs.
+
+### 06e implementation (resolved 2026-09-14 in code; live verification still owed)
+
+- **Writers:** `replace_company_tickers` builds each landed row (`cik`, `ticker`, `exchange`,
+  `source_name`, `source_rank`, `cause_reference` when given), skips a row with no `cik` or a
+  falsy ticker, and records through `_record_landing_passthrough` with `_synced_now_stamp`, so
+  one call shares one `last_synced_at`. `source_rank` stays the ordinal over every input row.
+  The local `DELETE`/`INSERT` are gone. `upsert_filing_text` keeps its seven-field check and
+  records the row as given (`stamp={}`).
+- **Deleted:** `get_company_tickers`, `get_filing_text`, `get_all_filing_texts`, and the
+  `track_landing_rows`/`track_landing_row` decorators; `silver_landing_export.py` now holds
+  only `LandingExportBuffer`. Comments naming the decorators were updated in production code
+  and in present-tense test comments; past-tense test history ("the raw rows
+  `@track_landing_rows` recorded") was left as it is.
+- **Reference-catalog driver:** the read-back after the write is replaced by the recorded
+  count against the expected member set. Because the driver filters rows with the writer's own
+  skip rule, the two differ only if that rule and the filter drift apart (the Spec and GoF
+  reviews both noted the check is close to structural; it matches the decided shape and
+  06b's precedent). The `prior_pairs` read is unchanged (Q1); its module docstring now
+  records that it finds nothing until the change-propagation map reads the earlier list
+  from Snowflake silver. The duplicate `written_pairs` set was dropped for `new_pairs`, and the
+  failure text no longer mentions a read-back.
+- **`/gof-refactor-reviewer`:** pre-code and post-diff, leave it. Deleting the decorators
+  removes the second, raw-row path into the landing buffer that caused issue 08.
+- **Declined review notes:** renaming `DUCKDB_PRODUCER_KIND` (it is the default producer kind
+  for every acceptance module in `processing.py`, not this ticket's); a shared helper for the
+  cik/ticker skip rule (two copies, only one past drift); inlining the new test file's
+  `_local_count` helper.
+- **Tests:** new `test_ticker_and_filing_text_landing_passthrough.py` (17 tests: landing-only
+  and nothing local, with and without a buffer; stamps; the skip and `source_rank` over skipped
+  rows; one `last_synced_at` per call; `cause_reference` only when given; stamp overriding row
+  values; a repeat snapshot recording both and deleting nothing; the seven-field check raising
+  before recording). Five failed red first on the local writes. Moved to landing rows:
+  `test_windowing`'s compute-windows reference sync (landing Parquet), `test_bootstrap_company_identity`
+  (landing Parquet), `test_reference_catalog_silver_acceptance` (buffer rows by run; the
+  retirement test seeds the earlier membership with `insert_silver_rows`, since that read is
+  unchanged). `test_drive_reference_catalog_discovery_command` drops its second-database
+  read-back (the driver opens no landing export; 06d precedent). `test_write_path_snowflake_reads`
+  seeds with `insert_silver_rows`. Full suite (excluding `tests/integration`): 3521 passed, 5 skipped. mypy and ruff: nothing beyond what `main`
+  already had.
+
+**Still owed:** a live `seed-universe` run showing `SEC_COMPANY_TICKER` landing rows with
+`last_sync_run_id` populated.

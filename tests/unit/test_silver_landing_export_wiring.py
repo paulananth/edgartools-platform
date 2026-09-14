@@ -90,7 +90,7 @@ def test_landing_export_flushes_rows_written_during_the_run(tmp_path) -> None:
 
     def _fake_open_silver_database(silver_root, *, landing_export=None):
         captured["buffer"] = landing_export
-        # Models the real merge_company()->@track_landing_rows path a live
+        # Models the real merge_company()->_record_landing_passthrough path a live
         # SilverDatabase would exercise -- this test stubs the DB itself, so
         # the row is recorded directly to prove the buffer that was passed
         # in is the one actually flushed.

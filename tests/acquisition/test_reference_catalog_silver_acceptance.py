@@ -36,6 +36,7 @@ from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.silver_rows import insert_silver_rows
 
 
 def _engine():
@@ -49,7 +50,7 @@ def _engine():
 def _harness(tmp_path: Path):
     engine = _engine()
     AcquisitionBase.metadata.create_all(engine)
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    silver = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
     bronze_root = StorageLocation(str(tmp_path / "bronze"))
     return (
         AcquisitionLedger(engine),
@@ -59,6 +60,16 @@ def _harness(tmp_path: Path):
         SilverFinalizer(engine),
         silver,
     )
+
+
+def _landed_tickers(silver: SilverDatabase, *, sync_run_id: str | None = None) -> list[tuple]:
+    """sec_company_ticker is landing-only (silver-merge-engine-migration
+    Ticket 06e): the rows this run recorded for the landing export."""
+    return [
+        (row["cik"], row["ticker"], row["source_name"])
+        for row in silver.landing_export.tables().get("sec_company_ticker", [])
+        if sync_run_id is None or row["last_sync_run_id"] == sync_run_id
+    ]
 
 
 def _captured_decision(
@@ -145,10 +156,7 @@ def test_finalize_writes_and_verifies_sec_company_ticker(tmp_path: Path) -> None
     producer_names = {p.producer_name for p in decision.expected_producers}
     assert producer_names == {"sec_company_ticker"}
 
-    rows = silver.fetch(
-        "SELECT cik, ticker FROM sec_company_ticker WHERE source_name = ?", ["company_tickers"]
-    )
-    assert rows == [{"cik": 320193, "ticker": "AAPL"}]
+    assert _landed_tickers(silver) == [(320193, "AAPL", "company_tickers")]
 
 
 def test_finalize_settles_a_complete_empty_catalog_scope(tmp_path: Path) -> None:
@@ -261,13 +269,13 @@ def test_finalize_second_identical_capture_is_no_impact_and_publishes_with_no_pr
     assert second_decision.expected_producers == ()
 
 
-def test_a_fresh_snapshot_replaces_the_prior_scope_for_the_local_candidate(tmp_path: Path) -> None:
+def test_a_fresh_snapshot_records_only_its_own_members(tmp_path: Path) -> None:
     """Bullet 3's negative gate is only meaningful if a *good* fresh snapshot
-    genuinely replaces the prior scope locally -- confirms
-    ``replace_company_tickers``'s per-source_name delete-then-insert is
-    correctly reached and does retire a dropped ticker from this candidate's
-    own local Silver database (see this module's docstring for the separate,
-    known gap in propagating that retirement to canonical).
+    genuinely reaches Silver -- confirms ``replace_company_tickers`` is
+    reached for the content-changed snapshot and records exactly its members.
+    The writer is landing-only (silver-merge-engine-migration Ticket 06e), so
+    a dropped ticker is not deleted anywhere; retiring it is the Silver
+    Landing Retirement Record's job (see the retirement test below).
     """
 
     ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
@@ -288,12 +296,10 @@ def test_a_fresh_snapshot_replaces_the_prior_scope_for_the_local_candidate(tmp_p
             outcomes=(_candidate_outcome(source_name="company_tickers", decision_id=first_decision_id),),
         ),
     )
-    assert {
-        r["ticker"]
-        for r in silver.fetch(
-            "SELECT ticker FROM sec_company_ticker WHERE source_name = ?", ["company_tickers"]
-        )
-    } == {"AAPL", "MSFT"}
+    assert {ticker for _, ticker, _ in _landed_tickers(silver, sync_run_id=first_decision_id)} == {
+        "AAPL",
+        "MSFT",
+    }
 
     # A fresh, content-different snapshot drops MSFT.
     second_payload = json.dumps(_catalog_payload(entries=((320193, "AAPL"),))).encode("utf-8")
@@ -312,12 +318,7 @@ def test_a_fresh_snapshot_replaces_the_prior_scope_for_the_local_candidate(tmp_p
     )
 
     assert second_result.outcomes[0].processing_decision.silver_outcome is SilverOutcome.PUBLISHED
-    assert {
-        r["ticker"]
-        for r in silver.fetch(
-            "SELECT ticker FROM sec_company_ticker WHERE source_name = ?", ["company_tickers"]
-        )
-    } == {"AAPL"}
+    assert _landed_tickers(silver, sync_run_id=second_decision_id) == [(320193, "AAPL", "company_tickers")]
 
 
 def test_finalize_settles_verified_when_a_numbered_dict_entry_has_a_blank_ticker(
@@ -361,10 +362,7 @@ def test_finalize_settles_verified_when_a_numbered_dict_entry_has_a_blank_ticker
         assert producer.outcome.value == "VERIFIED"
         assert "count=1" in producer.scope_reference
 
-    rows = silver.fetch(
-        "SELECT cik, ticker FROM sec_company_ticker WHERE source_name = ?", ["company_tickers"]
-    )
-    assert rows == [{"cik": 320193, "ticker": "AAPL"}]
+    assert _landed_tickers(silver) == [(320193, "AAPL", "company_tickers")]
 
 
 def test_drive_rejects_a_required_producers_set_it_cannot_serve(tmp_path: Path) -> None:
@@ -382,9 +380,14 @@ def test_drive_rejects_a_required_producers_set_it_cannot_serve(tmp_path: Path) 
 
 
 def test_scope_shrink_writes_landing_retirement_records(tmp_path: Path) -> None:
+    """The earlier membership that retirement compares against is still read
+    from the local Silver database (silver-merge-engine-migration Ticket 06e
+    left that read unchanged). The landing-only writer no longer fills it, so
+    the first snapshot's members are inserted directly, standing in for the
+    earlier list that must come from Snowflake silver once this driver is
+    wired."""
     ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
-    buffer = LandingExportBuffer()
-    silver.landing_export = buffer
+    buffer = silver.landing_export
 
     first_payload = json.dumps(
         _catalog_payload(entries=((320193, "AAPL"), (789019, "MSFT")))
@@ -401,6 +404,15 @@ def test_scope_shrink_writes_landing_retirement_records(tmp_path: Path) -> None:
             manifest=ReferenceCatalogManifest(universe_label="test", candidates=()),
             outcomes=(_candidate_outcome(source_name="company_tickers", decision_id=first_id),),
         ),
+    )
+
+    insert_silver_rows(
+        silver,
+        "sec_company_ticker",
+        [
+            {"cik": 320193, "ticker": "AAPL", "source_name": "company_tickers"},
+            {"cik": 789019, "ticker": "MSFT", "source_name": "company_tickers"},
+        ],
     )
 
     second_payload = json.dumps(

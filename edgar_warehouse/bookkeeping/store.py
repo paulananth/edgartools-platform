@@ -3,11 +3,12 @@
 Ported 1:1 from edgar_warehouse.silver_store.SilverDatabase's equivalent
 methods (DuckDB Retirement Cutover Ticket 02). Method names and signatures
 match the originals so Ticket 03's caller repointing is close to mechanical.
-Two methods from the original surface are deliberately NOT ported here:
-`get_all_filing_texts` (queries sec_filing_text, not one of these 10 tables)
+Two methods from the original surface were deliberately NOT ported here:
+`get_all_filing_texts` (queried sec_filing_text, not one of these 10 tables)
 and `get_company_identity_ciks` (a cross-store join against sec_company/
-sec_company_ticker) -- both are Ticket 03's territory, see that ticket and
-Ticket 02's own file for the full reasoning. `get_table_counts` here is a
+sec_company_ticker) -- see Ticket 02's own file for the reasoning. Both
+have since been deleted from SilverDatabase (silver-merge-engine-migration
+Tickets 06b and 06e). `get_table_counts` here is a
 narrowed, 10-table-only reimplementation; the original's whole-database
 contract is also Ticket 03's job (merging this store's counts with DuckDB's
 remaining content-table counts).

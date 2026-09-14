@@ -118,23 +118,11 @@ def test_drive_reference_catalog_discovery_captures_and_publishes_end_to_end(
         assert outcome["silver_outcome"] == "PUBLISHED"
         assert outcome["silver_error"] is None
 
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    verify_db = open_silver_database(silver_root)
-    try:
-        rows = verify_db.fetch(
-            "SELECT cik, ticker, source_name FROM sec_company_ticker WHERE cik = ? "
-            "ORDER BY source_name",
-            [320193],
-        )
-        assert rows == [
-            {"cik": 320193, "ticker": "AAPL", "source_name": "company_tickers"},
-            {"cik": 320193, "ticker": "AAPL", "source_name": "company_tickers_exchange"},
-        ]
-    finally:
-        verify_db.close()
+    # sec_company_ticker is landing-only (silver-merge-engine-migration Ticket
+    # 06e) and this driver opens no landing export, so a second Silver
+    # database has no row to read back. silver_outcome == "PUBLISHED" above
+    # already required the recorded member count to match the snapshot;
+    # test_reference_catalog_silver_acceptance.py covers the rows it records.
 
     run_manifest_path = (
         tmp_path / "bronze" / "runs" / "drive-reference-catalog-discovery"
