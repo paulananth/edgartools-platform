@@ -1722,6 +1722,35 @@ def _capture_bronze_raw(
                 )
             return raw_writes, metrics
         if scope_type == "accession":
+            # silver-merge-engine-migration Ticket 10: get_filing answers only
+            # from rows this run recorded (Ticket 06d), and nothing earlier in
+            # an accession-scoped run records the filing, so read it from
+            # EDGARTOOLS_SILVER and record every (accession, cik) row first.
+            # The cik branch above needs no read: its submissions capture
+            # records the filings in the same run.
+            #
+            # Recording re-lands the rows with this run's sync stamp, as the
+            # old DuckDB upsert did; dbt collapses the copies (including the
+            # one _run_accession_resync lands again). get_filing returns the
+            # first row recorded, the lowest CIK: silver has no reliable
+            # issuer signal for a multi-CIK accession, and any associated
+            # CIK's EDGAR paths serve the filing.
+            if arguments.get("include_parsers", True) and not arguments.get("include_artifacts", True):
+                # The parsers read this run's attachment rows, which only the
+                # artifact step records; without it every parse would fail
+                # quietly and the command would still succeed.
+                raise WarehouseRuntimeError(
+                    "targeted-resync --scope-type accession cannot run parsers without "
+                    "artifacts: drop --no-include-artifacts or add --no-include-parsers"
+                )
+            filing_rows = _filing_rows_snowflake(scope_key)
+            if not filing_rows:
+                raise WarehouseRuntimeError(
+                    f"accession {scope_key} not found in EDGARTOOLS_SILVER.sec_company_filing "
+                    "(silver may not have a recent filing yet, and retired filings are excluded) -- "
+                    "run targeted-resync --scope-type cik for its filer instead"
+                )
+            metrics["rows_inserted"] += db.merge_filings(filing_rows, sync_run_id)
             pipeline_result = _run_accession_resync(
                 context=context,
                 db=db,
@@ -6546,6 +6575,50 @@ def _snowflake_distinct_values(table: str, column: str) -> set[str]:
     finally:
         reader.close()
     return {str(row[column.lower()]) for row in rows}
+
+
+# sec_company_filing's columns (silver_store._DDL), named so an extra column
+# in the collapsed Snowflake model never reaches merge_filings.
+_SNOWFLAKE_FILING_COLUMNS: tuple[str, ...] = (
+    "accession_number",
+    "cik",
+    "form",
+    "filing_date",
+    "report_date",
+    "acceptance_datetime",
+    "act",
+    "file_number",
+    "film_number",
+    "items",
+    "size",
+    "is_xbrl",
+    "is_inline_xbrl",
+    "primary_document",
+    "primary_doc_desc",
+    "last_sync_run_id",
+    "last_synced_at",
+)
+
+
+def _filing_rows_snowflake(accession_number: str) -> list[dict[str, Any]]:
+    """Every (accession_number, cik) row EDGARTOOLS_SILVER holds for one filing.
+
+    silver-merge-engine-migration Ticket 10: targeted-resync's accession
+    scope reads the filing recorded by an earlier run from here. The silver
+    model's grain is (accession_number, cik), so a multi-CIK accession
+    returns one row per associated CIK, lowest CIK first.
+    """
+    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+    columns = ", ".join(_SNOWFLAKE_FILING_COLUMNS)
+    reader = SnowflakeSilverReader.connect()
+    try:
+        return reader.fetch(
+            f"SELECT {columns} FROM sec_company_filing WHERE accession_number = ? ORDER BY cik",
+            [accession_number],
+        )
+    finally:
+        reader.close()
 
 
 def _get_mdm_tracked_ciks(status_filter: str) -> list[int]:
