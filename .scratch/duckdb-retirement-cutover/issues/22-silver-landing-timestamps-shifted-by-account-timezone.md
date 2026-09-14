@@ -122,10 +122,59 @@ deploy script, one more manual-`CALL` script listed above.
 Follow-up filed: [Ticket 23](23-consolidate-snowflake-run-manifest-task-definitions.md), one
 definition for `SNOWFLAKE_RUN_MANIFEST_TASK` (the three copies already disagree on `SCHEDULE`).
 
-Merged in PR #629 (`ec5be53c`, 2026-09-14 18:59 ET). **Not deployed:** both tasks still show
-`TIMEZONE = America/Los_Angeles` in prod (checked 2026-09-14).
+Merged in PR #629 (`ec5be53c`, 2026-09-14 18:59 ET). **Deployed 2026-09-14 19:34 ET** in the
+window below.
 
-## Rollout plan (2026-09-14, draft — every prod step needs operator go-ahead)
+## Window run (2026-09-14 19:33–19:46 ET, operator go-ahead)
+
+Ran the runbook below as `ACCOUNTADMIN` (the connection's role, which owns every table in scope),
+not `EDGARTOOLS_PROD_LOADER` as step 4 suggested.
+
+0. **Pre-checks** (19:25–19:32 ET):
+   - No prod Step Functions execution running; no task run executing.
+   - Offset counts identical to the dry run.
+   - Loader had `UPDATE` on all 20 tables.
+   - MDM markers read and saved (scratchpad, not committed): `EMPLOYED_BY:exec`
+     `2026-08-05T10:16:52.832132-07:00`, `EMPLOYED_BY:event` `2026-08-05T02:16:54.298785-07:00`,
+     `INSTITUTIONAL_HOLDS` `2026-07-22T03:13:43.914118-07:00`; `pending_watermark_value` NULL on all
+     three. At that point 6,375,269 `INSTITUTIONAL_HOLDS` rows were unprocessed in silver, and
+     259,922 of them would have fallen behind an unfixed marker. The `EMPLOYED_BY` keys had none.
+1. **19:33** Both tasks suspended; no run `EXECUTING` or `SCHEDULED` afterwards.
+2. **19:34** `ALTER TASK ... SET TIMEZONE = 'UTC'` on both; `SHOW PARAMETERS` returns `UTC` at
+   `TASK` level for both.
+3. **19:35** Schema `EDGARTOOLS_PROD.T22_TIMESTAMP_BACKUP` created with 20 clones (`L_<table>` for
+   landing, `S_<table>` for source). Each clone's row count equals its table's. **Drop after
+   2026-09-21.**
+4. **19:36–19:37** 34 `UPDATE` statements, one per column in the correction list. 21,765,149 values
+   updated; every column's count equals its pre-check count (0 mismatches).
+5. **MDM markers relabelled.** The first attempt failed with `KeyError` before sending anything:
+   SQLAlchemy `text()` read `:00` in the regex as a bind parameter. It was re-run with
+   `exec_driver_sql`, in one transaction requiring exactly 3 rows. All three markers now end in
+   `+00:00` with the same digits; `IS_INSIDER` (`accession_number`) is untouched.
+6. **Verify and refresh:**
+   - Offset re-count: 0 values at `-07:00`/`-08:00` in the correction list; the five excluded
+     columns unchanged.
+   - 19:38–19:40: manual refresh of the 15 silver dynamic tables that read corrected landing
+     tables, all `SUCCEEDED`. Silver samples (`SEC_THIRTEENF_HOLDING`, `SEC_COMPANY_TICKER`,
+     `SEC_COMPANY_FILING`, `SEC_EXECUTIVE_RECORD`) show only `Z`.
+   - 19:41–19:45: manual refresh of all 21 gold dynamic tables, all succeeded. Every gold
+     `TIMESTAMP_TZ` value is `Z`, except `EDGARTOOLS_GOLD_STATUS` (refresh-status times from
+     `CURRENT_TIMESTAMP()`, correct as they are).
+   - Some gold tables gained rows (`FILING_ACTIVITY`/`FILING_DETAIL` +32,237, `COMPANY` +39).
+     They were behind silver, since gold is `TARGET_LAG = DOWNSTREAM`; the timestamp correction
+     adds no rows.
+7. **19:45:57** Both tasks resumed (`started`, `TIMEZONE = UTC`). Resuming restarted the schedules:
+   next landing run 22:45 ET, next manifest run 2026-09-15 01:45 ET.
+
+**Still open:**
+- **Live check on a real load.** The next landing load that picks up new Parquet files should
+  write offset `Z` with a time near its run id's epoch. The first source-layer load through
+  `SNOWFLAKE_RUN_MANIFEST_TASK` should do the same.
+- **Drop the clone schema** after 2026-09-21.
+- **Rollback note.** The loader has no `DELETE` on the landing tables, so an `INSERT OVERWRITE`
+  restore there runs as `ACCOUNTADMIN`.
+
+## Rollout plan (2026-09-14; executed in the window above)
 
 Deploy, correction of loaded rows, and the MDM marker fix are one change. Doing only part of it
 skips MDM rows (see "MDM relationship markers").

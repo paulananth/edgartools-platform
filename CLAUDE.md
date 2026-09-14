@@ -1409,7 +1409,7 @@ warehouse to have suspended meaningfully beforehand. Size the interval against a
 credit budget up front (or add a data-presence gate, e.g. `WHEN SYSTEM$STREAM_HAS_DATA(...)`)
 instead of shipping a "tune later" placeholder default.
 
-## Snowflake Parquet timestamps loaded 7–8 hours late 5-whys (fixed, not deployed, 2026-09-14)
+## Snowflake Parquet timestamps loaded 7–8 hours late 5-whys (fixed and deployed, rows corrected, 2026-09-14)
 
 **Problem:** every `TIMESTAMP_TZ` in `EDGARTOOLS_SILVER_LANDING` and `EDGARTOOLS_SOURCE` held the
 right UTC clock digits labelled `−07:00`, i.e. 7 hours late (8 in winter). **Root cause:** both
@@ -1419,7 +1419,8 @@ Snowflake's default `America/Los_Angeles`. Not caused by the 2026-09-04 US/Easte
 change (Python-only, and the shift is Los Angeles, not Eastern). **Fix:** `TIMEZONE = 'UTC'` pinned on
 `LOAD_SILVER_LANDING_TASK` and on all three definitions of `SNOWFLAKE_RUN_MANIFEST_TASK`
 (owner's-rights procedures use the caller's `TIMEZONE`); `tests/unit/test_loader_task_timezone_sql.py`.
-Rows already loaded still need a correction. **Lesson:** store instants in UTC and pin UTC on every
+Deployed 2026-09-14, and the 21.8M values already loaded were corrected in the same window.
+**Lesson:** store instants in UTC and pin UTC on every
 Snowflake session that loads them; convert to Eastern only for business dates and display. A
 one-row Parquet file through the real file format into a temporary table is a 15-second proof.
 Full detail: [Ticket 22](.scratch/duckdb-retirement-cutover/issues/22-silver-landing-timestamps-shifted-by-account-timezone.md).
