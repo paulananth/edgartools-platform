@@ -99,8 +99,12 @@ except where a table's specifics genuinely need a fresh design pass.
   populated) — the "done" bar both tickets still owe.
 - Silver-landing timestamps load 7–8 hours late, found 2026-09-14 by Ticket 19:
   [duckdb-retirement-cutover Ticket 22](../duckdb-retirement-cutover/issues/22-silver-landing-timestamps-shifted-by-account-timezone.md).
-  Platform-wide (every `TIMESTAMP_TZ` in `EDGARTOOLS_SILVER_LANDING`), not DuckDB-specific; filed
-  there only because Ticket 19 found it. Needs an owner and a fix decision.
+  Platform-wide (every `TIMESTAMP_TZ` in `EDGARTOOLS_SILVER_LANDING`, and `EDGARTOOLS_SOURCE` too),
+  not DuckDB-specific; filed there only because Ticket 19 found it. Diagnosed 2026-09-14 (COPY
+  INTO labels Parquet UTC times with the session zone); fix for new loads implemented, not
+  deployed. Correcting loaded rows needs operator go-ahead. Follow-up:
+  [Ticket 23](../duckdb-retirement-cutover/issues/23-consolidate-snowflake-run-manifest-task-definitions.md)
+  (the manifest task's three definitions).
 
 ## Out of scope
 

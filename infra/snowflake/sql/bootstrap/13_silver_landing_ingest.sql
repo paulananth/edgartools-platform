@@ -241,9 +241,18 @@ $$;
 -- account's other lightweight scheduled/refresh work; no new warehouse.
 -- Loader already holds USAGE on this warehouse (it is dbt's prod target's
 -- warehouse too) -- no additional grant needed for the task to run on it.
+-- TIMEZONE = 'UTC' (duckdb-retirement-cutover Ticket 22): PARQUET_FORMAT reads
+-- Parquet timestamps without their UTC marker (USE_LOGICAL_TYPE = false), and
+-- COPY INTO labels the bare clock time with the session TIMEZONE. The account
+-- default, America/Los_Angeles, made every landed TIMESTAMP_TZ 7-8 hours late
+-- (proven live 2026-09-14 with a one-row file). LOAD_SILVER_LANDING() is
+-- EXECUTE AS OWNER and an owner's-rights procedure uses its caller's TIMEZONE,
+-- so pinning the task's session is enough. The procedure uses no date or clock
+-- function, so nothing else in it changes.
 CREATE TASK IF NOT EXISTS LOAD_SILVER_LANDING_TASK
     WAREHOUSE = EDGARTOOLS_PROD_REFRESH_WH
     SCHEDULE = '180 MINUTE'
+    TIMEZONE = 'UTC'
     COMMENT = 'Scheduled COPY INTO of the silver-landing Parquet export (Ticket 07); 180 MINUTE cadence targets ~0.3-0.5 credits/day on EDGARTOOLS_PROD_REFRESH_WH (silver-landing-task-cost Ticket 02, widened from the original 60 MINUTE/<=1 credit/day sizing in Ticket 01).'
 AS
     CALL LOAD_SILVER_LANDING();
@@ -260,6 +269,9 @@ AS
 -- task's state going in.
 ALTER TASK LOAD_SILVER_LANDING_TASK SUSPEND;
 ALTER TASK LOAD_SILVER_LANDING_TASK SET SCHEDULE = '180 MINUTE';
+-- Same reason as SCHEDULE: CREATE TASK IF NOT EXISTS won't add the Ticket 22
+-- TIMEZONE pin to an installed task, so apply it here too.
+ALTER TASK LOAD_SILVER_LANDING_TASK SET TIMEZONE = 'UTC';
 
 -- Tasks are created SUSPENDED by default -- must be explicitly resumed to
 -- actually run on schedule (same real Snowflake behavior the manifest-task

@@ -454,10 +454,16 @@ deploy_manifest_task() {
   local db wh
   db="$(json_value "${SNOWFLAKE_OUTPUTS_FILE}" "database_name")"
   wh="$(json_map_value "${SNOWFLAKE_OUTPUTS_FILE}" "warehouse_names" "refresh")"
+  # TIMEZONE = 'UTC' (duckdb-retirement-cutover Ticket 22): the load procedures
+  # this task calls COPY Parquet with USE_LOGICAL_TYPE = false, which labels UTC
+  # timestamps with the session TIMEZONE (account default America/Los_Angeles).
+  # Terraform's snowflake_task.manifest_processor and 04_refresh_wrapper.sql also
+  # create this task and carry the same pin.
   snow sql --connection "${SNOW_CONNECTION}" -q "
 CREATE OR REPLACE TASK ${db}.EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK
   WAREHOUSE = ${wh}
   SCHEDULE = '1 MINUTE'
+  TIMEZONE = 'UTC'
   WHEN SYSTEM\$STREAM_HAS_DATA('${db}.EDGARTOOLS_SOURCE.SNOWFLAKE_RUN_MANIFEST_STREAM')
   AS
   CALL ${db}.EDGARTOOLS_GOLD.PROCESS_RUN_MANIFEST_STREAM();
