@@ -101,10 +101,11 @@ except where a table's specifics genuinely need a fresh design pass.
   [duckdb-retirement-cutover Ticket 22](../duckdb-retirement-cutover/issues/22-silver-landing-timestamps-shifted-by-account-timezone.md).
   Platform-wide (every `TIMESTAMP_TZ` in `EDGARTOOLS_SILVER_LANDING`, and `EDGARTOOLS_SOURCE` too),
   not DuckDB-specific; filed there only because Ticket 19 found it. Diagnosed 2026-09-14 (COPY
-  INTO labels Parquet UTC times with the session zone); fix for new loads merged (PR #629), not
-  deployed. Rollout plan with dry-run counts drafted 2026-09-14 in the ticket: deploy, row
-  correction (21.8M values; 5 Snowflake-written source columns excluded) and MDM
-  `ingested_at` marker relabel as one window; operator accepted the recommended D1–D5 the same day; the window has not run. Follow-up:
+  INTO labels Parquet UTC times with the session zone). Deployed and corrected in one window
+  2026-09-14 19:33–19:46 ET: both loading tasks pinned to UTC, 21,765,149 values relabelled
+  (backups in `T22_TIMESTAMP_BACKUP` until 2026-09-21), the three MDM `ingested_at` markers
+  relabelled, silver and gold refreshed. Still open: live check on the next real load, then drop
+  the clones. Follow-up:
   [Ticket 23](../duckdb-retirement-cutover/issues/23-consolidate-snowflake-run-manifest-task-definitions.md)
   (the manifest task's three definitions).
 
