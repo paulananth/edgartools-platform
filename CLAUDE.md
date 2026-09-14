@@ -504,7 +504,8 @@ exhausting `MaxAttempts:3` retries and failing the execution.
 registry (`_gold_table_builders`) plus a new generator, `iter_gold_tables()`, that yields
 `(name, table)` pairs one at a time; `build_gold()` is now just
 `dict(iter_gold_tables(db))`, kept for the one remaining caller
-(`validate_data_quality.py`) that needs random access across the full gold layer.
+(`validate_data_quality.py`, since deleted by silver-merge-engine-migration Ticket 07)
+that needs random access across the full gold layer.
 `warehouse_orchestrator.py`'s `GOLD_AFFECTING_COMMANDS` caller now streams: build one
 table, write it to storage, export it to Snowflake, `del table`, move to the next — instead
 of three full passes over the whole gold layer held in memory at once. Confirmed via

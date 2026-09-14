@@ -1,3 +1,11 @@
+"""parse-adv-bronze parses operator-staged ADV XML named by --artifact.
+
+silver-merge-engine-migration Ticket 07 deleted the command's two local reads
+(registry discovery over sec_company_filing, and the already_parsed gate over
+sec_adv_filing): the local store is never hydrated, so both were always empty.
+The FakeAdvParseDB below fails any read to prove none is left.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -10,41 +18,20 @@ from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 
 class FakeAdvParseDB:
-    def __init__(
-        self,
-        *,
-        filings: list[dict[str, Any]] | None = None,
-        already_parsed: list[str] | None = None,
-        attachments: dict[str, list[dict[str, Any]]] | None = None,
-        raw_objects: dict[str, dict[str, Any]] | None = None,
-    ) -> None:
-        self.filings = filings or []
-        self.already_parsed = set(already_parsed or [])
-        self.attachments = attachments or {}
-        self.raw_objects = raw_objects or {}
-        self.fetch_calls: list[str] = []
-        self.attachment_calls: list[str] = []
-        self.raw_object_calls: list[str] = []
+    def __init__(self) -> None:
         self.merge_adv_filings_calls: list[tuple[list[dict[str, Any]], str]] = []
         self.merge_adv_offices_calls: list[tuple[list[dict[str, Any]], str]] = []
         self.merge_adv_disclosure_events_calls: list[tuple[list[dict[str, Any]], str]] = []
         self.merge_adv_private_funds_calls: list[tuple[list[dict[str, Any]], str]] = []
 
-    def fetch(self, sql: str, params: list[Any] | tuple[Any, ...] | None = None) -> list[dict[str, Any]]:
-        self.fetch_calls.append(sql)
-        if "sec_adv_filing" in sql:
-            return [{"accession_number": accession} for accession in sorted(self.already_parsed)]
-        if "sec_company_filing" in sql:
-            return list(self.filings)
-        return []
+    def fetch(self, sql: str, params: Any = None) -> list[dict[str, Any]]:
+        raise AssertionError(f"parse-adv-bronze must not read the local store: {sql}")
 
     def get_filing_attachments(self, accession_number: str) -> list[dict[str, Any]]:
-        self.attachment_calls.append(accession_number)
-        return list(self.attachments.get(accession_number, []))
+        raise AssertionError("parse-adv-bronze must not read the local store")
 
     def get_raw_object(self, raw_object_id: str) -> dict[str, Any] | None:
-        self.raw_object_calls.append(raw_object_id)
-        return self.raw_objects.get(raw_object_id)
+        raise AssertionError("parse-adv-bronze must not read the local store")
 
     def merge_adv_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
         self.merge_adv_filings_calls.append((rows, sync_run_id))
@@ -103,21 +90,28 @@ def _adv_rows(accession: str) -> dict[str, list[dict[str, Any]]]:
     }
 
 
-def _registry_db(accessions: list[str], *, already_parsed: list[str] | None = None) -> FakeAdvParseDB:
-    attachments: dict[str, list[dict[str, Any]]] = {}
-    raw_objects: dict[str, dict[str, Any]] = {}
-    filings: list[dict[str, Any]] = []
-    for index, accession in enumerate(accessions, start=1):
-        raw_id = f"raw-{index}"
-        filings.append({"accession_number": accession, "cik": 900000 + index, "form": "ADV"})
-        attachments[accession] = [{"is_primary": True, "raw_object_id": raw_id}]
-        raw_objects[raw_id] = {"storage_path": f"s3://bucket/{accession}.xml"}
-    return FakeAdvParseDB(
-        filings=filings,
-        already_parsed=already_parsed,
-        attachments=attachments,
-        raw_objects=raw_objects,
+def _artifact(accession: str, path: str, *, form: str = "ADV", cik: int | None = None) -> dict[str, Any]:
+    artifact: dict[str, Any] = {"accession_number": accession, "form": form, "storage_path": path}
+    if cik is not None:
+        artifact["cik"] = cik
+    return artifact
+
+
+def _run(
+    bronze_context, db, sync_run_id: str, artifacts: list[dict[str, Any]], **kwargs: Any
+) -> dict[str, Any]:
+    from edgar_warehouse.application import warehouse_orchestrator
+
+    metrics: dict[str, Any] = {}
+    warehouse_orchestrator._run_parse_adv_bronze(
+        context=bronze_context,
+        db=db,
+        sync_run_id=sync_run_id,
+        metrics=metrics,
+        explicit_artifacts=artifacts,
+        **kwargs,
     )
+    return metrics
 
 
 def test_cli_parser_accepts_limit_accession_list_and_repeated_artifacts():
@@ -137,8 +131,6 @@ def test_cli_parser_accepts_limit_accession_list_and_repeated_artifacts():
         ]
     )
 
-    assert args.limit == 2
-    assert args.accession_list == ["0001111111-24-000001", "0001111111-24-000002"]
     assert args.artifacts == [
         {
             "accession_number": "0001111111-24-000001",
@@ -152,6 +144,48 @@ def test_cli_parser_accepts_limit_accession_list_and_repeated_artifacts():
             "storage_path": "s3://bucket/b.xml",
         },
     ]
+    assert args.limit == 2
+    assert args.accession_list == ["0001111111-24-000001", "0001111111-24-000002"]
+
+
+def test_accession_list_and_limit_bound_named_artifacts(bronze_context, no_sec_fetch):
+    from edgar_warehouse.application import warehouse_orchestrator
+
+    first, second, third = "0001111111-24-000070", "0001111111-24-000071", "0001111111-24-000072"
+    read_calls: list[str] = []
+
+    def read_bytes(storage_path: str) -> bytes:
+        read_calls.append(storage_path)
+        return b"adv payload"
+
+    with (
+        patch.object(warehouse_orchestrator, "read_bytes", side_effect=read_bytes),
+        patch("edgar_warehouse.parsers.adv.parse_adv", side_effect=lambda acc, *_args: _adv_rows(acc)),
+    ):
+        metrics = _run(
+            bronze_context,
+            FakeAdvParseDB(),
+            "run-bounded",
+            [
+                _artifact(first, "s3://bucket/first.xml"),
+                _artifact(second, "s3://bucket/second.xml"),
+                _artifact(third, "s3://bucket/third.xml"),
+            ],
+            accession_list=[second, third],
+            limit=1,
+        )
+
+    assert read_calls == ["s3://bucket/second.xml"]
+    assert metrics["discovered"] == 2
+    assert metrics["selected"] == 1
+    assert metrics["parsed"] == 1
+
+
+def test_cli_parser_requires_an_artifact():
+    from edgar_warehouse.cli import build_parser
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["parse-adv-bronze"])
 
 
 def test_cli_parser_rejects_malformed_artifact_value():
@@ -161,40 +195,7 @@ def test_cli_parser_rejects_malformed_artifact_value():
         build_parser().parse_args(["parse-adv-bronze", "--artifact", "not-enough-fields"])
 
 
-def test_registry_candidate_is_read_parsed_and_merged(bronze_context, no_sec_fetch):
-    from edgar_warehouse.application import warehouse_orchestrator
-
-    accession = "0001111111-24-000010"
-    db = _registry_db([accession])
-    parse_calls: list[tuple[str, str, str, int | None]] = []
-
-    def parse_adv(accession_number: str, content: str, form: str, cik: int | None = None):
-        parse_calls.append((accession_number, content, form, cik))
-        return _adv_rows(accession_number)
-
-    with (
-        patch.object(warehouse_orchestrator, "read_bytes", return_value=b"<adv>payload</adv>") as read_bytes,
-        patch("edgar_warehouse.parsers.adv.parse_adv", side_effect=parse_adv),
-    ):
-        metrics: dict[str, Any] = {}
-        warehouse_orchestrator._run_parse_adv_bronze(
-            context=bronze_context,
-            db=db,
-            sync_run_id="run-adv",
-            metrics=metrics,
-        )
-
-    assert read_bytes.call_args.args == ("s3://bucket/0001111111-24-000010.xml",)
-    assert parse_calls == [(accession, "<adv>payload</adv>", "ADV", 900001)]
-    assert db.merge_adv_filings_calls == [(_adv_rows(accession)["sec_adv_filing"], "run-adv")]
-    assert db.merge_adv_offices_calls == [(_adv_rows(accession)["sec_adv_office"], "run-adv")]
-    assert db.merge_adv_disclosure_events_calls == [(_adv_rows(accession)["sec_adv_disclosure_event"], "run-adv")]
-    assert db.merge_adv_private_funds_calls == [(_adv_rows(accession)["sec_adv_private_fund"], "run-adv")]
-    assert metrics["parsed"] == 1
-    assert metrics["rows_written"] == 4
-
-
-def test_explicit_artifact_input_is_reachable_without_registry_rows(bronze_context, no_sec_fetch):
+def test_explicit_artifact_is_read_parsed_and_merged_without_local_reads(bronze_context, no_sec_fetch):
     from edgar_warehouse.application import warehouse_orchestrator
 
     accession = "0001111111-24-000020"
@@ -209,109 +210,29 @@ def test_explicit_artifact_input_is_reachable_without_registry_rows(bronze_conte
         patch.object(warehouse_orchestrator, "read_bytes", return_value=b"explicit adv") as read_bytes,
         patch("edgar_warehouse.parsers.adv.parse_adv", side_effect=parse_adv),
     ):
-        metrics: dict[str, Any] = {}
-        warehouse_orchestrator._run_parse_adv_bronze(
-            context=bronze_context,
-            db=db,
-            sync_run_id="run-explicit",
-            metrics=metrics,
-            explicit_artifacts=[
-                {
-                    "accession_number": accession,
-                    "form": "ADV/A",
-                    "storage_path": "s3://bucket/explicit.xml",
-                    "cik": 42,
-                }
-            ],
+        metrics = _run(
+            bronze_context,
+            db,
+            "run-explicit",
+            [_artifact(accession, "s3://bucket/explicit.xml", form="ADV/A", cik=42)],
         )
 
-    assert db.attachment_calls == []
     assert read_bytes.call_args.args == ("s3://bucket/explicit.xml",)
     assert parse_calls == [(accession, "explicit adv", "ADV/A", 42)]
+    rows = _adv_rows(accession)
+    assert db.merge_adv_filings_calls == [(rows["sec_adv_filing"], "run-explicit")]
+    assert db.merge_adv_offices_calls == [(rows["sec_adv_office"], "run-explicit")]
+    assert db.merge_adv_disclosure_events_calls == [(rows["sec_adv_disclosure_event"], "run-explicit")]
+    assert db.merge_adv_private_funds_calls == [(rows["sec_adv_private_fund"], "run-explicit")]
     assert metrics["explicit_artifacts"] == 1
     assert metrics["parsed"] == 1
+    assert metrics["rows_written"] == 4
 
 
-def test_already_parsed_accession_is_skipped_before_storage_read(bronze_context, no_sec_fetch):
+def test_invalid_and_unreadable_artifacts_are_counted_and_do_not_abort(bronze_context, no_sec_fetch):
     from edgar_warehouse.application import warehouse_orchestrator
 
-    accession = "0001111111-24-000030"
-    db = _registry_db([accession], already_parsed=[accession])
-
-    with patch.object(
-        warehouse_orchestrator,
-        "read_bytes",
-        side_effect=AssertionError("already parsed accession should not read storage"),
-    ):
-        metrics: dict[str, Any] = {}
-        warehouse_orchestrator._run_parse_adv_bronze(
-            context=bronze_context,
-            db=db,
-            sync_run_id="run-skip",
-            metrics=metrics,
-        )
-
-    assert metrics["already_parsed"] == 1
-    assert metrics["selected"] == 0
-    assert metrics["skipped"] == 1
-    assert metrics["parsed"] == 0
-    assert db.merge_adv_filings_calls == []
-
-
-def test_limit_counts_not_yet_parsed_candidates(bronze_context, no_sec_fetch):
-    from edgar_warehouse.application import warehouse_orchestrator
-
-    already = "0001111111-24-000040"
-    first_new = "0001111111-24-000041"
-    second_new = "0001111111-24-000042"
-    db = _registry_db([already, first_new, second_new], already_parsed=[already])
-    read_calls: list[str] = []
-
-    def read_bytes(storage_path: str) -> bytes:
-        read_calls.append(storage_path)
-        return b"adv payload"
-
-    with (
-        patch.object(warehouse_orchestrator, "read_bytes", side_effect=read_bytes),
-        patch("edgar_warehouse.parsers.adv.parse_adv", side_effect=lambda accession, *_args: _adv_rows(accession)),
-    ):
-        metrics: dict[str, Any] = {}
-        warehouse_orchestrator._run_parse_adv_bronze(
-            context=bronze_context,
-            db=db,
-            sync_run_id="run-limit",
-            metrics=metrics,
-            limit=1,
-        )
-
-    assert read_calls == [f"s3://bucket/{first_new}.xml"]
-    assert metrics["skipped"] == 1
-    assert metrics["selected"] == 1
-    assert metrics["parsed"] == 1
-    assert db.merge_adv_filings_calls[0][0][0]["accession_number"] == first_new
-
-
-def test_missing_and_unreadable_artifacts_are_counted_and_do_not_abort(bronze_context, no_sec_fetch):
-    from edgar_warehouse.application import warehouse_orchestrator
-
-    missing = "0001111111-24-000050"
-    unreadable = "0001111111-24-000051"
-    valid = "0001111111-24-000052"
-    db = FakeAdvParseDB(
-        filings=[
-            {"accession_number": missing, "cik": 1, "form": "ADV"},
-            {"accession_number": unreadable, "cik": 2, "form": "ADV"},
-            {"accession_number": valid, "cik": 3, "form": "ADV"},
-        ],
-        attachments={
-            unreadable: [{"is_primary": True, "raw_object_id": "raw-unreadable"}],
-            valid: [{"is_primary": True, "raw_object_id": "raw-valid"}],
-        },
-        raw_objects={
-            "raw-unreadable": {"storage_path": "s3://bucket/unreadable.xml"},
-            "raw-valid": {"storage_path": "s3://bucket/valid.xml"},
-        },
-    )
+    db = FakeAdvParseDB()
 
     def read_bytes(storage_path: str) -> bytes:
         if storage_path.endswith("unreadable.xml"):
@@ -320,28 +241,31 @@ def test_missing_and_unreadable_artifacts_are_counted_and_do_not_abort(bronze_co
 
     with (
         patch.object(warehouse_orchestrator, "read_bytes", side_effect=read_bytes),
-        patch("edgar_warehouse.parsers.adv.parse_adv", side_effect=lambda accession, *_args: _adv_rows(accession)),
+        patch("edgar_warehouse.parsers.adv.parse_adv", side_effect=lambda acc, *_args: _adv_rows(acc)),
     ):
-        metrics: dict[str, Any] = {}
-        warehouse_orchestrator._run_parse_adv_bronze(
-            context=bronze_context,
-            db=db,
-            sync_run_id="run-missing",
-            metrics=metrics,
+        metrics = _run(
+            bronze_context,
+            db,
+            "run-missing",
+            [
+                _artifact("0001111111-24-000050", "s3://bucket/form4.xml", form="4"),
+                _artifact("0001111111-24-000051", "s3://bucket/unreadable.xml"),
+                _artifact("0001111111-24-000052", "s3://bucket/valid.xml"),
+            ],
         )
 
     assert metrics["missing_artifacts"] == 1
     assert metrics["unreadable_artifacts"] == 1
     assert metrics["parsed"] == 1
-    assert db.merge_adv_filings_calls[0][0][0]["accession_number"] == valid
+    assert db.merge_adv_filings_calls[0][0][0]["accession_number"] == "0001111111-24-000052"
 
 
-def test_parser_errors_are_counted_and_later_candidates_continue(bronze_context, no_sec_fetch):
+def test_parser_errors_are_counted_and_later_artifacts_continue(bronze_context, no_sec_fetch):
     from edgar_warehouse.application import warehouse_orchestrator
 
     bad = "0001111111-24-000060"
     good = "0001111111-24-000061"
-    db = _registry_db([bad, good])
+    db = FakeAdvParseDB()
     events: list[tuple[str, dict[str, Any]]] = []
 
     def parse_adv(accession_number: str, *_args: Any) -> dict[str, list[dict[str, Any]]]:
@@ -358,12 +282,11 @@ def test_parser_errors_are_counted_and_later_candidates_continue(bronze_context,
         ),
         patch("edgar_warehouse.parsers.adv.parse_adv", side_effect=parse_adv),
     ):
-        metrics: dict[str, Any] = {}
-        warehouse_orchestrator._run_parse_adv_bronze(
-            context=bronze_context,
-            db=db,
-            sync_run_id="run-parser-error",
-            metrics=metrics,
+        metrics = _run(
+            bronze_context,
+            db,
+            "run-parser-error",
+            [_artifact(bad, "s3://bucket/bad.xml"), _artifact(good, "s3://bucket/good.xml")],
         )
 
     assert metrics["errors"] == 1

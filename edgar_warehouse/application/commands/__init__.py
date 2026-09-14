@@ -35,7 +35,6 @@ from edgar_warehouse.application.commands import (
     seed_universe,
     sweep_filing_text,
     targeted_resync,
-    validate_data_quality,
     verify_pipeline_run,
     write_run_summary,
 )
@@ -70,7 +69,6 @@ LEGACY_COMMAND_REGISTRY = {
     "ingest-relationship-sources": ingest_relationship_sources.execute,
     "reconcile-relationship-release": reconcile_relationship_release.execute,
     "migrate-silver-shards": migrate_silver_shards.execute,
-    "validate-data-quality": validate_data_quality.execute,
     "verify-pipeline-run": verify_pipeline_run.execute,
     "write-run-summary": write_run_summary.execute,
 }

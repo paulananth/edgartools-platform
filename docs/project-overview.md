@@ -305,7 +305,7 @@ Defined in `edgar_warehouse/cli.py` → `edgar_warehouse` package.
 | `bootstrap-fundamentals` | Branch B: earnings, proxy, 13F, entity facts |
 | `daily-incremental` | Process new filings for a date range |
 | `parse-ownership-bronze` | Re-parse Forms 3/4/5 from bronze (no SEC calls) |
-| `parse-adv-bronze` | Parse operator-supplied ADV bronze |
+| `parse-adv-bronze` | Parse operator-staged ADV XML named by `--artifact` |
 | `gold-refresh` | Rebuild gold / Snowflake export once |
 | `targeted-resync` | Repair or re-fetch a single CIK / scope |
 | `mdm …` | Entity resolution, graph, counts, migrations |

@@ -20,20 +20,11 @@ digest, though -- see ``_CROSS_SYSTEM_SYNC_BOOKKEEPING_EXCLUDE``/
 ``_CROSS_SYSTEM_DENORMALIZED_CIK_TABLES`` below (Ticket 11, 2026-09-06) for
 the columns that registry doesn't cover and why.
 
-Parent-link declarations below are informed by
-``edgar_warehouse/application/commands/validate_data_quality.py``'s
-``_FK_CHECKS`` list (an independently reviewed, already-live orphan-check
-declaration for 18 of these 30 tables) -- re-declared here rather than
-imported, since that list is private to a QA-gate module with a narrower
-table scope than this ticket's, and this module's own additions (the 12
-tables validate_data_quality.py does not cover: sec_current_filing_feed,
-sec_adv_filing, sec_adv_firm_roster, sec_subsidiary_evidence,
-sec_auditor_report_evidence, sec_pcaob_firm_identity, sec_raw_object,
-sec_company (root, no parent), sec_thirteenf_filing, sec_employment_event,
-sec_guidance_fact, and sec_filing_attachment's own bronze_anchor) needed
-the same relationships derived and cross-checked anyway. Every entry below
-where the two lists overlap was verified to agree with
-``_FK_CHECKS`` before being written down.
+Parent-link declarations below were first cross-checked against the
+``_FK_CHECKS`` list of the ``validate-data-quality`` command (18 of these 30
+tables), and every overlapping entry agreed. That command was deleted by
+silver-merge-engine-migration Ticket 07 (it checked a frozen copy of the
+retired canonical DuckDB), so this module is now the only declaration.
 """
 from __future__ import annotations
 

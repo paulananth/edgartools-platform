@@ -100,30 +100,20 @@ The dbt silver model collapses the repeated rows on `(accession_number, owner_in
 
 ---
 
-## Step 1b: Parse ADV Bronze (Required for Adviser and Fund Entity Types)
+## Step 1b: Parse Hand-Staged ADV XML (Optional)
 
 > **Important:** ADV (Form ADV) filings are **not** in EDGAR. They are filed through
-> IARD/IAPD (operated by FINRA). Standard `edgar-warehouse bootstrap` does **not** capture ADV
-> bronze. ADV bronze must be obtained from IAPD and placed in S3 bronze before this step can run.
-> See [Phase 10 Fork-A acquisition](../gsd-workspaces/neo4j-pipe/phases/10-live-adv-backfill-validation/)
-> as the precedent for obtaining ADV XML from the SEC FOIA Form ADV bulk dataset and uploading it
-> to the canonical bronze path.
+> IARD/IAPD (operated by FINRA). The scheduled path loads them without this step:
+> `fetch-adv-bulk` + `ingest-relationship-sources` (IAPD bulk archive → `sec_adv_filing`,
+> `sec_adv_private_fund`) and `fetch-firm-roster` (aggregate fund counts), in both
+> `load_history` and `daily_incremental`.
 
-Before running `mdm mastering --entity-type adviser` or `mdm mastering --entity-type fund`, parse existing
-ADV bronze XML artifacts into the silver ADV tables (`sec_adv_filing`, `sec_adv_office`,
-`sec_adv_disclosure_event`, `sec_adv_private_fund`).
+Use `parse-adv-bronze` only for ADV XML an operator staged in S3 bronze by hand. The scheduled
+bulk path does not fill `sec_adv_office` or `sec_adv_disclosure_event`; this command does, from
+the staged file. Name each
+artifact with `--artifact` (required, repeatable):
 
 ```bash
-# Parse all unprocessed ADV XML from the bronze artifact registry
-edgar-warehouse parse-adv-bronze
-
-# Bounded run: limit to N accessions
-edgar-warehouse parse-adv-bronze --limit 100
-
-# Bounded run: specific accession numbers only
-edgar-warehouse parse-adv-bronze --accession-list ADV-105958-20241218,ADV-987654-20241218
-
-# Explicit artifact path (when no registry rows exist — the Phase 10 validated path):
 edgar-warehouse parse-adv-bronze \
   --artifact "ADV-105958-20241218,ADV,s3://edgartools-dev-bronze/warehouse/bronze/filings/sec/cik=105958/accession=ADV-105958-20241218/primary_doc.xml,105958"
 ```
@@ -141,9 +131,9 @@ edgar-warehouse parse-adv-bronze \
 and fund loaders will silently no-op. Always run the targeted `--entity-type adviser` and
 `--entity-type fund` commands with the diagnostics check first.
 
-The command is idempotent: accessions already present in `sec_adv_filing` are skipped on repeat
-runs. Unreadable bronze artifacts emit a non-fatal `parse_adv_bronze_unreadable_artifact` event
-and the batch continues.
+The command has no cross-run skip: a repeat run re-parses every named artifact, and the dbt silver
+models collapse the repeated rows. Unreadable bronze artifacts emit a non-fatal
+`parse_adv_bronze_unreadable_artifact` event and the batch continues.
 
 **Also unset `WAREHOUSE_STORAGE_ROOT` when running locally** to prevent the silver reader from
 switching to S3 shard hydration instead of reading the local `MDM_SILVER_DUCKDB`:
@@ -266,7 +256,7 @@ SELECT COUNT(*) AS private_fund_count FROM sec_adv_private_fund;
 |---------|-------|--------|
 | Nonzero `sec_company_filing` Forms 3/4/5 + zero `sec_raw_object` | Bronze artifacts were not captured | Bronze capture is outside Phase 5 scope; contact operator who ran bronze pipeline |
 | Nonzero `sec_raw_object` + zero `sec_ownership_reporting_owner` | `parse-ownership-bronze` not yet run or failed | Run `edgar-warehouse parse-ownership-bronze --limit 100` and review output |
-| Zero `sec_adv_filing` | ADV data was not loaded — ADV bronze must come from IAPD (not EDGAR bootstrap) | See [Step 1b: Parse ADV Bronze](#step-1b-parse-adv-bronze-required-for-adviser-and-fund-entity-types) |
+| Zero `sec_adv_filing` | ADV data was not loaded — ADV comes from IAPD (not EDGAR bootstrap) | Check the scheduled `fetch-adv-bulk` + `ingest-relationship-sources` run; for hand-staged XML see [Step 1b](#step-1b-parse-hand-staged-adv-xml-optional) |
 
 ---
 
@@ -298,8 +288,8 @@ sequence for the full-scale Phase 5 run is:
    upload the XML to the canonical bronze path:
    `s3://<bucket>/warehouse/bronze/filings/sec/cik=<CIK>/accession=<ACCESSION>/primary_doc.xml`
 
-2. **Parse ADV bronze.** Run `edgar-warehouse parse-adv-bronze` (or with `--artifact` for
-   explicit paths; see [Step 1b](#step-1b-parse-adv-bronze-required-for-adviser-and-fund-entity-types)).
+2. **Parse ADV bronze.** Run `edgar-warehouse parse-adv-bronze --artifact ...` for each
+   staged file; see [Step 1b](#step-1b-parse-hand-staged-adv-xml-optional).
 
 3. **Confirm silver counts.**
    ```bash

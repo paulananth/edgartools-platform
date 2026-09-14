@@ -2,8 +2,7 @@
 source evidence tables and the current filing feed are landing-only.
 
 None of them is read back in-process: their readers are MDM (Snowflake
-reader), and `_run_parse_adv_bronze`'s `already_parsed` gate keeps its own
-in-run set. Every dbt silver model partitions on the old ON CONFLICT key.
+reader). Every dbt silver model partitions on the old ON CONFLICT key.
 These tables stamp `last_sync_run_id` (the feed also `last_synced_at`);
 the raw rows `@track_landing_rows` recorded carried neither.
 """

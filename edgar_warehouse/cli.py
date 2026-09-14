@@ -535,10 +535,6 @@ def _handle_verify_pipeline_run(args: argparse.Namespace) -> int:
     return run_command("verify-pipeline-run", args)
 
 
-def _handle_validate_data_quality(args: argparse.Namespace) -> int:
-    return run_command("validate-data-quality", args)
-
-
 def _handle_resolve_snowflake_env(args: argparse.Namespace) -> int:
     """Print `export KEY=VALUE` shell lines for a Snowflake connection.
 
@@ -1211,9 +1207,9 @@ def build_parser() -> argparse.ArgumentParser:
     parse_adv_bronze = subparsers.add_parser(
         "parse-adv-bronze",
         help=(
-            "Parse ADV-family filings already in S3 bronze into silver ADV tables. "
+            "Parse operator-staged ADV XML in S3 bronze into silver ADV tables. "
             "Uses the local ADV parser. No SEC API calls. "
-            "Idempotent — skips accessions already in sec_adv_filing."
+            "Scheduled ADV ingestion is fetch-adv-bulk + ingest-relationship-sources."
         ),
     )
     parse_adv_bronze.add_argument(
@@ -1221,27 +1217,24 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         metavar="N",
-        help="Maximum number of not-yet-parsed ADV accessions to process (default: all).",
+        help="Maximum number of named ADV artifacts to parse (default: all).",
     )
     parse_adv_bronze.add_argument(
         "--accession-list",
         type=lambda s: [a.strip() for a in s.split(",") if a.strip()],
         default=None,
         metavar="ACCESSIONS",
-        help=(
-            "Comma-separated accession numbers to process. "
-            "When supplied, only these accessions are parsed (default: all ADV-family forms)."
-        ),
+        help="Comma-separated accession numbers; only named artifacts with these are parsed.",
     )
     parse_adv_bronze.add_argument(
         "--artifact",
         action="append",
-        default=[],
+        required=True,
         dest="artifacts",
         metavar="ACCESSION,FORM,STORAGE_PATH[,CIK]",
         type=_parse_adv_artifact,
         help=(
-            "Explicit already-captured ADV artifact to parse. "
+            "Staged ADV artifact to parse. "
             "Repeatable. Format: ACCESSION,FORM,STORAGE_PATH[,CIK]."
         ),
     )
@@ -1959,12 +1952,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pipeline run id to verify.",
     )
     verify_pipeline_run.set_defaults(handler=_handle_verify_pipeline_run)
-
-    validate_data_quality = subparsers.add_parser(
-        "validate-data-quality",
-        help="Validate silver/gold data quality and emit a JSON report.",
-    )
-    validate_data_quality.set_defaults(handler=_handle_validate_data_quality)
 
     resolve_snowflake_env = subparsers.add_parser(
         "resolve-snowflake-env",

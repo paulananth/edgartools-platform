@@ -766,32 +766,6 @@ class BookkeepingStore:
         row = self._session.get(PipelineRun, pipeline_run_id)
         return self._to_dict(row) if row else None
 
-    def get_recent_successful_pipeline_runs(self, limit: int = 10) -> list[dict[str, Any]]:
-        """Recent succeeded/ok pipeline_run rows with metrics, most-recent-first.
-
-        Ticket 03: replaces application/commands/validate_data_quality.py's
-        _latest_previous_table_counts raw SQL: `SELECT pipeline_run_id,
-        metrics_json FROM pipeline_run WHERE status IN ('succeeded', 'ok')
-        AND metrics_json IS NOT NULL ORDER BY completed_at DESC NULLS LAST,
-        started_at DESC LIMIT 10`. completed_at and metrics_json are always
-        set together by complete_pipeline_run, so a NULL completed_at with
-        non-NULL metrics_json can't arise through this store's own write
-        path today -- the NULLS LAST ordering (and the started_at DESC
-        tiebreak) is kept anyway to match the original query's defensive
-        handling of that state exactly.
-        """
-        stmt = (
-            select(PipelineRun)
-            .where(
-                PipelineRun.status.in_(("succeeded", "ok")),
-                PipelineRun.metrics_json.is_not(None),
-            )
-            .order_by(PipelineRun.completed_at.desc().nulls_last(), PipelineRun.started_at.desc())
-            .limit(limit)
-        )
-        rows = self._session.execute(stmt).scalars().all()
-        return [self._to_dict(r) for r in rows]
-
     # -- gold_manifest --------------------------------------------------------
 
     def _latest_gold_manifest_for_table(
