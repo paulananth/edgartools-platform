@@ -97,7 +97,7 @@ SEC EDGAR API
 
 **Affected files:**
 - `edgar_warehouse/silver_store.py` — DDL for `sec_financial_fact`, `sec_financial_derived`, etc.
-- `edgar_warehouse/silver_support/session.py` — `open_silver_shard()` / `open_silver_database()`
+- `edgar_warehouse/silver_support/session.py` — `open_silver_database()` (`open_silver_shard()` was deleted by silver-merge-engine-migration Ticket 08)
 - `edgar_warehouse/application/commands/bootstrap_fundamentals.py` — Branch B processing
 - `edgar_warehouse/config/warehouse_paths.properties` — separate fundamentals path
 

@@ -21,52 +21,20 @@ Runtime variables must be exported in your shell or injected as ECS task environ
 # Required for all MDM commands
 export MDM_DATABASE_URL="postgresql+psycopg2://user:password@host:5432/mdm"
 
-# Required for MDM entity loads from silver (see path options below)
-export MDM_SILVER_DUCKDB="/path/to/silver.duckdb"    # local path
-# or
-export MDM_SILVER_DUCKDB="s3://edgartools-dev-warehouse/warehouse/silver.duckdb"  # S3-backed
-
-# Optional: local cache path for S3-backed silver (avoids re-download on each run)
-export MDM_LOCAL_SILVER_DUCKDB="/tmp/silver_local_cache.duckdb"
+# MDM entity loads read silver from Snowflake EDGARTOOLS_SILVER (see Silver Source below).
+# MDM_SILVER_DUCKDB / MDM_LOCAL_SILVER_DUCKDB are no longer read by any command.
 ```
 
 ---
 
-## Silver Source Options
+## Silver Source
 
-### Local Path
-
-Set `MDM_SILVER_DUCKDB` to an absolute path on the local filesystem:
-
-```bash
-export MDM_SILVER_DUCKDB="/data/silver/silver.duckdb"
-```
-
-The MDM CLI opens the DuckDB file read-only and loads entity rows without copying it.
-
-### S3-Backed Path
-
-Set `MDM_SILVER_DUCKDB` to an S3 URI. The CLI downloads the file through the existing
-`object_storage.read_bytes()` adapter (backed by `fsspec`/`s3fs`):
-
-```bash
-export MDM_SILVER_DUCKDB="s3://edgartools-dev-warehouse/warehouse/silver.duckdb"
-```
-
-The AWS credential chain (`~/.aws/credentials`, EC2 instance profile, ECS task role) must grant
-`s3:GetObject` on the warehouse bucket path.
-
-Optionally cache the downloaded file locally to avoid re-downloading on repeated runs:
-
-```bash
-export MDM_LOCAL_SILVER_DUCKDB="/tmp/silver_local_cache.duckdb"
-```
-
-If `MDM_LOCAL_SILVER_DUCKDB` is set and the file already exists at that path, the CLI skips the
-S3 download and reads from the cached local file instead.
-
-**Note:** Unsupported URI protocols (e.g., `ftp://`, `http://`) are rejected by the
-object_storage allowlist before any download is attempted.
+MDM reads silver only from Snowflake `EDGARTOOLS_SILVER`, through `SnowflakeSilverReader`
+(role `EDGARTOOLS_PROD_MDM_SILVER_READER`, connection settings from
+`edgar_warehouse.mdm.export.silver_connection_settings`). This has been the only path since
+duckdb-retirement-cutover Ticket 05. The local/S3 DuckDB options this section used to describe
+(`MDM_SILVER_DUCKDB`, `MDM_LOCAL_SILVER_DUCKDB`) were last read by the `mdm verify-*-parity`
+commands, deleted by silver-merge-engine-migration Ticket 08.
 
 ---
 
@@ -135,14 +103,6 @@ The command has no cross-run skip: a repeat run re-parses every named artifact, 
 models collapse the repeated rows. Unreadable bronze artifacts emit a non-fatal
 `parse_adv_bronze_unreadable_artifact` event and the batch continues.
 
-**Also unset `WAREHOUSE_STORAGE_ROOT` when running locally** to prevent the silver reader from
-switching to S3 shard hydration instead of reading the local `MDM_SILVER_DUCKDB`:
-
-```bash
-unset WAREHOUSE_STORAGE_ROOT
-export MDM_SILVER_DUCKDB="/tmp/edgar-warehouse-silver/silver/sec/silver.duckdb"
-```
-
 ---
 
 ## Step 2: Run MDM Entity Loaders
@@ -172,10 +132,9 @@ edgar-warehouse mdm mastering --entity-type all --limit 100
 The loaders are idempotent: running `mdm mastering` twice against the same silver data leaves
 `mdm_company`, `mdm_adviser`, `mdm_person`, `mdm_security`, and `mdm_fund` counts stable.
 
-**Note:** `MDM_SILVER_DUCKDB` must be set and readable before this command opens the MDM
-database session. If the variable is absent or the DuckDB cannot be opened, the command exits
-with a nonzero code and names `MDM_SILVER_DUCKDB` in the error message without opening an MDM
-session or mutating MDM state.
+**Note:** the command opens the Snowflake silver reader before it opens the MDM database
+session. If that connection fails, it exits nonzero without opening an MDM session or mutating
+MDM state.
 
 ---
 
@@ -463,8 +422,6 @@ aws stepfunctions describe-execution \
 
 | Error | Meaning | Fix |
 |-------|---------|-----|
-| `MDM_SILVER_DUCKDB is required` | Variable not set | `export MDM_SILVER_DUCKDB=...` |
-| `Unsupported protocol` in silver path | Protocol not in allowlist | Use `/local/path`, `s3://`, or a supported scheme |
 | `Table not found: sec_ownership_reporting_owner` | Preflight failed; table missing | Run `parse-ownership-bronze` first |
 | `No source priority rule for ...` | MDM schema not seeded | Run `edgar-warehouse mdm migrate` |
 | `CatalogException: Table with name sec_tracked_universe` | Stale pipeline code | Upgrade to current `edgar_warehouse.mdm.pipeline` |

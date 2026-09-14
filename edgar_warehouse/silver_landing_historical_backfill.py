@@ -76,16 +76,47 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from edgar_warehouse.mdm.silver_parity import PARITY_TABLES
-
-# Every table verify-silver-parity tracks, except sec_company_ticker (see
-# module docstring for why). Deliberately a superset that includes tables
-# already covered by the original narrower backfill (sec_company and its
-# three siblings) -- re-running for them is a harmless no-op duplicate seed,
-# and keeping one table list (rather than "the original four" plus "the rest")
-# avoids a second place this list could drift from PARITY_TABLES.
-_BACKFILL_TABLES: tuple[str, ...] = tuple(
-    table for table in PARITY_TABLES if table != "sec_company_ticker"
+# The 31 tables the deleted verify-silver-parity gate tracked (its list never
+# changed after it was created in 67af48c8), except sec_company_ticker (see
+# module docstring for why). A fixed historical seed set: do not "sync" it to
+# today's dbt silver model list, which has since grown. Deliberately a superset
+# that includes tables already covered by the original narrower backfill
+# (sec_company and its three siblings) -- re-running for them is a harmless
+# no-op duplicate seed. This list used to be derived from
+# mdm/silver_parity.py's PARITY_TABLES; that module was deleted with the
+# parity commands (silver-merge-engine-migration Ticket 08), and this module
+# goes with the DuckDB engine in that map's Ticket 09.
+_BACKFILL_TABLES: tuple[str, ...] = (
+    "sec_accounting_flag",
+    "sec_adv_disclosure_event",
+    "sec_adv_filing",
+    "sec_adv_firm_roster",
+    "sec_adv_office",
+    "sec_adv_private_fund",
+    "sec_auditor_report_evidence",
+    "sec_company",
+    "sec_company_address",
+    "sec_company_filing",
+    "sec_company_former_name",
+    "sec_company_submission_file",
+    "sec_current_filing_feed",
+    "sec_earnings_release",
+    "sec_employment_event",
+    "sec_executive_record",
+    "sec_filing_attachment",
+    "sec_filing_text",
+    "sec_financial_derived",
+    "sec_financial_fact",
+    "sec_guidance_fact",
+    "sec_guidance_fact_reject",
+    "sec_ownership_derivative_txn",
+    "sec_ownership_non_derivative_txn",
+    "sec_ownership_reporting_owner",
+    "sec_pcaob_firm_identity",
+    "sec_raw_object",
+    "sec_subsidiary_evidence",
+    "sec_thirteenf_filing",
+    "sec_thirteenf_holding",
 )
 
 

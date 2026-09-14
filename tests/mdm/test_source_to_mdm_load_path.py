@@ -616,56 +616,15 @@ class TestUnsupportedProtocolRejected:
 
 
 # ---------------------------------------------------------------------------
-# D-11: s3:// MDM_SILVER_DUCKDB succeeds via object_storage.read_bytes monkeypatch
+# D-11: a legacy s3:// MDM_SILVER_DUCKDB is ignored post-cutover
 # ---------------------------------------------------------------------------
 
-class TestS3BackedSilverSourceUsesObjectStorageReadBytes:
-    """D-11 / PIPE-01: s3:// MDM_SILVER_DUCKDB must use object_storage.read_bytes().
-
-    The monkeypatch returns real DuckDB bytes from a local fixture, simulating
-    a successful S3 download.  This test asserts that:
-      1. object_storage.read_bytes is called with the s3:// URI
-      2. The localized file is a valid DuckDB database
-      3. No SEC download helper is invoked
-
-    These tests FAIL against the current implementation because the required-table
-    preflight does not exist, so the post-download validation step cannot pass.
+class TestLegacyS3SilverDuckdbIsIgnored:
+    """D-11 / PIPE-01, post-cutover: a legacy s3:// MDM_SILVER_DUCKDB value is
+    ignored by mdm mastering. The DuckDB reader that localized it via
+    object_storage.read_bytes() was deleted with the parity commands
+    (silver-merge-engine-migration Ticket 08).
     """
-
-    def test_s3_backed_silver_source_uses_object_storage_read_bytes(
-        self, monkeypatch, silver_duckdb, tmp_path
-    ):
-        """_duckdb_silver_reader() must call object_storage.read_bytes(s3_uri)
-        for s3:// URIs -- still exercised (DuckDB Retirement Cutover Ticket
-        05) because verify-silver-parity/verify-resolver-input-parity need
-        this DuckDB path; mdm mastering itself no longer reaches it (see
-        test_s3_env_vars_do_not_affect_handle_run below)."""
-        import edgar_warehouse.infrastructure.object_storage as obj_store
-        import edgar_warehouse.mdm.cli as mdm_cli
-
-        s3_uri = "s3://my-bucket/warehouse/silver/silver.duckdb"
-        silver_bytes = silver_duckdb.read_bytes()
-        local_path = tmp_path / "localized_silver.duckdb"
-
-        read_bytes_calls: list[str] = []
-
-        def spy_read_bytes(path: str) -> bytes:
-            read_bytes_calls.append(path)
-            return silver_bytes
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", s3_uri)
-        monkeypatch.setenv("MDM_LOCAL_SILVER_DUCKDB", str(local_path))
-        monkeypatch.setattr(obj_store, "read_bytes", spy_read_bytes)
-
-        reader = mdm_cli._duckdb_silver_reader()
-
-        assert s3_uri in read_bytes_calls, (
-            f"Expected _duckdb_silver_reader() to call object_storage.read_bytes({s3_uri!r}). "
-            f"Got: {read_bytes_calls}"
-        )
-        assert reader is not None, (
-            "Expected _duckdb_silver_reader() to return a DuckDB reader after localization"
-        )
 
     def test_s3_env_vars_do_not_affect_handle_run(self, monkeypatch, tmp_path):
         """DuckDB Retirement Cutover Ticket 05: mdm mastering's silver preflight

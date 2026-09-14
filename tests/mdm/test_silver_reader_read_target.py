@@ -27,32 +27,24 @@ def test_silver_reader_always_reaches_snowflake(monkeypatch, read_target_value):
     monkeypatch.delenv("MDM_SILVER_DUCKDB", raising=False)
     monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
 
-    with (
-        patch.object(mdm_cli, "_duckdb_silver_reader") as duckdb_reader,
-        patch.object(SnowflakeSilverReader, "connect", return_value="snowflake-reader-sentinel") as connect,
-    ):
+    with patch.object(SnowflakeSilverReader, "connect", return_value="snowflake-reader-sentinel") as connect:
         result = mdm_cli._silver_reader()
 
     connect.assert_called_once_with()
-    duckdb_reader.assert_not_called()
     assert result == "snowflake-reader-sentinel"
 
 
 def test_silver_reader_ignores_duckdb_env_vars_entirely(monkeypatch):
     """Even a fully-configured legacy DuckDB environment (MDM_SILVER_DUCKDB
     and WAREHOUSE_STORAGE_ROOT both set) must not influence _silver_reader()
-    post-cutover -- only _duckdb_silver_reader() (used by the parity
-    commands) still reads those."""
+    post-cutover. The DuckDB reader that still read those variables was
+    deleted with the parity commands (silver-merge-engine-migration Ticket 08)."""
     monkeypatch.delenv("MDM_SILVER_READ_TARGET", raising=False)
     monkeypatch.setenv("MDM_SILVER_DUCKDB", "/tmp/legacy-shard-dir")
     monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", "s3://bucket/warehouse")
 
-    with (
-        patch.object(mdm_cli, "_duckdb_silver_reader") as duckdb_reader,
-        patch.object(SnowflakeSilverReader, "connect", return_value="snowflake-reader-sentinel") as connect,
-    ):
+    with patch.object(SnowflakeSilverReader, "connect", return_value="snowflake-reader-sentinel") as connect:
         result = mdm_cli._silver_reader()
 
     connect.assert_called_once_with()
-    duckdb_reader.assert_not_called()
     assert result == "snowflake-reader-sentinel"

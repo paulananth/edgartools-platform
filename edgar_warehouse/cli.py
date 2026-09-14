@@ -1568,7 +1568,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     backfill_silver_landing_historical = subparsers.add_parser(
         "backfill-silver-landing-historical",
-        help="One-time seed of every verify-silver-parity table (except sec_company_ticker) "
+        help="One-time seed of 30 core silver tables (the old parity gate's list, minus sec_company_ticker) "
              "into the Snowflake landing zone from DuckDB canonical silver, for rows that "
              "predate the landing-zone write path and will never reach it through the "
              "skip-if-unchanged-gated incremental path (see "

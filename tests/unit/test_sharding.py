@@ -67,51 +67,6 @@ def test_shard_file_size_within_limit(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# STORE-02: overlapping shard hydration (Plan 02 implements)
-# ---------------------------------------------------------------------------
-
-
-def test_hydrate_downloads_only_overlapping_shard() -> None:
-    """STORE-02: bootstrap task downloads only the shard(s) whose CIK band overlaps its window."""
-    from pathlib import Path
-    from unittest.mock import MagicMock
-
-    from edgar_warehouse.application.warehouse_orchestrator import _hydrate_shard_for_window
-
-    # Build a minimal context with remote storage and local silver root
-    storage_root = MagicMock()
-    storage_root.is_remote = True
-    storage_root.join.side_effect = lambda *parts: "s3://bucket/" + "/".join(parts)
-
-    silver_root = MagicMock()
-    silver_root.is_remote = False
-    silver_root.join.side_effect = lambda *parts: "/tmp/silver/" + "/".join(parts)
-
-    context = MagicMock()
-    context.storage_root = storage_root
-    context.silver_root = silver_root
-
-    fake_bytes = b"fake-shard-content"
-
-    def fake_download_file(relative_path, local_path, chunk_size=8 * 1024 * 1024):
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        Path(local_path).write_bytes(fake_bytes)
-        return str(local_path)
-
-    storage_root.download_file.side_effect = fake_download_file
-
-    result = _hydrate_shard_for_window(context, shard_index=1)
-
-    # Must have called download_file exactly once
-    assert storage_root.download_file.call_count == 1
-    # The relative path used must reference shard-1.duckdb, not shard-0.duckdb or silver.duckdb
-    called_path: str = storage_root.download_file.call_args[0][0]
-    assert "shard-1.duckdb" in called_path, f"Expected shard-1.duckdb in path, got: {called_path}"
-    assert "shard-0.duckdb" not in called_path
-    assert "silver.duckdb" not in called_path
-
-
-# ---------------------------------------------------------------------------
 # STORE-03: deterministic band resolution (Plan 02 implements)
 # ---------------------------------------------------------------------------
 
@@ -349,9 +304,6 @@ def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
             return_value=mock_bookkeeping,
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_shard_for_window",
-        ) as mock_hydrate_shard,
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
             return_value=None,
         ) as mock_monolith_publish,
@@ -372,12 +324,11 @@ def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
             arguments={"cik_list": chunk_ciks},
         )
 
-    # The shard manifest is never consulted, no shard is ever hydrated, and
-    # no shard-open code path runs at all. (_publish_shard_if_remote_with_retry
+    # The shard manifest is never consulted and no shard-open code path
+    # runs at all. (_publish_shard_if_remote_with_retry
     # no longer exists -- deleted, confirmed zero live callers, by
     # duckdb-retirement-cutover Ticket 12.)
     mock_read_manifest.assert_not_called()
-    mock_hydrate_shard.assert_not_called()
     # The monolith open/publish path runs unconditionally instead. Hydrate
     # is never called for any command post-Ticket-10 (see the docstring above).
     mock_monolith_hydrate.assert_not_called()

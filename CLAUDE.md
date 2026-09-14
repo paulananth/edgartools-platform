@@ -221,10 +221,12 @@ MDM's own silver reader is **always** Snowflake `EDGARTOOLS_SILVER` via
 `SnowflakeSilverReader` (`edgar_warehouse/mdm/cli.py`'s `_silver_reader()`
 docstring is explicit: "Always EDGARTOOLS_SILVER via SnowflakeSilverReader")
 — cut over live-verified 2026-09-06 (duckdb-retirement-cutover Ticket 05).
-DuckDB's `ShardedSilverReader` still exists in the codebase but only for
-parity-verification tooling (`mdm verify-resolver-input-parity`, which
-needs both readers side by side to diff them), not as MDM's production
-read path. The broader silver-layer DuckDB retirement (the write path,
+The DuckDB-vs-Snowflake parity commands (`mdm verify-silver-parity`,
+`mdm verify-resolver-input-parity`) and their DuckDB reader path were
+deleted by silver-merge-engine-migration Ticket 08; DuckDB's
+`ShardedSilverReader` survives only for the one-time
+`backfill-silver-landing-historical` command, which leaves with the DuckDB
+engine in that map's Ticket 09. The broader silver-layer DuckDB retirement (the write path,
 bookkeeping tables, and final cleanup — duckdb-retirement-cutover Tickets
 06-14/16) is still in progress as of this writing; MDM's reader is simply
 the one piece of that migration that's already fully cut over. MDM
@@ -1783,6 +1785,9 @@ doesn't cover this gap. **A first-pass fix missed one table** (the `person` enti
 uncaught) — found only on a live re-run after the fix looked complete. **Lesson:** a live
 re-run after a fix is not optional even when the fix looks structurally complete — partial
 manual verification missed a table the automated live gate caught immediately.
+**Command deleted 2026-09-14** (silver-merge-engine-migration Ticket 08): with every writer
+landing-only there are no new DuckDB rows to compare; `table-reconcile` carries its own
+exclude-column list for cross-store checks.
 
 ## full-reconcile decommissioned entirely (2026-09-04)
 
