@@ -40,8 +40,9 @@ afterward.
 
 ## Investigation (2026-09-14)
 
-**Status:** root-caused. Closure pending an operator decision on the "Done when" line (see
-"Proposed closure" below).
+**Status:** closed 2026-09-14 by operator decision: root-caused and explained, not fixed (see
+"Closure decision" below). The "Done when" clean re-run is waived because the DuckDB side no
+longer changes.
 
 **Answer: Snowflake is right, the DuckDB file is stale. Neither failure is a Snowflake
 ingestion gap.** The two failures have two separate causes, and neither is new with Ticket 10.
