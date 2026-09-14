@@ -1,9 +1,8 @@
 """pipeline-resumability ticket 02: default-path Clean and Merge Filings (formerly BatchSilver) resume markers.
 
-Covers edgar_warehouse.application.batch_silver_resume -- the weaker-guarantee
-sibling of relationship_bulk_load.py's Ticket-20 P0 batch_identity_for_ciks/
-build_remaining_cik_batches machinery, applied to the default (non-
-release_mode) Clean and Merge Filings path instead of the strict/release path.
+Covers edgar_warehouse.application.batch_silver_resume, which reuses
+relationship_bulk_load.py's batch_identity_for_ciks/build_remaining_cik_batches
+helpers for the Clean and Merge Filings resume.
 """
 from __future__ import annotations
 
@@ -38,7 +37,7 @@ def test_resume_prefix_matches_seed_bronze_batches_convention() -> None:
     assert batch_done_prefix("run-1") == "reference/cik_universe/runs/run-1/batch_done/"
 
 
-def test_default_marker_schema_is_distinct_from_strict_marker() -> None:
+def test_default_marker_schema() -> None:
     marker = build_default_batch_done_marker(
         ciks=[3, 1, 2], resume_ledger_run_id="run-1", completed_at="2026-08-08T00:00:00Z",
     )
@@ -46,8 +45,8 @@ def test_default_marker_schema_is_distinct_from_strict_marker() -> None:
     assert marker["batch_identity"] == batch_identity_for_ciks([1, 2, 3])
     assert marker["cik_list"] == "1,2,3"
     assert marker["cik_count"] == 3
-    # Strict markers carry inventory_fingerprint/ledger_fingerprint/terminal_counts;
-    # the default marker deliberately does not claim that guarantee.
+    # The marker records completion only: no ledger or terminal-count fields
+    # (the strict release marker that carried them was deleted in Ticket 11).
     assert "inventory_fingerprint" not in marker
     assert "ledger_fingerprint" not in marker
     assert "terminal_counts" not in marker
@@ -246,7 +245,7 @@ class TestComputeRemainingBatchesDispatchIntegration:
 
 
 class TestBootstrapBatchWritesDefaultDoneMarker:
-    """bootstrap-batch's non-release_mode success path (warehouse_orchestrator.py,
+    """bootstrap-batch's success path (warehouse_orchestrator.py,
     right after _run_submissions_bronze_then_silver) now writes a default_batch_done
     marker. _run_submissions_bronze_then_silver itself is mocked -- this covers the
     marker-write wiring, not the underlying SEC-fetch pipeline (already covered
@@ -324,34 +323,3 @@ class TestBootstrapBatchWritesDefaultDoneMarker:
         )
         assert marker_path.exists()
 
-    def test_default_and_release_marker_writes_are_mutually_exclusive_by_construction(
-        self,
-    ) -> None:
-        """release_mode has its own separate marker system
-        (release_batch_done_marker, written inside `if release_mode:`); the
-        default marker is written inside a separate, sibling `if not
-        release_mode:` block -- the two can never both fire for the same
-        dispatch, by source structure rather than a runtime flag check.
-        Exercising release_mode's own branch live needs an unrelated,
-        heavyweight strict-manifest fixture (validate_strict_release_manifest)
-        already covered by test_release_batch_resume.py; asserting the
-        source shape here is the proportionate check for this ticket."""
-        import inspect
-
-        from edgar_warehouse.application import warehouse_orchestrator as wo
-
-        source = inspect.getsource(wo)
-        bootstrap_batch_start = source.index('if command_name == "bootstrap-batch":')
-        next_command_start = source.index(
-            'if command_name == "ingest-relationship-sources":', bootstrap_batch_start
-        )
-        block = source[bootstrap_batch_start:next_command_start]
-
-        assert "if not release_mode:" in block
-        assert "write_default_batch_done_marker" in block
-        not_release_idx = block.index("if not release_mode:")
-        release_idx = block.index("if release_mode:", not_release_idx)
-        # The default-marker write must be inside the `if not release_mode:`
-        # block, strictly before the sibling `if release_mode:` block starts.
-        marker_call_idx = block.index("write_default_batch_done_marker")
-        assert not_release_idx < marker_call_idx < release_idx

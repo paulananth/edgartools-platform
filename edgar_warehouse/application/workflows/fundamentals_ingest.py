@@ -49,7 +49,6 @@ BRANCH_B_FILING_FORMS = frozenset({
 })
 
 # 13F forms handled by the thirteenf path
-BRANCH_B_13F_FORMS = frozenset({"13F-HR", "13F-HR/A"})
 
 
 def _is_item_202_earnings_filing(filing: dict[str, Any]) -> bool:
@@ -141,8 +140,6 @@ def run_bootstrap_fundamentals_per_filing(
     source,                # SilverDatabase | None — Branch A metadata source
     db,                    # SilverDatabase instance — write target
     sync_run_id: str,
-    release_mode: bool = False,
-    candidate_accessions: set[str] | None = None,
 ) -> dict[str, Any]:
     """Process 8-K earnings + DEF 14A proxy filings from bronze for the given CIKs.
 
@@ -166,12 +163,9 @@ def run_bootstrap_fundamentals_per_filing(
         "rows_employment_event": 0,
         "rows_guidance_fact": 0,
         "rows_guidance_fact_reject": 0,
-        "candidate_outcomes": [],
     }
 
     if source is None:
-        if release_mode:
-            raise WarehouseRuntimeError("release relationship source is unavailable")
         _emit("fundamentals_source_unavailable", cik_count=len(cik_list))
         return metrics
 
@@ -190,46 +184,38 @@ def run_bootstrap_fundamentals_per_filing(
     )
     metrics["filings_scanned"] = len(filings)
 
-    if candidate_accessions is not None:
-        filings = [row for row in filings if row["accession_number"] in candidate_accessions]
-        observed = {row["accession_number"] for row in filings}
-        missing = sorted(candidate_accessions - observed)
-        if release_mode and missing:
-            raise WarehouseRuntimeError(f"required candidates missing from filing manifest: {missing}")
+    # Bound Item 5.02 / ambiguous 8-Ks to the agent 2y window so ad-hoc
+    # fundamentals loads match ownership integration.
+    from edgar_warehouse.application.warehouse_orchestrator import (
+        _is_item_502_candidate_form,
+        _ownership_min_filing_date,
+        _ownership_within_lookback,
+        _resolve_item_502_lookback_years,
+    )
+
+    item_502_min = _ownership_min_filing_date(_resolve_item_502_lookback_years(None))
+    if item_502_min is not None:
+        bounded: list[dict[str, Any]] = []
+        skipped_item_502 = 0
+        for row in filings:
+            form_type = str(row.get("form") or "").strip()
+            if form_type in ("8-K", "8-K/A") and _is_item_502_candidate_form(
+                form_type, row.get("items")
+            ):
+                if not _ownership_within_lookback(row, min_filing_date=item_502_min):
+                    skipped_item_502 += 1
+                    continue
+            bounded.append(row)
+        filings = bounded
+        if skipped_item_502:
+            _emit(
+                "item_502_lookback_filtered",
+                skipped_count=skipped_item_502,
+                min_filing_date=item_502_min.isoformat(),
+            )
         metrics["filings_scanned"] = len(filings)
-    elif not release_mode:
-        # Non-release Branch B: bound Item 5.02 / ambiguous 8-Ks to the agent
-        # 2y window so ad-hoc fundamentals loads match ownership integration.
-        from edgar_warehouse.application.warehouse_orchestrator import (
-            _is_item_502_candidate_form,
-            _ownership_min_filing_date,
-            _ownership_within_lookback,
-            _resolve_item_502_lookback_years,
-        )
 
-        item_502_min = _ownership_min_filing_date(_resolve_item_502_lookback_years(None))
-        if item_502_min is not None:
-            bounded: list[dict[str, Any]] = []
-            skipped_item_502 = 0
-            for row in filings:
-                form_type = str(row.get("form") or "").strip()
-                if form_type in ("8-K", "8-K/A") and _is_item_502_candidate_form(
-                    form_type, row.get("items")
-                ):
-                    if not _ownership_within_lookback(row, min_filing_date=item_502_min):
-                        skipped_item_502 += 1
-                        continue
-                bounded.append(row)
-            filings = bounded
-            if skipped_item_502:
-                _emit(
-                    "item_502_lookback_filtered",
-                    skipped_count=skipped_item_502,
-                    min_filing_date=item_502_min.isoformat(),
-                )
-            metrics["filings_scanned"] = len(filings)
-
-    if not release_mode and filings:
+    if filings:
         # duckdb-retirement-cutover Ticket 17: read via source (the real
         # Snowflake-backed reader in production), not db (local, unhydrated
         # write target) -- source is guaranteed non-None here since filings
@@ -252,10 +238,6 @@ def run_bootstrap_fundamentals_per_filing(
         try:
             parser = get_parser(form_type)
         except ValueError:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required candidate {accession_number} has no configured parser"
-                )
             metrics["filings_skipped"] += 1
             continue
 
@@ -266,10 +248,6 @@ def run_bootstrap_fundamentals_per_filing(
             )
             primary = next((r for r in attachments if r.get("is_primary")), None)
             if primary is None or not primary.get("raw_object_id"):
-                if release_mode:
-                    raise WarehouseRuntimeError(
-                        f"required candidate {accession_number} is missing its primary artifact"
-                    )
                 metrics["filings_skipped"] += 1
                 continue
             primary_content = _read_attachment_content(
@@ -286,12 +264,6 @@ def run_bootstrap_fundamentals_per_filing(
                 )
             )
         except Exception as exc:
-            if release_mode:
-                if isinstance(exc, WarehouseRuntimeError):
-                    raise
-                raise WarehouseRuntimeError(
-                    f"required candidate {accession_number} artifact read failed"
-                ) from exc
             _emit("fundamentals_artifact_error", accession=accession_number, error=str(exc))
             metrics["filings_skipped"] += 1
             continue
@@ -303,10 +275,6 @@ def run_bootstrap_fundamentals_per_filing(
             else:
                 parsed = parser(accession_number, primary_content, form_type, cik)
         except Exception as exc:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required candidate {accession_number} parse failed"
-                ) from exc
             _emit("fundamentals_parse_error", accession=accession_number,
                   form=form_type, error=str(exc))
             metrics["filings_skipped"] += 1
@@ -324,11 +292,6 @@ def run_bootstrap_fundamentals_per_filing(
         metrics["rows_guidance_fact_reject"] += db.merge_guidance_fact_rejects(
             parsed.get("sec_guidance_fact_reject", []), sync_run_id
         )
-        terminal_status = "not_applicable"
-        terminal_reason = "no_relationship_rows"
-        if parsed.get("sec_executive_record"):
-            terminal_status = "applicable_loaded"
-            terminal_reason = "executive_records_loaded"
         if form_type in ("8-K", "8-K/A") and (
             "5.02" in str(filing.get("items") or "") or not str(filing.get("items") or "").strip()
         ):
@@ -342,23 +305,6 @@ def run_bootstrap_fundamentals_per_filing(
                              else _date.fromisoformat(str(filing_date)[:10])),
                 content=primary_content,
             )
-            # Release-Owner-accepted Item 5.02 unresolved exception (see
-            # docs/release-readiness/required-relationship-bulk-load-completion-gate.md).
-            # An unresolved parse is recorded as the bounded "unresolved_accepted"
-            # terminal status instead of hard-failing the whole batch; the
-            # aggregate rate is enforced fail-closed at evidence time
-            # (build_required_relationship_bulk_load_evidence), where exceeding
-            # the accepted threshold still yields NO_GO. Only this specific
-            # parse-ambiguity path is accepted — artifact/manifest failures
-            # above still raise.
-            unresolved_item502 = release_mode and result.applicability == "unresolved"
-            if unresolved_item502:
-                metrics.setdefault("unresolved_item502", []).append(accession_number)
-                _emit(
-                    "item_502_unresolved_accepted",
-                    accession=accession_number,
-                    cik=int(cik),
-                )
             event_rows = [
                 {
                     "accession_number": event.accession_number,
@@ -377,21 +323,6 @@ def run_bootstrap_fundamentals_per_filing(
             metrics["rows_employment_event"] += db.merge_employment_events(
                 event_rows, sync_run_id
             )
-            if unresolved_item502:
-                terminal_status = "unresolved_accepted"
-                terminal_reason = "item_502_unresolved_ambiguous_verb"
-            elif event_rows:
-                terminal_status = "applicable_loaded"
-                terminal_reason = "employment_events_loaded"
-            else:
-                terminal_status = "not_applicable"
-                terminal_reason = f"item_502_{result.applicability}"
-        if release_mode:
-            metrics["candidate_outcomes"].append({
-                "accession_number": accession_number,
-                "status": terminal_status,
-                "reason": terminal_reason,
-            })
         # Ticket 02: marker write is strictly the last statement for this
         # accession -- every real output row above has already executed and
         # returned, so a crash before this line leaves no marker (safe,
@@ -563,8 +494,6 @@ def run_bootstrap_thirteenf(
     source,                 # SilverDatabase | None — Branch A metadata source
     db,                      # SilverDatabase instance — write target
     sync_run_id: str,
-    release_mode: bool = False,
-    candidate_accessions: set[str] | None = None,
 ) -> dict[str, Any]:
     """Parse 13F-HR INFORMATION TABLE XML attachments for the given CIKs.
 
@@ -587,12 +516,9 @@ def run_bootstrap_thirteenf(
         "filings_already_processed": 0,
         "rows_thirteenf_holding": 0,
         "rows_thirteenf_filing": 0,
-        "candidate_outcomes": [],
     }
 
     if source is None:
-        if release_mode:
-            raise WarehouseRuntimeError("release 13F source is unavailable")
         _emit("fundamentals_source_unavailable", cik_count=len(cik_list))
         return metrics
 
@@ -609,15 +535,7 @@ def run_bootstrap_thirteenf(
     )
     metrics["filings_scanned"] = len(filings)
 
-    if candidate_accessions is not None:
-        filings = [row for row in filings if row["accession_number"] in candidate_accessions]
-        observed = {row["accession_number"] for row in filings}
-        missing = sorted(candidate_accessions - observed)
-        if release_mode and missing:
-            raise WarehouseRuntimeError(f"required 13F candidates missing from filing manifest: {missing}")
-        metrics["filings_scanned"] = len(filings)
-
-    if not release_mode and filings:
+    if filings:
         # duckdb-retirement-cutover Ticket 17: read via source, not db --
         # see run_bootstrap_fundamentals_per_filing's identical comment.
         already_processed = _get_processed_accessions(
@@ -641,10 +559,6 @@ def run_bootstrap_thirteenf(
                 [accession_number],
             )
         except Exception:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} attachment lookup failed"
-                )
             metrics["filings_skipped"] += 1
             continue
 
@@ -658,19 +572,11 @@ def run_bootstrap_thirteenf(
                 break
 
         if infotable_attachment is None:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} is missing its information table"
-                )
             _emit("thirteenf_no_infotable", accession=accession_number, cik=cik)
             metrics["filings_skipped"] += 1
             continue
 
         if primary_attachment is None or not primary_attachment.get("raw_object_id"):
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} is missing its cover page"
-                )
             metrics["filings_skipped"] += 1
             continue
 
@@ -681,10 +587,6 @@ def run_bootstrap_thirteenf(
             )
             raw_object = raw_rows[0] if raw_rows else None
             if raw_object is None:
-                if release_mode:
-                    raise WarehouseRuntimeError(
-                        f"required 13F candidate {accession_number} information-table raw object is missing"
-                    )
                 metrics["filings_skipped"] += 1
                 continue
             infotable_xml = read_bytes(str(raw_object["storage_path"])).decode(
@@ -703,12 +605,6 @@ def run_bootstrap_thirteenf(
                 "utf-8", errors="replace"
             )
         except Exception as exc:
-            if release_mode:
-                if isinstance(exc, WarehouseRuntimeError):
-                    raise
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} artifact read failed"
-                ) from exc
             _emit("thirteenf_artifact_error", accession=accession_number,
                   cik=cik, error=str(exc))
             metrics["filings_skipped"] += 1
@@ -717,11 +613,7 @@ def run_bootstrap_thirteenf(
         from edgar_warehouse.parsers.thirteenf_cover import parse_thirteenf_cover
         try:
             cover = parse_thirteenf_cover(cover_xml)
-        except Exception as exc:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} cover parse failed"
-                ) from exc
+        except Exception:
             metrics["filings_skipped"] += 1
             continue
 
@@ -735,11 +627,6 @@ def run_bootstrap_thirteenf(
         if not period_of_report:
             period_of_report = cover.get("period_of_report")
         if not period_of_report:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} has no "
-                    "period_of_report in silver metadata or its cover page"
-                )
             _emit("thirteenf_missing_period", accession=accession_number, cik=cik)
             metrics["filings_skipped"] += 1
             continue
@@ -752,19 +639,10 @@ def run_bootstrap_thirteenf(
                 period_of_report=str(period_of_report),
             )
         except Exception as exc:
-            if release_mode:
-                raise WarehouseRuntimeError(
-                    f"required 13F candidate {accession_number} parse failed"
-                ) from exc
             _emit("thirteenf_parse_error", accession=accession_number,
                   cik=cik, error=str(exc))
             metrics["filings_skipped"] += 1
             continue
-
-        if release_mode and not parsed.get("sec_thirteenf_holding"):
-            raise WarehouseRuntimeError(
-                f"required 13F candidate {accession_number} produced zero holding rows"
-            )
 
         metrics["rows_thirteenf_filing"] += db.merge_thirteenf_filings([{
             "accession_number": accession_number,
@@ -780,12 +658,6 @@ def run_bootstrap_thirteenf(
         metrics["rows_thirteenf_holding"] += db.merge_thirteenf_holdings(
             parsed.get("sec_thirteenf_holding", []), sync_run_id
         )
-        if release_mode:
-            metrics["candidate_outcomes"].append({
-                "accession_number": accession_number,
-                "status": "applicable_loaded",
-                "reason": "effective_holdings_loaded",
-            })
         # Ticket 02: marker write is strictly the last statement for this
         # accession -- every real output write above has already executed
         # and returned, so a crash before this line leaves no marker (safe:

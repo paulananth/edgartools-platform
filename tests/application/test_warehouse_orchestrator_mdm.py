@@ -352,7 +352,7 @@ def test_publish_silver_database_with_retry_always_returns_none(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _is_transient_artifact_error — release-mode artifact retry classifier
+# _is_transient_artifact_error — artifact retry classifier
 # ---------------------------------------------------------------------------
 
 

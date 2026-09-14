@@ -13,7 +13,7 @@ see the map's Out of scope; it leaves with the engine), `application/commands/mi
 `silver_landing_historical_backfill.py` (with `silver_support/sharded_reader.py`, its last
 user after Ticket 08, plus that reader's tests in `test_sharding.py`, `test_fundamentals_modules.py`
 and `test_adv_preflight.py`'s fixture), `scripts/ops/*.py`'s three DuckDB diagnostics,
-`scripts/build_relationship_release_manifest.py`, then `duckdb>=1.0.0` itself and the warehouse
+`scripts/build_relationship_release_manifest.py` (already deleted by Ticket 11), then `duckdb>=1.0.0` itself and the warehouse
 deps image (`uv.lock` change → rebuild both deps images per CLAUDE.md's table).
 
 `LandingExportBuffer` + the `_record_landing_passthrough` defaults/stamps/NOT-NULL sets are the

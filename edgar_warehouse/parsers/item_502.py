@@ -48,8 +48,8 @@ Coverage evolution:
   references to prior filings ("as previously disclosed... had appointed"),
   bio-background prose, appositive names, and nominalized "approved the
   appointment of X" — those are suppression-shaped fixes (would turn
-  `unresolved` into `not_applicable`, which release_mode does not
-  re-check) and can silently drop a real event if the same filing also
+  `unresolved` into `not_applicable`, which nothing downstream
+  re-checks) and can silently drop a real event if the same filing also
   discloses one under a different construction (confirmed on a real
   accession); left as pending backlog rather than rushed.
 """

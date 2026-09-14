@@ -6,8 +6,7 @@ Fetch and ingest are deliberately separate steps (ticket 06, adv-pipeline
 map): this module only decides *what* to fetch and records *where it was
 staged*; edgar_warehouse.application.adv_bulk_ingest owns parsing and
 silver writes. The resulting manifest is the reviewable artifact connecting
-them, mirroring the existing mdm build-relationship-release-manifest
-precedent of treating a manifest as evidence rather than a throwaway.
+them, treating a manifest as evidence rather than a throwaway.
 """
 
 from __future__ import annotations

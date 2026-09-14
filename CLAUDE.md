@@ -2556,10 +2556,11 @@ consumer (that machine's `BatchSilver` Map); the other two `bootstrap-batch`
 callers inside `write_one_click_data_refresh_definition` received the env
 var but never read it (their `MaxConcurrency` was always hardcoded — 20 for
 the "first-load recovery" Map, 2 for the Ticket 20 strict candidate-manifest
-Map). With its one real consumer gone, the env var/CLI flag were removed
+Map, since deleted with release mode by silver-merge-engine-migration Ticket 11).
+With its one real consumer gone, the env var/CLI flag were removed
 entirely from `deploy-aws-application.sh`, not left as dead plumbing.
 
-Neither `one_click_data_refresh`'s two `bootstrap-batch` Maps nor
+Neither `one_click_data_refresh`'s `bootstrap-batch` Map(s) nor
 `load_history` (which runs `bootstrap-next`, a different command, per
 window at `MaxConcurrency=1`) were ever controlled by this env var — their
 `MaxConcurrency` values are unaffected by its removal. The old standalone
@@ -2572,13 +2573,13 @@ note above and state-machine-consolidation wayfinder map ticket 03).
 - `gold-refresh` must be in `SOURCE_EXPORT_COMMANDS` — it is the sole gold builder in the phased pipeline
 - `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
   `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
-- `one_click_data_refresh`'s two `bootstrap-batch` Maps must keep passing `--artifact-policy skip`
+- `one_click_data_refresh`'s `bootstrap-batch` Map must keep passing `--artifact-policy skip`
   where documented above — without it the pipeline makes thousands of SEC API calls (fetching
   ownership XMLs) even though the purpose of that path is to reprocess already-loaded bronze
   with zero SEC calls. 5-why root cause: the artifact pipeline is a separate SEC fetch pass;
   "no SEC calls" must be encoded as a flag, not assumed from the pipeline name.
 - **Do not manually kick off `one_click_data_refresh`'s default path
-  (`{"batch_size": 100, "release_mode": false}`) while `daily_incremental` is
+  (`{"batch_size": 100}`) while `daily_incremental` is
   running.** Confirmed live 2026-09-06: a manual run
   (`one-click-data-refresh-verify-1788697757`, 08:29-10:41 ET) overlapped
   almost exactly with that day's scheduled `daily_incremental` run

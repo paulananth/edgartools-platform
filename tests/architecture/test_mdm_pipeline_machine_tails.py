@@ -107,25 +107,3 @@ def test_one_click_data_refresh_default_tail_ordering(one_click_data_refresh: di
     assert s["Reconcile"].get("Catch") == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Publish Business Data"}]
 
 
-def test_one_click_data_refresh_strict_branch_untouched(one_click_data_refresh: dict) -> None:
-    # The Ticket-20 "strict" release-mode branch is a completely separate
-    # 6-state graph with no equivalent elsewhere -- it must survive the
-    # wire_mdm_tail refactor of the *default* tail exactly as before, with
-    # its own independent Export->Sync->SyncIdempotency->VerifyCandidate->
-    # Verify->"Strict Publish Business Data" chain still wired by hand
-    # (nothing to deduplicate, since it has no sibling).
-    s = one_click_data_refresh["States"]
-    for name in (
-        "StrictPublish", "Strict Publish Relationships", "Strict Publish Relationships Idempotency",
-        "Strict Reconcile Candidate", "StrictReconcile", "Strict Publish Business Data",
-    ):
-        assert name in s, f"missing strict-mode state: {name}"
-    assert s["StrictPublish"]["Next"] == "Strict Publish Relationships"
-    assert s["StrictReconcile"]["Next"] == "Strict Publish Business Data"
-    assert s["Strict Publish Business Data"]["End"] is True
-
-
-def test_no_shared_state_names_between_default_and_strict_paths(one_click_data_refresh: dict) -> None:
-    s = one_click_data_refresh["States"]
-    assert "Publish" in s and "StrictPublish" in s
-    assert s["Publish"] != s["StrictPublish"]

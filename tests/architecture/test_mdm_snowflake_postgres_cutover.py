@@ -66,7 +66,7 @@ def test_deploy_script_bucket_discovery_does_not_capture_head_bucket_output() ->
 def test_bronze_seed_state_machine_defaults_and_stringifies_batch_size() -> None:
     text = _read(DEPLOY_SCRIPT)
 
-    assert '"StartAt": "ReleaseModeCheck"' in text
+    assert '"StartAt": "ResumeFromRunIdPresenceCheck"' in text
     assert '"Default": "BatchSizeCheck"' in text
     assert '"BatchSizeDefault": batch_size_default' in text
     assert '"ResultPath": "$.batch_size"' in text
@@ -114,7 +114,7 @@ def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
     """pipeline-resumability ticket 02: automatic resume for Clean and Merge Filings + Mastering."""
     text = _read(DEPLOY_SCRIPT)
 
-    assert '"Default": "ResumeFromRunIdPresenceCheck"' in text
+    assert '"StartAt": "ResumeFromRunIdPresenceCheck"' in text
     assert '"ResumeFromRunIdPresenceCheck": resume_from_run_id_presence_check' in text
     assert '"ResumeFromRunIdDefault": resume_from_run_id_default' in text
     assert '"ResumeFromRunIdCheck": resume_from_run_id_check' in text
@@ -130,23 +130,6 @@ def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
         "'--run-id', $$.Execution.Name, "
         "'--resume-ledger-run-id', $.resume_from_run_id)"
     ) in text
-
-
-def test_bronze_seed_exposes_fail_closed_ticket20_release_path() -> None:
-    text = _read(DEPLOY_SCRIPT)
-
-    assert '"StartAt": "ReleaseModeCheck"' in text
-    assert '"Strict Clean and Merge Filings": strict_batch_map' in text
-    assert '"MaxConcurrency": 2' in text
-    assert "'--release-mode', '--candidate-manifest'" in text
-    assert "'reconcile-relationship-release'" in text
-    assert "'--insider-coverage'" in text
-    assert "'verify-insider-coverage'" in text
-    assert "'--attestations-json'" in text
-    assert "States.JsonToString($.attestations)" in text
-    assert '"StrictReconcile": strict_mdm_verify' in text
-    assert '"StrictInsiderCoverage": strict_insider_coverage' in text
-    assert 'strict_mdm_verify["Catch"]' not in text
 
 
 def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tasks() -> None:

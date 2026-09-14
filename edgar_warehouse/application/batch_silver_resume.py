@@ -2,12 +2,9 @@
 Filings" (formerly BatchSilver) batches.
 
 Reuses relationship_bulk_load.py's content-derived batch identity and
-low-level marker path/listing helpers (release_mode-agnostic), but writes a
-distinct, weaker-guarantee marker than the strict/release_mode path's: this
-one records only "bootstrap-batch completed for this CIK set," not strict
-mode's reconciled-terminal-outcomes guarantee (inventory_fingerprint,
-ledger_fingerprint, terminal_counts). The two marker shapes intentionally do
-not share a schema_version namespace -- see build_default_batch_done_marker.
+remaining-batch helpers. The marker records only "bootstrap-batch completed
+for this CIK set". (The strict release path's reconciled-terminal-outcomes
+marker was deleted with release mode, silver-merge-engine-migration Ticket 11.)
 
 pipeline-resumability ticket 02 (.scratch/pipeline-resumability/issues/
 02-design-resume-from-stage-mechanism.md) is the design record this module
@@ -78,7 +75,7 @@ def build_default_batch_done_marker(
     resume_ledger_run_id: str,
     completed_at: str,
 ) -> dict[str, Any]:
-    """Weaker-guarantee done marker for the default (non-release_mode) path."""
+    """Done marker for a completed default-path Clean and Merge Filings batch."""
     cik_values = sorted(int(cik) for cik in ciks)
     if not cik_values:
         raise InventoryError("default batch done marker requires a non-empty CIK list")
