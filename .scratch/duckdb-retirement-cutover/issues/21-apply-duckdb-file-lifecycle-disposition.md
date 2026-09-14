@@ -13,13 +13,14 @@ needs both the DuckDB side of that comparison and the live 1.79GB canonical obje
 still exist. Applying disposition before Ticket 19 resolves would remove the evidence
 needed to close it.
 
-**Blocked by:** [Ticket 19](19-sec-company-ticker-cross-store-divergence.md), and
-requires explicit operator go-ahead separately (destructive action on shared prod
-infrastructure, not something to execute on an inferred approval).
+**Blocked by:** nothing since 2026-09-14 ([Ticket 19](19-sec-company-ticker-cross-store-divergence.md)
+closed as explained, its evidence recorded in the ticket, so the DuckDB file is no longer needed
+to close it). Still requires explicit operator go-ahead separately (destructive action on shared
+prod infrastructure, not something to execute on an inferred approval).
 
 **Status:** open
 
-- [ ] Ticket 19 resolved
+- [x] Ticket 19 resolved (closed 2026-09-14 as explained)
 - [ ] Explicit operator go-ahead obtained for this specific disposition action
 - [ ] Bounded retention + archive/delete applied to the canonical `silver.duckdb`/shard S3
       objects, following the `expire-noncurrent-silver-canonical-versions` precedent

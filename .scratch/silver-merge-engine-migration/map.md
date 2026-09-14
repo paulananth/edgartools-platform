@@ -73,6 +73,7 @@ except where a table's specifics genuinely need a fresh design pass.
 - [Delete `ShardedSilverReader` and `verify-resolver-input-parity`](issues/08-delete-sharded-reader-and-parity-tooling.md) — resolved in code 2026-09-14 with a corrected scope. Both `mdm verify-*-parity` commands, `mdm/silver_parity.py`, the DuckDB-reader helpers and the shard-hydrate helpers are deleted; cutover Tickets 19/21 rely on `table-reconcile`, not this tooling. `ShardedSilverReader` stays: `backfill-silver-landing-historical` still reads through it, and both go in Ticket 09.
 - [Restore targeted-resync accession scope](issues/10-restore-targeted-resync-accession-scope.md) — resolved in code 2026-09-14. Confirmed broken by a local repro (no live run, user decision): `get_filing` only sees same-run rows. Fixed by reading every (accession, cik) row from `EDGARTOOLS_SILVER.sec_company_filing` and recording it before the unchanged resync steps; fails closed, pointing at cik scope, when silver has no row. Not yet run live.
 - [Restore release-mode Branch B same-run reads](issues/11-restore-release-mode-branch-b-same-run-reads.md) — resolved in code 2026-09-14 by retiring release mode (user decision): the strict path of `one_click_data_refresh`, `reconcile-relationship-release`, every `--release-mode` path and the release-only helpers and scripts are deleted. It last ran 2026-07-25 and was broken at both ends (manifest freeze read the retired DuckDB file; Branch B raw SQL found nothing after 06d). Recurring mode keeps the shared retry and fail-closed logic. Takes effect on the next deploy.
+- [`sec_company_ticker`'s DuckDB and Snowflake copies disagree](../duckdb-retirement-cutover/issues/19-sec-company-ticker-cross-store-divergence.md) (duckdb-retirement-cutover Ticket 19, blocks Ticket 21 and so Ticket 09) — closed 2026-09-14 as explained (operator decision). Snowflake is right: the old canonical DuckDB file kept 512 tickers SEC had dropped, because the publish merge never deleted canonical-only rows; the orphan count is the catalog-vs-captured-companies contract, not missing data. `contracts.py` left unchanged. Ticket 21 is unblocked but still needs its own go-ahead.
 
 ## Not yet specified
 
@@ -96,6 +97,14 @@ except where a table's specifics genuinely need a fresh design pass.
 - Live verification of Tickets 02/03: a prod entity-facts run after deploy showing
   `SEC_FINANCIAL_FACT`/`SEC_FINANCIAL_DERIVED`/`SEC_ACCOUNTING_FLAG` landing rows (scores
   populated) — the "done" bar both tickets still owe.
+- Silver-landing timestamps load 7–8 hours late, found 2026-09-14 by Ticket 19:
+  [duckdb-retirement-cutover Ticket 22](../duckdb-retirement-cutover/issues/22-silver-landing-timestamps-shifted-by-account-timezone.md).
+  Platform-wide (every `TIMESTAMP_TZ` in `EDGARTOOLS_SILVER_LANDING`, and `EDGARTOOLS_SOURCE` too),
+  not DuckDB-specific; filed there only because Ticket 19 found it. Diagnosed 2026-09-14 (COPY
+  INTO labels Parquet UTC times with the session zone); fix for new loads implemented, not
+  deployed. Correcting loaded rows needs operator go-ahead. Follow-up:
+  [Ticket 23](../duckdb-retirement-cutover/issues/23-consolidate-snowflake-run-manifest-task-definitions.md)
+  (the manifest task's three definitions).
 
 ## Out of scope
 

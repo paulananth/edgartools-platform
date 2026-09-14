@@ -727,6 +727,15 @@ resource "snowflake_task" "manifest_processor" {
   sql_statement = "CALL ${local.gold_schema_fqn}.${var.stream_processor_procedure_name}()"
   comment       = "Triggered task that processes EdgarTools manifest stream rows."
 
+  # duckdb-retirement-cutover Ticket 22: the load procedures this task calls
+  # COPY Parquet with USE_LOGICAL_TYPE = false, which labels UTC timestamps
+  # with the session TIMEZONE (account default America/Los_Angeles, 7-8 hours
+  # late). Owner's-rights procedures use the caller's TIMEZONE, so the task's
+  # session is pinned. This task is also created by deploy-snowflake-stack.sh
+  # and 04_refresh_wrapper.sql; all three must keep TIMEZONE = UTC
+  # (tests/unit/test_loader_task_timezone_sql.py).
+  timezone = "UTC"
+
   # Standalone task (no predecessor DAG) -- Snowflake requires an explicit
   # schedule to resume/start one. This was previously unset here and only
   # existed as out-of-band drift (`ALTER TASK ... SET SCHEDULE`) on the live
