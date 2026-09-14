@@ -22,8 +22,7 @@ class _FakeDb:
 
     def fetch(self, query: str, params=None):
         self.last_query = " ".join(query.split())
-        key = "parse_run" if "sec_parse_run" in query else "owners" if "sec_ownership" in query else "facts"
-        return list(self.rows_by_query.get(key, []))
+        return list(self.rows_by_query.get("facts", []))
 
     def get_daily_index_checkpoint(self, business_date: str):
         return self.daily
@@ -46,24 +45,9 @@ class _FakeBookkeeping:
 
 class SilverOnceTests(unittest.TestCase):
     def test_ownership_parse_run_hit(self) -> None:
-        db = _FakeDb({"parse_run": [{"ok": 1}]})
         bookkeeping = _FakeBookkeeping(has_parse_run=True)
         self.assertTrue(
             has_successful_ownership_parse(
-                db,
-                bookkeeping,
-                accession_number="0001",
-                parser_name=PARSER_NAME,
-                parser_version=PARSER_VERSION,
-            )
-        )
-
-    def test_ownership_fallback_to_owner_rows(self) -> None:
-        db = _FakeDb({"parse_run": [], "owners": [{"ok": 1}]})
-        bookkeeping = _FakeBookkeeping(has_parse_run=False)
-        self.assertTrue(
-            has_successful_ownership_parse(
-                db,
                 bookkeeping,
                 accession_number="0001",
                 parser_name=PARSER_NAME,
@@ -72,13 +56,23 @@ class SilverOnceTests(unittest.TestCase):
         )
 
     def test_ownership_miss(self) -> None:
-        db = _FakeDb({})
+        """Without a succeeded sec_parse_run there is no skip."""
         bookkeeping = _FakeBookkeeping(has_parse_run=False)
         self.assertFalse(
             has_successful_ownership_parse(
-                db,
                 bookkeeping,
                 accession_number="0001",
+                parser_name=PARSER_NAME,
+                parser_version=PARSER_VERSION,
+            )
+        )
+
+    def test_ownership_blank_accession_never_skips(self) -> None:
+        bookkeeping = _FakeBookkeeping(has_parse_run=True)
+        self.assertFalse(
+            has_successful_ownership_parse(
+                bookkeeping,
+                accession_number="  ",
                 parser_name=PARSER_NAME,
                 parser_version=PARSER_VERSION,
             )

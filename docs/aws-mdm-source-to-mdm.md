@@ -94,8 +94,9 @@ the gap and skips that filing — it does not re-fetch from SEC. Absent bronze p
 the bronze capture phase was incomplete; re-running bronze capture is outside Phase 5 scope
 unless explicitly requested.
 
-The command is idempotent: accessions already present in `sec_ownership_reporting_owner` are
-skipped on repeat runs.
+The command skips an accession it already parsed earlier in the same run, but has no cross-run
+skip: `sec_ownership_reporting_owner` is landing-only, so a repeat run re-parses every accession.
+The dbt silver model collapses the repeated rows on `(accession_number, owner_index)`.
 
 ---
 

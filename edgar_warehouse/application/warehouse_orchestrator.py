@@ -3818,7 +3818,6 @@ def _run_configured_form_artifact_pipeline(
                     )
 
                     if has_successful_ownership_parse(
-                        db,
                         bookkeeping,
                         accession_number=accession_number,
                         parser_name=parser_name,
@@ -4666,7 +4665,8 @@ def _run_parse_ownership_bronze(
 
     Reads primary XML through the artifact registry (sec_filing_attachment +
     sec_raw_object + read_bytes) — no S3 prefix listing, no SEC API calls.
-    Idempotent: skips accessions already present in sec_ownership_reporting_owner.
+    Skips an accession already parsed earlier in this run; there is no
+    cross-run skip (the ownership tables are landing-only).
     Default lookback is past 2 years of Form 3/4/5 filings (filing_date).
 
     Args:
@@ -4705,6 +4705,10 @@ def _run_parse_ownership_bronze(
     ]
     lookback_skipped = pre_lookback - len(filings)
 
+    # Always empty in production: local DuckDB is never hydrated, and the
+    # ownership trio is landing-only (silver-merge-engine-migration Ticket
+    # 06c), so this command has no cross-run skip. The in-run set is kept
+    # below via already_parsed.add.
     already_parsed: set[str] = {
         row["accession_number"]
         for row in db.fetch("SELECT DISTINCT accession_number FROM sec_ownership_reporting_owner")

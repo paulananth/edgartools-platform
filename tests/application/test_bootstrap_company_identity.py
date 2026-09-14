@@ -96,15 +96,11 @@ def test_company_identity_mode_stages_company_and_ticker_only(
         )
         assert any(row["ticker"] == "AAPL" for row in ticker_rows)
 
-        # Zero ownership/ADV artifacts touched -- the whole point of this mode.
-        ownership_rows = db.fetch(
-            "SELECT * FROM sec_ownership_reporting_owner WHERE 1=1"
-        )
-        assert ownership_rows == []
-        # sec_adv_filing and sec_thirteenf_holding are landing-only
-        # (silver-merge-engine-migration Tickets 05/06a): an empty local
-        # DuckDB table no longer proves they were untouched, so they are not
-        # asserted here.
+        # Zero ownership/ADV artifacts touched is the whole point of this mode,
+        # but the ownership trio, sec_adv_filing and sec_thirteenf_holding are
+        # landing-only (silver-merge-engine-migration Tickets 05/06a/06c): an
+        # empty local DuckDB table no longer proves they were untouched, so
+        # the landing export is checked below instead.
     finally:
         db.close()
 
@@ -119,6 +115,12 @@ def test_company_identity_mode_stages_company_and_ticker_only(
     assert [(row["cik"], row["entity_name"], row["sic"]) for row in company_rows] == [
         (CIK, "APPLE INC", "3571")
     ]
+    untouched_tables = ("/sec_ownership_", "/sec_adv_", "/sec_thirteenf_")
+    assert not [
+        path
+        for path in landing_root.rglob("*.parquet")
+        if any(table in path.as_posix() for table in untouched_tables)
+    ], "company-identity mode must not land any ownership, ADV or 13F rows"
 
 
 def test_company_identity_mode_rejects_release_mode() -> None:

@@ -219,3 +219,58 @@ Resolved 2026-09-13 in code; live verification still owed.
 **Still owed:** a live `daily_incremental` run showing `SEC_COMPANY`/`SEC_COMPANY_ADDRESS`/
 `SEC_COMPANY_FORMER_NAME`/`SEC_COMPANY_SUBMISSION_FILE` landing rows with `last_sync_run_id`
 populated.
+
+## 06c Answer
+
+Resolved 2026-09-13 in code; live verification still owed.
+
+- `merge_ownership_reporting_owners`, `merge_ownership_non_derivative_txns` and
+  `merge_ownership_derivative_txns` call `_record_landing_passthrough` with
+  `_sync_run_stamp(sync_run_id)` and no defaults. The old `values_fn`s read only the key
+  columns as `row["..."]` (`accession_number`, `owner_index`, `txn_index`), which are the
+  primary-key columns the passthrough's NOT NULL check requires; every other column was
+  `row.get(...)` with no default. So parity is exact: a missing key still raises, an absent
+  nullable column still lands as NULL.
+- **Duplicates within one call cannot happen:** `parsers/ownership.py` assigns `owner_index`
+  and `txn_index` with `enumerate` per accession, so the dbt collapse's unordered
+  within-load tiebreak never has two rows to pick between.
+- **The open question — `has_successful_ownership_parse`'s fallback — is deleted, not moved.**
+  The fallback read local `sec_ownership_reporting_owner` for "silver populated before
+  parse_run was consistently written". That is a cross-run concern, and the primary check
+  already answers it on durable state: `sec_parse_run` lives in the bookkeeping Postgres
+  store and is committed after publish. The fallback was redundant by construction; after
+  this ticket the local table is always empty anyway. Same-run is also covered: `_run_parse_pipeline`
+  stages its parse run with `start_parse_run` (`session.add`) and the bookkeeping session
+  autoflushes, so a later check in the same run sees it. The function no longer takes `db`.
+  Moving the fallback to the Snowflake reader was rejected: it would add one Snowflake query
+  per candidate accession and would restore skips that do not happen today.
+- **One direction of behaviour change, noted:** an accession whose ownership rows landed but
+  whose ADV merges in the same `_run_parse_pipeline` call then raised has its parse run marked
+  `failed`. Before, a later run's fallback could have skipped it (only if the local rows were
+  visible, which they no longer were); now it is re-parsed. Strictly the safer direction.
+- **Pre-existing, not introduced:** `parse-ownership-bronze`'s `already_parsed` read has been
+  permanently empty since local DuckDB stopped being hydrated, so that command has no
+  cross-run skip. Its CLI help text claimed it did; corrected. Same shape as 06a's ADV note.
+- **Reader inventory:** MDM (`pipeline.py`, `coverage.py`, `mdm_entity_backfill.py`,
+  `relationship_bulk_load.insider_inventory` via MDM) reads on the Snowflake reader. The trio is
+  also referenced by `validate_data_quality.py` (hydrated canonical copy),
+  `table_reconciliation/contracts.py` and `case_coverage.py`, `migrate_silver_shards.py`,
+  `sharded_reader.py` and `mdm/silver_parity.py` — none reads rows written earlier in the same
+  run, so none is a blocker (the same correction 06a's Answer made).
+- **Pre-existing, not introduced:** the same accession parsed twice in one load (`--force`, or
+  `parse-ownership-bronze` and the artifact pipeline both landing it) gives the dbt collapse two
+  rows with the same `parse_sequence` and no ordered tiebreak. `@track_landing_rows` had the
+  same shape; both copies come from the same parser version and bronze bytes.
+- `tests/application/test_parse_ownership_bronze.py` still exercises the `already_parsed` skip
+  through a fake db that returns owner rows; that skip only fires within a run now.
+- Tests: `test_ownership_landing_passthrough.py` (landing-only + stamp override, empty input,
+  key columns raising, absent nullable columns not filled, no per-row DuckDB I/O; red first,
+  then green). `test_silver_once.py`: `test_ownership_fallback_to_owner_rows` deleted — it
+  covered the removed behaviour — while `test_ownership_parse_run_hit` still covers the
+  surviving skip path, and a blank-accession case was added. The company-identity test's
+  "no ownership rows" assertion on local DuckDB would have passed vacuously; it now asserts
+  no ownership, ADV or 13F landing Parquet was written.
+
+**Still owed:** a live `daily_incremental` run showing `SEC_OWNERSHIP_REPORTING_OWNER`/
+`SEC_OWNERSHIP_NON_DERIVATIVE_TXN`/`SEC_OWNERSHIP_DERIVATIVE_TXN` landing rows with
+`last_sync_run_id` populated.

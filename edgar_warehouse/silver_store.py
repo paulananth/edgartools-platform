@@ -2030,135 +2030,19 @@ class SilverDatabase:
     # ownership and ADV parser tables
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_ownership_reporting_owner")
     def merge_ownership_reporting_owners(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_ownership_reporting_owner
-                (accession_number, owner_index, owner_cik, owner_name, is_director,
-                 is_officer, is_ten_percent_owner, is_other, officer_title,
-                 parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, owner_index) DO UPDATE SET
-                owner_cik = excluded.owner_cik,
-                owner_name = excluded.owner_name,
-                is_director = excluded.is_director,
-                is_officer = excluded.is_officer,
-                is_ten_percent_owner = excluded.is_ten_percent_owner,
-                is_other = excluded.is_other,
-                officer_title = excluded.officer_title,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows,
-            lambda row: [
-                row["accession_number"],
-                row["owner_index"],
-                row.get("owner_cik"),
-                row.get("owner_name"),
-                row.get("is_director"),
-                row.get("is_officer"),
-                row.get("is_ten_percent_owner"),
-                row.get("is_other"),
-                row.get("officer_title"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_ownership_reporting_owner", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
-    @track_landing_rows("sec_ownership_non_derivative_txn")
     def merge_ownership_non_derivative_txns(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_ownership_non_derivative_txn
-                (accession_number, owner_index, txn_index, security_title, transaction_date,
-                 transaction_code, transaction_shares, transaction_price, acquired_disposed_code,
-                 shares_owned_after, ownership_nature, ownership_direct_indirect,
-                 parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, owner_index, txn_index) DO UPDATE SET
-                security_title = excluded.security_title,
-                transaction_date = excluded.transaction_date,
-                transaction_code = excluded.transaction_code,
-                transaction_shares = excluded.transaction_shares,
-                transaction_price = excluded.transaction_price,
-                acquired_disposed_code = excluded.acquired_disposed_code,
-                shares_owned_after = excluded.shares_owned_after,
-                ownership_nature = excluded.ownership_nature,
-                ownership_direct_indirect = excluded.ownership_direct_indirect,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows,
-            lambda row: [
-                row["accession_number"],
-                row["owner_index"],
-                row["txn_index"],
-                row.get("security_title"),
-                row.get("transaction_date"),
-                row.get("transaction_code"),
-                row.get("transaction_shares"),
-                row.get("transaction_price"),
-                row.get("acquired_disposed_code"),
-                row.get("shares_owned_after"),
-                row.get("ownership_nature"),
-                row.get("ownership_direct_indirect"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_ownership_non_derivative_txn", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
-    @track_landing_rows("sec_ownership_derivative_txn")
     def merge_ownership_derivative_txns(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        return self._merge_rows(
-            """
-            INSERT INTO sec_ownership_derivative_txn
-                (accession_number, owner_index, txn_index, security_title, transaction_date,
-                 transaction_code, transaction_shares, transaction_price, acquired_disposed_code,
-                 shares_owned_after, ownership_nature, ownership_direct_indirect,
-                 conversion_or_exercise_price, exercise_date, expiration_date,
-                 underlying_security_title, underlying_security_shares, parser_version, last_sync_run_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, owner_index, txn_index) DO UPDATE SET
-                security_title = excluded.security_title,
-                transaction_date = excluded.transaction_date,
-                transaction_code = excluded.transaction_code,
-                transaction_shares = excluded.transaction_shares,
-                transaction_price = excluded.transaction_price,
-                acquired_disposed_code = excluded.acquired_disposed_code,
-                shares_owned_after = excluded.shares_owned_after,
-                ownership_nature = excluded.ownership_nature,
-                ownership_direct_indirect = excluded.ownership_direct_indirect,
-                conversion_or_exercise_price = excluded.conversion_or_exercise_price,
-                exercise_date = excluded.exercise_date,
-                expiration_date = excluded.expiration_date,
-                underlying_security_title = excluded.underlying_security_title,
-                underlying_security_shares = excluded.underlying_security_shares,
-                parser_version = excluded.parser_version,
-                last_sync_run_id = excluded.last_sync_run_id
-            """,
-            rows,
-            lambda row: [
-                row["accession_number"],
-                row["owner_index"],
-                row["txn_index"],
-                row.get("security_title"),
-                row.get("transaction_date"),
-                row.get("transaction_code"),
-                row.get("transaction_shares"),
-                row.get("transaction_price"),
-                row.get("acquired_disposed_code"),
-                row.get("shares_owned_after"),
-                row.get("ownership_nature"),
-                row.get("ownership_direct_indirect"),
-                row.get("conversion_or_exercise_price"),
-                row.get("exercise_date"),
-                row.get("expiration_date"),
-                row.get("underlying_security_title"),
-                row.get("underlying_security_shares"),
-                row.get("parser_version"),
-                sync_run_id,
-            ],
+        return self._record_landing_passthrough(
+            "sec_ownership_derivative_txn", rows, defaults={}, stamp=self._sync_run_stamp(sync_run_id)
         )
 
     def merge_adv_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
@@ -2585,8 +2469,8 @@ class SilverDatabase:
         explicit None. `stamp` adds write-time columns the landing schema
         carries but the caller doesn't supply (facts/flags: `ingested_at` +
         the Ticket 33 validity trio; per-filing and 13F tables:
-        `ingested_at`; company submission, ADV and relationship-source
-        evidence tables and the current filing feed: `last_sync_run_id`,
+        `ingested_at`; company submission, ownership, ADV and relationship-
+        source evidence tables and the current filing feed: `last_sync_run_id`,
         plus `last_synced_at` where the table has it;
         derived: nothing, its landing rows are recorded as given). A
         `values_fn` coercion that replaced a present value -- `bool(...)`,
@@ -2648,8 +2532,8 @@ class SilverDatabase:
     @staticmethod
     def _sync_run_stamp(sync_run_id: str) -> dict[str, Any]:
         """`last_sync_run_id` for tables that record which sync run last
-        wrote a row (company submission, ADV and relationship-source evidence
-        tables, the current filing feed). The old `values_fn`s always wrote the call's `sync_run_id`,
+        wrote a row (company submission, ownership, ADV and relationship-source
+        evidence tables, the current filing feed). The old `values_fn`s always wrote the call's `sync_run_id`,
         whatever the row said, so this overrides a row-supplied value."""
         return {"last_sync_run_id": sync_run_id}
 
