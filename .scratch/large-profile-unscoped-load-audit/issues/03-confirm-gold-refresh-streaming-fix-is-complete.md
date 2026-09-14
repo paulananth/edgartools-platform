@@ -103,6 +103,11 @@ No evidence found that it's about to be scheduled/automated. Decision: (a)
 leave it as-is — an operator-invoked, not scheduled, risk; no code change,
 no fog entry needed.
 
+**Later (2026-09-14):** silver-merge-engine-migration Ticket 07 deleted
+`validate-data-quality`. This decision covered only the memory risk. The
+`build_source_export(db)` call it examined was already gone (PR #550), and
+the command's checks read a frozen copy of the retired canonical DuckDB.
+
 **`serving_publish.py`'s dead wrapper — confirmed dead, deleted.**
 Repo-wide search for the module name and each of its 7 individual function
 names (`build_source_export`, `build_ticker_reference_table`,

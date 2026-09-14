@@ -392,7 +392,6 @@ class WarehousePathResolver:
             }
         if command_name in (
             "verify-pipeline-run",
-            "validate-data-quality",
             "acquire-identity-refresh-lease",
             "release-identity-refresh-lease",
             "acquire-sec-fetch-lease",

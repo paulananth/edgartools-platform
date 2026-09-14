@@ -771,8 +771,7 @@ class FundamentalsGoldBuilderTests(unittest.TestCase):
     # test_build_source_export_registers_fundamentals_builders removed: these
     # 6 builders' dbt gold models now ref() silver directly, so
     # build_source_export()/iter_source_export_tables() no longer register
-    # them at all. See test_validate_data_quality.py for the equivalent
-    # live-Snowflake gold-vs-silver check that replaced it.
+    # them at all.
 
 class FundamentalsSnowflakeExportTests(unittest.TestCase):
     """PR-2 invariants — Snowflake export wiring for the 6 fundamentals tables."""
