@@ -5,12 +5,12 @@ mirroring ``company_facts_silver_acceptance.py``'s shape but per-source-name
 rather than per-CIK: one producer (``sec_company_ticker``) per catalog
 snapshot, scoped to that snapshot's own ``source_name``.
 
-Retirement: reuses ``SilverDatabase.replace_company_tickers`` exactly as the
-legacy ``_sync_reference_data`` path already does -- a per-``source_name``
-delete-then-insert against the *local candidate* Silver database. This is
-pre-existing legacy behavior on a method reused unmodified (same posture as
-Ticket 22 reusing ``merge_financial_facts`` unmodified); this module does not
-introduce a new deletion mechanism, it only gates the existing one behind
+Writes reuse ``SilverDatabase.replace_company_tickers`` exactly as the legacy
+``_sync_reference_data`` path does. Since silver-merge-engine-migration
+Ticket 06e that writer is landing-only: it records the snapshot's members
+for the Snowflake landing zone and deletes nothing locally. A ticker that
+drops out of a fresh snapshot is retired only by the Silver Landing
+Retirement Records ``_record_landing_retirements`` writes, gated behind
 CAPTURED-and-complete (bullet 3: "partial, unavailable, or malformed catalogs
 cannot ... retire prior authoritative members"). Nothing reaches Silver
 unless the candidate is CAPTURED with a complete payload
@@ -18,24 +18,12 @@ unless the candidate is CAPTURED with a complete payload
 ``ContentImpact`` is unchanged seals with empty expected producers, touching
 nothing -- same pattern as Tickets 21/22's analogous bullet.
 
-Known, pre-existing gap this module does NOT fix (confirmed live against
-``silver_protection.py``'s own docstring, not assumed): ``merge_candidate_
-into_canonical`` "never deletes a row that exists only in canonical (a
-partial candidate is expected and must not regress coverage)". So while this
-module's local candidate write correctly retires a ticker that has dropped
-out of a fresh snapshot (the ``DELETE FROM sec_company_ticker WHERE
-source_name = ?`` inside ``replace_company_tickers``), that retirement does
-NOT propagate to canonical once the candidate is merged -- a stale ticker
-mapping removed from the source can persist in canonical indefinitely. This
-is the same, already-known gap Ticket 02's table-change-semantics inventory
-already recorded ("Local replacement deletes for ticker catalogs ... are not
-exported"), now confirmed to also apply at the DuckDB candidate-to-canonical
-merge layer, not just the Snowflake-landing-export layer this ticket doesn't
-touch. Fixing ``merge_candidate_into_canonical``'s conservative "never
-shrinks a scope" policy is a real design change (it exists specifically to
-protect a windowed CIK-slice candidate from looking like "the whole table
-shrank") and is out of this ticket's scope -- flagged here, not silently
-carried forward as an assumption.
+Known gap, left as it is by Ticket 06e: the earlier membership that
+retirement compares against is read from the local Silver database, which
+starts empty on every run and no writer fills any more, so no retirement is
+found. This driver is not wired into any state machine; the earlier list
+must come from Snowflake silver when the change-propagation map wires it
+(silver-merge-engine-migration map, "Not yet specified").
 
 ``seed_company_sync_state_bulk`` (the legacy path's CIK-universe-seeding side
 effect, `` _sync_reference_data``) is deliberately NOT reproduced here: it is
@@ -218,10 +206,9 @@ def _finalize_reference_catalog_candidate(
 
     parsed_rows = _parse_company_ticker_rows(document)
     # replace_company_tickers itself skips any row with a missing cik or a
-    # falsy ticker (silver_store.py's `if cik is None or not ticker: continue`)
-    # -- filtered here too, upfront, so member_keys/scope_reference/the
-    # written-set verification below all agree with what actually lands in
-    # Silver. Standards review caught this: _parse_company_ticker_rows's
+    # falsy ticker -- filtered here too, upfront, so member_keys/
+    # scope_reference/the recorded-count verification below all agree with
+    # what actually lands in Silver. Standards review caught this: _parse_company_ticker_rows's
     # numbered-dict branch (company_tickers.json's shape) only guards a
     # missing cik, not an empty ticker string, so an unfiltered `rows` could
     # count a row the writer silently drops -- producing a false FAILED
@@ -276,7 +263,7 @@ def _finalize_reference_catalog_candidate(
     if REFERENCE_CATALOG_PRODUCER_NAME not in pending_producer_names:
         return decision
 
-    silver.replace_company_tickers(
+    recorded_count = silver.replace_company_tickers(
         rows,
         decision_id,
         source_name=source_name,
@@ -288,22 +275,14 @@ def _finalize_reference_catalog_candidate(
         source_name=source_name,
         cause_reference=cause_reference,
     )
-    written_pairs = {(row["cik"], row["ticker"]) for row in rows}
-    if written_pairs:
-        present = silver.fetch(
-            "SELECT cik, ticker FROM sec_company_ticker WHERE source_name = ?",
-            [source_name],
-        )
-        verified = {(r["cik"], r["ticker"]) for r in present} == written_pairs
-    else:
-        # Complete-empty scope: a valid catalog snapshot can legitimately
-        # carry zero members (bullet 2). Zero written, zero expected, so this
-        # settles VERIFIED trivially -- not a failure.
-        present = silver.fetch(
-            "SELECT cik, ticker FROM sec_company_ticker WHERE source_name = ?",
-            [source_name],
-        )
-        verified = len(present) == 0
+    # sec_company_ticker is landing-only (silver-merge-engine-migration Ticket
+    # 06e): there is no local row to read back, so this settles on the count
+    # replace_company_tickers recorded against the expected member set. Since
+    # `rows` is filtered above with the writer's own skip rule, the two can
+    # only differ if that rule and this filter drift apart. A complete-empty
+    # scope (bullet 2) records zero of zero and settles VERIFIED, not a
+    # failure.
+    verified = recorded_count == len(member_keys)
 
     decision = finalizer.record_producer_outcome(
         decision.processing_decision_id,
@@ -314,8 +293,8 @@ def _finalize_reference_catalog_candidate(
             None
             if verified
             else (
-                f"sec_company_ticker read-back for source_name={source_name!r} did not "
-                "match the written member set"
+                f"replace_company_tickers recorded {recorded_count} sec_company_ticker row(s) "
+                f"for source_name={source_name!r}, expected {len(member_keys)}"
             )
         ),
     )
@@ -326,7 +305,7 @@ def _finalize_reference_catalog_candidate(
             REFERENCE_CATALOG_LANDING_PRODUCER_NAME,
             target_table=REFERENCE_CATALOG_TARGET_TABLE,
             cause_reference=cause_reference,
-            expected_row_count=len(written_pairs),
+            expected_row_count=len(new_pairs),
             count_rows=landing_row_counter,
         )
     return decision

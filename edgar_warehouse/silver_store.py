@@ -9,10 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
-from edgar_warehouse.serving.silver_landing_export import (
-    LandingExportBuffer,
-    track_landing_row,
-)
+from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 if TYPE_CHECKING:
     from edgar_warehouse.bookkeeping.store import BookkeepingStore
@@ -1228,10 +1225,8 @@ class SilverDatabase:
         real rows having landed, and this method has no way to enforce that
         ordering itself.
 
-        Recorded to the landing export directly (not via @track_landing_row,
-        which expects a ``row: dict`` argument this method doesn't take) --
-        this is the table's only writer, so building the row here is no
-        extra cost.
+        Recorded to the landing export directly -- this is the table's only
+        writer, so building the row here is no extra cost.
         """
         row = self._conn.execute(
             """
@@ -1666,79 +1661,33 @@ class SilverDatabase:
         source_name: str = "company_tickers_exchange",
         cause_reference: str | None = None,
     ) -> int:
-        # Deliberately NOT @track_landing_rows("sec_company_ticker"): that
-        # decorator records the caller's raw `rows` argument as-is, which is
-        # correct for every other merge_*/upsert_* method here because their
-        # callers already pass fully-shaped rows. This method is the
-        # exception -- its caller passes bare {cik, ticker, exchange} dicts
-        # straight from company_tickers_exchange.json, and source_name/
-        # source_rank/last_sync_run_id/last_synced_at are only added below,
-        # inside this function's own loop. Using the decorator here silently
-        # landed 3-column rows missing source_name (a NOT NULL column in the
-        # Snowflake landing schema) on every row, every run -- confirmed live
-        # as the root cause of LOAD_SILVER_LANDING_TASK's suspension
-        # (.scratch/silver-snowflake-migration/issues/08-...). Recording the
-        # actual enriched row manually, after the loop, fixes it at the
-        # source instead of special-casing the decorator further.
-        now = datetime.now(UTC)
-        self._conn.execute(
-            "DELETE FROM sec_company_ticker WHERE source_name = ?",
-            [source_name],
-        )
-        count = 0
+        """Landing-only (silver-merge-engine-migration Ticket 06e). Callers pass
+        bare {cik, ticker, exchange} dicts from the SEC catalogs; each landed
+        row adds source_name, source_rank (its position in the whole input,
+        skipped rows included), cause_reference when given, and the sync
+        stamp. Recording only those bare dicts once landed rows without the
+        NOT NULL source_name and suspended LOAD_SILVER_LANDING_TASK
+        (silver-snowflake-migration issue 08). A row with no cik or an empty
+        ticker is skipped, not raised. The old local DELETE of this
+        source_name's earlier snapshot never reached landing: a ticker that
+        drops out of a snapshot is a Silver Landing Retirement Record's job."""
         landed_rows: list[dict[str, Any]] = []
         for ordinal, row in enumerate(rows, start=1):
-            ticker = row.get("ticker")
-            cik = row.get("cik")
-            if cik is None or not ticker:
+            if row.get("cik") is None or not row.get("ticker"):
                 continue
-            exchange = row.get("exchange")
-            self._conn.execute(
-                """
-                INSERT INTO sec_company_ticker
-                    (cik, ticker, exchange, source_name, source_rank,
-                     last_sync_run_id, last_synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    cik,
-                    ticker,
-                    exchange,
-                    source_name,
-                    ordinal,
-                    sync_run_id,
-                    now,
-                ],
-            )
-            count += 1
             landed = {
-                "cik": cik,
-                "ticker": ticker,
-                "exchange": exchange,
+                "cik": row["cik"],
+                "ticker": row["ticker"],
+                "exchange": row.get("exchange"),
                 "source_name": source_name,
                 "source_rank": ordinal,
-                "last_sync_run_id": sync_run_id,
-                "last_synced_at": now,
             }
             if cause_reference is not None:
                 landed["cause_reference"] = cause_reference
             landed_rows.append(landed)
-        landing_export = getattr(self, "landing_export", None)
-        if landing_export is not None and landed_rows:
-            landing_export.record("sec_company_ticker", landed_rows)
-        return count
-
-    def get_company_tickers(self, cik: int) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            """
-            SELECT * FROM sec_company_ticker
-            WHERE cik = ?
-            ORDER BY source_name, source_rank, ticker
-            """,
-            [cik],
-        ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        return self._record_landing_passthrough(
+            "sec_company_ticker", landed_rows, defaults={}, stamp=self._synced_now_stamp(sync_run_id)
+        )
 
     # ------------------------------------------------------------------
     # sec_company (silver merge)
@@ -2048,11 +1997,13 @@ class SilverDatabase:
     # sec_filing_text
     # ------------------------------------------------------------------
 
-    @track_landing_row("sec_filing_text")
     def upsert_filing_text(self, row: dict[str, Any]) -> None:
-        """Insert or update a filing text extraction row.
+        """Record a filing text extraction row, landing-only
+        (silver-merge-engine-migration Ticket 06e); the dbt model collapses
+        rows on (accession_number, text_version).
 
-        Raises ValueError if any required field is missing or None.
+        Raises ValueError if any required field is missing or None, before
+        anything is recorded.
         """
         for required in (
             "accession_number",
@@ -2067,51 +2018,7 @@ class SilverDatabase:
                 raise ValueError(
                     f"upsert_filing_text: required field '{required}' is missing or None"
                 )
-        self._conn.execute(
-            """
-            INSERT INTO sec_filing_text
-                (accession_number, text_version, source_document_name,
-                 text_storage_path, text_sha256, char_count, extracted_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (accession_number, text_version) DO UPDATE SET
-                source_document_name = excluded.source_document_name,
-                text_storage_path = excluded.text_storage_path,
-                text_sha256 = excluded.text_sha256,
-                char_count = excluded.char_count,
-                extracted_at = excluded.extracted_at
-            """,
-            [
-                row["accession_number"],
-                row["text_version"],
-                row["source_document_name"],
-                row["text_storage_path"],
-                row["text_sha256"],
-                row["char_count"],
-                row["extracted_at"],
-            ],
-        )
-
-    def get_filing_text(
-        self, accession_number: str, text_version: str
-    ) -> dict[str, Any] | None:
-        """Return the filing text row for the given accession and version, or None."""
-        result = self._conn.execute(
-            "SELECT * FROM sec_filing_text WHERE accession_number = ? AND text_version = ?",
-            [accession_number, text_version],
-        ).fetchone()
-        if result is None:
-            return None
-        cols = [d[0] for d in self._conn.description]
-        return dict(zip(cols, result))
-
-    def get_all_filing_texts(self, accession_number: str) -> list[dict[str, Any]]:
-        """Return all text extraction rows for an accession, ordered by text_version."""
-        rows = self._conn.execute(
-            "SELECT * FROM sec_filing_text WHERE accession_number = ? ORDER BY text_version",
-            [accession_number],
-        ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        self._record_landing_passthrough("sec_filing_text", [row], defaults={}, stamp={})
 
     # ------------------------------------------------------------------
     # sec_reconcile_finding
@@ -2267,9 +2174,9 @@ class SilverDatabase:
         the Ticket 33 validity trio; per-filing and 13F tables:
         `ingested_at`; company submission, filing, attachment, ownership, ADV
         and relationship-source evidence tables and the current filing feed:
-        `last_sync_run_id`, plus `last_synced_at` where the table has it;
-        derived and raw objects: nothing, their landing rows are recorded as
-        given). A `values_fn` coercion that replaced a present value --
+        `last_sync_run_id`, plus `last_synced_at` where the table has it
+        (company tickers too, Ticket 06e); derived, raw objects and filing
+        text: nothing, their landing rows are recorded as given). A `values_fn` coercion that replaced a present value --
         `bool(...)`, `or ""` -- is applied by the caller before this call,
         since `defaults` only fills absent keys.
 
@@ -2358,9 +2265,11 @@ class SilverDatabase:
     @staticmethod
     def _sync_run_stamp(sync_run_id: str) -> dict[str, Any]:
         """`last_sync_run_id` for tables that record which sync run last
-        wrote a row (company submission, filing, attachment, ownership, ADV and
-        relationship-source evidence tables, the current filing feed). The old `values_fn`s always wrote the call's `sync_run_id`,
-        whatever the row said, so this overrides a row-supplied value."""
+        wrote a row (company submission, ticker, filing, attachment,
+        ownership, ADV and relationship-source evidence tables, the current
+        filing feed). The old `values_fn`s always wrote the call's
+        `sync_run_id`, whatever the row said, so this overrides a row-supplied
+        value."""
         return {"last_sync_run_id": sync_run_id}
 
     @classmethod

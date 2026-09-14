@@ -2,8 +2,8 @@
 (edgar_warehouse/silver_landing_historical_backfill.py).
 
 Root cause this closes: every merge/upsert method in silver_store.py that
-tracks rows into the landing-zone buffer (via @track_landing_rows/
-@track_landing_row) only fires when it actually executes -- and most of
+records rows into the landing-zone buffer (now via
+_record_landing_passthrough) only fires when it actually executes -- and most of
 those methods are themselves gated by a skip-if-unchanged/skip-if-already-
 loaded check (this repo's own "SEC data idempotency" policy). Content
 captured before -- or without re-triggering -- that write path never gets a

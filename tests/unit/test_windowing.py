@@ -627,6 +627,7 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
         environment_name="test",
         identity="tester@example.com",
         runtime_mode="bronze_capture",
+        silver_landing_export_root=StorageLocation(str(tmp_path / "landing")),
     )
 
     # open_silver_database() (called inside _execute_warehouse_bronze_capture)
@@ -697,19 +698,20 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
         "nothing merges it into canonical anymore"
     )
 
-    # The reference-data sync's rows must actually be present in the local
-    # working silver db that a real (remote) publish would merge into
-    # canonical -- the correctness gap this test guards: with no reducer
-    # left, this sync must be readable from the working db it wrote to, or
-    # it would be silently lost once nothing else consumes it.
-    working_db = SilverDatabase(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    try:
-        rows = working_db._conn.execute(
-            "SELECT cik, ticker FROM sec_company_ticker ORDER BY cik"
-        ).fetchall()
-    finally:
-        working_db.close()
+    # The reference-data sync's rows must actually leave the run -- the
+    # correctness gap this test guards: with no reducer left, this sync
+    # would be silently lost if nothing carried it to silver.
+    # sec_company_ticker is landing-only (silver-merge-engine-migration
+    # Ticket 06e), so read it back from the landing Parquet the run flushed.
+    import pyarrow.parquet as pq
+
+    ticker_files = [
+        path
+        for path in Path(tmp_path / "landing").rglob("*.parquet")
+        if "/sec_company_ticker/" in path.as_posix()
+    ]
+    assert len(ticker_files) == 1, "expected exactly one sec_company_ticker landing Parquet"
+    rows = [(row["cik"], row["ticker"]) for row in pq.read_table(ticker_files[0]).to_pylist()]
     assert rows == [(100, "AAA")], (
-        "compute-windows' reference-data sync must be readable back from "
-        "the working silver db after the run"
+        "compute-windows' reference-data sync must reach the landing export"
     )

@@ -86,23 +86,22 @@ def test_company_identity_mode_stages_company_and_ticker_only(
     exit_code = bootstrap_fundamentals.execute(args)
     assert exit_code == 0
 
-    from edgar_warehouse.silver_support.session import open_silver_database
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
+    # sec_company_ticker is landing-only (silver-merge-engine-migration Ticket
+    # 06e): read the ticker rows back from the landing Parquet this command
+    # flushed.
+    ticker_rows = [
+        row
+        for path in landing_root.rglob("*.parquet")
+        if "/sec_company_ticker/" in path.as_posix()
+        for row in pq.read_table(path).to_pylist()
+    ]
+    assert any(row["cik"] == CIK and row["ticker"] == "AAPL" for row in ticker_rows)
 
-    db = open_silver_database(StorageLocation(str(storage_root)))
-    try:
-        ticker_rows = db.fetch(
-            "SELECT * FROM sec_company_ticker WHERE cik = ?", [CIK]
-        )
-        assert any(row["ticker"] == "AAPL" for row in ticker_rows)
-
-        # Zero ownership/ADV artifacts touched is the whole point of this mode,
-        # but the ownership trio, sec_adv_filing and sec_thirteenf_holding are
-        # landing-only (silver-merge-engine-migration Tickets 05/06a/06c): an
-        # empty local DuckDB table no longer proves they were untouched, so
-        # the landing export is checked below instead.
-    finally:
-        db.close()
+    # Zero ownership/ADV artifacts touched is the whole point of this mode,
+    # but the ownership trio, sec_adv_filing and sec_thirteenf_holding are
+    # landing-only (silver-merge-engine-migration Tickets 05/06a/06c): an
+    # empty local DuckDB table no longer proves they were untouched, so
+    # the landing export is checked below instead.
 
     # sec_company is landing-only (silver-merge-engine-migration Ticket 06b):
     # the company row reaches silver through the landing export this command
