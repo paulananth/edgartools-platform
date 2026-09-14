@@ -1173,7 +1173,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Parse Form 3/4/5 ownership XMLs already in S3 bronze into silver. "
             "Uses edgartools (Ownership.from_xml). No SEC API calls. "
-            "Idempotent — skips accessions already in sec_ownership_reporting_owner. "
+            "Skips accessions already parsed earlier in the same run; no cross-run skip. "
             "Default lookback is the past 2 years of Form 3/4/5 filings."
         ),
     )
