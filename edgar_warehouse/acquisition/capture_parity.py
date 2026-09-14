@@ -364,11 +364,22 @@ def run_dual_path_filing_artifact_parity(
             fetch_kwargs["get_filing"] = get_filing
         fetch_filing_artifacts(**fetch_kwargs)
 
-    legacy_rows = db.fetch("SELECT * FROM sec_raw_object")
+    # sec_raw_object is landing-only (silver-merge-engine-migration Ticket
+    # 06d): raw SQL on local DuckDB finds nothing, so read the legacy rows back
+    # through the run's own lookup, via the attachments just recorded.
+    legacy_rows: dict[str, dict[str, Any]] = {}
+    for row in index_rows:
+        for attachment in db.get_filing_attachments(str(row["accession_number"])):
+            raw_object_id = attachment.get("raw_object_id")
+            if not raw_object_id or str(raw_object_id) in legacy_rows:
+                continue
+            raw_object = db.get_raw_object(str(raw_object_id))
+            if raw_object is not None:
+                legacy_rows[str(raw_object_id)] = raw_object
     legacy = CaptureSnapshot(
         path="legacy",
         cause_reference=legacy_capture_cause_reference(business_date, scope.cik_list),
-        artifacts=tuple(artifact_from_silver_raw_object(row) for row in legacy_rows),
+        artifacts=tuple(artifact_from_silver_raw_object(row) for row in legacy_rows.values()),
     )
 
     run_filing_artifact_gated_capture_for_business_date(

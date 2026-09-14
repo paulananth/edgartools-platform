@@ -27,3 +27,12 @@ The lookup answers only "what did this run record". Reads that were really about
 (the artifact cache hit, a `--force` repair's prior hash, `targeted-resync --scope accession`)
 get nothing from it; the S3 listing is what prevents re-fetching SEC content, and anything that
 genuinely needs an earlier run's row must read Snowflake silver.
+
+The lookup serves only `get_filing`, `get_filing_attachments` and `get_raw_object`. A reader that
+queries these tables with raw SQL on the local store gets nothing. One such reader runs after
+the same run's own capture: the release-mode Branch B parsers (`bootstrap-batch --release-mode`)
+pass the local store as `source` to the per-filing and 13F fundamentals ingest, which now fail
+closed with "required candidates missing from filing manifest". That path had no recent
+production executions; restoring it is a follow-up. `parse-ownership-bronze` and
+`parse-adv-bronze` also query `sec_company_filing` with raw SQL, but nothing earlier in their run
+fills the local store, so they already found nothing.

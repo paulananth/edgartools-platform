@@ -103,10 +103,12 @@ def test_stage_submission_merges_recent_and_pagination_in_one_call(tmp_path, mon
         assert merge_calls == [4]
         assert result["rows_written"] >= 4
 
-        stored = db.fetch(
-            "SELECT accession_number, form FROM sec_company_filing ORDER BY accession_number"
-        )
-        by_accession = {row["accession_number"]: row["form"] for row in stored}
+        # sec_company_filing is landing-only (silver-merge-engine-migration
+        # Ticket 06d); the run's own recorded rows answer get_filing.
+        by_accession = {
+            accession: db.get_filing(accession)["form"]
+            for accession in ("acc-recent-1", "acc-page-1", "acc-page-2")
+        }
         assert by_accession["acc-recent-1"] == "10-K"
         assert by_accession["acc-page-2"] == "8-K"
         assert by_accession["acc-page-1"] == "10-Q/A"

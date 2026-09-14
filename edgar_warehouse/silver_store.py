@@ -9,12 +9,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
-import pyarrow as pa
-
 from edgar_warehouse.serving.silver_landing_export import (
     LandingExportBuffer,
     track_landing_row,
-    track_landing_rows,
 )
 
 if TYPE_CHECKING:
@@ -928,6 +925,21 @@ _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS = {
 }
 
 
+# Same-run reads of three landing-only tables (silver-merge-engine-migration
+# Ticket 06d, ADR 0011): the writer call that records a row also indexes it,
+# and get_filing/get_filing_attachments/get_raw_object answer from that. Per
+# table: its key columns, and the columns the old upsert's DO UPDATE SET never
+# touched, which keep their first value in the run.
+_IN_RUN_LOOKUP_TABLES: dict[str, tuple[tuple[str, ...], frozenset[str]]] = {
+    "sec_company_filing": (
+        ("accession_number",),
+        frozenset({"cik", "act", "file_number", "film_number", "items"}),
+    ),
+    "sec_filing_attachment": (("accession_number", "document_name"), frozenset()),
+    "sec_raw_object": (("raw_object_id",), frozenset({"fetched_at"})),
+}
+
+
 class SilverDatabase:
     """Manages the silver-layer DuckDB instance for a warehouse root."""
 
@@ -947,6 +959,12 @@ class SilverDatabase:
         # add contention there.
         self._fetch_lock = threading.Lock()
         self._required_columns_cache: dict[str, tuple[str, ...]] = {}
+        self._lookup_columns_cache: dict[str, tuple[str, ...]] = {}
+        # Rows of _IN_RUN_LOOKUP_TABLES recorded this run: table -> first key
+        # value -> remaining key values -> row.
+        self._in_run_rows: dict[str, dict[Any, dict[tuple[Any, ...], dict[str, Any]]]] = {
+            table_name: {} for table_name in _IN_RUN_LOOKUP_TABLES
+        }
         # Opt-in, silver-snowflake-migration map Ticket 01: when set, every
         # merge_*/upsert_* method below also records its rows here via the
         # @track_landing_* decorators, for a later flush to the Snowflake
@@ -1769,135 +1787,19 @@ class SilverDatabase:
     # sec_company_filing
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_company_filing")
     def merge_filings(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        """Bulk UPSERT into sec_company_filing.
-
-        A single CIK's full filing history can be hundreds to low-thousands of
-        rows (first-load recovery stages a company's entire "recent" + all
-        pagination-file filings at once, not just a day's worth). The previous
-        row-by-row execute() loop was the dominant cost of one_click_data_refresh's
-        Clean and Merge Filings stage (~93% of per-batch time, measured live) -- per-statement
-        parse/plan/exec overhead repeated per row against a growing table, not
-        anything sharding would fix. _merge_rows_bulk stages all rows
-        in one executemany() then applies the upsert as two set-based SQL
-        statements.
-        """
-        if not rows:
-            return 0
-        now = datetime.now(UTC)
-        return self._merge_rows_bulk(
-            staging_table="stg_sec_company_filing",
-            staging_ddl="""
-                CREATE TEMP TABLE IF NOT EXISTS stg_sec_company_filing (
-                    seq                 BIGINT,
-                    accession_number    TEXT,
-                    cik                 BIGINT,
-                    form                TEXT,
-                    filing_date         DATE,
-                    report_date         DATE,
-                    acceptance_datetime TEXT,
-                    act                 TEXT,
-                    file_number         TEXT,
-                    film_number         TEXT,
-                    items               TEXT,
-                    size                BIGINT,
-                    is_xbrl             BOOLEAN,
-                    is_inline_xbrl      BOOLEAN,
-                    primary_document    TEXT,
-                    primary_doc_desc    TEXT,
-                    last_sync_run_id    TEXT,
-                    last_synced_at      TIMESTAMPTZ
-                )
-            """,
-            insert_first_sql="""
-                INSERT INTO sec_company_filing
-                    (accession_number, cik, form, filing_date, report_date,
-                     acceptance_datetime, act, file_number, film_number, items,
-                     size, is_xbrl, is_inline_xbrl, primary_document,
-                     primary_doc_desc, last_sync_run_id, last_synced_at)
-                SELECT accession_number, cik, form, filing_date, report_date,
-                       acceptance_datetime, act, file_number, film_number, items,
-                       size, is_xbrl, is_inline_xbrl, primary_document,
-                       primary_doc_desc, last_sync_run_id, last_synced_at
-                FROM stg_sec_company_filing
-                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq ASC) = 1
-                ON CONFLICT (accession_number) DO NOTHING
-            """,
-            insert_last_sql="""
-                INSERT INTO sec_company_filing
-                    (accession_number, cik, form, filing_date, report_date,
-                     acceptance_datetime, act, file_number, film_number, items,
-                     size, is_xbrl, is_inline_xbrl, primary_document,
-                     primary_doc_desc, last_sync_run_id, last_synced_at)
-                SELECT accession_number, cik, form, filing_date, report_date,
-                       acceptance_datetime, act, file_number, film_number, items,
-                       size, is_xbrl, is_inline_xbrl, primary_document,
-                       primary_doc_desc, last_sync_run_id, last_synced_at
-                FROM stg_sec_company_filing
-                QUALIFY ROW_NUMBER() OVER (PARTITION BY accession_number ORDER BY seq DESC) = 1
-                ON CONFLICT (accession_number) DO UPDATE SET
-                    form = excluded.form,
-                    filing_date = excluded.filing_date,
-                    report_date = excluded.report_date,
-                    acceptance_datetime = excluded.acceptance_datetime,
-                    size = excluded.size,
-                    is_xbrl = excluded.is_xbrl,
-                    is_inline_xbrl = excluded.is_inline_xbrl,
-                    primary_document = excluded.primary_document,
-                    primary_doc_desc = excluded.primary_doc_desc,
-                    last_sync_run_id = excluded.last_sync_run_id,
-                    last_synced_at = excluded.last_synced_at
-            """,
-            rows=rows,
-            values_fn=lambda row: [
-                row["accession_number"],
-                row["cik"],
-                row.get("form"),
-                row.get("filing_date"),
-                row.get("report_date"),
-                row.get("acceptance_datetime"),
-                row.get("act"),
-                row.get("file_number"),
-                row.get("film_number"),
-                row.get("items"),
-                row.get("size"),
-                row.get("is_xbrl"),
-                row.get("is_inline_xbrl"),
-                row.get("primary_document"),
-                row.get("primary_doc_desc"),
-                sync_run_id,
-                now,
-            ],
+        # cik is nullable in the DDL, so the NOT NULL check would not catch a
+        # missing key that the old values_fn's row["cik"] rejected.
+        for row in rows:
+            if "cik" not in row:
+                raise ValueError(f"sec_company_filing row is missing the 'cik' key: {row!r}")
+        return self._record_landing_passthrough(
+            "sec_company_filing", rows, defaults={}, stamp=self._synced_now_stamp(sync_run_id)
         )
 
-    def get_filing_count(self, cik: int) -> int:
-        return self._conn.execute(
-            "SELECT COUNT(*) FROM sec_company_filing WHERE cik = ?", [cik]
-        ).fetchone()[0]
-
     def get_filing(self, accession_number: str) -> dict[str, Any] | None:
-        result = self._conn.execute(
-            "SELECT * FROM sec_company_filing WHERE accession_number = ?",
-            [accession_number],
-        ).fetchone()
-        if result is None:
-            return None
-        cols = [d[0] for d in self._conn.description]
-        return dict(zip(cols, result))
-
-    def get_filings_for_cik(self, cik: int) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            """
-            SELECT *
-            FROM sec_company_filing
-            WHERE cik = ?
-            ORDER BY filing_date DESC, accession_number DESC
-            """,
-            [cik],
-        ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        rows = self._in_run_lookup("sec_company_filing", accession_number)
+        return rows[0] if rows else None
 
     # ------------------------------------------------------------------
     # Submission staging (composite operation)
@@ -2112,142 +2014,35 @@ class SilverDatabase:
     # sec_raw_object
     # ------------------------------------------------------------------
 
-    @track_landing_row("sec_raw_object")
     def upsert_raw_object(self, row: dict[str, Any]) -> None:
-        """Insert or update a raw object row.
-
-        fetched_at is set on first insert and never overwritten on conflict.
-        All other mutable fields are updated on conflict.
-        """
         for required in ("raw_object_id", "source_url", "storage_path", "sha256", "fetched_at", "http_status"):
             if row.get(required) is None:
                 raise ValueError(f"upsert_raw_object: required field '{required}' is missing or None")
-        self._conn.execute(
-            """
-            INSERT INTO sec_raw_object
-                (raw_object_id, source_type, cik, accession_number, form,
-                 source_url, storage_path, content_type, content_encoding,
-                 byte_size, sha256, fetched_at, http_status,
-                 source_last_modified, source_etag)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (raw_object_id) DO UPDATE SET
-                source_type = excluded.source_type,
-                cik = excluded.cik,
-                accession_number = excluded.accession_number,
-                form = excluded.form,
-                source_url = excluded.source_url,
-                storage_path = excluded.storage_path,
-                content_type = excluded.content_type,
-                content_encoding = excluded.content_encoding,
-                byte_size = excluded.byte_size,
-                sha256 = excluded.sha256,
-                http_status = excluded.http_status,
-                source_last_modified = excluded.source_last_modified,
-                source_etag = excluded.source_etag
-            """,
-            [
-                row["raw_object_id"],
-                row.get("source_type"),
-                row.get("cik"),
-                row.get("accession_number"),
-                row.get("form"),
-                row.get("source_url"),
-                row.get("storage_path"),
-                row.get("content_type"),
-                row.get("content_encoding"),
-                row.get("byte_size"),
-                row.get("sha256"),
-                row.get("fetched_at"),
-                row.get("http_status"),
-                row.get("source_last_modified"),
-                row.get("source_etag"),
-            ],
-        )
+        self._record_landing_passthrough("sec_raw_object", [row], defaults={}, stamp={})
 
     def get_raw_object(self, raw_object_id: str) -> dict[str, Any] | None:
-        result = self._conn.execute(
-            "SELECT * FROM sec_raw_object WHERE raw_object_id = ?",
-            [raw_object_id],
-        ).fetchone()
-        if result is None:
-            return None
-        cols = [d[0] for d in self._conn.description]
-        return dict(zip(cols, result))
-
-    def get_raw_objects_for_accession(self, accession_number: str, source_type: str | None = None) -> list[dict[str, Any]]:
-        """Return raw objects for an accession, optionally filtered by source type."""
-        if source_type is None:
-            rows = self._conn.execute(
-                """
-                SELECT * FROM sec_raw_object
-                WHERE accession_number = ?
-                ORDER BY fetched_at DESC
-                """,
-                [accession_number],
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                """
-                SELECT * FROM sec_raw_object
-                WHERE accession_number = ? AND source_type = ?
-                ORDER BY fetched_at DESC
-                """,
-                [accession_number, source_type],
-            ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        rows = self._in_run_lookup("sec_raw_object", raw_object_id)
+        return rows[0] if rows else None
 
     # ------------------------------------------------------------------
     # sec_filing_attachment
     # ------------------------------------------------------------------
 
-    @track_landing_rows("sec_filing_attachment")
     def merge_filing_attachments(self, rows: list[dict[str, Any]], sync_run_id: str) -> int:
-        """Upsert filing attachment rows. Returns row count."""
-        count = 0
         for row in rows:
             for required in ("accession_number", "document_name", "document_type", "document_url"):
                 if not row.get(required):
                     raise ValueError(f"merge_filing_attachments: required field '{required}' is missing or None in row {row}")
-            self._conn.execute(
-                """
-                INSERT INTO sec_filing_attachment
-                    (accession_number, sequence_number, document_name,
-                     document_type, document_description, document_url,
-                     is_primary, raw_object_id, last_sync_run_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (accession_number, document_name) DO UPDATE SET
-                    sequence_number = excluded.sequence_number,
-                    document_type = excluded.document_type,
-                    document_description = excluded.document_description,
-                    document_url = excluded.document_url,
-                    is_primary = excluded.is_primary,
-                    raw_object_id = excluded.raw_object_id,
-                    last_sync_run_id = excluded.last_sync_run_id
-                """,
-                [
-                    row["accession_number"],
-                    row.get("sequence_number"),
-                    row["document_name"],
-                    row.get("document_type"),
-                    row.get("document_description"),
-                    row.get("document_url"),
-                    row.get("is_primary", False),
-                    row.get("raw_object_id"),
-                    sync_run_id,
-                ],
-            )
-            count += 1
-        return count
+        return self._record_landing_passthrough(
+            "sec_filing_attachment",
+            rows,
+            defaults={"is_primary": False},
+            stamp=self._sync_run_stamp(sync_run_id),
+        )
 
     def get_filing_attachments(self, accession_number: str) -> list[dict[str, Any]]:
-        """Return all attachment rows for the given accession number."""
-        rows = self._conn.execute(
-            "SELECT * FROM sec_filing_attachment WHERE accession_number = ?",
-            [accession_number],
-        ).fetchall()
-        cols = [d[0] for d in self._conn.description]
-        return [dict(zip(cols, row)) for row in rows]
+        """Return all attachment rows this run recorded for the given accession number."""
+        return self._in_run_lookup("sec_filing_attachment", accession_number)
 
     # ------------------------------------------------------------------
     # sec_filing_text
@@ -2457,25 +2252,26 @@ class SilverDatabase:
         stamp: dict[str, Any],
     ) -> int:
         """Landing-only write for a table whose local DuckDB copy is dead
-        (silver-merge-engine-migration Tickets 02-06): nothing reads these
-        tables back in-process since DuckDB Retirement Cutover Ticket 10
-        made the local store ephemeral, so the QUALIFY/ON CONFLICT merge
-        they used to run computed a result nothing consumed. The dbt silver
-        models collapse the raw landing rows with the same first-insert/
-        last-write semantics the DuckDB upsert had.
+        (silver-merge-engine-migration Tickets 02-06): DuckDB Retirement
+        Cutover Ticket 10 made the local store ephemeral, so the QUALIFY/ON
+        CONFLICT merge these tables used to run computed a result no later run
+        consumed. The dbt silver models collapse the raw landing rows on the
+        old ON CONFLICT keys. Rows of the `_IN_RUN_LOOKUP_TABLES` are also
+        indexed for this run's own `get_*` reads (Ticket 06d), with or without
+        a landing buffer attached; raw SQL on local DuckDB finds none of them.
 
         `defaults` mirrors the old values_fn's `r.get(col, default)` fills
         exactly -- applied only when the key is absent, never over an
         explicit None. `stamp` adds write-time columns the landing schema
         carries but the caller doesn't supply (facts/flags: `ingested_at` +
         the Ticket 33 validity trio; per-filing and 13F tables:
-        `ingested_at`; company submission, ownership, ADV and relationship-
-        source evidence tables and the current filing feed: `last_sync_run_id`,
-        plus `last_synced_at` where the table has it;
-        derived: nothing, its landing rows are recorded as given). A
-        `values_fn` coercion that replaced a present value -- `bool(...)`,
-        `or ""` -- is applied by the caller before this call, since
-        `defaults` only fills absent keys.
+        `ingested_at`; company submission, filing, attachment, ownership, ADV
+        and relationship-source evidence tables and the current filing feed:
+        `last_sync_run_id`, plus `last_synced_at` where the table has it;
+        derived and raw objects: nothing, their landing rows are recorded as
+        given). A `values_fn` coercion that replaced a present value --
+        `bool(...)`, `or ""` -- is applied by the caller before this call,
+        since `defaults` only fills absent keys.
 
         A row that would have violated this table's NOT NULL DDL raises here
         instead of failing the Snowflake load of its whole Parquet file
@@ -2496,6 +2292,8 @@ class SilverDatabase:
         landing_export = getattr(self, "landing_export", None)
         if landing_export is not None:
             landing_export.record(table_name, recorded)
+        if table_name in _IN_RUN_LOOKUP_TABLES:
+            self._remember_in_run(table_name, recorded)
         return len(recorded)
 
     def _required_columns(self, table_name: str) -> tuple[str, ...]:
@@ -2521,6 +2319,34 @@ class SilverDatabase:
             self._required_columns_cache[table_name] = columns
         return self._required_columns_cache[table_name]
 
+    def _remember_in_run(self, table_name: str, rows: list[dict[str, Any]]) -> None:
+        """Index recorded rows for this run's own reads. A key that recurs keeps
+        the old upsert's rule: first-value columns from its earliest write, every
+        other column from its latest. Stores copies, so a landing row is never
+        mutated."""
+        key_columns, first_value_columns = _IN_RUN_LOOKUP_TABLES[table_name]
+        by_first_key = self._in_run_rows[table_name]
+        for row in rows:
+            group = by_first_key.setdefault(row[key_columns[0]], {})
+            rest_key = tuple(row[column] for column in key_columns[1:])
+            merged = dict(row)
+            earlier = group.get(rest_key)
+            if earlier is not None:
+                merged.update({column: earlier.get(column) for column in first_value_columns})
+            group[rest_key] = merged
+
+    def _in_run_lookup(self, table_name: str, first_key: Any) -> list[dict[str, Any]]:
+        """Rows this run recorded under `first_key`, as copies carrying every DDL
+        column in order (None where the write had none): the row shape
+        `SELECT *` returned before the table went landing-only."""
+        columns = self._lookup_columns_cache.get(table_name)
+        if columns is None:
+            columns = self._lookup_columns_cache[table_name] = tuple(self._table_columns(table_name))
+        return [
+            {column: row.get(column) for column in columns}
+            for row in self._in_run_rows[table_name].get(first_key, {}).values()
+        ]
+
     @staticmethod
     def _ingested_at_stamp() -> dict[str, Any]:
         """ingested_at was DuckDB's DEFAULT NOW() and every ON CONFLICT
@@ -2532,8 +2358,8 @@ class SilverDatabase:
     @staticmethod
     def _sync_run_stamp(sync_run_id: str) -> dict[str, Any]:
         """`last_sync_run_id` for tables that record which sync run last
-        wrote a row (company submission, ownership, ADV and relationship-source
-        evidence tables, the current filing feed). The old `values_fn`s always wrote the call's `sync_run_id`,
+        wrote a row (company submission, filing, attachment, ownership, ADV and
+        relationship-source evidence tables, the current filing feed). The old `values_fn`s always wrote the call's `sync_run_id`,
         whatever the row said, so this overrides a row-supplied value."""
         return {"last_sync_run_id": sync_run_id}
 
@@ -2643,77 +2469,6 @@ class SilverDatabase:
             stamp=self._ingested_at_stamp(),
         )
 
-    def _merge_rows(
-        self,
-        sql: str,
-        rows: list[dict[str, Any]],
-        values_fn,
-    ) -> int:
-        count = 0
-        for row in rows:
-            self._conn.execute(sql, values_fn(row))
-            count += 1
-        return count
-
-    def _merge_rows_bulk(
-        self,
-        staging_table: str,
-        staging_ddl: str,
-        insert_first_sql: str,
-        insert_last_sql: str,
-        rows: list[dict[str, Any]],
-        values_fn,
-    ) -> int:
-        """Bulk UPSERT via a no-PK staging table, replicating row-by-row last-write-wins.
-
-        `values_fn` must return values in the same column order as `staging_ddl`
-        (excluding the leading `seq` column, which this method supplies via
-        `enumerate`).
-
-        The row-by-row loop in `_merge_rows` has per-column semantics on
-        conflict: columns in the `ON CONFLICT DO UPDATE SET` clause take the
-        *last* occurrence's value for a given primary key, while columns NOT
-        in that clause (e.g. `merge_filings`' first-seen columns) are set only on the
-        row's *first-ever* insert and never overwritten afterwards. A single
-        QUALIFY-deduped INSERT cannot reproduce this per-column mix, so two
-        passes are used:
-
-        1. `insert_first_sql` — INSERT the *first* (lowest-seq) occurrence per
-           PK, `ON CONFLICT DO NOTHING`. Establishes "first-insert-wins"
-           columns for brand-new PKs; no-ops for PKs that already existed.
-        2. `insert_last_sql` — INSERT the *last* (highest-seq) occurrence per
-           PK, `ON CONFLICT DO UPDATE SET <mutable columns>`. Applies
-           "last-write-wins" to the mutable columns for both new and
-           pre-existing PKs.
-        """
-        if not rows:
-            return 0
-        self._conn.execute(staging_ddl)
-        try:
-            staged = [[i, *values_fn(row)] for i, row in enumerate(rows)]
-            col_names = [f"c{i}" for i in range(len(staged[0]))]
-            # executemany() binds and executes one INSERT per row -- fine for the
-            # hundreds-to-low-thousands volumes merge_filings was built for, but it
-            # scales linearly at ~1.5ms/row (measured: 384K rows took 577s here).
-            # Staging via a registered Arrow table lets DuckDB's vectorized Arrow
-            # scan bulk-load the rows in one shot instead of 384K round trips.
-            # Build columns directly (zip transpose) rather than a list of 384K
-            # per-row dicts -- from_pylist's dict-per-row overhead is what pushed
-            # a memory-constrained host into swap at this volume.
-            columns = list(zip(*staged))
-            arrow_table = pa.table(dict(zip(col_names, columns)))
-            self._conn.register("_bulk_stage_src", arrow_table)
-            try:
-                self._conn.execute(
-                    f"INSERT INTO {staging_table} SELECT * FROM _bulk_stage_src"
-                )
-            finally:
-                self._conn.unregister("_bulk_stage_src")
-            self._conn.execute(insert_first_sql)
-            self._conn.execute(insert_last_sql)
-        finally:
-            self._conn.execute(f"DELETE FROM {staging_table}")
-        return len(rows)
 
 
 # ------------------------------------------------------------------

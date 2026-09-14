@@ -97,11 +97,9 @@ def test_stage_submission_skips_company_rows_for_individual_filer(tmp_path):
 
         # Real filing history (Form 4, an ownership filing) is untouched --
         # this is a plain per-CIK filing log, not a company-universe claim.
-        filings = db.fetch(
-            "SELECT accession_number, form FROM sec_company_filing WHERE cik = ?",
-            [1548760],
-        )
-        assert filings == [{"accession_number": "acc-1", "form": "4"}]
+        assert [row["accession_number"] for row in recorded["sec_company_filing"]] == ["acc-1"]
+        filing = db.get_filing("acc-1")
+        assert (filing["cik"], filing["form"]) == (1548760, "4")
         assert result["rows_written"] >= 1
     finally:
         db.close()

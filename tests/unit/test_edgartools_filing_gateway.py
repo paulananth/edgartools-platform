@@ -54,14 +54,6 @@ class _ArtifactDb:
     def get_raw_object(self, raw_object_id: str):
         return self.raw_objects.get(raw_object_id)
 
-    def get_raw_objects_for_accession(self, accession_number: str, source_type: str | None = None):
-        return [
-            row
-            for row in self.raw_objects.values()
-            if row.get("accession_number") == accession_number
-            and (source_type is None or row.get("source_type") == source_type)
-        ]
-
     def upsert_raw_object(self, row: dict) -> None:
         self.raw_objects[row["raw_object_id"]] = dict(row)
 

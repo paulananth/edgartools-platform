@@ -109,11 +109,10 @@ class TestStageSubmissionFilingMinDate:
                 filing_min_date=date(2024, 1, 1),
             )
             assert result["recent_accessions"] == ["recent-8k"]
-            rows = db._conn.execute(
-                "SELECT accession_number FROM sec_company_filing WHERE cik = ?", [1800]
-            ).fetchall()
-            written = {r[0] for r in rows}
-            assert written == {"recent-8k"}
+            # sec_company_filing is landing-only (silver-merge-engine-migration
+            # Ticket 06d); the run's own recorded rows answer get_filing.
+            assert db.get_filing("recent-8k") is not None
+            assert db.get_filing("old-10k") is None
         finally:
             db.close()
 
@@ -134,11 +133,8 @@ class TestStageSubmissionFilingMinDate:
                 filing_min_date=None,
             )
             assert set(result["recent_accessions"]) == {"old-10k", "recent-8k"}
-            rows = db._conn.execute(
-                "SELECT accession_number FROM sec_company_filing WHERE cik = ?", [1800]
-            ).fetchall()
-            written = {r[0] for r in rows}
-            assert written == {"old-10k", "recent-8k"}
+            assert db.get_filing("old-10k") is not None
+            assert db.get_filing("recent-8k") is not None
         finally:
             db.close()
 

@@ -201,22 +201,11 @@ def test_drive_filing_discovery_captures_new_filing_and_excludes_out_of_scope_fo
     # The excluded candidate produced no Bronze object at all.
     assert len(list((tmp_path / "bronze" / "filing_artifact").iterdir())) == 1
 
-    # Durable external evidence (Ticket 19 bullet 5): read sec_raw_object
-    # back independently from the local Silver database this run wrote to,
-    # not via anything the command's own JSON payload claimed.
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    verify_db = open_silver_database(silver_root)
-    try:
-        raw_object = verify_db.get_raw_object(expected_hash)
-        assert raw_object is not None
-        assert raw_object["sha256"] == expected_hash
-        assert raw_object["accession_number"] == "0001140361-26-000001"
-        assert raw_object["cik"] == 320193
-    finally:
-        verify_db.close()
+    # sec_raw_object is landing-only (silver-merge-engine-migration Ticket
+    # 06d) and this driver opens no landing export, so a second Silver
+    # database has no row to read back. silver_outcome == "PUBLISHED" above
+    # already required the run's own read-back to match the sha256;
+    # test_silver_acceptance.py covers the row it records.
 
     run_manifest_path = (
         tmp_path

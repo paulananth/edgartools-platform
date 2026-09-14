@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import tempfile
 import unittest
 from datetime import date
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from unittest.mock import patch
 
 from edgar_warehouse import cli
 from edgar_warehouse.application import warehouse_orchestrator
+from edgar_warehouse.silver_store import SilverDatabase
 
 
 class _CachedSubmissionDb:
@@ -425,6 +427,73 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
             ["index-ownership"],
         )
         self.assertEqual(result["rows_written"], 1)
+
+    def _seed_recurring_candidate_into_real_silver(self, candidate_row: dict):
+        """Candidate seeding against a real SilverDatabase: merge_filings is
+        landing-only (silver-merge-engine-migration Ticket 06d), so the
+        get_filing check after it must find the row in the in-run lookup."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = SilverDatabase(f"{tmp}/silver.duckdb")
+            try:
+                with (
+                    patch.object(
+                        warehouse_orchestrator,
+                        "_capture_submission_bronze_snapshots",
+                        return_value=[[{"cik": 1001, "raw_writes": []}]],
+                    ),
+                    patch.object(
+                        warehouse_orchestrator,
+                        "_apply_submission_snapshot_to_silver",
+                        return_value={
+                            "rows_written": 0,
+                            "rows_skipped": 0,
+                            "recent_accessions": [],
+                            "pagination_accessions": [],
+                        },
+                    ),
+                    patch.object(
+                        warehouse_orchestrator,
+                        "_run_configured_form_artifact_pipeline",
+                        return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
+                    ) as artifact_pipeline,
+                ):
+                    warehouse_orchestrator._run_submissions_bronze_then_silver(
+                        context=object(),
+                        db=db,
+                        bookkeeping=_BulkNoOpBookkeeping(),
+                        sync_run_id="daily-run",
+                        ciks=[1001],
+                        include_pagination=False,
+                        fetch_date=date(2026, 7, 29),
+                        force=False,
+                        load_mode="daily_incremental",
+                        artifact_policy="all_attachments",
+                        parser_policy="configured_forms",
+                        recurring_mode=True,
+                        required_accessions={"index-ownership"},
+                        required_candidate_rows={"index-ownership": candidate_row},
+                    )
+                return artifact_pipeline, db.get_filing("index-ownership")
+            finally:
+                db.close()
+
+    def test_recurring_seeding_against_real_silver_reads_back_from_in_run_lookup(self) -> None:
+        artifact_pipeline, filing = self._seed_recurring_candidate_into_real_silver(
+            {"accession_number": "index-ownership", "cik": 1001, "form": "4", "filing_date": date(2026, 7, 29)}
+        )
+
+        self.assertEqual(artifact_pipeline.call_args.kwargs["accession_numbers"], ["index-ownership"])
+        self.assertEqual((filing["cik"], filing["form"]), (1001, "4"))
+
+    def test_recurring_seeding_against_real_silver_fails_closed_for_seed_row_missing_its_key(self) -> None:
+        with self.assertRaisesRegex(ValueError, "accession_number"):
+            self._seed_recurring_candidate_into_real_silver({"cik": 1001, "form": "4"})
+
+    def test_recurring_seeding_against_real_silver_fails_closed_when_seed_row_is_keyed_elsewhere(self) -> None:
+        with self.assertRaisesRegex(warehouse_orchestrator.WarehouseRuntimeError, "could not be staged"):
+            self._seed_recurring_candidate_into_real_silver(
+                {"accession_number": "different-accession", "cik": 1001, "form": "4"}
+            )
 
     def test_release_submission_flow_sends_only_manifest_required_accessions(self) -> None:
         def capture(**kwargs):
