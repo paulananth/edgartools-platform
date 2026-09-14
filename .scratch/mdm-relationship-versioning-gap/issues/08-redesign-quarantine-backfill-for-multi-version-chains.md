@@ -43,14 +43,23 @@ scale, so this needed an explicit design decision, not just an execution
 step.
 
 **MANAGES_FUND ruled explicitly out of scope for this ticket/map.** Its
-root cause is structurally different: `_derive_manages_fund` passes an
-empty `properties` dict to `ensure_relationship`, so
-`relationships_conflict`'s discriminator (`properties differ`) can never
-be true for it -- it never reaches quarantine at all, silently
-accumulating duplicate active rows instead (140,907 relationship_ids,
+root cause is structurally different: it silently accumulates duplicate
+active rows instead of reaching quarantine (140,907 relationship_ids,
 far larger blast radius than this map's 199K-quarantined-rows
-destination). This is a distinct write-time conflict-blindness bug, not
-a backfill-design gap, and needs its own future wayfinder map.
+destination). This is a distinct write-time bug, not a backfill-design
+gap, and needs its own future wayfinder map.
+
+**Correction (2026-09-12, [manages-fund-duplicate-rows](../../manages-fund-duplicate-rows/map.md)):**
+the specific mechanism named above ("empty `properties` dict, discriminator
+can never fire") is wrong -- the real, live `_derive_manages_fund_batch`
+code path passes a full properties dict and has since before this ticket
+was written. Direct MDM Postgres sampling instead found every duplicated
+`relationship_id` has 2-4 rows with byte-identical properties/validity
+window/`source_system`/`source_accession`/`created_at` -- a different,
+not-yet-root-caused failure of `ensure_relationship`'s identical-evidence
+merge check. The "needs its own future wayfinder map" conclusion still
+holds; only the named mechanism was wrong. See the new map for the
+corrected investigation.
 
 **Mechanism: extend Ticket 05's existing module, not full re-derivation,
 not a call to `ensure_relationship`.** Two mechanism candidates were
