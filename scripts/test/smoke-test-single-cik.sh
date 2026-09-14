@@ -209,7 +209,8 @@ done
 
 if [[ "$SF_STATUS" != "succeeded" ]]; then
   echo "  Manifest task did not pick up run within ${SF_TIMEOUT}s — triggering manually"
-  snow_sql "CALL ${DB}.EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN('targeted-resync', '${RESYNC_EXEC_NAME}')"
+  # UTC session: COPY INTO labels Parquet timestamps with the session zone (cutover Ticket 22).
+  snow_sql "ALTER SESSION SET TIMEZONE = 'UTC'; CALL ${DB}.EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN('targeted-resync', '${RESYNC_EXEC_NAME}')"
   snow_sql "CALL ${DB}.EDGARTOOLS_GOLD.REFRESH_AFTER_LOAD('targeted-resync', '${RESYNC_EXEC_NAME}')"
   SF_STATUS="$(snow_scalar "
     SELECT COALESCE(MAX(status), 'unknown')
