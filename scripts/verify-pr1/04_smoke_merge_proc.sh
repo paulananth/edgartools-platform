@@ -151,8 +151,9 @@ log "Test 3 — invoke LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN with a fake run id"
 
 # Should fail with "No run manifest found" — that proves the proc parses and
 # runs to its first SELECT.  It should NOT raise an "unknown procedure" error.
+# UTC session: COPY INTO labels Parquet timestamps with the session zone (cutover Ticket 22).
 result="$(snow sql --connection "$SNOW_CONNECTION" --format json --query \
-    "CALL ${SNOWFLAKE_DATABASE}.${SOURCE_SCHEMA}.LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN('pr1-verify-workflow', 'pr1-verify-${TEST_CIK}');" \
+    "ALTER SESSION SET TIMEZONE = 'UTC'; CALL ${SNOWFLAKE_DATABASE}.${SOURCE_SCHEMA}.LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN('pr1-verify-workflow', 'pr1-verify-${TEST_CIK}');" \
     2>&1 || true)"
 
 if printf '%s' "$result" | grep -qiE "No run manifest|manifest"; then

@@ -76,8 +76,9 @@ done
 
 echo "Loading exports into Snowflake source tables..."
 for NAME in "${EXEC_NAMES[@]}"; do
+  # UTC session: COPY INTO labels Parquet timestamps with the session zone (cutover Ticket 22).
   snow sql --connection "$SNOW_CONNECTION" --query \
-    "CALL ${DB}.EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN('targeted-resync', '${NAME}')"
+    "ALTER SESSION SET TIMEZONE = 'UTC'; CALL ${DB}.EDGARTOOLS_SOURCE.LOAD_EXPORTS_FOR_RUN('targeted-resync', '${NAME}')"
 done
 
 echo "Refreshing gold ownership tables..."
