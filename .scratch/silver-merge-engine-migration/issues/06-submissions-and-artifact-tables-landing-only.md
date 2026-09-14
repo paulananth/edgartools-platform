@@ -125,7 +125,8 @@ filing text moved to 06e.
 
 ### 06e — tickers and filing text (no same-run readers)
 
-**Status:** open. Split off 06d by its grilling (2026-09-13).
+**Status:** decided 2026-09-14 by grilling (see "06e Answer"); implementation open. Split off
+06d by its grilling (2026-09-13).
 
 `replace_company_tickers`, `upsert_filing_text`. A straight landing-only switch, same shape as
 06a–06c.
@@ -143,8 +144,8 @@ filing text moved to 06e.
   `SilverDatabase.get_company_tickers`.
 - `sec_filing_text`'s dbt model partitions on `(accession_number, text_version)`, the old key.
 
-Order: 06a first (no reader touched), then 06b, then 06c. 06d is decided and waits on
-implementation; 06e can go in either order with it.
+Order: 06a first (no reader touched), then 06b, then 06c. 06d is resolved in code; 06e is
+decided and waits on implementation.
 
 ## 06a Answer
 
@@ -416,3 +417,55 @@ live `daily_incremental` run showing the three tables' landing rows.
 **Still owed:** a live `daily_incremental` run showing `SEC_COMPANY_FILING`/
 `SEC_FILING_ATTACHMENT`/`SEC_RAW_OBJECT` landing rows (filings and attachments with
 `last_sync_run_id` populated), and Ticket 11.
+
+## 06e Answer
+
+Decided 2026-09-14 by grilling; implementation open. No ADR: easy to reverse, the 06a–06d
+shape.
+
+**Reader inventory, verified:** the one production ticker writer is `seed-universe`
+(`_sync_reference_data`, gated on the bookkeeping source checkpoint); nothing later in that run
+reads `sec_company_ticker` locally (`_company_identity_ciks_snowflake`, `mdm seed-universe` and
+MDM read Snowflake). Nothing reads `sec_filing_text` locally: extraction reads the filing through
+the 06d lookup and `run_filing_text_sweep` reads Snowflake. The landing schema carries
+`cause_reference` on tickers (bootstrap SQL 19); both dbt models partition on the old keys.
+
+- **Writers:** `replace_company_tickers` and `upsert_filing_text` call
+  `_record_landing_passthrough`.
+  - Tickers: stamp `_synced_now_stamp(sync_run_id)`. The writer's own skip of a row with no
+    `cik` or a falsy ticker stays ahead of the landing call (06d Answer, Q9); without it the
+    primary-key NOT NULL check would raise on `None` and accept `""`. `source_rank` stays the
+    ordinal over every input row, skipped ones included. `cause_reference` is passed through
+    when given. The local `DELETE ... WHERE source_name` goes; it never reached landing, and a
+    dropped ticker is a Silver Landing Retirement Record's job (pre-existing).
+  - Filing text: no stamp (the table has no sync columns; `extracted_at` comes from the caller).
+    The seven-field `None` check stays at the writer.
+- **Deleted:** `get_filing_text`, `get_all_filing_texts`, `SilverDatabase.get_company_tickers`
+  (no callers), and the `track_landing_rows`/`track_landing_row` decorators, which have no
+  production user once `upsert_filing_text` is switched (Q2). Comments that name them are
+  updated (`silver_store.py`, `silver_landing_historical_backfill.py`, test docstrings);
+  `bookkeeping/store.py`'s docstring reference to `get_all_filing_texts` too.
+  `LandingExportBuffer` stays.
+- **Dormant reference-catalog driver (Q1):** `drive-reference-catalog-discovery` is not wired
+  into any state machine and opens the store with no landing buffer. Its read of the earlier
+  ticker list (`prior_pairs`, which feeds `_record_landing_retirements`) stays unchanged: it was
+  already always empty (fresh local store, and the retirement step returns early without a
+  buffer). The map's retirement fog now records that the list must come from Snowflake silver
+  when the change-propagation map wires this driver. Its read-back after the write settles as
+  VERIFIED on record (Ticket 02's shape), since the local table stays empty.
+- **Tests owed:** landing-only + stamps, the skip, `source_rank` over skipped rows,
+  `cause_reference`, the filing-text check raising before recording; tests that read
+  `sec_company_ticker` back from local DuckDB (`test_windowing`, `test_bootstrap_company_identity`,
+  `test_drive_reference_catalog_discovery_command`, `test_reference_catalog_silver_acceptance`)
+  move to landing rows; `test_write_path_snowflake_reads` seeds its DuckDB fixture with
+  `insert_silver_rows` instead of the writer.
+- **Is DuckDB gone after 06e?** No. Every SEC data writer is off local DuckDB, but DuckDB still
+  backs the table definitions the landing NOT NULL check and the 06d lookup read, the migration
+  log, the two fundamentals markers, `silver_protection.py`, the sharded reader, shard migration,
+  the `drive-*` drivers and the raw-SQL readers. Tickets 07, 08 and 09 (and Ticket 09's
+  cross-map blockers) remain.
+
+**Owed at implementation:** the 06a–06d build shape (`/gof-refactor-reviewer` first, red-first
+tests, 3-axis review), then a live run showing `SEC_COMPANY_TICKER` landing rows from
+`seed-universe`. `SEC_FILING_TEXT` landing rows show only when the filing-text sweep or
+`targeted-resync --include-text` runs.
