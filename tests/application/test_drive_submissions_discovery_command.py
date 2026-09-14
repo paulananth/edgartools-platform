@@ -186,21 +186,11 @@ def test_drive_submissions_discovery_captures_main_and_pagination_end_to_end(
     assert (tmp_path / "bronze" / "submissions" / main_hash).read_bytes() == main_bytes
     assert (tmp_path / "bronze" / "submissions" / pagination_hash).read_bytes() == pagination_bytes
 
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
-
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    verify_db = open_silver_database(silver_root)
-    try:
-        # sec_company is landing-only (silver-merge-engine-migration Ticket
-        # 06b) and this driver opens no landing export, so there is no company
-        # row to read back; test_submissions_silver_acceptance.py covers it.
-        recent_filing = verify_db.get_filing("0000320193-26-000001")
-        assert recent_filing is not None
-        pagination_filing = verify_db.get_filing("0000320193-19-000042")
-        assert pagination_filing is not None
-    finally:
-        verify_db.close()
+    # sec_company and sec_company_filing are landing-only (silver-merge-engine-
+    # migration Tickets 06b/06d) and this driver opens no landing export, so a
+    # second Silver database has no row to read back. silver_outcome ==
+    # "PUBLISHED" above already required the run's own get_filing read-back;
+    # test_submissions_silver_acceptance.py covers the rows it records.
 
     run_manifest_path = (
         tmp_path

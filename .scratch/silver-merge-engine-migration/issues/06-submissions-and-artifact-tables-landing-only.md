@@ -97,8 +97,13 @@ from `stage_submission`.
 
 ### 06d — the same-run core (blocked on a decision, not a mechanical switch)
 
+**Status:** decided 2026-09-13 by grilling and resolved in code the same day (see "06d Answer");
+live verification still owed.
+Narrowed to `sec_company_filing`, `sec_filing_attachment` and `sec_raw_object` — tickers and
+filing text moved to 06e.
+
 `merge_filings`, `upsert_raw_object`, `merge_filing_attachments`, `upsert_filing_text`,
-`replace_company_tickers`.
+`replace_company_tickers` (as originally scoped).
 
 - **Blocker:** `warehouse_orchestrator.py` release/recurring candidate seeding calls
   `merge_filings`, then `db.get_filing` for each required accession, and fails closed with
@@ -118,7 +123,28 @@ from `stage_submission`.
   keep the local DuckDB write for these tables only; or move the reads to bookkeeping.
   This decides whether Ticket 09 (drop `duckdb`) is reachable.
 
-Order: 06a first (no reader touched), then 06b, then 06c. 06d waits on its decision.
+### 06e — tickers and filing text (no same-run readers)
+
+**Status:** open. Split off 06d by its grilling (2026-09-13).
+
+`replace_company_tickers`, `upsert_filing_text`. A straight landing-only switch, same shape as
+06a–06c.
+
+- No same-run production reader: `seed-universe` gates `replace_company_tickers` on the
+  bookkeeping source checkpoint, and `sec_filing_text` is read only by the filing-text sweep,
+  on the Snowflake reader. The dormant reference-catalog acceptance driver's
+  `sec_company_ticker` read-back takes Ticket 02's "VERIFIED on record" shape.
+- `replace_company_tickers`'s local `DELETE ... WHERE source_name` never reached landing; the
+  dbt model already partitions on `(cik, ticker, source_name)` behind `silver_not_retired`, so
+  a ticker dropping out of a snapshot belongs to the Silver Landing Retirement Record, not to
+  this switch (pre-existing).
+- Keep each writer's own input checks ahead of the landing call (06d Answer, Q9).
+- Delete the uncalled `get_filing_text`, `get_all_filing_texts` and
+  `SilverDatabase.get_company_tickers`.
+- `sec_filing_text`'s dbt model partitions on `(accession_number, text_version)`, the old key.
+
+Order: 06a first (no reader touched), then 06b, then 06c. 06d is decided and waits on
+implementation; 06e can go in either order with it.
 
 ## 06a Answer
 
@@ -274,3 +300,119 @@ Resolved 2026-09-13 in code; live verification still owed.
 **Still owed:** a live `daily_incremental` run showing `SEC_OWNERSHIP_REPORTING_OWNER`/
 `SEC_OWNERSHIP_NON_DERIVATIVE_TXN`/`SEC_OWNERSHIP_DERIVATIVE_TXN` landing rows with
 `last_sync_run_id` populated.
+
+## 06d Answer
+
+Decided 2026-09-13 by grilling; implementation open. Recorded as
+[ADR 0011](../../../docs/adr/0011-same-run-silver-reads-from-recorded-rows.md).
+
+- **Scope narrowed (Q1):** 06d is `sec_company_filing`, `sec_filing_attachment` and
+  `sec_raw_object`. `replace_company_tickers` and `upsert_filing_text` have no same-run
+  production reader and move to 06e as a straight landing-only switch.
+- **Same-run reads (Q2):** answered by an in-run lookup, not local DuckDB (would keep `duckdb`
+  in the daily write path, so Ticket 09 unreachable), not the bookkeeping Postgres store
+  (source content in a tracking-state store, commits only after publish, a round trip per
+  lookup in the artifact loop), not the Snowflake reader (cannot see this run's rows before the
+  landing load and dbt collapse). The readers it serves: `daily_incremental` candidate seeding
+  (`merge_filings` then `get_filing`, fail-closed), configured-form selection,
+  `fetch_filing_artifacts`, `_read_primary_artifact_bytes`, the ownership-skip and release
+  evidence, and text extraction. The landing buffer is written out once at the end of the run,
+  so the lookup can index the same row dicts it already holds.
+- **Values when a key recurs in one run (Q4):** keep the old upsert's per-column rule. Columns
+  its `DO UPDATE SET` never touched keep their first value in the run — for filings `cik`,
+  `items`, `act`, `file_number`, `film_number`; for raw objects `fetched_at` — and every other
+  column takes the latest write. Keys: filings by `accession_number`, attachments by
+  `(accession_number, document_name)`, raw objects by `raw_object_id`. Reason: a multi-CIK
+  accession staged twice (issuer, then reporting owner) must keep resolving
+  `fetch_filing_artifacts` to the same bronze path.
+- **Where it lives (Q5):** inside `SilverDatabase`, filled by the same writer call that records
+  to landing; `get_filing`, `get_filing_attachments` and `get_raw_object` keep their
+  signatures and read from it, so no caller changes. Ticket 09 moves it with the writers into
+  the store-free module.
+- **Without a landing buffer (Q6):** the lookup is filled anyway. The five dormant `drive-*`
+  drivers open `SilverDatabase` without one and read back what they just wrote.
+- **Writer input checks (Q9):** kept at each writer, ahead of the landing call —
+  `merge_filing_attachments` still raises on a falsy `accession_number`/`document_name`/
+  `document_type`/`document_url`, `upsert_raw_object` on its six named `None` fields — not
+  replaced by the landing NOT NULL check alone.
+- **Uncalled readers (Q10):** `get_raw_objects_for_accession`, `get_filings_for_cik` and
+  `get_filing_count` have no callers and are deleted with 06d (06e deletes the filing-text and
+  ticker ones), rather than being backed by the lookup.
+- **Reads meant for earlier runs (Q3):** unchanged. The artifact cache hit (`existing_rows`)
+  and a `--force` repair's prior hash/version snapshot have been empty since local DuckDB
+  stopped being hydrated; the S3 LIST (Ticket 88 and the bronze-recovery fix) is what prevents
+  re-fetching. `targeted-resync --scope accession` appears to fail outright for the same
+  reason — [Ticket 10](10-restore-targeted-resync-accession-scope.md) verifies it live and
+  picks a fix.
+- **Is DuckDB gone after 06d/06e?** No. Every silver writer is DuckDB-free then, but DuckDB
+  still backs the two fundamentals markers (bootstrap-fundamentals-crash-resume map), the
+  landing NOT NULL lookup (`_required_columns` reads the DuckDB DDL; Ticket 09), the dead local
+  readers (Ticket 07), the sharded reader and parity tooling (Ticket 08), the publish merge,
+  shard migration, event reducer, historical backfill and scripts (Ticket 09), and the old
+  canonical S3 files (duckdb-retirement-cutover Ticket 21). Ticket 09 stays reachable.
+
+**Owed at implementation:** the 06a–06c build shape (passthrough, `/gof-refactor-reviewer`
+first, red-first tests, 3-axis review), plus tests that a recurring key keeps first-value
+columns, that the lookup works with no landing buffer, and that `daily_incremental`'s
+candidate seeding still passes and still fails closed for a seed row missing its key; then a
+live `daily_incremental` run showing the three tables' landing rows.
+
+### 06d implementation (resolved 2026-09-13 in code; live verification still owed)
+
+- **Writers:** `merge_filings`, `merge_filing_attachments` and `upsert_raw_object` call
+  `_record_landing_passthrough`; their `@track_landing_*` decorators, the DuckDB upsert SQL,
+  `_merge_rows` and `_merge_rows_bulk` are gone. Stamps: filings `_synced_now_stamp`,
+  attachments `_sync_run_stamp`, raw objects none. Attachments keep the absent-key
+  `is_primary=False` default.
+- **Input checks (Q9):** attachments still raise on a falsy key/type/URL, raw objects on their
+  six `None` fields. Filings add an explicit `"cik" not in row` check: `cik` is nullable, so the
+  NOT NULL check alone would accept a row the old `row["cik"]` rejected. A missing
+  `accession_number` is caught by the NOT NULL check. Every writer now validates all rows
+  before recording any; the old attachment loop had already inserted earlier rows when a later
+  one raised (the safer direction).
+- **In-run lookup (Q2/Q4–Q6):** a module-level `_IN_RUN_LOOKUP_TABLES` names each table's key
+  columns and first-value columns; the passthrough indexes recorded rows for those tables
+  (`_remember_in_run`), with or without a landing buffer. `get_filing`, `get_filing_attachments`
+  and `get_raw_object` keep their signatures and return copies carrying every DDL column in
+  order (`None` where absent), the shape `SELECT *` returned. Values come back as written: the
+  old DuckDB coercion (e.g. `DATE`) is gone, and no production caller relied on it (extractors
+  and relationship candidates already pass `date`; `_ownership_filing_date`,
+  `latest_filing_date` and `fundamentals_ingest` accept either).
+- **Deleted (Q10):** `get_filing_count`, `get_filings_for_cik`, `get_raw_objects_for_accession`
+  (and two test stubs that still modelled the last one).
+- **`/gof-refactor-reviewer` (pre-code and post-diff):** leave the shape. The three tables differ
+  only in data, so a spec dict plus two helpers beats three copies of the rule; the membership
+  check in the passthrough is one branch at one site; `SilverDatabase` stays the owner until
+  Ticket 09, which now notes that the lookup's column order comes from the DuckDB DDL.
+- **Raw-SQL same-run readers (not in the grilling's inventory):**
+  - `capture_parity.run_dual_path_filing_artifact_parity` read `SELECT * FROM sec_raw_object`
+    after the legacy capture; it now reads attachments and raw objects through the lookup.
+    `tests/acquisition/test_capture_parity_legacy_snapshot.py` covers it (red on the old read).
+  - Release-mode Branch B (`bootstrap-batch --release-mode`) passes the local store as `source`
+    to the fundamentals per-filing and 13F ingest, whose raw SQL now finds nothing, so it fails
+    closed with "required candidates missing from filing manifest". Newly broken, dormant (the
+    last two `one_click_data_refresh` executions ran `release_mode: false`); recorded in
+    ADR 0011 and [Ticket 11](11-restore-release-mode-branch-b-same-run-reads.md). Its tests use
+    hand-rolled `fetch()` stubs, which is why none caught it.
+  - `parse-ownership-bronze` / `parse-adv-bronze` raw-SQL reads of `sec_company_filing` were
+    already empty (nothing earlier in those commands fills the local store); pre-existing.
+- **Pre-existing, not introduced:** the lookup keeps `fetched_at` first for raw objects and keys
+  filings on `accession_number` alone, while the dbt models take the latest write for every
+  raw-object column and partition filings on `(accession_number, cik)`. The lookup copies the old
+  upsert on purpose (Q4); the old passthrough docstring's "same first-insert/last-write
+  semantics" claim was corrected.
+- **Tests:** `test_filing_artifact_landing_passthrough.py` (landing-only + stamps, the
+  first-value/latest-write rule within and across calls, full-column copies, no-buffer lookup,
+  every input check raising before recording; it carries over the deleted
+  `test_merge_filings_bulk.py`'s cases). `test_submission_phase_order.py` gained candidate
+  seeding against a real `SilverDatabase`: passes, fails closed with `ValueError` for a seed row
+  missing `accession_number`, and with "could not be staged" for a row keyed elsewhere. Seven
+  tests that read these tables from local DuckDB now read the lookup or landing rows; the two
+  `drive-*` end-to-end tests drop their second-database read-back (the driver opens no landing
+  export; the run's own read-back still gates `PUBLISHED`). Full suite (excluding
+  `tests/integration`): 3504 passed, 5 skipped. mypy and ruff: nothing beyond the findings HEAD
+  already had.
+
+**Still owed:** a live `daily_incremental` run showing `SEC_COMPANY_FILING`/
+`SEC_FILING_ATTACHMENT`/`SEC_RAW_OBJECT` landing rows (filings and attachments with
+`last_sync_run_id` populated), and Ticket 11.

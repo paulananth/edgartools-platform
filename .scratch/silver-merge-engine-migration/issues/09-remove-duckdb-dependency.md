@@ -16,6 +16,9 @@ deps image (`uv.lock` change → rebuild both deps images per CLAUDE.md's table)
 
 `LandingExportBuffer` + the `_record_landing_passthrough` defaults/stamps/NOT-NULL sets are the
 only thing the writers still need — they move to a store-free module (name TBD when this lands).
+Ticket 06d's in-run lookup (`_IN_RUN_LOOKUP_TABLES`, `_remember_in_run`, `_in_run_lookup`) moves
+with them. It takes its row shape (every column, in order) from `_table_columns`, which reads the
+DuckDB DDL, so that column list needs a DuckDB-free source too.
 
 **Blocked by:** [Ticket 07](07-delete-confirmed-dead-duckdb-readers.md),
 [Ticket 08](08-delete-sharded-reader-and-parity-tooling.md), duckdb-retirement-cutover
