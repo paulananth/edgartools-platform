@@ -503,10 +503,6 @@ def _handle_seed_bronze_batches(args: argparse.Namespace) -> int:
     return run_command("seed-bronze-batches", args)
 
 
-def _handle_parse_ownership_bronze(args: argparse.Namespace) -> int:
-    return run_command("parse-ownership-bronze", args)
-
-
 def _handle_parse_adv_bronze(args: argparse.Namespace) -> int:
     return run_command("parse-adv-bronze", args)
 
@@ -1151,46 +1147,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(seed_bronze_batches)
     seed_bronze_batches.set_defaults(handler=_handle_seed_bronze_batches)
-
-    parse_ownership_bronze = subparsers.add_parser(
-        "parse-ownership-bronze",
-        help=(
-            "Parse Form 3/4/5 ownership XMLs already in S3 bronze into silver. "
-            "Uses edgartools (Ownership.from_xml). No SEC API calls. "
-            "Skips accessions already parsed earlier in the same run; no cross-run skip. "
-            "Default lookback is the past 2 years of Form 3/4/5 filings."
-        ),
-    )
-    parse_ownership_bronze.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Maximum number of accessions to process (default: all).",
-    )
-    parse_ownership_bronze.add_argument(
-        "--accession-list",
-        type=lambda s: [a.strip() for a in s.split(",") if a.strip()],
-        default=None,
-        metavar="ACCESSIONS",
-        help=(
-            "Comma-separated accession numbers to process. "
-            "When supplied, only these accessions are parsed (default: all Forms 3/4/5)."
-        ),
-    )
-    parse_ownership_bronze.add_argument(
-        "--ownership-lookback-years",
-        type=int,
-        default=None,
-        metavar="N",
-        help=(
-            "Years of Form 3/4/5 history to parse (default: 2). "
-            "Use 0 for full history. Also settable via "
-            "WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
-        ),
-    )
-    _add_run_id_arg(parse_ownership_bronze)
-    parse_ownership_bronze.set_defaults(handler=_handle_parse_ownership_bronze)
 
     parse_adv_bronze = subparsers.add_parser(
         "parse-adv-bronze",

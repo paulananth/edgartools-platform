@@ -342,7 +342,6 @@ class WarehousePathResolver:
             "seed-universe",
             "seed-silver-batches",
             "seed-bronze-batches",
-            "parse-ownership-bronze",
             "parse-adv-bronze",
             "fetch-adv-bulk",
             "fetch-firm-roster",

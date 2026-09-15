@@ -1,9 +1,8 @@
 """silver-merge-engine-migration Ticket 06c: the ownership trio is landing-only.
 
-Nothing reads these tables back in-process: their readers are MDM (Snowflake
-reader), `parse-ownership-bronze`'s `already_parsed` gate keeps its own in-run
-set, and the artifact pipeline's silver-once skip now asks only the bookkeeping
-`sec_parse_run`. Every dbt silver model partitions on the old ON CONFLICT key.
+Nothing reads these tables back in-process: their reader is MDM (Snowflake
+reader), and the artifact pipeline's silver-once skip now asks only the
+bookkeeping `sec_parse_run` (`parse-ownership-bronze` was retired by Ticket 15). Every dbt silver model partitions on the old ON CONFLICT key.
 The rows stamp `last_sync_run_id`; the raw rows `@track_landing_rows`
 recorded did not carry it.
 """

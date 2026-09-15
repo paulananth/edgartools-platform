@@ -23,7 +23,6 @@ from edgar_warehouse.application.commands import (
     gold_refresh,
     ingest_relationship_sources,
     parse_adv_bronze,
-    parse_ownership_bronze,
     reduce_identity_refresh,
     release_identity_refresh_lease,
     release_sec_fetch_lease,
@@ -53,7 +52,6 @@ LEGACY_COMMAND_REGISTRY = {
     "seed-silver-batches": seed_silver_batches.execute,
     "seed-bronze-batches": seed_bronze_batches.execute,
     "parse-adv-bronze": parse_adv_bronze.execute,
-    "parse-ownership-bronze": parse_ownership_bronze.execute,
     "bootstrap-batch": bootstrap_batch.execute,
     "bootstrap-next": bootstrap_next.execute,
     "bootstrap-fundamentals": bootstrap_fundamentals.execute,  # Branch B (AD-05)
