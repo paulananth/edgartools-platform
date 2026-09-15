@@ -52,7 +52,6 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
     manifest_entries = [
@@ -118,7 +117,6 @@ def test_gold_refresh_persists_and_emits_frozen_input_envelope(tmp_path) -> None
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
     envelope = {
@@ -202,7 +200,6 @@ def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> No
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {"sec_company": 1}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
 
@@ -264,7 +261,6 @@ def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path)
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {"sec_company": 1}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
 

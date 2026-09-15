@@ -648,12 +648,12 @@ def _execute_warehouse_bronze_capture(
             rows_inserted=metrics.get("rows_inserted", 0),
             rows_skipped=metrics.get("rows_skipped", 0),
         )
-        # DuckDB Retirement Cutover Ticket 14: db.get_table_counts() now
-        # excludes the 10 bookkeeping tables entirely (they moved to
-        # Postgres) -- merge in bookkeeping's own counts for those so this
-        # diagnostic dict keeps covering every silver table, content and
-        # bookkeeping alike, with no colliding/stale-zero keys.
-        silver_table_counts = {**db.get_table_counts(), **bookkeeping.get_table_counts()}
+        # Bookkeeping's 10 Postgres tables only (DuckDB Retirement Cutover
+        # Ticket 14). The local store's content-table counts went with
+        # SilverDatabase.get_table_counts (silver-merge-engine-migration
+        # Ticket 14): every content table is landing-only, so the local
+        # count was always zero.
+        silver_table_counts = dict(bookkeeping.get_table_counts())
         if context.snowflake_export_root is not None and publish_gold:
             from edgar_warehouse.serving.source_dimensional_export import (
                 capture_gold_input_envelope,
