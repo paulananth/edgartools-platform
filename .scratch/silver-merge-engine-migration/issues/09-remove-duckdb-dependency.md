@@ -2,7 +2,7 @@
 
 **Type:** task — the destination.
 
-**Status:** split 2026-09-14 into Tickets 13–17 (see the note at the end); resolves when Ticket 17 lands.
+**Status:** resolved in code 2026-09-15 — Ticket 17 landed the engine deletion and the `duckdb` removal; its deploy and lifecycle-rule cleanup remain on Ticket 17.
 
 ## Question
 

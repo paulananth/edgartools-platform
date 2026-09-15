@@ -1,7 +1,7 @@
 """BookkeepingStore: SQLAlchemy-backed store for the 10 operational tables.
 
-Ported 1:1 from edgar_warehouse.silver_store.SilverDatabase's equivalent
-methods (DuckDB Retirement Cutover Ticket 02). Method names and signatures
+Ported 1:1 from the equivalent methods of the since-deleted DuckDB
+SilverDatabase (DuckDB Retirement Cutover Ticket 02). Method names and signatures
 match the originals so Ticket 03's caller repointing is close to mechanical.
 Two methods from the original surface were deliberately NOT ported here:
 `get_all_filing_texts` (queried sec_filing_text, not one of these 10 tables)

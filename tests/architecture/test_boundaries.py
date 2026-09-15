@@ -21,12 +21,10 @@ class BoundaryTests(unittest.TestCase):
         ]
         self.assertEqual(offenders, [])
 
-    def test_db_conn_only_lives_in_silver_support_session(self) -> None:
-        allowed = {
-            PACKAGE_ROOT / "silver_support" / "session.py",
-            PACKAGE_ROOT / "silver_support" / "access.py",
-        }
-        offenders = [path for path in _python_sources() if "db._conn" in path.read_text(encoding="utf-8") and path not in allowed]
+    def test_no_local_silver_connection_is_reached_into(self) -> None:
+        """The DuckDB engine is gone (silver-merge-engine-migration Ticket
+        17); nothing may reach for a `db._conn` again."""
+        offenders = [path for path in _python_sources() if "db._conn" in path.read_text(encoding="utf-8")]
         self.assertEqual(offenders, [])
 
     def test_fsspec_only_lives_in_object_storage_adapter(self) -> None:

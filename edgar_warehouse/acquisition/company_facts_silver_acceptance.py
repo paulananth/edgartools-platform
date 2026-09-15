@@ -28,9 +28,8 @@ A producer settles VERIFIED once its rows are recorded: with no local
 store to read back, the record call raising is the only failure mode, and
 that isolates as a per-candidate error in ``drive_company_facts_silver_
 acceptance``. Note the driver (``drive_company_facts_discovery.py``) opens
-its ``SilverDatabase`` without a landing export today, so its writes go
-nowhere -- already true of its DuckDB writes since Ticket 10 made the
-publish step a no-op; wiring it is that dormant driver's own follow-up.
+its ``SilverLandingStore`` without a landing export today, so its writes go
+nowhere; wiring it is that dormant driver's own follow-up.
 
 Bullet 2 ("Scope Completion includes the authoritative member count and
 ordered digest") is a *recording* requirement, not a deletion one: each
@@ -50,7 +49,7 @@ scoring (``score_accounting_flags``, run per CIK inside
 ``run_bootstrap_entity_facts``) is likewise out of scope -- not a producer
 of this snapshot's scope.
 
-Deliberately does not touch ``silver_store.py``'s existing merge methods --
+Deliberately does not touch ``silver_landing_store.py``'s existing merge methods --
 reuses ``merge_financial_facts``/``merge_accounting_flags`` exactly as the
 legacy path does.
 """
@@ -72,7 +71,7 @@ from edgar_warehouse.acquisition.processing import (
 )
 from edgar_warehouse.acquisition.revisions import ContentImpact, SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 COMPANY_FACTS_FACT_PRODUCER_NAME = "sec_financial_fact"
 COMPANY_FACTS_FACT_TARGET_TABLE = "sec_financial_fact"
@@ -154,7 +153,7 @@ def _finalize_company_facts_candidate(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     decision_id: str,
     *,
     cik: int,
@@ -283,7 +282,7 @@ def drive_company_facts_silver_acceptance(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     result: CompanyFactsDriveResult,
     *,
     required_producers: tuple[str, ...] = (

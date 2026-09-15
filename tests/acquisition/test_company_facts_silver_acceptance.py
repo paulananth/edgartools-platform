@@ -3,8 +3,7 @@ sec_accounting_flag rows), not concrete classes -- same discipline as
 test_submissions_silver_acceptance.py's own header comment.
 
 The durable evidence is the landing export (silver-merge-engine-migration
-Ticket 02): local DuckDB is never written or read back for these tables
-anymore, so the harness attaches a LandingExportBuffer and asserts on it.
+Ticket 02): the harness attaches a LandingExportBuffer and asserts on it.
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ from edgar_warehouse.acquisition.processing import ProcessingLedger, SilverFinal
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
 def _engine():
@@ -53,7 +52,7 @@ def _engine():
 def _harness(tmp_path: Path):
     engine = _engine()
     AcquisitionBase.metadata.create_all(engine)
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    silver = SilverLandingStore(landing_export=LandingExportBuffer())
     bronze_root = StorageLocation(str(tmp_path / "bronze"))
     return (
         AcquisitionLedger(engine),
@@ -222,8 +221,6 @@ def test_finalize_writes_and_verifies_sec_financial_fact_and_sec_accounting_flag
     facts = silver.landing_export.tables()["sec_financial_fact"]
     assert [(r["cik"], r["concept"], r["value"]) for r in facts] == [(320193, "Assets", 1000.0)]
     assert facts[0]["is_current"] is True
-    # Nothing local anymore -- the landing export is the only write.
-    assert silver.fetch("SELECT COUNT(*) AS n FROM sec_financial_fact")[0]["n"] == 0
 
 
 def test_finalize_settles_a_complete_empty_facts_scope(tmp_path: Path) -> None:
@@ -342,7 +339,7 @@ def test_a_second_complete_snapshot_with_different_content_records_its_own_membe
     tmp_path: Path,
 ) -> None:
     """Formerly Ticket 33's retirement scenario (a second snapshot missing a
-    fact key retired it in local DuckDB). Retirement went with the local
+    fact key retired it in the local store). Retirement went with the local
     read-back (silver-merge-engine-migration Ticket 02): a second, different
     snapshot now records exactly its own rows to the landing export and
     settles VERIFIED, with no local state consulted.

@@ -35,11 +35,11 @@ company-identity Company master identity: global reference data
              Output: sec_company, sec_company_ticker, sec_company_filing,
              sec_company_address, sec_company_former_name.
 
-Silver database
----------------
-Writes to the canonical SEC silver database under ``silver/sec/silver.duckdb``.
-Branch B tables share the same DuckDB file as Branch A tables so application code
-can enforce cross-table consistency through ordinary reads before writing.
+Silver
+------
+Writes go through ``SilverLandingStore`` to the Snowflake landing zone, flushed
+once at the end of the run; reads of existing silver go to EDGARTOOLS_SILVER
+through ``_open_fundamentals_silver_source``.
 
 Invariants preserved
 --------------------
@@ -93,33 +93,22 @@ def execute(args: Any) -> int:
     started_at = datetime.now(UTC)
     context = _build_silver_context(identity=identity, silver_root_override=silver_root_override)
 
-    from edgar_warehouse.silver_support.session import open_silver_database
+    from edgar_warehouse.silver_landing_store import SilverLandingStore
     # duckdb-retirement-cutover Ticket 18: without this buffer, every write
-    # this command makes lands only in the local, throwaway `db` and never
-    # reaches the Snowflake landing zone -- see _execute_warehouse_bronze_capture
-    # in warehouse_orchestrator.py for the same construct-then-flush shape
-    # every other silver-writing command already uses.
+    # this command makes is dropped and never reaches the Snowflake landing
+    # zone -- see _execute_warehouse_bronze_capture in warehouse_orchestrator.py
+    # for the same construct-then-flush shape every other silver-writing
+    # command already uses.
     from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
     landing_export = (
         LandingExportBuffer() if context.silver_landing_export_root is not None else None
     )
-    try:
-        # DuckDB Retirement Cutover Ticket 10: hydration removed entirely.
-        # _resolve_fundamentals_ciks (both the --cik-list and windowed cases)
-        # already reads bookkeeping.get_tracked_ciks() -- Postgres, not this
-        # local `db` -- since Ticket 14 repointed it; canonical silver.duckdb
-        # is no longer written by any command (see
-        # _publish_silver_database_if_remote's docstring), so there is
-        # nothing left to hydrate from.
-        db = open_silver_database(context.silver_root, landing_export=landing_export)
-    except Exception as exc:
-        _err(f"Failed to open silver database: {exc}")
-        return 2
+    db = SilverLandingStore(landing_export=landing_export)
 
     # DuckDB Retirement Cutover Ticket 14: sec_company_sync_state (read by
     # _resolve_fundamentals_ciks below) and the tables _sync_reference_data/
-    # _run_submissions_bronze_then_silver touch now live in the Postgres-backed
-    # BookkeepingStore, not this local DuckDB `db` connection.
+    # _run_submissions_bronze_then_silver touch live in the Postgres-backed
+    # BookkeepingStore.
     bookkeeping = _bookkeeping_store()
 
     # Resolve the CIK batch. When no explicit --cik-list is given (the Step
@@ -162,7 +151,7 @@ def execute(args: Any) -> int:
     #
     # Hard-fail (not silently degrade) when this connection can't be
     # established, matching this function's own convention for every other
-    # real dependency (resolve_edgar_identity, open_silver_database) above.
+    # real dependency (resolve_edgar_identity) above.
     # A pre-code /gof-refactor-reviewer consult flagged that falling back to
     # `db` here would reproduce this exact ticket's bug -- unbounded
     # re-fetch/re-scan -- conditionally on Snowflake being unreachable,
@@ -319,12 +308,13 @@ def execute(args: Any) -> int:
         except Exception:
             pass
 
-    # A run-scoped Daily Identity Refresh persists only its immutable CIK delta.
-    # The dedicated reducer is the sole canonical publisher for that run.
+    # A run-scoped Daily Identity Refresh records this batch's immutable
+    # success declaration; the reducer checks every declared batch has one.
     if identity_refresh_run_id:
-        from pathlib import Path
-
-        from edgar_warehouse.application.identity_refresh_publication import persist_batch_outcome
+        from edgar_warehouse.application.identity_refresh_publication import (
+            batch_outcome_path,
+            persist_batch_outcome,
+        )
 
         image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
         if not image_identity:
@@ -336,43 +326,13 @@ def execute(args: Any) -> int:
                 run_id=identity_refresh_run_id,
                 image_identity=image_identity,
                 ciks=cik_list,
-                delta_file=Path(context.silver_root.join("silver", "sec", "silver.duckdb")),
             )
-            metrics["identity_refresh_delta"] = {
+            metrics["identity_refresh_batch"] = {
                 "batch_id": outcome["batch_id"],
-                "path": outcome["delta_path"],
-                "sha256": outcome["sha256"],
+                "outcome_path": batch_outcome_path(identity_refresh_run_id, outcome["batch_id"]),
             }
         except Exception as exc:
-            _err(f"Failed to persist identity refresh batch delta: {exc}")
-            return 1
-
-    # Upload the unified silver database to remote storage so later tasks can
-    # consume the Branch A and Branch B tables from one consistent file.
-    if context.storage_root.root and not identity_refresh_run_id:
-        from edgar_warehouse.application.warehouse_orchestrator import (
-            _publish_silver_database_if_remote,
-        )
-        try:
-            upload_result = _publish_silver_database_if_remote(context)
-            if upload_result and upload_result.get("skipped"):
-                _log(
-                    "silver_database_publish_skipped_noop",
-                    relative_path=upload_result["relative_path"],
-                    run_id=run_id,
-                )
-                metrics["silver_database_uploaded"] = False
-            elif upload_result:
-                _log(
-                    "silver_database_uploaded",
-                    destination=upload_result["path"],
-                    size_bytes=upload_result["size_bytes"],
-                    run_id=run_id,
-                )
-                metrics["silver_database_uploaded"] = True
-                metrics["silver_database_size_bytes"] = upload_result["size_bytes"]
-        except Exception as exc:
-            _err(f"Failed to upload silver database to remote storage: {exc}")
+            _err(f"Failed to persist identity refresh batch outcome: {exc}")
             return 1
 
     duration = (datetime.now(UTC) - started_at).total_seconds()
@@ -398,9 +358,9 @@ def _open_fundamentals_silver_source() -> Any | None:
     """Read-only Snowflake reader for per-filing/thirteenf/entity-facts's
     skip-check and Branch A filing-metadata reads.
 
-    duckdb-retirement-cutover Ticket 17: ``db`` (local DuckDB) is never
-    hydrated in production, so it can never answer "does this filing/CIK
-    already exist". Reuses ``SnowflakeSilverReader.connect()``'s default
+    duckdb-retirement-cutover Ticket 17: ``db`` (the in-memory
+    ``SilverLandingStore``) holds only this run's writes, so it can never
+    answer "does this filing/CIK already exist". Reuses ``SnowflakeSilverReader.connect()``'s default
     settings (``EDGARTOOLS_PROD_MDM_SILVER_READER``) -- despite its name,
     that role is the only one granted schema-wide read access to
     ``EDGARTOOLS_SILVER``, and ``SnowflakeSilverReader`` was already
@@ -413,8 +373,7 @@ def _open_fundamentals_silver_source() -> Any | None:
     production, so a fallback would reproduce this exact ticket's bug
     (unbounded re-fetch/re-scan) conditionally on Snowflake being
     unreachable instead of fixing it, matching this command's existing
-    convention for every other real dependency (``resolve_edgar_identity``,
-    ``open_silver_database``).
+    convention for every other real dependency (``resolve_edgar_identity``).
     """
     from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 

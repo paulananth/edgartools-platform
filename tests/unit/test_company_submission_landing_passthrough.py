@@ -16,8 +16,8 @@ from tests.support.silver_rows import open_landing_db
 
 
 @pytest.fixture()
-def db(tmp_path):
-    database = open_landing_db(tmp_path)
+def db():
+    database = open_landing_db()
     try:
         yield database
     finally:
@@ -70,14 +70,13 @@ _WRITERS = [
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _WRITERS)
-def test_rows_land_with_last_sync_run_id_and_never_touch_local_duckdb(db, method, table, make_row):
+def test_rows_land_with_last_sync_run_id(db, method, table, make_row):
     count = getattr(db, method)([make_row(last_sync_run_id="stale")], "run-1")
 
     assert count == 1
     recorded = db.landing_export.tables()[table][0]
     # The old SQL always wrote the call's sync_run_id, whatever the row said.
     assert recorded["last_sync_run_id"] == "run-1"
-    assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _WRITERS)

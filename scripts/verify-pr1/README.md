@@ -7,7 +7,7 @@ Manual verification harness for the Branch B fundamentals PR-1 (Snowflake source
 | Stage | Script | Creds needed | What it checks |
 |---|---|---|---|
 | **1** | `01_check_local_schema.sh` | No | 6 `CREATE TABLE` blocks in `01_source_stage.sql`; `LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN` proc in `06_*.sql`; 3 dim entries in `03_*.sql`; 6 entries in `SNOWFLAKE_EXPORT_TABLES`; 6 dbt sources with correct naming; 6 dbt gold models reference the right sources; PR-1 unit tests pass |
-| **2** | `02_smoke_builders.sh` | No | In-memory DuckDB → 6 PyArrow builders → row count + schema equality + `nullable=False` on PK columns + non-zero `fact_key` on dimensional rows |
+| **2** | _(deleted)_ | — | The in-memory DuckDB → PyArrow builder smoke test left with the DuckDB engine (silver-merge-engine-migration Ticket 17) |
 | **3** | `03_check_snowflake_ddl.sh` | Yes | Applies all 3 SQL files to dev Snowflake; verifies 6 tables exist; verifies `NOT NULL` constraints on PK columns; verifies both load procs exist |
 | **4** | `04_smoke_merge_proc.sh` | Yes | Composite-key MERGE is idempotent (INSERT same row twice → COUNT=1); update on conflict actually updates; NULL CIK/CONCEPT INSERTs are rejected (NOT NULL enforced); `LOAD_FUNDAMENTALS_EXPORTS_FOR_RUN` parses and executes (returns "No run manifest" — expected, no real manifest at this stage) |
 | **5** | _(deferred)_ | Yes | Full Parquet roundtrip via `gold-refresh` → S3 → COPY INTO → MERGE — depends on PR-2 |
@@ -49,7 +49,6 @@ bash scripts/verify-pr1/run_all.sh
 
 ```bash
 bash scripts/verify-pr1/01_check_local_schema.sh
-bash scripts/verify-pr1/02_smoke_builders.sh
 bash scripts/verify-pr1/03_check_snowflake_ddl.sh
 bash scripts/verify-pr1/04_smoke_merge_proc.sh
 ```
@@ -69,7 +68,7 @@ Each stage ends with `[STAGE N OK]` or `[STAGE N FAILED]` and a count.
 
 PR-1 is **complete** when:
 
-1. **Stages 1 + 2 pass** without Snowflake creds (proves the local artifacts are internally consistent — schemas match, builders produce correct shapes, dbt models reference real sources). This is the **review-time gate**.
+1. **Stage 1 passes** without Snowflake creds (proves the local artifacts are internally consistent — schemas match, dbt models reference real sources). This is the **review-time gate**.
 
 2. **Stages 3 + 4 pass** against dev Snowflake (proves the DDL actually deploys, NOT NULL constraints land in Snowflake metadata, composite-key MERGE behaves correctly). This is the **deploy-time gate**.
 
@@ -90,7 +89,6 @@ Each script logs the specific check that failed. Common fixes:
 
 - **Stage 1 `sources.yml MISSING <table>`** → check that `sources.yml` was committed; my edits used the dimensional names without `SEC_` prefix
 - **Stage 1 `NOT NULL`** → check `01_source_stage.sql` — PK columns need `NOT NULL` after the type
-- **Stage 2 `schema mismatch`** → silver column order differs from PyArrow schema order; use explicit SELECT list in the builder
 - **Stage 3 `<table> NOT FOUND`** → snow connection or role issue; always use `SNOW_CONNECTION=snowconn` (ACCOUNTADMIN required for storage integration + DDL); run `snow connection test --connection snowconn` to confirm
 - **Stage 4 `NULL <col> INSERT was ACCEPTED`** → DDL did not apply NOT NULL constraint; re-run stage 3 and capture the deploy output by running `snow sql --connection $SNOW_CONNECTION --filename <the-tmp-file-path-from-the-failed-stage>` to see errors
 - **`required command not found: snow`** → install via `pip install snowflake-cli-labs`

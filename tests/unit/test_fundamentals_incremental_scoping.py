@@ -8,62 +8,40 @@ Ticket 03: entity-facts's per-CIK refresh trigger
 has_companyfacts_at_version one-time-per-parser-version gate.
 
 Both marker writers are landing-only (silver-merge-engine-migration Ticket
-12): their tests assert on the recorded landing rows, and the reader SQL
-tests seed the marker tables directly.
-
-Real-DuckDB tests below exercise the reader SQL directly (schema-backed,
-not a hand-rolled stub) -- per this repo's own lesson (CLAUDE.md's
-"INSTITUTIONAL_HOLDS/EMPLOYED_BY" and "MDM Postgres migration-011" 5-whys
-entries) that a never-yet-run-against-real-data query needs a real schema
-fixture, not just a mock. The orchestration-level skip/process/mark tests
-follow this file's own established MagicMock convention
+12): their tests assert on the recorded landing rows. The reader SQL
+(get_ciks_with_new_qualifying_filing, run against EDGARTOOLS_SILVER) lost its
+schema-backed local fixture with the DuckDB engine (Ticket 17); only its
+no-query guard is covered here. The orchestration-level skip/process/mark
+tests follow this file's own established MagicMock convention
 (tests/unit/test_fundamentals_modules.py).
 """
 
 from __future__ import annotations
 
-import shutil
-import tempfile
 import unittest
-from datetime import UTC, datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from edgar_warehouse.silver_store import SilverDatabase
-from tests.support.silver_rows import insert_silver_rows, open_landing_db
-
-
-class _RealSilverDatabaseTestCase(unittest.TestCase):
-    """Shared setUp/tearDown for tests needing a real, throwaway SilverDatabase."""
-
-    def setUp(self) -> None:
-        self._tmp_dir = tempfile.mkdtemp()
-        self.db = SilverDatabase(str(Path(self._tmp_dir) / "silver.duckdb"))
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self._tmp_dir, ignore_errors=True)
+from tests.support.silver_rows import open_landing_db
 
 
 # ---------------------------------------------------------------------------
-# Ticket 02 -- sec_fundamentals_processed_accession table + method (real DuckDB)
+# Ticket 02 -- sec_fundamentals_processed_accession marker (landing-only)
 # ---------------------------------------------------------------------------
 
-class _LandingSilverDatabaseTestCase(unittest.TestCase):
-    """A throwaway SilverDatabase with a LandingExportBuffer attached."""
+class _LandingStoreTestCase(unittest.TestCase):
+    """A SilverLandingStore with a LandingExportBuffer attached."""
 
     def setUp(self) -> None:
-        self._tmp_dir = tempfile.mkdtemp()
-        self.db = open_landing_db(Path(self._tmp_dir))
+        self.db = open_landing_db()
 
     def tearDown(self) -> None:
         self.db.close()
-        shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
 
-class FundamentalsProcessedAccessionMarkerTests(_LandingSilverDatabaseTestCase):
+class FundamentalsProcessedAccessionMarkerTests(_LandingStoreTestCase):
     """silver-merge-engine-migration Ticket 12: the marker is landing-only."""
 
-    def test_mark_records_a_landing_row_and_never_local_duckdb(self) -> None:
+    def test_mark_records_a_landing_row(self) -> None:
         self.db.mark_fundamentals_accession_processed(
             mode="per-filing", accession_number="0001-test",
         )
@@ -72,8 +50,6 @@ class FundamentalsProcessedAccessionMarkerTests(_LandingSilverDatabaseTestCase):
         self.assertEqual(recorded[0]["mode"], "per-filing")
         self.assertEqual(recorded[0]["accession_number"], "0001-test")
         self.assertIsNotNone(recorded[0]["processed_at"].tzinfo)
-        rows = self.db.fetch("SELECT COUNT(*) AS n FROM sec_fundamentals_processed_accession")
-        self.assertEqual(rows[0]["n"], 0)
 
     def test_repeated_mark_appends_a_second_landing_row(self) -> None:
         # The dbt silver model keeps one row per (mode, accession_number).
@@ -230,47 +206,9 @@ class ThirteenfSkipsAlreadyProcessedTests(unittest.TestCase):
 
 # ---------------------------------------------------------------------------
 # Ticket 03 -- sec_entity_facts_refresh_watermark + get_ciks_with_new_qualifying_filing
-# (real DuckDB)
 # ---------------------------------------------------------------------------
 
-class GetCiksWithNewQualifyingFilingTests(_RealSilverDatabaseTestCase):
-    def _seed_filing(self, *, accession: str, cik: int, form: str, filing_date: str) -> None:
-        self.db._conn.execute(
-            "INSERT INTO sec_company_filing (accession_number, cik, form, filing_date) "
-            "VALUES (?, ?, ?, ?)",
-            [accession, cik, form, filing_date],
-        )
-
-    def _seed_watermark(self, cik: int) -> None:
-        # The watermark writer is landing-only (Ticket 12); this tests the reader SQL.
-        insert_silver_rows(
-            self.db, "sec_entity_facts_refresh_watermark",
-            [{"cik": cik, "entity_facts_refreshed_at": datetime.now(UTC)}],
-        )
-
-    def test_cik_with_no_watermark_is_new(self) -> None:
-        from edgar_warehouse.infrastructure.silver_once import get_ciks_with_new_qualifying_filing
-        self._seed_filing(accession="a1", cik=1, form="10-K", filing_date="2026-01-01")
-        self.assertEqual(get_ciks_with_new_qualifying_filing(self.db, cik_list=[1]), {1})
-
-    def test_cik_with_watermark_after_latest_filing_is_not_new(self) -> None:
-        from edgar_warehouse.infrastructure.silver_once import get_ciks_with_new_qualifying_filing
-        self._seed_filing(accession="a1", cik=1, form="10-K", filing_date="2026-01-01")
-        self._seed_watermark(1)
-        self.assertEqual(get_ciks_with_new_qualifying_filing(self.db, cik_list=[1]), set())
-
-    def test_cik_with_new_filing_after_watermark_is_new(self) -> None:
-        from edgar_warehouse.infrastructure.silver_once import get_ciks_with_new_qualifying_filing
-        self._seed_filing(accession="a1", cik=1, form="10-K", filing_date="2026-01-01")
-        self._seed_watermark(1)
-        self._seed_filing(accession="a2", cik=1, form="10-Q", filing_date="2099-01-01")
-        self.assertEqual(get_ciks_with_new_qualifying_filing(self.db, cik_list=[1]), {1})
-
-    def test_non_qualifying_form_ignored(self) -> None:
-        from edgar_warehouse.infrastructure.silver_once import get_ciks_with_new_qualifying_filing
-        self._seed_filing(accession="a1", cik=1, form="8-K", filing_date="2099-01-01")
-        self.assertEqual(get_ciks_with_new_qualifying_filing(self.db, cik_list=[1]), set())
-
+class GetCiksWithNewQualifyingFilingTests(unittest.TestCase):
     def test_empty_cik_list_returns_empty_set_without_querying(self) -> None:
         from edgar_warehouse.infrastructure.silver_once import get_ciks_with_new_qualifying_filing
         fake_db = MagicMock()
@@ -278,17 +216,15 @@ class GetCiksWithNewQualifyingFilingTests(_RealSilverDatabaseTestCase):
         fake_db.fetch.assert_not_called()
 
 
-class EntityFactsRefreshWatermarkMarkerTests(_LandingSilverDatabaseTestCase):
+class EntityFactsRefreshWatermarkMarkerTests(_LandingStoreTestCase):
     """silver-merge-engine-migration Ticket 12: the watermark is landing-only."""
 
-    def test_mark_records_a_landing_row_and_never_local_duckdb(self) -> None:
+    def test_mark_records_a_landing_row(self) -> None:
         self.db.mark_entity_facts_refreshed(320193)
         recorded = self.db.landing_export.tables()["sec_entity_facts_refresh_watermark"]
         self.assertEqual(len(recorded), 1)
         self.assertEqual(recorded[0]["cik"], 320193)
         self.assertIsNotNone(recorded[0]["entity_facts_refreshed_at"].tzinfo)
-        rows = self.db.fetch("SELECT COUNT(*) AS n FROM sec_entity_facts_refresh_watermark")
-        self.assertEqual(rows[0]["n"], 0)
 
     def test_repeated_mark_appends_a_second_landing_row(self) -> None:
         # The dbt silver model keeps one row per cik.

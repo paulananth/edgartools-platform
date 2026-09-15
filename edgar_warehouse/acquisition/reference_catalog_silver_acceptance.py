@@ -5,7 +5,7 @@ mirroring ``company_facts_silver_acceptance.py``'s shape but per-source-name
 rather than per-CIK: one producer (``sec_company_ticker``) per catalog
 snapshot, scoped to that snapshot's own ``source_name``.
 
-Writes reuse ``SilverDatabase.replace_company_tickers`` exactly as the legacy
+Writes reuse ``SilverLandingStore.replace_company_tickers`` exactly as the legacy
 ``_sync_reference_data`` path does. Since silver-merge-engine-migration
 Ticket 06e that writer is landing-only: it records the snapshot's members
 for the Snowflake landing zone and deletes nothing locally. A ticker that
@@ -19,11 +19,13 @@ unless the candidate is CAPTURED with a complete payload
 nothing -- same pattern as Tickets 21/22's analogous bullet.
 
 Known gap, left as it is by Ticket 06e: the earlier membership that
-retirement compares against is read from the local Silver database, which
-starts empty on every run and no writer fills any more, so no retirement is
-found. This driver is not wired into any state machine; the earlier list
-must come from Snowflake silver when the change-propagation map wires it
-(silver-merge-engine-migration map, "Not yet specified").
+retirement compares against has no source in production. It used to be read
+from the local Silver database, which started empty on every run; with that
+store gone (Ticket 17) the caller supplies it through ``prior_members``, and
+no caller does, so no retirement is found. This driver is not wired into any
+state machine; the earlier list must come from Snowflake silver when the
+change-propagation map wires it (silver-merge-engine-migration map, "Not yet
+specified").
 
 ``seed_company_sync_state_bulk`` (the legacy path's CIK-universe-seeding side
 effect, `` _sync_reference_data``) is deliberately NOT reproduced here: it is
@@ -38,7 +40,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -56,7 +58,7 @@ from edgar_warehouse.acquisition.processing import (
 from edgar_warehouse.acquisition.reference_catalog_discovery import ReferenceCatalogDriveResult
 from edgar_warehouse.acquisition.revisions import ContentImpact, SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 REFERENCE_CATALOG_PRODUCER_NAME = "sec_company_ticker"
 REFERENCE_CATALOG_TARGET_TABLE = "sec_company_ticker"
@@ -145,11 +147,12 @@ def _finalize_reference_catalog_candidate(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     decision_id: str,
     *,
     source_name: str,
     landing_row_counter: Callable[[str, str], int] | None = None,
+    prior_members: Callable[[str], Iterable[tuple[int, str]]] | None = None,
 ) -> ProcessingDecision:
     status = ledger.source_change_status(decision_id)
     if status.fetch_state is not FetchWorkState.CAPTURED:
@@ -202,7 +205,7 @@ def _finalize_reference_catalog_candidate(
             ),
         )
 
-    from edgar_warehouse.silver_store import _parse_company_ticker_rows
+    from edgar_warehouse.silver_landing_store import _parse_company_ticker_rows
 
     parsed_rows = _parse_company_ticker_rows(document)
     # replace_company_tickers itself skips any row with a missing cik or a
@@ -219,13 +222,8 @@ def _finalize_reference_catalog_candidate(
         for ordinal, row in enumerate(rows, start=1)
     ]
     cause_reference = status.cause_reference or decision_id
-    prior_pairs = {
-        (row["cik"], row["ticker"])
-        for row in silver.fetch(
-            "SELECT cik, ticker FROM sec_company_ticker WHERE source_name = ?",
-            [source_name],
-        )
-    }
+    # See the module docstring's known gap: nothing supplies this in production.
+    prior_pairs = set(prior_members(source_name)) if prior_members is not None else set()
     new_pairs = {(row["cik"], row["ticker"]) for row in rows}
     dropped_pairs = prior_pairs - new_pairs
 
@@ -312,7 +310,7 @@ def _finalize_reference_catalog_candidate(
 
 
 def _record_landing_retirements(
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     *,
     dropped_pairs: set[tuple],
     source_name: str,
@@ -347,11 +345,12 @@ def drive_reference_catalog_silver_acceptance(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     result: ReferenceCatalogDriveResult,
     *,
     required_producers: tuple[str, ...] = (REFERENCE_CATALOG_PRODUCER_NAME,),
     landing_row_counter: Callable[[str, str], int] | None = None,
+    prior_members: Callable[[str], Iterable[tuple[int, str]]] | None = None,
 ) -> ReferenceCatalogSilverAcceptanceResult:
     """Carry every CAPTURED candidate in a reference-catalog drive result to Silver.
 
@@ -386,6 +385,7 @@ def drive_reference_catalog_silver_acceptance(
                 candidate_outcome.decision_id,
                 source_name=source_name,
                 landing_row_counter=landing_row_counter,
+                prior_members=prior_members,
             )
             outcomes.append(
                 ReferenceCatalogOutcome(

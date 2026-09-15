@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
@@ -42,9 +42,6 @@ def test_bronze_capture_records_pipeline_run(tmp_path) -> None:
     ]
 
     with (
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
@@ -94,9 +91,6 @@ def test_bronze_capture_commits_bookkeeping_on_failure(tmp_path) -> None:
 
     with (
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
         ),
@@ -123,24 +117,27 @@ def test_bronze_capture_commits_bookkeeping_on_failure(tmp_path) -> None:
     fake_bookkeeping.commit.assert_called_once()
 
 
-def test_bronze_capture_never_commits_success_before_silver_publish_succeeds(
+def test_bronze_capture_never_commits_success_before_landing_export_succeeds(
     tmp_path,
 ) -> None:
     """bronze-capture-oom Ticket 02, fixed 2026-09-02: bookkeeping.commit()
-    must not fire until silver publish (and landing export) has actually
-    succeeded -- a checkpoint or "succeeded" status durably committed
-    before that point lets a crash between commit and publish look, on the
-    next run, exactly like a genuine no-op skip (the content was never
-    durably captured, but the checkpoint says it was). When publish fails,
-    the except block must roll back whatever this run staged and commit
-    only a clean "failed" record -- not correct an already-committed
-    "succeeded" record in place, since nothing should have been committed
-    yet at that point."""
+    must not fire until the landing export has actually succeeded -- a
+    checkpoint or "succeeded" status durably committed before that point
+    lets a crash between commit and export look, on the next run, exactly
+    like a genuine no-op skip (the content was never durably captured, but
+    the checkpoint says it was). When the export fails, the except block
+    must roll back whatever this run staged and commit only a clean
+    "failed" record -- not correct an already-committed "succeeded" record
+    in place, since nothing should have been committed yet at that point.
+    (The silver publish that used to sit inside this boundary too went with
+    the DuckDB engine, silver-merge-engine-migration Ticket 17.)"""
     from edgar_warehouse.application.warehouse_orchestrator import (
         _execute_warehouse_bronze_capture,
     )
 
-    context = _context(tmp_path)
+    context = dataclasses.replace(
+        _context(tmp_path), silver_landing_export_root=StorageLocation(str(tmp_path / "landing"))
+    )
     fake_db = MagicMock()
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
@@ -155,9 +152,6 @@ def test_bronze_capture_never_commits_success_before_silver_publish_succeeds(
 
     with (
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
         ),
@@ -170,8 +164,8 @@ def test_bronze_capture_never_commits_success_before_silver_publish_succeeds(
             return_value=(raw_writes, {"rows_inserted": 1, "rows_skipped": 0}),
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
-            side_effect=RuntimeError("publish boom"),
+            "edgar_warehouse.application.warehouse_orchestrator.write_landing_export",
+            side_effect=RuntimeError("landing export boom"),
         ),
     ):
         try:
@@ -184,7 +178,7 @@ def test_bronze_capture_never_commits_success_before_silver_publish_succeeds(
             pass
 
     # complete_pipeline_run is still called twice -- once "succeeded"
-    # (staged before the publish attempt), once "failed" (from the except
+    # (staged before the export attempt), once "failed" (from the except
     # block) -- but only the LAST state is ever allowed to become durable.
     assert fake_bookkeeping.complete_pipeline_run.call_count == 2
     statuses = [c.kwargs["status"] for c in fake_bookkeeping.complete_pipeline_run.call_args_list]
@@ -203,20 +197,15 @@ def test_bronze_capture_never_commits_success_before_silver_publish_succeeds(
     assert fake_bookkeeping.start_pipeline_run.call_count == 2
 
 
-@pytest.mark.parametrize("failing_stage", ["silver_publish", "landing_export"])
-def test_bronze_capture_rolls_back_a_checkpoint_write_on_publish_boundary_failure(
-    tmp_path, failing_stage: str
+def test_bronze_capture_rolls_back_a_checkpoint_write_on_landing_export_failure(
+    tmp_path,
 ) -> None:
     """Proven against a real BookkeepingStore/session (not a MagicMock) so a
     genuine session.rollback() is exercised: a checkpoint written mid-run
-    must not survive a failure anywhere in the durability boundary this fix
-    commits behind -- silver publish *and* landing export both succeeding --
-    or the next run's skip-if-unchanged comparison would wrongly believe
-    this run's content already reached canonical Silver. Parametrized over
-    both halves of that boundary (a Standards-review finding: the original
-    diff only covered a silver-publish failure, leaving the landing-export
-    half -- the one that moved furthest from the old commit point -- an
-    unproven claim)."""
+    must not survive a landing-export failure -- the durability boundary
+    this fix commits behind -- or the next run's skip-if-unchanged
+    comparison would wrongly believe this run's content already reached
+    Silver."""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
     from sqlalchemy.pool import StaticPool
@@ -240,9 +229,6 @@ def test_bronze_capture_rolls_back_a_checkpoint_write_on_publish_boundary_failur
         bronze_root=StorageLocation(str(tmp_path / "bronze")),
         storage_root=StorageLocation(str(tmp_path / "warehouse")),
         silver_root=StorageLocation(str(tmp_path / "silver")),
-        # Only needed for the landing_export case (gates whether that block
-        # runs at all) -- harmless to always set, since a silver_publish
-        # failure raises before this block is ever reached either way.
         silver_landing_export_root=StorageLocation(str(tmp_path / "landing")),
         snowflake_export_root=None,
         environment_name="test",
@@ -267,33 +253,17 @@ def test_bronze_capture_rolls_back_a_checkpoint_write_on_publish_boundary_failur
             {
                 "source_name": "submissions_main",
                 "source_key": "cik:1",
-                "raw_object_id": f"should-not-survive-a-failed-{failing_stage}",
+                "raw_object_id": "should-not-survive-a-failed-landing-export",
             }
         )
         return raw_writes, {"rows_inserted": 1, "rows_skipped": 0}
 
-    if failing_stage == "silver_publish":
-        publish_patch = patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
-            side_effect=RuntimeError("publish boom"),
-        )
-        landing_patch = patch(
-            "edgar_warehouse.application.warehouse_orchestrator.write_landing_export"
-        )
-    else:
-        publish_patch = patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
-            return_value={"layer": "silver", "path": "s3://silver.duckdb", "size_bytes": 1},
-        )
-        landing_patch = patch(
-            "edgar_warehouse.application.warehouse_orchestrator.write_landing_export",
-            side_effect=RuntimeError("landing export boom"),
-        )
+    landing_patch = patch(
+        "edgar_warehouse.application.warehouse_orchestrator.write_landing_export",
+        side_effect=RuntimeError("landing export boom"),
+    )
 
     with (
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
@@ -306,7 +276,6 @@ def test_bronze_capture_rolls_back_a_checkpoint_write_on_publish_boundary_failur
             "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
             side_effect=fake_capture_bronze_raw,
         ),
-        publish_patch,
         landing_patch,
     ):
         try:
@@ -352,9 +321,6 @@ def test_bronze_capture_writes_consolidated_run_manifest(tmp_path) -> None:
     ]
 
     with (
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,

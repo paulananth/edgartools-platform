@@ -95,11 +95,10 @@ def test_company_identity_mode_stages_company_and_ticker_only(
     ]
     assert any(row["cik"] == CIK and row["ticker"] == "AAPL" for row in ticker_rows)
 
-    # Zero ownership/ADV artifacts touched is the whole point of this mode,
-    # but the ownership trio, sec_adv_filing and sec_thirteenf_holding are
-    # landing-only (silver-merge-engine-migration Tickets 05/06a/06c): an
-    # empty local DuckDB table no longer proves they were untouched, so
-    # the landing export is checked below instead.
+    # Zero ownership/ADV artifacts touched is the whole point of this mode;
+    # the ownership trio, sec_adv_filing and sec_thirteenf_holding are
+    # landing-only (silver-merge-engine-migration Tickets 05/06a/06c), so
+    # the landing export is checked below.
 
     # sec_company is landing-only (silver-merge-engine-migration Ticket 06b):
     # the company row reaches silver through the landing export this command
@@ -120,76 +119,45 @@ def test_company_identity_mode_stages_company_and_ticker_only(
     ], "company-identity mode must not land any ownership, ADV or 13F rows"
 
 
-def test_company_identity_with_explicit_cik_list_skips_full_hydrate(
+def test_identity_refresh_batch_persists_an_outcome_the_reducer_accepts(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An explicit --cik-list never reads db.get_tracked_ciks(), and (DuckDB
-    Retirement Cutover Ticket 10) canonical silver.duckdb is no longer a
-    write/hydrate target for any command at all -- see
-    _publish_silver_database_if_remote's docstring.
-    """
+    """daily_incremental's identity fan-out runs this mode with
+    --identity-refresh-run-id; each batch must leave an outcome that
+    PublishCompanyIdentityUpdates' reducer accepts. Regression
+    (silver-merge-engine-migration Ticket 17): the batch used to upload the
+    local silver.duckdb as its "delta", so deleting the engine made every
+    batch fail with "identity refresh batch delta is missing"."""
+    from edgar_warehouse.application.identity_refresh_publication import (
+        persist_run_manifest,
+        reduce_identity_refresh,
+    )
+    from edgar_warehouse.infrastructure.object_storage import StorageLocation
+
     storage_root = tmp_path / "warehouse"
     monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
     monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("WAREHOUSE_IMAGE_REF", "sha256:test-image")
     monkeypatch.delenv("WAREHOUSE_BRONZE_ROOT", raising=False)
     monkeypatch.delenv("WAREHOUSE_SILVER_ROOT", raising=False)
+    monkeypatch.delenv("SILVER_LANDING_EXPORT_ROOT", raising=False)
 
-    hydrate_calls: list[object] = []
-    monkeypatch.setattr(
-        warehouse_orchestrator,
-        "_hydrate_silver_database_from_storage",
-        lambda context: hydrate_calls.append(context),
-    )
+    storage = StorageLocation(str(storage_root))
+    persist_run_manifest(storage, run_id="identity-run", image_identity="sha256:test-image", batches=[[CIK]])
 
     args = SimpleNamespace(
         cik_list=[CIK],
         mode="company-identity",
-        run_id="test-skip-hydrate-run",
+        run_id="identity-run",
+        identity_refresh_run_id="identity-run",
         silver_root=None,
         cik_offset=0,
         cik_limit=None,
         force=False,
     )
 
-    exit_code = bootstrap_fundamentals.execute(args)
-    assert exit_code == 0
-    assert hydrate_calls == []
+    assert bootstrap_fundamentals.execute(args) == 0
 
-
-def test_company_identity_without_cik_list_also_skips_hydrate(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Without an explicit --cik-list (the windowed Step Functions Map case),
-    _resolve_fundamentals_ciks falls back to bookkeeping.get_tracked_ciks()
-    -- Postgres, not this local DuckDB `db` connection (DuckDB Retirement
-    Cutover Ticket 14 repointed it there). DuckDB Retirement Cutover Ticket
-    10 then removed hydration for this call site entirely: there is no
-    local-DB dependency left to justify it, and canonical silver.duckdb is
-    no longer a write target for any command (see
-    _publish_silver_database_if_remote's docstring).
-    """
-    storage_root = tmp_path / "warehouse"
-    monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
-    monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", str(storage_root))
-    monkeypatch.delenv("WAREHOUSE_BRONZE_ROOT", raising=False)
-    monkeypatch.delenv("WAREHOUSE_SILVER_ROOT", raising=False)
-
-    hydrate_calls: list[object] = []
-    monkeypatch.setattr(
-        warehouse_orchestrator,
-        "_hydrate_silver_database_from_storage",
-        lambda context: hydrate_calls.append(context),
-    )
-
-    args = SimpleNamespace(
-        cik_list=None,
-        mode="company-identity",
-        run_id="test-windowed-hydrate-run",
-        silver_root=None,
-        cik_offset=0,
-        cik_limit=None,
-        force=False,
-    )
-
-    bootstrap_fundamentals.execute(args)
-    assert hydrate_calls == []
+    completed = reduce_identity_refresh(storage, run_id="identity-run", image_identity="sha256:test-image")
+    assert completed["status"] == "succeeded"
+    assert [batch["ciks"] for batch in completed["batches"]] == [[CIK]]

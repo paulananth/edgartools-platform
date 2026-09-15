@@ -40,7 +40,7 @@ from edgar_warehouse.acquisition.submissions_silver_acceptance import (
     drive_submissions_silver_acceptance,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
@@ -57,7 +57,7 @@ def _harness(tmp_path: Path):
     AcquisitionBase.metadata.create_all(engine)
     # sec_company is landing-only (silver-merge-engine-migration Ticket
     # 06b): assert on the rows recorded for landing.
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    silver = SilverLandingStore(landing_export=LandingExportBuffer())
     bronze_root = StorageLocation(str(tmp_path / "bronze"))
     return (
         AcquisitionLedger(engine),

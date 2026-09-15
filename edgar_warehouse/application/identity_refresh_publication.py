@@ -13,21 +13,18 @@ import json
 import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
 
-_SHA256_LENGTH = 64
 _RUN_PREFIX = "identity_refresh/runs"
 
 
 def _emit_reducer_event(event: str, *, run_id: str, **fields: Any) -> None:
     """Structured per-stage log event for `reduce_identity_refresh`, matching
     this codebase's existing `event`-keyed JSON logging convention (e.g.
-    source_dimensional_export.py's gold_table_started/completed, silver_protection.py's
-    silver_table_merge_started/silver_table_merged). Before this, the
+    source_dimensional_export.py's gold_table_started/completed). Before this, the
     reducer emitted zero output for its entire runtime -- a real prod
     ReduceIdentityRefresh task ran 17+ minutes with `describe-log-streams`
     reporting storedBytes: 0, indistinguishable from hung without reading
@@ -43,8 +40,6 @@ class IdentityRefreshInput:
 
     batch_id: str
     cik_list: tuple[int, ...]
-    delta_path: str
-    sha256: str
 
 
 def run_manifest_path(run_id: str) -> str:
@@ -53,10 +48,6 @@ def run_manifest_path(run_id: str) -> str:
 
 def completed_manifest_path(run_id: str) -> str:
     return f"{_RUN_PREFIX}/{run_id}/completed_manifest.json"
-
-
-def batch_delta_path(run_id: str, batch_id: str) -> str:
-    return f"{_RUN_PREFIX}/{run_id}/batches/{batch_id}/delta.duckdb"
 
 
 def batch_outcome_path(run_id: str, batch_id: str) -> str:
@@ -115,16 +106,17 @@ def persist_batch_outcome(
     run_id: str,
     image_identity: str,
     ciks: Iterable[int],
-    delta_file: Path,
 ) -> dict[str, Any]:
-    """Persist a batch delta and its immutable success declaration."""
+    """Persist a batch's immutable success declaration.
+
+    silver-merge-engine-migration Ticket 17: the batch no longer uploads a
+    delta. It used to copy the local silver.duckdb (the empty store, the same
+    file Ticket 16 stopped uploading as the reference snapshot) to
+    ``batches/<id>/delta.duckdb``; nothing ever read those bytes, and the
+    file no longer exists. The batch's rows leave through its landing export.
+    """
     normalized = tuple(int(cik) for cik in ciks)
     batch_id = batch_id_for_ciks(normalized)
-    if not delta_file.exists():
-        raise WarehouseRuntimeError(f"identity refresh batch delta is missing: {delta_file}")
-    payload = delta_file.read_bytes()
-    delta_relative = batch_delta_path(run_id, batch_id)
-    storage_root.write_immutable_bytes(delta_relative, payload)
     outcome = {
         "schema_version": 1,
         "run_id": run_id,
@@ -132,8 +124,6 @@ def persist_batch_outcome(
         "batch_id": batch_id,
         "ciks": list(normalized),
         "status": "succeeded",
-        "delta_path": delta_relative,
-        "sha256": _sha256(payload),
     }
     storage_root.write_immutable_bytes(batch_outcome_path(run_id, batch_id), _json_bytes(outcome))
     return outcome
@@ -176,8 +166,8 @@ def reduce_identity_refresh(
     """Validate every declared batch succeeded; no longer merges/promotes.
 
     DuckDB Retirement Cutover Ticket 10: canonical ``silver/sec/silver.duckdb``
-    is no longer a write target for any command (see warehouse_orchestrator.py's
-    ``_publish_silver_database_if_remote`` docstring). This reducer used to be
+    stopped being a write target for any command, and the DuckDB engine was
+    deleted by silver-merge-engine-migration Ticket 17. This reducer used to be
     a second, independent write path to that same canonical object --
     structurally identical to the monolith merge/stage/promote cycle, just
     built to survive 20-way concurrent identity-batch writers without a
@@ -213,7 +203,7 @@ def reduce_identity_refresh(
 def validate_complete_run_manifest(
     manifest: Mapping[str, Any], *, expected_run_id: str, expected_image_identity: str | None = None
 ) -> tuple[IdentityRefreshInput, ...]:
-    """Validate a completed run before the reducer may read any delta.
+    """Validate that every declared batch of a run succeeded.
 
     The manifest is intentionally strict: a missing or failed batch is not a
     recoverable reducer condition.  Batch repair must happen before this
@@ -244,20 +234,10 @@ def validate_complete_run_manifest(
             raise WarehouseRuntimeError("identity refresh batch_id does not match its CIK list")
         if batch_id in seen_batch_ids or seen_ciks.intersection(ciks):
             raise WarehouseRuntimeError("identity refresh manifest contains duplicate batch or CIK input")
-        if not _valid_sha256(batch.get("sha256")) or not str(batch.get("delta_path") or ""):
-            raise WarehouseRuntimeError("identity refresh batch lacks immutable delta identity")
         seen_batch_ids.add(batch_id)
         seen_ciks.update(ciks)
-        inputs.append(IdentityRefreshInput(batch_id, ciks, str(batch["delta_path"]), str(batch["sha256"])))
+        inputs.append(IdentityRefreshInput(batch_id, ciks))
     return tuple(inputs)
-
-
-def _valid_sha256(value: Any) -> bool:
-    return isinstance(value, str) and len(value) == _SHA256_LENGTH and all(ch in "0123456789abcdef" for ch in value)
-
-
-def _sha256(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
 
 
 def _read_json(storage_root: StorageLocation, relative: str) -> dict[str, Any]:

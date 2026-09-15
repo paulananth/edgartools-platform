@@ -1,4 +1,4 @@
-"""Fixture-based MDM adviser/fund preflight fail->pass tests.
+"""MDM adviser/fund preflight fail->pass tests.
 
 Proves the _require_silver_reader gate transitions from FAIL (empty sec_adv_filing /
 sec_adv_private_fund) to PASS (populated table) for adviser and fund entity types.
@@ -6,142 +6,71 @@ sec_adv_private_fund) to PASS (populated table) for adviser and fund entity type
 MDM-ADV-02 automated proof — no network, no S3, no live Postgres required.
 
 DuckDB Retirement Cutover Ticket 05: _require_silver_reader's own reader is
-always EDGARTOOLS_SILVER via SnowflakeSilverReader now, so MDM_SILVER_DUCKDB
-alone no longer selects what these tests read. SnowflakeSilverReader.connect
-is monkeypatched to a small DuckDB-backed reader over the local fixture below
-instead (silver-merge-engine-migration Ticket 15 deleted ShardedSilverReader;
-this file goes with the DuckDB engine in Ticket 17), preserving genuine fail->pass fixture coverage rather than an
-accidental pass driven by "no live Snowflake in the test environment"
-(the same class of false-confirmed-by-the-wrong-mechanism gap CLAUDE.md's
-MDM Postgres migration-011 entry documents).
+always EDGARTOOLS_SILVER via SnowflakeSilverReader. SnowflakeSilverReader.connect
+is monkeypatched to a reader that answers the preflight's only query shape
+(``SELECT COUNT(*) AS n FROM <table>``) from a table->count dict, so the gate
+is exercised for real rather than passing by accident because there is no
+live Snowflake in the test environment (the false-confirmed-by-the-wrong-
+mechanism gap CLAUDE.md's MDM Postgres migration-011 entry documents). The
+DuckDB-file fixture this replaced went with the engine (silver-merge-engine-
+migration Ticket 17).
 """
 
 from __future__ import annotations
 
-import duckdb
 import pytest
 
 import edgar_warehouse.mdm.cli as mdm_cli
 from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 
 
-class _DuckDBFixtureReader:
-    """fetch()/close() over one local DuckDB file, the reader seam MDM expects."""
+class _CountReader:
+    """fetch()/close() over a table->row-count dict, the reader seam MDM expects."""
 
-    def __init__(self, db_path: str) -> None:
-        self._conn = duckdb.connect(db_path, read_only=True)
+    def __init__(self, counts: dict[str, int]) -> None:
+        self._counts = counts
 
     def fetch(self, sql: str, params: list | None = None) -> list[dict]:
-        cursor = self._conn.execute(sql, params or [])
-        columns = [d[0] for d in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        table_name = sql.split(" FROM ", 1)[1].split()[0]
+        if table_name not in self._counts:
+            raise RuntimeError(f"Catalog Error: Table with name {table_name} does not exist")
+        return [{"n": self._counts[table_name]}]
 
     def close(self) -> None:
-        self._conn.close()
+        pass
 
 
-def _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path: str) -> None:
-    monkeypatch.setattr(
-        SnowflakeSilverReader, "connect", staticmethod(lambda: _DuckDBFixtureReader(db_path))
-    )
+def _patch_silver_reader(monkeypatch, counts: dict[str, int]) -> None:
+    monkeypatch.setattr(SnowflakeSilverReader, "connect", staticmethod(lambda: _CountReader(counts)))
+    monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-def _make_adv_fixture_db(path: str) -> None:
-    """Create a minimal DuckDB at *path* with ADV silver tables (empty)."""
-    con = duckdb.connect(path)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS sec_adv_filing (
-            accession_number    TEXT PRIMARY KEY,
-            cik                 BIGINT,
-            form                TEXT,
-            adviser_name        TEXT,
-            sec_file_number     TEXT,
-            crd_number          TEXT,
-            effective_date      DATE,
-            filing_status       TEXT,
-            source_format       TEXT,
-            parser_version      TEXT,
-            last_sync_run_id    TEXT
-        )
-    """)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS sec_adv_private_fund (
-            accession_number    TEXT,
-            fund_index          SMALLINT,
-            fund_name           TEXT,
-            fund_type           TEXT,
-            jurisdiction        TEXT,
-            aum_amount          DECIMAL(28,2),
-            parser_version      TEXT,
-            last_sync_run_id    TEXT,
-            PRIMARY KEY (accession_number, fund_index)
-        )
-    """)
-    con.close()
-
-
-# ---------------------------------------------------------------------------
-# Adviser preflight tests
-# ---------------------------------------------------------------------------
+_EMPTY_ADV_TABLES = {"sec_adv_filing": 0, "sec_adv_private_fund": 0}
 
 
 class TestAdviserPreflight:
     """sec_adv_filing must be nonempty before mdm mastering --entity-type adviser passes."""
 
-    def test_adviser_fail_on_empty_sec_adv_filing(self, tmp_path, monkeypatch):
-        """Empty sec_adv_filing → _require_silver_reader returns rc=1."""
-        db_path = str(tmp_path / "silver.duckdb")
-        _make_adv_fixture_db(db_path)
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
-        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
-        monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
-        monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    def test_adviser_fail_on_empty_sec_adv_filing(self, monkeypatch):
+        _patch_silver_reader(monkeypatch, dict(_EMPTY_ADV_TABLES))
 
         required = mdm_cli._required_tables_for_run("adviser")
         reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
         assert rc == 1, f"Expected rc=1 (FAIL) for empty sec_adv_filing, got rc={rc}"
 
-    def test_adviser_pass_after_inserting_sec_adv_filing_row(self, tmp_path, monkeypatch):
-        """One row in sec_adv_filing → _require_silver_reader returns rc=0."""
-        db_path = str(tmp_path / "silver.duckdb")
-        _make_adv_fixture_db(db_path)
-
-        con = duckdb.connect(db_path)
-        con.execute("""
-            INSERT INTO sec_adv_filing
-            (accession_number, cik, form, adviser_name, sec_file_number,
-             crd_number, effective_date, filing_status, source_format, parser_version)
-            VALUES
-            ('ADV-105958-20241218', 105958, 'ADV', 'THE VANGUARD GROUP, INC.',
-             '801-11953', '105958', '2024-12-18', 'ACTIVE', 'xml', '1')
-        """)
-        con.close()
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
-        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
-        monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
-        monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    def test_adviser_pass_with_a_sec_adv_filing_row(self, monkeypatch):
+        _patch_silver_reader(monkeypatch, {**_EMPTY_ADV_TABLES, "sec_adv_filing": 1})
 
         required = mdm_cli._required_tables_for_run("adviser")
         reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
-        assert rc == 0, f"Expected rc=0 (PASS) after inserting sec_adv_filing row, got rc={rc}"
+        assert rc == 0, f"Expected rc=0 (PASS) with a sec_adv_filing row, got rc={rc}"
 
-    def test_adviser_validate_silver_tables_fail_empty(self, tmp_path, monkeypatch):
+    def test_adviser_validate_silver_tables_fail_empty(self, monkeypatch):
         """_validate_silver_tables returns a nonempty failures list when sec_adv_filing is empty."""
-        db_path = str(tmp_path / "silver.duckdb")
-        _make_adv_fixture_db(db_path)
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
-        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
-        monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
+        _patch_silver_reader(monkeypatch, dict(_EMPTY_ADV_TABLES))
 
         required = mdm_cli._required_tables_for_run("adviser")
         reader, _rc = mdm_cli._require_silver_reader(
@@ -156,49 +85,21 @@ class TestAdviserPreflight:
         assert any("sec_adv_filing" in f for f in failures)
 
 
-# ---------------------------------------------------------------------------
-# Fund preflight tests
-# ---------------------------------------------------------------------------
-
-
 class TestFundPreflight:
     """sec_adv_private_fund must be nonempty before mdm mastering --entity-type fund passes."""
 
-    def test_fund_fail_on_empty_sec_adv_private_fund(self, tmp_path, monkeypatch):
-        """Empty sec_adv_private_fund → _require_silver_reader returns rc=1."""
-        db_path = str(tmp_path / "silver.duckdb")
-        _make_adv_fixture_db(db_path)
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
-        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
-        monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
-        monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    def test_fund_fail_on_empty_sec_adv_private_fund(self, monkeypatch):
+        _patch_silver_reader(monkeypatch, dict(_EMPTY_ADV_TABLES))
 
         required = mdm_cli._required_tables_for_run("fund")
         reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
         assert rc == 1, f"Expected rc=1 (FAIL) for empty sec_adv_private_fund, got rc={rc}"
 
-    def test_fund_pass_after_inserting_sec_adv_private_fund_row(self, tmp_path, monkeypatch):
-        """One row in sec_adv_private_fund → _require_silver_reader returns rc=0."""
-        db_path = str(tmp_path / "silver.duckdb")
-        _make_adv_fixture_db(db_path)
-
-        con = duckdb.connect(db_path)
-        con.execute("""
-            INSERT INTO sec_adv_private_fund
-            (accession_number, fund_index, fund_name, fund_type, jurisdiction, aum_amount, parser_version)
-            VALUES
-            ('ADV-105958-20241218', 1, 'CSF PRIVATE FUND', 'Hedge Fund', 'Cayman Islands', 276012482.00, '1')
-        """)
-        con.close()
-
-        monkeypatch.setenv("MDM_SILVER_DUCKDB", db_path)
-        _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path)
-        monkeypatch.delenv("WAREHOUSE_STORAGE_ROOT", raising=False)
-        monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    def test_fund_pass_with_a_sec_adv_private_fund_row(self, monkeypatch):
+        _patch_silver_reader(monkeypatch, {**_EMPTY_ADV_TABLES, "sec_adv_private_fund": 1})
 
         required = mdm_cli._required_tables_for_run("fund")
         reader, rc = mdm_cli._require_silver_reader(required, "mdm mastering")
 
-        assert rc == 0, f"Expected rc=0 (PASS) after inserting sec_adv_private_fund row, got rc={rc}"
+        assert rc == 0, f"Expected rc=0 (PASS) with a sec_adv_private_fund row, got rc={rc}"

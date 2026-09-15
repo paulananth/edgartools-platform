@@ -4,9 +4,11 @@ set -euo pipefail
 #
 # Stages:
 #   1. Local schema integrity        (no creds)
-#   2. PyArrow builder smoke test    (no creds)
 #   3. Snowflake DDL deployment      (creds required)
 #   4. Composite-key MERGE semantics (creds required)
+#
+# Stage 2 (the in-memory DuckDB -> PyArrow builder smoke test) was deleted
+# with the DuckDB engine (silver-merge-engine-migration Ticket 17).
 #
 # Stage 5 (full Parquet roundtrip via gold-refresh) is NOT yet implemented
 # because PR-2 (warehouse export wiring) needs to land first.
@@ -25,7 +27,7 @@ for arg in "$@"; do
             cat <<EOF
 Usage: $0 [--offline]
 
-  --offline   Run only stages 1 and 2 (no Snowflake creds required)
+  --offline   Run only stage 1 (no Snowflake creds required)
 EOF
             exit 0 ;;
     esac
@@ -33,7 +35,6 @@ done
 
 STAGES=(
     "01_check_local_schema.sh:Stage 1 — Local schema integrity"
-    "02_smoke_builders.sh:Stage 2 — PyArrow builder smoke test"
 )
 
 if ! $OFFLINE; then

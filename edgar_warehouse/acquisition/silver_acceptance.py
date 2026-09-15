@@ -4,7 +4,7 @@ This is the family-specific wiring for the generic mechanism in
 ``processing.py``: materialize the Logical Source Revision for an already
 CAPTURED Source Fetch Decision, seal its expected Silver producer set, and --
 for a revision whose content actually changed -- write and read back
-``sec_raw_object`` (``edgar_warehouse.silver_store.SilverDatabase``) as this
+``sec_raw_object`` (``edgar_warehouse.silver_landing_store.SilverLandingStore``) as this
 family's one Silver producer. Two entry points:
 
 - ``finalize_filing_artifact_candidate``: one already-CAPTURED decision.
@@ -16,7 +16,7 @@ family's one Silver producer. Two entry points:
 
 Deliberately does not touch ``discovery.py``: that module's own docstring
 says it "stays independent of the ~292KB legacy orchestrator," and pulling a
-``SilverDatabase`` (DuckDB) dependency into it would re-acquire exactly the
+``SilverLandingStore`` dependency into it would re-acquire exactly the
 coupling it was built to avoid. This module instead consumes an already
 CAPTURED ``decision_id`` (or a whole ``DiscoveryDriveResult``) and owns
 nothing upstream of capture.
@@ -38,7 +38,7 @@ from edgar_warehouse.acquisition.processing import (
     SilverOutcome,
 )
 from edgar_warehouse.acquisition.revisions import ContentImpact, SourceRevisionLedger
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 FILING_ARTIFACT_PRODUCER_NAME = "sec_raw_object"
 FILING_ARTIFACT_TARGET_TABLE = "sec_raw_object"
@@ -108,7 +108,7 @@ def finalize_filing_artifact_candidate(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     decision_id: str,
     candidate: FilingArtifactCandidateMeta,
     *,
@@ -272,7 +272,7 @@ def drive_filing_artifact_silver_acceptance(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     result: DiscoveryDriveResult,
     *,
     required_producers: tuple[str, ...] = (FILING_ARTIFACT_PRODUCER_NAME,),

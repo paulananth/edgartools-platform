@@ -35,8 +35,7 @@ from edgar_warehouse.acquisition.reference_catalog_silver_acceptance import (
 from edgar_warehouse.acquisition.revisions import SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_store import SilverDatabase
-from tests.support.silver_rows import insert_silver_rows
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
 def _engine():
@@ -50,7 +49,7 @@ def _engine():
 def _harness(tmp_path: Path):
     engine = _engine()
     AcquisitionBase.metadata.create_all(engine)
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    silver = SilverLandingStore(landing_export=LandingExportBuffer())
     bronze_root = StorageLocation(str(tmp_path / "bronze"))
     return (
         AcquisitionLedger(engine),
@@ -62,7 +61,7 @@ def _harness(tmp_path: Path):
     )
 
 
-def _landed_tickers(silver: SilverDatabase, *, sync_run_id: str | None = None) -> list[tuple]:
+def _landed_tickers(silver: SilverLandingStore, *, sync_run_id: str | None = None) -> list[tuple]:
     """sec_company_ticker is landing-only (silver-merge-engine-migration
     Ticket 06e): the rows this run recorded for the landing export."""
     return [
@@ -380,12 +379,10 @@ def test_drive_rejects_a_required_producers_set_it_cannot_serve(tmp_path: Path) 
 
 
 def test_scope_shrink_writes_landing_retirement_records(tmp_path: Path) -> None:
-    """The earlier membership that retirement compares against is still read
-    from the local Silver database (silver-merge-engine-migration Ticket 06e
-    left that read unchanged). The landing-only writer no longer fills it, so
-    the first snapshot's members are inserted directly, standing in for the
-    earlier list that must come from Snowflake silver once this driver is
-    wired."""
+    """The earlier membership that retirement compares against has no
+    production source yet (the module's known gap); the caller supplies it
+    through ``prior_members``, standing in for the earlier list that must come
+    from Snowflake silver once this driver is wired."""
     ledger, bronze_root, revisions, processing, finalizer, silver = _harness(tmp_path)
     buffer = silver.landing_export
 
@@ -406,14 +403,7 @@ def test_scope_shrink_writes_landing_retirement_records(tmp_path: Path) -> None:
         ),
     )
 
-    insert_silver_rows(
-        silver,
-        "sec_company_ticker",
-        [
-            {"cik": 320193, "ticker": "AAPL", "source_name": "company_tickers"},
-            {"cik": 789019, "ticker": "MSFT", "source_name": "company_tickers"},
-        ],
-    )
+    prior_members = {"company_tickers": [(320193, "AAPL"), (789019, "MSFT")]}
 
     second_payload = json.dumps(
         _catalog_payload(entries=((320193, "AAPL"),))
@@ -430,6 +420,7 @@ def test_scope_shrink_writes_landing_retirement_records(tmp_path: Path) -> None:
             manifest=ReferenceCatalogManifest(universe_label="test", candidates=()),
             outcomes=(_candidate_outcome(source_name="company_tickers", decision_id=second_id),),
         ),
+        prior_members=lambda source_name: prior_members[source_name],
     )
 
     retired = buffer.tables().get("silver_landing_retirement", [])

@@ -68,9 +68,6 @@ def test_gold_refresh_records_gold_manifest_rows(tmp_path) -> None:
 
     with (
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
         ),
@@ -205,9 +202,6 @@ def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> No
 
     with (
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
         ),
@@ -225,10 +219,6 @@ def test_bootstrap_next_silver_only_skips_gold_in_bronze_capture(tmp_path) -> No
                 [],
                 {"rows_inserted": 1, "rows_skipped": 0, "sync_status": "succeeded"},
             ),
-        ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
-            return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
         patch(
             "edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables",
@@ -266,9 +256,6 @@ def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path)
 
     with (
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             return_value=fake_db,
         ),
@@ -286,10 +273,6 @@ def test_bootstrap_next_default_still_publishes_gold_in_bronze_capture(tmp_path)
                 [],
                 {"rows_inserted": 1, "rows_skipped": 0, "sync_status": "succeeded"},
             ),
-        ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
-            return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
         patch(
             "edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables",

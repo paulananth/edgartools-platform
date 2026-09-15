@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import importlib
-import sys
-import types
 import unittest
-from unittest.mock import patch
 
 
 class RuntimeImportTests(unittest.TestCase):
@@ -12,53 +9,6 @@ class RuntimeImportTests(unittest.TestCase):
         runtime = importlib.import_module("edgar_warehouse.runtime")
         self.assertTrue(callable(runtime.run_command))
         self.assertTrue(callable(runtime.run_seed_universe_command))
-
-    def test_silver_shim_imports_and_reexports_expected_symbols(self) -> None:
-        # edgar_warehouse.gold, the sibling re-export shim this test used to
-        # also cover, no longer exists -- see test_gold_shim_was_deleted in
-        # tests/architecture/test_runtime_shim.py.
-        fake_duckdb = types.ModuleType("duckdb")
-
-        fake_pyarrow = types.ModuleType("pyarrow")
-        fake_pyarrow.Table = type("Table", (), {})
-        fake_pyarrow.BufferOutputStream = type("BufferOutputStream", (), {})
-        fake_pyarrow.schema = lambda fields: ("schema", fields)
-        # `nullable` kwarg added with Branch B fundamentals PR-1 (Q5-C: PK
-        # columns marked nullable=False).  Pre-existing 9 fact/dim schemas
-        # call pa.field with 2 args; the new fundamentals schemas pass nullable.
-        fake_pyarrow.field = lambda name, value, nullable=True: (name, value, nullable)
-        fake_pyarrow.int64 = lambda: "int64"
-        fake_pyarrow.int32 = lambda: "int32"
-        fake_pyarrow.int16 = lambda: "int16"
-        fake_pyarrow.string = lambda: "string"
-        fake_pyarrow.date32 = lambda: "date32"
-        fake_pyarrow.bool_ = lambda: "bool"
-        fake_pyarrow.float64 = lambda: "float64"
-        # Branch B fundamentals timestamp column uses pa.timestamp("us", tz="UTC").
-        fake_pyarrow.timestamp = lambda unit, tz=None: f"timestamp[{unit}{',' + tz if tz else ''}]"
-
-        fake_parquet = types.ModuleType("pyarrow.parquet")
-        fake_parquet.write_table = lambda table, buffer: None
-        fake_pyarrow.parquet = fake_parquet
-
-        with patch.dict(
-            sys.modules,
-            {
-                "duckdb": fake_duckdb,
-                "pyarrow": fake_pyarrow,
-                "pyarrow.parquet": fake_parquet,
-            },
-            clear=False,
-        ):
-            for module_name in [
-                "edgar_warehouse.silver_store",
-                "edgar_warehouse.silver",
-            ]:
-                sys.modules.pop(module_name, None)
-
-            silver = importlib.import_module("edgar_warehouse.silver")
-
-        self.assertTrue(hasattr(silver, "SilverDatabase"))
 
     def test_command_registry_contains_all_cli_commands(self) -> None:
         cli = importlib.import_module("edgar_warehouse.cli")

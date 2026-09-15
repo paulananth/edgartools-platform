@@ -12,7 +12,7 @@ first value, every other column takes the latest write. The dbt silver models
 partition on the old ON CONFLICT keys.
 
 The insert, second-call update, first-value, same-call dedupe and empty-rows
-filing cases carry over the deleted DuckDB bulk-upsert tests, which pinned the
+filing cases carry over the deleted local bulk-upsert tests, which pinned the
 same rule against the old upsert.
 """
 
@@ -22,13 +22,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 from tests.support.silver_rows import open_landing_db
 
 
 @pytest.fixture()
-def db(tmp_path):
-    database = open_landing_db(tmp_path)
+def db():
+    database = open_landing_db()
     try:
         yield database
     finally:
@@ -99,14 +99,13 @@ def _raw_object(**overrides):
 # ------------------------------------------------------------------
 
 
-def test_filings_land_with_sync_stamp_and_never_touch_local_duckdb(db):
+def test_filings_land_with_sync_stamp(db):
     count = db.merge_filings([_filing(last_sync_run_id="stale")], sync_run_id="run-1")
 
     assert count == 1
     recorded = db.landing_export.tables()["sec_company_filing"][0]
     assert recorded["last_sync_run_id"] == "run-1"
     assert isinstance(recorded["last_synced_at"], datetime)
-    assert db.fetch("SELECT COUNT(*) AS n FROM sec_company_filing")[0]["n"] == 0
 
 
 def test_merge_filings_inserts_new_rows(db):
@@ -200,8 +199,8 @@ def test_merge_filings_row_without_accession_number_raises_before_recording(db):
     assert db.landing_export.total_row_count() == 0
 
 
-def test_lookup_is_filled_without_a_landing_buffer(tmp_path):
-    database = SilverDatabase(str(tmp_path / "silver.duckdb"))
+def test_lookup_is_filled_without_a_landing_buffer():
+    database = SilverLandingStore()
     try:
         database.merge_filings([_filing(accession_number="acc-1")], sync_run_id="run-1")
         database.merge_filing_attachments([_attachment(accession_number="acc-1")], sync_run_id="run-1")
@@ -227,7 +226,6 @@ def test_attachments_land_with_sync_run_id_and_default_is_primary(db):
     recorded = db.landing_export.tables()["sec_filing_attachment"][0]
     assert recorded["last_sync_run_id"] == "run-1"
     assert recorded["is_primary"] is False
-    assert db.fetch("SELECT COUNT(*) AS n FROM sec_filing_attachment")[0]["n"] == 0
 
 
 def test_attachment_latest_write_replaces_the_row(db):
@@ -263,11 +261,10 @@ def test_attachment_with_falsy_required_field_raises_before_recording(db, field)
 # ------------------------------------------------------------------
 
 
-def test_raw_object_lands_as_given_and_never_touches_local_duckdb(db):
+def test_raw_object_lands_as_given(db):
     assert db.upsert_raw_object(_raw_object()) is None
 
     assert db.landing_export.tables()["sec_raw_object"] == [_raw_object()]
-    assert db.fetch("SELECT COUNT(*) AS n FROM sec_raw_object")[0]["n"] == 0
 
 
 def test_raw_object_keeps_first_fetched_at_and_takes_latest_otherwise(db):

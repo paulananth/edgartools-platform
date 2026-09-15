@@ -35,9 +35,8 @@ default).
 
 For every required-and-unprocessed CIK, this stages that CIK's filing
 metadata via the existing ``submissions_orchestrator`` (a real SEC fetch --
-canonical local silver.duckdb starts empty every run per DuckDB
-Retirement Cutover Ticket 10, so nothing is locally known about a CIK
-until this run captures it) then extracts text for its latest qualifying
+the run's silver store holds only this run's rows, so nothing is locally
+known about a CIK until this run captures it) then extracts text for its latest qualifying
 accession via the existing ``extract_filing_text``. One CIK's failure
 (a transient SEC error, a delisted CIK whose target accession fell out of
 its own recent-submissions window, etc.) is isolated and logged, not

@@ -15,11 +15,11 @@ two logical-key kinds:
 
 - Pagination revisions each seal one producer, ``sec_company_filing``
   (scoped to that one file's own accession rows) -- writes and read-back
-  verifies its own filing rows only, via ``silver_store.merge_filings``.
+  verifies its own filing rows only, via ``silver_landing_store.merge_filings``.
 - Main revisions seal two producers, ``sec_company`` (company/address/
-  former-name/manifest, one combined write via ``silver_store.
+  former-name/manifest, one combined write via ``silver_landing_store.
   stage_submission`` with an empty ``pagination_payloads`` list -- confirmed
-  via ``_stage_submission_locked`` that this still runs every main-derived
+  via ``stage_submission`` that this still runs every main-derived
   loader and both scope-retire deletes) and ``sec_company_filing`` (this
   CIK's "recent" filing rows only -- the pagination rows are each already
   owned by their own pagination revision's producer, so main's own
@@ -27,7 +27,7 @@ two logical-key kinds:
   combined set, to avoid two different revisions both claiming to have
   produced the same table without a real ownership split).
 
-Deliberately does not touch ``silver_store.py``'s existing loaders/merge
+Deliberately does not touch ``silver_landing_store.py``'s existing loaders/merge
 methods -- reuses them exactly as the legacy path does, since Ticket 21's
 job is carrying already-correct Silver-write logic through the new
 registered path, not reimplementing it.
@@ -57,7 +57,7 @@ from edgar_warehouse.acquisition.revisions import (
 )
 from edgar_warehouse.acquisition.submissions_discovery import SubmissionsDriveResult
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 SUBMISSIONS_COMPANY_PRODUCER_NAME = "sec_company"
 SUBMISSIONS_COMPANY_TARGET_TABLE = "sec_company"
@@ -204,7 +204,7 @@ def _finalize_pagination_candidate(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     decision_id: str,
     *,
     cik: int,
@@ -290,7 +290,7 @@ def _finalize_main_candidate(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     decision_id: str,
     *,
     cik: int,
@@ -405,7 +405,7 @@ def drive_submissions_silver_acceptance(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     result: SubmissionsDriveResult,
     *,
     required_producers: tuple[str, ...] = (

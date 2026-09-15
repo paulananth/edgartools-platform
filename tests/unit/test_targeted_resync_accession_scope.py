@@ -1,8 +1,7 @@
 """silver-merge-engine-migration Ticket 10: `targeted-resync --scope-type
 accession` reads the filing from EDGARTOOLS_SILVER.
 
-DuckDB Retirement Cutover Ticket 10 stopped hydrating local DuckDB, and
-Ticket 06d made `get_filing` answer only from rows recorded earlier in the
+The run's silver store holds only this run's rows, and Ticket 06d made `get_filing` answer only from rows recorded earlier in the
 same run. An accession-scoped run records none before `_run_accession_resync`
 asks for the filing, so it always raised "Unknown accession_number". The
 accession branch now reads every (accession, cik) row from Snowflake silver
@@ -20,7 +19,7 @@ import pytest
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 from tests.unit.test_targeted_resync_accession_conflict_isolation import (
     _context,
     _submissions_result,
@@ -51,7 +50,7 @@ def _snowflake_row(cik: int) -> dict:
     }
 
 
-def _run_accession_scope(tmp_path: Path, db: SilverDatabase, scope_key: str = ACCESSION):
+def _run_accession_scope(tmp_path: Path, db: SilverLandingStore, scope_key: str = ACCESSION):
     return warehouse_orchestrator._capture_bronze_raw(
         context=_context(tmp_path),
         db=db,
@@ -72,7 +71,7 @@ def _run_accession_scope(tmp_path: Path, db: SilverDatabase, scope_key: str = AC
 
 def test_accession_scope_resyncs_a_filing_recorded_by_an_earlier_run(tmp_path) -> None:
     landing = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=landing)
+    db = SilverLandingStore(landing_export=landing)
     rows = [_snowflake_row(320193), _snowflake_row(1214156)]
 
     with patch.object(warehouse_orchestrator, "_filing_rows_snowflake", return_value=rows) as read:
@@ -91,7 +90,7 @@ def test_accession_scope_resyncs_a_filing_recorded_by_an_earlier_run(tmp_path) -
 
 
 def test_accession_scope_fails_closed_when_silver_has_no_row(tmp_path) -> None:
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    db = SilverLandingStore(landing_export=LandingExportBuffer())
 
     with (
         patch.object(warehouse_orchestrator, "_filing_rows_snowflake", return_value=[]),
@@ -103,7 +102,7 @@ def test_accession_scope_fails_closed_when_silver_has_no_row(tmp_path) -> None:
 
 
 def test_cik_scope_does_not_read_snowflake_silver(tmp_path) -> None:
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    db = SilverLandingStore(landing_export=LandingExportBuffer())
 
     with (
         patch.object(
@@ -132,7 +131,7 @@ def test_accession_scope_refuses_parsers_without_artifacts(tmp_path) -> None:
     step records. Without it every parse run would be marked failed while
     the command still succeeded, so the combination fails closed before any
     Snowflake read."""
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    db = SilverLandingStore(landing_export=LandingExportBuffer())
 
     with (
         patch.object(
@@ -174,14 +173,12 @@ class _FakeReader:
         self.closed = True
 
 
-def test_filing_columns_match_the_silver_ddl(tmp_path) -> None:
-    """Pinned to the real table, not a hand-copied list, so the constant
-    cannot drift from silver_store._DDL unnoticed."""
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+def test_filing_columns_match_the_silver_schema() -> None:
+    """Pinned to the schema snapshot, not a hand-copied list, so the constant
+    cannot drift from the landing DDL unnoticed."""
+    from edgar_warehouse import silver_schema
 
-    assert warehouse_orchestrator._SNOWFLAKE_FILING_COLUMNS == tuple(
-        db._table_columns("sec_company_filing")
-    )
+    assert warehouse_orchestrator._SNOWFLAKE_FILING_COLUMNS == silver_schema.COLUMNS["sec_company_filing"]
 
 
 def test_filing_rows_snowflake_selects_named_columns_for_the_accession() -> None:

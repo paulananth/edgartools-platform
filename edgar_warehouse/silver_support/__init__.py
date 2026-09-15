@@ -1,1 +1,1 @@
-"""Support modules that sit beside the legacy silver.py monolith."""
+"""Silver read-side support: the Snowflake reader for EDGARTOOLS_SILVER."""

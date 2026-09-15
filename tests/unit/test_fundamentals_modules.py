@@ -472,8 +472,8 @@ class BootstrapFundamentalsWiringTests(unittest.TestCase):
         """duckdb-retirement-cutover Ticket 17: per-filing/thirteenf/entity-facts
         all require a real Snowflake-backed source (db is never hydrated in
         production). A connection failure must hard-fail (exit 2), matching
-        this command's existing convention for resolve_edgar_identity/
-        open_silver_database above -- falling back to db instead would
+        this command's existing convention for resolve_edgar_identity
+        above -- falling back to db instead would
         silently reproduce this ticket's own bug (unbounded re-fetch/re-scan)
         conditionally on Snowflake being unreachable."""
         from edgar_warehouse.application.commands import bootstrap_fundamentals
@@ -494,7 +494,7 @@ class BootstrapFundamentalsWiringTests(unittest.TestCase):
             "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
             return_value=MagicMock(),
         ), patch(
-            "edgar_warehouse.silver_support.session.open_silver_database",
+            "edgar_warehouse.silver_landing_store.SilverLandingStore",
             return_value=MagicMock(),
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"
@@ -547,12 +547,12 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             context = _build_silver_context(identity=env["EDGAR_IDENTITY"], silver_root_override="")
         self.assertIsNone(context.silver_landing_export_root)
 
-    def test_open_silver_database_receives_landing_export_buffer(self) -> None:
+    def test_silver_store_receives_landing_export_buffer(self) -> None:
         from edgar_warehouse.application.commands import bootstrap_fundamentals
 
         captured: dict[str, Any] = {}
 
-        def _fake_open_silver_database(silver_root: Any, *, landing_export: Any = None) -> Any:
+        def _fake_silver_store(*, landing_export: Any = None) -> Any:
             captured["landing_export"] = landing_export
             return MagicMock()
 
@@ -560,8 +560,8 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
             return_value=MagicMock(),
         ), patch(
-            "edgar_warehouse.silver_support.session.open_silver_database",
-            side_effect=_fake_open_silver_database,
+            "edgar_warehouse.silver_landing_store.SilverLandingStore",
+            side_effect=_fake_silver_store,
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"
             "._open_fundamentals_silver_source",
@@ -580,7 +580,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
         captured_open_kwargs: dict[str, Any] = {}
         write_calls: list[dict[str, Any]] = []
 
-        def _fake_open_silver_database(silver_root: Any, *, landing_export: Any = None) -> Any:
+        def _fake_silver_store(*, landing_export: Any = None) -> Any:
             captured_open_kwargs["landing_export"] = landing_export
             return fake_db
 
@@ -595,8 +595,8 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
             return_value=MagicMock(),
         ), patch(
-            "edgar_warehouse.silver_support.session.open_silver_database",
-            side_effect=_fake_open_silver_database,
+            "edgar_warehouse.silver_landing_store.SilverLandingStore",
+            side_effect=_fake_silver_store,
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"
             "._open_fundamentals_silver_source",
@@ -614,7 +614,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
         self.assertEqual(len(write_calls), 1)
         self.assertEqual(write_calls[0]["command_name"], "bootstrap-fundamentals")
         self.assertEqual(write_calls[0]["run_id"], "test-run")
-        # The buffer flushed is the exact same instance open_silver_database
+        # The buffer flushed is the exact same instance SilverLandingStore
         # received -- not a different/fresh buffer.
         self.assertIs(write_calls[0]["buffer"], captured_open_kwargs["landing_export"])
         # Flushed before db.close() was called on the success path.
@@ -631,7 +631,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
             return_value=MagicMock(),
         ), patch(
-            "edgar_warehouse.silver_support.session.open_silver_database",
+            "edgar_warehouse.silver_landing_store.SilverLandingStore",
             return_value=fake_db,
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"
@@ -663,7 +663,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             "edgar_warehouse.application.commands.bootstrap_fundamentals._bookkeeping_store",
             return_value=MagicMock(),
         ), patch(
-            "edgar_warehouse.silver_support.session.open_silver_database",
+            "edgar_warehouse.silver_landing_store.SilverLandingStore",
             return_value=fake_db,
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"

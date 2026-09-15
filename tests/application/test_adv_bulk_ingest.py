@@ -13,7 +13,7 @@ from edgar_warehouse.application.adv_bulk_ingest import (
     reconstruct_effective_adv_set,
 )
 from edgar_warehouse.application.errors import WarehouseRuntimeError
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
@@ -254,7 +254,7 @@ def test_ingest_scopes_fund_index_per_filing_not_per_archive(tmp_path) -> None:
         ),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    db = SilverLandingStore(landing_export=LandingExportBuffer())
     try:
         result = ingest_adv_bulk_archive(
             db,

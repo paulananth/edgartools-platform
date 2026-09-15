@@ -1,7 +1,7 @@
 """SQLAlchemy models for the 10 operational bookkeeping tables.
 
-Ported from the DuckDB DDL in edgar_warehouse.silver_store's `_DDL` string
-(DuckDB Retirement Cutover Ticket 02). Type mapping: DuckDB `TIMESTAMPTZ` ->
+Ported from the since-deleted DuckDB silver DDL (DuckDB Retirement Cutover
+Ticket 02). Type mapping: DuckDB `TIMESTAMPTZ` ->
 Postgres `TIMESTAMP WITH TIME ZONE` (SQLAlchemy `TIMESTAMP(timezone=True)`,
 matching edgar_warehouse.mdm.database's own convention); everything else
 (TEXT, BIGINT, INTEGER, SMALLINT, DATE, BOOLEAN) maps directly, no DuckDB-only
@@ -273,7 +273,7 @@ class SecSourceCheckpoint(Base):
     last_accession_number_seen: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )
-    # Not present in silver_store.py's bare _DDL string -- added there via a
+    # Not present in the original DuckDB DDL string -- added there via a
     # runtime `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` schema-evolution
     # step. upsert_source_checkpoint writes it, so it must be a real column
     # here from the start (see Ticket 02's DDL/method mismatch note).

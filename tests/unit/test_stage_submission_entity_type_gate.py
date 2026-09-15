@@ -14,7 +14,7 @@ from edgar_warehouse.loaders.bronze_submission_extractors import (
     is_reporting_company_entity_type,
 )
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
 def test_is_reporting_company_entity_type_classifies_known_values():
@@ -63,7 +63,7 @@ def _columns(entries: list[dict]) -> dict:
 
 def test_stage_submission_skips_company_rows_for_individual_filer(tmp_path):
     landing = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=landing)
+    db = SilverLandingStore(landing_export=landing)
     try:
         main_payload = {
             "name": "Zuckerberg Mark",
@@ -107,7 +107,7 @@ def test_stage_submission_skips_company_rows_for_individual_filer(tmp_path):
 
 def test_stage_submission_still_writes_company_rows_for_real_company(tmp_path):
     landing = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=landing)
+    db = SilverLandingStore(landing_export=landing)
     try:
         main_payload = {
             "name": "Test Co",
@@ -136,8 +136,5 @@ def test_stage_submission_still_writes_company_rows_for_real_company(tmp_path):
         assert [row["entity_type"] for row in recorded["sec_company"]] == ["operating"]
         assert len(recorded["sec_company_address"]) == 1
         assert result["company_rows_written"] == 1
-        # Nothing reaches local DuckDB for the company tables.
-        for table in ("sec_company", "sec_company_address", "sec_company_former_name"):
-            assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
     finally:
         db.close()

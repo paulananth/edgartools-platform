@@ -1,18 +1,15 @@
-"""Store-free silver write path (silver-merge-engine-migration Ticket 14).
+"""Store-free silver write path (silver-merge-engine-migration Tickets 14, 17).
 
 Every silver writer records its rows to the Snowflake landing zone through
 `_record_landing_passthrough`; the dbt silver models collapse them. The
 three tables read back inside a run (`_IN_RUN_LOOKUP_TABLES`, ADR 0011)
 are answered from the rows this run recorded. Nothing here opens a
-database: `SilverDatabase` (silver_store.py) subclasses this only to keep
-its DuckDB engine alive until Ticket 17 deletes it, so the 35 importers and
-`open_silver_database` do not churn in the same diff as the engine.
+database: the local DuckDB engine that used to sit under this class
+(`SilverDatabase`, silver_store.py) was deleted in Ticket 17.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -55,12 +52,7 @@ class SilverLandingStore:
         self.landing_export = landing_export
 
     def close(self) -> None:
-        """Nothing to release; SilverDatabase overrides this to close DuckDB."""
-
-    @contextmanager
-    def _shard_advisory_lock(self) -> Iterator[None]:
-        """No local file to serialize on; SilverDatabase overrides with a file lock."""
-        yield
+        """Nothing to release; kept so callers can pair open/close uniformly."""
 
     def mark_fundamentals_accession_processed(self, mode: str, accession_number: str) -> None:
         """Record that ``mode`` (per-filing | thirteenf) fully wrote this accession.
@@ -193,30 +185,6 @@ class SilverLandingStore:
     ) -> dict[str, Any]:
         """Stage one company's full submission: run loaders, record the company
         tables for landing, merge the filing rows locally."""
-        with self._shard_advisory_lock():
-            return self._stage_submission_locked(
-                cik=cik,
-                main_payload=main_payload,
-                pagination_payloads=pagination_payloads,
-                sync_run_id=sync_run_id,
-                raw_object_id=raw_object_id,
-                load_mode=load_mode,
-                recent_limit=recent_limit,
-                filing_min_date=filing_min_date,
-            )
-
-    def _stage_submission_locked(
-        self,
-        *,
-        cik: int,
-        main_payload: dict[str, Any],
-        pagination_payloads: list[tuple[str, dict[str, Any]]],
-        sync_run_id: str,
-        raw_object_id: str,
-        load_mode: str,
-        recent_limit: int | None = None,
-        filing_min_date: Any = None,
-    ) -> dict[str, Any]:
         from edgar_warehouse.loaders.bronze_submission_extractors import (
             filter_rows_by_min_filing_date,
             is_reporting_company_entity_type,
@@ -627,3 +595,47 @@ class SilverLandingStore:
             defaults={"effective_status": "effective", "parser_version": "1"},
             stamp=self._ingested_at_stamp(),
         )
+
+
+def _parse_company_ticker_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Parse company_tickers_exchange/company_tickers style payloads into rows."""
+    rows: list[dict[str, Any]] = []
+    if not isinstance(payload, dict):
+        return rows
+
+    fields = payload.get("fields")
+    data = payload.get("data")
+    if isinstance(fields, list) and isinstance(data, list):
+        field_names = [str(field) for field in fields]
+        for record in data:
+            if not isinstance(record, list):
+                continue
+            item = dict(zip(field_names, record))
+            cik = item.get("cik") or item.get("cik_str")
+            ticker = item.get("ticker")
+            if cik is None or not ticker:
+                continue
+            rows.append(
+                {
+                    "cik": int(cik),
+                    "ticker": str(ticker),
+                    "exchange": str(item.get("exchange")) if item.get("exchange") else None,
+                }
+            )
+        return rows
+
+    for entry in payload.values():
+        if not isinstance(entry, dict):
+            continue
+        cik = entry.get("cik_str")
+        ticker = entry.get("ticker", "")
+        if cik is None:
+            continue
+        rows.append(
+            {
+                "cik": int(cik),
+                "ticker": str(ticker),
+                "exchange": str(entry.get("exchange")) if entry.get("exchange") else None,
+            }
+        )
+    return rows

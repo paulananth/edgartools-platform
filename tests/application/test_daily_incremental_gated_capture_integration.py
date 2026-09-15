@@ -117,8 +117,7 @@ def test_gated_capture_reuses_already_open_db_and_captures_real_filing(
     from edgar_warehouse.application.workflows.drive_filing_discovery import (
         run_filing_artifact_gated_capture_for_business_date,
     )
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
+    from edgar_warehouse.silver_landing_store import SilverLandingStore
     from tests.support.bookkeeping_fixtures import bookkeeping_fixture
 
     _set_warehouse_env(monkeypatch, tmp_path)
@@ -126,8 +125,7 @@ def test_gated_capture_reuses_already_open_db_and_captures_real_filing(
     _seed_daily_index(bookkeeping, business_date="2026-08-27")
 
     context = _build_warehouse_context("daily-incremental")
-    silver_root = StorageLocation(str(tmp_path / "silver"))
-    db = open_silver_database(silver_root)
+    db = SilverLandingStore()
     payload = b"<ownershipDocument>form4 bytes</ownershipDocument>"
     try:
         with patch(

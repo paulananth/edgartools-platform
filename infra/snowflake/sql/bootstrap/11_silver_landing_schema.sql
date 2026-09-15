@@ -8,9 +8,9 @@
 -- (and its dbt-model-generating companion, generate_silver_dbt_models.py):
 -- 13 of the 14 Snowflake bootstrap SQL files were already hand-maintained,
 -- and this was the one exception. THIS FILE IS NOW THE HAND-MAINTAINED
--- SOURCE OF TRUTH -- there is no regeneration step. Edit it directly when
--- silver_store.py's schema changes, matching every other bootstrap SQL file
--- in this repo.
+-- SOURCE OF TRUTH -- there is no regeneration step. Edit it directly when a
+-- landing table changes, together with edgar_warehouse/silver_schema.py
+-- (tests/unit/test_silver_schema_snapshot.py holds the two equal).
 --
 -- Root cause this file exists to prevent, named per the migration map's
 -- standing requirement (not generic caution): the MDM Snowflake mirror
@@ -374,8 +374,8 @@ CREATE TABLE IF NOT EXISTS sec_employment_event (
 ALTER TABLE sec_employment_event ALTER COLUMN parse_sequence DROP NOT NULL;
 
 -- fundamentals-daily-integration map, Ticket 03 / duckdb-retirement-cutover
--- Ticket 17. Reflects edgar_warehouse.silver_store._DDL's
--- sec_entity_facts_refresh_watermark table.
+-- Ticket 17. Mirrored in edgar_warehouse/silver_schema.py's
+-- sec_entity_facts_refresh_watermark entry.
 CREATE TABLE IF NOT EXISTS sec_entity_facts_refresh_watermark (
     cik BIGINT NOT NULL,
     entity_facts_refreshed_at TIMESTAMP_TZ,
@@ -498,8 +498,8 @@ CREATE TABLE IF NOT EXISTS sec_financial_fact (
 ALTER TABLE sec_financial_fact ALTER COLUMN parse_sequence DROP NOT NULL;
 
 -- fundamentals-daily-integration map, Ticket 02 / duckdb-retirement-cutover
--- Ticket 17. Reflects edgar_warehouse.silver_store._DDL's
--- sec_fundamentals_processed_accession table.
+-- Ticket 17. Mirrored in edgar_warehouse/silver_schema.py's
+-- sec_fundamentals_processed_accession entry.
 CREATE TABLE IF NOT EXISTS sec_fundamentals_processed_accession (
     mode TEXT NOT NULL,
     accession_number TEXT NOT NULL,

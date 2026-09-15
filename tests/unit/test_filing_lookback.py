@@ -17,7 +17,7 @@ import pytest
 from edgar_warehouse.application import warehouse_orchestrator as orch
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.loaders.bronze_submission_extractors import filter_rows_by_min_filing_date
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
 class TestResolveFilingLookbackYears:
@@ -66,7 +66,7 @@ class TestFilterRowsByMinFilingDate:
 
 
 class TestStageSubmissionFilingMinDate:
-    """Integration-level: SilverDatabase.stage_submission is the actual
+    """Integration-level: SilverLandingStore.stage_submission is the actual
     bronze-discovery write path -- prove filing_min_date controls what lands
     in sec_company_filing, not just what a pure helper returns."""
 
@@ -93,7 +93,7 @@ class TestStageSubmissionFilingMinDate:
         }
 
     def test_filing_min_date_excludes_old_filings_from_sec_company_filing(self, tmp_path):
-        db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+        db = SilverLandingStore()
         try:
             payload = self._payload(accessions_and_dates=[
                 ("old-10k", "2020-03-01", "10-K"),
@@ -117,7 +117,7 @@ class TestStageSubmissionFilingMinDate:
             db.close()
 
     def test_filing_min_date_none_keeps_full_history(self, tmp_path):
-        db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+        db = SilverLandingStore()
         try:
             payload = self._payload(accessions_and_dates=[
                 ("old-10k", "2020-03-01", "10-K"),

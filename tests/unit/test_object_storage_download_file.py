@@ -1,8 +1,8 @@
 """Tests for StorageLocation.download_file (seed-universe-narrow-hydrate ticket 04).
 
-_hydrate_silver_database_from_storage previously buffered the entire remote
-silver.duckdb into one Python bytes value (read_bytes()) before writing it to
-local disk -- the confirmed shared root cause behind four separate live OOMs
+The since-deleted silver.duckdb hydrate previously buffered the entire remote
+object into one Python bytes value (read_bytes()) before writing it to local
+disk -- the confirmed shared root cause behind four separate live OOMs
 (Stage0CompanyIdentity, ComputeWindows, gold-refresh, seed-universe). This
 file locks in download_file's streaming behavior: it must never hold the
 whole object in memory as one value.

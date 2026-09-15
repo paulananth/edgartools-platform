@@ -136,16 +136,15 @@ def _get_processed_accessions(source: Any, *, mode: str, accession_numbers: list
 def run_bootstrap_fundamentals_per_filing(
     *,
     cik_list: list[int],
-    source,                # SilverDatabase | None — Branch A metadata source
-    db,                    # SilverDatabase instance — write target
+    source,                # silver reader | None — Branch A metadata source
+    db,                    # SilverLandingStore — write target
     sync_run_id: str,
 ) -> dict[str, Any]:
     """Process 8-K earnings + DEF 14A proxy filings from bronze for the given CIKs.
 
     Filing/attachment/raw-object metadata is read from ``source`` — Branch A's
-    silver tables, produced by bootstrap-next/bootstrap-batch. In the unified
-    silver layout ``source`` is normally the same ``SilverDatabase`` instance as
-    ``db``. ``source`` may still be None in direct unit tests or ad-hoc local
+    silver tables, produced by bootstrap-next/bootstrap-batch, read from
+    EDGARTOOLS_SILVER (``db`` only records writes). ``source`` may still be None in direct unit tests or ad-hoc local
     calls; this is treated as zero available filings rather than an error.
 
     Returns row counts per table written.
@@ -338,7 +337,7 @@ def run_bootstrap_fundamentals_per_filing(
 def run_bootstrap_entity_facts(
     *,
     cik_list: list[int],
-    db,                     # SilverDatabase instance -- write target
+    db,                     # SilverLandingStore -- write target
     identity: str,          # SEC User-Agent string
     sync_run_id: str,
     force: bool = False,
@@ -490,8 +489,8 @@ def run_bootstrap_entity_facts(
 def run_bootstrap_thirteenf(
     *,
     cik_list: list[int],
-    source,                 # SilverDatabase | None — Branch A metadata source
-    db,                      # SilverDatabase instance — write target
+    source,                 # silver reader | None — Branch A metadata source
+    db,                      # SilverLandingStore — write target
     sync_run_id: str,
 ) -> dict[str, Any]:
     """Parse 13F-HR INFORMATION TABLE XML attachments for the given CIKs.

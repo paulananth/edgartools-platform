@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import pytest
 
-from tests.support.silver_rows import CountingConnection, open_landing_db
+from tests.support.silver_rows import open_landing_db
 
 
 @pytest.fixture()
-def db(tmp_path):
-    database = open_landing_db(tmp_path)
+def db():
+    database = open_landing_db()
     try:
         yield database
     finally:
@@ -66,7 +66,7 @@ _WRITERS = [
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _WRITERS)
-def test_rows_land_with_last_sync_run_id_and_never_touch_local_duckdb(db, method, table, make_row):
+def test_rows_land_with_last_sync_run_id(db, method, table, make_row):
     count = getattr(db, method)([make_row(last_sync_run_id="stale")], "run-1")
 
     assert count == 1
@@ -74,7 +74,6 @@ def test_rows_land_with_last_sync_run_id_and_never_touch_local_duckdb(db, method
     # The old values_fn always wrote the call's sync_run_id, whatever the row said.
     assert recorded["last_sync_run_id"] == "run-1"
     assert recorded["parser_version"] == "ownership_v1"
-    assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _WRITERS)
@@ -92,7 +91,7 @@ def test_empty_rows_record_nothing(db, method, table, make_row):
     ],
 )
 def test_row_missing_a_key_column_raises_before_recording(db, method, row):
-    """The old values_fn read the key columns as row["..."] and the DuckDB
+    """The old values_fn read the key columns as row["..."] and the local
     primary key rejected NULLs; the passthrough's NOT NULL check still raises."""
     with pytest.raises(ValueError, match="NOT NULL"):
         getattr(db, method)([row], "run-1")
@@ -112,15 +111,3 @@ def test_absent_nullable_columns_are_not_filled(db):
         "accession_number": "0000320193-26-000001", "owner_index": 1, "last_sync_run_id": "run-1",
     }
 
-
-def test_large_filing_does_no_per_row_duckdb_io(db):
-    rows = [_non_derivative_row(txn_index=i) for i in range(1, 5_001)]
-    counting = CountingConnection(db._conn)
-    db._conn = counting
-    try:
-        count = db.merge_ownership_non_derivative_txns(rows, "run-1")
-    finally:
-        db._conn = counting.wrapped
-
-    assert count == 5_000
-    assert counting.executes <= 1

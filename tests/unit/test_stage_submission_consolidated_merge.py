@@ -8,7 +8,7 @@ per-file merge order."""
 
 from __future__ import annotations
 
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
 def _filing_entry(accession_number, form, **overrides):
@@ -59,7 +59,7 @@ def _pagination_payload(entries: list[dict]) -> dict:
 
 def test_stage_submission_merges_recent_and_pagination_in_one_call(tmp_path, monkeypatch):
     merge_calls: list[int] = []
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverLandingStore()
     try:
         original_merge_filings = db.merge_filings
 

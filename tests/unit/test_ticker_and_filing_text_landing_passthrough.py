@@ -15,21 +15,17 @@ from datetime import UTC, datetime
 
 import pytest
 
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 from tests.support.silver_rows import open_landing_db
 
 
 @pytest.fixture()
-def db(tmp_path):
-    database = open_landing_db(tmp_path)
+def db():
+    database = open_landing_db()
     try:
         yield database
     finally:
         database.close()
-
-
-def _local_count(database: SilverDatabase, table: str) -> int:
-    return database.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"]
 
 
 # ------------------------------------------------------------------
@@ -37,7 +33,7 @@ def _local_count(database: SilverDatabase, table: str) -> int:
 # ------------------------------------------------------------------
 
 
-def test_tickers_land_with_sync_stamp_and_never_touch_local_duckdb(db):
+def test_tickers_land_with_sync_stamp(db):
     count = db.replace_company_tickers(
         [{"cik": 320193, "ticker": "AAPL", "exchange": "Nasdaq"}],
         "run-1",
@@ -55,7 +51,6 @@ def test_tickers_land_with_sync_stamp_and_never_touch_local_duckdb(db):
         "source_rank": 1,
         "last_sync_run_id": "run-1",
     }
-    assert _local_count(db, "sec_company_ticker") == 0
 
 
 def test_tickers_skip_rows_without_cik_or_ticker_and_rank_counts_every_input_row(db):
@@ -117,7 +112,6 @@ def test_tickers_repeat_snapshot_records_both_and_deletes_nothing(db):
 
     recorded = db.landing_export.tables()["sec_company_ticker"]
     assert [(row["cik"], row["last_sync_run_id"]) for row in recorded] == [(1, "run-1"), (2, "run-1"), (1, "run-2")]
-    assert _local_count(db, "sec_company_ticker") == 0
 
 
 def test_tickers_empty_input_records_nothing(db):
@@ -125,11 +119,10 @@ def test_tickers_empty_input_records_nothing(db):
     assert db.landing_export.total_row_count() == 0
 
 
-def test_tickers_without_a_landing_buffer_write_nothing_locally(tmp_path):
-    database = SilverDatabase(str(tmp_path / "silver.duckdb"))
+def test_tickers_without_a_landing_buffer_are_a_noop():
+    database = SilverLandingStore()
     try:
         assert database.replace_company_tickers([{"cik": 1, "ticker": "A"}], "run-1") == 1
-        assert _local_count(database, "sec_company_ticker") == 0
     finally:
         database.close()
 
@@ -153,20 +146,18 @@ def _filing_text(**overrides):
     return base
 
 
-def test_filing_text_lands_as_given_and_never_touches_local_duckdb(db):
+def test_filing_text_lands_as_given(db):
     row = _filing_text()
 
     db.upsert_filing_text(row)
 
     assert db.landing_export.tables()["sec_filing_text"] == [row]
-    assert _local_count(db, "sec_filing_text") == 0
 
 
-def test_filing_text_without_a_landing_buffer_writes_nothing_locally(tmp_path):
-    database = SilverDatabase(str(tmp_path / "silver.duckdb"))
+def test_filing_text_without_a_landing_buffer_is_a_noop():
+    database = SilverLandingStore()
     try:
         database.upsert_filing_text(_filing_text())
-        assert _local_count(database, "sec_filing_text") == 0
     finally:
         database.close()
 

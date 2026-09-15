@@ -55,14 +55,13 @@ from edgar_warehouse.application.acquisition_command_registry import (
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
-    _publish_silver_database_with_retry,
 )
 from edgar_warehouse.application.workflows.acquisition_run_writes import (
     write_consolidated_run_manifest,
     write_declared_layer_manifests,
 )
 from edgar_warehouse.mdm.database import get_engine
-from edgar_warehouse.silver_support.session import open_silver_database
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 DEFAULT_LEASE_SECONDS = 300
 DEFAULT_REGISTRY_VERSION = "submissions-v1"
@@ -126,12 +125,11 @@ def run_drive_submissions_discovery(args: Any) -> int:
         else (SUBMISSIONS_COMPANY_PRODUCER_NAME, SUBMISSIONS_FILING_PRODUCER_NAME)
     )
 
-    # DuckDB Retirement Cutover Ticket 10: hydration removed. sec_company_
-    # sync_state (read by _resolve_ciks) lives in the Postgres-backed
-    # BookkeepingStore, not this local DuckDB `db` connection (Ticket 15);
-    # canonical silver.duckdb is no longer written by any command (see
-    # _publish_silver_database_if_remote's docstring).
-    db = open_silver_database(context.silver_root)
+    # silver-merge-engine-migration Ticket 17: no local store. Reads this
+    # driver makes are satisfied by its own run's writes or by the
+    # Postgres-backed BookkeepingStore; the writes go nowhere until this
+    # dormant driver gets a landing export of its own.
+    db = SilverLandingStore()
     bookkeeping = _bookkeeping_store()
     try:
         ciks = _resolve_ciks(
@@ -180,7 +178,6 @@ def run_drive_submissions_discovery(args: Any) -> int:
             SUBMISSIONS_DISCOVERY_SOURCE_FAMILY, now.date()
         )
 
-    _publish_silver_database_with_retry(context)
 
     write_consolidated_run_manifest(
         command_name=COMMAND_NAME,

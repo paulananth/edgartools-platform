@@ -1,8 +1,8 @@
 """run_dual_path_filing_artifact_parity's legacy snapshot after Ticket 06d.
 
 sec_raw_object is landing-only (silver-merge-engine-migration Ticket 06d), so
-the legacy snapshot can no longer `SELECT * FROM sec_raw_object` on local
-DuckDB: it reads the raw objects the legacy capture just recorded through the
+the legacy snapshot cannot `SELECT * FROM sec_raw_object` on a local store:
+it reads the raw objects the legacy capture just recorded through the
 run's own lookup (attachments, then raw object by id). The live SEC dual-path
 test (tests/application/test_dual_path_capture_parity.py) is skipped in CI, so
 this covers the snapshot without SEC or Postgres.
@@ -21,7 +21,7 @@ from edgar_warehouse.acquisition.capture_parity import (
     run_dual_path_filing_artifact_parity,
 )
 from edgar_warehouse.acquisition.models import AcquisitionBase
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 ACCESSION = "0000320193-26-000001"
 
@@ -73,7 +73,7 @@ def _legacy_fetch(*, db, accession_number, sync_run_id, **_kwargs):
 def test_legacy_snapshot_reads_raw_objects_this_run_recorded(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'mdm.db'}")
     AcquisitionBase.metadata.create_all(engine)
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverLandingStore()
     try:
         with (
             patch("edgar_warehouse.bronze_filing_artifacts.fetch_filing_artifacts", side_effect=_legacy_fetch),

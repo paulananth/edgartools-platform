@@ -20,15 +20,13 @@ These tests cover:
      (matches run_companies()/derive_relationships()'s identical guard --
      StaticPool shares one physical connection and cannot run concurrent
      transactions), _RUN_STEP_MAX_WORKERS otherwise.
-  3. Correctness: run_all() against a real SilverDatabase still resolves
+  3. Correctness: run_all() against a stub silver reader still resolves
      companies and returns accurate PipelineStats.
   4. Fail-fast: an exception in any one step propagates out of run_all()
      rather than being silently swallowed.
 """
 from __future__ import annotations
 
-import os
-import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -42,9 +40,13 @@ from edgar_warehouse.mdm.database import (
     MdmRelationshipType,
 )
 from edgar_warehouse.mdm.pipeline import MDMPipeline
-from edgar_warehouse.silver_store import SilverDatabase
 
-from tests.mdm.test_run_companies_concurrency import _seeded_sqlite_session, _StubBookkeeping
+from tests.mdm.test_run_companies_concurrency import (
+    StubSilver,
+    _companies_fixture,
+    _seeded_sqlite_session,
+    _StubBookkeeping,
+)
 
 
 def _seed_fundamentals_relationship_types(session) -> None:
@@ -81,17 +83,11 @@ def _seed_fundamentals_relationship_types(session) -> None:
     session.commit()
 
 
-def _real_silver_with_companies(n: int) -> SilverDatabase:
-    tmpdir = tempfile.mkdtemp()
-    silver_path = os.path.join(tmpdir, "silver.duckdb")
-    db = SilverDatabase(silver_path)
-    for i in range(n):
-        db._conn.execute(
-            "INSERT INTO sec_company (cik, entity_name) VALUES (?, ?)",
-            [900000 + i, f"Company {i}"],
-        )
-    db.close()
-    return SilverDatabase(silver_path)
+def _silver_with_companies(n: int) -> StubSilver:
+    """A stub silver reader with n companies (ciks 900000..). The DuckDB-backed
+    fixture this replaced went with the engine (silver-merge-engine-migration
+    Ticket 17)."""
+    return StubSilver(_companies_fixture(n))
 
 
 class TestRunAllUsesIsolatedSessionsPerStep:
@@ -104,7 +100,7 @@ class TestRunAllUsesIsolatedSessionsPerStep:
         thread-safety bug (concurrent use of one non-thread-safe
         SQLAlchemy Session), not just a style issue."""
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(2)
+        silver = _silver_with_companies(2)
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
@@ -145,7 +141,7 @@ class TestRunAllSqliteDialectGuard:
         max_workers must be forced to 1 regardless of
         MDM_RUN_STEP_CONCURRENCY's configured value."""
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(1)
+        silver = _silver_with_companies(1)
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
@@ -171,7 +167,7 @@ class TestRunAllSqliteDialectGuard:
 class TestRunAllCorrectness:
     def test_resolves_companies_and_returns_accurate_stats(self) -> None:
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(3)
+        silver = _silver_with_companies(3)
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
@@ -199,7 +195,7 @@ class TestRunAllEnqueuesPublicationRequest:
 
     def test_a_run_that_resolves_companies_enqueues_one_request(self) -> None:
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(3)
+        silver = _silver_with_companies(3)
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver, run_id="test-run-abc")
 
@@ -214,7 +210,7 @@ class TestRunAllEnqueuesPublicationRequest:
 
     def test_a_run_with_nothing_to_resolve_enqueues_no_request(self) -> None:
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(0)
+        silver = _silver_with_companies(0)
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
@@ -242,7 +238,7 @@ class TestRunAllEnqueuesPublicationRequest:
         )
 
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(2)
+        silver = _silver_with_companies(2)
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver, run_id="e2e-run")
 
@@ -269,7 +265,7 @@ class TestRunAllEnqueuesPublicationRequest:
 
     def test_a_run_without_an_explicit_run_id_still_enqueues_with_a_generated_identity(self) -> None:
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(1)
+        silver = _silver_with_companies(1)
         _seed_fundamentals_relationship_types(session)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
@@ -283,7 +279,7 @@ class TestRunAllEnqueuesPublicationRequest:
 class TestRunAllFailsFast:
     def test_a_failing_step_propagates_out_of_run_all(self, monkeypatch) -> None:
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(1)
+        silver = _silver_with_companies(1)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
         # Raise from inside one step's worker without patching MDMPipeline
@@ -324,7 +320,7 @@ class TestRunAllFailsFast:
         sqlite dialect guard's forced max_workers=1 used by every other
         test in this file."""
         session = _seeded_sqlite_session(static_pool=True)
-        silver = _real_silver_with_companies(1)
+        silver = _silver_with_companies(1)
         outer_pipeline = MDMPipeline(session=session, silver=silver)
 
         shutdown_calls: list[dict] = []

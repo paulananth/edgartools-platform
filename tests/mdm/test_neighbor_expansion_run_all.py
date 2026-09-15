@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 from sqlalchemy import select
 
-from edgar_warehouse.mdm import pipeline as pipeline_module
 from edgar_warehouse.mdm.database import (
     MdmCompany,
     MdmEntity,
@@ -24,10 +23,16 @@ from edgar_warehouse.mdm.database import (
 from edgar_warehouse.mdm.pipeline import MDMPipeline
 
 from tests.mdm.test_run_all_step_concurrency import (
-    _real_silver_with_companies,
     _seed_fundamentals_relationship_types,
+    _silver_with_companies,
 )
 from tests.mdm.test_run_companies_concurrency import _seeded_sqlite_session, _StubBookkeeping
+
+_DIRECT_INSIDER_ROW = {
+    "accession_number": "0000000001", "owner_index": 1, "owner_cik": 555001,
+    "owner_name": "Direct Insider", "is_director": True, "is_officer": False,
+    "is_ten_percent_owner": False, "is_other": False, "officer_title": None,
+}
 
 
 def _make_entity(session, entity_type: str) -> str:
@@ -39,13 +44,10 @@ def _make_entity(session, entity_type: str) -> str:
 
 def test_changed_company_rechecks_direct_person_neighbor_not_two_hop() -> None:
     session = _seeded_sqlite_session(static_pool=True)
-    silver = _real_silver_with_companies(1)
+    silver = _silver_with_companies(1)
     _seed_fundamentals_relationship_types(session)
 
-    company_cik = list(
-        row[0]
-        for row in silver._conn.execute("SELECT cik FROM sec_company").fetchall()
-    )[0]
+    company_cik = silver.fetch("SELECT cik FROM sec_company")[0]["cik"]
 
     # Pre-seed the company entity with NO MdmSourceRef row yet -- resolve_one
     # will treat this as a genuine first observation (not skipped_unchanged),
@@ -123,7 +125,7 @@ def test_no_relationship_neighbors_means_no_extra_run_persons_call() -> None:
     universe scan.
     """
     session = _seeded_sqlite_session(static_pool=True)
-    silver = _real_silver_with_companies(1)
+    silver = _silver_with_companies(1)
     _seed_fundamentals_relationship_types(session)
     outer_pipeline = MDMPipeline(session=session, silver=silver)
 
@@ -151,18 +153,11 @@ def test_direct_neighbor_with_real_silver_data_is_actually_resolved() -> None:
     [...]) must actually resolve it, not just iterate an empty result set.
     """
     session = _seeded_sqlite_session(static_pool=True)
-    silver = _real_silver_with_companies(1)
+    silver = _silver_with_companies(1)
     _seed_fundamentals_relationship_types(session)
 
-    company_cik = silver._conn.execute("SELECT cik FROM sec_company").fetchall()[0][0]
-    silver._conn.execute(
-        """
-        INSERT INTO sec_ownership_reporting_owner
-            (accession_number, owner_index, owner_cik, owner_name,
-             is_director, is_officer, is_ten_percent_owner, is_other, officer_title)
-        VALUES ('0000000001', 1, 555001, 'Direct Insider', TRUE, FALSE, FALSE, FALSE, NULL)
-        """
-    )
+    company_cik = silver.fetch("SELECT cik FROM sec_company")[0]["cik"]
+    silver._fixtures["FROM sec_ownership_reporting_owner"] = [_DIRECT_INSIDER_ROW]
 
     company_entity_id = _make_entity(session, "company")
     session.add(MdmCompany(entity_id=company_entity_id, cik=company_cik, canonical_name="Old Name"))
@@ -202,17 +197,10 @@ def test_second_call_on_an_unchanged_neighbor_hits_skip_if_unchanged() -> None:
     least one.
     """
     session = _seeded_sqlite_session(static_pool=True)
-    silver = _real_silver_with_companies(1)
+    silver = _silver_with_companies(1)
     _seed_fundamentals_relationship_types(session)
 
-    silver._conn.execute(
-        """
-        INSERT INTO sec_ownership_reporting_owner
-            (accession_number, owner_index, owner_cik, owner_name,
-             is_director, is_officer, is_ten_percent_owner, is_other, officer_title)
-        VALUES ('0000000001', 1, 555001, 'Direct Insider', TRUE, FALSE, FALSE, FALSE, NULL)
-        """
-    )
+    silver._fixtures["FROM sec_ownership_reporting_owner"] = [_DIRECT_INSIDER_ROW]
 
     direct_person_entity_id = _make_entity(session, "person")
     session.add(

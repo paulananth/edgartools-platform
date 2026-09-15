@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import pytest
 
-from tests.support.silver_rows import CountingConnection, open_landing_db
+from tests.support.silver_rows import open_landing_db
 
 
 @pytest.fixture()
-def db(tmp_path):
-    database = open_landing_db(tmp_path)
+def db():
+    database = open_landing_db()
     try:
         yield database
     finally:
@@ -145,14 +145,13 @@ _WRITERS = [
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _WRITERS)
-def test_rows_land_with_last_sync_run_id_and_never_touch_local_duckdb(db, method, table, make_row):
+def test_rows_land_with_last_sync_run_id(db, method, table, make_row):
     count = getattr(db, method)([make_row(last_sync_run_id="stale")], "run-1")
 
     assert count == 1
     recorded = db.landing_export.tables()[table][0]
     # The old values_fn always wrote the call's sync_run_id, whatever the row said.
     assert recorded["last_sync_run_id"] == "run-1"
-    assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _WRITERS)
@@ -232,17 +231,11 @@ def test_row_missing_a_not_null_column_raises_before_recording(db, method, row):
     assert db.landing_export.total_row_count() == 0
 
 
-def test_adv_private_fund_window_does_no_per_row_duckdb_io(db):
-    """A 13-month advFilingData window stages ~384K fund rows in one call.
-    The passthrough makes at most the one cached NOT NULL lookup."""
+def test_adv_private_fund_window_records_every_row(db):
+    """A 13-month advFilingData window stages ~384K fund rows in one call."""
     rows = [_adv_fund_row(fund_index=i) for i in range(1, 20_001)]
-    counting = CountingConnection(db._conn)
-    db._conn = counting
-    try:
-        count = db.merge_adv_private_funds(rows, "run-1")
-    finally:
-        db._conn = counting.wrapped
+
+    count = db.merge_adv_private_funds(rows, "run-1")
 
     assert count == 20_000
     assert db.landing_export.row_count("sec_adv_private_fund") == 20_000
-    assert counting.executes <= 1
