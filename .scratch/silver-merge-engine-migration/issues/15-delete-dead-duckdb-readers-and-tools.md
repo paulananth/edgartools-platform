@@ -2,7 +2,7 @@
 
 **Type:** task
 
-**Status:** open
+**Status:** claimed (2026-09-15)
 
 ## Question
 

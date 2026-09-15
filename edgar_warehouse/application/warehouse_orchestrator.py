@@ -520,20 +520,6 @@ def _execute_warehouse_bronze_capture(
 
         return run_mdm_entity_backfill_sweep(context, run_id)
 
-    if command_name == "backfill-silver-landing-historical":
-        # silver-snowflake-migration map, Ticket 15 (widened from the
-        # original duckdb-retirement company-metadata-only backfill): one-time
-        # seed of the silver tables the old parity gate tracked (except sec_company_ticker)
-        # into the landing zone -- see
-        # edgar_warehouse/silver_landing_historical_backfill.py's module
-        # docstring. Reads the canonical monolith directly, same dispatch
-        # shape as backfill-mdm-entity-ids above.
-        from edgar_warehouse.silver_landing_historical_backfill import (
-            run_silver_landing_historical_backfill,
-        )
-
-        return run_silver_landing_historical_backfill(context, run_id)
-
     # DuckDB Retirement Cutover Ticket 06: bootstrap-batch used to hydrate/open
     # a CIK-sharded shard-{0-3}.duckdb file here instead of the monolith, to
     # avoid concurrent writers (MaxConcurrency up to 20) racing an ETag-guarded
@@ -6465,11 +6451,6 @@ def _resolve_scope(
     if command_name == "backfill-mdm-entity-ids":
         # mdm-ahead-of-silver map, Phase B: sweeps every shard uniformly;
         # no meaningful CIK range/date/etc scope to report.
-        return {}
-
-    if command_name == "backfill-silver-landing-historical":
-        # silver-snowflake-migration map, Ticket 15: one-time full-universe
-        # seed; no meaningful CIK range/date/etc scope to report.
         return {}
 
     if command_name == "sweep-filing-text":

@@ -839,65 +839,6 @@ class FundamentalsSnowflakeExportTests(unittest.TestCase):
                 self.assertEqual(counts[export_name], 0)
 
 
-class FundamentalsShardedReaderTests(unittest.TestCase):
-    """PR-2 invariant — ShardedSilverReader supports mixed-namespace mounts.
-
-    Verifies the per-shard table-membership detection added to
-    ShardedSilverReader.__init__ so mixed historical/current files with disjoint
-    table sets can be attached without the CREATE VIEW UNION ALL failing.
-    """
-
-    def test_mixed_namespace_mount(self) -> None:
-        import tempfile
-        import os
-        import duckdb
-        from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
-
-        # Build two minimal DuckDB shards with DISJOINT table sets
-        with tempfile.TemporaryDirectory() as tmpdir:
-            ownership_path = os.path.join(tmpdir, "ownership.duckdb")
-            fundamentals_path = os.path.join(tmpdir, "fundamentals.duckdb")
-
-            # Ownership shard: only has sec_company (1 of the 9 ownership tables)
-            c1 = duckdb.connect(ownership_path)
-            c1.execute("CREATE TABLE sec_company (cik BIGINT, name TEXT)")
-            c1.execute("INSERT INTO sec_company VALUES (320193, 'Apple Inc.')")
-            c1.close()
-
-            # Fundamentals shard: only has sec_financial_fact (1 of the 6 fundamentals tables)
-            c2 = duckdb.connect(fundamentals_path)
-            c2.execute("""
-                CREATE TABLE sec_financial_fact (
-                    cik BIGINT, accession_number TEXT, fiscal_year INTEGER,
-                    fiscal_period TEXT, period_end DATE, form_type TEXT,
-                    concept TEXT, value DOUBLE, unit TEXT, decimals INTEGER,
-                    segment TEXT, parser_version TEXT, ingested_at TIMESTAMPTZ
-                )
-            """)
-            c2.execute("""
-                INSERT INTO sec_financial_fact
-                    (cik, accession_number, fiscal_year, fiscal_period, period_end,
-                     form_type, concept, value, unit, decimals, segment, parser_version)
-                VALUES (320193, '0001-test', 2023, 'FY', '2023-12-31', '10-K',
-                        'Revenues', 383285000000.0, 'USD', -6, 'consolidated', 'v1')
-            """)
-            c2.close()
-
-            # Mount both: per-shard membership detection routes each query to the
-            # right alias without CREATE VIEW failing on the missing table.
-            reader = ShardedSilverReader([ownership_path, fundamentals_path])
-            try:
-                ownership_rows = reader.fetch("SELECT cik, name FROM sec_company")
-                fundamentals_rows = reader.fetch(
-                    "SELECT cik, value FROM sec_financial_fact WHERE concept='Revenues'"
-                )
-                self.assertEqual(len(ownership_rows), 1)
-                self.assertEqual(ownership_rows[0]["cik"], 320193)
-                self.assertEqual(len(fundamentals_rows), 1)
-                self.assertEqual(fundamentals_rows[0]["value"], 383285000000.0)
-            finally:
-                reader.close()
-
 
 class MdmPipelineRegistrationTests(unittest.TestCase):
     def test_new_relationship_types_in_registry(self) -> None:

@@ -82,7 +82,6 @@ Options:
                                     Secrets Manager ARN injected as BOOKKEEPING_DATABASE_URL on the
                                     warehouse profile. Default: resolved by name
                                     (<prefix>/bookkeeping/postgres_dsn), same as the MDM DSN.
-  --mdm-silver-duckdb <uri>         MDM_SILVER_DUCKDB. Default: s3://<warehouse-bucket>/warehouse/silver/sec/silver.duckdb.
   --mdm-run-limit <n>               Default limit for mdm mastering state machine. Default: 0 (unbounded); a positive value bounds it.
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
@@ -300,7 +299,6 @@ MDM_ECR_REPOSITORY_URL=""
 MDM_POSTGRES_DSN_SECRET_ARN=""
 MDM_SNOWFLAKE_SECRET_ARN=""
 BOOKKEEPING_POSTGRES_DSN_SECRET_ARN=""
-MDM_SILVER_DUCKDB=""
 # diagnosing-bugs session, 2026-09-07: was 100 (a daily cap on how many
 # entities per type daily_incremental's nested Mastering step resolves).
 # Operator decision: MDM mastering must capture all changes -- 0 means
@@ -376,7 +374,6 @@ while [[ $# -gt 0 ]]; do
     --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-snowflake-secret-arn) MDM_SNOWFLAKE_SECRET_ARN="${2:?}"; shift 2 ;;
     --bookkeeping-postgres-dsn-secret-arn) BOOKKEEPING_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
-    --mdm-silver-duckdb) MDM_SILVER_DUCKDB="${2:?}"; shift 2 ;;
     --mdm-run-limit) MDM_RUN_LIMIT="${2:?}"; shift 2 ;;
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
     --mdm-seed-universe-tracking-status) MDM_SEED_UNIVERSE_TRACKING_STATUS="${2:?}"; shift 2 ;;
@@ -1313,7 +1310,6 @@ if [[ "$BUILD_IMAGE" != "true" ]] && is_empty "$IMAGE_REF"; then
   fail "--skip-build requires --image-ref"
 fi
 
-MDM_SILVER_DUCKDB="$(first_nonempty "$MDM_SILVER_DUCKDB" "s3://${WAREHOUSE_BUCKET_NAME}/warehouse/silver/sec/silver.duckdb")"
 DEPLOY_MDM=false
 missing_mdm_values=()
 is_empty "$MDM_POSTGRES_DSN_SECRET_ARN" && missing_mdm_values+=("mdm_postgres_dsn_secret_arn")
@@ -1734,7 +1730,7 @@ register_task_definition() {
 write_mdm_container_definitions() {
   local output_file="$1" profile="$2"
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$MDM_IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
-    "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$MDM_SILVER_DUCKDB" "$MDM_POSTGRES_DSN_SECRET_ARN" \
+    "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$MDM_POSTGRES_DSN_SECRET_ARN" \
     "$MDM_SNOWFLAKE_SECRET_ARN" \
     "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
 import json
@@ -1749,7 +1745,6 @@ import sys
     environment,
     bronze_bucket,
     warehouse_bucket,
-    mdm_silver_duckdb,
     mdm_database_secret_arn,
     snowflake_secret_arn,
     edgar_secret_arn,
@@ -1764,7 +1759,6 @@ environment_values = [
     {"name": "WAREHOUSE_BRONZE_ROOT", "value": f"s3://{bronze_bucket}/warehouse/bronze"},
     {"name": "WAREHOUSE_STORAGE_ROOT", "value": f"s3://{warehouse_bucket}/warehouse"},
     {"name": "WAREHOUSE_SILVER_ROOT", "value": "/tmp/edgar-warehouse-silver"},
-    {"name": "MDM_SILVER_DUCKDB", "value": mdm_silver_duckdb},
 ]
 
 mdm_secrets = [
@@ -5729,7 +5723,7 @@ MSYS_NO_PATHCONV=1 python3 - "$(win_path "$SUMMARY_FILE")" "$ENVIRONMENT" "$AWS_
   "$CLUSTER_NAME" "$CLUSTER_ARN" "$ECR_REPOSITORY_URL" "$LOG_GROUP_NAME" \
   "$STEP_FUNCTIONS_ROLE_ARN" "$STEP_FUNCTIONS_LOG_GROUP_NAME" \
   "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-  "$DEPLOY_MDM" "$MDM_DATABASE_SOURCE" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MDM_LARGE_ARN" "$MDM_SILVER_DUCKDB" \
+  "$DEPLOY_MDM" "$MDM_DATABASE_SOURCE" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MDM_LARGE_ARN" \
   "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$(win_path "$WORKFLOW_ARNS_FILE")" \
   "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
@@ -5759,7 +5753,6 @@ import sys
     mdm_small_task_definition,
     mdm_medium_task_definition,
     mdm_large_task_definition,
-    mdm_silver_duckdb,
     mdm_database_secret_arn,
     snowflake_secret_arn,
     workflow_arns_file,
@@ -5810,7 +5803,6 @@ if deploy_mdm == "true":
     summary["mdm"] = {
         "image_ref": mdm_image_ref,
         "database_source": mdm_database_source,
-        "silver_duckdb": mdm_silver_duckdb,
         "secrets": {
             "postgres_dsn": mdm_database_secret_arn,
             "snowflake": snowflake_secret_arn,
