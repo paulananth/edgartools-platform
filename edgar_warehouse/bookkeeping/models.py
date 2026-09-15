@@ -273,7 +273,7 @@ class SecSourceCheckpoint(Base):
     last_accession_number_seen: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )
-    # Not present in silver_store.py's bare _DDL string -- added there via a
+    # Not present in the original DuckDB DDL string -- added there via a
     # runtime `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` schema-evolution
     # step. upsert_source_checkpoint writes it, so it must be a real column
     # here from the start (see Ticket 02's DDL/method mismatch note).

@@ -385,8 +385,8 @@ def fetch_filing_artifacts(
         )
 
     # Real fetches run concurrently. Each worker does network I/O + the
-    # immutable S3 write only — no DuckDB access, since a single
-    # SilverDatabase connection is not safe for concurrent use (ticket 03).
+    # immutable S3 write only — no ``db`` access, since the silver store's
+    # in-run lookup is not safe for concurrent use (ticket 03).
     # Bronze-recovery reads share the same pool (cheap S3 GETs, no SEC rate
     # limit involved) so a mixed accession doesn't pay for two sequential
     # dispatch rounds. Results are collected here and every db.upsert_raw_object
@@ -576,9 +576,9 @@ def _fetch_and_store_attachment(
     """Network fetch + immutable storage write for one attachment.
 
     Ticket 77: this is the unit of work each artifact-fetch pool thread runs.
-    Deliberately does not touch ``db`` — a single SilverDatabase DuckDB
-    connection is not safe for concurrent access, so every db.* call stays on
-    the main thread (see the caller in ``fetch_filing_artifacts``).
+    Deliberately does not touch ``db`` — the silver store's in-run lookup is
+    not safe for concurrent access, so every db.* call stays on the main
+    thread (see the caller in ``fetch_filing_artifacts``).
     """
     started_at = time.monotonic()
     _emit_artifact_event(

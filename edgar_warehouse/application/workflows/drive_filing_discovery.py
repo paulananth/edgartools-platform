@@ -485,7 +485,7 @@ def _load_sealed_discovery_rows(bookkeeping: Any, business_date: str) -> list[di
     never triggers that fetch itself (out of scope; see module docstring).
     Takes an already-open ``BookkeepingStore`` (DuckDB Retirement Cutover
     Ticket 15) rather than opening and closing its own, matching the
-    already-open ``SilverDatabase`` shape this had before that table pair
+    already-open silver-store shape this had before that table pair
     moved off DuckDB (Ticket 29's original reasoning still applies: the
     caller owns the connection lifecycle across the whole workflow).
     """

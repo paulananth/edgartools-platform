@@ -20,7 +20,7 @@ These tests cover:
      (matches run_companies()/derive_relationships()'s identical guard --
      StaticPool shares one physical connection and cannot run concurrent
      transactions), _RUN_STEP_MAX_WORKERS otherwise.
-  3. Correctness: run_all() against a real SilverDatabase still resolves
+  3. Correctness: run_all() against a stub silver reader still resolves
      companies and returns accurate PipelineStats.
   4. Fail-fast: an exception in any one step propagates out of run_all()
      rather than being silently swallowed.

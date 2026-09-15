@@ -117,3 +117,47 @@ def test_company_identity_mode_stages_company_and_ticker_only(
         for path in landing_root.rglob("*.parquet")
         if any(table in path.as_posix() for table in untouched_tables)
     ], "company-identity mode must not land any ownership, ADV or 13F rows"
+
+
+def test_identity_refresh_batch_persists_an_outcome_the_reducer_accepts(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """daily_incremental's identity fan-out runs this mode with
+    --identity-refresh-run-id; each batch must leave an outcome that
+    PublishCompanyIdentityUpdates' reducer accepts. Regression
+    (silver-merge-engine-migration Ticket 17): the batch used to upload the
+    local silver.duckdb as its "delta", so deleting the engine made every
+    batch fail with "identity refresh batch delta is missing"."""
+    from edgar_warehouse.application.identity_refresh_publication import (
+        persist_run_manifest,
+        reduce_identity_refresh,
+    )
+    from edgar_warehouse.infrastructure.object_storage import StorageLocation
+
+    storage_root = tmp_path / "warehouse"
+    monkeypatch.setenv("EDGAR_IDENTITY", "EdgarTools Test test@example.com")
+    monkeypatch.setenv("WAREHOUSE_STORAGE_ROOT", str(storage_root))
+    monkeypatch.setenv("WAREHOUSE_IMAGE_REF", "sha256:test-image")
+    monkeypatch.delenv("WAREHOUSE_BRONZE_ROOT", raising=False)
+    monkeypatch.delenv("WAREHOUSE_SILVER_ROOT", raising=False)
+    monkeypatch.delenv("SILVER_LANDING_EXPORT_ROOT", raising=False)
+
+    storage = StorageLocation(str(storage_root))
+    persist_run_manifest(storage, run_id="identity-run", image_identity="sha256:test-image", batches=[[CIK]])
+
+    args = SimpleNamespace(
+        cik_list=[CIK],
+        mode="company-identity",
+        run_id="identity-run",
+        identity_refresh_run_id="identity-run",
+        silver_root=None,
+        cik_offset=0,
+        cik_limit=None,
+        force=False,
+    )
+
+    assert bootstrap_fundamentals.execute(args) == 0
+
+    completed = reduce_identity_refresh(storage, run_id="identity-run", image_identity="sha256:test-image")
+    assert completed["status"] == "succeeded"
+    assert [batch["ciks"] for batch in completed["batches"]] == [[CIK]]

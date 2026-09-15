@@ -1,4 +1,4 @@
--- Hand-maintained. Reflects edgar_warehouse.silver_store._DDL's
+-- Hand-maintained. Reflects infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql's
 -- sec_entity_facts_refresh_watermark table (fundamentals-daily-integration
 -- map, Ticket 03 / duckdb-retirement-cutover Ticket 17).
 

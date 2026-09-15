@@ -35,11 +35,11 @@ company-identity Company master identity: global reference data
              Output: sec_company, sec_company_ticker, sec_company_filing,
              sec_company_address, sec_company_former_name.
 
-Silver database
----------------
-Writes to the canonical SEC silver database under ``silver/sec/silver.duckdb``.
-Branch B tables share the same DuckDB file as Branch A tables so application code
-can enforce cross-table consistency through ordinary reads before writing.
+Silver
+------
+Writes go through ``SilverLandingStore`` to the Snowflake landing zone, flushed
+once at the end of the run; reads of existing silver go to EDGARTOOLS_SILVER
+through ``_open_fundamentals_silver_source``.
 
 Invariants preserved
 --------------------
@@ -151,7 +151,7 @@ def execute(args: Any) -> int:
     #
     # Hard-fail (not silently degrade) when this connection can't be
     # established, matching this function's own convention for every other
-    # real dependency (resolve_edgar_identity, open_silver_database) above.
+    # real dependency (resolve_edgar_identity) above.
     # A pre-code /gof-refactor-reviewer consult flagged that falling back to
     # `db` here would reproduce this exact ticket's bug -- unbounded
     # re-fetch/re-scan -- conditionally on Snowflake being unreachable,
@@ -308,12 +308,13 @@ def execute(args: Any) -> int:
         except Exception:
             pass
 
-    # A run-scoped Daily Identity Refresh persists only its immutable CIK delta.
-    # The dedicated reducer is the sole canonical publisher for that run.
+    # A run-scoped Daily Identity Refresh records this batch's immutable
+    # success declaration; the reducer checks every declared batch has one.
     if identity_refresh_run_id:
-        from pathlib import Path
-
-        from edgar_warehouse.application.identity_refresh_publication import persist_batch_outcome
+        from edgar_warehouse.application.identity_refresh_publication import (
+            batch_outcome_path,
+            persist_batch_outcome,
+        )
 
         image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
         if not image_identity:
@@ -325,15 +326,13 @@ def execute(args: Any) -> int:
                 run_id=identity_refresh_run_id,
                 image_identity=image_identity,
                 ciks=cik_list,
-                delta_file=Path(context.silver_root.join("silver", "sec", "silver.duckdb")),
             )
-            metrics["identity_refresh_delta"] = {
+            metrics["identity_refresh_batch"] = {
                 "batch_id": outcome["batch_id"],
-                "path": outcome["delta_path"],
-                "sha256": outcome["sha256"],
+                "outcome_path": batch_outcome_path(identity_refresh_run_id, outcome["batch_id"]),
             }
         except Exception as exc:
-            _err(f"Failed to persist identity refresh batch delta: {exc}")
+            _err(f"Failed to persist identity refresh batch outcome: {exc}")
             return 1
 
     duration = (datetime.now(UTC) - started_at).total_seconds()
@@ -359,9 +358,9 @@ def _open_fundamentals_silver_source() -> Any | None:
     """Read-only Snowflake reader for per-filing/thirteenf/entity-facts's
     skip-check and Branch A filing-metadata reads.
 
-    duckdb-retirement-cutover Ticket 17: ``db`` (local DuckDB) is never
-    hydrated in production, so it can never answer "does this filing/CIK
-    already exist". Reuses ``SnowflakeSilverReader.connect()``'s default
+    duckdb-retirement-cutover Ticket 17: ``db`` (the in-memory
+    ``SilverLandingStore``) holds only this run's writes, so it can never
+    answer "does this filing/CIK already exist". Reuses ``SnowflakeSilverReader.connect()``'s default
     settings (``EDGARTOOLS_PROD_MDM_SILVER_READER``) -- despite its name,
     that role is the only one granted schema-wide read access to
     ``EDGARTOOLS_SILVER``, and ``SnowflakeSilverReader`` was already
@@ -374,8 +373,7 @@ def _open_fundamentals_silver_source() -> Any | None:
     production, so a fallback would reproduce this exact ticket's bug
     (unbounded re-fetch/re-scan) conditionally on Snowflake being
     unreachable instead of fixing it, matching this command's existing
-    convention for every other real dependency (``resolve_edgar_identity``,
-    ``open_silver_database``).
+    convention for every other real dependency (``resolve_edgar_identity``).
     """
     from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 

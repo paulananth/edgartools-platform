@@ -4376,7 +4376,7 @@ def sec_fetch_task_catch():
 # Stale-lease reclaim (20h -- 2h of margin past the Identity Backstop
 # Sweep's own 18h completion/alarm bound, so a new run's acquire can't
 # race a legitimately-still-finishing backstop mid-ReleaseLease) lives in
-# acquire_pipeline_run_lease itself (silver_store.py), not here, so a
+# acquire_pipeline_run_lease itself (edgar_warehouse/bookkeeping/store.py), not here, so a
 # crashed run can't wedge the schedule permanently -- release-on-failure
 # elsewhere in this chain is therefore best-effort, not wrapped in Catch
 # on every downstream state.

@@ -67,7 +67,7 @@ SEC EDGAR API → edgar-warehouse Python CLI → AWS S3 (Parquet, bronze)
 Layers:
 - **Source**: SEC EDGAR API (live pull by the warehouse CLI)
 - **Bronze**: AWS S3 Parquet exports written by `edgar-warehouse`
-- **Silver** (internal): DuckDB intermediate processing inside the warehouse container
+- **Silver**: Snowflake `EDGARTOOLS_SILVER` (the warehouse CLI writes to the `EDGARTOOLS_SILVER_LANDING` landing zone; dbt collapses it)
 - **Gold**: Snowflake `EDGARTOOLS_GOLD` dynamic tables managed by dbt
 
 ---

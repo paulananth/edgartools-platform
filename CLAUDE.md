@@ -226,8 +226,9 @@ deleted by silver-merge-engine-migration Ticket 08; DuckDB's
 `ShardedSilverReader` and the one-time `backfill-silver-landing-historical`
 command were deleted by that map's Ticket 15 (2026-09-15), and the DuckDB
 engine itself (`silver_store.py`, `silver_protection.py`, the `duckdb`
-dependency) by Ticket 17 the same day — there is no DuckDB anywhere in the
-production import graph or images now. MDM
+dependency) by Ticket 17 the same day — no production module imports DuckDB,
+and once the images are rebuilt from that change neither image installs it (it survives in `uv.lock` only as `splink`'s
+transitive dependency under the `mdm` extra, which no image installs). MDM
 resolves entities independently of the gold/dbt path — the two branches
 above run in parallel, not in sequence. See "Graph storage" and "MDM
 database" notes further below for what each Snowflake-hosted piece
@@ -2339,7 +2340,7 @@ Stage 0 — Company identity seeding (single steps, no windowing)
 
 Stage 1 — Bronze + Silver bootstrap (windowed, MaxConcurrency=1)
   IngestBronzeAndSilver/WindowedBootstrap
-  • Each window: bootstrap-next --silver-only over a CIK slice → S3 bronze, parse → silver DuckDB
+  • Each window: bootstrap-next --silver-only over a CIK slice → S3 bronze, parse → Snowflake silver landing zone
   • MaxConcurrency=1 by design (same class of reason as the ticket-20 N-way
     silver-promotion-race finding elsewhere in this file) -- windows run one at
     a time, not in parallel, regardless of BOOTSTRAP_BATCH_CONCURRENCY (see

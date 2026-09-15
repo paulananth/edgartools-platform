@@ -1637,8 +1637,8 @@ def _capture_bronze_raw(
         # record for company information (seed-universe-narrow-hydrate ticket
         # 05) -- its mdm_company.tracking_status mirrors silver's, kept
         # current by MdmSeedUniverse, and querying it (small, indexed
-        # Postgres) needs no silver/duckdb hydrate at all, unlike the
-        # previous db.get_active_ciks() silver read this replaced.
+        # Postgres) needs no silver read at all, unlike the previous
+        # db.get_active_ciks() silver read this replaced.
         active_ciks = set(_get_mdm_tracked_ciks("active"))
         if active_ciks:
             before = len(universe_rows)
@@ -5647,7 +5647,7 @@ def _snowflake_distinct_values(table: str, column: str) -> set[str]:
     return {str(row[column.lower()]) for row in rows}
 
 
-# sec_company_filing's columns (silver_store._DDL), named so an extra column
+# sec_company_filing's columns (silver_schema.COLUMNS), named so an extra column
 # in the collapsed Snowflake model never reaches merge_filings.
 _SNOWFLAKE_FILING_COLUMNS: tuple[str, ...] = (
     "accession_number",

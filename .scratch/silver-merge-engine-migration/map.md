@@ -87,6 +87,8 @@ except where a table's specifics genuinely need a fresh design pass.
 
 - [Delete the remaining DuckDB readers and tools](issues/15-delete-dead-duckdb-readers-and-tools.md) — resolved in code 2026-09-15. Event reducer, shard migrator, sharded reader, historical backfill, `table-reconcile`, five `scripts/ops` diagnostics, `MDM_SILVER_DUCKDB`, `parse-ownership-bronze` and the identity-refresh reference snapshot are gone (6,600 lines); `reduce-identity-refresh` kept as `daily_incremental`'s completeness gate (Ticket 16 corrected). `merge_candidate_into_canonical` now has zero callers. Frontier is Ticket 17, the last.
 
+- [Delete the engine, drop `duckdb`, rebuild the deps images](issues/17-drop-duckdb-dependency-and-rebuild-images.md) — resolved in code 2026-09-15; the destination reached in code. `silver_store.py`, `silver_protection.py`, the `silver.py` shim, `open_silver_database`, the orchestrator's hydrate/publish/lease-repoint scaffolding and `duckdb>=1.0.0` are gone (11,700 lines); `SilverLandingStore` is the only silver store. Operator decision: `duckdb` removed entirely rather than kept as a dev-group test dependency, so ~50 MDM real-schema reader tests were deleted (no local engine runs Snowflake-dialect SQL — a SQLite stand-in fails on `QUALIFY`). `duckdb` survives in `uv.lock` only as splink's transitive dependency under the `mdm` extra, which no image installs. Still owed on the ticket: rebuild both deps images and deploy (go-ahead needed), and delete the two `expire-retired-silver-*` lifecycle rules after ~2026-09-23. Review caught one regression, fixed in the same PR: identity-refresh batches still uploaded the (now missing) local `silver.duckdb` as their "delta" — dropped, like Ticket 16's reference snapshot. [Ticket 09](issues/09-remove-duckdb-dependency.md) closes with it.
+
 ## Not yet specified
 
 - "Equivalent semantics" per table resolved in practice by Tickets 02/03, not as a separate
@@ -103,9 +105,9 @@ except where a table's specifics genuinely need a fresh design pass.
   specified. Same fog covers wiring `drive_company_facts_discovery.py` to a landing export at
   all (it has none today, so its writes go nowhere). Also the reference catalog
   (`drive-reference-catalog-discovery`, dormant): its read of the earlier ticker list, which
-  feeds its retirement records, still queries the empty local store (Ticket 06e left it
-  unchanged); it must come from Snowflake silver when the change-propagation map wires the
-  driver.
+  feeds its retirement records, has no production source — Ticket 17 replaced the empty local
+  store read with a `prior_members` callable that no caller supplies; it must come from
+  Snowflake silver when the change-propagation map wires the driver.
 - Live verification of Tickets 02/03: a prod entity-facts run after deploy showing
   `SEC_FINANCIAL_FACT`/`SEC_FINANCIAL_DERIVED`/`SEC_ACCOUNTING_FLAG` landing rows (scores
   populated) — the "done" bar both tickets still owe.

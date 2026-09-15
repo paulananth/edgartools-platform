@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 from sqlalchemy import select
 
-from edgar_warehouse.mdm import pipeline as pipeline_module
 from edgar_warehouse.mdm.database import (
     MdmCompany,
     MdmEntity,

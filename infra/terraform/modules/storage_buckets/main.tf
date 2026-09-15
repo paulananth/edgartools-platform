@@ -162,7 +162,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
 
   # Backstop for the canonical silver.duckdb + shard-N.duckdb keys under
   # warehouse/silver/. Every merge_candidate_into_canonical publish
-  # (edgar_warehouse/silver_protection.py) promotes a brand-new full-file
+  # (the since-deleted silver_protection.py) promoted a brand-new full-file
   # copy onto these keys; with bucket versioning enabled and no lifecycle
   # rule, every prior version stays billed forever. Confirmed live in prod
   # (ecs-cost-sizing ticket 22): 458+ noncurrent versions on silver.duckdb

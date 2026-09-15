@@ -552,7 +552,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
 
         captured: dict[str, Any] = {}
 
-        def _fake_open_silver_database(*, landing_export: Any = None) -> Any:
+        def _fake_silver_store(*, landing_export: Any = None) -> Any:
             captured["landing_export"] = landing_export
             return MagicMock()
 
@@ -561,7 +561,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             return_value=MagicMock(),
         ), patch(
             "edgar_warehouse.silver_landing_store.SilverLandingStore",
-            side_effect=_fake_open_silver_database,
+            side_effect=_fake_silver_store,
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"
             "._open_fundamentals_silver_source",
@@ -580,7 +580,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
         captured_open_kwargs: dict[str, Any] = {}
         write_calls: list[dict[str, Any]] = []
 
-        def _fake_open_silver_database(*, landing_export: Any = None) -> Any:
+        def _fake_silver_store(*, landing_export: Any = None) -> Any:
             captured_open_kwargs["landing_export"] = landing_export
             return fake_db
 
@@ -596,7 +596,7 @@ class BootstrapFundamentalsLandingExportWiringTests(unittest.TestCase):
             return_value=MagicMock(),
         ), patch(
             "edgar_warehouse.silver_landing_store.SilverLandingStore",
-            side_effect=_fake_open_silver_database,
+            side_effect=_fake_silver_store,
         ), patch(
             "edgar_warehouse.application.commands.bootstrap_fundamentals"
             "._open_fundamentals_silver_source",
