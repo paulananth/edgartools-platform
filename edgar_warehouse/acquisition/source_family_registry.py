@@ -124,7 +124,7 @@ def _is_valid_json_object(payload: bytes) -> bool:
 # Ticket 21: distinct from filing_artifact's checks -- a submissions payload
 # that decodes to non-empty bytes but isn't well-formed JSON (a truncated
 # download, an SEC error page served with a 200) must not be treated as
-# complete, since silver_store.py's staging loaders would fail or silently
+# complete, since silver_landing_store.py's staging loaders would fail or silently
 # produce nothing useful from it downstream.
 _SUBMISSIONS_COMPLETENESS_CHECKS: dict[str, Callable[[bytes], bool]] = {
     "valid_json_object": _is_valid_json_object,

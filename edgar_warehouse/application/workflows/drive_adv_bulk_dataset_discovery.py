@@ -49,14 +49,13 @@ from edgar_warehouse.application.acquisition_command_registry import (
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
-    _publish_silver_database_with_retry,
 )
 from edgar_warehouse.application.workflows.acquisition_run_writes import (
     write_consolidated_run_manifest,
     write_declared_layer_manifests,
 )
 from edgar_warehouse.mdm.database import get_engine
-from edgar_warehouse.silver_support.session import open_silver_database
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 DEFAULT_LEASE_SECONDS = 300
 DEFAULT_REGISTRY_VERSION = "adv-bulk-dataset-v1"
@@ -99,10 +98,11 @@ def run_drive_adv_bulk_dataset_discovery(args: Any) -> int:
     from edgar_warehouse.application.adv_bulk_fetch import fetch_reports_metadata_bytes
     from edgar_warehouse.application.firm_roster_fetch import fetch_listing_bytes
 
-    # DuckDB Retirement Cutover Ticket 10: hydration removed. Canonical
-    # silver.duckdb is no longer written by any command (see
-    # _publish_silver_database_if_remote's docstring).
-    db = open_silver_database(context.silver_root)
+    # silver-merge-engine-migration Ticket 17: no local store. Reads this
+    # driver makes are satisfied by its own run's writes or by the
+    # Postgres-backed BookkeepingStore; the writes go nowhere until this
+    # dormant driver gets a landing export of its own.
+    db = SilverLandingStore()
     try:
         manifest = build_adv_bulk_dataset_manifest(
             universe_label=f"adv-bulk-dataset:{run_id}",
@@ -148,7 +148,6 @@ def run_drive_adv_bulk_dataset_discovery(args: Any) -> int:
             ADV_BULK_DATASET_DISCOVERY_SOURCE_FAMILY, now.date()
         )
 
-    _publish_silver_database_with_retry(context)
 
     write_consolidated_run_manifest(
         command_name=COMMAND_NAME,

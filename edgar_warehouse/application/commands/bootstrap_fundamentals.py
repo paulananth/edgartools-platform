@@ -93,33 +93,22 @@ def execute(args: Any) -> int:
     started_at = datetime.now(UTC)
     context = _build_silver_context(identity=identity, silver_root_override=silver_root_override)
 
-    from edgar_warehouse.silver_support.session import open_silver_database
+    from edgar_warehouse.silver_landing_store import SilverLandingStore
     # duckdb-retirement-cutover Ticket 18: without this buffer, every write
-    # this command makes lands only in the local, throwaway `db` and never
-    # reaches the Snowflake landing zone -- see _execute_warehouse_bronze_capture
-    # in warehouse_orchestrator.py for the same construct-then-flush shape
-    # every other silver-writing command already uses.
+    # this command makes is dropped and never reaches the Snowflake landing
+    # zone -- see _execute_warehouse_bronze_capture in warehouse_orchestrator.py
+    # for the same construct-then-flush shape every other silver-writing
+    # command already uses.
     from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
     landing_export = (
         LandingExportBuffer() if context.silver_landing_export_root is not None else None
     )
-    try:
-        # DuckDB Retirement Cutover Ticket 10: hydration removed entirely.
-        # _resolve_fundamentals_ciks (both the --cik-list and windowed cases)
-        # already reads bookkeeping.get_tracked_ciks() -- Postgres, not this
-        # local `db` -- since Ticket 14 repointed it; canonical silver.duckdb
-        # is no longer written by any command (see
-        # _publish_silver_database_if_remote's docstring), so there is
-        # nothing left to hydrate from.
-        db = open_silver_database(context.silver_root, landing_export=landing_export)
-    except Exception as exc:
-        _err(f"Failed to open silver database: {exc}")
-        return 2
+    db = SilverLandingStore(landing_export=landing_export)
 
     # DuckDB Retirement Cutover Ticket 14: sec_company_sync_state (read by
     # _resolve_fundamentals_ciks below) and the tables _sync_reference_data/
-    # _run_submissions_bronze_then_silver touch now live in the Postgres-backed
-    # BookkeepingStore, not this local DuckDB `db` connection.
+    # _run_submissions_bronze_then_silver touch live in the Postgres-backed
+    # BookkeepingStore.
     bookkeeping = _bookkeeping_store()
 
     # Resolve the CIK batch. When no explicit --cik-list is given (the Step
@@ -345,34 +334,6 @@ def execute(args: Any) -> int:
             }
         except Exception as exc:
             _err(f"Failed to persist identity refresh batch delta: {exc}")
-            return 1
-
-    # Upload the unified silver database to remote storage so later tasks can
-    # consume the Branch A and Branch B tables from one consistent file.
-    if context.storage_root.root and not identity_refresh_run_id:
-        from edgar_warehouse.application.warehouse_orchestrator import (
-            _publish_silver_database_if_remote,
-        )
-        try:
-            upload_result = _publish_silver_database_if_remote(context)
-            if upload_result and upload_result.get("skipped"):
-                _log(
-                    "silver_database_publish_skipped_noop",
-                    relative_path=upload_result["relative_path"],
-                    run_id=run_id,
-                )
-                metrics["silver_database_uploaded"] = False
-            elif upload_result:
-                _log(
-                    "silver_database_uploaded",
-                    destination=upload_result["path"],
-                    size_bytes=upload_result["size_bytes"],
-                    run_id=run_id,
-                )
-                metrics["silver_database_uploaded"] = True
-                metrics["silver_database_size_bytes"] = upload_result["size_bytes"]
-        except Exception as exc:
-            _err(f"Failed to upload silver database to remote storage: {exc}")
             return 1
 
     duration = (datetime.now(UTC) - started_at).total_seconds()

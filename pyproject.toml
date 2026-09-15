@@ -15,7 +15,6 @@ authors = [
 dependencies = [
     "edgartools>=5.29.0",
     "pyarrow>=17.0.0",
-    "duckdb>=1.0.0",
     "fsspec>=2023.1.0",
     "pytz>=2024.1",
     "zstandard>=0.20.0",

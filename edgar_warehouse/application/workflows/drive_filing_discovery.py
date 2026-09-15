@@ -83,14 +83,13 @@ from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application.warehouse_orchestrator import (
     _build_warehouse_context,
     _emit_pipeline_event,
-    _publish_silver_database_with_retry,
 )
 from edgar_warehouse.application.workflows.acquisition_run_writes import (
     write_consolidated_run_manifest,
     write_declared_layer_manifests,
 )
 from edgar_warehouse.mdm.database import get_engine
-from edgar_warehouse.silver_support.session import open_silver_database
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 DEFAULT_LEASE_SECONDS = 300
 DEFAULT_REGISTRY_VERSION = "filing_artifact-v1"
@@ -426,11 +425,11 @@ def _run_daily_index_driven_discovery(
     lease_seconds = getattr(args, "lease_seconds", None) or DEFAULT_LEASE_SECONDS
     registry_version = getattr(args, "registry_version", None) or default_registry_version
 
-    # DuckDB Retirement Cutover Ticket 10: hydration removed. finalize_filing_
-    # artifact_candidate's write-then-read-back of sec_raw_object is satisfied
-    # by this run's own writes; canonical silver.duckdb is no longer written
-    # by any command (see _publish_silver_database_if_remote's docstring).
-    db = open_silver_database(context.silver_root)
+    # silver-merge-engine-migration Ticket 17: no local store. Reads this
+    # driver makes are satisfied by its own run's writes or by the
+    # Postgres-backed BookkeepingStore; the writes go nowhere until this
+    # dormant driver gets a landing export of its own.
+    db = SilverLandingStore()
     bookkeeping = _bookkeeping_store()
     try:
         # Ticket 46 extracted the discovery/capture/Silver-acceptance body
@@ -459,7 +458,6 @@ def _run_daily_index_driven_discovery(
     result = outcome.result
     silver_result = outcome.silver_result
 
-    _publish_silver_database_with_retry(context)
 
     write_consolidated_run_manifest(
         command_name=command_name,

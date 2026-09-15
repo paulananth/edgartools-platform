@@ -42,7 +42,7 @@ from edgar_warehouse.application.adv_firm_roster_ingest import (
     parse_firm_roster_archive,
 )
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 ADV_BULK_PRODUCER_NAMES = ("sec_adv_filing", "sec_adv_private_fund")
 FIRM_ROSTER_PRODUCER_NAME = "sec_adv_firm_roster"
@@ -103,7 +103,7 @@ def _read_bronze_bytes(bronze_root: StorageLocation, relative_path: str) -> byte
 def _finalize_adv_bulk_archive(
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     revision,
     decision_id: str,
     content: bytes,
@@ -162,7 +162,7 @@ def _finalize_adv_bulk_archive(
 def _finalize_firm_roster_archive(
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     revision,
     decision_id: str,
     content: bytes,
@@ -214,7 +214,7 @@ def _finalize_adv_bulk_dataset_candidate(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     decision_id: str,
     *,
     source_kind: str,
@@ -260,7 +260,7 @@ def drive_adv_bulk_dataset_silver_acceptance(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     result: AdvBulkDatasetDriveResult,
     *,
     required_producers: tuple[str, ...] = ADV_BULK_PRODUCER_NAMES + (FIRM_ROSTER_PRODUCER_NAME,),

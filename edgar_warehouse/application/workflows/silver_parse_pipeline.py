@@ -8,11 +8,11 @@ from edgar_warehouse.application import warehouse_orchestrator
 
 if TYPE_CHECKING:
     from edgar_warehouse.bookkeeping.store import BookkeepingStore
-    from edgar_warehouse.silver_store import SilverDatabase
+    from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
 def run_parse_pipeline(
-    *, db: "SilverDatabase", bookkeeping: "BookkeepingStore", accession_number: str, sync_run_id: str
+    *, db: "SilverLandingStore", bookkeeping: "BookkeepingStore", accession_number: str, sync_run_id: str
 ) -> int:
     return warehouse_orchestrator._run_parse_pipeline(
         db=db,

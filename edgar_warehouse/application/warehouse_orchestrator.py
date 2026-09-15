@@ -74,11 +74,10 @@ from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
 from edgar_warehouse.infrastructure.object_storage import StorageLocation, read_bytes
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.serving.silver_landing_writer import write_landing_export
-from edgar_warehouse.silver_support.session import open_silver_database
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 if TYPE_CHECKING:
     from edgar_warehouse.bookkeeping.store import BookkeepingStore
-    from edgar_warehouse.silver_store import SilverDatabase
 
 SOURCE_EXPORT_COMMANDS = {
     "bootstrap-full",
@@ -177,46 +176,6 @@ SEC_FETCH_LEASE_STALE_AFTER_SECONDS = 16 * 3600
 # real runtime turns out to exceed this.
 IDENTITY_REFRESH_LEASE_STALE_AFTER_SECONDS = 6 * 3600
 
-# These four commands touch nothing but the pipeline_run_lease table (a
-# handful of rows). Routing them through the normal hydrate/merge/publish
-# path against the full canonical silver.duckdb (1.5GB+ as of 2026-08 and
-# growing) downloads and re-uploads the entire monolith, plus a full
-# protected-table merge scan across all 31 tables, just to flip one row --
-# confirmed live to OOM a 4096MB task (task #35's first load_history
-# attempt, 2026-08-09): hydration and the merge scan of every other table
-# succeeded, and the kill landed during/after re-uploading the merged
-# canonical file. _lease_command_context() repoints these commands at a
-# separate, tiny silver.duckdb under a "leases" prefix instead -- same
-# schema (SilverDatabase creates every table, just empty ones here), same
-# acquire/release/get/mark SQL (edgar_warehouse/silver_store.py, unchanged),
-# so the lease's atomicity and stale-reclaim semantics are identical; only
-# the file being downloaded/merged/uploaded is now KB instead of GB.
-LEASE_ONLY_COMMANDS = frozenset(
-    {
-        "acquire-sec-fetch-lease",
-        "release-sec-fetch-lease",
-        "acquire-identity-refresh-lease",
-        "release-identity-refresh-lease",
-    }
-)
-
-
-def _lease_command_context(context: WarehouseCommandContext) -> WarehouseCommandContext:
-    """Repoint storage_root/silver_root at a small, lease-only silver.duckdb.
-
-    Every other root (bronze_root, snowflake_export_root) is left untouched
-    -- lease commands don't touch bronze or Snowflake export at all, and
-    lease_result.json still needs to land in the normal bronze location the
-    Step Functions Choice state reads it from.
-    """
-    import dataclasses
-
-    return dataclasses.replace(
-        context,
-        storage_root=StorageLocation(f"{context.storage_root.root}/leases"),
-        silver_root=StorageLocation(f"{context.silver_root.root}/leases"),
-    )
-
 # load_history's tracking-status contract (data-architecture Issue 2): compute-windows,
 # bootstrap-next (via the explicit --tracking-status-filter the load_history state machine
 # passes), and bootstrap-fundamentals's CIK resolution must all query the SAME combined status
@@ -279,8 +238,8 @@ def _emit_pipeline_event(event: str, **payload: Any) -> None:
 # `raw_writes` carries one write receipt per document (path, sha256,
 # raw_object_id, cik, cached) and can run into the thousands for a single
 # bootstrap window. The full list is already durable elsewhere -- one row per
-# run in `pipeline_run.raw_writes_json` (SilverDatabase.complete_pipeline_run)
-# inside the published silver database, plus the underlying S3 objects
+# run in `pipeline_run.raw_writes_json` (BookkeepingStore.complete_pipeline_run)
+# in the bookkeeping Postgres store, plus the underlying S3 objects
 # themselves -- so printing it in full to stdout only duplicated data ECS was
 # already routing to CloudWatch, and was the single largest contributor to
 # production log volume (ops-cost-control ticket 01: 61.9M bytes, 71% of all
@@ -496,9 +455,6 @@ def _execute_warehouse_bronze_capture(
     command_name: str,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    if command_name in LEASE_ONLY_COMMANDS:
-        context = _lease_command_context(context)
-
     landing_export = (
         LandingExportBuffer() if context.silver_landing_export_root is not None else None
     )
@@ -520,41 +476,21 @@ def _execute_warehouse_bronze_capture(
 
         return run_mdm_entity_backfill_sweep(context, run_id)
 
-    # DuckDB Retirement Cutover Ticket 06: bootstrap-batch used to hydrate/open
-    # a CIK-sharded shard-{0-3}.duckdb file here instead of the monolith, to
-    # avoid concurrent writers (MaxConcurrency up to 20) racing an ETag-guarded
-    # promote of one shared silver.duckdb. That contention no longer applies --
-    # bootstrap-batch's real write target is the Snowflake landing zone
-    # (append-only, one Parquet file per run, no shared mutable object), so
-    # every command now opens the same monolith silver database (see Ticket
-    # 10's note immediately below for why "hydrates" no longer applies). The
-    # shard-file read helpers (_hydrate_shard_for_window, _hydrate_all_shards,
-    # open_silver_shard) were deleted with the MDM parity commands that last
-    # read through them (silver-merge-engine-migration Ticket 08);
-    # _read_shard_manifest stays for seed-bronze-batches' _shard_partition_ciks.
-    # The shard-file WRITE side (_publish_shard_if_remote and its retry
-    # wrapper) was deleted (duckdb-retirement-cutover Ticket 12): confirmed
-    # zero live callers, since bootstrap-batch sharding itself was retired
-    # (Ticket 06) before this write path was ever exercised in a mixed
-    # concurrent-writer scenario that would have needed the retry.
-    #
-    # DuckDB Retirement Cutover Ticket 10: hydration removed. Canonical
-    # silver/sec/silver.duckdb is no longer written by any command (see
-    # _publish_silver_database_if_remote's docstring), so every caller in
-    # this function operates on a fresh, empty local DuckDB scratch store --
-    # confirmed safe for every read this function itself performs: each one
-    # is satisfied by writes made earlier in this same run
-    # (_configured_parser_accessions reads db.get_filing rows staged moments
-    # earlier by submissions_orchestrator; fetch_filing_artifacts's cache-hit
-    # check falls through to its own bronze-key S3 LIST fallback when the
-    # local row is absent, per the bronze-recovery fix). Reads that did
-    # genuinely depend on historical local content
-    # (SilverDatabase.get_company_identity_ciks, the fetch-adv-bulk/
-    # fetch-firm-roster already_ingested checks) were repointed at
-    # EDGARTOOLS_SILVER via SnowflakeSilverReader in this same ticket --
-    # see _company_identity_ciks_snowflake/_snowflake_distinct_values.
+    # The run's silver store is in-memory (silver-merge-engine-migration
+    # Ticket 17 deleted the local DuckDB engine): every writer records its
+    # rows to landing_export, flushed to the Snowflake landing zone below.
+    # Every read this function performs is satisfied by writes made earlier
+    # in this same run (_configured_parser_accessions reads db.get_filing
+    # rows staged moments earlier by submissions_orchestrator;
+    # fetch_filing_artifacts's cache-hit check falls through to its own
+    # bronze-key S3 LIST fallback when the row is absent, per the
+    # bronze-recovery fix). Reads that depend on historical content go to
+    # EDGARTOOLS_SILVER via SnowflakeSilverReader
+    # (_company_identity_ciks_snowflake/_snowflake_distinct_values) or to the
+    # bookkeeping Postgres store. _read_shard_manifest stays for
+    # seed-bronze-batches' _shard_partition_ciks.
     scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
-    db = _open_silver_database(context.silver_root, landing_export=landing_export)
+    db = _open_silver_database(landing_export=landing_export)
     db_closed = False
     bookkeeping = _bookkeeping_store()
     sync_mode = _sync_mode_for_command(command_name)
@@ -635,10 +571,8 @@ def _execute_warehouse_bronze_capture(
             rows_skipped=metrics.get("rows_skipped", 0),
         )
         # Bookkeeping's 10 Postgres tables only (DuckDB Retirement Cutover
-        # Ticket 14). The local store's content-table counts went with
-        # SilverDatabase.get_table_counts (silver-merge-engine-migration
-        # Ticket 14): every content table is landing-only, so the local
-        # count was always zero.
+        # Ticket 14): every content table is landing-only, so there is no
+        # local count to report.
         silver_table_counts = dict(bookkeeping.get_table_counts())
         if context.snowflake_export_root is not None and publish_gold:
             from edgar_warehouse.serving.source_dimensional_export import (
@@ -773,13 +707,13 @@ def _execute_warehouse_bronze_capture(
         # no-op skip -- silent, permanent data loss. See
         # .scratch/bronze-capture-oom/issues/02-checkpoint-outruns-silver-publish-on-crash.md.
         # Tradeoff, accepted deliberately: this leaves the bookkeeping
-        # transaction open for as long as _publish_silver_database_with_retry
-        # takes, which is unbounded-retry by default -- a long stall there
-        # delays this run's commit, but never loses data, since SEC capture
-        # is documented idempotent and a retry safely re-processes.
+        # transaction open for as long as the landing export takes -- a
+        # stall there delays this run's commit, but never loses data, since
+        # SEC capture is documented idempotent and a retry safely
+        # re-processes.
         #
         # INVARIANT: the only commit for a successful run is below, after
-        # silver publish and landing export have both actually succeeded.
+        # the landing export has actually succeeded.
         # Do not add an earlier bookkeeping.commit() call in this try block.
         db.close()
         db_closed = True
@@ -827,7 +761,9 @@ def _execute_warehouse_bronze_capture(
                 "path": context.storage_root.join(run_manifest_path(run_id)),
             }
         else:
-            silver_database_write = _publish_silver_database_with_retry(context)
+            # silver-merge-engine-migration Ticket 17: nothing to publish --
+            # the run's silver rows leave through the landing export below.
+            silver_database_write = None
         _emit_pipeline_event(
             "silver_publish_completed",
             command=command_name,
@@ -1059,120 +995,9 @@ def _execute_warehouse_bronze_capture(
     }
 
 
-def _open_silver_database(
-    silver_root: StorageLocation, *, landing_export: "LandingExportBuffer | None" = None
-) -> SilverDatabase:
-    return open_silver_database(silver_root, landing_export=landing_export)
-
-
-def _hydrate_silver_database_from_storage(context: WarehouseCommandContext) -> None:
-    if not context.storage_root.is_remote or context.silver_root.is_remote:
-        return
-    remote_path = context.storage_root.join("silver", "sec", "silver.duckdb")
-    local_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    try:
-        context.storage_root.download_file("silver/sec/silver.duckdb", local_path)
-    except (FileNotFoundError, OSError):
-        return
-    _emit_pipeline_event(
-        "silver_database_hydrated",
-        path=remote_path,
-        local_path=str(local_path),
-        size_bytes=local_path.stat().st_size,
-    )
-
-
-def _streaming_md5_hexdigest(path: Path, chunk_size: int = 8 * 1024 * 1024) -> str:
-    """MD5 of a local file's content, read in chunks rather than buffered
-    fully into memory (seed-universe-narrow-hydrate ticket 06)."""
-    digest = hashlib.md5()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(chunk_size), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict[str, Any] | None:
-    """Permanent no-op: DuckDB Retirement Cutover Ticket 10 retired canonical
-    ``silver/sec/silver.duckdb`` as a write target.
-
-    The production write path no longer merges/promotes a local candidate
-    into canonical silver.duckdb -- every real consumer (MDM's reader, gold's
-    dbt builders, the 11 bookkeeping tables, all five acquisition-family
-    ``*_silver_acceptance.py`` modules) reads Snowflake (``EDGARTOOLS_SILVER``)
-    or the bookkeeping Postgres store instead (Tickets 02-08), so there is
-    nothing left to publish this candidate into. Every one of this
-    function's ~15 call sites already handles a ``None`` return -- it is
-    exactly the pre-cutover ``not context.storage_root.is_remote`` local-
-    testing path this replaces -- so no call site needed editing beyond
-    removing its paired ``_hydrate_silver_database_from_storage`` call.
-
-    Kept as a named function (not deleted) since ``_publish_silver_database_
-    with_retry`` and every one of this function's own callers still call it
-    by name -- rewiring or deleting them was out of scope for Ticket 10.
-    ``merge_candidate_into_canonical`` is dead from THIS call site
-    specifically (its sibling caller here, ``_publish_shard_if_remote``, was
-    confirmed to have zero real callers and deleted -- duckdb-retirement-
-    cutover Ticket 12). Its last other caller, ``application/
-    silver_event_reducer.py``, was deleted by silver-merge-engine-migration
-    Ticket 15, so the function now has zero callers and leaves with the
-    engine in Ticket 17. The fingerprint-sidecar helpers
-    this docstring used to mention (``_read_fingerprint_sidecar``/
-    ``_write_fingerprint_sidecar``) were deleted (Ticket 20): once this
-    function became a permanent no-op, nothing ever read the sidecar again,
-    so ``_hydrate_silver_database_from_storage`` (and the since-deleted
-    ``_hydrate_shard_for_window``) writing one was pure dead weight.
-    ``compute_silver_fingerprint`` itself is untouched -- it still has a real, separate caller in
-    ``PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`` fingerprinting.
-    """
-    return None
-
-
-def _publish_silver_database_with_retry(context: WarehouseCommandContext) -> dict[str, Any] | None:
-    """Retry _publish_silver_database_if_remote on a lost promotion race.
-
-    Regression (2026-07-22): Ticket 20's strict release (deleted by
-    silver-merge-engine-migration Ticket 11) ran concurrent
-    Distributed Map batches (MaxConcurrency=4) that all merge into and
-    publish the same canonical silver.duckdb. PromotionConflictError's own
-    docstring says it is "retryable: the staged object is left in place ...
-    so a caller can re-read canonical, re-merge, and retry promotion" -- but
-    no caller ever did, so the first batch to publish always won and every
-    other concurrently-finishing batch failed outright, aborting the whole
-    0%-tolerance release even though its work (fetch + merge) was otherwise
-    complete. The merge/publish cycle re-downloads canonical, re-merges the
-    original local candidate, re-uploads, and re-attempts the ETag-guarded
-    promote. A sequence of sibling writers may legitimately win more than five
-    times, so the default policy has no attempt ceiling. Operators may set a
-    positive ``WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS`` to impose one explicitly.
-    """
-    from edgar_warehouse.infrastructure.object_storage import PromotionConflictError
-
-    configured_attempts = int(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_ATTEMPTS", "0"))
-    max_attempts = configured_attempts if configured_attempts > 0 else None
-    backoff_base_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_BASE_SECONDS", "1.0"))
-    backoff_max_seconds = float(os.environ.get("WAREHOUSE_PUBLISH_CONFLICT_RETRY_MAX_SECONDS", "30.0"))
-    attempt = 0
-    while True:
-        attempt += 1
-        try:
-            return _publish_silver_database_if_remote(context)
-        except PromotionConflictError as exc:
-            if max_attempts is not None and attempt >= max_attempts:
-                raise
-            import random
-            import time as _time
-
-            exponential_delay = backoff_base_seconds * (2 ** min(attempt - 1, 20))
-            delay = min(backoff_max_seconds, exponential_delay) * (0.5 + random.random() / 2)
-            _emit_pipeline_event(
-                "silver_publish_conflict_retry",
-                attempt=attempt,
-                max_attempts=max_attempts or "unbounded",
-                retry_delay_seconds=delay,
-                error=str(exc),
-            )
-            _time.sleep(delay)
+def _open_silver_database(*, landing_export: "LandingExportBuffer | None" = None) -> SilverLandingStore:
+    """The run's silver store: a seam tests replace with a fake."""
+    return SilverLandingStore(landing_export=landing_export)
 
 
 # ---------------------------------------------------------------------------
@@ -1206,20 +1031,19 @@ def _read_shard_manifest(context: WarehouseCommandContext) -> dict:
 
 def _run_filing_artifact_gated_capture(
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     business_date: str,
     run_id: str,
 ) -> dict[str, Any]:
     """Ticket 46: dispatch filing_artifact's gated discovery/capture core
     in-process, reusing daily-incremental's own already-open Silver
-    connection and MDM engine rather than a second hydrate/publish cycle.
+    store and MDM engine rather than opening a second one.
 
     Local import breaks the module cycle -- drive_filing_discovery imports
-    _build_warehouse_context/_hydrate_silver_database_from_storage/
-    _publish_silver_database_with_retry from this module at its own module
-    level, so importing it back at this module's top level would be
-    circular. Matches this file's existing local-import convention for
+    _build_warehouse_context/_emit_pipeline_event from this module at its
+    own module level, so importing it back at this module's top level would
+    be circular. Matches this file's existing local-import convention for
     command-branch-specific dependencies (see e.g. the mdm_entity_backfill/
     adv_bulk_ingest imports elsewhere in this file).
 
@@ -1238,7 +1062,7 @@ def _run_filing_artifact_gated_capture(
 
 def _capture_bronze_raw(
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     command_name: str,
     arguments: dict[str, Any],
@@ -2601,7 +2425,7 @@ def _capture_bronze_raw(
 def submissions_orchestrator(
     *,
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     cik: int,
@@ -2640,7 +2464,7 @@ def submissions_orchestrator(
 def _run_submissions_bronze_then_silver(
     *,
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     ciks: list[int],
@@ -3139,7 +2963,7 @@ def _merge_capture_network_metrics(metrics: dict[str, Any], result: dict[str, An
 def _run_configured_form_artifact_pipeline(
     *,
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     accession_numbers: list[str],
@@ -3821,7 +3645,7 @@ def _is_item_502_candidate_form(form_type: Any, items: Any = None) -> bool:
 
 
 def _configured_parser_accessions(
-    db: SilverDatabase,
+    db: SilverLandingStore,
     accession_numbers: list[str],
     *,
     ownership_lookback_years: Any = None,
@@ -4025,7 +3849,7 @@ def _is_configured_parser_form(form_type: Any, items: Any = None) -> bool:
 def _run_parse_adv_bronze(
     *,
     context: "WarehouseCommandContext",
-    db: "SilverDatabase",
+    db: SilverLandingStore,
     sync_run_id: str,
     metrics: dict[str, Any],
     explicit_artifacts: list[Any] | tuple[Any, ...],
@@ -4198,9 +4022,8 @@ def _dispatch_to_worker_pool(
 ) -> tuple[dict[Any, dict[str, Any]], dict[Any, BaseException]]:
     """Run ``fn`` over ``items`` on a bounded thread pool, keyed by item.
 
-    ``fn`` must do network I/O + storage writes only -- no db access (a
-    single SilverDatabase DuckDB connection is not safe for concurrent use,
-    ticket 03). ``on_complete`` runs on the main thread (inside
+    ``fn`` must do network I/O + storage writes only -- no db or bookkeeping
+    access (neither store is safe for concurrent use, ticket 03). ``on_complete`` runs on the main thread (inside
     ``as_completed``'s iteration), never on a worker thread.
     """
     results: dict[Any, dict[str, Any]] = {}
@@ -4333,8 +4156,9 @@ def _capture_submission_bronze_snapshots_for_chunk(
         pending_main_ciks = list(ciks)
     else:
         # Phase 1 (main thread, DB-only, fast): resolve checkpoint refs for
-        # every CIK -- a plain SELECT, must stay single-threaded (SilverDatabase
-        # wraps one shared duckdb connection, ticket 03). Phase 2 (worker pool):
+        # every CIK -- a plain SELECT, must stay single-threaded (the
+        # bookkeeping store's session is not safe for concurrent use, ticket
+        # 03). Phase 2 (worker pool):
         # the actual file read/verify. Ticket 11 follow-up
         # (pipeline-throughput-architecture): this used to run every cache-hit
         # read sequentially on the main thread even though it's pure S3 I/O with
@@ -4468,7 +4292,7 @@ def _capture_submission_bronze_snapshots_for_chunk(
 
 def _apply_submission_snapshot_to_silver(
     *,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     snapshot: dict[str, Any],
@@ -4687,7 +4511,7 @@ def _apply_submission_snapshot_to_silver(
 def _sync_reference_data(
     *,
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     fetch_date: date,
@@ -4939,8 +4763,7 @@ def _resolve_submissions_main_checkpoint_only(
     """DB-only half of the main-submissions cache check (ticket 11 follow-up,
     pipeline-throughput-architecture): a single checkpoint SELECT. Must stay on
     the main thread -- the bookkeeping store's session is not safe for
-    concurrent use (ticket 03's SilverDatabase precedent, now the bookkeeping
-    store's own equivalent constraint). Returns (bronze_path, last_sha256)
+    concurrent use (ticket 03). Returns (bronze_path, last_sha256)
     or None; the actual file read/verify is done separately in
     ``_read_submissions_main_cached_payload`` so it can run in the worker pool.
 
@@ -5484,7 +5307,7 @@ def _daily_index_candidate_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[
 def _run_accession_resync(
     *,
     context: WarehouseCommandContext,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     sync_run_id: str,
     accession_number: str,
@@ -5528,7 +5351,7 @@ def _run_accession_resync(
 
 def _run_parse_pipeline(
     *,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     bookkeeping: "BookkeepingStore",
     accession_number: str,
     sync_run_id: str,
@@ -5598,7 +5421,7 @@ def _run_parse_pipeline(
 
 def _parse_item_502_accession(
     *,
-    db: SilverDatabase,
+    db: SilverLandingStore,
     filing: Mapping[str, Any],
     accession_number: str,
     sync_run_id: str,
@@ -5645,7 +5468,7 @@ def _parse_item_502_accession(
     return rows_written
 
 
-def _read_primary_artifact_bytes(db: SilverDatabase, accession_number: str) -> bytes:
+def _read_primary_artifact_bytes(db: SilverLandingStore, accession_number: str) -> bytes:
     attachments = db.get_filing_attachments(accession_number)
     primary = next((row for row in attachments if row.get("is_primary")), None)
     if primary is None or not primary.get("raw_object_id"):
@@ -5765,16 +5588,16 @@ def _parse_cik(value: Any) -> int:
 
 
 def _company_identity_ciks_snowflake(tracked_ciks: set[int]) -> list[int]:
-    """Snowflake-backed replacement for SilverDatabase.get_company_identity_ciks.
+    """Snowflake-backed company-identity eligibility check.
 
     DuckDB Retirement Cutover Ticket 10: the production write path no longer
     hydrates local DuckDB silver, so this eligibility check (an entity must be
     operating or present in the canonical company_tickers snapshot) reads
     EDGARTOOLS_SILVER directly instead, mirroring MDM's reader cutover
     (Ticket 05, edgar_warehouse/silver_support/snowflake_reader.py). Same
-    SQL/UNION shape SilverDatabase.get_company_identity_ciks used against
-    local DuckDB (deleted by silver-merge-engine-migration Ticket 06b, once
-    sec_company itself became landing-only).
+    SQL/UNION shape the old local-store get_company_identity_ciks used
+    (deleted by silver-merge-engine-migration Ticket 06b, once sec_company
+    itself became landing-only).
     """
     if not tracked_ciks:
         return []
@@ -6190,14 +6013,10 @@ def _resolve_scope(
     now: datetime,
     silver_root: StorageLocation | None = None,
 ) -> dict[str, Any]:
-    # DuckDB Retirement Cutover Ticket 14: this function's only use of a
-    # database handle is the bookkeeping checkpoint lookup below -- no
-    # DuckDB content table is ever touched here, so there is no need to
-    # open a real SilverDatabase connection (whose only observable effect
-    # was that single read; it also documented no matching db.close(), a
-    # leak this change incidentally removes). Gated on silver_root, same
-    # as the connection it replaces, so _execute_warehouse_infrastructure_validation's
-    # silver_root=None call site still opts out of any DB access entirely.
+    # DuckDB Retirement Cutover Ticket 14: this function's only store access
+    # is the bookkeeping checkpoint lookup below. Gated on silver_root so
+    # _execute_warehouse_infrastructure_validation's silver_root=None call
+    # site still opts out of any DB access entirely.
     bookkeeping = _bookkeeping_store() if silver_root is not None else None
     registration = acquisition_command_registration(command_name)
     if registration is not None:
@@ -6442,17 +6261,6 @@ def _planned_pipeline_writes(
             {
                 "layer": "snowflake_export_manifest",
                 "path": context.snowflake_export_root.join(relative_path),
-                "relative_path": relative_path,
-                "planned": True,
-            }
-        )
-
-    if context.storage_root.is_remote:
-        relative_path = "silver/sec/silver.duckdb"
-        writes.append(
-            {
-                "layer": "silver_database",
-                "path": context.storage_root.join(relative_path),
                 "relative_path": relative_path,
                 "planned": True,
             }

@@ -327,10 +327,10 @@ def _handle_compare_filing_artifact_capture(args: argparse.Namespace) -> int:
         from edgar_warehouse.application.warehouse_orchestrator import (
             _build_warehouse_context,
         )
-        from edgar_warehouse.silver_support.session import open_silver_database
+        from edgar_warehouse.silver_landing_store import SilverLandingStore
 
         context = _build_warehouse_context("daily-incremental")
-        db = open_silver_database(context.silver_root)
+        db = SilverLandingStore()
         try:
             result = run_dual_path_filing_artifact_parity(
                 context=context,

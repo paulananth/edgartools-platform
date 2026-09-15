@@ -5,7 +5,7 @@ mirroring ``company_facts_silver_acceptance.py``'s shape but per-source-name
 rather than per-CIK: one producer (``sec_company_ticker``) per catalog
 snapshot, scoped to that snapshot's own ``source_name``.
 
-Writes reuse ``SilverDatabase.replace_company_tickers`` exactly as the legacy
+Writes reuse ``SilverLandingStore.replace_company_tickers`` exactly as the legacy
 ``_sync_reference_data`` path does. Since silver-merge-engine-migration
 Ticket 06e that writer is landing-only: it records the snapshot's members
 for the Snowflake landing zone and deletes nothing locally. A ticker that
@@ -56,7 +56,7 @@ from edgar_warehouse.acquisition.processing import (
 from edgar_warehouse.acquisition.reference_catalog_discovery import ReferenceCatalogDriveResult
 from edgar_warehouse.acquisition.revisions import ContentImpact, SourceRevisionLedger
 from edgar_warehouse.infrastructure.object_storage import StorageLocation
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 REFERENCE_CATALOG_PRODUCER_NAME = "sec_company_ticker"
 REFERENCE_CATALOG_TARGET_TABLE = "sec_company_ticker"
@@ -145,7 +145,7 @@ def _finalize_reference_catalog_candidate(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     decision_id: str,
     *,
     source_name: str,
@@ -202,7 +202,7 @@ def _finalize_reference_catalog_candidate(
             ),
         )
 
-    from edgar_warehouse.silver_store import _parse_company_ticker_rows
+    from edgar_warehouse.silver_landing_store import _parse_company_ticker_rows
 
     parsed_rows = _parse_company_ticker_rows(document)
     # replace_company_tickers itself skips any row with a missing cik or a
@@ -312,7 +312,7 @@ def _finalize_reference_catalog_candidate(
 
 
 def _record_landing_retirements(
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     *,
     dropped_pairs: set[tuple],
     source_name: str,
@@ -347,7 +347,7 @@ def drive_reference_catalog_silver_acceptance(
     revisions: SourceRevisionLedger,
     processing: ProcessingLedger,
     finalizer: SilverFinalizer,
-    silver: SilverDatabase,
+    silver: SilverLandingStore,
     result: ReferenceCatalogDriveResult,
     *,
     required_producers: tuple[str, ...] = (REFERENCE_CATALOG_PRODUCER_NAME,),
