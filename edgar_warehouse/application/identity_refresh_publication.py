@@ -55,10 +55,6 @@ def completed_manifest_path(run_id: str) -> str:
     return f"{_RUN_PREFIX}/{run_id}/completed_manifest.json"
 
 
-def reference_snapshot_path(run_id: str) -> str:
-    return f"{_RUN_PREFIX}/{run_id}/reference/reference_snapshot.duckdb"
-
-
 def batch_delta_path(run_id: str, batch_id: str) -> str:
     return f"{_RUN_PREFIX}/{run_id}/batches/{batch_id}/delta.duckdb"
 
@@ -82,10 +78,14 @@ def persist_run_manifest(
     *,
     run_id: str,
     image_identity: str,
-    reference_snapshot_file: Path,
     batches: Iterable[Iterable[int]],
 ) -> dict[str, Any]:
-    """Persist the immutable run plan and its one reference snapshot.
+    """Persist the immutable run plan.
+
+    silver-merge-engine-migration Ticket 15 dropped the reference snapshot the
+    plan used to carry: it was the local DuckDB file, empty since cutover
+    Ticket 10, and nothing read it. The batch-completeness gate the reducer
+    still applies never depended on it.
 
     The plan intentionally records only declarations. Batch outcomes are
     separate immutable objects, so retrying a failed batch cannot rewrite a
@@ -93,20 +93,11 @@ def persist_run_manifest(
     """
     if not image_identity:
         raise WarehouseRuntimeError("identity refresh requires an immutable warehouse image identity")
-    if not reference_snapshot_file.exists():
-        raise WarehouseRuntimeError(f"identity refresh reference snapshot is missing: {reference_snapshot_file}")
     declared_batches = [tuple(int(cik) for cik in batch) for batch in batches]
-    snapshot_payload = reference_snapshot_file.read_bytes()
-    snapshot_relative = reference_snapshot_path(run_id)
-    storage_root.write_immutable_bytes(snapshot_relative, snapshot_payload)
     manifest = {
         "schema_version": 1,
         "run_id": run_id,
         "image_identity": image_identity,
-        "reference_snapshot": {
-            "path": snapshot_relative,
-            "sha256": _sha256(snapshot_payload),
-        },
         "batches": [
             {"batch_id": batch_id_for_ciks(ciks), "ciks": list(ciks), "outcome_path": batch_outcome_path(run_id, batch_id_for_ciks(ciks))}
             for ciks in declared_batches
@@ -235,11 +226,6 @@ def validate_complete_run_manifest(
         raise WarehouseRuntimeError("identity refresh manifest has no image_identity")
     if expected_image_identity is not None and image_identity != expected_image_identity:
         raise WarehouseRuntimeError("identity refresh manifest image_identity does not match reducer image")
-    reference = manifest.get("reference_snapshot")
-    if not isinstance(reference, Mapping) or not _valid_sha256(reference.get("sha256")):
-        raise WarehouseRuntimeError("identity refresh manifest has no valid reference snapshot")
-    if not str(reference.get("path") or ""):
-        raise WarehouseRuntimeError("identity refresh reference snapshot has no path")
     batches = manifest.get("batches")
     if not isinstance(batches, list):
         raise WarehouseRuntimeError("identity refresh manifest batches must be a list")

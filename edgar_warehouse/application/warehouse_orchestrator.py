@@ -810,18 +810,18 @@ def _execute_warehouse_bronze_capture(
             from edgar_warehouse.application.identity_refresh_publication import persist_run_manifest
 
             image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
-            snapshot = persist_run_manifest(
+            persist_run_manifest(
                 context.storage_root,
                 run_id=run_id,
                 image_identity=image_identity,
-                reference_snapshot_file=Path(context.silver_root.join("silver", "sec", "silver.duckdb")),
                 batches=metrics.pop("_identity_refresh_batches"),
             )
+            # silver-merge-engine-migration Ticket 15: the run manifest no
+            # longer carries a reference snapshot (it was the empty local
+            # DuckDB file); the write recorded here is the manifest itself.
             silver_database_write = {
-                "layer": "identity_refresh_reference_snapshot",
-                "path": context.storage_root.join(snapshot["reference_snapshot"]["path"]),
-                "run_manifest_path": context.storage_root.join("identity_refresh/runs", run_id, "run_manifest.json"),
-                "size_bytes": Path(context.silver_root.join("silver", "sec", "silver.duckdb")).stat().st_size,
+                "layer": "identity_refresh_run_manifest",
+                "path": context.storage_root.join("identity_refresh/runs", run_id, "run_manifest.json"),
             }
         else:
             silver_database_write = _publish_silver_database_with_retry(context)
