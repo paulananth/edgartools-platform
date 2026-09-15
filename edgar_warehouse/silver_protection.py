@@ -408,12 +408,11 @@ PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES = frozenset(
         "sec_daily_index_checkpoint",
         "stg_daily_index_filing",
         # fundamentals-daily-integration map, Tickets 02/03 -- see the
-        # matching comment in EXCLUDED_OPERATIONAL_TABLES above. Each
-        # bootstrap-fundamentals task hydrates the full canonical table
-        # before adding new markers, so its candidate is always canonical's
-        # prior content plus this run's additions -- a blind full-table
-        # overwrite (this pass's existing behavior) is safe here for the
-        # same reason it's safe for the two tables above.
+        # matching comment in EXCLUDED_OPERATIONAL_TABLES above. Both marker
+        # writers are landing-only since silver-merge-engine-migration
+        # Ticket 12, so the local tables stay empty and this merge pass
+        # copies nothing for them; the entries stay until Ticket 09 deletes
+        # the merge engine itself.
         "sec_fundamentals_processed_accession",
         "sec_entity_facts_refresh_watermark",
     }

@@ -1,7 +1,7 @@
-"""Test helpers for tables whose merge_* writers are landing-only.
+"""Test helpers for tables whose merge_* and mark_* writers are landing-only.
 
-silver-merge-engine-migration Tickets 02-06 made those writers skip local
-DuckDB. A test that still needs rows physically present in a local
+silver-merge-engine-migration Tickets 02-06 and 12 made those writers skip
+local DuckDB. A test that still needs rows physically present in a local
 SilverDatabase -- schema-migration tests, ShardedSilverReader allowlist
 tests -- inserts them directly; those tests guard the migration or the
 reader, not a writer. `open_landing_db` opens a SilverDatabase with a

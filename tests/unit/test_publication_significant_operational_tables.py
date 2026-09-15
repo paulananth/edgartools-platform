@@ -39,6 +39,7 @@ from edgar_warehouse.silver_protection import (
     merge_candidate_into_canonical,
 )
 from edgar_warehouse.silver_store import SilverDatabase
+from tests.support.silver_rows import insert_silver_rows
 
 
 def _insert_checkpoint_row(db: SilverDatabase, row: dict) -> None:
@@ -276,10 +277,13 @@ def test_merge_copies_fundamentals_processed_accession_into_canonical(tmp_path: 
 
     candidate_path = tmp_path / "candidate.duckdb"
     candidate_db = SilverDatabase(str(candidate_path))
-    candidate_db.mark_fundamentals_accession_processed(
-        mode="per-filing", accession_number="0001-test",
+    # Both marker writers are landing-only (silver-merge-engine-migration
+    # Ticket 12); this guards the merge, so the rows are seeded directly.
+    insert_silver_rows(
+        candidate_db, "sec_fundamentals_processed_accession",
+        [{"mode": "per-filing", "accession_number": "0001-test"}],
     )
-    candidate_db.mark_entity_facts_refreshed(320193)
+    insert_silver_rows(candidate_db, "sec_entity_facts_refresh_watermark", [{"cik": 320193}])
     candidate_db.close()
 
     output_path = tmp_path / "merged.duckdb"

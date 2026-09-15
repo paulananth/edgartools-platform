@@ -8,6 +8,13 @@ correction note. Implements the existing resume-ledger pattern
 (`edgar_warehouse/mdm/company_resume.py`/`daily_artifact_resume.py` precedent), per-item
 granularity, no new BookkeepingStore schema.
 
+**Note (2026-09-14):** `mark_entity_facts_refreshed` is landing-only as of
+silver-merge-engine-migration [Ticket 12](../../silver-merge-engine-migration/issues/12-fundamentals-markers-landing-only.md).
+The landing buffer is written once, at the end of the task, and Snowflake silver lags by hours,
+so the marker is lost on a crash mid-window and cannot serve as a resume point. Read "at the same
+point" below as a position in the loop only: the ledger record must be written to S3 per CIK,
+outside the landing buffer.
+
 ## Question
 
 Implement [Ticket 02](02-design-bookkeeping-schema-and-retry-contract.md)'s
