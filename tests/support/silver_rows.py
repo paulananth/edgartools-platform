@@ -2,7 +2,7 @@
 
 silver-merge-engine-migration Tickets 02-06 and 12 made those writers skip
 local DuckDB. A test that still needs rows physically present in a local
-SilverDatabase -- schema-migration tests, ShardedSilverReader allowlist
+SilverDatabase -- schema-migration tests, MDM real-schema
 tests -- inserts them directly; those tests guard the migration or the
 reader, not a writer. `open_landing_db` opens a SilverDatabase with a
 `LandingExportBuffer` attached, for tests that assert on the rows a

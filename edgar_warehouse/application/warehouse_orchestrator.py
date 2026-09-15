@@ -807,7 +807,10 @@ def _execute_warehouse_bronze_capture(
             # publish below, so its once-per-run reference-data sync
             # (company_tickers/company_tickers_exchange) lands in canonical on
             # its own -- there is no reducer left to merge it otherwise.
-            from edgar_warehouse.application.identity_refresh_publication import persist_run_manifest
+            from edgar_warehouse.application.identity_refresh_publication import (
+                persist_run_manifest,
+                run_manifest_path,
+            )
 
             image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
             persist_run_manifest(
@@ -821,7 +824,7 @@ def _execute_warehouse_bronze_capture(
             # DuckDB file); the write recorded here is the manifest itself.
             silver_database_write = {
                 "layer": "identity_refresh_run_manifest",
-                "path": context.storage_root.join("identity_refresh/runs", run_id, "run_manifest.json"),
+                "path": context.storage_root.join(run_manifest_path(run_id)),
             }
         else:
             silver_database_write = _publish_silver_database_with_retry(context)
@@ -1110,10 +1113,10 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     ``merge_candidate_into_canonical`` is dead from THIS call site
     specifically (its sibling caller here, ``_publish_shard_if_remote``, was
     confirmed to have zero real callers and deleted -- duckdb-retirement-
-    cutover Ticket 12), but the function itself is NOT dead overall: it has
-    a separate, live caller in ``application/silver_event_reducer.py`` --
-    an earlier version of this docstring claimed otherwise without checking
-    that caller, corrected here (Ticket 12). The fingerprint-sidecar helpers
+    cutover Ticket 12). Its last other caller, ``application/
+    silver_event_reducer.py``, was deleted by silver-merge-engine-migration
+    Ticket 15, so the function now has zero callers and leaves with the
+    engine in Ticket 17. The fingerprint-sidecar helpers
     this docstring used to mention (``_read_fingerprint_sidecar``/
     ``_write_fingerprint_sidecar``) were deleted (Ticket 20): once this
     function became a permanent no-op, nothing ever read the sidecar again,
@@ -1248,8 +1251,8 @@ def _capture_bronze_raw(
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
 
     if command_name == "sweep-filing-text":
-        # release-readiness Ticket 101: unlike backfill-mdm-entity-ids/
-        # backfill-silver-landing-historical (dispatched even earlier, before
+        # release-readiness Ticket 101: unlike backfill-mdm-entity-ids
+        # (dispatched even earlier, before
         # db/bookkeeping exist -- see _execute_warehouse_bronze_capture),
         # this sweep needs the normal per-run db/bookkeeping/landing_export
         # this function already receives, since it stages real filing

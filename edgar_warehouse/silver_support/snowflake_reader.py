@@ -1,4 +1,4 @@
-"""Snowflake-backed silver reader satisfying ShardedSilverReader's read seam.
+"""Snowflake-backed silver reader: MDM's ``.fetch()``/``.close()`` read seam.
 
 ``SnowflakeSilverReader`` implements exactly the two methods MDM's pipeline
 code calls through (``.fetch(sql, params) -> list[dict]`` and ``.close()``),
@@ -8,8 +8,8 @@ so ``silver-snowflake-migration`` map Ticket 12's env-var flip
 ``edgar_warehouse/mdm/pipeline.py``/``adv_bulk.py``/``coverage.py`` that only
 ever call ``.fetch()``.
 
-Deliberately does NOT expose a DuckDB-shaped ``._conn`` attribute like
-``ShardedSilverReader`` does. A handful of call sites (``seed-universe
+Deliberately does NOT expose a DuckDB-shaped ``._conn`` attribute like the
+deleted ``ShardedSilverReader`` did. A handful of call sites (``seed-universe
 --source silver``, ``source_dimensional_export.py``) bypass ``.fetch()`` entirely and call
 ``reader._conn.execute(...)`` directly -- those are out of this ticket's
 scope and would silently break against a Snowflake connection object. Not
@@ -102,8 +102,7 @@ def _mdm_silver_reader_settings() -> _ConnectionSettings:
 
 
 class SnowflakeSilverReader:
-    """Read-only EDGARTOOLS_SILVER reader, duck-type compatible with
-    ``ShardedSilverReader``'s ``.fetch()``/``.close()`` interface."""
+    """Read-only EDGARTOOLS_SILVER reader exposing ``.fetch()``/``.close()``."""
 
     def __init__(self, connection: Any) -> None:
         self._connection = connection

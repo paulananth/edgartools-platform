@@ -1359,7 +1359,7 @@ class SilverDatabase(SilverLandingStore):
     def fetch(self, sql: str, params: list | None = None) -> list[dict[str, Any]]:
         """Execute a SQL query and return results as a list of dicts.
 
-        API-compatible with ``ShardedSilverReader.fetch`` so a reader-agnostic
+        Same shape as ``SnowflakeSilverReader.fetch`` so a reader-agnostic
         caller can read from either a single writable shard or a multi-shard
         reader.
 

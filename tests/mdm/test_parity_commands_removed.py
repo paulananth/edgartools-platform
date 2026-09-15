@@ -2,7 +2,8 @@
 commands are deleted. No writer produces DuckDB silver rows any more, so
 there is nothing on the DuckDB side to compare against EDGARTOOLS_SILVER.
 Cross-store comparison evidence (duckdb-retirement-cutover Tickets 19/21)
-uses ``table-reconcile``, which does not depend on this tooling.
+used ``table-reconcile``, itself deleted by silver-merge-engine-migration
+Ticket 15 once those tickets closed.
 """
 
 from __future__ import annotations

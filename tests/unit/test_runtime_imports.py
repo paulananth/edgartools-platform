@@ -72,9 +72,7 @@ class RuntimeImportTests(unittest.TestCase):
         # gold_verify), never registered in COMMAND_REGISTRY. resolve-snowflake-env is
         # the same shape: a standalone credential resolver, never registered either.
         # compare-filing-artifact-capture (Ticket 51) is observe-only Decision 2
-        # snapshot compare, same exclusion. table-reconcile (DuckDB Retirement
-        # Cutover Ticket 08) is the same shape: standalone direct DuckDB +
-        # Snowflake connections, own report, never registered.
+        # snapshot compare, same exclusion.
         warehouse_cli_commands = set(subparsers_action.choices) - {
             "mdm",
             "gold-verify-live",
@@ -105,7 +103,6 @@ class RuntimeImportTests(unittest.TestCase):
         # gold-verify-live never calls _planned_writes -- it doesn't go through
         # _execute_warehouse_bronze_capture at all (see the skip comment below).
         # resolve-snowflake-env and compare-filing-artifact-capture are the same shape.
-        # table-reconcile (Ticket 08) never calls _planned_writes either -- same reason.
         all_commands = set(subparsers_action.choices) - {
             "mdm",
             "gold-verify-live",

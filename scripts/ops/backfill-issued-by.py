@@ -14,7 +14,7 @@ What it does:
      Phase 2 that creates ISSUED_BY instances and syncs them to Neo4j.
   2. Polls until the execution finishes.
   3. Tails the ECS log stream to surface the result JSON.
-  4. Runs check-issued-by-coverage.py --skip-silver for a before/after summary.
+  4. (Retired: check-issued-by-coverage.py was deleted with the DuckDB readers, silver-merge-engine-migration Ticket 15; the coverage step now warns and skips.)
 
 Usage:
   uv run python scripts/ops/backfill-issued-by.py
