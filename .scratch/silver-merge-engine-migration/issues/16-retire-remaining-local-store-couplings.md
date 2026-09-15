@@ -2,7 +2,7 @@
 
 **Type:** grilling
 
-**Status:** open
+**Status:** resolved 2026-09-14 (operator decisions; the deletions are wired into Ticket 15).
 
 ## Question
 
@@ -28,3 +28,33 @@ decision rather than a mechanical deletion:
    putting the choice to the operator.
 
 **Blocked by:** none — frontier (can run in parallel with Ticket 13).
+
+## Answer (2026-09-14, operator decisions)
+
+**Facts found first:**
+- `silver_root` resolves to `/tmp/edgar-warehouse-silver` whenever `WAREHOUSE_STORAGE_ROOT` is an
+  `s3://` URI (`warehouse_settings.py`), so the "reference snapshot" is the local DuckDB file the
+  opener creates fresh each run — an empty-schema store since Ticket 10 stopped hydration. The last
+  three uploads (`daily-incremental-*`, 2026-09-08 and 2026-09-12 twice) are all exactly
+  2,371,584 bytes. Its only reader, `reduce-identity-refresh`, was removed from every state machine
+  by the stage0-stage1-consolidation map; `load_complete_run_manifest`/`validate_complete_run_manifest`
+  and the `batch_*_path` helpers have zero production callers.
+- `parse-ownership-bronze`: zero real runs in 90 days of `/aws/ecs/edgartools-prod-warehouse`
+  (the five log hits are argparse usage text); in no state machine; its filings query reads the
+  never-hydrated local store.
+
+**Decision 1 — reference snapshot: drop it (option a).** Delete the `reference_snapshot_file`
+parameter and the upload from `persist_run_manifest`, the manifest's `reference_snapshot` field and
+its `_valid_sha256` check, `reference_snapshot_path`, and the dead `reduce-identity-refresh` command
+with `load_complete_run_manifest`/`validate_complete_run_manifest`/`batch_*_path`/`batch_id_for_ciks`.
+`compute-windows`' `silver_publish_completed` event loses its `identity_refresh_reference_snapshot`
+layer entry. Not chosen: hashing the reference rows landed this run (builds a field nobody reads).
+
+**Decision 2 — `parse-ownership-bronze`: retire it (option a).** Delete the CLI parser and handler,
+`_run_parse_ownership_bronze`, `tests/application/test_parse_ownership_bronze.py` and the parts of
+`test_ownership_lookback.py` that drive it. Same shape as `parse-adv-bronze` (Ticket 07) and release
+mode (Ticket 11). A bronze re-parse tool, if ever wanted, grows out of `targeted-resync` (Ticket 10),
+which already reads filings from Snowflake silver. Not chosen: repointing at Snowflake silver.
+
+Both deletions are added to [Ticket 15](15-delete-dead-duckdb-readers-and-tools.md)'s scope so they
+ship in one slice with the other dead readers.

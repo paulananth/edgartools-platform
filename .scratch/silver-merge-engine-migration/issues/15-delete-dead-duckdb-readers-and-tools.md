@@ -18,4 +18,10 @@ and `silver_landing_historical_backfill.py` (its last user), the `table_reconcil
 `table_reconciliation/contracts.py` is the only production importer of `PROTECTED_TABLE_REGISTRY`
 outside `silver_protection.py`.
 
+Also, per [Ticket 16](16-retire-remaining-local-store-couplings.md)'s decisions (2026-09-14): drop
+the `compute-windows` reference-snapshot upload and manifest field (`persist_run_manifest`'s
+`reference_snapshot_file`, `reference_snapshot_path`, the `_valid_sha256` check) together with the
+dead `reduce-identity-refresh` command and the zero-caller manifest readers; and retire
+`parse-ownership-bronze` (CLI parser/handler, `_run_parse_ownership_bronze`, its two test files' parts).
+
 **Blocked by:** [Ticket 14](14-move-write-path-off-silver-database.md).
