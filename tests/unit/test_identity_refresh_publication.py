@@ -27,7 +27,6 @@ def _manifest(*, batch_status: str = "succeeded", image: str = "sha256:image") -
     return {
         "run_id": "run-1",
         "image_identity": image,
-        "reference_snapshot": {"path": "reference.duckdb", "sha256": _sha("reference")},
         "batches": [{
             "batch_id": batch_id_for_ciks(ciks), "ciks": ciks, "status": batch_status,
             "delta_path": "batch.duckdb", "sha256": _sha("batch"),
@@ -68,12 +67,10 @@ def test_batch_id_rejects_unordered_or_duplicate_ciks() -> None:
 
 def test_reducer_never_touches_canonical_silver_duckdb(tmp_path: Path) -> None:
     storage = StorageLocation(str(tmp_path / "warehouse"))
-    reference = tmp_path / "reference.duckdb"
     delta = tmp_path / "batch.duckdb"
-    reference.write_bytes(b"reference")
     delta.write_bytes(b"batch")
     persist_run_manifest(
-        storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference,
+        storage, run_id="run-1", image_identity="sha256:image",
         batches=[[100]],
     )
     persist_batch_outcome(
@@ -89,10 +86,8 @@ def test_reducer_never_touches_canonical_silver_duckdb(tmp_path: Path) -> None:
 
 def test_reducer_never_publishes_a_partial_declared_run(tmp_path: Path) -> None:
     storage = StorageLocation(str(tmp_path / "warehouse"))
-    reference = tmp_path / "reference.duckdb"
-    reference.write_bytes(b"reference")
     persist_run_manifest(
-        storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference,
+        storage, run_id="run-1", image_identity="sha256:image",
         batches=[[100], [200]],
     )
     delta = tmp_path / "batch.duckdb"
@@ -112,11 +107,9 @@ def test_reducer_never_publishes_a_partial_declared_run(tmp_path: Path) -> None:
 
 def test_reducer_writes_completed_manifest_immutably(tmp_path: Path) -> None:
     storage = StorageLocation(str(tmp_path / "warehouse"))
-    reference = tmp_path / "reference.duckdb"
     delta = tmp_path / "batch.duckdb"
-    reference.write_bytes(b"reference")
     delta.write_bytes(b"batch")
-    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", batches=[[100]])
     persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
 
     reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image")
@@ -130,11 +123,9 @@ def test_reducer_accepts_but_ignores_max_attempts(tmp_path: Path) -> None:
     """max_attempts is kept for call-site compatibility (the CLI still passes
     it) but no longer changes behavior -- there is nothing left to retry."""
     storage = StorageLocation(str(tmp_path / "warehouse"))
-    reference = tmp_path / "reference.duckdb"
     delta = tmp_path / "batch.duckdb"
-    reference.write_bytes(b"reference")
     delta.write_bytes(b"batch")
-    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", reference_snapshot_file=reference, batches=[[100]])
+    persist_run_manifest(storage, run_id="run-1", image_identity="sha256:image", batches=[[100]])
     persist_batch_outcome(storage, run_id="run-1", image_identity="sha256:image", ciks=[100], delta_file=delta)
 
     completed = reduce_identity_refresh(storage, run_id="run-1", image_identity="sha256:image", max_attempts=1)

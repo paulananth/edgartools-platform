@@ -682,20 +682,12 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
         "reference sync -- the special no-publish case must not run for it"
     )
 
-    from edgar_warehouse.application.identity_refresh_publication import (
-        reference_snapshot_path,
-        run_manifest_path,
-    )
+    from edgar_warehouse.application.identity_refresh_publication import run_manifest_path
 
     manifest_path = Path(context.storage_root.join(run_manifest_path("cw-direct-publish-run")))
     assert not manifest_path.exists(), (
         "compute-windows must no longer persist an identity-refresh run "
         "manifest -- ReduceIdentityRefresh, its only consumer, was removed"
-    )
-    snapshot_path = Path(context.storage_root.join(reference_snapshot_path("cw-direct-publish-run")))
-    assert not snapshot_path.exists(), (
-        "compute-windows must no longer persist a reference snapshot -- "
-        "nothing merges it into canonical anymore"
     )
 
     # The reference-data sync's rows must actually leave the run -- the

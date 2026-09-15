@@ -342,7 +342,6 @@ class WarehousePathResolver:
             "seed-universe",
             "seed-silver-batches",
             "seed-bronze-batches",
-            "parse-ownership-bronze",
             "parse-adv-bronze",
             "fetch-adv-bulk",
             "fetch-firm-roster",
@@ -384,11 +383,6 @@ class WarehousePathResolver:
                 "bronze": self._render("manifest.default.bronze.path", **default_tokens),
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }
-        if command_name == "migrate-silver-shards":
-            # Local-only migration; no S3 bronze/silver/gold manifests are written.
-            return {
-                "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
-            }
         if command_name in (
             "verify-pipeline-run",
             "acquire-identity-refresh-lease",
@@ -396,19 +390,15 @@ class WarehousePathResolver:
             "acquire-sec-fetch-lease",
             "release-sec-fetch-lease",
             "backfill-mdm-entity-ids",
-            "backfill-silver-landing-historical",
         ):
             # Lease commands write the pipeline_run_lease DB row plus their own
             # lease_result.json side-channel (identity_refresh_lease_path /
             # sec_fetch_lease_path) -- neither goes through this run-manifest
             # writer, so no bronze/gold manifest entries are produced here.
             # backfill-mdm-entity-ids (mdm-ahead-of-silver map, Phase B/ticket
-            # 06) and backfill-silver-landing-historical (silver-snowflake-
-            # migration map, Ticket 15, widened from the original duckdb-
-            # retirement company-metadata-only backfill) both read silver
-            # directly and write via the separate LandingExportBuffer/
-            # write_landing_export manifest, not bronze/gold -- same "no
-            # manifest layers beyond artifacts" shape.
+            # 06) reads silver directly and writes via the separate
+            # LandingExportBuffer/write_landing_export manifest, not
+            # bronze/gold -- same "no manifest layers beyond artifacts" shape.
             return {
                 "artifacts": self._render("manifest.default.artifacts.path", **default_tokens),
             }

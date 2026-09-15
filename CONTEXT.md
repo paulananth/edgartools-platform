@@ -97,12 +97,8 @@ The sole run-scoped publisher that verifies the complete Identity Refresh Batch 
 _Avoid_: Distributed canonical writers, canonical publish before complete-batch verification, bypassing the existing merge and promotion guard
 
 **Identity Refresh Run**:
-The immutable execution identity binding one selected CIK universe, one reference snapshot, one warehouse image, its declared batch deltas, and (only after complete verification) one canonical silver publication.
+The immutable execution identity binding one selected CIK universe, one warehouse image and its declared batch deltas; complete verification of every declared batch is the run's gate (the reference snapshot and the canonical silver publication it once carried were retired with the DuckDB write path).
 _Avoid_: Reusing successful deltas with changed inputs or image, retrying a failed batch as a new unbound refresh, publishing a partial run
-
-**Identity Reference Snapshot**:
-The once-per-Identity-Refresh-Run global ticker and reference-data result consumed by the Identity Refresh Reducer together with the complete batch-delta set.
-_Avoid_: Reference fetch/write per CIK batch, a reducer combining deltas with an unbound or later reference version
 
 **Identity Refresh Publication Retry**:
 A bounded retry of only the Identity Refresh Reducer after an interrupted or ETag-conflicted promotion; it rehydrates canonical and re-merges the same verified Identity Refresh Run inputs without repeating batch capture.

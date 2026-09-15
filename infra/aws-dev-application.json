@@ -31,7 +31,6 @@
   "mdm": {
     "image_ref": "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-mdm@sha256:12c2c45e1e3abdbeb82df5a5f93c3c8ffa7cb78cfa17ba1ba11a23f40b7e30ee",
     "database_source": "snowflake-postgres",
-    "silver_duckdb": "s3://edgartools-dev-warehouse/warehouse/silver/sec/silver.duckdb",
     "secrets": {
       "postgres_dsn": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/postgres_dsn-AempIg",
       "snowflake": "arn:aws:secretsmanager:us-east-1:690839588395:secret:edgartools-dev/mdm/snowflake-d7X99N"

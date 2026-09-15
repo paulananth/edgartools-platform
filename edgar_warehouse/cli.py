@@ -303,10 +303,6 @@ def _handle_backfill_mdm_entity_ids(args: argparse.Namespace) -> int:
     return run_command("backfill-mdm-entity-ids", args)
 
 
-def _handle_backfill_silver_landing_historical(args: argparse.Namespace) -> int:
-    return run_command("backfill-silver-landing-historical", args)
-
-
 def _handle_sweep_filing_text(args: argparse.Namespace) -> int:
     return run_command("sweep-filing-text", args)
 
@@ -507,16 +503,8 @@ def _handle_seed_bronze_batches(args: argparse.Namespace) -> int:
     return run_command("seed-bronze-batches", args)
 
 
-def _handle_parse_ownership_bronze(args: argparse.Namespace) -> int:
-    return run_command("parse-ownership-bronze", args)
-
-
 def _handle_parse_adv_bronze(args: argparse.Namespace) -> int:
     return run_command("parse-adv-bronze", args)
-
-
-def _handle_migrate_silver_shards(args: argparse.Namespace) -> int:
-    return run_command("migrate-silver-shards", args)
 
 
 def _handle_bootstrap_fundamentals(args: argparse.Namespace) -> int:
@@ -1160,46 +1148,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(seed_bronze_batches)
     seed_bronze_batches.set_defaults(handler=_handle_seed_bronze_batches)
 
-    parse_ownership_bronze = subparsers.add_parser(
-        "parse-ownership-bronze",
-        help=(
-            "Parse Form 3/4/5 ownership XMLs already in S3 bronze into silver. "
-            "Uses edgartools (Ownership.from_xml). No SEC API calls. "
-            "Skips accessions already parsed earlier in the same run; no cross-run skip. "
-            "Default lookback is the past 2 years of Form 3/4/5 filings."
-        ),
-    )
-    parse_ownership_bronze.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Maximum number of accessions to process (default: all).",
-    )
-    parse_ownership_bronze.add_argument(
-        "--accession-list",
-        type=lambda s: [a.strip() for a in s.split(",") if a.strip()],
-        default=None,
-        metavar="ACCESSIONS",
-        help=(
-            "Comma-separated accession numbers to process. "
-            "When supplied, only these accessions are parsed (default: all Forms 3/4/5)."
-        ),
-    )
-    parse_ownership_bronze.add_argument(
-        "--ownership-lookback-years",
-        type=int,
-        default=None,
-        metavar="N",
-        help=(
-            "Years of Form 3/4/5 history to parse (default: 2). "
-            "Use 0 for full history. Also settable via "
-            "WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS."
-        ),
-    )
-    _add_run_id_arg(parse_ownership_bronze)
-    parse_ownership_bronze.set_defaults(handler=_handle_parse_ownership_bronze)
-
     parse_adv_bronze = subparsers.add_parser(
         "parse-adv-bronze",
         help=(
@@ -1509,19 +1457,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_run_id_arg(backfill_mdm_entity_ids)
     backfill_mdm_entity_ids.set_defaults(handler=_handle_backfill_mdm_entity_ids)
 
-    backfill_silver_landing_historical = subparsers.add_parser(
-        "backfill-silver-landing-historical",
-        help="One-time seed of 30 core silver tables (the old parity gate's list, minus sec_company_ticker) "
-             "into the Snowflake landing zone from DuckDB canonical silver, for rows that "
-             "predate the landing-zone write path and will never reach it through the "
-             "skip-if-unchanged-gated incremental path (see "
-             "edgar_warehouse/silver_landing_historical_backfill.py). Safe to re-run.",
-    )
-    _add_run_id_arg(backfill_silver_landing_historical)
-    backfill_silver_landing_historical.set_defaults(
-        handler=_handle_backfill_silver_landing_historical
-    )
-
     sweep_filing_text = subparsers.add_parser(
         "sweep-filing-text",
         help="release-readiness Ticket 101: extract sec_filing_text for every genuine "
@@ -1635,12 +1570,6 @@ def build_parser() -> argparse.ArgumentParser:
              "gold actually populated, not just that the dynamic tables compile.",
     )
     gold_verify_live.set_defaults(handler=_handle_gold_verify_live)
-
-    from edgar_warehouse.table_reconciliation.cli import (
-        register_subparser as _register_table_reconcile,
-    )
-
-    _register_table_reconcile(subparsers)
 
     compute_windows = subparsers.add_parser(
         "compute-windows",
@@ -1766,36 +1695,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_id_arg(write_run_summary)
     write_run_summary.set_defaults(handler=_handle_write_run_summary)
-
-    migrate_silver_shards = subparsers.add_parser(
-        "migrate-silver-shards",
-        help=(
-            "One-time migration: convert a monolithic silver.duckdb into 4 CIK-range shard files "
-            "with a verified shard-manifest.json. Run the production CIK percentile query first "
-            "(see docs/runbook.md) to verify band boundaries before executing on prod data."
-        ),
-    )
-    migrate_silver_shards.add_argument(
-        "--source",
-        required=True,
-        help="Path to the monolithic silver.duckdb file (local path).",
-    )
-    migrate_silver_shards.add_argument(
-        "--output-dir",
-        required=True,
-        help="Directory to write shard-{0..3}.duckdb and shard-manifest.json.",
-    )
-    migrate_silver_shards.add_argument(
-        "--band-boundaries",
-        default=None,
-        help=(
-            "JSON array of custom band boundaries, e.g. "
-            "'[{\"shard_index\":0,\"cik_min\":0,\"cik_max\":1053917}, ...]'. "
-            "Defaults to dev DB quartiles (p25=1053917, p50=1523562, p75=1819990). "
-            "Run the prod CIK percentile query first to compute production quartiles."
-        ),
-    )
-    migrate_silver_shards.set_defaults(handler=_handle_migrate_silver_shards)
 
     bootstrap_fundamentals = subparsers.add_parser(
         "bootstrap-fundamentals",

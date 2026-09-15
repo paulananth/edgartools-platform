@@ -1,6 +1,6 @@
 """release-readiness Ticket 101: confirms sweep-filing-text is actually
 wired into the shared warehouse dispatch (_resolve_scope, _capture_bronze_raw)
-the same way backfill-mdm-entity-ids/backfill-silver-landing-historical are
+the same way backfill-mdm-entity-ids is
 -- a new command name that's missing from _resolve_scope's ladder raises
 WarehouseRuntimeError before it ever reaches its own logic, so this is a
 real regression seam, not a formality.

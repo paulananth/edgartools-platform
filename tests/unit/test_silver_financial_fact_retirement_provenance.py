@@ -94,8 +94,9 @@ def _retire_all_current(db: SilverDatabase, *, cik: int) -> None:
     (is_current/valid_to closed, retirement_state_observed_at advanced).
     That method is gone -- local DuckDB is never read back anymore
     (silver-merge-engine-migration Ticket 02) -- but the publish-side merge
-    semantics it exercised still guard merge_candidate_into_canonical's
-    remaining live caller (silver_event_reducer.py)."""
+    semantics it exercised still describe merge_candidate_into_canonical,
+    which has no caller left (Ticket 15) and leaves with the engine in
+    Ticket 17."""
     db._conn.execute(
         "UPDATE sec_financial_fact SET is_current = FALSE, valid_to = now(), "
         "retirement_state_observed_at = now() WHERE cik = ? AND is_current = TRUE",

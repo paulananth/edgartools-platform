@@ -8,8 +8,9 @@ MDM-ADV-02 automated proof — no network, no S3, no live Postgres required.
 DuckDB Retirement Cutover Ticket 05: _require_silver_reader's own reader is
 always EDGARTOOLS_SILVER via SnowflakeSilverReader now, so MDM_SILVER_DUCKDB
 alone no longer selects what these tests read. SnowflakeSilverReader.connect
-is monkeypatched to a real ShardedSilverReader over the local DuckDB fixture
-below instead, preserving genuine fail->pass fixture coverage rather than an
+is monkeypatched to a small DuckDB-backed reader over the local fixture below
+instead (silver-merge-engine-migration Ticket 15 deleted ShardedSilverReader;
+this file goes with the DuckDB engine in Ticket 17), preserving genuine fail->pass fixture coverage rather than an
 accidental pass driven by "no live Snowflake in the test environment"
 (the same class of false-confirmed-by-the-wrong-mechanism gap CLAUDE.md's
 MDM Postgres migration-011 entry documents).
@@ -21,13 +22,27 @@ import duckdb
 import pytest
 
 import edgar_warehouse.mdm.cli as mdm_cli
-from edgar_warehouse.silver_support.sharded_reader import ShardedSilverReader
 from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
+
+
+class _DuckDBFixtureReader:
+    """fetch()/close() over one local DuckDB file, the reader seam MDM expects."""
+
+    def __init__(self, db_path: str) -> None:
+        self._conn = duckdb.connect(db_path, read_only=True)
+
+    def fetch(self, sql: str, params: list | None = None) -> list[dict]:
+        cursor = self._conn.execute(sql, params or [])
+        columns = [d[0] for d in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def close(self) -> None:
+        self._conn.close()
 
 
 def _patch_silver_reader_to_duckdb_fixture(monkeypatch, db_path: str) -> None:
     monkeypatch.setattr(
-        SnowflakeSilverReader, "connect", staticmethod(lambda: ShardedSilverReader([db_path]))
+        SnowflakeSilverReader, "connect", staticmethod(lambda: _DuckDBFixtureReader(db_path))
     )
 
 

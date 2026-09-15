@@ -2,7 +2,7 @@
 
 **Type:** grilling
 
-**Status:** resolved 2026-09-14 (operator decisions; the deletions are wired into Ticket 15).
+**Status:** resolved 2026-09-14 (operator decisions; the deletions are wired into Ticket 15). **Correction 2026-09-15:** see the note at the end — the reducer stays.
 
 ## Question
 
@@ -58,3 +58,12 @@ which already reads filings from Snowflake silver. Not chosen: repointing at Sno
 
 Both deletions are added to [Ticket 15](15-delete-dead-duckdb-readers-and-tools.md)'s scope so they
 ship in one slice with the other dead readers.
+
+## Correction (2026-09-15, found while implementing Ticket 15)
+
+The fact under decision 1 was wrong: `reduce-identity-refresh` was removed from `load_history`
+by the stage0-stage1-consolidation map, but it is still `daily_incremental`'s
+`PublishCompanyIdentityUpdates` state and ran in prod within the last 30 days. Its
+batch-completeness gate is a real signal and never depended on the snapshot. Decision 1 therefore
+narrows to: drop the snapshot file, the manifest field and its check; **keep** the command and the
+manifest readers. Ticket 15's answer records what shipped.

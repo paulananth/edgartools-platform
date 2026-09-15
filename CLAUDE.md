@@ -224,9 +224,8 @@ docstring is explicit: "Always EDGARTOOLS_SILVER via SnowflakeSilverReader")
 The DuckDB-vs-Snowflake parity commands (`mdm verify-silver-parity`,
 `mdm verify-resolver-input-parity`) and their DuckDB reader path were
 deleted by silver-merge-engine-migration Ticket 08; DuckDB's
-`ShardedSilverReader` survives only for the one-time
-`backfill-silver-landing-historical` command, which leaves with the DuckDB
-engine in that map's Ticket 09. The broader silver-layer DuckDB retirement (the write path,
+`ShardedSilverReader` and the one-time `backfill-silver-landing-historical`
+command were deleted by that map's Ticket 15 (2026-09-15). The broader silver-layer DuckDB retirement (the write path,
 bookkeeping tables, and final cleanup — duckdb-retirement-cutover Tickets
 06-14/16) is still in progress as of this writing; MDM's reader is simply
 the one piece of that migration that's already fully cut over. MDM
@@ -1864,7 +1863,10 @@ have real drift-finding rows captured before this decommission, and
 stripping the registry entries would silently drop that data instead of
 copying it. The same argument applies unchanged post-decommission — if
 anything more so, since there is no live writer left at all to ever
-recreate that history. Confirmed live: the DuckDB copy was always a dead
+recreate that history. (Update 2026-09-15: silver-merge-engine-migration
+Ticket 15 deleted `sharded_reader.py` and `migrate_silver_shards.py`, so
+only the `EXCLUDED_OPERATIONAL_TABLES` entry remains, and it leaves with
+the engine in Ticket 17.) Confirmed live: the DuckDB copy was always a dead
 write path anyway (`SilverDatabase.insert_reconcile_findings` had zero
 callers even before this decommission — the real writes only ever went
 through `BookkeepingStore`), so nothing was actually reachable/writable on

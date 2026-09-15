@@ -520,20 +520,6 @@ def _execute_warehouse_bronze_capture(
 
         return run_mdm_entity_backfill_sweep(context, run_id)
 
-    if command_name == "backfill-silver-landing-historical":
-        # silver-snowflake-migration map, Ticket 15 (widened from the
-        # original duckdb-retirement company-metadata-only backfill): one-time
-        # seed of the silver tables the old parity gate tracked (except sec_company_ticker)
-        # into the landing zone -- see
-        # edgar_warehouse/silver_landing_historical_backfill.py's module
-        # docstring. Reads the canonical monolith directly, same dispatch
-        # shape as backfill-mdm-entity-ids above.
-        from edgar_warehouse.silver_landing_historical_backfill import (
-            run_silver_landing_historical_backfill,
-        )
-
-        return run_silver_landing_historical_backfill(context, run_id)
-
     # DuckDB Retirement Cutover Ticket 06: bootstrap-batch used to hydrate/open
     # a CIK-sharded shard-{0-3}.duckdb file here instead of the monolith, to
     # avoid concurrent writers (MaxConcurrency up to 20) racing an ETag-guarded
@@ -821,21 +807,24 @@ def _execute_warehouse_bronze_capture(
             # publish below, so its once-per-run reference-data sync
             # (company_tickers/company_tickers_exchange) lands in canonical on
             # its own -- there is no reducer left to merge it otherwise.
-            from edgar_warehouse.application.identity_refresh_publication import persist_run_manifest
+            from edgar_warehouse.application.identity_refresh_publication import (
+                persist_run_manifest,
+                run_manifest_path,
+            )
 
             image_identity = os.environ.get("WAREHOUSE_IMAGE_REF", "").strip()
-            snapshot = persist_run_manifest(
+            persist_run_manifest(
                 context.storage_root,
                 run_id=run_id,
                 image_identity=image_identity,
-                reference_snapshot_file=Path(context.silver_root.join("silver", "sec", "silver.duckdb")),
                 batches=metrics.pop("_identity_refresh_batches"),
             )
+            # silver-merge-engine-migration Ticket 15: the run manifest no
+            # longer carries a reference snapshot (it was the empty local
+            # DuckDB file); the write recorded here is the manifest itself.
             silver_database_write = {
-                "layer": "identity_refresh_reference_snapshot",
-                "path": context.storage_root.join(snapshot["reference_snapshot"]["path"]),
-                "run_manifest_path": context.storage_root.join("identity_refresh/runs", run_id, "run_manifest.json"),
-                "size_bytes": Path(context.silver_root.join("silver", "sec", "silver.duckdb")).stat().st_size,
+                "layer": "identity_refresh_run_manifest",
+                "path": context.storage_root.join(run_manifest_path(run_id)),
             }
         else:
             silver_database_write = _publish_silver_database_with_retry(context)
@@ -1124,10 +1113,10 @@ def _publish_silver_database_if_remote(context: WarehouseCommandContext) -> dict
     ``merge_candidate_into_canonical`` is dead from THIS call site
     specifically (its sibling caller here, ``_publish_shard_if_remote``, was
     confirmed to have zero real callers and deleted -- duckdb-retirement-
-    cutover Ticket 12), but the function itself is NOT dead overall: it has
-    a separate, live caller in ``application/silver_event_reducer.py`` --
-    an earlier version of this docstring claimed otherwise without checking
-    that caller, corrected here (Ticket 12). The fingerprint-sidecar helpers
+    cutover Ticket 12). Its last other caller, ``application/
+    silver_event_reducer.py``, was deleted by silver-merge-engine-migration
+    Ticket 15, so the function now has zero callers and leaves with the
+    engine in Ticket 17. The fingerprint-sidecar helpers
     this docstring used to mention (``_read_fingerprint_sidecar``/
     ``_write_fingerprint_sidecar``) were deleted (Ticket 20): once this
     function became a permanent no-op, nothing ever read the sidecar again,
@@ -1262,8 +1251,8 @@ def _capture_bronze_raw(
     metrics: dict[str, Any] = {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}
 
     if command_name == "sweep-filing-text":
-        # release-readiness Ticket 101: unlike backfill-mdm-entity-ids/
-        # backfill-silver-landing-historical (dispatched even earlier, before
+        # release-readiness Ticket 101: unlike backfill-mdm-entity-ids
+        # (dispatched even earlier, before
         # db/bookkeeping exist -- see _execute_warehouse_bronze_capture),
         # this sweep needs the normal per-run db/bookkeeping/landing_export
         # this function already receives, since it stages real filing
@@ -1855,17 +1844,6 @@ def _capture_bronze_raw(
         metrics["cik_universe_path"] = cik_universe_path
         metrics["cik_count"] = len(universe_rows)
         return raw_writes, metrics
-
-    if command_name == "parse-ownership-bronze":
-        return _run_parse_ownership_bronze(
-            context=context,
-            db=db,
-            sync_run_id=sync_run_id,
-            metrics=metrics,
-            limit=int(arguments["limit"]) if arguments.get("limit") is not None else None,
-            accession_list=arguments.get("accession_list") or None,
-            ownership_lookback_years=arguments.get("ownership_lookback_years"),
-        )
 
     if command_name == "parse-adv-bronze":
         return _run_parse_adv_bronze(
@@ -3144,7 +3122,6 @@ def _reset_edgartools_filing_cache_after_transient_content_error(exc: BaseExcept
     return False
 
 
-
 def _merge_capture_network_metrics(metrics: dict[str, Any], result: dict[str, Any]) -> None:
     """Fold network_fetches / silver_skips from a pipeline result into command metrics."""
     for key in (
@@ -4045,155 +4022,6 @@ def _is_configured_parser_form(form_type: Any, items: Any = None) -> bool:
     return False
 
 
-def _run_parse_ownership_bronze(
-    *,
-    context: "WarehouseCommandContext",
-    db: "SilverDatabase",
-    sync_run_id: str,
-    metrics: dict[str, Any],
-    limit: int | None = None,
-    accession_list: list[str] | None = None,
-    ownership_lookback_years: Any = None,
-) -> tuple[list[dict], dict[str, Any]]:
-    """Parse Form 3/4/5 ownership XMLs that already exist in bronze into silver.
-
-    Reads primary XML through the artifact registry (sec_filing_attachment +
-    sec_raw_object + read_bytes) — no S3 prefix listing, no SEC API calls.
-    Skips an accession already parsed earlier in this run; there is no
-    cross-run skip (the ownership tables are landing-only).
-    Default lookback is past 2 years of Form 3/4/5 filings (filing_date).
-
-    Args:
-        context: Warehouse command context (bronze_root, silver_root, etc.)
-        db: Silver database connection for queries and merges.
-        sync_run_id: Run ID for audit trail and event payloads.
-        metrics: Mutable dict; populated with parsed/skipped/errors/missing_artifacts/rows_written.
-        limit: Optional cap on the number of accessions to process.
-        accession_list: Optional explicit list of accession numbers to process
-            (filters the sec_company_filing query result to this set).
-        ownership_lookback_years: Years of Form 3/4/5 history to parse (default 2;
-            0 = full history). Env WAREHOUSE_OWNERSHIP_LOOKBACK_YEARS also accepted.
-    """
-    from edgar_warehouse.parsers.ownership import parse_ownership
-
-    lookback_years = _resolve_ownership_lookback_years(ownership_lookback_years)
-    min_filing_date = _ownership_min_filing_date(lookback_years)
-
-    filings = db.fetch(
-        """
-        SELECT f.accession_number, f.cik, f.form, f.filing_date, f.report_date
-        FROM sec_company_filing f
-        WHERE f.form IN ('3','3/A','4','4/A','5','5/A')
-        ORDER BY f.cik, f.report_date
-        """
-    )
-
-    # Apply optional accession filter
-    if accession_list is not None:
-        allowed = set(accession_list)
-        filings = [f for f in filings if f["accession_number"] in allowed]
-
-    pre_lookback = len(filings)
-    filings = [
-        f for f in filings if _ownership_within_lookback(f, min_filing_date=min_filing_date)
-    ]
-    lookback_skipped = pre_lookback - len(filings)
-
-    # Always empty in production: local DuckDB is never hydrated, and the
-    # ownership trio is landing-only (silver-merge-engine-migration Ticket
-    # 06c), so this command has no cross-run skip. The in-run set is kept
-    # below via already_parsed.add.
-    already_parsed: set[str] = {
-        row["accession_number"]
-        for row in db.fetch("SELECT DISTINCT accession_number FROM sec_ownership_reporting_owner")
-    }
-
-    # Apply optional limit after skip-filter so the limit counts processable accessions
-    if limit is not None:
-        filings = filings[:limit]
-
-    total = len(filings)
-    parsed_count = skipped_count = error_count = missing_artifact_count = 0
-    rows_written = 0
-
-    _emit_pipeline_event(
-        "parse_ownership_bronze_started",
-        total_filings=total,
-        already_parsed=len(already_parsed),
-        ownership_lookback_years=lookback_years,
-        ownership_min_filing_date=min_filing_date.isoformat() if min_filing_date else None,
-        ownership_lookback_skipped=lookback_skipped,
-        run_id=sync_run_id,
-    )
-
-    for filing in filings:
-        accession = filing["accession_number"]
-        form = filing["form"]
-
-        if accession in already_parsed:
-            skipped_count += 1
-            continue
-
-        try:
-            xml_bytes = _read_primary_artifact_bytes(db, accession)
-        except WarehouseRuntimeError as exc:
-            missing_artifact_count += 1
-            _emit_pipeline_event(
-                "parse_ownership_bronze_missing_artifact",
-                accession_number=accession,
-                reason=str(exc)[:200],
-                run_id=sync_run_id,
-            )
-            continue
-
-        try:
-            xml_content = xml_bytes.decode("utf-8", errors="replace")
-            parsed = parse_ownership(accession, xml_content, form)
-
-            rows_written += db.merge_ownership_reporting_owners(
-                parsed.get("sec_ownership_reporting_owner", []), sync_run_id
-            )
-            rows_written += db.merge_ownership_non_derivative_txns(
-                parsed.get("sec_ownership_non_derivative_txn", []), sync_run_id
-            )
-            rows_written += db.merge_ownership_derivative_txns(
-                parsed.get("sec_ownership_derivative_txn", []), sync_run_id
-            )
-            already_parsed.add(accession)
-            parsed_count += 1
-
-        except Exception as exc:
-            error_count += 1
-            _emit_pipeline_event(
-                "parse_ownership_bronze_error",
-                accession_number=accession,
-                error=str(exc)[:200],
-                run_id=sync_run_id,
-            )
-
-    _emit_pipeline_event(
-        "parse_ownership_bronze_completed",
-        total=total,
-        parsed=parsed_count,
-        skipped=skipped_count,
-        errors=error_count,
-        missing_artifacts=missing_artifact_count,
-        rows_written=rows_written,
-        run_id=sync_run_id,
-    )
-    metrics["parsed"] = parsed_count
-    metrics["skipped"] = skipped_count
-    metrics["errors"] = error_count
-    metrics["missing_artifacts"] = missing_artifact_count
-    metrics["rows_written"] = rows_written
-    metrics["ownership_lookback_years"] = lookback_years
-    metrics["ownership_min_filing_date"] = (
-        min_filing_date.isoformat() if min_filing_date else None
-    )
-    metrics["ownership_lookback_skipped"] = lookback_skipped
-    return [], metrics
-
-
 def _run_parse_adv_bronze(
     *,
     context: "WarehouseCommandContext",
@@ -4937,7 +4765,6 @@ def _sync_reference_data(
         "seed_document": seed_document,
         "reference_snapshot_identity": reference_snapshot_identity,
     }
-
 
 
 def _write_cik_universe_batches(
@@ -6467,11 +6294,6 @@ def _resolve_scope(
         # no meaningful CIK range/date/etc scope to report.
         return {}
 
-    if command_name == "backfill-silver-landing-historical":
-        # silver-snowflake-migration map, Ticket 15: one-time full-universe
-        # seed; no meaningful CIK range/date/etc scope to report.
-        return {}
-
     if command_name == "sweep-filing-text":
         # release-readiness Ticket 101: required/processed CIKs are computed
         # fresh from Snowflake every sweep; no meaningful CIK range/date/etc
@@ -6516,15 +6338,6 @@ def _resolve_scope(
     if command_name == "compute-remaining-batches":
         return {
             "resume_ledger_run_id": arguments.get("resume_ledger_run_id") or "",
-        }
-
-    if command_name == "parse-ownership-bronze":
-        return {
-            "limit": arguments.get("limit"),
-            "accession_list": arguments.get("accession_list"),
-            "ownership_lookback_years": _resolve_ownership_lookback_years(
-                arguments.get("ownership_lookback_years")
-            ),
         }
 
     if command_name == "parse-adv-bronze":
