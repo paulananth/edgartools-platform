@@ -456,9 +456,8 @@ class SilverLandingStore:
                     f"{table_name} row is missing NOT NULL column(s) {missing}: {row!r}"
                 )
             recorded.append(full)
-        landing_export = getattr(self, "landing_export", None)
-        if landing_export is not None:
-            landing_export.record(table_name, recorded)
+        if self.landing_export is not None:
+            self.landing_export.record(table_name, recorded)
         if table_name in _IN_RUN_LOOKUP_TABLES:
             self._remember_in_run(table_name, recorded)
         return len(recorded)

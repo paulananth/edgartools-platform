@@ -922,7 +922,10 @@ _SEC_FINANCIAL_DERIVED_FACTOR_COLUMNS = {
 
 
 class SilverDatabase(SilverLandingStore):
-    """Manages the silver-layer DuckDB instance for a warehouse root."""
+    """The DuckDB half of the silver store: DDL, migrations and local reads.
+
+    Every writer lives on SilverLandingStore (silver-merge-engine-migration
+    Ticket 14); this subclass exists until Ticket 17 deletes the engine."""
 
     def __init__(self, db_path: str, *, landing_export: LandingExportBuffer | None = None) -> None:
         super().__init__(landing_export=landing_export)
@@ -940,7 +943,6 @@ class SilverDatabase(SilverLandingStore):
         # single-threaded bronze/silver capture path, so this lock doesn't
         # add contention there.
         self._fetch_lock = threading.Lock()
-
 
     def _ensure_schema_evolution(self) -> None:
         self._conn.execute(_SCHEMA_MIGRATION_TABLE_DDL)
