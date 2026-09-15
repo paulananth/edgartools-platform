@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
+from edgar_warehouse import silver_schema
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 if TYPE_CHECKING:
@@ -955,8 +956,6 @@ class SilverDatabase:
         # single-threaded bronze/silver capture path, so this lock doesn't
         # add contention there.
         self._fetch_lock = threading.Lock()
-        self._required_columns_cache: dict[str, tuple[str, ...]] = {}
-        self._lookup_columns_cache: dict[str, tuple[str, ...]] = {}
         # Rows of _IN_RUN_LOOKUP_TABLES recorded this run: table -> first key
         # value -> remaining key values -> row.
         self._in_run_rows: dict[str, dict[Any, dict[tuple[Any, ...], dict[str, Any]]]] = {
@@ -2185,28 +2184,20 @@ class SilverDatabase:
             self._remember_in_run(table_name, recorded)
         return len(recorded)
 
-    def _required_columns(self, table_name: str) -> tuple[str, ...]:
-        """NOT NULL columns, read from the live DDL so the check can never
-        drift from `_DDL`. Defaulted ones count too -- DuckDB rejected an
-        explicit NULL there as well, and `defaults`/`stamp` are what supply
-        them now. Fails closed on an empty result
-        (a misspelled table, or its DuckDB DDL dropped later in this map):
-        every landing-only table has at least cik/accession_number NOT NULL,
-        so "nothing required" can only mean the lookup itself is broken."""
-        if table_name not in self._required_columns_cache:
-            columns = tuple(
-                r[0]
-                for r in self._conn.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_schema = 'main' AND table_name = ? "
-                    "AND is_nullable = 'NO' ORDER BY ordinal_position",
-                    [table_name],
-                ).fetchall()
-            )
-            if not columns:
-                raise ValueError(f"{table_name}: no NOT NULL columns found in the DuckDB DDL")
-            self._required_columns_cache[table_name] = columns
-        return self._required_columns_cache[table_name]
+    @staticmethod
+    def _required_columns(table_name: str) -> tuple[str, ...]:
+        """NOT NULL columns from the silver schema snapshot
+        (edgar_warehouse/silver_schema.py, silver-merge-engine-migration
+        Ticket 13; generated from the live DDL while DuckDB exists). Defaulted
+        ones count too -- DuckDB rejected an explicit NULL there as well, and
+        `defaults`/`stamp` are what supply them now. Fails closed on a table
+        the snapshot does not know: every landing-only table has at least
+        cik/accession_number NOT NULL, so a misspelled or unsnapshotted table
+        must not pass as "nothing required"."""
+        try:
+            return silver_schema.REQUIRED[table_name]
+        except KeyError:
+            raise ValueError(f"{table_name}: not in the silver schema snapshot") from None
 
     def _remember_in_run(self, table_name: str, rows: list[dict[str, Any]]) -> None:
         """Index recorded rows for this run's own reads. A key that recurs keeps
@@ -2225,12 +2216,11 @@ class SilverDatabase:
             group[rest_key] = merged
 
     def _in_run_lookup(self, table_name: str, first_key: Any) -> list[dict[str, Any]]:
-        """Rows this run recorded under `first_key`, as copies carrying every DDL
-        column in order (None where the write had none): the row shape
-        `SELECT *` returned before the table went landing-only."""
-        columns = self._lookup_columns_cache.get(table_name)
-        if columns is None:
-            columns = self._lookup_columns_cache[table_name] = tuple(self._table_columns(table_name))
+        """Rows this run recorded under `first_key`, as copies carrying every
+        column of the schema snapshot in order (None where the write had
+        none): the row shape `SELECT *` returned before the table went
+        landing-only."""
+        columns = silver_schema.COLUMNS[table_name]
         return [
             {column: row.get(column) for column in columns}
             for row in self._in_run_rows[table_name].get(first_key, {}).values()
