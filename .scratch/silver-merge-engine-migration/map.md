@@ -78,6 +78,8 @@ except where a table's specifics genuinely need a fresh design pass.
 
 - [Apply DuckDB file lifecycle disposition](../duckdb-retirement-cutover/issues/21-apply-duckdb-file-lifecycle-disposition.md) (duckdb-retirement-cutover Ticket 21, blocked Ticket 09) — resolved 2026-09-14 with operator go-ahead. Two 7-day `expiration` lifecycle rules on the exact `silver.duckdb` and `shards/` keys, applied to prod via Terraform (plan: 1 change, 0 destroy; no drift after). The objects are already older than 7 days, so S3 delete-markers them within about a day; each stays restorable as a noncurrent version for 7 days after that. Ticket 09 is now the frontier (Ticket 12's PR #633 merged).
 
+- [Remove `duckdb` and delete the DuckDB engine](issues/09-remove-duckdb-dependency.md) — **split 2026-09-14**, not resolved: too big for one session (35 production importers, 60 test files, 34 live methods). Now Tickets 13–17, expand–contract: schema snapshot (13, frontier) → store-free write path (14) → delete dead readers and tools (15) → two operator decisions on `compute-windows`' reference snapshot and the prod no-op `parse-ownership-bronze` (16, frontier) → engine deletion, `duckdb` out of `pyproject`, deps-image rebuild (17). Ticket 09 closes with 17.
+
 ## Not yet specified
 
 - "Equivalent semantics" per table resolved in practice by Tickets 02/03, not as a separate
