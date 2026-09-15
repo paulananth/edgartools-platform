@@ -284,7 +284,6 @@ def test_bootstrap_chunk_always_uses_monolith_hydrate_and_publish() -> None:
     context.environment_name = "test"
 
     mock_db = MagicMock()
-    mock_db.get_table_counts.return_value = {}
     mock_bookkeeping = MagicMock()
     mock_bookkeeping.get_table_counts.return_value = {}
 

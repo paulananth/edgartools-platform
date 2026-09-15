@@ -29,7 +29,6 @@ def test_bronze_capture_records_pipeline_run(tmp_path) -> None:
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
     raw_path = context.bronze_root.write_bytes("raw/test.json", b'{"ok": true}')
@@ -90,7 +89,6 @@ def test_bronze_capture_commits_bookkeeping_on_failure(tmp_path) -> None:
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
 
@@ -144,7 +142,6 @@ def test_bronze_capture_never_commits_success_before_silver_publish_succeeds(
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
     raw_writes = [
@@ -253,7 +250,6 @@ def test_bronze_capture_rolls_back_a_checkpoint_write_on_publish_boundary_failur
         runtime_mode="bronze_capture",
     )
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     raw_writes = [
         {
             "layer": "bronze_raw",
@@ -342,9 +338,10 @@ def test_bronze_capture_writes_consolidated_run_manifest(tmp_path) -> None:
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {"sec_company": 1}
     fake_bookkeeping = MagicMock()
-    fake_bookkeeping.get_table_counts.return_value = {}
+    # silver-merge-engine-migration Ticket 14: the run manifest's table
+    # counts come from bookkeeping only; the local store no longer counts.
+    fake_bookkeeping.get_table_counts.return_value = {"sec_company_sync_state": 1}
     raw_writes = [
         {
             "layer": "bronze_raw",
@@ -384,7 +381,7 @@ def test_bronze_capture_writes_consolidated_run_manifest(tmp_path) -> None:
     assert payload["run_id"] == "run-1"
     assert payload["created_at"].endswith("Z")
     assert payload["row_counts"]["rows_inserted"] == 1
-    assert payload["row_counts"]["silver_table_counts"] == {"sec_company": 1}
+    assert payload["row_counts"]["silver_table_counts"] == {"sec_company_sync_state": 1}
 
     manifests = {entry["layer"]: entry for entry in payload["manifests"]}
     assert {"bronze", "staging", "artifacts"} <= set(manifests)

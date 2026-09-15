@@ -35,7 +35,6 @@ def test_landing_export_is_a_noop_when_context_has_no_landing_root(tmp_path) -> 
 
     context = _context(tmp_path)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
 
@@ -82,7 +81,6 @@ def test_landing_export_flushes_rows_written_during_the_run(tmp_path) -> None:
     landing_root = StorageLocation(str(tmp_path / "silver-landing"))
     context = _context(tmp_path, silver_landing_export_root=landing_root)
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {"sec_company": 1}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
 
@@ -143,7 +141,6 @@ def test_landing_export_not_flushed_on_pipeline_failure(tmp_path) -> None:
 
     context = _context(tmp_path, silver_landing_export_root=StorageLocation(str(tmp_path / "silver-landing")))
     fake_db = MagicMock()
-    fake_db.get_table_counts.return_value = {}
     fake_bookkeeping = MagicMock()
     fake_bookkeeping.get_table_counts.return_value = {}
 

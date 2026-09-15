@@ -5,9 +5,9 @@ exactly the rows a command parses and hands to `SilverDatabase`'s
 merge_*/upsert_* methods this run -- not a full re-read of the local
 silver.duckdb (which would re-export rows that were already exported by an
 earlier run, defeating "append-only" the moment two runs overlap in
-content). `SilverDatabase` is the single chokepoint every one of those
+content). `SilverLandingStore` is the single chokepoint every one of those
 methods lives on. Each writer records into this buffer through
-`SilverDatabase._record_landing_passthrough`, which adds the write-time
+`SilverLandingStore._record_landing_passthrough`, which adds the write-time
 columns the landing schema carries (silver-merge-engine-migration Tickets
 02-06); the `track_landing_rows`/`track_landing_row` decorators that
 recorded the caller's raw rows were deleted with Ticket 06e, once no writer
