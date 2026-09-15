@@ -110,20 +110,19 @@ def _emit(event: str, **kwargs: Any) -> None:
     print(json.dumps(doc, sort_keys=True), file=sys.stderr, flush=True)
 
 
-def _get_processed_accessions(db: Any, *, mode: str, accession_numbers: list[str]) -> set[str]:
+def _get_processed_accessions(source: Any, *, mode: str, accession_numbers: list[str]) -> set[str]:
     """Bulk-prefetch which of ``accession_numbers`` are already marked processed
     for ``mode`` in sec_fundamentals_processed_accession (Ticket 02,
     fundamentals-daily-integration map). One query for the whole batch, not
-    one per accession. This table is fundamentals' own write-side
-    bookkeeping (written by db.mark_fundamentals_accession_processed), so
-    it's read via ``db``, not ``source`` -- unlike filing/attachment/raw-
-    object metadata, which is Branch A domain content and always comes from
-    ``source`` (see BranchBSourceReaderTests in test_fundamentals_modules.py).
+    one per accession. Callers pass ``source`` (the Snowflake silver reader,
+    duckdb-retirement-cutover Ticket 17): db.mark_fundamentals_accession_processed
+    writes the marker to the landing zone only (silver-merge-engine-migration
+    Ticket 12), so earlier runs' markers exist only in Snowflake silver.
     """
     if not accession_numbers:
         return set()
     placeholders = ", ".join("?" * len(accession_numbers))
-    rows = db.fetch(
+    rows = source.fetch(
         f"""
         SELECT accession_number
         FROM sec_fundamentals_processed_accession

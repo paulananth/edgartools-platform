@@ -1225,26 +1225,17 @@ class SilverDatabase:
         real rows having landed, and this method has no way to enforce that
         ordering itself.
 
-        Recorded to the landing export directly -- this is the table's only
-        writer, so building the row here is no extra cost.
+        Landing-only (silver-merge-engine-migration Ticket 12): the readers
+        query Snowflake silver, whose dbt model keeps one row per
+        (mode, accession_number) by landing `parse_sequence` -- the row from
+        the latest load, as the old ON CONFLICT update kept the latest write.
         """
-        row = self._conn.execute(
-            """
-            INSERT INTO sec_fundamentals_processed_accession
-                (mode, accession_number, processed_at)
-            VALUES (?, ?, now())
-            ON CONFLICT (mode, accession_number) DO UPDATE SET
-                processed_at = excluded.processed_at
-            RETURNING mode, accession_number, processed_at
-            """,
-            [mode, accession_number],
-        ).fetchone()
-        landing_export = getattr(self, "landing_export", None)
-        if landing_export is not None and row is not None:
-            landing_export.record(
-                "sec_fundamentals_processed_accession",
-                [{"mode": row[0], "accession_number": row[1], "processed_at": row[2]}],
-            )
+        self._record_landing_passthrough(
+            "sec_fundamentals_processed_accession",
+            [{"mode": mode, "accession_number": accession_number}],
+            defaults={},
+            stamp={"processed_at": datetime.now(UTC)},
+        )
 
     def mark_entity_facts_refreshed(self, cik: int) -> None:
         """Record that entity-facts successfully refreshed this CIK just now.
@@ -1254,26 +1245,15 @@ class SilverDatabase:
         written and returned, same ordering contract as
         mark_fundamentals_accession_processed above.
 
-        Recorded to the landing export directly, same reasoning as
-        mark_fundamentals_accession_processed above.
+        Landing-only, same as mark_fundamentals_accession_processed above;
+        the dbt model keeps one row per cik.
         """
-        row = self._conn.execute(
-            """
-            INSERT INTO sec_entity_facts_refresh_watermark
-                (cik, entity_facts_refreshed_at)
-            VALUES (?, now())
-            ON CONFLICT (cik) DO UPDATE SET
-                entity_facts_refreshed_at = excluded.entity_facts_refreshed_at
-            RETURNING cik, entity_facts_refreshed_at
-            """,
-            [int(cik)],
-        ).fetchone()
-        landing_export = getattr(self, "landing_export", None)
-        if landing_export is not None and row is not None:
-            landing_export.record(
-                "sec_entity_facts_refresh_watermark",
-                [{"cik": row[0], "entity_facts_refreshed_at": row[1]}],
-            )
+        self._record_landing_passthrough(
+            "sec_entity_facts_refresh_watermark",
+            [{"cik": int(cik)}],
+            defaults={},
+            stamp={"entity_facts_refreshed_at": datetime.now(UTC)},
+        )
 
     def _widen_adv_fund_index_to_bigint(self) -> None:
         """``CREATE TABLE IF NOT EXISTS`` never widens an existing store's column type.
@@ -2175,8 +2155,10 @@ class SilverDatabase:
         `ingested_at`; company submission, filing, attachment, ownership, ADV
         and relationship-source evidence tables and the current filing feed:
         `last_sync_run_id`, plus `last_synced_at` where the table has it
-        (company tickers too, Ticket 06e); derived, raw objects and filing
-        text: nothing, their landing rows are recorded as given). A `values_fn` coercion that replaced a present value --
+        (company tickers too, Ticket 06e); the two fundamentals markers:
+        `processed_at` / `entity_facts_refreshed_at` (Ticket 12); derived,
+        raw objects and filing text: nothing, their landing rows are recorded
+        as given). A `values_fn` coercion that replaced a present value --
         `bool(...)`, `or ""` -- is applied by the caller before this call,
         since `defaults` only fills absent keys.
 
