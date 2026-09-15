@@ -2,6 +2,8 @@
 
 **Type:** task — the destination.
 
+**Status:** split 2026-09-14 into Tickets 13–17 (see the note at the end); resolves when Ticket 17 lands.
+
 ## Question
 
 With every writer landing-only and every reader deleted, `SilverDatabase` is a DDL-and-migrations
@@ -52,3 +54,22 @@ PR #633 merged). Ticket 12 replaced the earlier blocker, "the bootstrap-fundamen
 marker move": DuckDB removal needs only the landing-only switch, not that map's per-CIK resume
 ledger. **Frontier.** Also delete the two `expire-retired-silver-*` lifecycle
 rules Ticket 21 added, once the objects are gone.
+
+## Split (2026-09-14)
+
+Claimed for implementation and found too big for one session: 35 production modules import
+`SilverDatabase`, 60 test files do, and 34 of its methods are still called. Inventory taken
+(callers per method, remaining local `fetch` sites, schema-snapshot feasibility) and the work
+split expand–contract into five tickets, each one session:
+
+- [Ticket 13](13-duckdb-free-silver-schema-snapshot.md) — generated column/NOT NULL snapshot
+  replaces DuckDB `information_schema` reads (frontier).
+- [Ticket 14](14-move-write-path-off-silver-database.md) — write path and in-run lookup into a
+  store-free module; `SilverDatabase` becomes an alias.
+- [Ticket 15](15-delete-dead-duckdb-readers-and-tools.md) — delete the dead readers and tools;
+  `MDM_SILVER_DUCKDB` out of the deploy script.
+- [Ticket 16](16-retire-remaining-local-store-couplings.md) — two operator decisions: the
+  `compute-windows` reference snapshot upload, and `parse-ownership-bronze` (found today: a prod
+  no-op, its filings query reads the never-hydrated local store) (frontier).
+- [Ticket 17](17-drop-duckdb-dependency-and-rebuild-images.md) — delete the engine, drop
+  `duckdb`, rebuild the deps images, deploy. Closes this ticket.
