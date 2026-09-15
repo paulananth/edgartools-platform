@@ -185,6 +185,43 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
       noncurrent_days = 7
     }
   }
+
+  # DuckDB Retirement Cutover Ticket 21 (operator go-ahead 2026-09-14): the
+  # canonical silver.duckdb and the four shard files are retired. No command
+  # has published to these keys since cutover Ticket 10 (2026-09-12; last
+  # writes 2026-09-06 and 2026-08-20), every reader is on Snowflake silver,
+  # and the last tool that hydrated them (table-reconcile) goes with the
+  # DuckDB engine. These two rules expire the final *current* version after
+  # a bounded window; the noncurrent rule above then removes the bytes 7
+  # days later. Scoped to the exact keys, not warehouse/silver/, so the
+  # bootstrap-batch run manifests under warehouse/silver/sec/runs/ are not
+  # touched, and the noncurrent-only rule above keeps its no-expiration
+  # contract. Delete both rules with the engine once the objects are gone.
+  rule {
+    id     = "expire-retired-silver-canonical"
+    status = "Enabled"
+
+    filter {
+      prefix = "warehouse/silver/sec/silver.duckdb"
+    }
+
+    expiration {
+      days = 7
+    }
+  }
+
+  rule {
+    id     = "expire-retired-silver-shards"
+    status = "Enabled"
+
+    filter {
+      prefix = "warehouse/silver/sec/shards/"
+    }
+
+    expiration {
+      days = 7
+    }
+  }
 }
 
 resource "aws_kms_key" "snowflake_export" {

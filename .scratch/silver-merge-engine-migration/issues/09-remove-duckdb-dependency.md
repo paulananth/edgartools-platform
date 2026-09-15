@@ -44,8 +44,11 @@ Snowflake — it is the tool duckdb-retirement-cutover Ticket 19 needs, so it le
 **Blocked by:** [Ticket 07](07-delete-confirmed-dead-duckdb-readers.md),
 [Ticket 08](08-delete-sharded-reader-and-parity-tooling.md), duckdb-retirement-cutover
 [Ticket 21](../../duckdb-retirement-cutover/issues/21-apply-duckdb-file-lifecycle-disposition.md)
-(the old canonical S3 objects must be dispositioned before the tools that read them go), and
+(the old canonical S3 objects must be dispositioned before the tools that read them go —
+**resolved 2026-09-14**: 7-day expiration rules applied to prod), and
 [Ticket 12](12-fundamentals-markers-landing-only.md) (`mark_entity_facts_refreshed`/
-`mark_fundamentals_accession_processed` still write local DuckDB). Ticket 12 replaced the earlier
-blocker, "the bootstrap-fundamentals-crash-resume map's marker move": DuckDB removal needs only
-the landing-only switch, not that map's per-CIK resume ledger.
+`mark_fundamentals_accession_processed` still write local DuckDB — resolved in code 2026-09-14,
+PR #633 merged). Ticket 12 replaced the earlier blocker, "the bootstrap-fundamentals-crash-resume map's
+marker move": DuckDB removal needs only the landing-only switch, not that map's per-CIK resume
+ledger. **Frontier.** Also delete the two `expire-retired-silver-*` lifecycle
+rules Ticket 21 added, once the objects are gone.
