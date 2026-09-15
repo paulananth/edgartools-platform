@@ -201,9 +201,9 @@ def test_no_landing_export_is_a_noop(tmp_path):
 
 
 def test_required_columns_fail_closed_on_an_unknown_table(db):
-    """The NOT NULL set comes from the DuckDB DDL this map is retiring; an
-    empty result must never silently turn the guard into a no-op."""
-    with pytest.raises(ValueError, match="no NOT NULL columns"):
+    """The NOT NULL set comes from the silver schema snapshot (Ticket 13); a
+    table it does not know must never silently turn the guard into a no-op."""
+    with pytest.raises(ValueError, match="not in the silver schema snapshot"):
         db._record_landing_passthrough("sec_no_such_table", [{"cik": 1}], defaults={}, stamp={})
 
     assert db.landing_export.total_row_count() == 0

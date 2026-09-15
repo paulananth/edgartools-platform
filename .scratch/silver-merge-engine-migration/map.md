@@ -80,6 +80,8 @@ except where a table's specifics genuinely need a fresh design pass.
 
 - [Remove `duckdb` and delete the DuckDB engine](issues/09-remove-duckdb-dependency.md) — **split 2026-09-14**, not resolved: too big for one session (35 production importers, 60 test files, 34 live methods). Now Tickets 13–17, expand–contract: schema snapshot (13, frontier) → store-free write path (14) → delete dead readers and tools (15) → two operator decisions on `compute-windows`' reference snapshot and the prod no-op `parse-ownership-bronze` (16, frontier) → engine deletion, `duckdb` out of `pyproject`, deps-image rebuild (17). Ticket 09 closes with 17.
 
+- [Commit a DuckDB-free silver schema snapshot](issues/13-duckdb-free-silver-schema-snapshot.md) — resolved in code 2026-09-14. `edgar_warehouse/silver_schema.py` (generated from the live DDL by `scripts/dev/regenerate_silver_schema.py`) now supplies the passthrough's NOT NULL set and the in-run lookup's column order; parity tests against the live DDL (until Ticket 17) and against `11_silver_landing_schema.sql` (the survivor, columns and NOT NULL). One real drift recorded: `retirement_state_observed_at` exists only in DuckDB. Ticket 14 is next.
+
 ## Not yet specified
 
 - "Equivalent semantics" per table resolved in practice by Tickets 02/03, not as a separate

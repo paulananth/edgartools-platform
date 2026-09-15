@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from edgar_warehouse.silver_protection import PROTECTED_TABLE_REGISTRY
+from edgar_warehouse import silver_schema
 from edgar_warehouse.silver_store import SilverDatabase
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
 def _landing_scoped_tables() -> set[str]:
-    """Mirrors infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql's
-    scope: PROTECTED_TABLE_REGISTRY minus pipeline_run_lease (operational),
-    plus sec_guidance_fact_reject (real domain data the registry doesn't
-    cover for an unrelated reason)."""
-    return (set(PROTECTED_TABLE_REGISTRY.keys()) | {"sec_guidance_fact_reject"}) - {"pipeline_run_lease"}
+    """The silver schema snapshot's tables (silver-merge-engine-migration
+    Ticket 13), which test_silver_schema_snapshot.py holds equal to the
+    CREATE TABLEs in infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql.
+    Previously derived from PROTECTED_TABLE_REGISTRY, which left out the two
+    fundamentals markers; both have recording writers (Ticket 12)."""
+    return set(silver_schema.COLUMNS)
 
 
 def test_landing_export_defaults_to_none_and_is_a_complete_noop(tmp_path):
@@ -350,6 +351,8 @@ def test_every_landing_scoped_table_has_a_wired_writer(tmp_path):
             ],
             "r",
         )
+        db.mark_fundamentals_accession_processed(mode="thirteenf", accession_number="0001-25-000001")
+        db.mark_entity_facts_refreshed(1)
     finally:
         db.close()
 
