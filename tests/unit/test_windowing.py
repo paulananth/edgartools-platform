@@ -62,15 +62,11 @@ def test_compute_windows_output():
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._sync_reference_data",
             return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
         ),
     ):
         from edgar_warehouse.application.warehouse_orchestrator import _execute_warehouse_bronze_capture
-        import argparse
         mock_context.runtime_mode = "bronze_capture"
 
         args_dict = {
@@ -130,7 +126,6 @@ def test_compute_windows_output():
 
 def test_daily_incremental_windowing():
     """daily_incremental applies windowing after _filter_ciks_to_universe."""
-    from unittest.mock import patch
     from edgar_warehouse.application.warehouse_orchestrator import _filter_ciks_to_universe
 
     # Simulate a post-filter impacted list of 10 CIKs and a windowed slice of 3 starting at offset 2
@@ -312,9 +307,6 @@ def test_write_run_summary_output():
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
         ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
-        ),
     ):
         from edgar_warehouse.application.warehouse_orchestrator import _capture_bronze_raw
         fake_db = MagicMock()
@@ -449,9 +441,6 @@ def test_compute_windows_total_cik_limit_bounds_universe():
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
         ),
         patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
-        ),
-        patch(
             "edgar_warehouse.application.warehouse_orchestrator._sync_reference_data",
             return_value={"raw_writes": [], "rows_written": 0, "rows_skipped": 0},
         ),
@@ -520,9 +509,6 @@ def test_compute_windows_orchestrator_rejects_non_positive_total_cik_limit():
         ),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
-        ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage",
         ),
     ):
         from edgar_warehouse.application.warehouse_orchestrator import _capture_bronze_raw
@@ -615,7 +601,6 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
     from edgar_warehouse.application import warehouse_orchestrator
     from edgar_warehouse.domain.models.command_context import WarehouseCommandContext
     from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_store import SilverDatabase
 
     monkeypatch.setenv("WAREHOUSE_IMAGE_REF", "sha256:test-image")
 
@@ -629,14 +614,6 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
         runtime_mode="bronze_capture",
         silver_landing_export_root=StorageLocation(str(tmp_path / "landing")),
     )
-
-    # open_silver_database() (called inside _execute_warehouse_bronze_capture)
-    # appends "silver/sec/silver.duckdb" to the silver_root -- this path is
-    # still seeded for the same schema-provisioning reason as before, though
-    # tracking state itself now lives in the bookkeeping store (DuckDB
-    # Retirement Cutover Ticket 14), stubbed via fake_bookkeeping below.
-    db = SilverDatabase(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    db.close()
 
     from unittest.mock import MagicMock
 
@@ -655,32 +632,18 @@ def test_compute_windows_publishes_reference_data_directly_to_canonical(
             return exchange_payload
         raise AssertionError(f"unexpected reference URL: {url}")
 
-    # _publish_silver_database_if_remote no-ops (returns None) for a
-    # non-remote StorageLocation -- this test's tmp_path storage_root -- so
-    # it can't itself prove the normal (not special-cased) publish path ran.
-    # Spy on it directly: this is the actual code change under test (removing
-    # "compute-windows" from warehouse_orchestrator.py:699's special-case
-    # tuple), independent of what a remote (S3) canonical would do with it.
+    # compute-windows must take the normal path (not the identity-refresh
+    # special case): no run manifest, and its reference sync leaves through
+    # the landing export like every other command's rows.
     with (
         patch.object(warehouse_orchestrator, "_download_sec_bytes", side_effect=fake_download),
         patch.object(warehouse_orchestrator, "_bookkeeping_store", return_value=fake_bookkeeping),
-        patch.object(
-            warehouse_orchestrator,
-            "_publish_silver_database_with_retry",
-            wraps=warehouse_orchestrator._publish_silver_database_with_retry,
-        ) as publish_spy,
     ):
         warehouse_orchestrator._execute_warehouse_bronze_capture(
             context=context,
             command_name="compute-windows",
             arguments={"window_size": 2, "run_id": "cw-direct-publish-run"},
         )
-
-    assert publish_spy.call_count == 1, (
-        "compute-windows must take the normal full-canonical publish path "
-        "now that ReduceIdentityRefresh no longer exists to merge its "
-        "reference sync -- the special no-publish case must not run for it"
-    )
 
     from edgar_warehouse.application.identity_refresh_publication import run_manifest_path
 

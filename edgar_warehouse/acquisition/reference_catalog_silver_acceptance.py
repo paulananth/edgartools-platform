@@ -19,11 +19,13 @@ unless the candidate is CAPTURED with a complete payload
 nothing -- same pattern as Tickets 21/22's analogous bullet.
 
 Known gap, left as it is by Ticket 06e: the earlier membership that
-retirement compares against is read from the local Silver database, which
-starts empty on every run and no writer fills any more, so no retirement is
-found. This driver is not wired into any state machine; the earlier list
-must come from Snowflake silver when the change-propagation map wires it
-(silver-merge-engine-migration map, "Not yet specified").
+retirement compares against has no source in production. It used to be read
+from the local Silver database, which started empty on every run; with that
+store gone (Ticket 17) the caller supplies it through ``prior_members``, and
+no caller does, so no retirement is found. This driver is not wired into any
+state machine; the earlier list must come from Snowflake silver when the
+change-propagation map wires it (silver-merge-engine-migration map, "Not yet
+specified").
 
 ``seed_company_sync_state_bulk`` (the legacy path's CIK-universe-seeding side
 effect, `` _sync_reference_data``) is deliberately NOT reproduced here: it is
@@ -38,7 +40,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -150,6 +152,7 @@ def _finalize_reference_catalog_candidate(
     *,
     source_name: str,
     landing_row_counter: Callable[[str, str], int] | None = None,
+    prior_members: Callable[[str], Iterable[tuple[int, str]]] | None = None,
 ) -> ProcessingDecision:
     status = ledger.source_change_status(decision_id)
     if status.fetch_state is not FetchWorkState.CAPTURED:
@@ -219,13 +222,8 @@ def _finalize_reference_catalog_candidate(
         for ordinal, row in enumerate(rows, start=1)
     ]
     cause_reference = status.cause_reference or decision_id
-    prior_pairs = {
-        (row["cik"], row["ticker"])
-        for row in silver.fetch(
-            "SELECT cik, ticker FROM sec_company_ticker WHERE source_name = ?",
-            [source_name],
-        )
-    }
+    # See the module docstring's known gap: nothing supplies this in production.
+    prior_pairs = set(prior_members(source_name)) if prior_members is not None else set()
     new_pairs = {(row["cik"], row["ticker"]) for row in rows}
     dropped_pairs = prior_pairs - new_pairs
 
@@ -352,6 +350,7 @@ def drive_reference_catalog_silver_acceptance(
     *,
     required_producers: tuple[str, ...] = (REFERENCE_CATALOG_PRODUCER_NAME,),
     landing_row_counter: Callable[[str, str], int] | None = None,
+    prior_members: Callable[[str], Iterable[tuple[int, str]]] | None = None,
 ) -> ReferenceCatalogSilverAcceptanceResult:
     """Carry every CAPTURED candidate in a reference-catalog drive result to Silver.
 
@@ -386,6 +385,7 @@ def drive_reference_catalog_silver_acceptance(
                 candidate_outcome.decision_id,
                 source_name=source_name,
                 landing_row_counter=landing_row_counter,
+                prior_members=prior_members,
             )
             outcomes.append(
                 ReferenceCatalogOutcome(

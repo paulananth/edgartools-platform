@@ -3120,7 +3120,7 @@ write_load_history_definition() {
   local wh_task_small_arn="$2"    # warehouse small  (compute-windows, write-run-summary)
   local wh_task_medium_arn="$3"   # warehouse medium (seed-universe, per-window bootstrap-next/-fundamentals)
   local mdm_task_medium_arn="$4"  # mdm medium       (mdm seed-universe)
-  local wh_task_large_arn="$5"    # warehouse large  (gold-refresh — full-universe DuckDB is multi-GB)
+  local wh_task_large_arn="$5"    # warehouse large  (gold-refresh, Stage 1B fundamentals)
   local mdm_state_machine_arn="$6" # the single MDM machine (state-machine-consolidation
                                     # wayfinder map, ticket 07) -- Mastering..Reconcile,
                                     # invoked as a nested execution instead of inlined here

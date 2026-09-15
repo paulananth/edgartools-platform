@@ -47,7 +47,7 @@ def _fake_index_result(impacted_ciks: list[int]) -> dict:
 def test_reference_sync_returns_canonical_ticker_snapshot_identity(tmp_path) -> None:
     """Scheduled identity evidence can bind eligibility to the exact captured
     company_tickers object instead of an untracked refetch or mutable count."""
-    from edgar_warehouse.silver_store import SilverDatabase
+    from edgar_warehouse.silver_landing_store import SilverLandingStore
 
     company_tickers_payload = (
         b'{"0":{"cik_str":200,"ticker":"TICK","title":"Ticker Co"}}'
@@ -78,7 +78,7 @@ def test_reference_sync_returns_canonical_ticker_snapshot_identity(tmp_path) -> 
     BookkeepingBase.metadata.create_all(bookkeeping_engine)
     bookkeeping = BookkeepingStore(SqlaSession(bookkeeping_engine))
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverLandingStore()
     try:
         with patch.object(
             warehouse_orchestrator,
@@ -401,20 +401,14 @@ def test_acquire_identity_refresh_lease_command_writes_success_to_s3(tmp_path) -
     }
 
 
-def test_acquire_identity_refresh_lease_end_to_end_never_touches_main_silver_database(tmp_path) -> None:
-    """Same root cause and fix as the sec_fetch_active lease (task #35's
-    OOM, see tests/unit/test_sec_fetch_lease.py): acquire/release-identity-
-    refresh-lease must also be repointed at the isolated leases subpath by
-    _execute_warehouse_bronze_capture, not just acquire/release-sec-fetch-
-    lease -- both pairs share the exact same dispatch-before-hydrate bug."""
+def test_acquire_identity_refresh_lease_end_to_end(tmp_path) -> None:
+    """acquire/release-identity-refresh-lease through the full
+    _execute_warehouse_bronze_capture path: the lease lives in the
+    bookkeeping store and the result lands as lease_result.json under the
+    bronze root (the Step Functions Choice state reads it there)."""
     from edgar_warehouse.infrastructure.dataset_path_catalog import default_path_resolver
 
     context = _context(tmp_path)
-    main_db_path = Path(context.silver_root.join("silver", "sec", "silver.duckdb"))
-    lease_db_path = Path(f"{context.silver_root.root}/leases").joinpath("silver", "sec", "silver.duckdb")
-
-    assert "acquire-identity-refresh-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
-    assert "release-identity-refresh-lease" in warehouse_orchestrator.LEASE_ONLY_COMMANDS
 
     # DuckDB Retirement Cutover Ticket 14: _execute_warehouse_bronze_capture
     # constructs its own bookkeeping store via _bookkeeping_store() (needs
@@ -429,8 +423,6 @@ def test_acquire_identity_refresh_lease_end_to_end_never_touches_main_silver_dat
             arguments={"mode": "daily", "run_id": "e2e-run"},
         )
         assert payload["status"] == "ok"
-        assert not main_db_path.exists()
-        assert lease_db_path.exists()
 
         lease_result_rel = default_path_resolver().identity_refresh_lease_path("e2e-run")
         result = json.loads(Path(context.bronze_root.join(lease_result_rel)).read_text())
@@ -441,7 +433,7 @@ def test_acquire_identity_refresh_lease_end_to_end_never_touches_main_silver_dat
             command_name="release-identity-refresh-lease",
             arguments={"run_id": "e2e-run"},
         )
-    assert not main_db_path.exists()
+    assert bookkeeping.get_pipeline_run_lease(warehouse_orchestrator.IDENTITY_REFRESH_LEASE_NAME)["status"] == "idle"
 
 
 def test_acquire_identity_refresh_lease_resolves_overdue_backstop_over_requested_daily_mode(tmp_path) -> None:

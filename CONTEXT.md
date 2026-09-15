@@ -25,7 +25,7 @@ An immutable, random-token-scoped warehouse object written before ETag-guarded p
 _Avoid_: Canonical silver, bronze archive, release evidence
 
 **Canonical Silver**:
-The current objects at `warehouse/silver/sec/silver.duckdb` and `warehouse/silver/sec/shards/shard-{0-3}.duckdb` — the live typed Runtime System of Engagement. Current versions of these keys are not reclaim candidates.
+Snowflake `EDGARTOOLS_SILVER`, the dbt collapse of the landing zone — the live typed Runtime System of Engagement. The S3 objects that used to hold it (`warehouse/silver/sec/silver.duckdb`, the shards) are retired and expiring under the lifecycle rules duckdb-retirement-cutover Ticket 21 applied; nothing writes or reads them.
 _Avoid_: Staged Warehouse Object, identity-refresh run snapshots, historical gold `run_id=` copies
 
 **Joined Live Key**:
@@ -46,7 +46,7 @@ _Avoid_: Obsolete CIK, obsolete filing, Bronze deletion candidate
 
 **Runtime System of Engagement**:
 Silver warehouse state (typed tables after parse) is the authoritative published business state against which processors compute Lifecycle Diffs; the Change Ledger decides acquisition and processing eligibility and records completion.
-_Avoid_: Silver as processing ledger, Bronze as business state, edgartools local disk cache as shared state, agent queries against DuckDB silver
+_Avoid_: Silver as processing ledger, Bronze as business state, edgartools local disk cache as shared state, agent queries against silver
 
 **Agent System of Engagement**:
 Snowflake Decision Contract objects only; agents never read silver or bronze directly. A Mongo Decision Projection is not a second SoE.

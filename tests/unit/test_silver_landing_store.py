@@ -1,7 +1,6 @@
 """SilverLandingStore (silver-merge-engine-migration Ticket 14) is the write
 path with no database behind it: writers record to the landing export, and
 same-run reads of the in-run lookup tables (ADR 0011) come from those rows.
-SilverDatabase subclasses it only to keep DuckDB alive until Ticket 17.
 """
 
 from __future__ import annotations
@@ -10,7 +9,6 @@ import pytest
 
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_landing_store import SilverLandingStore
-from edgar_warehouse.silver_store import SilverDatabase
 
 
 @pytest.fixture()
@@ -49,12 +47,3 @@ def test_no_landing_export_records_nothing():
     assert store.merge_company([{"cik": 1, "entity_name": "x"}], "r") == 1
     assert store.landing_export is None
 
-
-def test_silver_database_is_a_silver_landing_store(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
-    try:
-        assert isinstance(db, SilverLandingStore)
-        db.merge_company([{"cik": 1, "entity_name": "x"}], "r")
-        assert db.landing_export.row_count("sec_company") == 1
-    finally:
-        db.close()

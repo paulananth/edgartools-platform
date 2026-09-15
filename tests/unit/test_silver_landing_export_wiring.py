@@ -39,7 +39,6 @@ def test_landing_export_is_a_noop_when_context_has_no_landing_root(tmp_path) -> 
     fake_bookkeeping.get_table_counts.return_value = {}
 
     with (
-        patch("edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database", return_value=fake_db
         ) as open_db,
@@ -54,10 +53,6 @@ def test_landing_export_is_a_noop_when_context_has_no_landing_root(tmp_path) -> 
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
             return_value=([], {"rows_inserted": 0, "rows_skipped": 0, "sync_status": "succeeded"}),
-        ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
-            return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
         patch("edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables", return_value=iter(())),
         patch("edgar_warehouse.application.warehouse_orchestrator.write_landing_export") as write_landing,
@@ -86,7 +81,7 @@ def test_landing_export_flushes_rows_written_during_the_run(tmp_path) -> None:
 
     captured: dict[str, object] = {}
 
-    def _fake_open_silver_database(silver_root, *, landing_export=None):
+    def _fake_open_silver_database(*, landing_export=None):
         captured["buffer"] = landing_export
         # Models the real merge_company()->_record_landing_passthrough path a live
         # SilverDatabase would exercise -- this test stubs the DB itself, so
@@ -97,7 +92,6 @@ def test_landing_export_flushes_rows_written_during_the_run(tmp_path) -> None:
         return fake_db
 
     with (
-        patch("edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database",
             side_effect=_fake_open_silver_database,
@@ -113,10 +107,6 @@ def test_landing_export_flushes_rows_written_during_the_run(tmp_path) -> None:
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._capture_bronze_raw",
             return_value=([], {"rows_inserted": 1, "rows_skipped": 0, "sync_status": "succeeded"}),
-        ),
-        patch(
-            "edgar_warehouse.application.warehouse_orchestrator._publish_silver_database_with_retry",
-            return_value={"layer": "silver_database", "path": "silver.duckdb"},
         ),
         patch("edgar_warehouse.serving.source_dimensional_export.iter_source_export_tables", return_value=iter(())),
     ):
@@ -145,7 +135,6 @@ def test_landing_export_not_flushed_on_pipeline_failure(tmp_path) -> None:
     fake_bookkeeping.get_table_counts.return_value = {}
 
     with (
-        patch("edgar_warehouse.application.warehouse_orchestrator._hydrate_silver_database_from_storage"),
         patch(
             "edgar_warehouse.application.warehouse_orchestrator._open_silver_database", return_value=fake_db
         ),

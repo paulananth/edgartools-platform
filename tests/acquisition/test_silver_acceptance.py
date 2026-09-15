@@ -1,10 +1,9 @@
 """Ticket 19 bullet 5: assert durable external evidence, not concrete classes.
 
 Every test in this file exercises ``finalize_filing_artifact_candidate``
-against a real ``SilverDatabase`` (DuckDB) and reads the resulting
+against a real ``SilverLandingStore`` and reads the resulting
 ``sec_raw_object`` row back independently -- the assertions are on what
-landed in that durable store, never on which internal Facade/Strategy/
-handler object was invoked.
+landed, never on which internal Facade/Strategy/handler object was invoked.
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ from edgar_warehouse.acquisition.silver_acceptance import (
     bronze_reference_to_raw_evidence_hash,
     finalize_filing_artifact_candidate,
 )
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
 def _engine():
@@ -52,7 +51,7 @@ def _engine():
 def _harness(tmp_path: Path):
     engine = _engine()
     AcquisitionBase.metadata.create_all(engine)
-    silver = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    silver = SilverLandingStore()
     return (
         AcquisitionLedger(engine),
         SourceRevisionLedger(engine),
@@ -527,7 +526,7 @@ def test_drive_filing_artifact_silver_acceptance_records_per_candidate_error_wit
     # Seed a FAILED-and-blocking prior revision for this exact key, out of
     # band, before the real discovery drive ever sees a decision for it --
     # sealed and failed directly (not via finalize_filing_artifact_candidate,
-    # whose real SilverDatabase write would legitimately succeed here and
+    # whose real SilverLandingStore write would legitimately succeed here and
     # settle VERIFIED, not the FAILED state this test needs to seed).
     seed_decision_id = _captured_decision(
         ledger, candidate_id="seed", logical_source_key=logical_key,

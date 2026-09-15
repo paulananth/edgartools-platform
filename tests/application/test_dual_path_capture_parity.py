@@ -68,8 +68,7 @@ def test_dual_path_live_sec_apple(
         _build_warehouse_context,
         _load_daily_index_for_date,
     )
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
-    from edgar_warehouse.silver_support.session import open_silver_database
+    from edgar_warehouse.silver_landing_store import SilverLandingStore
 
     monkeypatch.setenv("EDGAR_IDENTITY", identity)
     monkeypatch.setenv("WAREHOUSE_ENVIRONMENT", "test")
@@ -83,7 +82,7 @@ def test_dual_path_live_sec_apple(
 
     business_date = os.environ.get("WAREHOUSE_LIVE_SEC_DATE", "2026-08-27")
     context = _build_warehouse_context("daily-incremental")
-    db = open_silver_database(StorageLocation(str(tmp_path / "silver")))
+    db = SilverLandingStore()
 
     # DuckDB Retirement Cutover Ticket 14: _load_daily_index_for_date now
     # reads/writes the bookkeeping store, not this SilverDatabase -- an

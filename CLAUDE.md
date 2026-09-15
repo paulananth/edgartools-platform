@@ -148,7 +148,7 @@ problem entirely.
 | Need | Location |
 |------|----------|
 | ETL runtime (form parsing, S3 writes) | `edgar_warehouse/application/warehouse_orchestrator.py` (`edgar_warehouse/runtime.py` is a pure re-export shim onto `edgar_warehouse/application/command_router.py`, which is real but thin: its own `run_command`/`run_seed_universe_command` route through `LEGACY_COMMAND_REGISTRY`/`execute_standard_command`, ultimately calling `warehouse_orchestrator._execute_warehouse` -- confirmed live 2026-09-02 while tracing `bootstrap`'s full call chain for its retirement, correcting this table's prior "both are compatibility shims re-exporting from here" claim) |
-| Silver-layer transformations | `edgar_warehouse/silver_store.py` (`edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase`, not a second implementation) |
+| Silver write path (landing-only writers, in-run lookup) | `edgar_warehouse/silver_landing_store.py` (`SilverLandingStore`; the local DuckDB engine, `silver_store.py`/`silver_protection.py`/the `silver.py` shim, was deleted by silver-merge-engine-migration Ticket 17, 2026-09-15 — there is no local silver store any more). Schema snapshot: `edgar_warehouse/silver_schema.py`, held equal to `infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql` by `tests/unit/test_silver_schema_snapshot.py` |
 | Source-layer dimensional export (feeds `EDGARTOOLS_SOURCE`, not `EDGARTOOLS_GOLD` — see single-path-per-layer map Ticket 01, which is why this module was renamed off its old "gold_models.py" name) | `edgar_warehouse/serving/source_dimensional_export.py` (its `edgar_warehouse/gold.py` compatibility shim was deleted in PR #550, 2026-09-06 — zero importers repo-wide; the module's own DuckDB-materialized builders were retired the same commit since every dbt gold model now `ref()`s dbt silver directly) |
 | Ownership / Form 3-4-5 parser | `edgar_warehouse/parsers/ownership.py` |
 | ADV parser (investment advisers) | `edgar_warehouse/parsers/adv.py` |
@@ -182,13 +182,12 @@ Snowflake EDGARTOOLS_SOURCE  <-- native S3 pull via bootstrap SQL
       |                           in here too -- see Quick Navigation above)
       v
 Snowflake EDGARTOOLS_SILVER  <-- landing zone + dbt-native collapse
-      |                          (silver-snowflake-migration map, in progress:
-      |                           real ingestion live in prod; DuckDB/
-      |                           silver_store.py is still canonical for most
-      |                           consumers until each one's cutover ticket
-      |                           lands -- do not assume this is fully cut
-      |                           over without checking that map's Decisions
-      |                           so far)
+      |                          (the only silver store: every writer records
+      |                           to the landing zone via
+      |                           edgar_warehouse/silver_landing_store.py and
+      |                           the dbt silver models collapse it; the local
+      |                           DuckDB engine was deleted 2026-09-15,
+      |                           silver-merge-engine-migration Ticket 17)
       |
       +-------------------------------------------------+
       |                                                  |
@@ -225,10 +224,10 @@ The DuckDB-vs-Snowflake parity commands (`mdm verify-silver-parity`,
 `mdm verify-resolver-input-parity`) and their DuckDB reader path were
 deleted by silver-merge-engine-migration Ticket 08; DuckDB's
 `ShardedSilverReader` and the one-time `backfill-silver-landing-historical`
-command were deleted by that map's Ticket 15 (2026-09-15). The broader silver-layer DuckDB retirement (the write path,
-bookkeeping tables, and final cleanup — duckdb-retirement-cutover Tickets
-06-14/16) is still in progress as of this writing; MDM's reader is simply
-the one piece of that migration that's already fully cut over. MDM
+command were deleted by that map's Ticket 15 (2026-09-15), and the DuckDB
+engine itself (`silver_store.py`, `silver_protection.py`, the `duckdb`
+dependency) by Ticket 17 the same day — there is no DuckDB anywhere in the
+production import graph or images now. MDM
 resolves entities independently of the gold/dbt path — the two branches
 above run in parallel, not in sequence. See "Graph storage" and "MDM
 database" notes further below for what each Snowflake-hosted piece
@@ -295,7 +294,7 @@ Canonical analysis and immutable evidence:
 |-------|----------|-------------|
 | **Bronze** | S3 (`s3://<bucket>/`) | Raw Parquet files written by `edgar-warehouse`. One file per filing/entity, partitioned by form type and date. Never mutated. |
 | **Source** | Snowflake `EDGARTOOLS_SOURCE` | External stage + tables auto-refreshed from S3 via Snowflake native S3 pull (bootstrap SQL), plus a Python-built dimensional export (`edgar_warehouse/serving/source_dimensional_export.py`) merged in via `LOAD_EXPORTS_FOR_RUN`. Read-only raw layer. |
-| **Silver** | `edgar_warehouse/silver_store.py` (local DuckDB, canonical today for most consumers) migrating to Snowflake `EDGARTOOLS_SILVER` (landing zone + dbt collapse, real ingestion already live) | Cleaned, typed, deduplicated records. Mid-migration as of this writing — see `.scratch/silver-snowflake-migration/map.md` for exactly which consumers have cut over vs. still read DuckDB; do not assume either store is authoritative without checking there first. |
+| **Silver** | Snowflake `EDGARTOOLS_SILVER` (landing zone `EDGARTOOLS_SILVER_LANDING` + dbt collapse). Writers: `edgar_warehouse/silver_landing_store.py`. | Cleaned, typed, deduplicated records. The local DuckDB store that used to be canonical is gone (silver-merge-engine-migration, finished with Ticket 17 on 2026-09-15). |
 | **Gold** | `EDGARTOOLS_GOLD` (23 dbt dynamic tables) | Business-ready tables, e.g. `company`, `ownership_holdings`, `ownership_activity`, `filing_detail`, `filing_activity`, `adviser_disclosures`, `adviser_offices`, `private_funds`, `ticker_reference`, `edgartools_gold_status`, plus 13 more added since this table was first written (`accounting_flags`, `adv_fund_count_reconciliation`, `consensus_estimates`, `earnings_calendar`, `earnings_releases`, `executive_records`, `financial_derived`, `financial_factors`, `financial_facts`, `guidance_facts`, `institutional_holdings`, `mdm_company`, `transcript_events`) — see `infra/snowflake/dbt/edgartools_gold/models/gold/` for the current, authoritative list rather than trusting this count to stay accurate. Refreshed on a Snowflake-managed schedule. |
 
 ## edgartools Dependency
@@ -2990,9 +2989,8 @@ These files exceed 30 KB. When modifying them, read section by section rather th
 
 | File | Size | Contents |
 |------|------|----------|
-| `edgar_warehouse/application/warehouse_orchestrator.py` | ~292 KB | Core ETL loop, form dispatch, S3 writes, bronze/silver publish paths. `edgar_warehouse/runtime.py` is a pure re-export shim; `edgar_warehouse/application/command_router.py` is a real (if thin) routing facade that ultimately delegates here (see Quick Navigation above for the exact chain) — this table previously pointed at both as pure shims with stale sizes copied from an earlier version of this file. |
-| `edgar_warehouse/silver_store.py` | ~190 KB | Record cleaning and transformation logic. `edgar_warehouse/silver.py` is a compatibility shim re-exporting `SilverDatabase` from here. |
-| `edgar_warehouse/serving/source_dimensional_export.py` | ~63 KB | Builds a source-layer dimensional export consumed by dbt — not the gold layer itself (see Quick Navigation above and `.scratch/single-path-per-layer/issues/01-enumerate-layer-transitions.md`; renamed off "gold_models.py" for exactly this reason). `edgar_warehouse/gold.py` is a compatibility shim re-exporting from here. |
+| `edgar_warehouse/application/warehouse_orchestrator.py` | ~290 KB | Core ETL loop, form dispatch, S3 writes, landing-export flush. `edgar_warehouse/runtime.py` is a pure re-export shim; `edgar_warehouse/application/command_router.py` is a real (if thin) routing facade that ultimately delegates here (see Quick Navigation above for the exact chain) — this table previously pointed at both as pure shims with stale sizes copied from an earlier version of this file. |
+| `edgar_warehouse/serving/source_dimensional_export.py` | ~63 KB | Builds a source-layer dimensional export consumed by dbt — not the gold layer itself (see Quick Navigation above and `.scratch/single-path-per-layer/issues/01-enumerate-layer-transitions.md`; renamed off "gold_models.py" for exactly this reason). |
 
 ## Setup
 

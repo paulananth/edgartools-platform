@@ -1,7 +1,7 @@
 """SQLAlchemy models for the 10 operational bookkeeping tables.
 
-Ported from the DuckDB DDL in edgar_warehouse.silver_store's `_DDL` string
-(DuckDB Retirement Cutover Ticket 02). Type mapping: DuckDB `TIMESTAMPTZ` ->
+Ported from the since-deleted DuckDB silver DDL (DuckDB Retirement Cutover
+Ticket 02). Type mapping: DuckDB `TIMESTAMPTZ` ->
 Postgres `TIMESTAMP WITH TIME ZONE` (SQLAlchemy `TIMESTAMP(timezone=True)`,
 matching edgar_warehouse.mdm.database's own convention); everything else
 (TEXT, BIGINT, INTEGER, SMALLINT, DATE, BOOLEAN) maps directly, no DuckDB-only

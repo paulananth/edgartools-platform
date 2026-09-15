@@ -1,10 +1,8 @@
 """merge_financial_facts / merge_financial_derived / merge_accounting_flags
 are landing-only (silver-merge-engine-migration Tickets 02/03).
 
-Their local DuckDB merge (QUALIFY ROW_NUMBER dedup + ON CONFLICT upsert)
-computed a result nothing read back once DuckDB Retirement Cutover Ticket 10
-made the local store ephemeral. Each method now records its rows to the
-landing export and nothing else; the dbt silver models collapse them.
+Each method records its rows to the landing export and nothing else; the
+dbt silver models collapse them on the old ON CONFLICT key.
 Replaces test_financial_fact_retirement.py's landing-row tests (its
 retirement tests went with retire_*_not_in_snapshot, whose only caller was
 the dormant company-facts acceptance driver).
@@ -16,8 +14,8 @@ import time
 
 import pytest
 
-from edgar_warehouse.silver_store import SilverDatabase
-from tests.support.silver_rows import CountingConnection, open_landing_db
+from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.silver_rows import open_landing_db
 
 
 def _fact_row(**overrides):
@@ -70,8 +68,8 @@ def _derived_row(**overrides):
 
 
 @pytest.fixture()
-def db(tmp_path):
-    database = open_landing_db(tmp_path)
+def db():
+    database = open_landing_db()
     try:
         yield database
     finally:
@@ -86,12 +84,11 @@ def db(tmp_path):
         ("merge_accounting_flags", "sec_accounting_flag", _flag_row()),
     ],
 )
-def test_rows_go_to_the_landing_export_and_never_local_duckdb(db, method, table, row):
+def test_rows_go_to_the_landing_export(db, method, table, row):
     count = getattr(db, method)([row], "run-1")
 
     assert count == 1
     assert db.landing_export.row_count(table) == 1
-    assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
 
 
 @pytest.mark.parametrize("method", ["merge_financial_facts", "merge_financial_derived", "merge_accounting_flags"])
@@ -184,16 +181,16 @@ def test_scored_flag_row_lands_complete(db):
     ],
 )
 def test_a_row_missing_a_not_null_column_raises_before_recording(db, method, row):
-    """DuckDB's NOT NULL DDL rejected these; Snowflake landing's NOT NULL
-    would reject the whole Parquet file. Fail here, loudly, first."""
+    """Snowflake landing's NOT NULL would reject the whole Parquet file.
+    Fail here, loudly, first."""
     with pytest.raises(ValueError, match="NOT NULL"):
         getattr(db, method)([row], "run-1")
 
     assert db.landing_export.total_row_count() == 0
 
 
-def test_no_landing_export_is_a_noop(tmp_path):
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+def test_no_landing_export_is_a_noop():
+    db = SilverLandingStore()
     try:
         assert db.merge_financial_facts([_fact_row()], "run-1") == 1
     finally:
@@ -374,7 +371,7 @@ _INGESTED_AT_WRITERS = _PER_FILING_WRITERS + _THIRTEENF_WRITERS
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _INGESTED_AT_WRITERS)
-def test_ingested_at_rows_land_and_never_touch_local_duckdb(db, method, table, make_row):
+def test_ingested_at_rows_land(db, method, table, make_row):
     count = getattr(db, method)([make_row()], "run-1")
 
     assert count == 1
@@ -382,7 +379,6 @@ def test_ingested_at_rows_land_and_never_touch_local_duckdb(db, method, table, m
     assert recorded["ingested_at"] is not None
     # No validity trio on these tables -- that stamp is facts/flags only.
     assert "is_current" not in recorded
-    assert db.fetch(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"] == 0
 
 
 @pytest.mark.parametrize(("method", "table", "make_row"), _INGESTED_AT_WRITERS)
@@ -429,21 +425,13 @@ def test_thirteenf_row_missing_a_not_null_column_raises_before_recording(db, met
     assert db.landing_export.total_row_count() == 0
 
 
-def test_thirteenf_holdings_batch_of_a_large_filer_does_no_per_row_duckdb_io(db):
+def test_thirteenf_holdings_batch_of_a_large_filer_records_every_row(db):
     """Ticket 05's volume check. A large 13F-HR filer reports a few thousand
     holdings per quarter; the very largest (broker-dealer aggregators) reach
-    tens of thousands. The old path executed one DuckDB INSERT per row. The
-    passthrough must be a plain per-row dict build: at most the one cached
-    NOT NULL lookup, however many rows -- a regression to per-row I/O shows
-    up here as a count, not as a flaky timing."""
+    tens of thousands."""
     rows = [_holding_row(holding_index=i, cusip=f"{i:09d}") for i in range(1, 20_001)]
-    counting = CountingConnection(db._conn)
-    db._conn = counting
-    try:
-        count = db.merge_thirteenf_holdings(rows, "run-1")
-    finally:
-        db._conn = counting.wrapped
+
+    count = db.merge_thirteenf_holdings(rows, "run-1")
 
     assert count == 20_000
     assert db.landing_export.row_count("sec_thirteenf_holding") == 20_000
-    assert counting.executes <= 1

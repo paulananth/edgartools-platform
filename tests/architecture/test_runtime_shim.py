@@ -12,12 +12,15 @@ class CompatibilityShimTests(unittest.TestCase):
         self.assertNotIn("def _execute_warehouse", content)
         self.assertNotIn("if command_name", content)
 
-    def test_silver_is_thin_compatibility_shim(self) -> None:
-        silver_path = Path(__file__).resolve().parents[2] / "edgar_warehouse" / "silver.py"
-        content = silver_path.read_text()
-        self.assertIn("silver_store", content)
-        self.assertNotIn("class SilverDatabase", content)
-        self.assertNotIn("CREATE TABLE IF NOT EXISTS", content)
+    def test_silver_shim_and_engine_were_deleted(self) -> None:
+        # edgar_warehouse/silver.py re-exported SilverDatabase from
+        # silver_store.py; both left with the DuckDB engine
+        # (silver-merge-engine-migration Ticket 17). The write path is
+        # edgar_warehouse/silver_landing_store.py.
+        package = Path(__file__).resolve().parents[2] / "edgar_warehouse"
+        self.assertFalse((package / "silver.py").exists())
+        self.assertFalse((package / "silver_store.py").exists())
+        self.assertFalse((package / "silver_protection.py").exists())
 
     def test_gold_shim_was_deleted(self) -> None:
         # edgar_warehouse/gold.py has zero importers repo-wide -- deleted

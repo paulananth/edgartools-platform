@@ -12,7 +12,7 @@ from edgar_warehouse.application.adv_firm_roster_ingest import (
 )
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 _HEADER = (
     '"Organization CRD#","7B","Count of Private Funds - 7B(1)",'
@@ -258,7 +258,7 @@ def test_ingest_firm_roster_archive_writes_real_silver_rows(tmp_path) -> None:
         ),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    db = SilverLandingStore(landing_export=LandingExportBuffer())
     try:
         result = ingest_firm_roster_archive(
             db, archive, dataset_period="2026-07", source_sha256="abc123", sync_run_id="run-1"
@@ -290,7 +290,7 @@ def test_ingest_firm_roster_archive_reingest_is_idempotent(tmp_path) -> None:
         "IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_34622660.CSV": _HEADER + _roster_row(crd="1588"),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    db = SilverLandingStore(landing_export=LandingExportBuffer())
     try:
         first = ingest_firm_roster_archive(
             db, archive, dataset_period="2026-07", source_sha256="abc123", sync_run_id="run-1"
@@ -314,7 +314,7 @@ def test_ingest_firm_roster_archive_different_period_is_a_new_row(tmp_path) -> N
         "IA_SEC_-_FIRM_ROSTER_FOIA_DOWNLOAD_-_34622660.CSV": _HEADER + _roster_row(crd="1588"),
     })
 
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=LandingExportBuffer())
+    db = SilverLandingStore(landing_export=LandingExportBuffer())
     try:
         ingest_firm_roster_archive(
             db, archive, dataset_period="2026-06", source_sha256="abc123", sync_run_id="run-1"

@@ -289,7 +289,7 @@ def run_command(command_name: str, args: Any) -> int:
 def run_seed_universe_command(args: Any) -> int:
     """Compatibility entry point for explicit MDM universe seeding."""
     try:
-        from edgar_warehouse.silver_store import _parse_company_ticker_rows
+        from edgar_warehouse.silver_landing_store import _parse_company_ticker_rows
 
         limit = _resolve_seed_limit(getattr(args, "limit", None))
         source_label, document = _resolve_seed_document(args)
@@ -4528,7 +4528,7 @@ def _sync_reference_data(
     capture_specs = default_capture_spec_factory()
 
     for spec in capture_specs.references(fetch_date, selected_sources):
-        from edgar_warehouse.silver_store import _parse_company_ticker_rows
+        from edgar_warehouse.silver_landing_store import _parse_company_ticker_rows
 
         # Idempotency: check bronze cache before hitting SEC API.
         # Reference data (company tickers) changes infrequently — re-downloading

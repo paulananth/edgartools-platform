@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from edgar_warehouse import silver_schema
-from edgar_warehouse.silver_store import SilverDatabase
+from edgar_warehouse.silver_landing_store import SilverLandingStore
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 
@@ -17,10 +17,10 @@ def _landing_scoped_tables() -> set[str]:
 
 
 def test_landing_export_defaults_to_none_and_is_a_complete_noop(tmp_path):
-    """SilverDatabase(db_path) with no landing_export must record nothing --
+    """SilverLandingStore() with no landing_export must record nothing --
     _record_landing_passthrough checks self.landing_export is not None
     before recording."""
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"))
+    db = SilverLandingStore()
     try:
         assert db.landing_export is None
         db.merge_company([{"cik": 320193, "entity_name": "Apple Inc"}], "run-1")
@@ -30,7 +30,7 @@ def test_landing_export_defaults_to_none_and_is_a_complete_noop(tmp_path):
 
 def test_merge_company_records_into_landing_buffer(tmp_path):
     buffer = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    db = SilverLandingStore(landing_export=buffer)
     try:
         db.merge_company(
             [
@@ -50,7 +50,7 @@ def test_merge_company_records_into_landing_buffer(tmp_path):
 
 def test_upsert_singular_methods_record_a_single_row(tmp_path):
     buffer = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    db = SilverLandingStore(landing_export=buffer)
     try:
         db.upsert_raw_object(
             {
@@ -76,7 +76,7 @@ def test_replace_company_tickers_records_the_enriched_row_not_the_raw_input(tmp_
     input instead landed source_name (a NOT NULL column in the Snowflake
     schema) as NULL on every row, which suspended LOAD_SILVER_LANDING_TASK."""
     buffer = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    db = SilverLandingStore(landing_export=buffer)
     try:
         db.replace_company_tickers(
             [{"cik": 320193, "ticker": "AAPL", "exchange": "Nasdaq"}],
@@ -100,7 +100,7 @@ def test_replace_company_tickers_records_the_enriched_row_not_the_raw_input(tmp_
 
 def test_replace_company_tickers_skips_rows_missing_cik_or_ticker(tmp_path):
     buffer = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    db = SilverLandingStore(landing_export=buffer)
     try:
         db.replace_company_tickers(
             [
@@ -126,7 +126,7 @@ def test_every_landing_scoped_table_has_a_wired_writer(tmp_path):
     into the landing export, this test fails loudly instead of silently
     shipping a table nothing ever populates.
 
-    Drives every SilverDatabase writer whose name plausibly touches a
+    Drives every SilverLandingStore writer whose name plausibly touches a
     landing-scoped table with a minimal row, then asserts the landing
     buffer captured something for every expected table. This is a coverage
     floor, not a correctness check -- the tests above (and
@@ -134,7 +134,7 @@ def test_every_landing_scoped_table_has_a_wired_writer(tmp_path):
     tricky cases.
     """
     buffer = LandingExportBuffer()
-    db = SilverDatabase(str(tmp_path / "silver.duckdb"), landing_export=buffer)
+    db = SilverLandingStore(landing_export=buffer)
     try:
         db.merge_company([{"cik": 1, "entity_name": "x"}], "r")
         db.merge_addresses([{"cik": 1, "address_type": "business"}], "r")
