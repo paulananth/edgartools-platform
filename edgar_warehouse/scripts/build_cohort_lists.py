@@ -25,7 +25,10 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pandas is imported lazily inside the functions that need it
+    import pandas as pd
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +55,6 @@ _EXCHANGE_LISTED = frozenset({"Nasdaq", "NYSE", "CBOE"})
 
 def _load_universe() -> "pd.DataFrame":
     """Load exchange-listed companies from bundled company_tickers.parquet."""
-    import pandas as pd
     from edgar.reference.tickers import get_company_tickers
 
     df: pd.DataFrame = get_company_tickers(as_dataframe=True)
@@ -106,8 +108,6 @@ def _github_sp500_tickers() -> set[str]:
 
 def _tickers_to_ciks(tickers: list[str], universe: "pd.DataFrame") -> list[int]:
     """Map ticker symbols to CIKs using the exchange-listed universe."""
-    import pandas as pd
-
     ticker_map: dict[str, int] = dict(
         zip(universe["ticker"].str.upper(), universe["cik"].astype(int))
     )
