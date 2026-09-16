@@ -1119,7 +1119,7 @@ entry — see
 for the redeploy + re-run of `load-daily-form-index-for-date` /
 `drive-filing-discovery-for-date` this fix was written to unblock.
 
-## Relationship-derivation single-threaded tail (fixed, not yet deployed, 2026-08-19)
+## Relationship-derivation single-threaded tail (fixed 2026-08-19; deployed and live-measured 2026-09-16)
 
 **Problem:** A live `mdm run --entity-type all` execution (`shard-fix-verify-1787134405`)
 ran 5.6+ hours past company/security/person resolution with no sign of finishing.
@@ -1195,9 +1195,31 @@ worker sessions against a real multi-connection SQLite engine — same direct-dr
 the dialect-gated entry point — plus an end-to-end sanity check that the SQLite-forced
 single-worker path is still behaviorally identical to the old sequential loop). Full
 repo suite green: 2225 passed, 4 skipped (same 2 pre-existing, unrelated failures as
-every prior entry in this file). **Not yet deployed** as of this entry — no live
-before/after timing has been captured; the CloudWatch overlap-counting method above is
-the way to get one once this ships.
+every prior entry in this file). **Deployed and live-measured 2026-09-16.** The worker
+pool is confirmed present in shipped code (`edgar_warehouse/mdm/pipeline.py:94` reads
+`MDM_RELATIONSHIP_CONCURRENCY`, default 4; `derive_relationships` at :1481 dispatches
+through the `ThreadPoolExecutor` at :1579). No task definition sets that variable, so
+prod runs at the default 4 workers.
+
+The live before/after that this entry asked for, from three consecutive SUCCEEDED
+`edgartools-prod-mdm` executions (2026-09-04/05/06, total chain 60.4/62.1/69.5 min):
+
+| Stage | min |
+|---|---|
+| Mastering | 2.0 - 10.7 (varies with how much changed) |
+| BackpropagateIdsToSilver | ~2.5 |
+| Infer Relationships | 14.0 - 15.1 |
+| Publish | 18.7 - 19.9 |
+| Publish Relationships | ~1.4 |
+| Reconcile | 21.0 - 21.5 |
+
+Against the 5.6+ hour tail that motivated this fix, relationship derivation is now
+~15 min and relationship *publication* ~1.4 min. **Relationship work is no longer the
+bottleneck** — `Reconcile` (~21 min) and `Publish` (~19 min) dominate at ~65% of the
+chain combined, and both are Snowflake-side work, not Postgres derivation. Anyone
+optimising MDM runtime should start there, not here. Measured with
+`get-execution-history` stage enter/exit deltas, not the CloudWatch overlap-counting
+method this entry originally proposed.
 
 ## MDM Postgres migration-011 schema drift blocking every mdm run (resolved 2026-08-20 — see correction below; the 2026-08-19 "resolved" claim was itself never actually verified)
 
