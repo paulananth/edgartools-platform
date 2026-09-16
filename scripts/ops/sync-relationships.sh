@@ -153,8 +153,8 @@ check_snowflake_env() {
 hr "Preflight"
 
 [[ -n "${MDM_DATABASE_URL:-}" ]] || err "MDM_DATABASE_URL is not set"
-[[ -n "${MDM_SILVER_DUCKDB:-}${WAREHOUSE_STORAGE_ROOT:-}" ]] \
-    || err "Set MDM_SILVER_DUCKDB (local path or s3://) or WAREHOUSE_STORAGE_ROOT"
+[[ -n "${WAREHOUSE_STORAGE_ROOT:-}" ]] \
+    || err "WAREHOUSE_STORAGE_ROOT is not set"
 [[ "$SKIP_GRAPH_SYNC" == "true" ]] || check_snowflake_env
 
 # Resolve which types to run
@@ -180,7 +180,6 @@ else
 fi
 
 info "MDM_DATABASE_URL      = ${MDM_DATABASE_URL%%@*}@***"
-info "MDM_SILVER_DUCKDB     = ${MDM_SILVER_DUCKDB:-<via WAREHOUSE_STORAGE_ROOT>}"
 info "TARGET_PER_TYPE       = $TARGET_PER_TYPE"
 info "INSTITUTIONAL_HOLDS_CAP = $INSTITUTIONAL_HOLDS_CAP"
 info "RUN_INSTITUTIONAL     = $RUN_INSTITUTIONAL"

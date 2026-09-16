@@ -8,7 +8,7 @@ or misaligned.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any, Mapping
 
 DECISION_CONTRACT_VERSION = "1"

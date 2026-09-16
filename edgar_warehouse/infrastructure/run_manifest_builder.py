@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure.dataset_path_catalog import default_capture_spec_factory, default_path_resolver
 
 SNOWFLAKE_EXPORT_TABLES = {
