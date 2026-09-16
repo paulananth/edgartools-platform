@@ -543,7 +543,7 @@ def _execute_warehouse_bronze_capture(
     gold_manifest_entries: list[dict[str, Any]] | None = None
     snowflake_export_counts: dict[str, int] | None = None
     snowflake_export_manifest_write: dict[str, Any] | None = None
-    silver_database_write: dict[str, Any] | None = None
+    identity_refresh_run_manifest_write: dict[str, Any] | None = None
     silver_table_counts: dict[str, int] | None = None
     landing_export_counts: dict[str, int] | None = None
     gold_input_envelope: dict[str, Any] | None = None
@@ -756,19 +756,19 @@ def _execute_warehouse_bronze_capture(
             # silver-merge-engine-migration Ticket 15: the run manifest no
             # longer carries a reference snapshot (it was the empty local
             # DuckDB file); the write recorded here is the manifest itself.
-            silver_database_write = {
+            identity_refresh_run_manifest_write = {
                 "layer": "identity_refresh_run_manifest",
                 "path": context.storage_root.join(run_manifest_path(run_id)),
             }
         else:
             # silver-merge-engine-migration Ticket 17: nothing to publish --
             # the run's silver rows leave through the landing export below.
-            silver_database_write = None
+            identity_refresh_run_manifest_write = None
         _emit_pipeline_event(
             "silver_publish_completed",
             command=command_name,
             run_id=run_id,
-            silver_database=silver_database_write,
+            silver_database=identity_refresh_run_manifest_write,
         )
         if landing_export is not None:
             landing_export_counts = write_landing_export(
@@ -884,8 +884,8 @@ def _execute_warehouse_bronze_capture(
         }
         writes.append(snowflake_export_manifest_write)
 
-    if silver_database_write is not None:
-        writes.append(silver_database_write)
+    if identity_refresh_run_manifest_write is not None:
+        writes.append(identity_refresh_run_manifest_write)
 
     ticker_reference_rows = metrics.pop("_ticker_reference_rows", None)
     if (
@@ -983,7 +983,7 @@ def _execute_warehouse_bronze_capture(
         "gold_row_counts": gold_row_counts,
         "gold_input_envelope": gold_input_envelope,
         "silver_table_counts": silver_table_counts,
-        "silver_database": silver_database_write,
+        "silver_database": identity_refresh_run_manifest_write,
         "snowflake_export_manifest": snowflake_export_manifest_write,
         "snowflake_export_row_counts": snowflake_export_counts,
         "silver_landing_export_row_counts": landing_export_counts,
