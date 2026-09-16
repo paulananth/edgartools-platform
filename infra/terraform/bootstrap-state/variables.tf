@@ -18,7 +18,7 @@ variable "terraform_state_bucket_name" {
 variable "retired_aws_account_ids" {
   description = "AWS accounts in which bootstrap is forbidden."
   type        = set(string)
-  default     = ["077127448006"]
+  default     = []
 }
 
 variable "tags" {
