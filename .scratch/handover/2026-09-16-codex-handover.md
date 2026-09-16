@@ -53,8 +53,15 @@ Verification actually performed (not inferred from a zero exit code):
 
 1. `DEPLOY_EXIT=0` read from the log body, not the task notification.
 2. All six task defs re-queried and confirmed flipped off the baseline digests.
-3. State machine definitions grepped for task-def ARNs — they reference the
-   **new** revisions (`mdm` → `mdm-medium:272`/`mdm-small:274`/`medium:307`).
+3. Task-def ARNs grepped out of **three** state machine definitions, all
+   referencing the new revisions: `mdm` → `mdm-medium:272`, `mdm-small:274`,
+   `medium:307`; `daily-incremental` → `large:305`, `medium:307`;
+   `load-history` → `large:305`, `mdm-medium:272`, `medium:307`.
+   **Not verified:** no state machine was found referencing
+   `edgartools-prod-mdm-large:206`. That task def was registered on the new
+   digest, but which machine (if any) consumes it was not established —
+   `mdm-large` is the pinned residual-security profile per CLAUDE.md's
+   Ticket 28, so confirm this before relying on it.
 4. The fix proven present *inside* the MDM image before deploying:
    `docker run --entrypoint python … ` confirmed `close_relationship_version`
    contains the write-level guard, `pipeline.py` contains the caller guard,
@@ -137,8 +144,11 @@ platform problems. All four failed closed; attempts 1 and 2 mutated nothing.
    "could not resolve ECS cluster ARN". Copy the manifest in first.
 4. **A fresh worktree needs `uv sync --extra s3 --extra mdm-runtime`.** The
    deploy runs `ecr_rollback_cli.py` under `uv`, which auto-creates a bare venv
-   without boto3, failing at `import boto3` *after* it has already configured
-   the S3 → SNS notification.
+   without boto3, failing at `import boto3`. **This failure is not clean:** by
+   that point the script has already configured the S3 → SNS notification on
+   `edgartools-prod-snowflake-export-690839588395` for the manifest prefix.
+   The write is idempotent, but do not assume a failed deploy mutated nothing
+   just because the task definitions are unchanged — that probe is too narrow.
 5. **The rollback-cleanup lock never auto-expires** and its release is
    silenced (`>/dev/null 2>&1 || log "WARN: …"`). A successful deploy can still
    leave it held. Check
