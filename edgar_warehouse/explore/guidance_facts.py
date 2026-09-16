@@ -21,7 +21,7 @@ import io
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import pyarrow as pa
 

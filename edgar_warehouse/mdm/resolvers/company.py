@@ -12,7 +12,7 @@ from typing import Optional
 
 from sqlalchemy import select
 
-from edgar_warehouse.mdm.database import MdmCompany, MdmEntity, MdmSourceRef
+from edgar_warehouse.mdm.database import MdmCompany, MdmEntity
 from edgar_warehouse.mdm.match import CIKExactMatcher, FuzzyNameMatcher, MatchAction, MatchPipeline
 from edgar_warehouse.mdm.resolvers.base import (
     BaseResolver,

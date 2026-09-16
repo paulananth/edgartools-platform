@@ -28,7 +28,6 @@ def main():
         counts[k] = counts.get(k, 0) + 1
 
     STAGES = [
-        "silver_database_hydrated",
         "sec_load_started",
         "bronze_capture_completed",
         "silver_apply_started",

@@ -132,7 +132,6 @@ print(f'  ({len(data.get(\"events\",[]))} total events, showing last {len(evts)}
 print()
 
 KEY = {
-    'silver_database_hydrated','silver_database_hydrate_started',
     'bootstrap_batch_started','bootstrap_batch_completed',
     'filing_artifact_pipeline_started','filing_artifact_pipeline_completed',
     'filing_artifact_circuit_open',

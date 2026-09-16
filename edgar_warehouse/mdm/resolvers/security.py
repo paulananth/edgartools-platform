@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from edgar_warehouse.mdm.database import MdmEntity, MdmSecurity
 from edgar_warehouse.mdm.match import MatchAction

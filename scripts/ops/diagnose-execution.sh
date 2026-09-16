@@ -210,7 +210,7 @@ print()
 
 # Structured events we care about
 KEY_EVENTS = {
-    'silver_database_hydrated','gold_refresh_started','gold_publish_started',
+    'gold_refresh_started','gold_publish_started',
     'gold_publish_completed','silver_publish_started','silver_publish_completed',
     'pipeline_failed','filing_artifact_pipeline_started',
     'filing_artifact_pipeline_completed','filing_artifact_circuit_open',
