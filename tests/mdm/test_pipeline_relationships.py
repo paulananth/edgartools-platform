@@ -3463,3 +3463,172 @@ class TestRelationshipTypesConcurrency:
         )
         assert set(summary.keys()) == {"MANAGES_FUND", "ISSUED_BY", "IS_ENTITY_OF"}
         assert summary["IS_ENTITY_OF"]["inserted"] == 1  # fixture_world's one adviser/company pair
+
+
+class TestZeroSharesDisposalGuard:
+    """`_deactivate_if_zero_shares` had no chronological guard, unlike every
+    sibling closer (`_deactivate_if_properties_changed` since
+    mdm-relationship-versioning-gap Ticket 05, `_derive_audited_by` since
+    Ticket 11).
+
+    Live prod failure `daily-incremental-ticket17-verify-1789514832`
+    (2026-09-16): at 01:29:59 a HOLDS disposal closed a version at a date not
+    strictly after its own `valid_from_date`, the flush raised
+    `CheckViolation` against `ck_rel_instance_valid_interval`, and because
+    the write went through the long-lived outer session every later
+    autoflush re-raised `PendingRollbackError` -- for ~5 hours, until
+    `mdm mastering` died 424 minutes in. COMPANY_HOLDS hit the identical
+    thing 17 seconds later.
+
+    Nothing covered this path before: `shares_owned_after: 0` and
+    `zero_shares` each appeared in zero tests, so a function writing a
+    constraint-guarded column for two live relationship types was entirely
+    unexercised.
+    """
+
+    @staticmethod
+    def _seed_open_holds(
+        session: Session, fixture_world: dict, *, valid_from, person_key: str = "reporting_person_id"
+    ) -> MdmRelationshipInstance:
+        """Insert an already-open HOLDS version by hand, as an earlier run
+        would have left it. Mirrors TestIsInsiderDeactivation's own
+        direct-insert precedent -- the ordinary HOLDS fixtures all pass
+        `transaction_date: None`, which yields a NULL `valid_from_date`, and
+        the CHECK constraint *passes* on a NULL, so they cannot reproduce
+        this crash.
+        """
+        from edgar_warehouse.mdm.database import relationship_logical_id
+
+        rel_type_id = session.execute(
+            select(MdmRelationshipType.rel_type_id)
+            .where(MdmRelationshipType.rel_type_name == "HOLDS")
+        ).scalar_one()
+        person_id = fixture_world[person_key]
+        security_id = fixture_world["security_entity_id"]
+        existing = MdmRelationshipInstance(
+            relationship_id=relationship_logical_id(rel_type_id, person_id, security_id),
+            rel_type_id=rel_type_id,
+            source_entity_id=person_id,
+            target_entity_id=security_id,
+            properties={"shares_owned": 10, "direct_indirect": "D", "is_derivative": False},
+            effective_from=valid_from,
+            valid_from_date=valid_from,
+            valid_to_date=None,
+            source_system="ownership_filing",
+            source_accession="0000-already-open",
+        )
+        session.add(existing)
+        session.commit()
+        return existing
+
+    @staticmethod
+    def _disposal_row(*, transaction_date) -> dict:
+        """A Form 4 non-derivative row reporting a full disposal: shares
+        owned after the transaction is zero, which is what
+        `_deactivate_if_zero_shares` treats as "close the open version"."""
+        return {
+            "accession_number": "0000-disposal",
+            "owner_index": 0,
+            "txn_index": 0,
+            "security_title": "Common Stock",
+            "transaction_date": transaction_date,
+            "shares_owned_after": 0,
+            "ownership_direct_indirect": "D",
+            "owner_cik": 910102,
+            "owner_name": "Reporting Person",
+            "issuer_cik": 910001,
+        }
+
+    def test_same_day_disposal_is_skipped_not_crashed(self, session, fixture_world):
+        """The exact live crash: a disposal dated the same day the version
+        opened. `ck_rel_instance_valid_interval` requires a strictly positive
+        interval, so this close is unrepresentable and must be skipped.
+        """
+        existing = self._seed_open_holds(session, fixture_world, valid_from=date(2025, 3, 14))
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                self._disposal_row(transaction_date=date(2025, 3, 14)),
+            ],
+        }))
+        pipe.derive_relationships(relationship_types=["HOLDS"])
+
+        session.expire_all()
+        reloaded = session.get(MdmRelationshipInstance, existing.instance_id)
+        assert reloaded.valid_to_date is None, (
+            "a same-day disposal cannot close the version it opened -- the "
+            "row must be left open rather than attempting an interval the "
+            "schema rejects"
+        )
+
+    def test_backdated_disposal_is_skipped_not_crashed(self, session, fixture_world):
+        """An out-of-order/late-filed disposal predating the open version --
+        the same shape a full-history resync produces. Must not close a
+        newer version with a stale date, and must not crash."""
+        existing = self._seed_open_holds(session, fixture_world, valid_from=date(2025, 6, 1))
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                self._disposal_row(transaction_date=date(2025, 1, 15)),
+            ],
+        }))
+        pipe.derive_relationships(relationship_types=["HOLDS"])
+
+        session.expire_all()
+        reloaded = session.get(MdmRelationshipInstance, existing.instance_id)
+        assert reloaded.valid_to_date is None
+
+    def test_genuine_later_disposal_still_closes_the_version(self, session, fixture_world):
+        """Positive control. Without this, a green suite would be satisfied
+        by a guard that simply stopped closing disposals altogether."""
+        existing = self._seed_open_holds(session, fixture_world, valid_from=date(2025, 1, 15))
+
+        pipe = MDMPipeline(session=session, silver=StubSilver({
+            "FROM sec_ownership_non_derivative_txn": [
+                self._disposal_row(transaction_date=date(2025, 6, 1)),
+            ],
+        }))
+        pipe.derive_relationships(relationship_types=["HOLDS"])
+
+        session.expire_all()
+        reloaded = session.get(MdmRelationshipInstance, existing.instance_id)
+        assert reloaded.valid_to_date == date(2025, 6, 1), (
+            "a disposal genuinely later than the open version must still "
+            "close it -- the guard narrows, it does not disable disposals"
+        )
+
+    def test_close_refuses_illegal_interval_but_still_closes_a_null_start(
+        self, session, fixture_world
+    ):
+        """The write-level guard mirrors the CHECK constraint, deliberately
+        NOT `confirmed_chronologically_after`.
+
+        The constraint is satisfied whenever *either* date is NULL, so a row
+        carrying no `valid_from_date` (an ISSUED_BY instance, say -- those are
+        created with both dates NULL) must still be closable. Using the
+        stricter helper here would refuse writes the database accepts.
+        """
+        from edgar_warehouse.mdm.graph import close_relationship_version
+
+        dated = self._seed_open_holds(session, fixture_world, valid_from=date(2025, 5, 1))
+        close_relationship_version(session, dated.instance_id, date(2025, 5, 1))
+        session.flush()
+        assert session.get(MdmRelationshipInstance, dated.instance_id).valid_to_date is None, (
+            "an equal-date close is illegal under the constraint and must be refused"
+        )
+
+        close_relationship_version(session, dated.instance_id, date(2024, 1, 1))
+        session.flush()
+        assert session.get(MdmRelationshipInstance, dated.instance_id).valid_to_date is None, (
+            "a backwards close is illegal under the constraint and must be refused"
+        )
+
+        undated = self._seed_open_holds(
+            session, fixture_world, valid_from=None, person_key="individual_person_id"
+        )
+        close_relationship_version(session, undated.instance_id, date(2025, 5, 1))
+        session.flush()
+        assert session.get(MdmRelationshipInstance, undated.instance_id).valid_to_date == date(2025, 5, 1), (
+            "a NULL valid_from_date satisfies the constraint, so this close "
+            "is legal and must still happen"
+        )
