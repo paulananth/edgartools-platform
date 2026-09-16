@@ -31,7 +31,7 @@ def _resolve(*, last_success: str | None, now: datetime, arguments: dict | None 
             command_name="daily-incremental",
             arguments=arguments or {},
             now=now,
-            silver_root=MagicMock(),
+            allow_bookkeeping_lookup=True,
         )
 
 

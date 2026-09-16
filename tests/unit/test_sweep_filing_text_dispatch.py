@@ -22,7 +22,6 @@ class TestSweepFilingTextDispatch:
             command_name="sweep-filing-text",
             arguments={},
             now=datetime.now(UTC),
-            silver_root=None,
         )
 
         assert scope == {}

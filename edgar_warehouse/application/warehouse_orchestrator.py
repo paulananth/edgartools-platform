@@ -489,7 +489,7 @@ def _execute_warehouse_bronze_capture(
     # (_company_identity_ciks_snowflake/_snowflake_distinct_values) or to the
     # bookkeeping Postgres store. _read_shard_manifest stays for
     # seed-bronze-batches' _shard_partition_ciks.
-    scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, silver_root=context.silver_root)
+    scope = _resolve_scope(command_name=command_name, arguments=arguments, now=now, allow_bookkeeping_lookup=True)
     db = _open_silver_database(landing_export=landing_export)
     db_closed = False
     bookkeeping = _bookkeeping_store()
@@ -6011,19 +6011,23 @@ def _resolve_scope(
     command_name: str,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None = None,
+    allow_bookkeeping_lookup: bool = False,
 ) -> dict[str, Any]:
     # DuckDB Retirement Cutover Ticket 14: this function's only store access
-    # is the bookkeeping checkpoint lookup below. Gated on silver_root so
-    # _execute_warehouse_infrastructure_validation's silver_root=None call
-    # site still opts out of any DB access entirely.
-    bookkeeping = _bookkeeping_store() if silver_root is not None else None
+    # is the bookkeeping checkpoint lookup below, and only the
+    # daily-incremental branch reads it. Gated so
+    # _execute_warehouse_infrastructure_validation's call site still opts out
+    # of any DB access entirely. The gate was previously keyed off a
+    # silver_root path argument: that argument configured nothing once
+    # silver-merge-engine-migration Ticket 17 deleted the DuckDB engine, and
+    # keying DB access off a path read as a location rather than the access
+    # decision it actually is.
+    bookkeeping = _bookkeeping_store() if allow_bookkeeping_lookup else None
     registration = acquisition_command_registration(command_name)
     if registration is not None:
         return registration.resolve_scope(
             arguments=arguments,
             now=now,
-            silver_root=silver_root,
         )
     if command_name == "bootstrap-full":
         return {

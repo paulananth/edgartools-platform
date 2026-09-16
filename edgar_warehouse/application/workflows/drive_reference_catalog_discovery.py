@@ -79,7 +79,7 @@ def run_drive_reference_catalog_discovery(args: Any) -> int:
 
     registration = acquisition_command_registration(COMMAND_NAME)
     assert registration is not None, f"{COMMAND_NAME} is not registered"
-    scope = registration.resolve_scope(arguments=arguments, now=now, silver_root=None)
+    scope = registration.resolve_scope(arguments=arguments, now=now)
     manifest_writes = write_declared_layer_manifests(
         command_name=COMMAND_NAME, context=context, run_id=run_id, arguments=arguments, scope=scope, now=now
     )

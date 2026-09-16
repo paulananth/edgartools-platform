@@ -121,13 +121,12 @@ class RuntimeImportTests(unittest.TestCase):
                     command_name=command,
                     arguments={},
                     now=__import__("datetime").datetime(2024, 1, 1),
-                    silver_root=None,
                 )
             except errors_module.WarehouseRuntimeError as e:
                 if "Unsupported warehouse command" in str(e):
                     missing.append(command)
             except Exception:
-                pass  # other errors are fine — silver_root=None will raise for most commands
+                pass  # other errors are fine — most commands raise on empty arguments
 
         self.assertEqual(
             missing,

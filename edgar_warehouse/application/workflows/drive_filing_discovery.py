@@ -408,7 +408,7 @@ def _run_daily_index_driven_discovery(
 
     registration = acquisition_command_registration(command_name)
     assert registration is not None, f"{command_name} is not registered"
-    scope = registration.resolve_scope(arguments=arguments, now=now, silver_root=None)
+    scope = registration.resolve_scope(arguments=arguments, now=now)
     manifest_writes = write_declared_layer_manifests(
         command_name=command_name, context=context, run_id=run_id, arguments=arguments, scope=scope, now=now
     )

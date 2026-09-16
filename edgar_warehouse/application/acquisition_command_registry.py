@@ -11,14 +11,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.domain.policy.command_scope import parse_date
 from edgar_warehouse.infrastructure.run_manifest_builder import planned_writes
-
-if TYPE_CHECKING:
-    from edgar_warehouse.infrastructure.object_storage import StorageLocation
 
 ExecuteCommand = Callable[[Any], int]
 ResolveCommandScope = Callable[..., dict[str, Any]]
@@ -56,9 +53,8 @@ def _resolve_load_daily_form_index_for_date_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     target_date = parse_date(arguments.get("target_date"), "target_date")
     if target_date is None:
         raise WarehouseRuntimeError("target_date is required")
@@ -91,9 +87,8 @@ def _resolve_capture_filing_artifact_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     candidate_id = str(arguments.get("candidate_id") or "").strip()
     if not candidate_id:
         raise WarehouseRuntimeError("candidate_id is required")
@@ -132,9 +127,8 @@ def _resolve_drive_filing_discovery_for_date_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     target_date = parse_date(arguments.get("business_date"), "business_date")
     if target_date is None:
         raise WarehouseRuntimeError("business_date is required")
@@ -169,9 +163,8 @@ def _resolve_drive_adv_filing_discovery_for_date_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     target_date = parse_date(arguments.get("business_date"), "business_date")
     if target_date is None:
         raise WarehouseRuntimeError("business_date is required")
@@ -206,9 +199,8 @@ def _resolve_drive_submissions_discovery_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     return {
         "tracking_status_filter": str(arguments.get("tracking_status_filter") or "active"),
         "limit": str(arguments.get("limit")) if arguments.get("limit") is not None else "",
@@ -243,9 +235,8 @@ def _resolve_drive_company_facts_discovery_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     return {
         "tracking_status_filter": str(arguments.get("tracking_status_filter") or "active"),
         "limit": str(arguments.get("limit")) if arguments.get("limit") is not None else "",
@@ -280,9 +271,8 @@ def _resolve_drive_reference_catalog_discovery_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     source_names = arguments.get("source_names")
     return {"source_names": ",".join(source_names) if source_names else ""}
 
@@ -315,9 +305,8 @@ def _resolve_drive_adv_bulk_dataset_discovery_scope(
     *,
     arguments: dict[str, Any],
     now: datetime,
-    silver_root: StorageLocation | None,
 ) -> dict[str, Any]:
-    del now, silver_root
+    del now
     window_months = arguments.get("window_months")
     return {"window_months": str(window_months) if window_months else ""}
 

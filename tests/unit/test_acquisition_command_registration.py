@@ -20,7 +20,6 @@ def test_registered_daily_index_command_preserves_scope_and_planned_writes() -> 
     scope = registration.resolve_scope(
         arguments={"target_date": "2026-04-22"},
         now=datetime(2026, 4, 23, tzinfo=UTC),
-        silver_root=None,
     )
     assert scope == {"target_date": "2026-04-22"}
     assert registration.planned_writes(
@@ -82,7 +81,6 @@ def test_capture_filing_artifact_is_registered_through_ticket_13_seam() -> None:
     scope = registration.resolve_scope(
         arguments={"candidate_id": "candidate-1"},
         now=datetime(2026, 4, 23, tzinfo=UTC),
-        silver_root=None,
     )
     assert scope == {"candidate_id": "candidate-1"}
     assert registration.planned_writes(
@@ -101,7 +99,7 @@ def test_capture_filing_artifact_scope_requires_candidate_id() -> None:
     assert registration is not None
 
     with pytest.raises(Exception, match="candidate_id is required"):
-        registration.resolve_scope(arguments={}, now=datetime(2026, 4, 23, tzinfo=UTC), silver_root=None)
+        registration.resolve_scope(arguments={}, now=datetime(2026, 4, 23, tzinfo=UTC))
 
 
 def test_drive_filing_discovery_for_date_is_registered_through_ticket_13_seam() -> None:
@@ -119,7 +117,6 @@ def test_drive_filing_discovery_for_date_is_registered_through_ticket_13_seam() 
     scope = registration.resolve_scope(
         arguments={"business_date": "2026-08-24"},
         now=datetime(2026, 8, 25, tzinfo=UTC),
-        silver_root=None,
     )
     assert scope == {"business_date": "2026-08-24"}
     assert registration.planned_writes(
@@ -138,7 +135,7 @@ def test_drive_filing_discovery_for_date_scope_requires_business_date() -> None:
     assert registration is not None
 
     with pytest.raises(Exception, match="business_date is required"):
-        registration.resolve_scope(arguments={}, now=datetime(2026, 8, 25, tzinfo=UTC), silver_root=None)
+        registration.resolve_scope(arguments={}, now=datetime(2026, 8, 25, tzinfo=UTC))
 
 
 def test_registered_daily_index_command_preserves_public_result(
