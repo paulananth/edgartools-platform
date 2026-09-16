@@ -126,7 +126,8 @@ def test_landing_export_flushes_rows_written_during_the_run(tmp_path) -> None:
 
 def test_landing_export_not_flushed_on_pipeline_failure(tmp_path) -> None:
     """A failed run must not publish a partial landing export -- matches
-    silver_database_write, which is likewise only produced on the success path."""
+    identity_refresh_run_manifest_write, which is likewise only produced on the
+    success path."""
     from edgar_warehouse.application.warehouse_orchestrator import _execute_warehouse_bronze_capture
 
     context = _context(tmp_path, silver_landing_export_root=StorageLocation(str(tmp_path / "silver-landing")))
