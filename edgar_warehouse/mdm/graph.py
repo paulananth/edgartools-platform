@@ -632,10 +632,43 @@ def resolve_source_priority(
 def close_relationship_version(
     session: Session, instance_id: str, valid_to_date
 ) -> MdmRelationshipInstance:
-    """Business-close a version (set its end date). Never deletes the row."""
+    """Business-close a version (set its end date). Never deletes the row.
+
+    Refuses, rather than attempts, a close that ``mdm_relationship_instance``'s
+    own ``ck_rel_instance_valid_interval`` would reject (it requires
+    ``valid_to_date > valid_from_date``, strictly). The row is returned
+    unchanged in that case, and no caller reads this return value today.
+
+    The guard lives here, at the single function that performs the write,
+    because the invariant was previously duplicated into callers and omitted by
+    most of them: of the eight call sites, only
+    ``_deactivate_if_properties_changed``, ``_derive_audited_by`` and the
+    retroactive quarantine backfill checked it. Live consequence
+    (`daily-incremental-ticket17-verify-1789514832`, 2026-09-16):
+    ``_deactivate_if_zero_shares`` closed a HOLDS version at a date not
+    strictly after its own ``valid_from_date``, the flush raised
+    ``CheckViolation``, and every later autoflush on the now-poisoned session
+    re-raised ``PendingRollbackError`` for ~5 hours until the task died 424
+    minutes in. COMPANY_HOLDS hit the same thing 17 seconds later.
+
+    Deliberately mirrors the CHECK constraint and **not**
+    ``confirmed_chronologically_after``: the constraint is satisfied whenever
+    either date is NULL, so a row carrying no ``valid_from_date`` (an
+    ISSUED_BY instance, say -- those are created with both dates NULL) can
+    still be closed here. Using the stricter helper would refuse writes the
+    database would have accepted. That stricter "when in doubt, leave it open"
+    business rule belongs at the call sites that want it, so this function
+    never blocks a legal close -- it only declines an illegal one.
+    """
     row = session.get(MdmRelationshipInstance, instance_id)
     if row is None:
         raise KeyError(f"No mdm_relationship_instance with instance_id={instance_id}")
+    if (
+        row.valid_from_date is not None
+        and valid_to_date is not None
+        and valid_to_date <= row.valid_from_date
+    ):
+        return row
     row.valid_to_date = valid_to_date
     row.effective_to = valid_to_date
     return row

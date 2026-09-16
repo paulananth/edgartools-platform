@@ -620,10 +620,29 @@ class MDMPipeline:
         """
         if shares_owned_after is None or float(shares_owned_after) != 0:
             return False
-        from edgar_warehouse.mdm.graph import close_relationship_version
+        from edgar_warehouse.mdm.graph import (
+            close_relationship_version,
+            confirmed_chronologically_after,
+        )
 
         key = (source_entity_id, target_entity_id)
+        still_open = []
         for current in current_by_pair.get(key, []):
+            # The same guard _deactivate_if_properties_changed has carried
+            # since mdm-relationship-versioning-gap Ticket 05, and that
+            # _derive_audited_by gained in Ticket 11 -- missing here until
+            # 2026-09-16. A disposal row whose own date is not strictly after
+            # the open version's valid_from_date cannot close it:
+            # ck_rel_instance_valid_interval rejects a zero-length or
+            # backwards interval outright. Live crash:
+            # daily-incremental-ticket17-verify-1789514832 hit this for HOLDS
+            # and then COMPANY_HOLDS, poisoning the session for ~5 hours.
+            # A skipped candidate stays open rather than being cleared, so a
+            # later re-acquisition still resolves against it (see this
+            # method's own docstring on why current_by_pair is mutated).
+            if not confirmed_chronologically_after(effective_from, current.valid_from_date):
+                still_open.append(current)
+                continue
             close_relationship_version(self.session, current.instance_id, effective_from)
             print(json.dumps({
                 "event": "mdm_relationship_deactivated",
@@ -633,7 +652,7 @@ class MDMPipeline:
                 "target_entity_id": target_entity_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
             }), file=sys.stderr, flush=True)
-        current_by_pair[key] = []
+        current_by_pair[key] = still_open
         return True
 
     def _deactivate_if_properties_changed(
@@ -990,6 +1009,18 @@ class MDMPipeline:
                     outcome.action == MatchAction.SKIPPED_UNCHANGED,
                     outcome.entity_id,
                 )
+            except Exception:
+                # Roll back before the finally closes this session. A failed
+                # flush leaves a SQLAlchemy Session unusable until rolled
+                # back, and every later query on it raises
+                # PendingRollbackError rather than the original error --
+                # which is how one CheckViolation turned into ~5 hours of
+                # cascading failures in
+                # daily-incremental-ticket17-verify-1789514832 (2026-09-16).
+                # The submit loop's own `except` below cancels futures and
+                # re-raises but never rolls back, so this has to live here.
+                worker_session.rollback()
+                raise
             finally:
                 worker_session.close()
 
@@ -1162,6 +1193,13 @@ class MDMPipeline:
                                 elapsed_ms=elapsed_ms(started_at),
                             )
                 worker_session.commit()
+            except Exception:
+                # See _resolve_row's identical handler: roll back before the
+                # finally closes, so a failed flush can't leave this session
+                # raising PendingRollbackError for every later query instead
+                # of the real error.
+                worker_session.rollback()
+                raise
             finally:
                 worker_session.close()
 
@@ -1569,6 +1607,13 @@ class MDMPipeline:
                 )
                 worker_session.commit()
                 return result
+            except Exception:
+                # See _resolve_row's identical handler. Each relationship
+                # type runs on its own worker session here, so one type's
+                # failed flush must not leave that session poisoned for the
+                # rest of its own work before it unwinds.
+                worker_session.rollback()
+                raise
             finally:
                 worker_session.close()
 
