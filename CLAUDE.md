@@ -451,7 +451,9 @@ Path-format equality between `StorageLocation.join()` and `find_existing()` (the
 both producing byte-identical strings) verified live against the real prod bronze bucket before
 deploying, not just local tempdir tests.
 
-**Not yet deployed as of this entry** — see task 35's own status for the redeploy + `retry5`
+**Deployed** (audited 2026-09-16): `_recover_from_bronze` is present in the running image
+(`bronze_filing_artifacts.py:418/663` at `cd5e8030`, the commit both prod images are built
+from). Separately, see task 35's own status for the redeploy + `retry5`
 restart this fix was written to unblock.
 
 ## Artifact-throttle 5-whys (resolved 2026-07-12)
@@ -554,7 +556,7 @@ real 44-resource prod state — a naive `terraform destroy` would have orphaned 
 prod VPC/ECS/KMS stack. **Lesson:** verify a teardown's backend resolves to the *current*
 state (`terraform state list` count) before trusting it.
 
-## INSTITUTIONAL_HOLDS / EMPLOYED_BY 5-whys (fixed, not yet deployed, 2026-07-26)
+## INSTITUTIONAL_HOLDS / EMPLOYED_BY 5-whys (fixed 2026-07-26; split status — audited 2026-09-16: the `entity_name` half is deployed, the `_TABLES` half is obsolete)
 
 **Problem:** `INSTITUTIONAL_HOLDS` was 0 in MDM after `derive-relationships` reported "OK." A
 2026-07-13 finding (EDGE-11, `.planning/workstreams/fix-pipelines/REQUIREMENTS.md`) attributed
@@ -978,7 +980,7 @@ means for it, or whether it should route through the generation-scoped
 generation-scoped graph sync gap noted above (deprioritized for now, not
 worked further).
 
-## Shard-publish promotion-race 5-whys (fixed, not yet deployed, 2026-08-19)
+## Shard-publish promotion-race 5-whys (fixed 2026-08-19; OBSOLETE — the shard mechanism was deleted, audited 2026-09-16)
 
 **Problem:** three separate `bronze_seed_silver_gold` prod executions failed
 on an identical `PromotionConflictError` for `shard-0.duckdb`, the third of
@@ -1040,10 +1042,16 @@ Tests: 11 cases in `tests/unit/test_publish_shard_if_remote.py`, including a
 real `SilverDatabase`-backed merge test and a two-concurrent-writers
 regression test (injects a stale first baseline read to reproduce the
 actual race a sequential test can't otherwise trigger). Full suite green.
-**Not yet built, pushed, or deployed** as of this entry — see
+**OBSOLETE, never deployed** (audited 2026-09-16): `_publish_shard_if_remote` and
+`_publish_shard_if_remote_with_retry` no longer exist in source — the only surviving
+trace at `cd5e8030` and on current `main` is a docstring mention at
+`infrastructure/object_storage.py:568`. DuckDB Retirement Cutover Ticket 06 deleted the
+CIK-sharded hydrate/publish mechanism outright, so this fix's subject is gone. Keep this
+entry for its concurrency lesson (a sibling write path silently diverging from an
+already-proven one), not as pending work — see
 `.scratch/silver-snowflake-migration/map.md` for status.
 
-## EXCLUDED_OPERATIONAL_TABLES silently dropped on merge 5-whys (fixed, not yet deployed, 2026-08-24)
+## EXCLUDED_OPERATIONAL_TABLES silently dropped on merge 5-whys (fixed 2026-08-24; OBSOLETE — `silver_protection.py` deleted, audited 2026-09-16)
 
 **Problem:** live during the change-propagation map's Ticket 29 prod dry run,
 `load-daily-form-index-for-date 2026-08-21` ran clean at the ECS-task level
@@ -1113,7 +1121,12 @@ cases) locks in both fixes at their own seams plus the inverse for genuine
 bookkeeping (`pipeline_run` must stay excluded from both, proving the fix
 doesn't over-widen); `test_skip_noop_silver_publish.py` gained one
 end-to-end test through `_publish_silver_database_if_remote`. Full repo
-suite green (2459 passed, 4 skipped). **Not yet deployed** as of this
+suite green (2459 passed, 4 skipped). **OBSOLETE, never deployed** (audited 2026-09-16):
+`silver_protection.py` is deleted in the running image, and
+`PUBLICATION_SIGNIFICANT_OPERATIONAL_TABLES`, `EXCLUDED_OPERATIONAL_TABLES`,
+`merge_candidate_into_canonical` and `compute_silver_fingerprint` all resolve to **zero**
+source files at `cd5e8030` — silver-merge-engine-migration Ticket 17 removed the DuckDB
+merge path this fix lived in. As of this
 entry — see
 [Ticket 29](.scratch/change-propagation/issues/29-deploy-and-dry-run-gated-acquisition-path.md)
 for the redeploy + re-run of `load-daily-form-index-for-date` /
@@ -1278,7 +1291,7 @@ Two further gaps surfaced and were separately resolved/tracked:
   `17_mdm_export_deployer_read.sql` are committed, real fixes but referenced by neither
   `install.sh` nor `deploy-snowflake-stack.sh` — still orphaned, not fixed.
 
-## Ticket 20 Source Family Registry — Postgres-only activation/rerun bugs 5-whys (fixed, not yet deployed, 2026-08-24)
+## Ticket 20 Source Family Registry — Postgres-only activation/rerun bugs 5-whys (fixed 2026-08-24, deployed 2026-08-26 — audited 2026-09-16)
 
 **Problem:** Ticket 20's Source Family Registry (`edgar_warehouse/acquisition/registry_ledger.py`,
 migration `014_source_registry.sql`) shipped with 18 passing SQLite-backed unit tests and no
@@ -1700,8 +1713,9 @@ new durability/crash-safety risk is introduced (both old and new code
 defer these writes to the same pre-existing `bookkeeping.commit()` call
 site, well after this loop returns).
 
-**Not yet deployed as of this entry** — the prod images running
-`daily_incremental` predate this fix.
+**Deployed** (audited 2026-09-16): `upsert_source_checkpoints_bulk` and
+`upsert_company_sync_states_bulk` are both present in the running image
+(`bookkeeping/store.py:936` at `cd5e8030`, the commit both prod images are built from).
 
 ## mdm_pipeline_lease migration never applied after PR #537 deploy (fixed live 2026-09-05)
 
@@ -2342,7 +2356,9 @@ Tests: 4 new in `tests/unit/test_daily_artifact_resume.py`, 4 new in
 code (`git apply`/revert round trip, not just read) before passing after. Full `tests/unit/`
 suite green (1119 passed, 8 skipped). This closes only "Done when" item 3 of Ticket 74 —
 items 1 (how to repair the two known stale accessions) and 2 (a proactive scan for other
-pre-2026-07-31 stale objects) remain open. **Not yet deployed** as of this entry.
+pre-2026-07-31 stale objects) remain open. **Deployed** (audited 2026-09-16):
+`application/daily_artifact_resume.py` is present in the running image at `cd5e8030`,
+including `check_unresolved_terminal_repairs`.
 
 ## Phased Pipeline (use this for all bootstraps ≥10 companies)
 
