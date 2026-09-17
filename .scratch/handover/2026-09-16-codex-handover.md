@@ -4,9 +4,13 @@ Session: https://claude.ai/code/session_014oAc1nXCnJEqHscRpK293F
 
 ## TL;DR
 
-`main` is at `50d9a71d`. Prod is deployed from it and verified. Nothing is
-uncommitted that should be committed. The pipeline is still down, but for a
-reason no code change can fix: **Snowflake billing**.
+`main` is at `7e69e4e4`. Prod is deployed from `50d9a71d` and verified (the two
+commits since are documentation only — nothing deployable changed). Nothing is
+uncommitted. Worktrees, branches and stashes are cleaned up. The pipeline is
+still down, but for a reason no code change can fix: **Snowflake billing**.
+
+**See "Session close" at the bottom for the final state** — the Open items
+section below was written mid-session and three of its entries are now done.
 
 ## State of `main`
 
@@ -93,8 +97,8 @@ a `start-execution` restarts from the start state and repeats the 12.5 hours.
 
 **Operator (human) only:**
 
-- Restore Snowflake billing, then redrive the failed execution.
-- Decide whether to discard the stale `CLAUDE.md` edits (see below).
+- Restore Snowflake billing, then redrive the failed execution. **This is the
+  only thing still blocking the pipeline.**
 
 **Available to pick up:**
 
@@ -103,22 +107,12 @@ a `start-execution` restarts from the start state and repeats the 12.5 hours.
   ticketed the site. CLAUDE.md's own debugging discipline (step 4) asks for a
   documented chain when an issue is likely to recur. The full write-up already
   exists in PR #648's body — this is a copy, not new analysis.
-- **Worktree/branch cleanup.** Five worktrees exist; `claude-claudemd`,
-  `claude-silver-root` and `claude-zeroshares` are all merged and idle.
-  `claude-deploy-main` (detached at `50d9a71d`) and `claude-handover` were
-  created this session. ~21 merged remote branches remain undeleted.
-- **The shared checkout is on a stale branch.**
-  `/Users/aneenaananth/projects/edgartools-platform` sits on
-  `claude/mdm-tail-single-machine-wayfinder` at `5d182d17` — **276 commits
-  behind `main`**, no remote branch — with an uncommitted `CLAUDE.md`.
-  Do **not** commit that file. Its content is superseded by #647 and one
-  paragraph of it is now factually wrong: its "Residual gap — `commit()` is
-  called only at `_execute_warehouse_bronze_capture`'s two conclusion points"
-  describes behaviour changed on 2026-09-02 (see `main`'s "Bookkeeping
-  checkpoint could outrun silver publish on crash" section). The only genuinely
-  new datum in it — the 2026-09-16 cross-session checkpoint readback,
-  79,788 → 80,214 across ten ECS tasks — is preserved as
-  `claudemd-live-verification-evidence.patch` next to this file.
+- ~~Worktree/branch cleanup~~ — **done**, see Session close.
+- ~~The shared checkout is on a stale branch~~ — **done**: it is on `main` at
+  `7e69e4e4`, clean. The superseded `CLAUDE.md` was discarded; its one genuinely
+  new datum (the 2026-09-16 cross-session checkpoint readback, 79,788 → 80,214
+  across ten ECS tasks) survives as `claudemd-live-verification-evidence.patch`
+  next to this file.
 - **Three CLAUDE.md claims left unverified** by #647's audit: the
   `mdm_change_log` write-side diff, Ticket 101 filing-text strip, and the
   capped-restart watermark.
@@ -176,3 +170,96 @@ traceback, including a positive control and a NULL-`valid_from_date` case.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_014oAc1nXCnJEqHscRpK293F
+
+## Session close — final state
+
+Appended after the body above was written. Where the two disagree, this wins.
+
+### Repository
+
+```
+main              7e69e4e4   (shared checkout current, clean)
+Local branches    main, codex/mdm-golden-copy-release1-wayfinder
+Remote branches   4  — all unmerged or Codex's
+Worktrees         2  — shared checkout + Codex's
+Stashes           1  — Codex's fundamentals work (kept)
+```
+
+Six PRs landed: #645, #646, #647, #648 (the relationship-version guard, which
+prod runs), then #649 and #650, both documentation only.
+
+| PR | Squash | What |
+|---|---|---|
+| #649 | `928ac2c5` | this handover doc + two rescued wayfinder commits |
+| #650 | `7e69e4e4` | the preserved s3-retention stash + its decision |
+
+### Cleanup performed
+
+- All Claude branches deleted, local and remote. Each deletion was gated on
+  proving the content exists on `origin/main` by checking the **files**, not
+  `git merge-base --is-ancestor` — squash merges make that check return false
+  for genuinely merged branches (hit live on #645 this session).
+- Four worktrees removed (`claude-claudemd`, `claude-silver-root`,
+  `claude-zeroshares`, `claude-deploy-main`), plus the two created for the
+  handover work. Only the shared checkout and Codex's remain.
+- Shared checkout moved off `claude/mdm-tail-single-machine-wayfinder`
+  (276 commits behind) onto `main`, then fast-forwarded to `7e69e4e4`.
+
+### Stash dispositions
+
+| Stash | Disposition |
+|---|---|
+| `codex/s3-retention-cleanup` (`ee3fa9a1`) | **dropped** — preserved on `main` by #650 first |
+| `claude/ticket09-sqlite-port-survey` (`6f2992c5`) | **dropped** — 4 timestamp lines in `STATE.md`, nothing of substance |
+| `codex/release-evidence-contract` | **kept**, now `stash@{0}` |
+
+**Its index has shifted twice** (it was `stash@{2}`). It is the only stash left,
+so a bare `git stash drop` would now destroy it. 14 files, +425/−41, touching
+`bootstrap_fundamentals.py`, `fundamentals_ingest.py`, the CLI and 4
+release-readiness ticket docs — the one stash that was never analysed for
+unlanded value. That analysis is still available to do.
+
+### Two commits rescued before their branch was deleted
+
+`claude/mdm-tail-single-machine-wayfinder` held 2 commits that existed in no
+remote branch and nowhere else: 200 insertions of
+`.scratch/state-machine-consolidation` ticket docs. They are on `main` as
+`git am`-ready patches in `.scratch/handover/wayfinder-mdm-tail-unmerged/`.
+
+### The deploy manifest was lost, then rebuilt
+
+`infra/aws-prod-application.json` is **gitignored**, and the post-deploy copy
+lived only inside the `claude-deploy-main` worktree — so removing that worktree
+destroyed the deploy record, leaving the shared checkout holding the *pre*-deploy
+values (`small:302`, old digests). It was rebuilt from live AWS state:
+`small:303`/`medium:307`/`large:305` on `b9e35e60`,
+`mdm-small:274`/`mdm-medium:272`/`mdm-large:206` on `01cc00a1`.
+
+This matters operationally: `deploy-aws-application.sh` **reads** that file to
+discover the cluster ARN, role ARNs, bucket names and secret ARNs (gotcha 3
+above). A missing or stale copy breaks or misinforms the next deploy. Do not
+delete a worktree that holds the only copy.
+
+### Deliberately left in place
+
+- **Codex's worktree and its 2 remote branches** — protected under CLAUDE.md
+  without an explicit handoff; 10 unmerged commits, active 2026-09-15.
+- **`origin/claude/ticket05-row-level-parity-reverify`** — not stale: 2 unmerged
+  commits, 482 insertions including `silver_parity.py` and a 192-line test file,
+  last touched 2026-09-06. Needs a decision, not deletion.
+- **`infra/aws-prod-application.json.bak-20260915-predeploy`** — untracked local
+  backup, the rollback anchor for the previous deploy.
+
+### Still open
+
+1. **Restore Snowflake billing, then redrive**
+   `daily-incremental-ticket17-verify-1789514832` (`REDRIVABLE`,
+   `redriveCount: 0`). Redrive resumes from the failure point; a fresh
+   `start-execution` repeats 12.5 hours. Operator only.
+2. The CLAUDE.md 5-whys entry for the zero-shares shape (write-up already in
+   #648's body).
+3. The three CLAUDE.md claims #647 left unverified.
+4. `origin/claude/ticket05-row-level-parity-reverify` — land or abandon.
+5. Codex's `stash@{0}` — analyse for unlanded value.
+6. `edgartools-prod-mdm-large:206` has no known state-machine consumer
+   (verification step 3 above).
