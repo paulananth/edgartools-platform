@@ -1,0 +1,109 @@
+{
+  "scope": "Existing acquisition ledger PostgreSQL baseline only; not Clean MDM acceptance",
+  "base_commit": "b1babd8bbd0e04044fcacbbab822d480c97c01bc",
+  "fix_commit": "b3d94d9d",
+  "postgres_version": "16.15",
+  "image": "postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685",
+  "command": "uv run --frozen --extra s3 --extra mdm-runtime pytest tests/integration/test_acquisition_ledger_postgres.py -q --tb=short",
+  "original_failure": "Fixture omitted migration 018; ORM writes required source_fetch_work.captured_etag",
+  "rerun_correction": "Reapply 018 after privileged 013 reruns to remove obsolete seven-argument finalize_source_fetch overload",
+  "test_file_sha256": "6d2a72875b307ee006420bccf6cafa33632db3f320cb9e2733e8cb12fd84004b",
+  "reports": {
+    "before": {
+      "tests": 10,
+      "passed": 4,
+      "failed": 6,
+      "skipped": 0,
+      "cases": [
+        {
+          "test": "test_postgres_roles_proofs_and_fencing_are_enforced",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_snowflake_write_ambient_access_is_revoked_on_the_nine_ledger_objects",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_privileged_rerun_skip_is_logged_not_silent",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_processor_and_silver_finalizer_boundaries_are_grant_enforced_not_just_python_checked",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_finalize_source_fetch_persists_failure_detail_and_rejects_it_with_captured",
+          "outcome": "failure"
+        },
+        {
+          "test": "test_finalize_fetch_raises_python_stale_fencing_token_against_real_postgres",
+          "outcome": "failure"
+        },
+        {
+          "test": "test_repository_uses_application_role_and_postgres_uuid_columns",
+          "outcome": "failure"
+        },
+        {
+          "test": "test_materialize_from_capture_round_trips_against_real_postgres",
+          "outcome": "failure"
+        },
+        {
+          "test": "test_seals_and_finalizes_processing_decision_round_trip_against_real_postgres",
+          "outcome": "failure"
+        },
+        {
+          "test": "test_concurrent_producer_settlement_rollup_converges_to_published",
+          "outcome": "failure"
+        }
+      ]
+    },
+    "after": {
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "cases": [
+        {
+          "test": "test_postgres_roles_proofs_and_fencing_are_enforced",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_snowflake_write_ambient_access_is_revoked_on_the_nine_ledger_objects",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_privileged_rerun_skip_is_logged_not_silent",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_processor_and_silver_finalizer_boundaries_are_grant_enforced_not_just_python_checked",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_finalize_source_fetch_persists_failure_detail_and_rejects_it_with_captured",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_finalize_fetch_raises_python_stale_fencing_token_against_real_postgres",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_repository_uses_application_role_and_postgres_uuid_columns",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_materialize_from_capture_round_trips_against_real_postgres",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_seals_and_finalizes_processing_decision_round_trip_against_real_postgres",
+          "outcome": "passed"
+        },
+        {
+          "test": "test_concurrent_producer_settlement_rollup_converges_to_published",
+          "outcome": "passed"
+        }
+      ]
+    }
+  }
+}
