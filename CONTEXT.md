@@ -22,6 +22,22 @@ _Avoid_: Duplicate legal entity, permanent role inferred from a filing name
 The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
 _Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
 
+**Source Record Binding**:
+The evidence-backed assignment of one source record to the Company Identity, Person Identity, or other accepted identity that it describes.
+_Avoid_: Combining two existing identities, selecting a winning field value
+
+**Identity Consolidation**:
+The decision that two existing master identities describe the same subject and will be represented by one surviving identity, with their prior identities and evidence retained in history.
+_Avoid_: Source Record Binding, corporate acquisition, merging fields because their values are similar
+
+**Field Survivorship**:
+The rules that select a master field value from eligible source claims after identity has been resolved, while retaining the claims that were not selected.
+_Avoid_: Proof of identity, source rank as permission to merge identities
+
+**Match Exclusion**:
+An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.
+_Avoid_: Low match score, deleting source evidence, a permanent ban without reviewable grounds
+
 **MDM Change Journal**:
 The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
 _Avoid_: A second root-run authority, mutable log of only the latest result

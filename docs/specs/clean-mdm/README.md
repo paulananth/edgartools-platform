@@ -18,6 +18,10 @@ The [Wayfinder policy ticket](../../../.scratch/clean-mdm/issues/01-set-merge-st
 holds the decision frontier. Its recommendations are not accepted policy yet.
 No implementation tickets exist for this effort.
 
+The [vendor comparison](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md)
+revises the initial match-threshold and survivor-ID proposals and supplies the
+current interview questions. Research completion is not policy acceptance.
+
 ## Existing decisions carried forward
 
 - [Independent domain publication authority](../../adr/0010-independent-source-grained-mdm-enrichment-consumers.md).

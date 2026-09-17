@@ -29,9 +29,12 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Decisions so far
 
-No new Wayfinder decision has been accepted. Shared identities, an isolated
-rebuild, offline PostgreSQL acceptance, and the delivery order come directly
-from the user's plan and do not need to be re-decided.
+- [Compare vendor match, survivorship, and merge-reversal rules](issues/02-research-vendor-merge-rules.md)
+  — primary-source comparison separates source binding, consolidation and
+  field selection; revises unsupported threshold and survivor-ID proposals.
+
+No new human policy decision has been accepted. Shared identities, an isolated
+rebuild, offline PostgreSQL acceptance, and delivery order remain user-directed.
 
 ## Not yet specified
 
