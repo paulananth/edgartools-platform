@@ -4,6 +4,36 @@ The shared language for the AWS-first SEC EDGAR data platform: production operat
 
 ## Language
 
+### Clean MDM identities and mastering
+
+**Company Identity**:
+The identity of one accepted company, shared by its governed Adviser, Audit Firm, and legally applicable Fund profiles.
+_Avoid_: A second identity per role, Person, a Fund name as proof of company legal form
+
+**Person Identity**:
+The identity of one natural person, distinct from a Company and shared with an applicable individual Adviser profile.
+_Avoid_: Employer identity, role as identity, same name as proof of sameness
+
+**Governed Role Profile**:
+An evidence-backed, dated registration or capacity attached to an identity without creating another identity for its holder.
+_Avoid_: Duplicate legal entity, permanent role inferred from a filing name
+
+**Merge Stage**:
+The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
+_Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
+
+**MDM Change Journal**:
+The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
+_Avoid_: A second root-run authority, mutable log of only the latest result
+
+**Reported Ultimate Parent**:
+The ultimate-parent relationship asserted by a source for its stated hierarchy scope and time.
+_Avoid_: Calculated Ultimate Parent, ownership and accounting consolidation treated as interchangeable
+
+**Calculated Ultimate Parent**:
+The terminal parent derived from accepted hierarchy edges for a specified scope, time and derivation rule, with the supporting path retained.
+_Avoid_: Reported Ultimate Parent, a result from an incomplete or cyclic hierarchy
+
 ### Snowflake operational roles
 
 **Deployer Role**:
