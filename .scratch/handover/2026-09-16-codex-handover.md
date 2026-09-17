@@ -2,6 +2,13 @@
 
 Session: https://claude.ai/code/session_014oAc1nXCnJEqHscRpK293F
 
+> **Superseded in part.** This document remains the best record of the prod
+> deploy — image digests, the five verification steps, and the six
+> `deploy-aws-application.sh` gotchas. But its "Session close" section predates
+> PR #652 and the final branch/worktree cleanup. For current state, read
+> [`2026-09-16-codex-handoff-final.md`](./2026-09-16-codex-handoff-final.md);
+> where the two disagree, that one wins.
+
 ## TL;DR
 
 `main` is at `7e69e4e4`. Prod is deployed from `50d9a71d` and verified (the two
