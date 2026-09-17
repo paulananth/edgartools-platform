@@ -1,0 +1,76 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 01f66250..36a888a7 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -1195,7 +1195,7 @@ entry — see
+ for the redeploy + re-run of `load-daily-form-index-for-date` /
+ `drive-filing-discovery-for-date` this fix was written to unblock.
+ 
+-## Relationship-derivation single-threaded tail (fixed, not yet deployed, 2026-08-19)
++## Relationship-derivation single-threaded tail (fixed 2026-08-19; deployed and live-measured 2026-09-16)
+ 
+ **Problem:** A live `mdm run --entity-type all` execution (`shard-fix-verify-1787134405`)
+ ran 5.6+ hours past company/security/person resolution with no sign of finishing.
+@@ -1271,9 +1271,19 @@ worker sessions against a real multi-connection SQLite engine — same direct-dr
+ the dialect-gated entry point — plus an end-to-end sanity check that the SQLite-forced
+ single-worker path is still behaviorally identical to the old sequential loop). Full
+ repo suite green: 2225 passed, 4 skipped (same 2 pre-existing, unrelated failures as
+-every prior entry in this file). **Not yet deployed** as of this entry — no live
+-before/after timing has been captured; the CloudWatch overlap-counting method above is
+-the way to get one once this ships.
++every prior entry in this file). **Deployed and live-measured 2026-09-16.** The worker
++pool is confirmed present in shipped code (`edgar_warehouse/mdm/pipeline.py:94` reads
++`MDM_RELATIONSHIP_CONCURRENCY`, default 4; `derive_relationships` at :1481 dispatches
++through the `ThreadPoolExecutor` at :1579). No task definition sets that variable, so
++prod runs at the default 4 workers.
++
++Live before/after: three consecutive SUCCEEDED `edgartools-prod-mdm` executions
++(2026-09-04/05/06) spent only ~14-15 min in `Infer Relationships` and ~1.4 min in
++`Publish Relationships`, against total chain times of 60.4/62.1/69.5 min — versus the
++5.6+ hour tail that motivated this fix. **Relationship derivation is no longer the
++bottleneck**: `Reconcile` (~21 min) and `Publish` (~19 min) now dominate, together ~65%
++of the chain, and both are Snowflake-side work rather than Postgres derivation. Anyone
++optimising MDM runtime should start there, not here.
+ 
+ ## MDM Postgres migration-011 schema drift blocking every mdm run (resolved 2026-08-20 — see correction below; the 2026-08-19 "resolved" claim was itself never actually verified)
+ 
+@@ -1992,9 +2002,16 @@ cause, fix (a `BookkeepingStore.commit()` method called at
+ MDM's own explicit-commit-at-caller convention rather than introducing
+ engine-level autocommit), and tests:
+ `.scratch/bronze-capture-oom/issues/03-bookkeeping-store-never-commits-any-write.md`.
+-Deployed to prod 2026-09-01; **not yet live-verified** — needs a fresh
+-`daily_incremental` run to confirm checkpoints now actually survive a
+-process restart.
++Deployed to prod 2026-09-01; **live-verified 2026-09-16**. Evidence from
++`daily-incremental-ticket17-verify-1789514832`: ten distinct ECS tasks — ten
++separate Postgres sessions — logged `sec_source_checkpoint` counts across the
++run. Three early tasks (19:28/19:29/19:31 ET) each read 79,788; 426 checkpoint
++rows were then written; six later, independent tasks (23:38 through 00:19 ET)
++each read back 80,214. Uncommitted writes are invisible to other sessions, so
++those rows are durably committed and checkpoints genuinely survive process
++exit. **Residual gap, not closed:** `commit()` is called only at
++`_execute_warehouse_bronze_capture`'s two conclusion points, so work finished
++mid-stage after the last commit is still lost on a crash and will be redone.
+ 
+ **Lesson:** "logged as succeeded, no error" is not evidence a database
+ write is durable — the same class of gap as this file's other
+@@ -2097,7 +2114,18 @@ Stage 1B — Fundamentals (windowed, MaxConcurrency=1 each, run after Stage 1)
+   • XBRL company facts, 8-K/DEF 14A per-filing data, and 13F holdings respectively
+ 
+ Stage 2 — MDM entity resolution (sequential Step Functions)
+-  mdm-mastering → mdm-infer-relationships → mdm-publish → mdm-publish-relationships → mdm-reconcile
++  Mastering → BackpropagateIdsToSilver → Infer Relationships → Publish →
++  Publish Relationships → Reconcile
++  • SIX stages, not five. Verified live 2026-09-16 via `describe-state-machine`
++    on `edgartools-prod-mdm`; this line previously listed five hyphenated
++    command names that match no live state name, and omitted
++    `BackpropagateIdsToSilver` entirely.
++  • Measured stage split, three consecutive SUCCEEDED runs (2026-09-04/05/06),
++    total 60.4/62.1/69.5 min: Reconcile ~21 min and Publish ~19 min dominate
++    (~65% combined), Infer Relationships ~15 min, Publish Relationships ~1.4
++    min, BackpropagateIdsToSilver ~2.5 min, Mastering 2.0-10.7 min (varies with
++    how much changed). Relationship *derivation* is no longer the bottleneck —
++    the Snowflake-side publish and parity stages are.
+   • Runs after Stage 1/1B complete so entity resolution sees the full silver dataset
+   • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
+ 
