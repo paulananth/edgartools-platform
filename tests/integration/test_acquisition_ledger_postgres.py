@@ -167,6 +167,14 @@ def postgres_ledger() -> Iterator[PostgresLedger]:
         )
         assert migrated_exclusion_import.returncode == 0, migrated_exclusion_import.stderr
 
+        # The current SourceFetchWorkRecord maps the HTTP validator columns.
+        # Apply their real migration before any ORM access to the ledger.
+        migrated_validators = _psql(
+            container,
+            MIGRATION.with_name("018_source_fetch_validators.sql").read_text(),
+        )
+        assert migrated_validators.returncode == 0, migrated_validators.stderr
+
         port_result = _run("docker", "port", container, "5432/tcp")
         assert port_result.returncode == 0, port_result.stderr
         port = port_result.stdout.strip().rsplit(":", 1)[-1]
@@ -439,6 +447,14 @@ def test_snowflake_write_ambient_access_is_revoked_on_the_nine_ledger_objects(
         "/tmp/ledger-rerun.sql",
     )
     assert reapplied.returncode == 0, reapplied.stderr
+
+    # Match the runtime migration order: 013 restores the obsolete seven-arg
+    # finalizer, and 018 removes it to avoid ambiguous defaulted overloads.
+    validators_reapplied = _psql(
+        postgres_ledger.container,
+        MIGRATION.with_name("018_source_fetch_validators.sql").read_text(),
+    )
+    assert validators_reapplied.returncode == 0, validators_reapplied.stderr
 
     assert _has_privilege("source_fetch_decision") is False
     assert _has_privilege("source_change_status") is False
@@ -792,6 +808,7 @@ def test_repository_uses_application_role_and_postgres_uuid_columns(
         admin_engine = create_engine(postgres_ledger.admin_database_url)
         try:
             assert migrations._apply_acquisition_ledger_migration(admin_engine) is True
+            assert migrations._apply_source_fetch_validators_migration(admin_engine) is True
         finally:
             admin_engine.dispose()
     finally:
