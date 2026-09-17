@@ -158,7 +158,7 @@ def test_gated_capture_reuses_already_open_db_and_captures_real_filing(
     from sqlalchemy.orm import Session
 
     from edgar_warehouse.acquisition.models import SourceFetchDecisionRecord
-    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.acquisition.database import get_engine
 
     with Session(get_engine()) as session:
         rows = session.execute(

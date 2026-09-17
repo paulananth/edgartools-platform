@@ -17,8 +17,13 @@
 #   bash infra/scripts/start-local-postgres.sh --stop    # stop, keep data
 #   bash infra/scripts/start-local-postgres.sh --reset   # destroy container+volume
 #
-# After start:
+# After start, three databases on the same instance:
 #   export MDM_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/mdm"
+#   export BOOKKEEPING_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/bookkeeping"
+#   export CHANGE_LEDGER_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/change_ledger"
+#
+# Creating the container only creates `mdm`. Provision the other two with:
+#   bash infra/scripts/provision-local-postgres-stores.sh
 
 set -euo pipefail
 
@@ -29,6 +34,8 @@ IMAGE="postgres:16-alpine"
 USER_NAME="postgres"
 PASSWORD="test"
 DATABASE="mdm"
+BOOKKEEPING_DATABASE="bookkeeping"
+CHANGE_LEDGER_DATABASE="change_ledger"
 BIND="127.0.0.1:5432"
 
 while [[ $# -gt 0 ]]; do
@@ -80,7 +87,9 @@ print_status() {
     log "container: $CONTAINER ($state)"
     log "image:     $IMAGE"
     log "bind:      $BIND"
-    log "dsn:       postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${DATABASE}"
+    log "mdm:            postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${DATABASE}"
+    log "bookkeeping:    postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${BOOKKEEPING_DATABASE}"
+    log "change_ledger:  postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${CHANGE_LEDGER_DATABASE}"
     if [[ "$state" == "running" ]]; then
         version="$(
             docker exec -e PGPASSWORD="$PASSWORD" "$CONTAINER" \
