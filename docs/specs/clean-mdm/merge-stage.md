@@ -2,8 +2,10 @@
 
 Status: proposed policy v1; requires the
 [Wayfinder decision](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md).
-Numeric thresholds below are conservative recommendations, not measured model
-accuracy or permission to change the running matcher.
+Revised after [vendor research](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md).
+The earlier numeric thresholds and smallest-seed survivor rule are withdrawn.
+The revised recommendations below are not accepted policy or permission to
+change the running matcher.
 
 ## Inputs and outputs
 
@@ -26,26 +28,35 @@ identifier scope. Check the whole proposed merged component for conflicts,
 not just the incoming record against one preferred candidate. A third record
 bridging two conflicting identifiers cannot transitively bypass the veto.
 
-| Kind | Automatic | Review candidate generation |
-| --- | --- | --- |
-| Company | 1.00 for exact unique authoritative CIK/LEI or jurisdictional registration identity, with compatible kind and no conflicting authoritative identifier | Normalized-name Jaro-Winkler at least 0.85; include jurisdiction/address comparisons as evidence, never as automatic boosts |
-| Person | 1.00 for exact unique authoritative person-scoped identifier with compatible kind and no conflict | Name similarity at least 0.80, with issuer/employment/jurisdiction context recorded; a shared name or employer cannot auto-consolidate |
-| Security | 1.00 for exact unique authoritative instrument identifier under approved interval/scope | Issuer/title or CUSIP-only ambiguity is review evidence; no fuzzy automatic consolidation |
-| Branch, Government Entity, International Organization | 1.00 for exact unique identifier under that kind's approved authority | Conflicting or non-authoritative mappings require explicit review; no numeric fuzzy fallback |
-| Market/Venue | 1.00 for exact MIC within approved identity and effective scope | Code changes, segment/operator ambiguity and code reuse require review |
-| Fund Structure | 1.00 for exact identifier proved authoritative for that structural level | PFID/LEI/series aliases require explicit compatible-form evidence; name/adviser similarity alone is review |
+Source Record Binding and Identity Consolidation are separate authorities
+inside the Merge Stage. Proposed first-release boundary: validated rules may
+bind an incoming source to one accepted identity; consolidating two established
+identities requires an explicit steward decision. A bridge between several
+eligible identities goes to review without attaching to an arbitrary winner.
 
-Automatic threshold is exactly 1.00. A unique existing source-record binding
-permits an update to that subject but still rechecks corrected identifiers and
-kind; it is not a permanent exemption from matching. Multiple exact candidates
-are a conflict requiring review. Fuzzy ties do not select an identity by UUID.
+| Kind | Candidate identity evidence | Required guard |
+| --- | --- | --- |
+| Company | Authoritative CIK/LEI/jurisdictional registration; name/address/jurisdiction comparisons | Compatible legal kind, whole-group identifier consistency, measured exact/scored-rule behavior |
+| Person | Person-scoped authoritative identifier; name and documented context | Shared name or employer alone is insufficient; no Company comparison |
+| Security | Instrument identifiers with approved interval/scope; issuer/title context | Ambiguous CUSIP or issuer/title is not a unique instrument identity |
+| Branch, Government Entity, International Organization | Approved identifiers and evidence for the specific kind | No generic fuzzy fallback without a domain-specific validated contract |
+| Market/Venue | MIC with identity and effective scope | Operator/segment ambiguity and code reuse need review |
+| Fund Structure | Identifiers with evidence for the precise structural level | No name/adviser-only collapse of PFID, LEI, series or share-class meanings |
+
+No universal automatic or review score is specified. Exact and scored rules
+need a labeled corpus, explicit false-match acceptance criteria, candidate
+recall measurement and versioned activation. Those values follow the user's
+automation decision. A unique existing source binding permits an update but
+still checks corrected identifiers and kind; changes that dispute identity
+create review rather than silently moving the record. Multiple exact candidates
+are a conflict. Fuzzy ties do not choose an identity by UUID.
 
 Normalize names with a versioned Unicode normalization, case-folding and
 whitespace policy; preserve original text. Pin the similarity dependency and
 algorithm. Missing implementation is a hard failure, not the current optional
-length-based fallback in `match.py`. Scores rank review candidates; they are
-not probabilities of identity. Raising automatic coverage requires labeled
-positive/negative cases including homonyms, reused identifiers, and mixed kinds.
+length-based fallback in `match.py`. A rule's similarity score is not itself
+a probability of identity. Validation includes homonyms, reused identifiers,
+mixed kinds and transitive bridges, for both automatic binding and review.
 
 No eligible candidate yields a new provisional source subject. Publication
 requires an authoritative identity anchor or an evidence-bound acceptance
@@ -56,26 +67,26 @@ regulated Adviser status.
 
 ## Determinism and surviving IDs
 
-Derive each source-subject seed UUID from one fixed, versioned UUID namespace
-and canonical `(kind, source_code, immutable subject key)` encoding. The
-subject key remains stable through that source's corrections; a filing-local
-occurrence may remain a separate anchor until a decision binds it.
+Proposed rule: once an identity is published, adding or correcting source
+evidence does not change its ID. Source-record keys remain distinct from
+master IDs and stable through source corrections. An approved consolidation
+explicitly selects an existing survivor; the losing published ID becomes a
+versioned alias. Selection precedence between established identities remains
+a dependent decision after the user chooses the stability boundary.
 
-An accepted merge forms a same-kind component of source anchors. Its survivor
-is the lexicographically smallest seed UUID; other IDs resolve through dated
-aliases. Never use random creation order, `created_at`, name, or last arrival.
-Adding a lower seed can change the canonical ID; publish explicit replacement
-and alias records and retain all accepted prior IDs. During rebuilding, freeze
-the complete baseline before exposing IDs to consumers.
+The persistent identity registry, bindings and accepted decisions become
+explicit replay inputs alongside evidence, supersessions, retractions and
+policy versions. Replays with those same inputs must reproduce IDs, identity
+components, winners, current relationships, aliases and business hashes across
+record permutations and batch sizes. Operational attempt history may differ.
+Freeze candidate generation against the declared watermark; ambiguous bridges
+remain unresolved rather than inheriting a first-arrival decision.
 
-Identity decisions, source supersessions and retractions are inputs to replay.
-For the same complete evidence set, accepted decisions and policy versions,
-record/batch arrival order must not change final identity components, winners,
-current relationship set, aliases, or business hashes. Operational attempts
-and observation history can differ. Freeze candidate generation against the
-declared evidence watermark; ambiguous candidates remain unresolved rather
-than inheriting a first-arrival decision. Differential tests must compare
-final results across permutations, duplicates and batch boundaries.
+A fresh rebuild from source bytes alone cannot be called exact-ID replay under
+this recommendation. It either restores the approved registry/decision history
+or proves semantic parity through a verified crosswalk. The initial isolated
+rebuild must establish and retain its registry before publishing IDs. This
+tradeoff replaces the earlier smallest-seed rule and requires user acceptance.
 
 ## Field semantics
 
@@ -108,6 +119,12 @@ as a meaningless ordinal across providers. Equal ranks resolve eligible
 ordinary-field disagreements deterministically while preserving a conflict
 record. Authoritative identity disagreement cannot be settled this way.
 
+Proposed addition: declare coherent field groups, such as address components,
+that must select one source assertion together. Keep type-plus-field priorities
+for independent facts. Validate source eligibility, quality and any declared
+freshness limit at the pinned as-of time before ranking. Do not mix address
+parts from different claims without a separately evidenced transformation.
+
 Fields without a registered policy remain evidence-only. Initial authority
 families are SEC for CIK and SEC-reported issuer/filing facts, IAPD/ADV for
 adviser registrations and reported private-fund facts, accepted PCAOB evidence
@@ -119,6 +136,9 @@ must enumerate actual fields and priorities before its implementation ticket.
 Steward overrides are new governed assertions with reviewer, reason, evidence,
 scope and expiry/revocation, never direct domain-table patches. A winning field
 exposes assertion ID, policy digest, origin run, reason, and losing candidates.
+Proposed default: contradictory source updates open review while the override
+persists until its declared expiry or explicit revocation. Field-specific
+exceptions and durations follow the user's override-lifetime decision.
 
 ## Relationships and reversal
 
@@ -144,6 +164,10 @@ a new steward-authorized event referencing that merge, not a deletion:
 4. Commit restored partitions, binding history, revised projections, reversal
    evidence, checkpoint and compensating publication intents atomically.
 5. Verify consumers at the new generation before reporting reversal complete.
+
+Proposed addition: record a scoped Match Exclusion so the next replay cannot
+automatically recreate the rejected merge. Revocation requires a new
+evidence-bound decision; the exclusion must not block unrelated identities.
 
 If the closure exceeds a bounded transaction, build and verify it in an
 isolated generation using bounded batches, then atomically activate the full

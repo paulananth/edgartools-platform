@@ -18,10 +18,14 @@ Status: design gate pending; no Clean MDM runtime implementation or deployment.
 - Installed locked dependencies using `uv sync --frozen --extra s3 --extra
   mdm-runtime`; pulled PostgreSQL 16 into Colima. Verified binary version
   16.15 and recorded the image digest in the baseline evidence below.
-- Document validation: all 26 relative links across 11 new Markdown documents
+- Document validation after vendor research: all 39 relative links across 15 Markdown documents
   resolved; `git diff --check` and staged whitespace validation passed.
 - Fixed an independent pre-existing PostgreSQL test-fixture migration gap in
   commit `b3d94d9d`; production code and schema were not changed.
+- Completed primary-source research for Matrix IDM/Rimes, Informatica,
+  Ataccama and Profisee. Revised the policy interview and draft, withdrawing
+  unsupported numeric thresholds and the blanket smallest-seed survivor rule.
+  Research findings are not policy approval; no vendor runtime was tested.
 
 ## Existing PostgreSQL baseline
 
