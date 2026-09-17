@@ -24,7 +24,7 @@ GLEIF publication discovery
 Source Fetch Decision for each declared archive
         |
         v
-Capture Facade -> immutable ZIP as Bronze Artifact -> Change Ledger
+Capture Facade -> exact ZIP in Temporary Bronze Stage -> Change Ledger
         |
         v
 Verify archive hash, member inventory, CDF/parser contract, and record count
@@ -41,13 +41,18 @@ Consumer transaction + Consumer Checkpoint + MDM Commit Evidence
         |
         +--> Snowflake export
         `--> graph publication
+        |
+        +--> complete publication: retain as latest Source Artifact Archive copy
+        `--> delta publication: delete Temporary Bronze only after every required
+             consumer and downstream verification passes
 ```
 
 GLEIF Evidence Capture downloads each source archive once. Company, Security,
-Fund, Branch, Adviser, Audit Firm, Government Entity, International
-Organization, Sole Proprietor, and Market/Trading Venue consumers read the same
-Normalized Source Evidence. They do not download private copies of a shared
-GLEIF publication.
+Fund, Branch, Adviser, Audit Firm, Government Entity, Sole Proprietor, and
+Market/Trading Venue consumers read the same Normalized Source Evidence. The
+shared foundation also routes International Organization evidence into the
+common MDM entity registry. No route downloads a private copy of a shared GLEIF
+publication.
 
 ## 1. Global LEI Index publication files
 
@@ -55,9 +60,9 @@ GLEIF publishes three Golden Copy file families in XML, CSV, and JSON. It also
 publishes four time-window delta variants for each family. XML is the normative
 CDF representation. GLEIF produces JSON and CSV from XML, and CSV can limit
 repeated fields and omit extension information. The repository's frozen
-research evidence uses JSON ZIP files. The foundation specification must select
-one canonical production representation; it must not silently capture all
-equivalent encodings.
+research evidence uses JSON ZIP files. The accepted canonical production
+representation is the exact XML ZIP. Production does not capture equivalent
+JSON or CSV encodings as separate business publications.
 
 Production discovery must use the official latest-publication endpoint:
 
@@ -256,14 +261,17 @@ Input evidence:
 
 The consumer does not classify this evidence as Company.
 
-### International-Organization Enrichment
+### International-Organization common-entity route
 
 Input evidence:
 
 - Level 1 records with the accepted International Organization category.
 - Applicable RR-CDF and reporting-exception evidence.
 
-Unsupported endpoints remain Deferred Domain Evidence.
+The shared foundation preserves the exact GLEIF classification and accepted
+legal-entity evidence in the common MDM entity registry. It does not create an
+International Organization domain table or coerce the record into Company or
+Government Entity. Unsupported endpoints remain Deferred Domain Evidence.
 
 ### Sole-Proprietor business-capacity boundary
 
@@ -319,6 +327,13 @@ Each Source Publication must record:
 - discovery URL and immutable download URL;
 - declared archive inventory and expected member names;
 - archive byte count, content type, raw evidence hash, and read-back result;
+- Temporary Bronze Stage identity and verified Source Artifact Archive object,
+  when the artifact is a complete publication, including storage class,
+  transition time, and checksum parity;
+- for a delta, every required Consumer Checkpoint and downstream verification
+  that must pass before Change-Ledger-authorized temporary-object deletion;
+- every later physical location or storage-class transition and its authorized
+  retention decision;
 - format, CDF or mapping contract, parser version, and normalized record count;
 - license or terms version and mapping certification status when applicable;
 - root run, phase attempt, registry version, and Change Ledger evidence;

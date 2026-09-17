@@ -13,7 +13,7 @@ work is complete.
 | Branch legal entity | Mandatory | Branch MDM owner | Verified consumer and production evidence | `docs/specs/mdm-enrichment/branch.md` |
 | Adviser/Audit Firm | Mandatory | Adviser and Audit Firm MDM owners | Verified consumers and production evidence | `docs/specs/mdm-enrichment/adviser-audit-firm.md` |
 | Government entity | Mandatory | Government Entity MDM owner | Verified consumer and production evidence | `docs/specs/mdm-enrichment/government-entity.md` |
-| International organization | Mandatory | International Organization MDM owner | Verified consumer and production evidence | `docs/specs/mdm-enrichment/international-organization.md` |
+| International organization classification | Mandatory route | Shared Foundation owner | Verified common-entity projection and production evidence | Owned by Shared Foundation spec |
 | Sole proprietor/Person boundary | Mandatory decision | Data Governance and Privacy owners | Verified publish or captured-only decision | `docs/specs/mdm-enrichment/sole-proprietor.md` |
 | Market/Trading Venue | Mandatory | Market/Venue MDM owner | Verified consumer and production evidence | `docs/specs/mdm-enrichment/market-venue.md` |
 | ISIN mapping | Mandatory | Security MDM owner | Verified within Security consumer | Owned by Security spec |

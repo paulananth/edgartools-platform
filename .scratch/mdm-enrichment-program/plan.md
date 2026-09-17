@@ -73,11 +73,24 @@ Owner: [Shared enrichment foundation](workstreams/00-shared-enrichment-foundatio
 Specify and prove the reusable contracts before any consumer implementation:
 
 - source registry, authority, license, cadence, and immutable publication identity;
-- S3 capture for Level 1, relationship, exception, and mapping families;
-- Change Ledger authorization and one run identity spanning source, MDM, export,
-  graph, and operator evidence;
+- temporary S3 Bronze staging and low-cost immutable Source Artifact Archive
+  retention for Level 1, relationship, exception, and mapping families;
+- a Bookkeeping Root Run and Change Ledger authorization joined by one run
+  identity spanning source, MDM, export, graph, and operator evidence;
+- Change Ledger records for every logical pipeline transition and every physical
+  S3 location or storage-class transition;
 - independent family checkpoints, delta-gap recovery, full reconciliation, and
   deterministic replay;
+- current-state disaster recovery from the newest ledger-authorized complete
+  Source Publication, without an operational dependency on archive restore;
+- latest-complete-publication retention per enrichment family, with
+  Change-Ledger-authorized deletion of superseded bytes and permanent manifests,
+  hashes, lineage, MDM Commit Evidence, and deletion evidence;
+- temporary-only delta bytes retained through all required consumer and
+  downstream verification, then deleted without an archive copy;
+- permanent normalized evidence, Change Ledger and Bookkeeping history,
+  stewardship decisions, temporal MDM history, manifests, hashes, lineage,
+  MDM Commit Evidence, and deletion evidence independent of raw-byte retention;
 - normalized source-grain evidence with temporal versions and record hashes;
 - accepted-link, candidate, conflict, deferred-domain, and retirement states;
 - stewardship decisions that never imply an entity merge;
@@ -132,9 +145,11 @@ consumer cannot roll back or advance another consumer's checkpoint.
 
 - [Bind accepted GLEIF identities to Adviser and Audit Firm](workstreams/05-adviser-audit-firm.md)
   without coercing them into Company.
-- Add explicit [Government Entity](workstreams/06-government-legal-entity.md)
-  and [International Organization](workstreams/07-international-organization.md)
-  consumers.
+- Add the explicit [Government Entity](workstreams/06-government-legal-entity.md)
+  consumer. Route the
+  [International Organization](workstreams/07-international-organization.md)
+  GLEIF category through the common MDM entity registry without a dedicated
+  domain table or consumer.
 - Resolve the [Sole Proprietor versus Person business-capacity boundary](workstreams/08-sole-proprietor-person-boundary.md)
   before any publication.
 - Add a [Market/Trading Venue domain](workstreams/09-market-trading-venue.md)

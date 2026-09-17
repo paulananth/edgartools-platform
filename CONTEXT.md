@@ -116,6 +116,14 @@ _Avoid_: Optional raw archive, changed-content-only capture, Bronze as processin
 One immutable source byte sequence addressed by its canonical content identity; multiple Source Captures may reference the same artifact while retaining distinct observation provenance.
 _Avoid_: Payload copy per poll, mutable latest object, request ID as content identity
 
+**Temporary Bronze Stage**:
+The new-enrichment-pipeline architecture's short-lived S3 landing location for exact source bytes while their hash, declared member inventory, and parser contract are verified. A complete publication remains until its Source Artifact Archive write is verified; a delta remains until every required consumer checkpoint and downstream verification passes, then is deleted without an archive copy. It is not durable processing authority or the long-term system of record. Existing SEC pipelines retain ADR 0006's durable Bronze contract until a separate migration is accepted.
+_Avoid_: Applying this contract silently to existing SEC pipelines, archiving delta bytes, permanent hot Bronze storage for new enrichment, starting downstream work from an S3 listing, deleting a complete publication before archive verification, deleting a delta before required consumers and downstream checks pass
+
+**Source Artifact Archive**:
+The low-cost immutable S3 audit store for the latest verified complete source bytes of each new enrichment publication family after Temporary Bronze Stage verification; the Change Ledger records content identity, location, storage class, checksum parity, transition time, and every later physical storage transition. A verified accepted replacement permits authorized deletion of superseded bytes while permanent manifests, hashes, lineage, MDM Commit Evidence, and deletion evidence remain. Current-state replay and disaster recovery redownload the newest complete Source Publication and never wait for this archive.
+_Avoid_: Retaining every superseded enrichment payload, deleting before replacement verification, S3 lifecycle age as deletion authority, archive restore as an operational dependency, checksum-only historical replay claim, untracked lifecycle transition, mutable latest object, archive state as processing authority
+
 **Raw Evidence Hash**:
 The digest of the exact source bytes that identifies one Bronze Artifact without claiming those bytes represent a business change.
 _Avoid_: Domain hash, request identity, transport metadata as meaning
@@ -257,8 +265,8 @@ The evidence-backed closure of a current enrichment link, projection, mapping, o
 _Avoid_: Physical deletion, absence-as-retirement, silent successor rebinding
 
 **Enrichment Evidence Retention**:
-Preservation of normalized source evidence, manifests, hashes, run lineage, and stewardship decisions independently from the storage class or reviewed expiry of superseded raw source archives.
-_Avoid_: Keep every byte hot forever, delete audit lineage with raw files, key-only S3 deletion
+Permanent preservation of Normalized Source Evidence, Change Ledger and Bookkeeping history, stewardship decisions, temporal MDM history, manifests, hashes, run lineage, MDM Commit Evidence, and deletion records independently from deletion of superseded raw source bytes.
+_Avoid_: Treating never looking back as permission to erase control or MDM history, keeping every byte forever, deleting audit lineage with raw files, key-only S3 deletion
 
 **Enrichment Planning Complete**:
 The state in which every mandatory and conditional enrichment workstream has an explicit destination, dependencies, authority, evidence requirements, release gates, and terminal outcome path, with no hidden design decision.
@@ -289,7 +297,7 @@ One immutable native release from an enrichment Source Authority, identified by 
 _Avoid_: Filename as publication identity, mutable latest URL as evidence, one file silently standing for a multi-file release, equivalent XML/JSON/CSV encodings treated as separate business releases
 
 **Enrichment Publication Artifact**:
-One declared source archive within an Enrichment Source Publication, retained through Bronze Persist with its archive hash, expected member inventory, source format, parser contract, and observed record count.
+One declared source archive within an Enrichment Source Publication, verified in the Temporary Bronze Stage with its archive hash, expected member inventory, source format, parser contract, observed record count, and Change Ledger transition history. The latest complete publication is retained in the Source Artifact Archive; delta bytes are deleted after every required consumer and downstream verification passes.
 _Avoid_: Extracted temporary file as source authority, undocumented side file, parser output as raw evidence, duplicate capture per MDM domain
 
 **GLEIF Candidate Backstop**:

@@ -54,6 +54,40 @@ implementation work is created or production publication is authorized.
 - [Inventory source files and pipeline routing](issues/06-inventory-source-files-and-pipeline-routing.md)
   — catalog the three Golden Copy families, their delta and recovery files,
   every approved mapping snapshot, and each domain or nonpublishing route.
+- [Select the Golden Copy representation and completeness boundary](issues/07-select-golden-copy-representation-and-completeness.md)
+  — use XML ZIP, coordinate Relationship Records with Reporting Exceptions,
+  and keep the six identifier mappings independently checkpointed.
+- [Set run, transaction, and artifact-transition authority](issues/08-set-run-transaction-and-artifact-transition-authority.md)
+  — join Bookkeeping, Change Ledger, and MDM Commit Evidence by one `run_id`;
+  commit bounded consumer batches atomically; and move verified temporary
+  Bronze bytes into the low-cost immutable Source Artifact Archive. Operational
+  recovery redownloads the newest complete Source Publication through the
+  Change Ledger and never waits for an archive restore. The archive retains
+  only the latest verified complete publication per family; authorized deletion
+  removes superseded bytes while permanent lineage and deletion evidence remain.
+  Delta bytes stay temporary until every required consumer and downstream check
+  passes, then are deleted without entering the archive. Normalized evidence,
+  control history, stewardship decisions, and temporal MDM history remain
+  permanent even when their source bytes are deleted.
+- [Add the Branch domain boundary](issues/10-add-branch-domain-boundary.md)
+  — extend the existing separate-domain model with `branch` and `mdm_branch`,
+  and link an accepted Branch to its separately accepted head office through
+  directional `IS_INTERNATIONAL_BRANCH_OF` evidence.
+- [Add the Government Entity domain boundary](issues/11-add-government-entity-domain-boundary.md)
+  — add `government_entity` and `mdm_government_entity`; retain LEI and
+  applicable QCC/GEM identifiers as governed source references without
+  coercing the entity into Company or inferring ownership.
+- [Route International Organizations through the common entity registry](issues/12-route-international-organizations-through-common-entity.md)
+  — keep the GLEIF category and all accepted evidence in Release 1, but do not
+  create a dedicated domain table or coerce it into Company or Government
+  Entity.
+
+## Deferred follow-up
+
+- [Migrate existing SEC Bronze later](issues/09-defer-existing-sec-bronze-migration.md)
+  — Release 1 changes only new enrichment pipelines. ADR 0006 remains active
+  for existing SEC pipelines until a separate migration proves no-loss parity,
+  replay, recovery, retention, cost, and rollback.
 
 ## Program workstreams
 
@@ -64,7 +98,7 @@ implementation work is created or production publication is authorized.
 - [Branch legal-entity enrichment](workstreams/04-branch-legal-entity.md)
 - [Adviser and audit-firm legal-entity enrichment](workstreams/05-adviser-audit-firm.md)
 - [Government legal-entity enrichment](workstreams/06-government-legal-entity.md)
-- [International-organization enrichment](workstreams/07-international-organization.md)
+- [International-organization common-entity route](workstreams/07-international-organization.md)
 - [Sole-proprietor and Person boundary](workstreams/08-sole-proprietor-person-boundary.md)
 - [Market and trading-venue enrichment](workstreams/09-market-trading-venue.md)
 - [ISIN-to-LEI mapping](workstreams/10-isin-mapping.md)
@@ -108,3 +142,5 @@ research and specification decisions; uncertainty is not hidden here.
 - Human-person enrichment from LEI evidence. The sole-proprietor workstream must
   decide the business-capacity boundary without asserting that an LEI identifies
   a natural person for unrelated purposes.
+- Changing existing SEC pipelines from durable Bronze to temporary staging.
+  That is a separately gated future migration, not part of enrichment Release 1.

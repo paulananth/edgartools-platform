@@ -87,8 +87,9 @@ verification remain. Later-domain questions are owned by the parent program.
 ## Out of scope
 
 - Later Fund, Security, Branch, Adviser/Audit-Firm, government,
-  international-organization, sole-proprietor, and Market/Venue consumer specs;
-  these are owned by the [parent program](../mdm-enrichment-program/map.md).
+  sole-proprietor, and Market/Venue consumer specs, plus the International
+  Organization common-entity route in the shared-foundation spec; these are
+  owned by the [parent program](../mdm-enrichment-program/map.md).
 - Production ingestion, schema migration, backfill execution, deployment,
   scheduling, operations, and physical retention; these are parent-program
   workstreams after this specification.
