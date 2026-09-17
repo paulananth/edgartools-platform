@@ -304,7 +304,7 @@ def test_filing_and_adv_discovery_partition_the_same_sealed_daily_index_independ
 
     from edgar_warehouse.acquisition.registry_ledger import CoverageSpec, SourceRegistryLedger
     from edgar_warehouse.application.command_router import run_command
-    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.acquisition.database import get_engine
 
     # This fixture only activated adv_filing -- also activate filing_artifact
     # so both drivers have real coverage in the same registry version.
