@@ -1,7 +1,8 @@
 # Clean MDM identity and relationship model
 
 Status: target design. Company/Person separation and governed profiles are
-user-directed; additional representations await the Wayfinder policy gate.
+user-directed. Q12 accepts the non-company Fund Structure boundary; Branch,
+Government Entity and Market/Venue await the Wayfinder policy gate.
 
 ## Identity and profile boundaries
 
@@ -14,7 +15,7 @@ user-directed; additional representations await the Wayfinder policy gate.
 | Government Entity | An accepted government body | Distinct ID and governed government identifiers; not a Company. |
 | International Organization | An organization whose accepted category supports this representation | Common registry kind and common legal-evidence fields; no dedicated domain table, consistent with the earlier accepted boundary. Preserve source classification history. |
 | Market/Venue | A market or trading venue identified within an approved MIC contract | Distinct ID and dated operator relationship; never collapse venue and operator. Operating/segment MIC relationships are venue hierarchy, not corporate ownership. |
-| Fund Structure | A supported non-company fund arrangement | `fund_structure` kind, governed Fund profile, explicit form such as trust, contractual fund, umbrella, or subfund. Structural level and legal personality remain separate assertions; unknown form stays deferred. |
+| Fund Structure | A supported non-company fund arrangement | `fund_structure` kind, governed Fund profile, evidence-backed legal form and structural level (including umbrella/subfund where supported). Structural level and legal personality remain separate assertions; unknown form stays deferred. |
 
 A profile is a dated, evidence-backed capability or regulated registration,
 not another identity. Profile key includes identity, role, authority,

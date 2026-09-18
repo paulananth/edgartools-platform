@@ -5,8 +5,8 @@ Status: design gate pending; no Clean MDM runtime implementation or deployment.
 
 ## Completed investigation
 
-- Recorded user acceptance of policy Q1–Q9 on 2026-09-18;
-  calibration, survivor selection and additional domain decisions remain open. Interview rounds now have at most
+- Recorded user acceptance of policy Q1–Q12 on 2026-09-18;
+  actual score calibration and Branch/Government/Venue decisions remain open. Interview rounds now have at most
   three questions. This records design decisions, not runtime verification.
 - Fetched `origin/main` and inspected
   `b1babd8bbd0e04044fcacbbab822d480c97c01bc`.
@@ -32,6 +32,20 @@ Status: design gate pending; no Clean MDM runtime implementation or deployment.
 
 ## Existing PostgreSQL baseline
 
+Calibration prerequisite check on 2026-09-18 found a frozen 1,000-company
+GLEIF research cohort and 883 adjudicated candidate pairs (316 same, 480
+different, 87 unresolved) in
+`.scratch/gleif-company-augmentation/research/02-reviewed-candidates.jsonl`
+and `02-decisions.jsonl`. Reviewer labels are from Codex agents; no documented
+independent reference truth and held-out protocol was found. The existing
+`02-identity-results.md` disclaims population inference and prohibits unattended
+linking from its heuristic tiers. These are development examples, not proof of
+the newly accepted precision target. The manifest's referenced raw GLEIF ZIP
+is absent from this worktree. Matcher, issuer, ADV and reconciliation unit
+fixtures are synthetic; no qualifying per-kind/rule-family corpus was found.
+Versioned independent labels, representative sampling and held-out validation
+remain necessary before numeric matching cutoffs can be accepted.
+
 Command: `uv run --frozen --extra s3 --extra mdm-runtime pytest
 tests/integration/test_acquisition_ledger_postgres.py -q --tb=short`.
 
@@ -56,7 +70,7 @@ Clean MDM identities, Merge Stage, consumer contracts or reversal behavior.
 
 | Delivery | State | Required next evidence |
 | --- | --- | --- |
-| Merge policy gate | Partially accepted | Calibration, survivor selection and domain decisions on the linked Wayfinder frontier |
+| Merge policy gate | Partially accepted | Actual score calibration and remaining domain decisions on the linked Wayfinder frontier |
 | Detailed migrations, schemas and adapter policies | Not implemented | Gate resolution, reviewed physical contract and implementation tickets |
 | PostgreSQL 16 core | Not run | Real migrations, restricted-role execution, fixture permutations and crash/retry suite with zero prerequisite skips |
 | Entity/profile/relationship integration | Not implemented | Every current writer routed through Merge Stage and downstream contracts verified |

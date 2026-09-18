@@ -4,13 +4,14 @@ Status: partially accepted policy v1; requires completion of the
 [Wayfinder decision](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md).
 Revised after [vendor research](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md).
 The earlier numeric thresholds and smallest-seed survivor rule are withdrawn.
-Q1–Q9 were accepted on 2026-09-18: validated binding, steward-approved
+Q1–Q12 were accepted on 2026-09-18: validated binding, steward-approved
 consolidation, field authority/groups, clear/retract semantics, override lifetime
 and evidence-based reversal with Match Exclusion, stable internal IDs, indefinite
 overrides when no expiry is supplied, and review of dependent merges before
-reversal activation. Calibration, survivor selection and additional domain
-boundaries remain open. No runtime implementation or activation is authorized
-by this partial gate resolution.
+reversal activation. The earliest-published survivor default, 99.9% precision
+release target and non-company Fund Structure boundary are now accepted. Actual
+score calibration and the remaining domain boundaries stay open. No runtime
+implementation or activation is authorized by this partial gate resolution.
 
 ## Inputs and outputs
 
@@ -48,12 +49,16 @@ eligible identities goes to review without attaching to an arbitrary winner.
 | Market/Venue | MIC with identity and effective scope | Operator/segment ambiguity and code reuse need review |
 | Fund Structure | Identifiers with evidence for the precise structural level | No name/adviser-only collapse of PFID, LEI, series or share-class meanings |
 
-No universal automatic or review score is specified. Exact and scored rules
-need a labeled corpus, explicit false-match acceptance criteria, candidate
-recall measurement and versioned activation. Those values follow the user's
-automation decision and remain an open calibration/release gate. A unique
-existing source binding permits an update but
-still checks corrected identifiers and kind; changes that dispute identity
+No universal automatic or review score is specified. Accepted Q11 requires
+at least 99.9% precision, demonstrated by a one-sided 95% lower confidence bound
+on representative, independently labeled held-out automatic-binding decisions
+for each enabled entity kind and rule family. Insufficient evidence keeps a
+rule review-only. Also require zero hard-veto violations in adversarial fixtures;
+measure candidate recall and review volume. This statistical release target is
+not a similarity cutoff or an accuracy guarantee. Actual cutoffs require measured
+calibration and a versioned policy before implementation tickets; none have been
+validated yet. A unique existing source binding permits an update but still
+checks corrected identifiers and kind; changes that dispute identity
 create review rather than silently moving the record. Multiple exact candidates
 are a conflict. Fuzzy ties do not choose an identity by UUID.
 
@@ -77,8 +82,11 @@ Accepted rule: once an identity is published, adding or correcting source
 evidence does not change its ID. Source-record keys remain distinct from
 master IDs and stable through source corrections. An approved consolidation
 explicitly selects an existing survivor; the losing published ID becomes a
-versioned alias. Selection precedence between established identities remains
-an open dependent decision; stability and registry-based replay are accepted.
+versioned alias. Accepted Q10 defaults to the earliest published identity,
+using UUID ordering only for equal publication times. A steward may select
+another existing ID with a recorded reason. Retain the publication history and
+selection decision for replay; arrival order never replaces that history.
+Survivor selection does not determine which source wins any master field.
 
 The persistent identity registry, bindings and accepted decisions become
 explicit replay inputs alongside evidence, supersessions, retractions and
