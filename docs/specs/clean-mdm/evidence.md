@@ -5,8 +5,8 @@ Status: design gate pending; no Clean MDM runtime implementation or deployment.
 
 ## Completed investigation
 
-- Recorded user acceptance of policy Q1, Q2 and Q4–Q7 on 2026-09-18;
-  Q3 and dependent decisions remain open. Interview rounds now have at most
+- Recorded user acceptance of policy Q1–Q9 on 2026-09-18;
+  calibration, survivor selection and additional domain decisions remain open. Interview rounds now have at most
   three questions. This records design decisions, not runtime verification.
 - Fetched `origin/main` and inspected
   `b1babd8bbd0e04044fcacbbab822d480c97c01bc`.
@@ -56,7 +56,7 @@ Clean MDM identities, Merge Stage, consumer contracts or reversal behavior.
 
 | Delivery | State | Required next evidence |
 | --- | --- | --- |
-| Merge policy gate | Partially accepted | Q3 and dependent decisions on the linked Wayfinder frontier |
+| Merge policy gate | Partially accepted | Calibration, survivor selection and domain decisions on the linked Wayfinder frontier |
 | Detailed migrations, schemas and adapter policies | Not implemented | Gate resolution, reviewed physical contract and implementation tickets |
 | PostgreSQL 16 core | Not run | Real migrations, restricted-role execution, fixture permutations and crash/retry suite with zero prerequisite skips |
 | Entity/profile/relationship integration | Not implemented | Every current writer routed through Merge Stage and downstream contracts verified |

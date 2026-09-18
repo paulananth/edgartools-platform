@@ -4,10 +4,12 @@ Status: partially accepted policy v1; requires completion of the
 [Wayfinder decision](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md).
 Revised after [vendor research](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md).
 The earlier numeric thresholds and smallest-seed survivor rule are withdrawn.
-Q1, Q2 and Q4–Q7 were accepted on 2026-09-18: validated binding, steward-approved
+Q1–Q9 were accepted on 2026-09-18: validated binding, steward-approved
 consolidation, field authority/groups, clear/retract semantics, override lifetime
-and evidence-based reversal with Match Exclusion. Q3 (ID stability) and dependent
-details remain proposed. No runtime implementation or activation is authorized
+and evidence-based reversal with Match Exclusion, stable internal IDs, indefinite
+overrides when no expiry is supplied, and review of dependent merges before
+reversal activation. Calibration, survivor selection and additional domain
+boundaries remain open. No runtime implementation or activation is authorized
 by this partial gate resolution.
 
 ## Inputs and outputs
@@ -49,7 +51,8 @@ eligible identities goes to review without attaching to an arbitrary winner.
 No universal automatic or review score is specified. Exact and scored rules
 need a labeled corpus, explicit false-match acceptance criteria, candidate
 recall measurement and versioned activation. Those values follow the user's
-automation decision and remain an open calibration/release gate. A unique existing source binding permits an update but
+automation decision and remain an open calibration/release gate. A unique
+existing source binding permits an update but
 still checks corrected identifiers and kind; changes that dispute identity
 create review rather than silently moving the record. Multiple exact candidates
 are a conflict. Fuzzy ties do not choose an identity by UUID.
@@ -70,12 +73,12 @@ regulated Adviser status.
 
 ## Determinism and surviving IDs
 
-Proposed rule: once an identity is published, adding or correcting source
+Accepted rule: once an identity is published, adding or correcting source
 evidence does not change its ID. Source-record keys remain distinct from
 master IDs and stable through source corrections. An approved consolidation
 explicitly selects an existing survivor; the losing published ID becomes a
 versioned alias. Selection precedence between established identities remains
-a dependent decision after the user chooses the stability boundary.
+an open dependent decision; stability and registry-based replay are accepted.
 
 The persistent identity registry, bindings and accepted decisions become
 explicit replay inputs alongside evidence, supersessions, retractions and
@@ -86,10 +89,10 @@ Freeze candidate generation against the declared watermark; ambiguous bridges
 remain unresolved rather than inheriting a first-arrival decision.
 
 A fresh rebuild from source bytes alone cannot be called exact-ID replay under
-this recommendation. It either restores the approved registry/decision history
+this accepted policy. It either restores the approved registry/decision history
 or proves semantic parity through a verified crosswalk. The initial isolated
 rebuild must establish and retain its registry before publishing IDs. This
-tradeoff replaces the earlier smallest-seed rule and requires user acceptance.
+accepted tradeoff replaces the earlier smallest-seed rule.
 
 ## Field semantics
 
@@ -140,8 +143,9 @@ Steward overrides are new governed assertions with reviewer, reason, evidence,
 scope and expiry/revocation, never direct domain-table patches. A winning field
 exposes assertion ID, policy digest, origin run, reason, and losing candidates.
 Accepted lifetime rule: contradictory source updates open review while the override
-persists until its declared expiry or explicit revocation. Field-specific
-exceptions and durations follow the user's override-lifetime decision.
+persists until its declared expiry or explicit revocation. Without an explicit
+expiry it remains until revoked; do not invent automatic expiry schedules.
+A field contract may declare a specific expiry policy before activation.
 
 ## Relationships and reversal
 
@@ -160,7 +164,9 @@ a new steward-authorized event referencing that merge, not a deletion:
    with before/after identities, fields, aliases, edges and consumer changes.
 2. Remove the revoked merge from the accepted-decision graph and find dependent
    merge decisions. Decisions that used the invalid combined identity require
-   re-adjudication; independent evidence-backed decisions remain valid.
+   re-adjudication before reversal activation; do not guess their new partition.
+   Unrelated identities continue processing. Independent evidence-backed
+   decisions remain valid.
 3. Replay retained assertions and later corrections with explicit policy
    versions. Partition by source attribution; unassignable later manual facts
    return to review instead of being guessed onto one restored identity.
