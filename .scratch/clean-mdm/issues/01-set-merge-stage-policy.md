@@ -26,7 +26,9 @@ the user's plan, not an implementation ticket.
 The [vendor comparison](../../../docs/research/clean-mdm-vendor-merge-rules-2026-09-17.md)
 supersedes the earlier blanket exact-only, numeric-threshold and smallest-ID
 recommendations. The earlier proposal remains in git history; it was never
-accepted. The following recommendations also remain unaccepted.
+accepted. On 2026-09-18 the user accepted Q1, Q2 and Q4–Q7 below.
+Q3 remains open pending clarification of the existing internal ID. Ask no more
+than three questions per round, as explicitly requested by the user.
 
 ### Q1 — Automatic Source Record Binding
 
@@ -98,11 +100,36 @@ unclear. Reversal completes only after downstream changes are verified.
 
 ## Remaining dependent decisions
 
-Once this round is answered, settle numeric calibration/release criteria,
+After clarifying Q3, settle numeric calibration/release criteria,
 the survivor-selection rule for approved consolidations, override schedules,
 and detailed reversal dependency handling. Additional domain representations
 from the original gate (including Market/Venue and non-company Fund Structure)
 also remain unresolved; vendor research is not their approval.
+
+## Next round (maximum three questions)
+
+Q3 fact check against this checkout: `mdm_entity.entity_id` is already a UUID
+primary key (`edgar_warehouse/mdm/migrations/001_initial_schema.sql:25`).
+Normal updates reuse it, but allocation mixes random UUID4 and source-seeded
+UUID5 paths. Steward merges tombstone the discarded ID and move source refs
+(`edgar_warehouse/mdm/stewardship.py:130–174`); redirects are consumer-specific,
+not a general alias contract. An empty-database rebuild cannot reproduce all
+random IDs from source bytes. The open decision strengthens continuity through
+merges, reversals and replay; it does not introduce the first internal ID.
+
+- **Q3 — Internal identity ID:** retain an immutable internal ID independent of
+  CIK/LEI and other source identifiers? Recommend yes: one ID per identity,
+  shared by its roles; an approved consolidation retains losing IDs as aliases,
+  and exact-ID replay restores the registry and accepted decisions. Existing
+  survivor selection remains a dependent decision.
+- **Q8 — Override expiry default:** when a steward gives no expiry, should the
+  correction remain until explicitly revoked? Recommend yes; allow an explicit
+  expiry, keep conflicting updates in review, and do not invent per-field
+  expiration periods before a field contract requires them.
+- **Q9 — Dependent merges during reversal:** if a later merge relied on the
+  incorrect merge, may the system guess how to split it? Recommend no: require
+  review of that affected dependency before activating the reversal; unrelated
+  identities continue processing. Independently supported corrections remain.
 
 ## Comments
 
@@ -116,5 +143,11 @@ inferred from that request; the previous “accept all seven” prompt is obsole
 
 ## Answer
 
-Pending user decision. Do not generate implementation tickets or apply a
-Clean MDM migration until this section records the actual exchange.
+Partial acceptance on 2026-09-18. User: “q1 yes, q2 yes, Q3 do we have an internal
+immutable id ?, q4 yes, q5 agreed, q6 agreed, q7 agreed ask three questions at a
+time not more than that”.
+
+Q1, Q2 and Q4–Q7 are accepted as recommended above. Q3 is a factual question,
+not acceptance. Numeric release criteria, survivor selection, override defaults,
+reversal dependencies and additional domain contracts remain open. The overall
+gate stays claimed; no implementation tickets or Clean MDM migrations yet.

@@ -1,11 +1,14 @@
 # Shared Merge Stage
 
-Status: proposed policy v1; requires the
+Status: partially accepted policy v1; requires completion of the
 [Wayfinder decision](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md).
 Revised after [vendor research](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md).
 The earlier numeric thresholds and smallest-seed survivor rule are withdrawn.
-The revised recommendations below are not accepted policy or permission to
-change the running matcher.
+Q1, Q2 and Q4–Q7 were accepted on 2026-09-18: validated binding, steward-approved
+consolidation, field authority/groups, clear/retract semantics, override lifetime
+and evidence-based reversal with Match Exclusion. Q3 (ID stability) and dependent
+details remain proposed. No runtime implementation or activation is authorized
+by this partial gate resolution.
 
 ## Inputs and outputs
 
@@ -29,7 +32,7 @@ not just the incoming record against one preferred candidate. A third record
 bridging two conflicting identifiers cannot transitively bypass the veto.
 
 Source Record Binding and Identity Consolidation are separate authorities
-inside the Merge Stage. Proposed first-release boundary: validated rules may
+inside the Merge Stage. Accepted first-release boundary: validated rules may
 bind an incoming source to one accepted identity; consolidating two established
 identities requires an explicit steward decision. A bridge between several
 eligible identities goes to review without attaching to an arbitrary winner.
@@ -46,7 +49,7 @@ eligible identities goes to review without attaching to an arbitrary winner.
 No universal automatic or review score is specified. Exact and scored rules
 need a labeled corpus, explicit false-match acceptance criteria, candidate
 recall measurement and versioned activation. Those values follow the user's
-automation decision. A unique existing source binding permits an update but
+automation decision and remain an open calibration/release gate. A unique existing source binding permits an update but
 still checks corrected identifiers and kind; changes that dispute identity
 create review rather than silently moving the record. Multiple exact candidates
 are a conflict. Fuzzy ties do not choose an identity by UUID.
@@ -119,7 +122,7 @@ as a meaningless ordinal across providers. Equal ranks resolve eligible
 ordinary-field disagreements deterministically while preserving a conflict
 record. Authoritative identity disagreement cannot be settled this way.
 
-Proposed addition: declare coherent field groups, such as address components,
+Accepted policy: declare coherent field groups, such as address components,
 that must select one source assertion together. Keep type-plus-field priorities
 for independent facts. Validate source eligibility, quality and any declared
 freshness limit at the pinned as-of time before ranking. Do not mix address
@@ -136,7 +139,7 @@ must enumerate actual fields and priorities before its implementation ticket.
 Steward overrides are new governed assertions with reviewer, reason, evidence,
 scope and expiry/revocation, never direct domain-table patches. A winning field
 exposes assertion ID, policy digest, origin run, reason, and losing candidates.
-Proposed default: contradictory source updates open review while the override
+Accepted lifetime rule: contradictory source updates open review while the override
 persists until its declared expiry or explicit revocation. Field-specific
 exceptions and durations follow the user's override-lifetime decision.
 
@@ -165,7 +168,7 @@ a new steward-authorized event referencing that merge, not a deletion:
    evidence, checkpoint and compensating publication intents atomically.
 5. Verify consumers at the new generation before reporting reversal complete.
 
-Proposed addition: record a scoped Match Exclusion so the next replay cannot
+Accepted policy: record a scoped Match Exclusion so the next replay cannot
 automatically recreate the rejected merge. Revocation requires a new
 evidence-bound decision; the exclusion must not block unrelated identities.
 
