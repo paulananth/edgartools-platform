@@ -23,6 +23,7 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   the historical enrichment program's decisions.
 - No implementation tickets until the Merge Stage policy gate is resolved.
   Draft specifications are proposals, never evidence of implementation.
+- Interview rounds contain at most three questions (user instruction, 2026-09-18).
 - Worktree: `../edgartools-platform-clean-mdm`; branch: `codex/clean-mdm`.
 - Inspected base: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`.
 - [Delivery index](../../docs/specs/clean-mdm/README.md).
@@ -33,8 +34,9 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   — primary-source comparison separates source binding, consolidation and
   field selection; revises unsupported threshold and survivor-ID proposals.
 
-No new human policy decision has been accepted. Shared identities, an isolated
-rebuild, offline PostgreSQL acceptance, and delivery order remain user-directed.
+The ongoing [identity, merge, and recovery policy interview](issues/01-set-merge-stage-policy.md)
+records partial acceptance of Q1, Q2 and Q4–Q7 on 2026-09-18. Q3 and dependent
+decisions remain open; the policy gate has not closed.
 
 ## Not yet specified
 
