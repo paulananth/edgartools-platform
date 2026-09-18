@@ -1,14 +1,25 @@
 # Clean MDM evidence report
 
 Date: 2026-09-18
-Status: design gate pending; no Clean MDM runtime implementation or deployment.
+Status: policy gate resolved; local foundation and shared merge core implemented.
+Source integrations and hosted qualification/cutover remain incomplete.
 
 ## Completed investigation
 
-- Recorded user acceptance of policy Q1–Q15 on 2026-09-18. Actual score
-  calibration remains unproven; Q16 proposes a sequencing change to permit
-  the local build while unqualified automatic rules stay disabled. Interview
-  rounds contain at most three questions. This records design decisions, not runtime verification.
+- Recorded acceptance of Q1–Q16 and the explicit three-database local layout.
+- Installed real migrations 023/025 in local `mdm` and the immutable journal
+  mirror migration 024 in local `change_ledger`. Existing legacy counts stayed
+  unchanged: 10 entities, 0 source references, 0 relationship instances. No
+  synthetic fixture was loaded into those persistent databases.
+- New acceptance suite: **19 passed, 0 skipped in 16.51 seconds** on disposable
+  PostgreSQL 16.15. Tests exercise restricted runtime roles, atomic rollback,
+  duplicate/reordered evidence, concurrent generation/checkpoint fencing,
+  idempotent export/graph delivery, expired publisher fencing, shared roles,
+  clear/retract/unknown time, authority conflicts, aliases, dependent reversal,
+  typed relationships, hierarchy cycles, and a real three-database mirror plus
+  Bookkeeping reconciliation. Synthetic fixtures are not calibration evidence.
+- `ruff check` passes for the new core and integration suite. The complete
+  current entity-pipeline/API/hosted-consumer surface is not yet qualified.
 - Fetched `origin/main` and inspected
   `b1babd8bbd0e04044fcacbbab822d480c97c01bc`.
 - Created isolated `codex/clean-mdm` branch and sibling worktree. The primary
@@ -73,13 +84,13 @@ Clean MDM identities, Merge Stage, consumer contracts or reversal behavior.
 
 | Delivery | State | Required next evidence |
 | --- | --- | --- |
-| Merge policy gate | Q1–Q15 accepted; Q16 pending | Decide whether calibration gates implementation tickets or individual automatic-rule activation |
-| Detailed migrations, schemas and adapter policies | Not implemented | Gate resolution, reviewed physical contract and implementation tickets |
-| PostgreSQL 16 core | Not run | Real migrations, restricted-role execution, fixture permutations and crash/retry suite with zero prerequisite skips |
+| Merge policy gate | Resolved | Q1–Q16 accepted; unqualified automatic rules disabled |
+| Detailed migrations, schemas and adapter policies | Foundation installed locally | Complete concrete source adapter contracts and source integration |
+| PostgreSQL 16 core | 19 integration tests pass | Broaden full-core coverage and complete independent review; automatic matching remains unqualified |
 | Entity/profile/relationship integration | Not implemented | Every current writer routed through Merge Stage and downstream contracts verified |
 | API/export/graph migration | Not implemented | Versioned contracts, consumer inventory and compatibility/completeness evidence |
 | Snowflake Postgres qualification | Not run | Same migrations/tests on isolated target with effective-role evidence |
 | Rebuild/catch-up/cutover/rollback | Not run | Pinned approved inputs, live downstream reconciliation, rehearsal and release decision |
 
-No Clean MDM migration success, live AWS/Snowflake state, production parity,
-or deployment readiness is claimed by these documents.
+Local migration and test results above do not claim live AWS/Snowflake state,
+production parity or deployment readiness.

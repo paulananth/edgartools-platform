@@ -35,9 +35,8 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   field selection; revises unsupported threshold and survivor-ID proposals.
 
 The ongoing [identity, merge, and recovery policy interview](issues/01-set-merge-stage-policy.md)
-records acceptance of Q1–Q15 on 2026-09-18. Actual score calibration remains
-unproven; Q16 proposes starting the local build with unqualified rules disabled.
-That sequencing change is not yet accepted; the policy gate has not closed.
+records acceptance of Q1–Q16 on 2026-09-18. The gate is resolved; unqualified
+automatic binding stays disabled while local implementation proceeds.
 
 ## Not yet specified
 
@@ -53,3 +52,15 @@ That sequencing change is not yet accepted; the policy gate has not closed.
   unrelated gold analytics, non-AWS deployment, and new conditional-source
   licensing or purchase.
 - Destruction of legacy MDM or activation based on local tests alone.
+
+## Q16 resolution — 2026-09-18
+
+The user accepted starting the offline build with unqualified automatic rules
+disabled. This supersedes earlier pre-implementation calibration timing above.
+Q1–Q16 are accepted; numeric calibration and versioned policy evidence are
+mandatory before each automatic rule activation. Implementation is authorized;
+production activation still requires all local and hosted acceptance gates.
+
+Implementation begins with [the isolated PostgreSQL foundation](issues/03-build-postgres-foundation.md). The dependent implementation tickets cover merge/recovery, pipeline integration, consumer contracts and hosted qualification.
+
+- [Build the isolated PostgreSQL foundation](issues/03-build-postgres-foundation.md): real migrations, restricted writes, atomic checkpoints and outbox, and three-database journal mirroring verified locally.

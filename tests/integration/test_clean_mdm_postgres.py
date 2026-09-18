@@ -1,0 +1,993 @@
+"""Mandatory PostgreSQL 16 acceptance; prerequisites fail rather than skip."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
+
+from edgar_warehouse.mdm.clean.store import (
+    Conflict,
+    Store,
+    migrate,
+    register_dataset,
+    register_policy,
+)
+from edgar_warehouse.mdm.migrations.runtime import _apply_source_registry_migration
+
+IMAGE = "postgres:16-alpine"
+
+
+def docker(*args, input=None):
+    return subprocess.run(
+        ["docker", *args], input=input, text=True, capture_output=True, check=True
+    ).stdout.strip()
+
+
+@dataclass
+class Database:
+    admin: object
+    application: object
+    policy: str
+    registry: str
+
+
+@pytest.fixture(scope="module")
+def postgres():
+    docker("image", "inspect", IMAGE)
+    name = f"clean-mdm-test-{uuid4().hex[:10]}"
+    docker(
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        name,
+        "-p",
+        "127.0.0.1::5432",
+        "-e",
+        "POSTGRES_PASSWORD=test",
+        IMAGE,
+    )
+    try:
+        port = docker("port", name, "5432/tcp").rsplit(":", 1)[1]
+        admin = create_engine(
+            f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres"
+        )
+        for _ in range(80):
+            try:
+                with admin.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                break
+            except DBAPIError:
+                time.sleep(0.1)
+        else:
+            pytest.fail("PostgreSQL did not become ready")
+        with admin.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE ROLE clean_application LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE"
+                )
+            )
+        _apply_source_registry_migration(admin)
+        app = create_engine(
+            f"postgresql+psycopg2://clean_application:test@127.0.0.1:{port}/postgres"
+        )
+        yield admin, app
+        app.dispose()
+        admin.dispose()
+    finally:
+        docker("stop", name)
+
+
+@pytest.fixture
+def database(postgres):
+    admin, app = postgres
+    with admin.begin() as conn:
+        conn.execute(text("DROP SCHEMA IF EXISTS mdm_v2 CASCADE"))
+        conn.execute(text("DELETE FROM source_registry_coverage"))
+        conn.execute(text("DELETE FROM source_registry_version"))
+        version = str(uuid4())
+        conn.execute(
+            text(
+                "INSERT INTO source_registry_version(version_id,status,operator_authorization_reference,activated_at) VALUES(:v,'active','offline-fixture',now())"
+            ),
+            {"v": version},
+        )
+        conn.execute(
+            text("""INSERT INTO source_registry_coverage(version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
+         VALUES(:v,'fixture','carry_forward','fixture','fixture','fixture','2026-01-01')"""),
+            {"v": version},
+        )
+    assert migrate(admin, application_role="clean_application")["installed"]
+    assert not migrate(admin, application_role="clean_application")["installed"]
+    with admin.begin() as conn:
+        policy = register_policy(
+            conn,
+            {
+                "version": 1,
+                "required_consumers": ["export", "graph"],
+                "automatic_rules": [],
+                "fields": {
+                    "company": {
+                        "name": {"sources": ["fixture.primary", "fixture.secondary"]},
+                        "address": {
+                            "sources": ["fixture.primary", "fixture.secondary"]
+                        },
+                    }
+                },
+            },
+        )
+        for code in ["fixture.primary", "fixture.secondary"]:
+            register_dataset(
+                conn,
+                code,
+                version,
+                {
+                    "provider": "test",
+                    "family": "fixture",
+                    "schema_version": "1",
+                    "record_key": "key",
+                    "publication_key": "version",
+                    "effective_time": "effective_at",
+                    "semantics": "patch",
+                },
+            )
+    return Database(admin, app, policy, version)
+
+
+def request(db, **changes):
+    return {
+        "batch_id": "batch-1",
+        "expected_generation": 0,
+        "consumer": "mastering/company",
+        "expected_checkpoint": 0,
+        "checkpoint": 1,
+        "policy_digest": db.policy,
+        "assertions": [],
+        "identities": [],
+        "decisions": [],
+        "projections": [
+            {
+                "object_type": "review",
+                "object_id": "review-1",
+                "body": {"reason": "needs evidence"},
+            }
+        ],
+        **changes,
+    }
+
+
+def test_atomic_commit_rollback_and_lost_ack(database):
+    store = Store(database.application)
+    run = str(uuid4())
+    req = request(database)
+    with pytest.raises(RuntimeError), database.application.begin() as conn:
+        store.commit(conn, req, run)
+        raise RuntimeError("process failed before commit")
+    with database.application.connect() as conn:
+        for table in [
+            "batch",
+            "projection",
+            "publication",
+            "checkpoint",
+            "observation",
+        ]:
+            assert conn.scalar(text(f"SELECT count(*) FROM mdm_v2.{table}")) == 0
+    with database.application.begin() as conn:
+        first = store.commit(conn, req, run)
+    another = str(uuid4())
+    with database.application.begin() as conn:
+        second = store.commit(conn, req, another)
+    assert first["generation"] == second["generation"] == 1 and second["duplicate"]
+    assert store.run_status(another) == {
+        "batches": 1,
+        "pending": 2,
+        "publication_complete": False,
+    }
+    with (
+        pytest.raises(DBAPIError, match="different content"),
+        database.application.begin() as conn,
+    ):
+        store.commit(conn, {**req, "checkpoint": 2}, run)
+
+
+def test_checkpoint_and_concurrent_generation_fencing(database):
+    store = Store(database.application)
+
+    def commit(key):
+        try:
+            with database.application.begin() as conn:
+                store.commit(conn, request(database, batch_id=key), str(uuid4()))
+            return "ok"
+        except DBAPIError:
+            return "stale"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(commit, ["a", "b"])) == ["ok", "stale"]
+    with (
+        pytest.raises(DBAPIError, match="checkpoint"),
+        database.application.begin() as conn,
+    ):
+        store.commit(
+            conn,
+            request(database, batch_id="c", expected_generation=1),
+            str(uuid4()),
+        )
+
+
+def test_permissions_immutable_evidence_and_migration_drift(database, monkeypatch):
+    with pytest.raises(DBAPIError), database.application.begin() as conn:
+        conn.execute(text("DELETE FROM mdm_v2.projection"))
+    with pytest.raises(DBAPIError), database.application.begin() as conn:
+        conn.execute(text("INSERT INTO mdm_v2.policy VALUES('x','{}')"))
+    with pytest.raises(DBAPIError), database.application.begin() as conn:
+        conn.execute(text("CREATE TABLE mdm_v2.bypass(a int)"))
+    with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
+        conn.execute(text("DELETE FROM mdm_v2.policy"))
+    original = Path.read_text
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda p, *a, **kw: (
+            original(p, *a, **kw) + "\n"
+            if p.name == "023_clean_mdm.sql"
+            else original(p, *a, **kw)
+        ),
+    )
+    with pytest.raises(Conflict, match="checksum"):
+        migrate(database.admin, application_role="clean_application")
+
+
+class Destination:
+    def __init__(self):
+        self.objects = {}
+        self.fail = True
+
+    def publish(self, key, payload, expected_hash):
+        previous = self.objects.setdefault(key, (payload, expected_hash))
+        assert previous == (payload, expected_hash)
+        if self.fail:
+            self.fail = False
+            raise OSError("external success followed by lost acknowledgement")
+
+    def verify(self, key, payload, expected_hash):
+        assert self.objects[key] == (payload, expected_hash)
+        return expected_hash
+
+
+def test_export_and_graph_failure_recovery(database):
+    store = Store(database.application)
+    run = str(uuid4())
+    with database.application.begin() as conn:
+        store.commit(conn, request(database), run)
+    export = Destination()
+    graph = Destination()
+    with pytest.raises(OSError):
+        store.deliver_one("export", "worker", export)
+    assert store.run_status(run)["pending"] == 2
+    assert store.deliver_one("export", "worker", export)
+    assert store.run_status(run)["pending"] == 1
+    with pytest.raises(OSError):
+        store.deliver_one("graph", "worker", graph)
+    assert not store.run_status(run)["publication_complete"]
+    assert store.deliver_one("graph", "worker", graph)
+    assert store.run_status(run)["publication_complete"]
+    assert not store.deliver_one("graph", "worker", graph)
+    assert len(export.objects) == len(graph.objects) == 1
+
+
+def test_publication_expired_worker_cannot_acknowledge(database):
+    store = Store(database.application)
+    with database.application.begin() as conn:
+        store.commit(conn, request(database), str(uuid4()))
+        first = conn.scalar(text("SELECT mdm_v2.claim_publication('export','old',300)"))
+    with database.admin.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE mdm_v2.publication SET lease_until=now()-interval '1 second' WHERE consumer='export'"
+            )
+        )
+    with database.application.begin() as conn:
+        second = conn.scalar(
+            text("SELECT mdm_v2.claim_publication('export','new',300)")
+        )
+    assert second["fence"] == first["fence"] + 1
+    with (
+        pytest.raises(DBAPIError, match="Stale publication fence"),
+        database.application.begin() as conn,
+    ):
+        conn.execute(
+            text("SELECT mdm_v2.finish_publication('batch-1','export',:f,:h,NULL)"),
+            {"f": first["fence"], "h": first["payload_hash"]},
+        )
+
+
+def test_evidence_delivery_collision_rolls_back_every_effect(database):
+    store = Store(database.application)
+    run = str(uuid4())
+    claim = {
+        "assertion_id": "a",
+        "source_code": "fixture.primary",
+        "schema_version": "1",
+        "record_key": "c1",
+        "publication_key": "p1",
+        "revision": 1,
+        "effective_at": "2026-01-01T00:00:00Z",
+        "fields": {"name": "Acme"},
+    }
+    with database.application.begin() as conn:
+        store.commit(conn, request(database, assertions=[claim]), run)
+    with pytest.raises(DBAPIError), database.application.begin() as conn:
+        store.commit(
+            conn,
+            request(
+                database,
+                batch_id="b2",
+                expected_generation=1,
+                expected_checkpoint=1,
+                checkpoint=2,
+                assertions=[
+                    {**claim, "assertion_id": "b", "fields": {"name": "Other"}}
+                ],
+            ),
+            run,
+        )
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+
+
+from edgar_warehouse.mdm.clean.evidence import assertion, decision
+from edgar_warehouse.mdm.clean.merge import MergeStage
+
+AS_OF = "2026-09-18T00:00:00+00:00"
+AT = "2026-01-01T00:00:00+00:00"
+
+
+def source(key="c1", source_code="fixture.primary", revision=1, **kw):
+    return assertion(
+        source_code=source_code,
+        record_key=key,
+        publication_key=f"p{revision}",
+        revision=revision,
+        effective_at=AT,
+        kind=kw.pop("kind", "company"),
+        fields=kw.pop("fields", {"name": "Acme"}),
+        **kw,
+    )
+
+
+def identity_and_binding(a, entity_id=None):
+    entity_id = entity_id or str(uuid4())
+    return {"entity_id": entity_id, "kind": a["kind"], "published_at": AT}, decision(
+        "bind",
+        actor="steward",
+        reason="fixture source reviewed",
+        at=AT,
+        subject=a["subject"],
+        entity_id=entity_id,
+        evidence=[a["assertion_id"]],
+    )
+
+
+def apply(db, n, **kw):
+    return MergeStage(Store(db.application)).apply(
+        batch_id=f"work-{n}",
+        run_id=kw.pop("run_id", str(uuid4())),
+        policy_digest=db.policy,
+        consumer="fixture",
+        expected_checkpoint=n - 1,
+        checkpoint=n,
+        as_of=AS_OF,
+        **kw,
+    )
+
+
+def documents(db, kind):
+    with db.application.connect() as conn:
+        return {
+            r[0]: r[1]
+            for r in conn.execute(
+                text(
+                    "SELECT object_id,body FROM mdm_v2.projection WHERE object_type=:kind"
+                ),
+                {"kind": kind},
+            )
+        }
+
+
+def test_reviewed_binding_and_disabled_automatic_matching(database):
+    a = source(identifiers={"cik": "1"})
+    apply(database, 1, assertions=[a])
+    assert not documents(database, "entity")
+    assert any(
+        v["reason"] == "binding_required" and v["open"]
+        for v in documents(database, "review").values()
+    )
+    entity, bind = identity_and_binding(a)
+    apply(database, 2, identities=[entity], decisions=[bind])
+    assert (
+        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
+        == "Acme"
+    )
+    assert all(not r["open"] for r in documents(database, "review").values())
+    with (
+        database.admin.begin() as conn,
+        pytest.raises(ValueError, match="No qualified"),
+    ):
+        register_policy(
+            conn, {"required_consumers": ["export"], "automatic_rules": ["exact"]}
+        )
+
+
+def test_field_selection_reordered_corrections_clear_retract_and_provenance(database):
+    a = source(fields={"name": "Primary", "address": {"street": "1 Main", "city": "A"}})
+    b = source(
+        source_code="fixture.secondary",
+        fields={"name": "Secondary", "address": {"street": "2 Side", "city": "B"}},
+    )
+    entity, bind = identity_and_binding(a)
+    _, bind_b = identity_and_binding(b, entity["entity_id"])
+    apply(database, 1, assertions=[b, a], identities=[entity], decisions=[bind, bind_b])
+    fields = documents(database, "entity")[entity["entity_id"]]["fields"]
+    assert (
+        fields["name"]["value"] == "Primary"
+        and fields["name"]["conflicts"][0]["source_code"] == "fixture.secondary"
+    )
+    assert fields["address"]["value"] == {"street": "1 Main", "city": "A"}
+    latest = source(revision=3, fields={"name": "Corrected"})
+    older = source(revision=2, fields={"name": "Outdated"})
+    apply(database, 2, assertions=[latest])
+    apply(database, 3, assertions=[older])
+    assert (
+        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
+        == "Corrected"
+    )
+    apply(database, 4, assertions=[source(revision=4, fields={"name": None})])
+    assert (
+        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
+        == "Corrected"
+    )
+    apply(
+        database, 5, assertions=[source(revision=5, fields={"name": {"op": "retract"}})]
+    )
+    assert (
+        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
+        == "Secondary"
+    )
+
+
+def test_incompatible_kinds_and_authoritative_conflicts_block_merge(database):
+    a = source("a", identifiers={"cik": "1"})
+    b = source("b", identifiers={"cik": "2"})
+    i, da = identity_and_binding(a)
+    j, db = identity_and_binding(b)
+    apply(database, 1, assertions=[a, b], identities=[i, j], decisions=[da, db])
+    merge = decision(
+        "merge",
+        actor="reviewer",
+        reason="duplicate proposal",
+        at="2026-02-01T00:00:00Z",
+        left=i["entity_id"],
+        right=j["entity_id"],
+    )
+    with pytest.raises(Conflict, match="authoritative"):
+        apply(database, 2, decisions=[merge])
+    c = source("p", kind="person")
+    k, dc = identity_and_binding(c)
+    apply(database, 2, assertions=[c], identities=[k], decisions=[dc])
+    bad = decision(
+        "merge",
+        actor="reviewer",
+        reason="bad proposal",
+        at="2026-02-01T00:00:00Z",
+        left=i["entity_id"],
+        right=k["entity_id"],
+    )
+    with pytest.raises(Conflict, match="Incompatible"):
+        apply(database, 3, decisions=[bad])
+
+
+def test_merge_alias_reversal_preserves_later_evidence_and_exclusion(database):
+    a = source("a", fields={"name": "First"})
+    b = source("b", fields={"name": "Second"})
+    i, da = identity_and_binding(a)
+    j, db = identity_and_binding(b)
+    j["published_at"] = "2026-01-02T00:00:00Z"
+    apply(database, 1, assertions=[a, b], identities=[i, j], decisions=[da, db])
+    merge = decision(
+        "merge",
+        actor="reviewer",
+        reason="reviewed match",
+        at="2026-02-01T00:00:00Z",
+        left=i["entity_id"],
+        right=j["entity_id"],
+    )
+    apply(database, 2, decisions=[merge])
+    assert (
+        documents(database, "entity")[j["entity_id"]]["canonical_id"] == i["entity_id"]
+    )
+    apply(
+        database,
+        3,
+        assertions=[source("b", revision=2, fields={"name": "Later correction"})],
+    )
+    reverse = decision(
+        "reverse",
+        actor="reviewer",
+        reason="separate entities proven",
+        at="2026-03-01T00:00:00Z",
+        target=merge["decision_id"],
+    )
+    apply(database, 4, decisions=[reverse])
+    entities = documents(database, "entity")
+    assert entities[i["entity_id"]]["fields"]["name"]["value"] == "First"
+    assert entities[j["entity_id"]]["fields"]["name"]["value"] == "Later correction"
+    repeated = decision(
+        "merge",
+        actor="reviewer",
+        reason="same old evidence",
+        at="2026-04-01T00:00:00Z",
+        left=i["entity_id"],
+        right=j["entity_id"],
+    )
+    with pytest.raises(Conflict, match="Exclusion"):
+        apply(database, 5, decisions=[repeated])
+
+
+def test_override_without_expiry_persists_and_disagreement_opens_review(database):
+    a = source()
+    i, bind = identity_and_binding(a)
+    override = decision(
+        "override",
+        actor="reviewer",
+        reason="verified correction",
+        at="2026-02-01T00:00:00Z",
+        subject=a["subject"],
+        field="name",
+        value="Steward name",
+        evidence=[a["assertion_id"]],
+    )
+    apply(database, 1, assertions=[a], identities=[i], decisions=[bind, override])
+    apply(database, 2, assertions=[source(revision=2, fields={"name": "Disagreement"})])
+    assert (
+        documents(database, "entity")[i["entity_id"]]["fields"]["name"]["value"]
+        == "Steward name"
+    )
+    assert any(
+        v["reason"] == "override_source_disagreement"
+        for v in documents(database, "review").values()
+    )
+    revoke = decision(
+        "revoke",
+        actor="reviewer",
+        reason="source correction now valid",
+        at="2026-03-01T00:00:00Z",
+        target=override["decision_id"],
+    )
+    apply(database, 3, decisions=[revoke])
+    assert (
+        documents(database, "entity")[i["entity_id"]]["fields"]["name"]["value"]
+        == "Disagreement"
+    )
+
+
+def test_issuer_links_reproject_through_merge_and_reverse(database):
+    a = source("a")
+    b = source("b")
+    instrument = source(
+        "instrument",
+        kind="security",
+        relationships=[
+            {"type": "ISSUED_BY", "target_subject": b["subject"], "valid_from": AT}
+        ],
+    )
+    i, da = identity_and_binding(a)
+    j, db = identity_and_binding(b)
+    k, dk = identity_and_binding(instrument)
+    apply(
+        database,
+        1,
+        assertions=[a, b, instrument],
+        identities=[i, j, k],
+        decisions=[da, db, dk],
+    )
+    merge = decision(
+        "merge",
+        actor="reviewer",
+        reason="reviewed",
+        at="2026-02-01T00:00:00Z",
+        left=i["entity_id"],
+        right=j["entity_id"],
+        survivor=i["entity_id"],
+    )
+    apply(database, 2, decisions=[merge])
+    active = [
+        e for e in documents(database, "relationship").values() if not e.get("retired")
+    ]
+    assert len(active) == 1 and active[0]["target_id"] == i["entity_id"]
+    reverse = decision(
+        "reverse",
+        actor="reviewer",
+        reason="wrong merge",
+        at="2026-03-01T00:00:00Z",
+        target=merge["decision_id"],
+    )
+    apply(database, 3, decisions=[reverse])
+    active = [
+        e for e in documents(database, "relationship").values() if not e.get("retired")
+    ]
+    assert len(active) == 1 and active[0]["target_id"] == j["entity_id"]
+
+
+def test_hierarchy_cycles_invalid_intervals_and_parent_conflicts(database):
+    a = source("a")
+    b = source("b")
+    c = source("c")
+    a = source(
+        "a",
+        relationships=[
+            {
+                "type": "ACCOUNTING_PARENT",
+                "target_subject": b["subject"],
+                "valid_from": AT,
+            }
+        ],
+    )
+    b = source(
+        "b",
+        relationships=[
+            {
+                "type": "ACCOUNTING_PARENT",
+                "target_subject": a["subject"],
+                "valid_from": AT,
+            }
+        ],
+    )
+    c = source(
+        "c",
+        relationships=[
+            {
+                "type": "ACCOUNTING_PARENT",
+                "target_subject": a["subject"],
+                "valid_from": AT,
+                "valid_to": "2025-01-01T00:00:00Z",
+            }
+        ],
+    )
+    pairs = [identity_and_binding(x) for x in [a, b, c]]
+    apply(
+        database,
+        1,
+        assertions=[a, b, c],
+        identities=[i for i, d in pairs],
+        decisions=[d for i, d in pairs],
+    )
+    assert not documents(database, "relationship")
+    reasons = {r["reason"] for r in documents(database, "review").values()}
+    assert {"hierarchy_cycle", "invalid_relationship_interval"} <= reasons
+
+
+def test_dependent_merge_prevents_partial_reversal(database):
+    sources = [source(x) for x in ["a", "b", "c"]]
+    pairs = [identity_and_binding(x) for x in sources]
+    apply(
+        database,
+        1,
+        assertions=sources,
+        identities=[i for i, d in pairs],
+        decisions=[d for i, d in pairs],
+    )
+    ids = [i["entity_id"] for i, d in pairs]
+    first = decision(
+        "merge",
+        actor="reviewer",
+        reason="first",
+        at="2026-02-01T00:00:00Z",
+        left=ids[0],
+        right=ids[1],
+        survivor=ids[0],
+    )
+    apply(database, 2, decisions=[first])
+    second = decision(
+        "merge",
+        actor="reviewer",
+        reason="dependent",
+        at="2026-03-01T00:00:00Z",
+        left=ids[0],
+        right=ids[2],
+        survivor=ids[0],
+        depends_on=[first["decision_id"]],
+    )
+    apply(database, 3, decisions=[second])
+    reverse = decision(
+        "reverse",
+        actor="reviewer",
+        reason="first was wrong",
+        at="2026-04-01T00:00:00Z",
+        target=first["decision_id"],
+    )
+    with pytest.raises(Conflict, match="Dependent merge"):
+        apply(database, 4, decisions=[reverse])
+    assert documents(database, "entity")[ids[2]]["canonical_id"] == ids[0]
+
+
+def test_source_retirement_recomputes_from_remaining_evidence(database):
+    a = source(fields={"name": "Primary"})
+    b = source(source_code="fixture.secondary", fields={"name": "Secondary"})
+    entity, first = identity_and_binding(a)
+    _, second = identity_and_binding(b, entity["entity_id"])
+    apply(
+        database, 1, assertions=[a, b], identities=[entity], decisions=[first, second]
+    )
+    retirement = decision(
+        "retire_source",
+        actor="operator",
+        reason="dataset withdrawn",
+        at="2026-02-01T00:00:00Z",
+        source_code="fixture.primary",
+        evidence=["source-owner-withdrawal"],
+    )
+    apply(database, 2, decisions=[retirement])
+    assert (
+        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
+        == "Secondary"
+    )
+
+
+def test_mirror_and_bookkeeping_across_three_real_databases(database):
+    from edgar_warehouse.bookkeeping.models import PipelineRun
+    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+    from edgar_warehouse.mdm.clean.publication import JournalMirror, migrate_mirror
+
+    # Existing bookkeeping schema is not redesigned. This fixture creates its
+    # existing ORM table only; Clean MDM migrations above always use real SQL.
+    suffix = uuid4().hex[:10]
+    ledger_name = f"ledger_{suffix}"
+    book_name = f"book_{suffix}"
+    with database.admin.connect().execution_options(
+        isolation_level="AUTOCOMMIT"
+    ) as conn:
+        conn.exec_driver_sql(f"CREATE DATABASE {ledger_name}")
+        conn.exec_driver_sql(f"CREATE DATABASE {book_name}")
+    ledger_admin = create_engine(database.admin.url.set(database=ledger_name))
+    ledger_app = create_engine(database.application.url.set(database=ledger_name))
+    book = create_engine(database.admin.url.set(database=book_name))
+    try:
+        migrate_mirror(ledger_admin, application_role="clean_application")
+        PipelineRun.__table__.create(book)
+        with database.admin.begin() as conn:
+            policy = register_policy(
+                conn,
+                {
+                    "version": 1,
+                    "required_consumers": ["journal"],
+                    "automatic_rules": [],
+                },
+            )
+        run = str(uuid4())
+        store = Store(database.application)
+        coordinator = RunCoordinator(book, store)
+        coordinator.start(run, ["batch-1"], manifest_digest="frozen-input")
+        with database.application.begin() as conn:
+            store.commit(
+                conn, request(database, policy_digest=policy, projections=[]), run
+            )
+        assert not coordinator.reconcile(run)["end_to_end_complete"]
+        mirror = JournalMirror(ledger_app)
+        original = mirror.publish
+
+        def lose_ack(key, payload, h):
+            original(key, payload, h)
+            raise OSError("mirror committed but acknowledgement was lost")
+
+        mirror.publish = lose_ack
+        with pytest.raises(OSError):
+            store.deliver_one("journal", "worker", mirror)
+        assert not coordinator.reconcile(run)["end_to_end_complete"]
+        mirror.publish = original
+        assert store.deliver_one("journal", "worker", mirror)
+        assert coordinator.reconcile(run)["end_to_end_complete"]
+        assert coordinator.reconcile(run)["end_to_end_complete"]
+        with ledger_app.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM mdm_mirror.event")) == 1
+            assert str(conn.scalar(text("SELECT run_id FROM mdm_mirror.event"))) == run
+        with book.connect() as conn:
+            assert conn.scalar(text("SELECT status FROM pipeline_run")) == "succeeded"
+    finally:
+        ledger_admin.dispose()
+        ledger_app.dispose()
+        book.dispose()
+        with database.admin.connect().execution_options(
+            isolation_level="AUTOCOMMIT"
+        ) as conn:
+            conn.exec_driver_sql(f"DROP DATABASE {ledger_name}")
+            conn.exec_driver_sql(f"DROP DATABASE {book_name}")
+
+
+def test_authorized_clear_blocks_fallback_and_unknown_time_is_retained(database):
+    with database.admin.begin() as conn:
+        database.policy = register_policy(
+            conn,
+            {
+                "version": 2,
+                "required_consumers": ["export"],
+                "automatic_rules": [],
+                "fields": {
+                    "company": {
+                        "name": {
+                            "sources": ["fixture.primary", "fixture.secondary"],
+                            "clear_sources": ["fixture.primary"],
+                        }
+                    }
+                },
+            },
+        )
+    a = source()
+    b = source(source_code="fixture.secondary", fields={"name": "Fallback"})
+    entity, first = identity_and_binding(a)
+    _, second = identity_and_binding(b, entity["entity_id"])
+    apply(
+        database, 1, assertions=[a, b], identities=[entity], decisions=[first, second]
+    )
+    apply(
+        database, 2, assertions=[source(revision=2, fields={"name": {"op": "clear"}})]
+    )
+    winner = documents(database, "entity")[entity["entity_id"]]["fields"]["name"]
+    assert winner["cleared"] and winner["value"] is None
+    unknown = assertion(
+        source_code="fixture.primary",
+        record_key="unknown",
+        publication_key="p1",
+        revision=1,
+        effective_at=None,
+        kind="company",
+        fields={"name": "Unknown effective date"},
+    )
+    apply(database, 3, assertions=[unknown])
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT effective_at FROM mdm_v2.assertion WHERE assertion_id=:id"
+                ),
+                {"id": unknown["assertion_id"]},
+            )
+            is None
+        )
+
+
+def test_company_and_person_role_profiles_and_field_provenance(database):
+    with database.admin.begin() as conn:
+        database.policy = register_policy(
+            conn,
+            {
+                "version": 2,
+                "required_consumers": ["export"],
+                "automatic_rules": [],
+                "fields": {
+                    "company": {
+                        "name": {"sources": ["fixture.primary", "fixture.secondary"]}
+                    }
+                },
+                "profile_fields": {
+                    "adviser": {
+                        "aum": {"sources": ["fixture.primary", "fixture.secondary"]}
+                    }
+                },
+            },
+        )
+    adviser = {
+        "role": "adviser",
+        "authority": "IAPD",
+        "registration": "123",
+        "valid_from": AT,
+        "fields": {"aum": "1000"},
+    }
+    audit = {
+        "role": "audit_firm",
+        "authority": "PCAOB",
+        "registration": "456",
+        "valid_from": AT,
+    }
+    a = source(profiles=[adviser, audit])
+    b = source(
+        source_code="fixture.secondary",
+        profiles=[{**adviser, "fields": {"aum": "900"}}],
+    )
+    entity, first = identity_and_binding(a)
+    _, second = identity_and_binding(b, entity["entity_id"])
+    apply(
+        database, 1, assertions=[a, b], identities=[entity], decisions=[first, second]
+    )
+    profiles = documents(database, "entity")[entity["entity_id"]]["profiles"]
+    assert {p["role"] for p in profiles} == {"adviser", "audit_firm"}
+    field = next(p for p in profiles if p["role"] == "adviser")["fields"]["aum"]
+    assert (
+        field["value"] == "1000"
+        and field["winner"]["assertion_id"] == a["assertion_id"]
+    )
+    assert field["conflicts"][0]["value"] == "900"
+    person = source("person", kind="person", profiles=[adviser, audit])
+    pid, bind = identity_and_binding(person)
+    apply(database, 2, assertions=[person], identities=[pid], decisions=[bind])
+    assert [
+        p["role"] for p in documents(database, "entity")[pid["entity_id"]]["profiles"]
+    ] == ["adviser"]
+    assert any(
+        r["reason"] == "incompatible_profile"
+        for r in documents(database, "review").values()
+    )
+
+
+def test_versioned_representative_fixture_and_alias_read_contract(database):
+    from edgar_warehouse.mdm.clean.cli import batch_assertions, read_manifest
+    from edgar_warehouse.mdm.clean.consumer import ContractReader
+
+    fixture = Path(__file__).parents[1] / "fixtures" / "clean_mdm" / "v1"
+    manifest, _, root = read_manifest(str(fixture / "manifest.json"))
+    with database.admin.begin() as conn:
+        assert (
+            register_policy(conn, json.loads((fixture / "policy.json").read_text()))
+            == manifest["policy_digest"]
+        )
+        register_dataset(
+            conn,
+            "fixture.representative",
+            database.registry,
+            json.loads((fixture / "dataset.json").read_text()),
+        )
+    store = Store(database.application)
+    batch = manifest["batches"][0]
+    evidence = batch_assertions(batch, root, store)
+    MergeStage(store).apply(
+        batch_id=batch["batch_id"],
+        run_id=str(uuid4()),
+        policy_digest=manifest["policy_digest"],
+        consumer=batch["consumer"],
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=manifest["as_of"],
+        assertions=evidence,
+        identities=batch["identities"],
+        decisions=batch["decisions"],
+    )
+    entities = documents(database, "entity")
+    assert len(entities) == 10
+    assert len({e["kind"] for e in entities.values()}) == 8
+    assert len(documents(database, "relationship")) == 7
+    assert not documents(database, "review")
+    manager = next(
+        e
+        for e in entities.values()
+        if e["fields"]["name"]["value"] == "Synthetic 13F Manager"
+    )
+    assert manager["profiles"] == []
+    read = ContractReader(database.application).entity(manager["entity_id"])
+    assert read["contract_version"] == 2
+    assert (
+        read["field_provenance"]["name"]["evidence"]["provenance"]["artifact_sha256"]
+        == batch["input"]["sha256"]
+    )
+    # Identical business output after a duplicate delivery in a different root run.
+    again = MergeStage(store).apply(
+        batch_id=batch["batch_id"],
+        run_id=str(uuid4()),
+        policy_digest=manifest["policy_digest"],
+        consumer=batch["consumer"],
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=manifest["as_of"],
+        assertions=list(reversed(evidence)),
+        identities=list(reversed(batch["identities"])),
+        decisions=list(reversed(batch["decisions"])),
+    )
+    assert again["duplicate"] and documents(database, "entity") == entities

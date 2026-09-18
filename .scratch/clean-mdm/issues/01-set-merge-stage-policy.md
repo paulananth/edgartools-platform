@@ -1,7 +1,7 @@
 # Set the Clean MDM identity, merge, and recovery policy
 
 Type: grilling
-Status: claimed
+Status: resolved
 Owner: Codex
 Blocked by: 02
 
@@ -26,7 +26,7 @@ the user's plan, not an implementation ticket.
 The [vendor comparison](../../../docs/research/clean-mdm-vendor-merge-rules-2026-09-17.md)
 supersedes the earlier blanket exact-only, numeric-threshold and smallest-ID
 recommendations. The earlier proposal remains in git history; it was never
-accepted. On 2026-09-18 the user accepted Q1–Q15 across four rounds. Ask no more
+accepted. On 2026-09-18 the user accepted Q1–Q16 across five rounds. Ask no more
 than three questions per round, as explicitly requested by the user.
 
 ### Q1 — Automatic Source Record Binding
@@ -102,7 +102,7 @@ unclear. Reversal completes only after downstream changes are verified.
 The survivor rule, numeric precision target and non-company Fund Structure
 boundary are accepted. Actual score cutoffs still require measured calibration;
 no validation result is implied. Branch, Government Entity and Market/Venue
-representations are now accepted. The remaining sequencing decision is Q16.
+representations are now accepted. Q16 is also accepted; implementation is unblocked.
 
 ## Completed clarification round
 
@@ -224,6 +224,14 @@ and distinct non-company Fund Structure identities with Fund profiles.
 The user replied “accept recommendation” to Q13–Q15, accepting distinct
 Branch, Government Entity and Market/Venue boundaries and their relationships.
 All Q1–Q15 policy choices are accepted. Actual calibrated scores remain
-unavailable; Q16 proposes changing their pre-implementation timing. The gate
-stays claimed until that explicit sequencing question is answered. No
-implementation tickets or Clean MDM migrations are created by this record.
+unavailable; Q16 proposes changing their pre-implementation timing. The subsequent Q16 acceptance below closes the gate.
+
+2026-09-18 — User accepted Q16 (“accept recommendation”). The policy gate is
+resolved. Implementation proceeds with all unqualified exact/scored automatic
+binding disabled; measured, versioned calibration gates rule activation. No
+automatic matching accuracy or hosted release readiness is claimed.
+
+2026-09-18 — User supplied local PostgreSQL URLs and explicitly chose master
+state plus transactional MDM journal in `mdm`, acquisition history in
+`change_ledger`, and durable MDM-event mirroring to the latter. Bookkeeping
+remains in its own database; no cross-database atomic commit is claimed.

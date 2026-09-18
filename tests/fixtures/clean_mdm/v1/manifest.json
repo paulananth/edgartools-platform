@@ -1,0 +1,198 @@
+{
+  "as_of": "2026-09-18T00:00:00+00:00",
+  "batches": [
+    {
+      "batch_id": "representative-v1",
+      "checkpoint": 1,
+      "consumer": "fixture/representative",
+      "decisions": [
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "b71a695d78c3beeeb3123cfd02388813004e9a0124cd1f014b26d1850b8f844e",
+          "entity_id": "b144d8f4-6456-5801-b1c1-dc48c0d2a025",
+          "evidence": [
+            "cd9092ee25b025b0a3f9f0cfc39cc63991d139d1a8c87004b789e21e56de1c3e"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "5c7e4f4d64f8f532a85de9f7005877f169b3db9a2d154796d2dae901e7c394b1"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "ee68dd3bd28893c27aee21ca0843b145402b6333baa68c7942622ec672db2a7f",
+          "entity_id": "72d0334d-6615-52ed-9c10-8467ae55f013",
+          "evidence": [
+            "3fe12dfc9fa9fcd178dec79a7fdfc556ce4b169ad3b4c9414099469d97a53f94"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "b4eb71853d29b887e9e29738712b8d85168960c41a8ffde716d0f0d122248a49"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "f3e64dc9b95fdff2add144c51a4fa80949ee9591aabd500791f001df5c45de1c",
+          "entity_id": "d16e9db4-1d28-5923-95ba-340b2ec3b90e",
+          "evidence": [
+            "7a380eaaf6496776174d616ed9a4648673cec29b46e1538ad2d2eda012d20609"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "ba29dc55ced6c9cca9712c52aa4ff76c303994ec8058f028668fe845fd6a7923"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "f6199c4cc9322baf7b88c6507abb99c4b69385b2f155f0c4be3964e81ee39e39",
+          "entity_id": "8e60cffd-7efc-50dd-846e-99bab31e7fdf",
+          "evidence": [
+            "c24b88f6953549652a91489e1b7500cf77650f88ab87b213e13e59bb9567fb09"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "9d558d68d893dcc65ee40d6d3a4afdd0fc9ab89b255675330a0b1670bd67fc9e"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "e184a35cdaeecb5d63f65b3afe7c2bb213575a0fd263f209b3ca8445b2fb7d5b",
+          "entity_id": "8880c75b-1614-59ea-b639-79ade9be490a",
+          "evidence": [
+            "c3e5c22ca823d73008f5ca574a29f2968ad9fdcfb381db9065015d970a0b6111"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "25ee53d8f43d81afe6c9e2ce10bfc1c539dd4a99d1126bba96de4b5065d948dc"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "994e2d1337775da32d7c42df1513579c7f655ee922063283a2883993a7e167ff",
+          "entity_id": "af373c6c-cc4a-5d8a-bf84-9f181e6b3c48",
+          "evidence": [
+            "168e84250b37c33d827407b462c5978e0eea813e0178f17bd8c7505bee3c8260"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "709d7ef0447234e68b9dba79d5b64ce6869fcd6f548283f424d4cc6d7b0e9242"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "6ffd5c11af6df7c95459ea2c3cd206c6cc52f02a8a649b8e22d8593b97774135",
+          "entity_id": "ff03b6f8-68e2-57a1-a799-075c228438ab",
+          "evidence": [
+            "485b6ec199da98d414f4c965bbec146495e5b8b21016b387c9a807ab72e0aabc"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "823ceed233350364e088ff2e1595708d29ac71d13897bf62226fafb6c0a7fcdb"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "3e66d41285830ccfb1fa99635a276aef5c2ca1dbde0ccb22f6326e0e489061c1",
+          "entity_id": "e4edd14f-83ce-556a-88f0-109b5ea307da",
+          "evidence": [
+            "a281d822a6b6e2c26c3efd93d85b8329154fef0674d645a3d204878682176ef5"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "2868b6e80ca5272d1802d0ce2e669612fa4b72ed1d8f9a9a865d811511eb5fb9"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "bca3146d99762e6d965b9b04fda203ea03cce679ed1865fd53473654170b1b9e",
+          "entity_id": "5c1691e0-b36c-535f-b1f7-8c5150af1d68",
+          "evidence": [
+            "a31e3c92f236dfd361af89a7afdeb53b55b0a8251d8d20aa1a6ba2074ef1df33"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "fe4f9c268058de5914702d405d9cca80f2dc470d388a6018f3ea577cf437ebce"
+        },
+        {
+          "actor": "synthetic-fixture",
+          "at": "2026-01-01T00:00:00+00:00",
+          "decision_id": "534fa9779ebc586bc3025f0836f8b61e026bfd4d8934512760142503b8b09968",
+          "entity_id": "ba437003-22b6-5690-a310-d1de797eb0ae",
+          "evidence": [
+            "c8bae18c3c03ab9d72b379e68f5e6dbcde4b9d09086690511fcc87844b5fde5d"
+          ],
+          "operation": "bind",
+          "reason": "Fixture expected identity, not real-world calibration evidence",
+          "subject": "fada0b2363525365035510e7dc8b0cbe58e8bf5e8f2e7de99c1de573066cc7b8"
+        }
+      ],
+      "expected_checkpoint": 0,
+      "identities": [
+        {
+          "entity_id": "b144d8f4-6456-5801-b1c1-dc48c0d2a025",
+          "kind": "company",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "72d0334d-6615-52ed-9c10-8467ae55f013",
+          "kind": "person",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "d16e9db4-1d28-5923-95ba-340b2ec3b90e",
+          "kind": "fund_structure",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "8e60cffd-7efc-50dd-846e-99bab31e7fdf",
+          "kind": "company",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "8880c75b-1614-59ea-b639-79ade9be490a",
+          "kind": "security",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "af373c6c-cc4a-5d8a-bf84-9f181e6b3c48",
+          "kind": "branch",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "ff03b6f8-68e2-57a1-a799-075c228438ab",
+          "kind": "government",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "e4edd14f-83ce-556a-88f0-109b5ea307da",
+          "kind": "venue",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "5c1691e0-b36c-535f-b1f7-8c5150af1d68",
+          "kind": "international_organization",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        },
+        {
+          "entity_id": "ba437003-22b6-5690-a310-d1de797eb0ae",
+          "kind": "company",
+          "published_at": "2026-01-01T00:00:00+00:00"
+        }
+      ],
+      "input": {
+        "path": "records.jsonl",
+        "publication": {
+          "effective_at": "2026-01-01T00:00:00+00:00",
+          "publication_key": "synthetic-v1",
+          "revision": 1
+        },
+        "sha256": "7920d565b95194eee8b084b5dd52e9febbe283f880490cf6803fab20bd0449d9",
+        "source_code": "fixture.representative"
+      },
+      "stage": "mastering"
+    }
+  ],
+  "contract_version": 2,
+  "policy_digest": "4b08167badd733063520f1db92b534a78664e0a863ac21d8663697c1b6d34859"
+}

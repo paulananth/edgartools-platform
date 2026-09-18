@@ -40,9 +40,13 @@ Bookkeeping currently uses `BOOKKEEPING_DATABASE_URL` and independent sessions;
 do not claim its status update is in the MDM transaction across databases. It
 observes durable committed batches and receipts and can repair a stale status.
 The local environment may colocate databases for convenience, but must test a
-lost Bookkeeping acknowledgement. If ledger and MDM are not on one transactional
-database in the chosen target, reject configuration before processing; never
-simulate atomicity with two successful commits.
+lost Bookkeeping acknowledgement. The user subsequently accepted the three-database local layout: the MDM
+transactional journal and master state share `mdm`; acquisition history remains
+in `change_ledger`; committed MDM events are mirrored there through durable
+publication. The mirror is a projection, never the authoritative MDM commit.
+A failed mirror leaves the required receipt pending. Do not claim a transaction
+spans the three databases. Dataset contracts retain pinned evidence from the
+existing acquisition registry rather than a competing activation registry.
 
 Lock/check the expected checkpoint and affected identity closure. Commit
 against the expected predecessor and policy version; stale workers cannot
