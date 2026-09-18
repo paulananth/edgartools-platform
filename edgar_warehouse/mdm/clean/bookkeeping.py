@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from sqlalchemy import text, update
 from sqlalchemy.orm import Session
@@ -11,13 +12,48 @@ from sqlalchemy.orm import Session
 from edgar_warehouse.bookkeeping.models import PipelineRun
 from edgar_warehouse.bookkeeping.store import BookkeepingStore
 
-from .store import Conflict, Store
+from .store import Conflict, Store, canonical
 
 
 class RunCoordinator:
     def __init__(self, bookkeeping_engine, mdm: Store):
         self.engine = bookkeeping_engine
         self.mdm = mdm
+
+    def execute(self, run_id: str, batch_id: str, action):
+        """Journal one invocation separately from its atomic business commit.
+
+        A lost terminal acknowledgement leaves a started attempt. Reconciliation
+        derives business completion from observations, never from this event.
+        """
+        attempt = str(uuid4())
+
+        def record(phase, detail):
+            with self.mdm.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "SELECT mdm_v2.record_attempt(CAST(:a AS uuid),CAST(:r AS uuid),:b,:p,CAST(:d AS jsonb))"
+                    ),
+                    {
+                        "a": attempt,
+                        "r": run_id,
+                        "b": batch_id,
+                        "p": phase,
+                        "d": canonical(detail),
+                    },
+                )
+
+        record("started", {})
+        try:
+            result = action()
+        except Exception as exc:
+            record("error", {"error_type": type(exc).__name__})
+            raise
+        record(
+            "finished",
+            {"generation": result["generation"], "duplicate": result["duplicate"]},
+        )
+        return result
 
     def start(
         self, run_id: str, expected_batches: list[str], *, manifest_digest: str
@@ -76,8 +112,18 @@ class RunCoordinator:
                     )
                 )
                 pending = conn.scalar(
-                    text("""SELECT count(*) FROM mdm_v2.publication p JOIN mdm_v2.observation o USING(batch_id)
-                    WHERE o.run_id=CAST(:run AS uuid) AND p.verified_at IS NULL"""),
+                    text("""WITH root_batches AS (
+                      SELECT batch_id FROM mdm_v2.observation WHERE run_id=CAST(:run AS uuid)
+                    ), review_ids AS (
+                      SELECT old->>'object_id' AS id FROM root_batches r
+                      JOIN mdm_v2.batch b USING(batch_id), jsonb_array_elements(b.effects->'projections') old
+                      WHERE old->>'object_type'='review'
+                    ), required_batches AS (
+                      SELECT batch_id FROM root_batches UNION
+                      SELECT p.batch_id FROM mdm_v2.projection p JOIN review_ids r ON r.id=p.object_id
+                      WHERE p.object_type='review'
+                    ) SELECT count(*) FROM mdm_v2.publication p JOIN required_batches r USING(batch_id)
+                    WHERE p.verified_at IS NULL"""),
                     {"run": run_id},
                 )
                 # Current review disposition, including a later valid correction,
@@ -89,6 +135,13 @@ class RunCoordinator:
                     WHERE o.run_id=CAST(:run AS uuid) AND old->>'object_type'='review' AND old->>'object_id'=p.object_id)"""),
                     {"run": run_id},
                 )
+                attempts = dict(
+                    conn.execute(
+                        text("""SELECT event,count(*) FROM mdm_v2.attempt_event
+                    WHERE run_id=CAST(:run AS uuid) GROUP BY event"""),
+                        {"run": run_id},
+                    ).all()
+                )
             report = {
                 "expected_batches": len(expected),
                 "observed_batches": len(observed),
@@ -96,6 +149,7 @@ class RunCoordinator:
                 "unexpected_batches": sorted(observed - expected),
                 "pending_publications": pending,
                 "unresolved_reviews": unresolved,
+                "attempt_events": attempts,
             }
             complete = expected == observed and pending == 0 and unresolved == 0
             report["end_to_end_complete"] = complete

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from functools import partial
 from pathlib import Path
 from uuid import UUID
 
@@ -99,6 +100,7 @@ def execute_manifest(
     run_id: str,
     stage: str,
     limit: int,
+    preview: bool = False,
 ) -> dict:
     if not 1 <= limit <= 1000:
         raise ValueError(
@@ -106,11 +108,12 @@ def execute_manifest(
         )
     UUID(run_id)
     manifest, manifest_hash, root = read_manifest(path)
-    coordinator.start(
-        run_id,
-        [b["batch_id"] for b in manifest["batches"]],
-        manifest_digest=manifest_hash,
-    )
+    if not preview:
+        coordinator.start(
+            run_id,
+            [b["batch_id"] for b in manifest["batches"]],
+            manifest_digest=manifest_hash,
+        )
     handled = 0
     committed = []
     with store.engine.connect() as conn:
@@ -153,23 +156,34 @@ def execute_manifest(
             if handled == 0:
                 raise ValueError(f"Next atomic batch requires --limit at least {cost}")
             break
-        result = MergeStage(store).apply(
-            batch_id=batch["batch_id"],
-            run_id=run_id,
-            policy_digest=manifest["policy_digest"],
-            consumer=batch["consumer"],
-            expected_checkpoint=batch["expected_checkpoint"],
-            checkpoint=batch["checkpoint"],
-            as_of=manifest["as_of"],
-            assertions=assertions,
-            identities=batch.get("identities", []),
-            decisions=batch.get("decisions", []),
-        )
+        command = {
+            "batch_id": batch["batch_id"],
+            "run_id": run_id,
+            "policy_digest": manifest["policy_digest"],
+            "consumer": batch["consumer"],
+            "expected_checkpoint": batch["expected_checkpoint"],
+            "checkpoint": batch["checkpoint"],
+            "as_of": manifest["as_of"],
+            "assertions": assertions,
+            "identities": batch.get("identities", []),
+            "decisions": batch.get("decisions", []),
+            "preview": preview,
+        }
+        if preview:
+            result = MergeStage(store).apply(**command)
+        else:
+            result = coordinator.execute(
+                run_id, batch["batch_id"], partial(MergeStage(store).apply, **command)
+            )
+        if preview:
+            return result  # Preview one atomic batch against the current generation.
         committed.append(result)
         observed.add(batch["batch_id"])
         prerequisites.add(batch["batch_id"])
         if not result["duplicate"]:
             handled += cost
+    if preview:
+        return {"preview": True, "commits": [], "records_processed": 0}
     return {
         "commits": committed,
         "records_processed": handled,
@@ -229,6 +243,7 @@ def handle(command: str, args) -> int:
                 run_id=run_id,
                 stage="stewardship" if command == "apply-decisions" else command,
                 limit=100 if getattr(args, "limit", None) is None else args.limit,
+                preview=getattr(args, "dry_run", False),
             )
         elif command == "publish":
             consumer = getattr(args, "consumer", None)

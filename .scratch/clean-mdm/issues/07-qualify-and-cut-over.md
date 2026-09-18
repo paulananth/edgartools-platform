@@ -11,4 +11,7 @@ Use same migrations on an isolated target after local acceptance. Pin approved i
 
 ## Evidence
 
-Pending.
+Not run. Requested the pinned source snapshot/publication identity, isolated
+Snowflake Postgres target/connection name and rollback retention window from
+the user. Answers are pending; no defaults have been treated as approval.
+Local source/consumer integration gates must also finish before qualification.

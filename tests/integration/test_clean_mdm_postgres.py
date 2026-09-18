@@ -929,6 +929,37 @@ def test_company_and_person_role_profiles_and_field_provenance(database):
         r["reason"] == "incompatible_profile"
         for r in documents(database, "review").values()
     )
+    apply(
+        database,
+        3,
+        assertions=[
+            source(revision=2, profiles=[{**adviser, "fields": {"aum": None}}, audit])
+        ],
+    )
+    selected = next(
+        p
+        for p in documents(database, "entity")[entity["entity_id"]]["profiles"]
+        if p["role"] == "adviser"
+    )["fields"]["aum"]
+    assert selected["value"] == "1000"
+    assert selected["winner"]["assertion_id"] == a["assertion_id"]
+    apply(
+        database,
+        4,
+        assertions=[
+            source(
+                revision=3,
+                profiles=[{**adviser, "fields": {"aum": {"op": "retract"}}}, audit],
+            )
+        ],
+    )
+    selected = next(
+        p
+        for p in documents(database, "entity")[entity["entity_id"]]["profiles"]
+        if p["role"] == "adviser"
+    )["fields"]["aum"]
+    assert selected["value"] == "900"
+    assert selected["winner"]["assertion_id"] == b["assertion_id"]
 
 
 def test_versioned_representative_fixture_and_alias_read_contract(database):
@@ -1275,3 +1306,300 @@ def test_conflicting_corrections_are_order_independent_and_history_survives(post
             expected = current
         else:
             assert current == expected
+
+
+def test_reversal_preview_rolls_back_and_matches_committed_replay(database):
+    a, b = source("left"), source("right")
+    left, bind_left = identity_and_binding(a)
+    right, bind_right = identity_and_binding(b)
+    apply(
+        database,
+        1,
+        assertions=[a, b],
+        identities=[left, right],
+        decisions=[bind_left, bind_right],
+    )
+    merge = decision(
+        "merge",
+        actor="steward",
+        reason="reviewed",
+        at="2026-02-01T00:00:00Z",
+        left=left["entity_id"],
+        right=right["entity_id"],
+    )
+    apply(database, 2, decisions=[merge])
+    before = documents(database, "entity")
+    reverse = decision(
+        "reverse",
+        actor="steward",
+        reason="separate legal persons",
+        at="2026-03-01T00:00:00Z",
+        target=merge["decision_id"],
+    )
+    preview = apply(database, 3, decisions=[reverse], preview=True)
+    assert preview["preview"]
+    assert documents(database, "entity") == before
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.publication")) == 4
+        assert (
+            conn.scalar(
+                text("SELECT position FROM mdm_v2.checkpoint WHERE consumer='fixture'")
+            )
+            == 2
+        )
+    apply(database, 3, decisions=[reverse])
+    expected = {
+        p["object_id"]: p["body"]
+        for p in preview["effects"]["projections"]
+        if p["object_type"] == "entity"
+    }
+    assert documents(database, "entity") == expected
+
+
+def test_attempt_history_retains_lost_ack_and_does_not_duplicate_effect(
+    database, command_databases
+):
+    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    run = str(uuid4())
+    coordinator.start(run, ["work-1"], manifest_digest="attempt-test")
+    a = source()
+    entity, bind = identity_and_binding(a)
+
+    def commit():
+        return apply(
+            database,
+            1,
+            run_id=run,
+            assertions=[a],
+            identities=[entity],
+            decisions=[bind],
+        )
+
+    def lost_ack():
+        commit()
+        raise OSError("process lost commit acknowledgement")
+
+    with pytest.raises(OSError):
+        coordinator.execute(run, "work-1", lost_ack)
+    assert coordinator.execute(run, "work-1", commit)["duplicate"]
+    report = coordinator.reconcile(run)
+    assert report["attempt_events"] == {"started": 2, "finished": 1, "error": 1}
+    assert report["observed_batches"] == 1
+    assert not report["end_to_end_complete"]
+    publisher = Destination()
+    publisher.fail = False
+    for name in ["export", "graph"]:
+        assert store.deliver_one(name, "worker", publisher)
+    assert coordinator.reconcile(run)["end_to_end_complete"]
+    with pytest.raises(DBAPIError), database.application.begin() as conn:
+        conn.execute(text("DELETE FROM mdm_v2.attempt_event"))
+    with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
+        conn.execute(text("DELETE FROM mdm_v2.attempt_event"))
+
+
+def test_review_resolution_requires_its_later_publication_receipts(
+    database, command_databases
+):
+    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    run = str(uuid4())
+    coordinator.start(run, ["work-1"], manifest_digest="review-resolution")
+    a = source()
+    apply(database, 1, run_id=run, assertions=[a])
+    sink = Destination()
+    sink.fail = False
+    for consumer in ["export", "graph"]:
+        store.deliver_one(consumer, "worker", sink)
+    assert coordinator.reconcile(run)["unresolved_reviews"] == 1
+    entity, bind = identity_and_binding(a)
+    apply(database, 2, identities=[entity], decisions=[bind])
+    report = coordinator.reconcile(run)
+    assert report["unresolved_reviews"] == 0
+    assert report["pending_publications"] == 2
+    assert not report["end_to_end_complete"]
+    for consumer in ["export", "graph"]:
+        store.deliver_one(consumer, "worker", sink)
+    assert coordinator.reconcile(run)["end_to_end_complete"]
+
+
+def test_temporal_parents_separate_ownership_reported_and_calculated(database):
+    a, b, c = source("child"), source("parent-one"), source("parent-two")
+
+    def edge(kind, target, start=AT, end=None):
+        return {
+            "type": kind,
+            "target_subject": target["subject"],
+            "valid_from": start,
+            "valid_to": end,
+            "scope": "consolidated",
+        }
+
+    ownership = [edge("OWNERSHIP_PARENT", b), edge("OWNERSHIP_PARENT", c)]
+    reported = edge("REPORTED_ULTIMATE_PARENT", b)
+    initial = source(
+        "child",
+        relationships=[
+            *ownership,
+            reported,
+            edge("ACCOUNTING_PARENT", b),
+            edge("ACCOUNTING_PARENT", c),
+        ],
+    )
+    pairs = [identity_and_binding(x) for x in [initial, b, c]]
+    apply(
+        database,
+        1,
+        assertions=[initial, b, c],
+        identities=[i for i, _ in pairs],
+        decisions=[d for _, d in pairs],
+    )
+    active = [
+        e for e in documents(database, "relationship").values() if not e.get("retired")
+    ]
+    assert [e["type"] for e in active].count("OWNERSHIP_PARENT") == 2
+    assert not any(
+        e["type"] in {"ACCOUNTING_PARENT", "CALCULATED_ULTIMATE_PARENT"} for e in active
+    )
+    assert any(
+        r["reason"] == "conflicting_accounting_parents" and r["open"]
+        for r in documents(database, "review").values()
+    )
+    boundary = "2026-02-01T00:00:00Z"
+    correction = source(
+        "child",
+        revision=2,
+        relationships=[
+            *ownership,
+            reported,
+            edge("ACCOUNTING_PARENT", b, end=boundary),
+            edge("ACCOUNTING_PARENT", c, start=boundary),
+        ],
+    )
+    reverse_direction = source(
+        "parent-one",
+        revision=2,
+        relationships=[edge("ACCOUNTING_PARENT", a, start=boundary)],
+    )
+    apply(database, 2, assertions=[correction, reverse_direction])
+    active = [
+        e for e in documents(database, "relationship").values() if not e.get("retired")
+    ]
+    assert not any(r["open"] for r in documents(database, "review").values())
+    assert any(
+        e["type"] == "REPORTED_ULTIMATE_PARENT"
+        and not e["derived"]
+        and e["target_id"] == pairs[1][0]["entity_id"]
+        for e in active
+    )
+    derived = [e for e in active if e["type"] == "CALCULATED_ULTIMATE_PARENT"]
+    assert len(derived) == 2
+    assert all(
+        e["derived"] and e["target_id"] == pairs[2][0]["entity_id"] and e["path"]
+        for e in derived
+    )
+
+
+def test_version_two_api_auth_history_pagination_and_profile_provenance(
+    database, monkeypatch
+):
+    from fastapi.testclient import TestClient
+
+    from edgar_warehouse.mdm.api import auth
+    from edgar_warehouse.mdm.api.main import create_app
+    from edgar_warehouse.mdm.api.routers.clean import get_reader
+    from edgar_warehouse.mdm.clean.consumer import ContractReader
+
+    monkeypatch.delenv("MDM_ENABLE_V2_API", raising=False)
+    assert not any(r.path.startswith("/api/v2/") for r in create_app().routes)
+    monkeypatch.setenv("MDM_ENABLE_V2_API", "1")
+    monkeypatch.setattr(auth, "_SECRET_CACHE", {"offline-test-key"})
+    with database.admin.begin() as conn:
+        database.policy = register_policy(
+            conn,
+            {
+                "version": 3,
+                "automatic_rules": [],
+                "required_consumers": ["export", "graph"],
+                "fields": {"company": {"name": {"sources": ["fixture.primary"]}}},
+                "profile_fields": {
+                    "adviser": {"aum": {"sources": ["fixture.primary"]}}
+                },
+            },
+        )
+    profile = {
+        "role": "adviser",
+        "authority": "IAPD",
+        "registration": "123",
+        "valid_from": AT,
+        "fields": {"aum": "1000"},
+    }
+    a = source("api-one", profiles=[profile])
+    b = source("api-two")
+    left, first = identity_and_binding(a, "10000000-0000-4000-8000-000000000001")
+    right, second = identity_and_binding(b, "20000000-0000-4000-8000-000000000002")
+    apply(
+        database,
+        1,
+        assertions=[a, b],
+        identities=[left, right],
+        decisions=[first, second],
+    )
+    app = create_app()
+    app.dependency_overrides[get_reader] = lambda: ContractReader(database.application)
+    with TestClient(app) as client:
+        endpoint = f"/api/v2/mdm/entities/{left['entity_id']}"
+        assert client.get(endpoint).status_code == 401
+        client.headers["X-API-Key"] = "offline-test-key"
+        body = client.get(endpoint).json()
+        assert body["projection"]["as_of"] == AS_OF
+        assert body["projection"]["generation"] == 1
+        assert body["projection"]["policy_digest"] == database.policy
+        assert (
+            body["contract_version"] == 2 and body["canonical_id"] == left["entity_id"]
+        )
+        profile_id = body["identity"]["profiles"][0]["profile_id"]
+        assert (
+            body["profile_field_provenance"][profile_id]["aum"]["evidence"][
+                "assertion_id"
+            ]
+            == a["assertion_id"]
+        )
+        first_page = client.get("/api/v2/mdm/objects/entity?limit=1").json()
+        assert (
+            first_page["generation"] == 1
+            and first_page["next_after"] == left["entity_id"]
+        )
+        apply(
+            database,
+            2,
+            assertions=[source("api-two", revision=2, fields={"name": "Changed"})],
+        )
+        second_page = client.get(
+            "/api/v2/mdm/objects/entity",
+            params={"limit": 1, "generation": 1, "after": first_page["next_after"]},
+        ).json()
+        assert second_page["next_after"] is None
+        assert second_page["items"][0]["body"]["fields"]["name"]["value"] == "Acme"
+        assert client.get(endpoint + "?generation=999").status_code == 404
+        assert client.get("/api/v2/mdm/objects/entity?limit=1001").status_code == 422
+        merge = decision(
+            "merge",
+            actor="steward",
+            reason="reviewed",
+            at="2026-02-01T00:00:00Z",
+            left=left["entity_id"],
+            right=right["entity_id"],
+        )
+        apply(database, 3, decisions=[merge])
+        alias_endpoint = f"/api/v2/mdm/entities/{right['entity_id']}"
+        assert client.get(alias_endpoint).json()["canonical_id"] == left["entity_id"]
+        assert (
+            client.get(alias_endpoint + "?generation=1").json()["canonical_id"]
+            == right["entity_id"]
+        )

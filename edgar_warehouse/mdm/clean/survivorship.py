@@ -9,6 +9,15 @@ from .evidence import PROFILE_KINDS, instant
 from .store import Conflict, canonical, digest
 
 
+def profile_key(profile):
+    return digest(
+        [
+            profile.get(k)
+            for k in ("role", "authority", "registration", "jurisdiction", "valid_from")
+        ]
+    )
+
+
 def current_claims(
     assertions: list[dict], as_of: str, retired: set[str]
 ) -> dict[str, dict]:
@@ -23,6 +32,7 @@ def current_claims(
         claims = {}
         ids = {}
         profiles = []
+        profile_fields = {}
         relationships = []
         kind = None
         seen = {}
@@ -51,12 +61,50 @@ def current_claims(
             # adapters must materialize them, including on patch datasets.
             ids = a["identifiers"]
             profiles = a["profiles"]
+            continuing = {}
+            for profile in profiles:
+                key = profile_key(profile)
+                values = dict(profile_fields.get(key, {}))
+                for field, value in profile.get("fields", {}).items():
+                    item = (
+                        value
+                        if isinstance(value, dict) and "op" in value
+                        else (
+                            {"op": "unknown"}
+                            if value is None
+                            else {"op": "value", "value": value}
+                        )
+                    )
+                    if item["op"] == "unknown":
+                        continue
+                    if item["op"] == "retract":
+                        values.pop(field, None)
+                    elif item["op"] in {"value", "clear"}:
+                        if item["op"] == "value" and item.get("value") is None:
+                            raise Conflict("Use unknown for null profile evidence")
+                        values[field] = {
+                            **item,
+                            **{
+                                k: a[k]
+                                for k in (
+                                    "assertion_id",
+                                    "source_code",
+                                    "record_key",
+                                    "effective_at",
+                                )
+                            },
+                        }
+                    else:
+                        raise Conflict("Unknown profile field operation")
+                continuing[key] = values
+            profile_fields = continuing
             relationships = a["relationships"]
         result[subject] = {
             "kind": kind,
             "fields": claims,
             "identifiers": ids,
             "profiles": profiles,
+            "profile_fields": profile_fields,
             "relationships": relationships,
             "assertion_id": a["assertion_id"],
             "source_meta": {
@@ -143,33 +191,10 @@ def select_fields(
             current["evidence"].append(record["assertion_id"])
             # Profile values use their own role/field authority policy. Keep raw
             # disagreement in source assertions rather than copying first arrival.
-            original = next((c for c in record["fields"].values()), None)
-            meta = record.get("source_meta") or original
-            if meta:
-                role_values = {}
-                for name, value in profile.get("fields", {}).items():
-                    item = (
-                        value
-                        if isinstance(value, dict) and "op" in value
-                        else {"op": "value", "value": value}
-                    )
-                    if (
-                        item["op"] in {"value", "clear"}
-                        and item.get("value") is not None
-                        or item["op"] == "clear"
-                    ):
-                        role_values[name] = {
-                            **item,
-                            **{
-                                k: meta[k]
-                                for k in ("source_code", "record_key", "effective_at")
-                            },
-                            "assertion_id": record["assertion_id"],
-                        }
-                profile_claims[profile_id][subject] = {
-                    "fields": role_values,
-                    "profiles": [],
-                }
+            profile_claims[profile_id][subject] = {
+                "fields": record["profile_fields"].get(profile_key(profile), {}),
+                "profiles": [],
+            }
             current.pop("fields", None)
     fields = {}
     for name, rule in policy.get("fields", {}).get(kind, {}).items():

@@ -4,6 +4,8 @@ Mounted at /api/v1/mdm. Every router requires X-API-Key.
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Depends, FastAPI
 
 from edgar_warehouse.mdm.api.auth import require_api_key
@@ -36,6 +38,13 @@ def create_app() -> FastAPI:
     api.include_router(rules.router)
     api.include_router(export.router)
     app.include_router(api)
+
+    if os.environ.get("MDM_ENABLE_V2_API") == "1":
+        from edgar_warehouse.mdm.api.routers.clean import router as clean_router
+
+        clean_api = APIRouter(prefix="/api/v2/mdm", dependencies=[Depends(require_api_key)])
+        clean_api.include_router(clean_router)
+        app.include_router(clean_api)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict:

@@ -200,3 +200,17 @@ disabled. This supersedes earlier pre-implementation calibration timing above.
 Q1–Q16 are accepted; numeric calibration and versioned policy evidence are
 mandatory before each automatic rule activation. Implementation is authorized;
 production activation still requires all local and hosted acceptance gates.
+
+## Current local implementation limits
+
+The implementation uses retained registry IDs and reviewed decisions only.
+An authoritative-ID/kind conflict introduced by a correction places the current
+identity in review with no selected fields or active profiles. Evidence and
+prior accepted generations remain available. Copying the previous current row
+would make results depend on delivery order, so quarantine is projected
+deterministically from the retained inputs.
+
+Bounded reversal preview executes the same transaction and rolls it back.
+Large-component staged generation building is not implemented: closure above
+10,000 records is rejected before any business effects. See the concrete
+[local reversal procedure](local-operations.md).
