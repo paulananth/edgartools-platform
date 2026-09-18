@@ -26,7 +26,7 @@ the user's plan, not an implementation ticket.
 The [vendor comparison](../../../docs/research/clean-mdm-vendor-merge-rules-2026-09-17.md)
 supersedes the earlier blanket exact-only, numeric-threshold and smallest-ID
 recommendations. The earlier proposal remains in git history; it was never
-accepted. On 2026-09-18 the user accepted Q1–Q9 across two rounds. Ask no more
+accepted. On 2026-09-18 the user accepted Q1–Q12 across three rounds. Ask no more
 than three questions per round, as explicitly requested by the user.
 
 ### Q1 — Automatic Source Record Binding
@@ -99,10 +99,10 @@ unclear. Reversal completes only after downstream changes are verified.
 
 ## Remaining dependent decisions
 
-Settle numeric calibration/release criteria and the survivor-selection rule
-for approved consolidations. Additional domain representations
-from the original gate (including Market/Venue and non-company Fund Structure)
-also remain unresolved; vendor research is not their approval.
+The survivor rule, numeric precision target and non-company Fund Structure
+boundary are accepted. Actual score cutoffs still require measured calibration;
+no validation result is implied. Branch, Government Entity and Market/Venue
+representations remain unresolved.
 
 ## Completed clarification round
 
@@ -129,7 +129,7 @@ merges, reversals and replay; it does not introduce the first internal ID.
   review of that affected dependency before activating the reversal; unrelated
   identities continue processing. Independently supported corrections remain.
 
-## Next round (maximum three questions)
+## Completed survivor, accuracy and fund round
 
 - **Q10 — Survivor selection:** recommend the earliest published identity as
   the default survivor, with UUID ordering only for equal publication times.
@@ -140,7 +140,7 @@ merges, reversals and replay; it does not introduce the first internal ID.
 - **Q11 — Automatic-binding release target:** propose at least 99.9% precision,
   demonstrated by a one-sided 95% lower confidence bound on representative,
   independently labeled held-out auto-binding decisions per enabled entity-kind
-  and rule family. This is a proposed business risk target, not a vendor fact,
+  and rule family. This is an accepted business risk target, not a vendor fact,
   a similarity cutoff or a guarantee. Also require zero hard-veto violations in
   adversarial fixtures, measure candidate recall and review volume, and keep
   unsupported/under-sampled rules review-only. Calibrate actual score cutoffs
@@ -153,8 +153,25 @@ merges, reversals and replay; it does not introduce the first internal ID.
   securities representing shares remain separate. Unclear form or level stays
   evidence-only until adjudicated.
 
-Branch, Government Entity and Market/Venue boundaries remain for the following
-round; International Organization common-registry routing is already accepted.
+## Next round (maximum three questions)
+
+- **Q13 — Branch:** recommend a distinct Branch identity linked to its head
+  office, even where it is not a separate legal person. Neither a shared name
+  nor a head-office identifier establishes branch identity. Retain evidence
+  when the branch/head-office mapping is unresolved.
+- **Q14 — Government Entity:** recommend a distinct kind for supported
+  government bodies. Government ownership alone does not change a legally
+  incorporated Company's kind; retain that ownership as a relationship.
+  Ambiguous legal status stays in review. International Organization remains
+  the previously accepted common-registry kind.
+- **Q15 — Market/Venue:** recommend distinct venue identities linked to their
+  operators, with operating/segment MIC relationships represented as dated
+  venue hierarchy. Neither venue/operator links nor venue hierarchy imply
+  corporate ownership. Retain identifier history and defer ambiguous mappings.
+
+Actual rule calibration is a research prerequisite, not another request for
+user-supplied score numbers. Additional consumer/source contracts follow the
+accepted domain boundaries before publication is enabled.
 
 ## Comments
 
@@ -176,6 +193,10 @@ In the next exchange the user said: “q3 yes, q8 agreed, q9 agreed”.
 Q1–Q9 are now accepted: internal IDs persist with aliases and registry-based
 replay; overrides without expiry remain until explicit revocation; dependent
 merges require review before reversal activation while unrelated work continues.
-Numeric release criteria, survivor selection and additional domain contracts
-remain open. The overall gate stays claimed; no implementation tickets or
-Clean MDM migrations yet.
+The user then replied “accept recommendation” to Q10–Q12. These three
+recommendations are accepted: earliest-published default survivor with recorded
+steward exceptions and aliases, the 99.9% precision/95% confidence release target,
+and distinct non-company Fund Structure identities with Fund profiles.
+Actual calibrated scores and remaining domain contracts are unresolved. The
+overall gate stays claimed; no implementation tickets or Clean MDM migrations
+are created by this partial resolution.

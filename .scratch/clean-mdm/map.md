@@ -35,8 +35,8 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   field selection; revises unsupported threshold and survivor-ID proposals.
 
 The ongoing [identity, merge, and recovery policy interview](issues/01-set-merge-stage-policy.md)
-records acceptance of Q1–Q9 on 2026-09-18. Calibration, survivor selection and
-additional domain decisions remain open; the policy gate has not closed.
+records acceptance of Q1–Q12 on 2026-09-18. Actual score calibration and
+Branch/Government/Venue decisions remain open; the policy gate has not closed.
 
 ## Not yet specified
 

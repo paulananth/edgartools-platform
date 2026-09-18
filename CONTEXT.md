@@ -22,6 +22,10 @@ _Avoid_: Duplicate legal entity, permanent role inferred from a filing name
 The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
 _Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
 
+**Fund Structure**:
+A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
+_Avoid_: treating every fund as a Company, treating a fund share as the fund itself
+
 **Source Record Binding**:
 The evidence-backed assignment of one source record to the Company Identity, Person Identity, or other accepted identity that it describes.
 _Avoid_: Combining two existing identities, selecting a winning field value
