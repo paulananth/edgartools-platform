@@ -26,7 +26,7 @@ the user's plan, not an implementation ticket.
 The [vendor comparison](../../../docs/research/clean-mdm-vendor-merge-rules-2026-09-17.md)
 supersedes the earlier blanket exact-only, numeric-threshold and smallest-ID
 recommendations. The earlier proposal remains in git history; it was never
-accepted. On 2026-09-18 the user accepted Q1–Q12 across three rounds. Ask no more
+accepted. On 2026-09-18 the user accepted Q1–Q15 across four rounds. Ask no more
 than three questions per round, as explicitly requested by the user.
 
 ### Q1 — Automatic Source Record Binding
@@ -102,7 +102,7 @@ unclear. Reversal completes only after downstream changes are verified.
 The survivor rule, numeric precision target and non-company Fund Structure
 boundary are accepted. Actual score cutoffs still require measured calibration;
 no validation result is implied. Branch, Government Entity and Market/Venue
-representations remain unresolved.
+representations are now accepted. The remaining sequencing decision is Q16.
 
 ## Completed clarification round
 
@@ -153,7 +153,7 @@ merges, reversals and replay; it does not introduce the first internal ID.
   securities representing shares remain separate. Unclear form or level stays
   evidence-only until adjudicated.
 
-## Next round (maximum three questions)
+## Completed branch, government and venue round
 
 - **Q13 — Branch:** recommend a distinct Branch identity linked to its head
   office, even where it is not a separate legal person. Neither a shared name
@@ -172,6 +172,30 @@ merges, reversals and replay; it does not introduce the first internal ID.
 Actual rule calibration is a research prerequisite, not another request for
 user-supplied score numbers. Additional consumer/source contracts follow the
 accepted domain boundaries before publication is enabled.
+
+## Next round — calibration sequencing
+
+**Q16 — Build locally before automatic-binding qualification?**
+
+The user has accepted the risk target and review-only fallback. The original
+plan nevertheless requires matching thresholds settled before implementation
+tickets, and Q11's draft explicitly retained that timing. The existing corpus
+does not establish qualifying accuracy; synthetic examples cannot establish it.
+
+Recommendation: allow implementation tickets and the complete offline core
+build under Q1–Q15 with every unqualified automatic-binding rule disabled.
+Evidence capture, candidate scoring for review, steward decisions, fields,
+relationships, journal/recovery and consumer contract tests can proceed.
+Both exact and scored automatic rules remain subject to the accepted release
+target; this is not an exact-match exemption or a reduction of the target.
+Calibrate and version numeric cutoffs before each rule is activated. Synthetic
+fixtures test behavior but cannot authorize activation. Hosted qualification,
+consumer completeness and cutover gates remain required.
+
+This changes only the pre-implementation timing of calibration. It is proposed,
+not inferred from prior acceptance. Approval would close the present policy
+interview and permit the already requested local implementation to proceed;
+it would not certify rule accuracy or production readiness.
 
 ## Comments
 
@@ -197,6 +221,9 @@ The user then replied “accept recommendation” to Q10–Q12. These three
 recommendations are accepted: earliest-published default survivor with recorded
 steward exceptions and aliases, the 99.9% precision/95% confidence release target,
 and distinct non-company Fund Structure identities with Fund profiles.
-Actual calibrated scores and remaining domain contracts are unresolved. The
-overall gate stays claimed; no implementation tickets or Clean MDM migrations
-are created by this partial resolution.
+The user replied “accept recommendation” to Q13–Q15, accepting distinct
+Branch, Government Entity and Market/Venue boundaries and their relationships.
+All Q1–Q15 policy choices are accepted. Actual calibrated scores remain
+unavailable; Q16 proposes changing their pre-implementation timing. The gate
+stays claimed until that explicit sequencing question is answered. No
+implementation tickets or Clean MDM migrations are created by this record.

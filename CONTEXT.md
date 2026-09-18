@@ -26,6 +26,18 @@ _Avoid_: Field overwrite only, source-specific direct master writes, identity co
 A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
 _Avoid_: treating every fund as a Company, treating a fund share as the fund itself
 
+**Branch Identity**:
+The identity of a separately identified branch establishment linked to its head office, including where the branch is not a separate legal person.
+_Avoid_: Head-office identity, subsidiary Company inferred from branch status
+
+**Government Entity**:
+A government body represented in its own right, distinct from a legally incorporated Company whose owner is a government.
+_Avoid_: Government ownership as an identity kind, International Organization
+
+**Market/Venue**:
+A trading market or venue distinct from the organization operating it. Operating and segment venues relate through a venue hierarchy.
+_Avoid_: Operator Company, corporate ownership hierarchy
+
 **Source Record Binding**:
 The evidence-backed assignment of one source record to the Company Identity, Person Identity, or other accepted identity that it describes.
 _Avoid_: Combining two existing identities, selecting a winning field value
