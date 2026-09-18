@@ -11,13 +11,22 @@ Source integrations and hosted qualification/cutover remain incomplete.
   mirror migration 024 in local `change_ledger`. Existing legacy counts stayed
   unchanged: 10 entities, 0 source references, 0 relationship instances. No
   synthetic fixture was loaded into those persistent databases.
-- New acceptance suite: **19 passed, 0 skipped in 16.51 seconds** on disposable
+- New acceptance suite: **25 PostgreSQL integration tests pass**, together with
+  **33 existing publication tests (58 passed, 0 skipped in 27.96 seconds)** on disposable
   PostgreSQL 16.15. Tests exercise restricted runtime roles, atomic rollback,
   duplicate/reordered evidence, concurrent generation/checkpoint fencing,
   idempotent export/graph delivery, expired publisher fencing, shared roles,
   clear/retract/unknown time, authority conflicts, aliases, dependent reversal,
   typed relationships, hierarchy cycles, and a real three-database mirror plus
   Bookkeeping reconciliation. Synthetic fixtures are not calibration evidence.
+- Command-level tests exercise the existing argparse entry points with all
+  three databases: bounded resume, ordered manifest stages, journal/export/graph
+  delivery and nonzero incomplete reconciliation. Fresh rebuilds vary input
+  order and batch size; oversized closure rejection leaves no committed effects.
+- Local review corrected arrival-dependent quarantine values, retirement review
+  closure, stale Bookkeeping success, atomic-file hash/read consistency and
+  mirror role checks. Both independent review agents failed on a service usage
+  limit; their reviews are **not** recorded as completed.
 - `ruff check` passes for the new core and integration suite. The complete
   current entity-pipeline/API/hosted-consumer surface is not yet qualified.
 - Fetched `origin/main` and inspected
@@ -86,7 +95,7 @@ Clean MDM identities, Merge Stage, consumer contracts or reversal behavior.
 | --- | --- | --- |
 | Merge policy gate | Resolved | Q1–Q16 accepted; unqualified automatic rules disabled |
 | Detailed migrations, schemas and adapter policies | Foundation installed locally | Complete concrete source adapter contracts and source integration |
-| PostgreSQL 16 core | 19 integration tests pass | Broaden full-core coverage and complete independent review; automatic matching remains unqualified |
+| PostgreSQL 16 core | 25 integration tests pass | Broaden full-core coverage and complete independent review; automatic matching remains unqualified |
 | Entity/profile/relationship integration | Not implemented | Every current writer routed through Merge Stage and downstream contracts verified |
 | API/export/graph migration | Not implemented | Versioned contracts, consumer inventory and compatibility/completeness evidence |
 | Snowflake Postgres qualification | Not run | Same migrations/tests on isolated target with effective-role evidence |

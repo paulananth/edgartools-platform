@@ -89,7 +89,10 @@ def postgres():
 
 @pytest.fixture
 def database(postgres):
-    admin, app = postgres
+    return initialize_database(*postgres)
+
+
+def initialize_database(admin, app):
     with admin.begin() as conn:
         conn.execute(text("DROP SCHEMA IF EXISTS mdm_v2 CASCADE"))
         conn.execute(text("DELETE FROM source_registry_coverage"))
@@ -991,3 +994,284 @@ def test_versioned_representative_fixture_and_alias_read_contract(database):
         decisions=list(reversed(batch["decisions"])),
     )
     assert again["duplicate"] and documents(database, "entity") == entities
+
+
+@pytest.fixture
+def command_databases(database, monkeypatch):
+    from edgar_warehouse.bookkeeping.models import PipelineRun
+    from edgar_warehouse.mdm.clean.publication import migrate_mirror
+
+    names = [f"clean_{kind}_{uuid4().hex[:10]}" for kind in ("book", "ledger")]
+    with database.admin.connect().execution_options(
+        isolation_level="AUTOCOMMIT"
+    ) as conn:
+        for name in names:
+            conn.exec_driver_sql(f"CREATE DATABASE {name}")
+    book, ledger = [
+        create_engine(database.admin.url.set(database=name)) for name in names
+    ]
+    try:
+        PipelineRun.__table__.create(book)
+        with book.begin() as conn:
+            conn.execute(
+                text("GRANT SELECT,INSERT,UPDATE ON pipeline_run TO clean_application")
+            )
+        migrate_mirror(ledger, application_role="clean_application")
+        monkeypatch.setenv("MDM_APPLICATION_ROLE", "clean_application")
+        for key, engine in [
+            ("MDM_DATABASE_URL", database.admin),
+            ("BOOKKEEPING_DATABASE_URL", book),
+            ("CHANGE_LEDGER_DATABASE_URL", ledger),
+        ]:
+            monkeypatch.setenv(key, engine.url.render_as_string(hide_password=False))
+        yield book, ledger
+    finally:
+        book.dispose()
+        ledger.dispose()
+        with database.admin.connect().execution_options(
+            isolation_level="AUTOCOMMIT"
+        ) as conn:
+            for name in names:
+                conn.exec_driver_sql(f"DROP DATABASE {name}")
+
+
+def test_commands_resume_bounded_work_and_reconcile_all_consumers(
+    database, command_databases, tmp_path, capsys
+):
+    import argparse
+
+    from edgar_warehouse.mdm.cli import register_mdm_subparser
+
+    parser = argparse.ArgumentParser()
+    register_mdm_subparser(parser.add_subparsers())
+    run = str(uuid4())
+
+    def command(*args):
+        parsed = parser.parse_args(["mdm", *args])
+        return parsed.handler(parsed)
+
+    with database.admin.begin() as conn:
+        policy = register_policy(
+            conn,
+            {
+                "version": 3,
+                "automatic_rules": [],
+                "required_consumers": ["export", "graph", "journal"],
+                "fields": {"company": {"name": {"sources": ["fixture.primary"]}}},
+            },
+        )
+    batches = []
+    for n in range(3):
+        a = source(f"command-{n}")
+        entity, bind = identity_and_binding(a)
+        batches.append(
+            {
+                "batch_id": f"command-{n}",
+                "stage": "mastering" if n < 2 else "derive-relationships",
+                "consumer": "fixture",
+                "expected_checkpoint": n,
+                "checkpoint": n + 1,
+                "assertions": [a],
+                "identities": [entity],
+                "decisions": [bind],
+            }
+        )
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "contract_version": 2,
+                "policy_digest": policy,
+                "as_of": AS_OF,
+                "batches": batches,
+            }
+        )
+    )
+    common = ("--model", "clean", "--run-id", run)
+    work = (*common, "--manifest", str(manifest), "--limit", "1")
+    with pytest.raises(Conflict, match="preceding"):
+        command("derive-relationships", *work)
+    assert command("mastering", *work) == 0
+    assert len(documents(database, "entity")) == 1
+    assert command("mastering", *work) == 0
+    assert len(documents(database, "entity")) == 2
+    assert command("mastering", *work) == 0
+    assert len(documents(database, "entity")) == 2
+    assert command("reconcile", *common) == 2
+    assert command("derive-relationships", *work) == 0
+    assert command("publication-status", *common) == 2
+    for consumer in ["export", "graph", "journal"]:
+        assert (
+            command(
+                "publish",
+                *common,
+                "--consumer",
+                consumer,
+                "--contract-output",
+                str(tmp_path / "published"),
+                "--limit",
+                "3",
+            )
+            == 0
+        )
+    assert command("reconcile", *common) == 0
+    assert command("counts", "--model", "clean") == 0
+    book, ledger = command_databases
+    with book.connect() as conn:
+        assert conn.scalar(text("SELECT status FROM pipeline_run")) == "succeeded"
+    with ledger.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_mirror.event")) == 3
+    # A stale success cannot survive reconciliation of unexpected committed work.
+    apply(database, 4, run_id=run, assertions=[source("unexpected")])
+    assert command("reconcile", *common) == 2
+    with book.connect() as conn:
+        assert conn.scalar(text("SELECT status FROM pipeline_run")) == "running"
+        assert conn.scalar(text("SELECT completed_at FROM pipeline_run")) is None
+
+
+def test_manifest_rejects_insufficient_or_zero_limit(
+    database, command_databases, tmp_path
+):
+    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+    from edgar_warehouse.mdm.clean.cli import execute_manifest
+
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "contract_version": 2,
+                "policy_digest": database.policy,
+                "as_of": AS_OF,
+                "batches": [
+                    {
+                        "batch_id": "large",
+                        "stage": "mastering",
+                        "consumer": "fixture",
+                        "expected_checkpoint": 0,
+                        "checkpoint": 1,
+                        "assertions": [source("one"), source("two")],
+                    }
+                ],
+            }
+        )
+    )
+    for limit, message in [(0, "1..1000"), (1, "at least 2")]:
+        with pytest.raises(ValueError, match=message):
+            execute_manifest(
+                store,
+                coordinator,
+                path=str(manifest),
+                run_id=str(uuid4()),
+                stage="mastering",
+                limit=limit,
+            )
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 0
+
+
+def test_fresh_replay_preserves_business_results_across_batching_and_order(postgres):
+    from edgar_warehouse.mdm.clean.consumer import ContractReader
+
+    first = source("stable", fields={"name": "Initial"})
+    secondary = source(
+        "second", source_code="fixture.secondary", fields={"name": "Alternative"}
+    )
+    correction = source("stable", revision=2, fields={"name": "Corrected"})
+    entity, bind = identity_and_binding(first)
+    _, bind_second = identity_and_binding(secondary, entity["entity_id"])
+    expected = None
+    for chunks in [
+        [[first, secondary, correction]],
+        [[first], [secondary], [correction]],
+        [[correction], [secondary], [first]],
+    ]:
+        db = initialize_database(*postgres)
+        for n, chunk in enumerate(chunks, 1):
+            # Retained steward evidence may arrive after a source correction.
+            apply(db, n, assertions=chunk)
+        apply(db, len(chunks) + 1, identities=[entity], decisions=[bind, bind_second])
+        business = documents(db, "entity")
+        assert all(not r["open"] for r in documents(db, "review").values())
+        assert (
+            ContractReader(db.application).entity(entity["entity_id"])["identity"]
+            == business[entity["entity_id"]]
+        )
+        if expected is None:
+            expected = business
+        else:
+            assert business == expected
+
+
+def test_oversized_closure_rolls_back_every_effect(database):
+    a = source()
+    entity, bind = identity_and_binding(a)
+    apply(database, 1, assertions=[a], identities=[entity], decisions=[bind])
+    before = documents(database, "entity")
+    with pytest.raises(Conflict, match="closure exceeds"):
+        MergeStage(Store(database.application), closure_limit=1).apply(
+            batch_id="too-large",
+            run_id=str(uuid4()),
+            policy_digest=database.policy,
+            consumer="fixture",
+            expected_checkpoint=1,
+            checkpoint=2,
+            as_of=AS_OF,
+            assertions=[source(revision=2, fields={"name": "Changed"})],
+        )
+    assert documents(database, "entity") == before
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+
+
+def test_retirement_closes_unbound_source_reviews(database):
+    apply(database, 1, assertions=[source()])
+    assert any(r["open"] for r in documents(database, "review").values())
+    apply(
+        database,
+        2,
+        decisions=[
+            decision(
+                "retire_source",
+                actor="operator",
+                reason="withdrawn",
+                at="2026-02-01T00:00:00Z",
+                source_code="fixture.primary",
+                evidence=["withdrawal"],
+            )
+        ],
+    )
+    assert all(not r["open"] for r in documents(database, "review").values())
+
+
+def test_conflicting_corrections_are_order_independent_and_history_survives(postgres):
+    from edgar_warehouse.mdm.clean.consumer import ContractReader
+
+    a = source("one", identifiers={"cik": "1"})
+    b = source("two", identifiers={"cik": "1"})
+    entity, first = identity_and_binding(a)
+    _, second = identity_and_binding(b, entity["entity_id"])
+    corrections = [
+        source("one", revision=2, identifiers={"cik": "2"}, fields={"name": "Changed"}),
+        source("two", revision=2, identifiers={"cik": "3"}),
+    ]
+    expected = None
+    for ordered in [corrections, list(reversed(corrections))]:
+        db = initialize_database(*postgres)
+        apply(db, 1, assertions=[a, b], identities=[entity], decisions=[first, second])
+        for n, correction in enumerate(ordered, 2):
+            apply(db, n, assertions=[correction])
+        current = documents(db, "entity")
+        assert current[entity["entity_id"]]["status"] == "review"
+        assert current[entity["entity_id"]]["fields"] == {}
+        history = ContractReader(db.application).entity(
+            entity["entity_id"], generation=1
+        )
+        assert history["identity"]["status"] == "accepted"
+        assert history["identity"]["fields"]["name"]["value"] == "Acme"
+        if expected is None:
+            expected = current
+        else:
+            assert current == expected
