@@ -15,8 +15,10 @@ Inspected code: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`, fetched from
 4. [Evidence report](evidence.md), which distinguishes completed checks from targets.
 
 The [Wayfinder policy ticket](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md)
-holds the decision frontier. Q1–Q12 were accepted on 2026-09-18; actual score
-calibration and Branch/Government/Venue decisions remain open.
+holds the decision frontier. Q1–Q15 were accepted on 2026-09-18. Q16 proposes
+starting the local build with unqualified automatic-binding rules disabled;
+actual calibration would then gate each rule activation. This timing change
+has not yet been accepted.
 No implementation tickets exist for this effort.
 
 The [vendor comparison](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md)

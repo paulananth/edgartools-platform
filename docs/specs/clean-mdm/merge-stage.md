@@ -4,14 +4,16 @@ Status: partially accepted policy v1; requires completion of the
 [Wayfinder decision](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md).
 Revised after [vendor research](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md).
 The earlier numeric thresholds and smallest-seed survivor rule are withdrawn.
-Q1–Q12 were accepted on 2026-09-18: validated binding, steward-approved
+Q1–Q15 were accepted on 2026-09-18: validated binding, steward-approved
 consolidation, field authority/groups, clear/retract semantics, override lifetime
 and evidence-based reversal with Match Exclusion, stable internal IDs, indefinite
 overrides when no expiry is supplied, and review of dependent merges before
 reversal activation. The earliest-published survivor default, 99.9% precision
-release target and non-company Fund Structure boundary are now accepted. Actual
-score calibration and the remaining domain boundaries stay open. No runtime
-implementation or activation is authorized by this partial gate resolution.
+release target and Fund Structure/Branch/Government/Venue boundaries are now
+accepted. Actual score calibration remains unproven. Q16 proposes allowing the
+local build with unqualified automatic rules disabled, moving calibration from
+a pre-implementation prerequisite to a per-rule activation prerequisite. That
+sequencing change has not yet been accepted; the implementation gate stays open.
 
 ## Inputs and outputs
 

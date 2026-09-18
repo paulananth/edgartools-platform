@@ -1,8 +1,8 @@
 # Clean MDM identity and relationship model
 
 Status: target design. Company/Person separation and governed profiles are
-user-directed. Q12 accepts the non-company Fund Structure boundary; Branch,
-Government Entity and Market/Venue await the Wayfinder policy gate.
+user-directed. Q12–Q15 accept Fund Structure, Branch, Government Entity and
+Market/Venue boundaries. These are target contracts, not implemented domains.
 
 ## Identity and profile boundaries
 
@@ -12,7 +12,7 @@ Government Entity and Market/Venue await the Wayfinder policy gate.
 | Person | A natural person | Adviser where individually registered. Never merge with a Company, employer, sole-proprietor business, or similarly named person through a role. |
 | Security | A distinct financial instrument | Identifier history and typed issuer links. Neither an ISIN nor a CUSIP is a Company attribute. Issuer plus title alone is review evidence. |
 | Branch | A separately identified branch establishment | Distinct ID, including where it is not a separate legal person. `IS_INTERNATIONAL_BRANCH_OF` retains the separately accepted head office. |
-| Government Entity | An accepted government body | Distinct ID and governed government identifiers; not a Company. |
+| Government Entity | An accepted government body | Distinct ID and governed government identifiers. A legally incorporated government-owned Company remains Company, with ownership recorded separately; unclear legal status goes to review. |
 | International Organization | An organization whose accepted category supports this representation | Common registry kind and common legal-evidence fields; no dedicated domain table, consistent with the earlier accepted boundary. Preserve source classification history. |
 | Market/Venue | A market or trading venue identified within an approved MIC contract | Distinct ID and dated operator relationship; never collapse venue and operator. Operating/segment MIC relationships are venue hierarchy, not corporate ownership. |
 | Fund Structure | A supported non-company fund arrangement | `fund_structure` kind, governed Fund profile, evidence-backed legal form and structural level (including umbrella/subfund where supported). Structural level and legal personality remain separate assertions; unknown form stays deferred. |
