@@ -26,8 +26,7 @@ the user's plan, not an implementation ticket.
 The [vendor comparison](../../../docs/research/clean-mdm-vendor-merge-rules-2026-09-17.md)
 supersedes the earlier blanket exact-only, numeric-threshold and smallest-ID
 recommendations. The earlier proposal remains in git history; it was never
-accepted. On 2026-09-18 the user accepted Q1, Q2 and Q4–Q7 below.
-Q3 remains open pending clarification of the existing internal ID. Ask no more
+accepted. On 2026-09-18 the user accepted Q1–Q9 across two rounds. Ask no more
 than three questions per round, as explicitly requested by the user.
 
 ### Q1 — Automatic Source Record Binding
@@ -100,13 +99,12 @@ unclear. Reversal completes only after downstream changes are verified.
 
 ## Remaining dependent decisions
 
-After clarifying Q3, settle numeric calibration/release criteria,
-the survivor-selection rule for approved consolidations, override schedules,
-and detailed reversal dependency handling. Additional domain representations
+Settle numeric calibration/release criteria and the survivor-selection rule
+for approved consolidations. Additional domain representations
 from the original gate (including Market/Venue and non-company Fund Structure)
 also remain unresolved; vendor research is not their approval.
 
-## Next round (maximum three questions)
+## Completed clarification round
 
 Q3 fact check against this checkout: `mdm_entity.entity_id` is already a UUID
 primary key (`edgar_warehouse/mdm/migrations/001_initial_schema.sql:25`).
@@ -114,7 +112,7 @@ Normal updates reuse it, but allocation mixes random UUID4 and source-seeded
 UUID5 paths. Steward merges tombstone the discarded ID and move source refs
 (`edgar_warehouse/mdm/stewardship.py:130–174`); redirects are consumer-specific,
 not a general alias contract. An empty-database rebuild cannot reproduce all
-random IDs from source bytes. The open decision strengthens continuity through
+random IDs from source bytes. The accepted decision strengthens continuity through
 merges, reversals and replay; it does not introduce the first internal ID.
 
 - **Q3 — Internal identity ID:** retain an immutable internal ID independent of
@@ -130,6 +128,33 @@ merges, reversals and replay; it does not introduce the first internal ID.
   incorrect merge, may the system guess how to split it? Recommend no: require
   review of that affected dependency before activating the reversal; unrelated
   identities continue processing. Independently supported corrections remain.
+
+## Next round (maximum three questions)
+
+- **Q10 — Survivor selection:** recommend the earliest published identity as
+  the default survivor, with UUID ordering only for equal publication times.
+  A steward can select another existing ID with a recorded reason; all losing
+  IDs remain aliases. Survivor selection does not determine field winners.
+  Pin publication history and the steward decision for replay; never use source
+  arrival order or a newly introduced source key to change a published ID.
+- **Q11 — Automatic-binding release target:** propose at least 99.9% precision,
+  demonstrated by a one-sided 95% lower confidence bound on representative,
+  independently labeled held-out auto-binding decisions per enabled entity-kind
+  and rule family. This is a proposed business risk target, not a vendor fact,
+  a similarity cutoff or a guarantee. Also require zero hard-veto violations in
+  adversarial fixtures, measure candidate recall and review volume, and keep
+  unsupported/under-sampled rules review-only. Calibrate actual score cutoffs
+  from the corpus and record them before implementation tickets; no universal
+  similarity score is assumed.
+- **Q12 — Non-company funds:** recommend a distinct Fund Structure identity
+  with a Fund profile for supported non-company arrangements. Incorporated
+  company funds retain Company identity plus Fund profile. Evidence determines
+  the structural level; umbrella/subfund relationships remain explicit and
+  securities representing shares remain separate. Unclear form or level stays
+  evidence-only until adjudicated.
+
+Branch, Government Entity and Market/Venue boundaries remain for the following
+round; International Organization common-registry routing is already accepted.
 
 ## Comments
 
@@ -147,7 +172,10 @@ Partial acceptance on 2026-09-18. User: “q1 yes, q2 yes, Q3 do we have an inte
 immutable id ?, q4 yes, q5 agreed, q6 agreed, q7 agreed ask three questions at a
 time not more than that”.
 
-Q1, Q2 and Q4–Q7 are accepted as recommended above. Q3 is a factual question,
-not acceptance. Numeric release criteria, survivor selection, override defaults,
-reversal dependencies and additional domain contracts remain open. The overall
-gate stays claimed; no implementation tickets or Clean MDM migrations yet.
+In the next exchange the user said: “q3 yes, q8 agreed, q9 agreed”.
+Q1–Q9 are now accepted: internal IDs persist with aliases and registry-based
+replay; overrides without expiry remain until explicit revocation; dependent
+merges require review before reversal activation while unrelated work continues.
+Numeric release criteria, survivor selection and additional domain contracts
+remain open. The overall gate stays claimed; no implementation tickets or
+Clean MDM migrations yet.

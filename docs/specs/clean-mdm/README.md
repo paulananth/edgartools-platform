@@ -15,8 +15,8 @@ Inspected code: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`, fetched from
 4. [Evidence report](evidence.md), which distinguishes completed checks from targets.
 
 The [Wayfinder policy ticket](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md)
-holds the decision frontier. Q1, Q2 and Q4–Q7 were accepted on 2026-09-18;
-ID stability and dependent decisions remain open, so the gate is not closed.
+holds the decision frontier. Q1–Q9 were accepted on 2026-09-18; calibration,
+survivor selection and additional domain decisions remain open.
 No implementation tickets exist for this effort.
 
 The [vendor comparison](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md)
