@@ -13,6 +13,7 @@ Inspected code: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`, fetched from
    [journal/recovery](recovery.md) contracts.
 3. [Acceptance, target qualification, and cutover](acceptance.md).
 4. [Evidence report](evidence.md), which distinguishes completed checks from targets.
+5. [Local commands, reversal and v2 read API](local-operations.md).
 
 The [Wayfinder policy ticket](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md)
 records the resolved policy gate. The PostgreSQL foundation and shared merge

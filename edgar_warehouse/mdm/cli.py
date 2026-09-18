@@ -36,6 +36,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     decisions.add_argument("--manifest", required=True)
     decisions.add_argument("--run-id", required=True)
     decisions.add_argument("--limit", type=int, default=100)
+    decisions.add_argument("--dry-run", action="store_true", help="Preview the next bounded decision batch; roll back every effect")
     decisions.set_defaults(model="clean", handler=_logged_handler("apply-decisions", _handle_clean_decisions))
 
     counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")

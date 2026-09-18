@@ -125,6 +125,7 @@ class MergeStage:
         assertions: list[dict] | None = None,
         decisions: list[dict] | None = None,
         identities: list[dict] | None = None,
+        preview: bool = False,
     ) -> dict:
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
         decisions = sorted(decisions or [], key=lambda d: (d["at"], d["decision_id"]))
@@ -161,6 +162,8 @@ class MergeStage:
             if previous is not None:
                 if previous.get("input_hash") != input_hash:
                     raise Conflict("Batch key reused with different command")
+                if preview:
+                    return {"preview": True, "duplicate": True, "effects": previous}
                 return self.store.commit(conn, previous, run_id)
             policy = conn.scalar(
                 text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
@@ -357,4 +360,10 @@ class MergeStage:
                     projections, key=lambda p: (p["object_type"], p["object_id"])
                 ),
             }
-            return self.store.commit(conn, request, run_id)
+            result = self.store.commit(conn, request, run_id)
+            if preview:
+                # Exercise the identical SQL validation/permissions boundary,
+                # then roll back every effect, observation, checkpoint and intent.
+                conn.rollback()
+                return {"preview": True, "duplicate": False, "effects": request}
+            return result

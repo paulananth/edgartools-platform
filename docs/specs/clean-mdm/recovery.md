@@ -1,6 +1,8 @@
 # Change Journal, Bookkeeping, and recovery
 
-Status: proposed implementation contract, preserving accepted ownership.
+Status: local atomic commit, attempts, publication recovery and Bookkeeping
+reconciliation are implemented. Hosted consumers, complete source disposition
+accounting and staged large-generation recovery remain acceptance requirements.
 
 ## Ownership
 

@@ -50,6 +50,13 @@ assertion or erase the prior version. A retraction withdraws that assertion's
 eligibility. Retiring a source dataset closes its governed contribution through
 a journaled operation and recomputes winners from still-eligible sources.
 
+The local adapter contract requires complete identifier/profile/relationship
+collections on every normalized record, including records from patch sources.
+Profile membership is a snapshot; ordinary and role-specific fields preserve
+prior eligible values for null/unknown and use explicit clear/retract operations.
+Role-field provenance retains the assertion that supplied the value, even when
+a later profile snapshot repeats the membership with an unknown field.
+
 Snapshot absence is meaningful only after manifest verification, complete
 record accounting, and the dataset's scope-completion decision. A partial
 file, missing parser member, failed batch, limit-bound sample, or daily delta

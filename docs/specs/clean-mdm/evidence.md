@@ -7,12 +7,12 @@ Source integrations and hosted qualification/cutover remain incomplete.
 ## Completed investigation
 
 - Recorded acceptance of Q1–Q16 and the explicit three-database local layout.
-- Installed real migrations 023/025 in local `mdm` and the immutable journal
+- Installed real migrations 023/025/026 in local `mdm` and the immutable journal
   mirror migration 024 in local `change_ledger`. Existing legacy counts stayed
   unchanged: 10 entities, 0 source references, 0 relationship instances. No
   synthetic fixture was loaded into those persistent databases.
-- New acceptance suite: **25 PostgreSQL integration tests pass**, together with
-  **33 existing publication tests (58 passed, 0 skipped in 27.96 seconds)** on disposable
+- New acceptance suite: **30 PostgreSQL integration tests pass**, together with
+  **86 existing API/publication tests (116 passed, 0 skipped in 52.35 seconds)** on disposable
   PostgreSQL 16.15. Tests exercise restricted runtime roles, atomic rollback,
   duplicate/reordered evidence, concurrent generation/checkpoint fencing,
   idempotent export/graph delivery, expired publisher fencing, shared roles,
@@ -27,6 +27,17 @@ Source integrations and hosted qualification/cutover remain incomplete.
   closure, stale Bookkeeping success, atomic-file hash/read consistency and
   mirror role checks. Both independent review agents failed on a service usage
   limit; their reviews are **not** recorded as completed.
+- Added bounded reversal preview with complete rollback, immutable invocation
+  attempts, role-field unknown/retraction provenance, temporal accounting-parent
+  corrections, and required receipts for review resolutions in later batches.
+- Opt-in authenticated v2 API tests verify shared identities, role provenance,
+  aliases, historical generations and stable paginated reads. The existing API
+  remains on its retained legacy contract. The installed `mdm` dependency extra
+  is required for API acceptance; a run without it failed on missing FastAPI
+  and was rerun with the locked extra rather than skipping those tests.
+- Checked local application schema access and Bookkeeping write permissions;
+  the installed console command `mdm counts --model clean` succeeded. Clean
+  master batches remain zero and legacy table counts remain unchanged.
 - `ruff check` passes for the new core and integration suite. The complete
   current entity-pipeline/API/hosted-consumer surface is not yet qualified.
 - Fetched `origin/main` and inspected
@@ -95,11 +106,18 @@ Clean MDM identities, Merge Stage, consumer contracts or reversal behavior.
 | --- | --- | --- |
 | Merge policy gate | Resolved | Q1–Q16 accepted; unqualified automatic rules disabled |
 | Detailed migrations, schemas and adapter policies | Foundation installed locally | Complete concrete source adapter contracts and source integration |
-| PostgreSQL 16 core | 25 integration tests pass | Broaden full-core coverage and complete independent review; automatic matching remains unqualified |
-| Entity/profile/relationship integration | Not implemented | Every current writer routed through Merge Stage and downstream contracts verified |
-| API/export/graph migration | Not implemented | Versioned contracts, consumer inventory and compatibility/completeness evidence |
+| PostgreSQL 16 core | 30 integration tests pass | Complete source disposition/large-component acceptance and independent review; automatic matching remains unqualified |
+| Native entity/profile/relationship pipelines | Not implemented | Every current writer routed through Merge Stage and downstream contracts verified |
+| API/export/graph migration | Opt-in v2 reads tested; local envelope delivery only | Hosted consumers, crosswalks and complete compatibility/completeness evidence |
 | Snowflake Postgres qualification | Not run | Same migrations/tests on isolated target with effective-role evidence |
 | Rebuild/catch-up/cutover/rollback | Not run | Pinned approved inputs, live downstream reconciliation, rehearsal and release decision |
 
 Local migration and test results above do not claim live AWS/Snowflake state,
 production parity or deployment readiness.
+
+[Current machine-readable acceptance evidence](../../../.scratch/clean-mdm/core-acceptance.json)
+records the exact command, file hashes, migration checksums and test counts;
+[JUnit results](../../../.scratch/clean-mdm/core-acceptance.xml) retain individual
+test outcomes. [Local operations](local-operations.md) documents the implemented
+commands and explicitly distinguishes local artifact delivery from hosted
+export/graph qualification.

@@ -82,21 +82,22 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
                 ),
                 {"name": path.name, "checksum": checksum},
             )
-        extra = path.with_name("025_clean_mdm_indexes.sql")
-        extra_source = extra.read_text()
-        extra_hash = hashlib.sha256(extra_source.encode()).hexdigest()
-        saved = conn.scalar(
-            text("SELECT checksum FROM mdm_v2.migration WHERE name=:n"),
-            {"n": extra.name},
-        )
-        if saved is None:
-            conn.execute(text(extra_source))
-            conn.execute(
-                text("INSERT INTO mdm_v2.migration(name,checksum) VALUES(:n,:h)"),
-                {"n": extra.name, "h": extra_hash},
+        for name in ("025_clean_mdm_indexes.sql", "026_clean_mdm_attempts.sql"):
+            extra = path.with_name(name)
+            extra_source = extra.read_text()
+            extra_hash = hashlib.sha256(extra_source.encode()).hexdigest()
+            saved = conn.scalar(
+                text("SELECT checksum FROM mdm_v2.migration WHERE name=:n"),
+                {"n": extra.name},
             )
-        elif saved != extra_hash:
-            raise Conflict("Installed migration checksum differs")
+            if saved is None:
+                conn.execute(text(extra_source))
+                conn.execute(
+                    text("INSERT INTO mdm_v2.migration(name,checksum) VALUES(:n,:h)"),
+                    {"n": extra.name, "h": extra_hash},
+                )
+            elif saved != extra_hash:
+                raise Conflict("Installed migration checksum differs")
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
             if inherited == "PUBLIC" or conn.scalar(
                 text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"),
@@ -119,6 +120,7 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "commit_batch(text,uuid)",
             "claim_publication(text,text,integer)",
             "finish_publication(text,text,bigint,text,text)",
+            "record_attempt(uuid,uuid,text,text,jsonb)",
         ):
             conn.exec_driver_sql(
                 f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO {runtime}"
