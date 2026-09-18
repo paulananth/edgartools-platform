@@ -1,6 +1,6 @@
 # Shared Merge Stage
 
-Status: partially accepted policy v1; requires completion of the
+Status: accepted policy v1; governed by the
 [Wayfinder decision](../../../.scratch/clean-mdm/issues/01-set-merge-stage-policy.md).
 Revised after [vendor research](../../research/clean-mdm-vendor-merge-rules-2026-09-17.md).
 The earlier numeric thresholds and smallest-seed survivor rule are withdrawn.
@@ -10,10 +10,9 @@ and evidence-based reversal with Match Exclusion, stable internal IDs, indefinit
 overrides when no expiry is supplied, and review of dependent merges before
 reversal activation. The earliest-published survivor default, 99.9% precision
 release target and Fund Structure/Branch/Government/Venue boundaries are now
-accepted. Actual score calibration remains unproven. Q16 proposes allowing the
-local build with unqualified automatic rules disabled, moving calibration from
-a pre-implementation prerequisite to a per-rule activation prerequisite. That
-sequencing change has not yet been accepted; the implementation gate stays open.
+accepted. Actual score calibration remains unproven. Accepted Q16 permits the local build
+with every unqualified exact/scored automatic rule disabled. Measured calibration
+and versioned policies gate each rule's activation, not implementation tickets.
 
 ## Inputs and outputs
 
@@ -58,7 +57,7 @@ for each enabled entity kind and rule family. Insufficient evidence keeps a
 rule review-only. Also require zero hard-veto violations in adversarial fixtures;
 measure candidate recall and review volume. This statistical release target is
 not a similarity cutoff or an accuracy guarantee. Actual cutoffs require measured
-calibration and a versioned policy before implementation tickets; none have been
+calibration and a versioned policy before automatic activation; none have been
 validated yet. A unique existing source binding permits an update but still
 checks corrected identifiers and kind; changes that dispute identity
 create review rather than silently moving the record. Multiple exact candidates
@@ -193,3 +192,11 @@ isolated generation using bounded batches, then atomically activate the full
 generation. Readers cannot observe a partly reversed identity graph. Policy
 upgrades are separate explicit replay operations, not implicit behavior during
 reversal. Source evidence and lineage survive every step.
+
+## Q16 implementation boundary — 2026-09-18
+
+The user accepted starting the offline build with unqualified automatic rules
+disabled. This supersedes earlier pre-implementation calibration timing above.
+Q1–Q16 are accepted; numeric calibration and versioned policy evidence are
+mandatory before each automatic rule activation. Implementation is authorized;
+production activation still requires all local and hosted acceptance gates.

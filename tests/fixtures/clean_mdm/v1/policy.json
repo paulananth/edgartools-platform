@@ -1,0 +1,67 @@
+{
+  "automatic_rules": [],
+  "fields": {
+    "branch": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    },
+    "company": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    },
+    "fund_structure": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    },
+    "government": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    },
+    "international_organization": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    },
+    "person": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    },
+    "security": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    },
+    "venue": {
+      "name": {
+        "sources": [
+          "fixture.representative"
+        ]
+      }
+    }
+  },
+  "required_consumers": [
+    "export",
+    "graph",
+    "journal"
+  ],
+  "version": "synthetic-v1"
+}

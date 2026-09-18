@@ -1,0 +1,107 @@
+{
+  "adapter": {
+    "fields": {
+      "name": "name"
+    },
+    "kind_field": "kind",
+    "kind_values": {
+      "branch": "branch",
+      "company": "company",
+      "fund_structure": "fund_structure",
+      "government": "government",
+      "international_organization": "international_organization",
+      "person": "person",
+      "security": "security",
+      "venue": "venue"
+    },
+    "profiles": [
+      {
+        "authority": "synthetic-test",
+        "registration": "adviser_registration",
+        "role": "adviser",
+        "valid_from": "valid_from"
+      },
+      {
+        "authority": "synthetic-test",
+        "registration": "audit_registration",
+        "role": "audit_firm",
+        "valid_from": "valid_from"
+      },
+      {
+        "authority": "synthetic-test",
+        "registration": "fund_registration",
+        "role": "fund",
+        "valid_from": "valid_from"
+      }
+    ],
+    "record_key": [
+      "key"
+    ],
+    "relationships": [
+      {
+        "target_key": [
+          "managed_fund"
+        ],
+        "target_source": "fixture.representative",
+        "type": "MANAGES_FUND",
+        "valid_from": "valid_from"
+      },
+      {
+        "target_key": [
+          "parent_fund"
+        ],
+        "target_source": "fixture.representative",
+        "type": "IS_SUBFUND_OF",
+        "valid_from": "valid_from"
+      },
+      {
+        "target_key": [
+          "auditor"
+        ],
+        "target_source": "fixture.representative",
+        "type": "AUDITED_BY",
+        "valid_from": "valid_from"
+      },
+      {
+        "target_key": [
+          "issuer"
+        ],
+        "target_source": "fixture.representative",
+        "type": "ISSUED_BY",
+        "valid_from": "valid_from"
+      },
+      {
+        "target_key": [
+          "head_office"
+        ],
+        "target_source": "fixture.representative",
+        "type": "IS_INTERNATIONAL_BRANCH_OF",
+        "valid_from": "valid_from"
+      },
+      {
+        "target_key": [
+          "operator"
+        ],
+        "target_source": "fixture.representative",
+        "type": "VENUE_OPERATOR",
+        "valid_from": "valid_from"
+      },
+      {
+        "target_key": [
+          "holding"
+        ],
+        "target_source": "fixture.representative",
+        "type": "HOLDS",
+        "valid_from": "valid_from"
+      }
+    ],
+    "version": "fixture-v1"
+  },
+  "effective_time": "publication effective time",
+  "family": "fixture",
+  "provider": "synthetic-test",
+  "publication_key": "publication",
+  "record_key": "key",
+  "schema_version": "1",
+  "semantics": "patch"
+}

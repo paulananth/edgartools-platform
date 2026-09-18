@@ -27,8 +27,16 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     mdm_sub = mdm.add_subparsers(dest="mdm_command", required=True)
 
     migrate = mdm_sub.add_parser("migrate", help="Create/upgrade MDM schema and seed reference data")
+    migrate.add_argument("--model", choices=("legacy", "clean"), default="legacy")
+    migrate.add_argument("--application-role", default="application")
     migrate.add_argument("--no-seed", dest="seed", action="store_false", default=True)
     migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
+
+    decisions = mdm_sub.add_parser("apply-decisions", help="Apply reviewed Clean MDM decisions from a pinned manifest")
+    decisions.add_argument("--manifest", required=True)
+    decisions.add_argument("--run-id", required=True)
+    decisions.add_argument("--limit", type=int, default=100)
+    decisions.set_defaults(model="clean", handler=_logged_handler("apply-decisions", _handle_clean_decisions))
 
     counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")
     counts.set_defaults(handler=_logged_handler("counts", _handle_counts))
@@ -151,6 +159,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "if no frozen CIK snapshot exists for it."
         ),
     )
+    mastering.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
+    mastering.add_argument("--manifest", help="Pinned Clean MDM input manifest")
     mastering.set_defaults(handler=_logged_handler("mastering", _handle_run))
 
     pub_drain = mdm_sub.add_parser(
@@ -261,6 +271,9 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
             "(IS_INSIDER/HOLDS/COMPANY_HOLDS). Repeatable. Ticket 21 insider path."
         ),
     )
+    derive.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
+    derive.add_argument("--manifest", help="Pinned Clean MDM relationship manifest")
+    derive.add_argument("--limit", type=int, default=100)
     derive.set_defaults(handler=_logged_handler("derive-relationships", _handle_derive_relationships))
 
     load_rels = mdm_sub.add_parser(
@@ -616,6 +629,11 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         default=5_000,
         help="Rows per Snowflake upsert batch while draining all pending rows",
     )
+    ex.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
+    ex.add_argument("--run-id")
+    ex.add_argument("--consumer", choices=("journal", "export", "graph"))
+    ex.add_argument("--contract-output", help="Offline contract artifact directory")
+    ex.add_argument("--limit", type=int, default=100)
     ex.set_defaults(handler=_logged_handler("publish", _handle_export))
 
     # publication-claim (07-03 RSYNC-01/03: transactional publication queue coordinator)
@@ -741,7 +759,11 @@ def _logged_handler(command_name: str, handler: Callable[[argparse.Namespace], i
             arguments=_safe_arguments(args),
         )
         try:
-            exit_code = handler(args)
+            if command_name != "migrate" and getattr(args, "model", os.environ.get("MDM_MODEL", "legacy")) == "clean":
+                from edgar_warehouse.mdm.clean.cli import handle
+                exit_code = handle(command_name, args)
+            else:
+                exit_code = handler(args)
         except Exception as exc:
             emit_mdm_event(
                 "mdm_command_failed",
@@ -1616,7 +1638,11 @@ def _handle_migrate(args) -> int:
     from edgar_warehouse.mdm.database import get_engine
     from edgar_warehouse.mdm.migrations.runtime import migrate
 
-    payload = migrate(get_engine(), seed=args.seed)
+    if getattr(args, "model", "legacy") == "clean":
+        from edgar_warehouse.mdm.clean.store import migrate as migrate_clean
+        payload = migrate_clean(get_engine(), application_role=args.application_role)
+    else:
+        payload = migrate(get_engine(), seed=args.seed)
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -2546,3 +2572,8 @@ def _handle_verify_insider_coverage(args) -> int:
               file=sys.stderr)
         return 1
     return 0
+
+
+def _handle_clean_decisions(args) -> int:
+    from edgar_warehouse.mdm.clean.cli import handle
+    return handle("apply-decisions", args)
