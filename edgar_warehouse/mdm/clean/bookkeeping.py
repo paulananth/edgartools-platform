@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
+from edgar_warehouse.bookkeeping.models import PipelineRun
 from edgar_warehouse.bookkeeping.store import BookkeepingStore
 
 from .store import Conflict, Store
@@ -29,6 +30,10 @@ class RunCoordinator:
             "contract_version": 2,
         }
         with Session(self.engine) as session:
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:run,0))"),
+                {"run": run_id},
+            )
             book = BookkeepingStore(session)
             existing = book.get_pipeline_run(run_id)
             if existing:
@@ -50,12 +55,18 @@ class RunCoordinator:
 
     def reconcile(self, run_id: str) -> dict:
         with Session(self.engine) as session:
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:run,0))"),
+                {"run": run_id},
+            )
             book = BookkeepingStore(session)
             run = book.get_pipeline_run(run_id)
             if run is None:
                 raise Conflict("Root run was not registered")
             expected = set(json.loads(run["scope_json"])["expected_batches"])
-            with self.mdm.engine.connect() as conn:
+            with self.mdm.engine.connect().execution_options(
+                isolation_level="REPEATABLE READ"
+            ) as conn:
                 observed = set(
                     conn.scalars(
                         text(
@@ -96,6 +107,12 @@ class RunCoordinator:
             if complete:
                 book.complete_pipeline_run(
                     run_id, status="succeeded", writes=[], raw_writes=[], metrics=report
+                )
+            else:
+                session.execute(
+                    update(PipelineRun)
+                    .where(PipelineRun.pipeline_run_id == run_id)
+                    .values(status="running", completed_at=None)
                 )
             # A lost acknowledgement is harmless: another call derives the same
             # completion from retained MDM receipts and the frozen root scope.

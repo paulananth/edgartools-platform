@@ -71,3 +71,14 @@ The reproduced six baseline failures justify adding that migration and
 preserving runtime migration order in privileged-rerun tests. Review verdict:
 leave the fixture structure in place; no GoF pattern is justified for this
 17-line setup repair. The existing real-PostgreSQL tests verify the fix.
+
+## Shared-core recovery review, 2026-09-18
+
+Reviewed the new core at `6aa55228` and legacy CLI history (`6faa4d31`,
+`4dcd5507`). Keep the small command dispatch and publication protocols; no new
+class hierarchy is warranted. The demonstrated costs were behavioral: bounded
+retry starvation, unavailable reconciliation flags, stale success and use of
+arrival-dependent prior projections. Fix these at their existing boundaries.
+The added PostgreSQL tests reproduce and verify those paths. API composition
+has remained stable since `c8562b73`; a separate versioned router can reuse it
+without refactoring the legacy routers.

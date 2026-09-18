@@ -39,6 +39,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     decisions.set_defaults(model="clean", handler=_logged_handler("apply-decisions", _handle_clean_decisions))
 
     counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")
+    counts.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
     counts.set_defaults(handler=_logged_handler("counts", _handle_counts))
 
     check = mdm_sub.add_parser("check-connectivity", help="Check MDM SQL connectivity")
@@ -527,6 +528,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         "reconcile",
         help="Verify Snowflake graph parity and Native App graph execution",
     )
+    vg.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
+    vg.add_argument("--run-id", help="Clean MDM root run to reconcile")
     vg.add_argument(
         "--skip-native-app",
         action="store_true",
@@ -659,6 +662,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         "publication-status",
         help="Report publication-queue freshness/health (RSYNC-03 SLO: 5min warning, 15min hard alert)",
     )
+    ps.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
+    ps.add_argument("--run-id", help="Clean MDM root run to reconcile")
     ps.set_defaults(handler=_logged_handler("publication-status", _handle_publication_status))
 
     # generation-plan (07-04 RSYNC-04: parallel generation builder, AWS fan-out orchestration)

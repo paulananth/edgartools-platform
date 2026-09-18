@@ -1,6 +1,9 @@
 # Source registry and evidence contract
 
-Status: proposed contract; no new registry or source adapter is implemented.
+Status: dataset metadata pinned to the existing acquisition authority and a
+configuration-selected JSONL adapter are implemented. Native source contracts,
+complete-publication accounting and unsupported-domain dispositions remain
+integration work; the requirements below are not all implementation evidence.
 
 ## Extend the existing authority
 

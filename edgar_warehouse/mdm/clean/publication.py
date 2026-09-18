@@ -23,6 +23,18 @@ def migrate_mirror(engine, *, application_role: str) -> dict:
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise ValueError("Mirror requires PostgreSQL 16")
         conn.execute(text("SELECT pg_advisory_xact_lock(730235)"))
+        if conn.scalar(text("SELECT current_user")) == application_role:
+            raise ValueError("Migration owner and runtime role must differ")
+        privileges = conn.execute(
+            text(
+                "SELECT rolsuper,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=:role"
+            ),
+            {"role": application_role},
+        ).first()
+        if privileges is None or any(privileges):
+            raise ValueError(
+                "Mirror runtime role must exist without administrative privileges"
+            )
         installed = conn.scalar(text("SELECT to_regclass('mdm_mirror.migration')"))
         if installed:
             if (
@@ -42,6 +54,13 @@ def migrate_mirror(engine, *, application_role: str) -> dict:
         conn.exec_driver_sql(
             f"REVOKE ALL ON ALL TABLES IN SCHEMA mdm_mirror FROM {role}"
         )
+        conn.exec_driver_sql(f"REVOKE ALL ON SCHEMA mdm_mirror FROM {role}, PUBLIC")
+        conn.exec_driver_sql(
+            "REVOKE ALL ON ALL TABLES IN SCHEMA mdm_mirror FROM PUBLIC"
+        )
+        conn.exec_driver_sql(
+            f"REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mdm_mirror FROM {role}, PUBLIC"
+        )
         conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA mdm_mirror TO {role}")
         conn.exec_driver_sql(
             f"GRANT SELECT ON ALL TABLES IN SCHEMA mdm_mirror TO {role}"
@@ -49,6 +68,19 @@ def migrate_mirror(engine, *, application_role: str) -> dict:
         conn.exec_driver_sql(
             f"GRANT EXECUTE ON FUNCTION mdm_mirror.deliver(text,text,jsonb) TO {role}"
         )
+        if conn.scalar(
+            text("SELECT has_schema_privilege(:role,'mdm_mirror','CREATE')"),
+            {"role": application_role},
+        ):
+            raise ValueError(
+                "Runtime role inherits mirror schema ownership or CREATE privilege"
+            )
+        if conn.scalar(
+            text("""SELECT count(*) FROM pg_tables WHERE schemaname='mdm_mirror'
+            AND has_table_privilege(:role,format('%I.%I',schemaname,tablename),'INSERT,UPDATE,DELETE,TRUNCATE')"""),
+            {"role": application_role},
+        ):
+            raise ValueError("Runtime role inherits direct mirror writes")
     return {
         "migration": path.name,
         "checksum": checksum,

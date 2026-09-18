@@ -54,11 +54,12 @@ def batch_assertions(batch: dict, root: Path, store: Store) -> list[dict]:
     file = (root / spec["path"]).resolve()
     if not file.is_relative_to(root):
         raise ValueError("Source member must be inside the manifest directory")
-    hasher = hashlib.sha256()
+    # Hash and parse the same bounded bytes, even if the file changes in place.
     with file.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    if hasher.hexdigest() != spec["sha256"]:
+        raw = source.read(16 * 1024 * 1024 + 1)
+    if len(raw) > 16 * 1024 * 1024:
+        raise ValueError("Source member exceeds 16 MiB; partition the manifest")
+    if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
     with store.engine.connect() as conn:
         contract = conn.scalar(
@@ -68,26 +69,25 @@ def batch_assertions(batch: dict, root: Path, store: Store) -> list[dict]:
     if contract is None:
         raise Conflict("Unregistered dataset")
     result = []
-    with file.open() as source:
-        for line in source:
-            if not line.strip():
-                continue
-            if len(result) >= 1000:
-                raise ValueError(
-                    "Source member exceeds bounded 1000-record batch; partition the manifest"
-                )
-            result.append(
-                normalize(
-                    json.loads(line),
-                    source_code=spec["source_code"],
-                    contract=contract,
-                    publication={
-                        **spec["publication"],
-                        "artifact_sha256": spec["sha256"],
-                        "member": spec["path"],
-                    },
-                )
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        if len(result) >= 1000:
+            raise ValueError(
+                "Source member exceeds bounded 1000-record batch; partition the manifest"
             )
+        result.append(
+            normalize(
+                json.loads(line),
+                source_code=spec["source_code"],
+                contract=contract,
+                publication={
+                    **spec["publication"],
+                    "artifact_sha256": spec["sha256"],
+                    "member": spec["path"],
+                },
+            )
+        )
     return result
 
 
@@ -113,12 +113,45 @@ def execute_manifest(
     )
     handled = 0
     committed = []
+    with store.engine.connect() as conn:
+        observed = set(
+            conn.scalars(
+                text(
+                    "SELECT batch_id FROM mdm_v2.observation WHERE run_id=CAST(:run AS uuid)"
+                ),
+                {"run": run_id},
+            )
+        )
+        retained = set(
+            conn.scalars(
+                text("SELECT batch_id FROM mdm_v2.batch WHERE batch_id=ANY(:ids)"),
+                {"ids": [b["batch_id"] for b in manifest["batches"]]},
+            )
+        )
+    prerequisites = set()
     for batch in manifest["batches"]:
-        if batch["stage"] != stage:
+        if batch["batch_id"] in observed:
+            prerequisites.add(batch["batch_id"])
             continue
+        if batch["stage"] != stage:
+            prerequisites.add(batch["batch_id"])
+            continue
+        if not prerequisites <= observed:
+            raise Conflict("Complete preceding manifest batches before this stage")
         assertions = batch_assertions(batch, root, store)
-        cost = max(1, len(assertions), len(batch.get("decisions", [])))
+        cost = (
+            0
+            if batch["batch_id"] in retained
+            else max(
+                1,
+                len(assertions),
+                len(batch.get("decisions", [])),
+                len(batch.get("identities", [])),
+            )
+        )
         if handled + cost > limit:
+            if handled == 0:
+                raise ValueError(f"Next atomic batch requires --limit at least {cost}")
             break
         result = MergeStage(store).apply(
             batch_id=batch["batch_id"],
@@ -133,6 +166,8 @@ def execute_manifest(
             decisions=batch.get("decisions", []),
         )
         committed.append(result)
+        observed.add(batch["batch_id"])
+        prerequisites.add(batch["batch_id"])
         if not result["duplicate"]:
             handled += cost
     return {
@@ -193,7 +228,7 @@ def handle(command: str, args) -> int:
                 path=args.manifest,
                 run_id=run_id,
                 stage="stewardship" if command == "apply-decisions" else command,
-                limit=getattr(args, "limit", None) or 100,
+                limit=100 if getattr(args, "limit", None) is None else args.limit,
             )
         elif command == "publish":
             consumer = getattr(args, "consumer", None)
@@ -207,7 +242,7 @@ def handle(command: str, args) -> int:
             else:
                 raise ValueError("Choose --consumer journal, export or graph")
             count = 0
-            limit = getattr(args, "limit", None) or 100
+            limit = 100 if getattr(args, "limit", None) is None else args.limit
             if not 1 <= limit <= 1000:
                 raise ValueError("Publication limit must be 1..1000 batches")
             while count < limit and store.deliver_one(

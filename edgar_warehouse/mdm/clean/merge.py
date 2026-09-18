@@ -263,14 +263,11 @@ class MergeStage:
                     "subjects": members,
                 }
                 if conflicts:
-                    prior = conn.scalar(
-                        text(
-                            "SELECT body FROM mdm_v2.projection WHERE object_type='entity' AND object_id=:id"
-                        ),
-                        {"id": entity_id},
-                    )
-                    if prior:
-                        body = {**prior, "status": "review"}
+                    # A prior projection depends on delivery order. Quarantine
+                    # the current component deterministically; accepted history
+                    # remains available through its retained generation.
+                    body["fields"] = {}
+                    body["profiles"] = []
                 projected[entity_id] = body
                 reviews.extend(
                     {**r, "entity_id": entity_id} for r in conflicts + field_reviews
@@ -316,7 +313,9 @@ class MergeStage:
                         **r,
                         "open": True,
                         "blocking": r["reason"] != "override_source_disagreement",
-                        "affected_subjects": sorted(claims),
+                        "affected_subjects": sorted(
+                            {a["subject"] for a in evidence.values()}
+                        ),
                         "affected_entities": sorted(all_ids),
                     },
                 }
@@ -329,7 +328,7 @@ class MergeStage:
              (object_type='relationship' AND (body->>'source_id'=ANY(:ids) OR body->>'target_id'=ANY(:ids))) OR
              (object_type='review' AND (body->>'entity_id'=ANY(:ids) OR body->>'subject'=ANY(:subjects) OR body->'affected_subjects' ?| CAST(:subjects AS text[]))) LIMIT :lim""",
                 ids=sorted(all_ids),
-                subjects=sorted(claims),
+                subjects=sorted({a["subject"] for a in evidence.values()}),
                 lim=self.closure_limit + 1,
             )
             if len(old) > self.closure_limit:

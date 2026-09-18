@@ -1,6 +1,8 @@
 # Local acceptance, consumer migration, and target qualification
 
-Status: required evidence plan; no gate below has passed for Clean MDM yet.
+Status: required acceptance matrix. The [evidence report](evidence.md) records
+passing local foundation/core checks and the remaining integration gates.
+No hosted qualification or cutover gate has passed.
 
 ## Local PostgreSQL foundation
 
