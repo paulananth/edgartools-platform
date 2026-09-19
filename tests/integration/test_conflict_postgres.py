@@ -141,6 +141,14 @@ def postgres_conflict() -> Iterator[PostgresConflict]:
         migrated_exclusion_import = _psql_file(container, "/tmp/exclusion_import.sql")
         assert migrated_exclusion_import.returncode == 0, migrated_exclusion_import.stderr
 
+        # Current SourceFetchWork ORM writes include HTTP validator columns.
+        # Install their migration before the real application-role round trips.
+        migrated_validators = _psql(
+            container,
+            LEDGER_MIGRATION.with_name("018_source_fetch_validators.sql").read_text(),
+        )
+        assert migrated_validators.returncode == 0, migrated_validators.stderr
+
         port_result = _run("docker", "port", container, "5432/tcp")
         assert port_result.returncode == 0, port_result.stderr
         port = port_result.stdout.strip().rsplit(":", 1)[-1]
