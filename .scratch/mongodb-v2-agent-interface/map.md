@@ -41,11 +41,21 @@ Contract as v1 SoE.
   ([Incremental Change Propagation](../change-propagation/map.md)).
 - Ask the operator one grilling question at a time. Standing preference:
   recommended answers unless the operator overrides.
-- Isolation: Grok worktree
-  `edgartools-platform-worktrees/grok-agent-decision-data-plane-wayfinder`
-  on `grok/mongodb-v2-agent-interface`. Do not switch Claude's shared
-  checkout (`claude/mdm-tail-single-machine-wayfinder`). Do not implement
-  v1 factor tickets (Claude). Charting does not resolve grilling.
+- Ownership: Grok's `grok/mongodb-v2-agent-interface` branch merged to
+  `main` via PR #606 (2026-09-12); the branch no longer exists. The prior
+  Grok-worktree isolation note above no longer applies — confirmed live
+  2026-09-19 (`gh pr list --head grok/mongodb-v2-agent-interface` shows
+  `MERGED`, no matching local or remote branch). Claude now stewards this
+  map, including its 4 open `v2-mongo-decision-projection` implementation
+  tickets (01-04). Do not implement v1 factor tickets (Claude's own,
+  unrelated map).
+- Reopened 2026-09-19 at operator request: whether SPARQL/RDF should serve
+  some or all of this v2 layer instead of, or alongside, MongoDB is back
+  under active grilling — the "decision-complete" state below predates
+  this. ADR 0009 stays accepted until/unless that grilling produces a
+  supersession; MongoDB implementation tickets 01-04 are not blocked by
+  it in the meantime. See `.scratch/agent-contract-query-interface-options/`
+  for the SPARQL-hosting research feeding this.
 
 ## Decisions so far
 
@@ -62,12 +72,19 @@ Contract as v1 SoE.
 
 ## Not yet specified
 
-<!-- destination is decision-complete; leftover is operator/implement work -->
+<!-- MongoDB implementation is decision-complete (tickets 01-08); the
+     SPARQL/RDF reopening below is not yet ticketed pending grilling -->
 
 - Operator: provision M0, apply `$jsonSchema`, create read-only agent user
   + publisher write user, set `0.0.0.0/0`.
 - Implementation: separate publisher after READY (not this map unless a
   later Notes override). Use `/to-tickets` to slice that work.
+- SPARQL/RDF as an alternative or complement to MongoDB for this layer:
+  scope (whole projection vs. relationship-edges-only), comparison set
+  (SPARQL-only vs. open survey of other serving shapes), and whether
+  fail-closed watermark semantics must be preserved exactly or may be
+  redesigned RDF-native — grilling in progress, not yet sharp enough to
+  ticket.
 
 ## Out of scope
 
