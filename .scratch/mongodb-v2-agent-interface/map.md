@@ -69,6 +69,7 @@ Contract as v1 SoE.
 - [Lock how v2 agents authenticate to Atlas](issues/07-lock-v2-agent-auth.md) — One read-only SCRAM user for internet agents; separate publisher write user; product OAuth later; plugin OAuth is operator-only.
 - [Lock how the v2 publisher is tested](issues/08-lock-v2-publisher-test-strategy.md) — Mock Mongo driver in unit tests; optional operator M0 smoke; no Atlas secrets in CI.
 - [ADR 0009 Mongo Decision Projection](../../docs/adr/0009-mongo-decision-projection.md) — v2 Atlas projection; v1 Snowflake SoE unchanged.
+- [Survey free/public serving options for the v2 relationship-edge layer](issues/09-survey-relationship-edge-serving-options.md) — No SPARQL/RDF, hosted property-graph (AuraDB/ArangoDB/TigerGraph/Neptune), GraphQL-over-HTTP, or static-JSON option clears the free-tier + public-reachability bar as cleanly as Atlas M0 already does; AuraDB Free comes closest but auto-deletes after 30 days idle. `IS_INSIDER`/`EMPLOYED_BY` are already embedded in the existing Mongo bundle, not homeless. [research](research/09-relationship-edge-serving-survey.md)
 
 ## Not yet specified
 
@@ -79,15 +80,12 @@ Contract as v1 SoE.
   + publisher write user, set `0.0.0.0/0`.
 - Implementation: separate publisher after READY (not this map unless a
   later Notes override). Use `/to-tickets` to slice that work.
-- Scope locked 2026-09-19: SPARQL/RDF evaluated for the relationship-edge
-  half only (`IS_INSIDER`/`EMPLOYED_BY`), not the tabular features; open
-  survey, not SPARQL-only; fail-closed *outcome* required, mechanism may
-  be RDF-native. See
-  [Survey free/public serving options for the v2 relationship-edge layer](issues/09-survey-relationship-edge-serving-options.md)
-  (claimed, in progress).
-  Which option wins, and whether that reopens ADR 0009, is a follow-on
-  grilling ticket once that survey lands — not yet sharp enough to
-  ticket.
+- Whether a second relationship-edge store is worth adding at all, given
+  the survey found no clean winner, and if so which option despite its
+  downside — see
+  [Decide whether the v2 layer needs a second relationship-edge store](issues/10-decide-second-edge-store-need.md)
+  (claimed, in progress). Whether this reopens ADR 0009 depends on that
+  ticket's answer.
 
 ## Out of scope
 

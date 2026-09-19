@@ -1,7 +1,7 @@
 # Survey free/public serving options for the v2 relationship-edge layer
 
 Type: research
-Status: claimed
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -55,4 +55,53 @@ Save findings at
 `.scratch/mongodb-v2-agent-interface/research/09-relationship-edge-serving-survey.md`.
 
 ## Answer
+
+**No surveyed option clears the free-tier + public-reachability bar as
+cleanly as Atlas M0 already does; Mongo remains the only vetted store.**
+Full detail: `.scratch/mongodb-v2-agent-interface/research/09-relationship-edge-serving-survey.md`.
+
+- **SPARQL/RDF**: no vendor offers a confirmed permanently-free,
+  bring-your-own-data, public SPARQL endpoint. The one lead (TriplyDB)
+  stayed unconfirmed and its cited pricing domain is now dead. Only
+  genuinely free-forever route is self-hosting Fuseki/Oxigraph — real
+  infrastructure to run, not a vendor SaaS.
+- **Hosted property-graph DBs**: none clear it cleanly. Neo4j AuraDB Free
+  is closest (free forever, public by default, 200k nodes/400k rels) but
+  **auto-deletes, unrecoverable, after 30 days idle** — a harder failure
+  mode than Atlas M0's resumable pause. ArangoDB's managed cloud has no
+  free tier; TigerGraph's only permanent-free option is self-hosted.
+  Neptune is a 30-day trial regardless of query-language framing.
+- **GraphQL-over-HTTP**: Hasura Cloud's Free plan is real and
+  permanent, but is a query layer needing a backing free Postgres (Neon
+  or Supabase), each with its own pause behavior. No LLM benchmark
+  compares GraphQL against SPARQL/SQL/Cypher/MQL head-to-head.
+  Standalone GraphQL benchmarks sit in the same rough low-accuracy band
+  as SPARQL's few-shot number, not directly comparable.
+- **Plain REST/JSON over static hosting** (S3, CloudFront, Cloudflare R2,
+  Cloudflare Pages, GitHub Pages): real permanently-free candidates
+  exist. But this shape only serves **point lookups by known key**
+  (fetch one issuer's edges) — no reverse/multi-hop traversal (e.g.
+  "which issuers is person X an insider of") without a second
+  separately-published index — and a CDN in front introduces a
+  fail-closed hazard (stale cached document served after the origin
+  flips to `not_ready`) that the query-engine-backed options don't have.
+- **LLM query-generation accuracy** (SM3-Text-to-Query, NeurIPS 2024,
+  the one same-methodology cross-language benchmark found): SQL 47.05%,
+  Cypher 34.45%, MongoDB 21.55%, SPARQL 3.3% zero-shot (~30% five-shot).
+  A real cost against SPARQL specifically for an LLM-driven agent.
+- **Cross-check confirmed**: `IS_INSIDER`/`EMPLOYED_BY` are **already**
+  inside the existing Mongo projection today — embedded as
+  `insiders.rows`/`employment.rows` on the `issuer_subject_bundle`
+  document (ticket 04, data-contract.md), not a gap needing a home. The
+  live question a follow-on decision has to answer is narrower than
+  "where do edges live": whether a genuine access-pattern gap (reverse/
+  multi-hop graph lookups Mongo's per-subject embedding doesn't serve)
+  justifies a *second* store despite every surveyed option's downside,
+  or whether v2 stays on Mongo alone. See
+  [Decide whether the v2 layer needs a second relationship-edge store](10-decide-second-edge-store-need.md).
+- Structural note: every family surveyed *can* carry a watermark/
+  generation stamp and support in-place fail-closed hiding as a
+  data-modeling choice — none is structurally incapable of it, except
+  that CDN-fronted static hosting needs explicit TTL/invalidation
+  handling to preserve that property.
 
