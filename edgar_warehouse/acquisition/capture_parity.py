@@ -325,7 +325,7 @@ def run_dual_path_filing_artifact_parity(
         run_filing_artifact_gated_capture_for_business_date,
     )
     from edgar_warehouse.bronze_filing_artifacts import fetch_filing_artifacts
-    from edgar_warehouse.mdm.database import get_engine
+    from edgar_warehouse.acquisition.database import get_engine
 
     scope = resolve_parity_scope(
         business_date=business_date, cik_list=cik_list, limit=limit

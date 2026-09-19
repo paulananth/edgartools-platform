@@ -81,7 +81,7 @@ def test_legacy_snapshot_reads_raw_objects_this_run_recorded(tmp_path):
                 "edgar_warehouse.application.workflows.drive_filing_discovery."
                 "run_filing_artifact_gated_capture_for_business_date"
             ),
-            patch("edgar_warehouse.mdm.database.get_engine", return_value=engine),
+            patch("edgar_warehouse.acquisition.database.get_engine", return_value=engine),
         ):
             result = run_dual_path_filing_artifact_parity(
                 context=object(),
