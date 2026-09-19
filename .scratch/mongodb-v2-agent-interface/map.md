@@ -80,15 +80,18 @@ Contract as v1 SoE.
   + publisher write user, set `0.0.0.0/0`.
 - Implementation: separate publisher after READY (not this map unless a
   later Notes override). Use `/to-tickets` to slice that work.
-- Whether a second relationship-edge store is worth adding at all, given
-  the survey found no clean winner, and if so which option despite its
-  downside — see
-  [Decide whether the v2 layer needs a second relationship-edge store](issues/10-decide-second-edge-store-need.md)
-  (claimed, in progress). Whether this reopens ADR 0009 depends on that
-  ticket's answer.
 
 ## Out of scope
 
+- **A generalized agent interface for all MDM, graph, and gold data**
+  (operator ask, 2026-09-19) — larger than this map's destination (a v2
+  read layer projecting v1 Agent-Grade Input Facts only, not MDM
+  Postgres, not gold, not a Snowflake Decision Contract replacement).
+  [Decide whether the v2 layer needs a second relationship-edge store](issues/10-decide-second-edge-store-need.md)
+  is closed (superseded) rather than answered, since its own question
+  turned out to be a narrower instance of this larger ask. Tracked as a
+  new effort; not resumed here unless the new effort's destination
+  narrows back down to this map's scope.
 - Replacing Snowflake as v1 Agent SoE (ADR 0001; contract ticket 10).
 - Ingest, bronze, PostgreSQL ledger, edgartools gateway.
 - Manager ADV / `MANAGES_FUND` agent-grade sections.

@@ -1,7 +1,14 @@
 # Decide whether the v2 layer needs a second relationship-edge store
 
 Type: grilling
-Status: claimed
+Status: superseded — Q1 answered "yes, a gap exists," but the stated need
+("a generalized agent interface for all MDM, graph, and gold data") is
+larger than a reverse-lookup fix to the v2 Mongo edge shape and exceeds
+this map's destination (v2 read layer only, not MDM/gold, not a
+replacement for the Snowflake Decision Contract). Superseded by
+destination-level grilling for a new, broader effort; ruled out of scope
+of `mongodb-v2-agent-interface` rather than answered here. See this
+map's Out of scope section.
 Blocked by: 09
 
 ## Question
@@ -40,3 +47,10 @@ Lock:
    access patterns change" leave it open as fog for later?
 
 ## Comments
+
+- 2026-09-19 Q1 answered: yes, a real gap exists — the operator stated a
+  need for "a generalized agent interface for all MDM, graph, and gold
+  data," which subsumes but exceeds the reverse/multi-hop-lookup gap
+  this ticket asked about. Not re-asked. Ruled out of scope of this map
+  rather than resolved here; tracked as a new, broader effort instead.
+  See this map's Out of scope section for the pointer.
