@@ -55,12 +55,30 @@ pre-approved questions.
 - Skills: `/grilling`, `/domain-modeling`, ADR 0001, ADR 0014,
   `CONTEXT.md` Agent decision support.
 - Ask the operator one grilling question at a time.
+- **Sequencing, set 2026-09-19**: the MDM Postgres backend is this map's
+  near-term target. The Snowflake half (gold, graph Native App) is
+  deferred, not decided against — following the sequencing
+  [Clean MDM](../../clean-mdm/map.md) already established for MDM
+  itself ("The user selected local PostgreSQL for the current target
+  and a 30-day legacy rollback window; Snowflake qualification is
+  deferred"). `.scratch/clean-mdm/` is Codex/Grok-owned, active work
+  (`codex/clean-mdm-integration`, `grok/clean-mdm-local-postgres`,
+  `grok/local-mdm-bounded-mastering`) — read-only reference from this
+  map, never edited here.
+- The local `edgartools-prod` SnowCLI connection profile points at
+  account `PRJEDJU-QJB05385` (expired trial, warehouses suspended), not
+  prod's real account `xcpclkf-kb19989` per CLAUDE.md's decommission
+  notes. Checked live 2026-09-19. This is a stale local profile, not a
+  production incident — but it means Snowflake-side verification is
+  unavailable from this environment until the profile is fixed
+  (operator's call, not touched here).
 
 ## Decisions so far
 
 - [Decide whether provenance metadata travels with Agent Query Surface results](issues/01-decide-provenance-metadata-travels.md) — No. Reversed from an initial "yes, by default": no graph generation id, gold `run_id`, silver-completeness flag, or any point-in-time identity travels with an Agent Query Surface result, by default or on request. Plain live reads only. Does not touch the Snowflake Decision Contract / Mongo Decision Projection's own Decision Watermark, which is unchanged.
 - [Lock the Agent Query Surface's query substrate](issues/02-lock-query-substrate.md) — Gold/graph/MDM all reduce to plain SQL across exactly two backends (Snowflake, Postgres); no RDF/SPARQL/Cypher-only store was ever structurally required. Transport is an MCP server; the agent writes raw SQL directly (no text-to-SQL translation layer); results return as raw JSON (no typed response envelope).
 - [Lock access control for the Agent Query Surface](issues/03-lock-access-control.md) — One shared service credential (same `X-API-Key` pattern as the existing MDM API), not per-caller. A dedicated read-only DB role (`SELECT`-only, same shape as `EDGARTOOLS_PROD_READER`) is the real enforcement boundary, not server-side parsing alone. Agent queries run on a separate warehouse/connection pool with a statement timeout so they cannot degrade production refresh or MDM's operational workload — exact numbers deferred.
+- [Decide whether v1/v2 get retired now that the Agent Query Surface exists](issues/04-decide-v1-v2-fate.md) — v1/v2 stay. Forced by ticket 01, not a preference: the Agent Query Surface has no freshness identity, so it cannot produce an Agent-Grade Read, and ADR 0001 requires one for any Trading Decision. Retiring v1/v2 would leave nothing able to satisfy that.
 
 ## Not yet specified
 
@@ -79,9 +97,10 @@ pre-approved questions.
   Snowflake + Postgres) but not yet locked.
 - Whether/how the existing undeployed MDM FastAPI surface
   (`edgar_warehouse/mdm/api/`) is reused, replaced, or left as-is.
-- Whether/when the v1 Snowflake Decision Contract and v2 Mongo Decision
-  Projection get retired in favor of this surface, or continue
-  indefinitely alongside it.
+- MDM Postgres DDL inventory for the Agent Query Catalog is in progress:
+  see [Inventory MDM Postgres DDL as input to the Agent Query Catalog](issues/05-inventory-mdm-postgres-ddl.md)
+  (open). Gold/graph-side catalog inventory is deferred per the
+  Sequencing note above.
 
 ## Out of scope
 
