@@ -52,15 +52,20 @@ time.
 - ADR 0001's "No Agent-Grade Read if watermark components misaligned"
   row no longer describes every agent read path — only reads through
   the Snowflake Decision Contract / Mongo Decision Projection.
-- The Agent Query Surface's query substrate (raw SQL, an MCP server, a
-  semantic layer), whether it federates all three stores or exposes them
-  per-store, and its access-control model are not decided by this ADR —
-  see `.scratch/agent-open-query-interface/map.md` Not yet specified.
+- Query substrate is locked (2026-09-19,
+  [ticket 02](../../.scratch/agent-open-query-interface/issues/02-lock-query-substrate.md)):
+  gold, graph, and MDM all reduce to plain SQL across exactly two
+  backends (Snowflake, Postgres) — no RDF/SPARQL/Cypher-only store was
+  ever structurally required. The agent reaches them through an **MCP
+  server**, writes **raw SQL** directly (no text-to-SQL translation
+  layer), and gets **raw JSON** results (no typed response envelope).
+  The exact tool surface (one unified query tool vs. per-backend tools)
+  and access-control model remain open — see
+  `.scratch/agent-open-query-interface/map.md` Not yet specified.
 - SM3-Text-to-Query (NeurIPS 2024) found zero-shot LLM SPARQL
   query-generation accuracy at 3.3% vs. SQL's 47.05% on the same
-  benchmark — directly relevant now that this surface's viability
-  depends on the agent generating correct queries. Argues toward SQL
-  over Snowflake as a likely substrate and away from SPARQL; not locked.
+  benchmark — the deciding evidence behind SQL as the locked substrate
+  above and against SPARQL.
 - Whatever forms an actual Trading Decision still needs an answer to
   "was this read safe to trade on" — this ADR does not resolve whether
   that stays exclusively the Snowflake Decision Contract's job or

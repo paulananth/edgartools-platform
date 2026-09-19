@@ -59,6 +59,7 @@ pre-approved questions.
 ## Decisions so far
 
 - [Decide whether provenance metadata travels with Agent Query Surface results](issues/01-decide-provenance-metadata-travels.md) — No. Reversed from an initial "yes, by default": no graph generation id, gold `run_id`, silver-completeness flag, or any point-in-time identity travels with an Agent Query Surface result, by default or on request. Plain live reads only. Does not touch the Snowflake Decision Contract / Mongo Decision Projection's own Decision Watermark, which is unchanged.
+- [Lock the Agent Query Surface's query substrate](issues/02-lock-query-substrate.md) — Gold/graph/MDM all reduce to plain SQL across exactly two backends (Snowflake, Postgres); no RDF/SPARQL/Cypher-only store was ever structurally required. Transport is an MCP server; the agent writes raw SQL directly (no text-to-SQL translation layer); results return as raw JSON (no typed response envelope).
 
 ## Not yet specified
 
@@ -69,14 +70,12 @@ pre-approved questions.
   consuming agent's own logic, or something not yet named) if it's
   needed at all. Not yet a question anyone has asked; flagged so it
   isn't lost.
-- Query substrate / how the Agent Query Catalog is exposed to the agent:
-  raw SQL access, an MCP server, a semantic layer / text-to-SQL tool, or
-  some combination. The SM3 benchmark argues toward SQL and away from
-  SPARQL; nothing is locked yet.
-- Federated single surface across all three stores (Snowflake gold +
-  graph, MDM Postgres) versus per-store surfaces the agent composes
-  itself across two different wire protocols (Snowflake HTTPS/SQL,
-  Postgres 5432).
+- Exact MCP tool surface: one unified `run_query(sql)` tool that routes
+  to the right backend, versus two explicit per-backend tools (e.g.
+  `query_snowflake` / `query_mdm_postgres`) the agent picks and joins
+  across itself. Now sharper than the original "federated vs. per-store"
+  framing (ticket 02 already fixed the substrate as SQL over exactly
+  Snowflake + Postgres) but not yet locked.
 - Whether/how the existing undeployed MDM FastAPI surface
   (`edgar_warehouse/mdm/api/`) is reused, replaced, or left as-is.
 - Access control for an open-query surface. ADR 0001's Deferred Access
