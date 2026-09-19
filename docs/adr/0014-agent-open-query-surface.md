@@ -60,12 +60,23 @@ time.
   server**, writes **raw SQL** directly (no text-to-SQL translation
   layer), and gets **raw JSON** results (no typed response envelope).
   The exact tool surface (one unified query tool vs. per-backend tools)
-  and access-control model remain open — see
-  `.scratch/agent-open-query-interface/map.md` Not yet specified.
+  remains open — see `.scratch/agent-open-query-interface/map.md` Not
+  yet specified.
 - SM3-Text-to-Query (NeurIPS 2024) found zero-shot LLM SPARQL
   query-generation accuracy at 3.3% vs. SQL's 47.05% on the same
   benchmark — the deciding evidence behind SQL as the locked substrate
   above and against SPARQL.
+- Access control is locked (2026-09-19,
+  [ticket 03](../../.scratch/agent-open-query-interface/issues/03-lock-access-control.md)):
+  one shared service credential (the same `X-API-Key` pattern as the
+  existing MDM API), not per-caller — consistent with ADR 0001's
+  Deferred Access Control. A dedicated read-only DB role (`SELECT`-only,
+  the same shape as `EDGARTOOLS_PROD_READER`) is the real enforcement
+  boundary, not server-side statement parsing alone. Agent queries run
+  on a separate warehouse/connection pool with a statement timeout so
+  they cannot degrade production refresh or MDM's operational
+  workload — exact timeout/row-cap numbers are implementation detail,
+  deferred.
 - Whatever forms an actual Trading Decision still needs an answer to
   "was this read safe to trade on" — this ADR does not resolve whether
   that stays exclusively the Snowflake Decision Contract's job or
