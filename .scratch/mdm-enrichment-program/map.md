@@ -15,6 +15,15 @@ implementation work is created or production publication is authorized.
 
 ## Notes
 
+- **Flagged 2026-09-19, not yet propagated below**: legacy MDM is being
+  decommissioned; Clean MDM (`mdm_v2`, `.scratch/clean-mdm/`, Codex/Grok-owned)
+  is the sole MDM target going forward — locked on the
+  [Shared Enrichment Foundation map](../mdm-enrichment-shared-foundation/map.md).
+  "MDM writes use Snowflake Postgres through the repository's existing
+  runtime contracts" below, and any decision so far that cites legacy
+  `edgar_warehouse/mdm/` tables, was written before this constraint existed.
+  Re-auditing this program's already-resolved decisions against it is its
+  own piece of work — not done here, flagged so it isn't silently lost.
 - AWS is the only deployment path. Source artifacts use S3, warehouse exports
   use the existing Snowflake native-pull path, and MDM writes use Snowflake
   Postgres through the repository's existing runtime contracts.

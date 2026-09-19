@@ -41,13 +41,23 @@ had never itself been through a decision process.
   all lack `docs/specs/mdm-enrichment/shared-foundation.md` and
   `.scratch/gleif-company-augmentation/spec.md`. Nothing to reverify; this is
   fresh decision work.
-- **Flagged, not resolved here**: this program's evidence (ADR 0007,
-  `edgar_warehouse/mdm/database.py`'s `mdm_change_log`/`mdm_relationship_instance`)
-  targets the existing **legacy** MDM Postgres schema, not Clean MDM's
-  `mdm_v2` rebuild (`.scratch/clean-mdm/`, Codex/Grok-owned, a separate active
-  effort). If Clean MDM's rebuild eventually supersedes the legacy schema,
-  this program's target may need to move. Not this map's call — noting it so
-  it isn't silently lost.
+- **Locked, 2026-09-19 (operator directive)**: legacy MDM will be
+  decommissioned. **Do not build anything against legacy MDM.** Clean MDM's
+  `mdm_v2` schema (`.scratch/clean-mdm/`, Codex/Grok-owned — read-only
+  reference from this map, never edited here), with its multi-source Merge
+  Stage, is **the** MDM going forward — not a parallel or eventual option.
+  This resolves the flag this map opened with: the GoF review's evidence
+  (ADR 0007, `edgar_warehouse/mdm/database.py`'s legacy
+  `mdm_change_log`/`mdm_relationship_instance`) targets a schema that is
+  going away. Every decision on this map, from here on, targets Clean MDM's
+  `mdm_v2` (`edgar_warehouse/mdm/clean/`), not legacy `edgar_warehouse/mdm/`.
+  Ticket 01 is revised accordingly (see below) before its round-1 answer is
+  taken. Not yet propagated to the parent
+  [MDM Enrichment Program](../mdm-enrichment-program/map.md) or
+  [GLEIF MDM enrichment evidence](../gleif-company-augmentation/map.md)
+  maps' own resolved tickets — flagged there as a pointer, not rewritten,
+  since re-auditing 16+28 already-resolved tickets against this constraint
+  is its own piece of work, not implied by this map alone.
 - Skills: `/grilling`, `/domain-modeling`, `/wayfinder`, per the parent
   program's own Notes.
 - Every session uses `/grilling` and `/domain-modeling`, per the parent
