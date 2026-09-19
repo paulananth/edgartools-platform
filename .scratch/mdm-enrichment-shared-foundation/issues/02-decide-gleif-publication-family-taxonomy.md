@@ -1,7 +1,7 @@
 # Decide the GLEIF publication-family taxonomy for the shared foundation
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -33,3 +33,18 @@ plus **(b)** one independent publication family per identifier mapping
 cadence per ticket 11 — or does the foundation need a different split?
 
 ## Comments
+
+- 2026-09-19: operator accepted the recommendation ("keep going with Q2-Q4").
+
+## Answer
+
+Yes, exactly as recommended: **(a)** GLEIF Level 1 + Relationship Records +
+Reporting Exceptions as one Golden Copy publication family (captured and
+checkpointed together, per
+[GLEIF Company ticket 07](../gleif-company-augmentation/issues/07-select-golden-copy-representation-and-completeness.md)),
+plus **(b)** one independent publication family per identifier mapping
+(ISIN, OpenCorporates, BIC, MIC, QCC, GEM, deferred S&P CIQ), each on its
+own cadence per
+[ticket 11](../gleif-company-augmentation/issues/11-decide-gleif-identifier-mapping-routing.md).
+Each publication family gets its own `source_family` value in
+`change_ledger` (ticket 01's answer) and its own checkpoint.

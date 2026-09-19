@@ -1,7 +1,7 @@
 # Decide delta continuity proof fields and the recovery-order algorithm
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -25,3 +25,18 @@ spanning multiple non-GLEIF sources need different continuity-proof fields
 than GLEIF's own?
 
 ## Comments
+
+- 2026-09-19: operator accepted the recommendation ("keep going with Q2-Q4").
+
+## Answer
+
+Generalized verbatim from
+[GLEIF Company ticket 14](../gleif-company-augmentation/issues/14-decide-delta-gap-recovery.md):
+every publication family proves continuity via its own sequence/hash chain;
+recovery order is **(1)** the smallest delta span that closes the gap and
+still proves continuity, **(2)** if none proves continuity, a full
+Golden-Copy-equivalent reconciliation for that family only — never advancing
+a sibling family's checkpoint. Continuity-proof fields themselves are
+declared per source family (in `change_ledger.source_registry_coverage`,
+per ticket 01's answer), not hardcoded to GLEIF's specific sequence numbers,
+so a future non-GLEIF source can plug in its own proof shape.

@@ -1,7 +1,7 @@
 # Decide where the persistent root run and phase-attempt model live
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -47,3 +47,43 @@ accept, not something this map can decide unilaterally (same ownership
 boundary as [the pre-merge staging proposal](../clean-mdm-premerge-staging-proposal/map.md)).
 
 ## Comments
+
+- 2026-09-19: operator answer — shared control schema, realized as the
+  **existing** `bookkeeping` and `change_ledger` databases, unchanged.
+  Verified live against the local Postgres instance: `bookkeeping.pipeline_run`
+  (`pipeline_run_id`, `command_name`, `started_at`/`completed_at`, `status`,
+  `arguments_json`, `environment_name`, ...) already is a persistent root-run
+  record with almost exactly the review's wanted fields (source trigger via
+  `command_name`/`arguments_json`, start/terminal state, environment
+  identity). `change_ledger`'s `source_fetch_decision`/`source_revision`/
+  `source_registry_version`/`source_registry_coverage`/`source_fetch_transition`
+  tables already carry per-`source_family`/`logical_source_key` evidence
+  lineage — `source_revision` alone has `parser_version`, `schema_version`,
+  `configuration_version`, `contract_version`, matching the review's
+  "image/parser/config identities" ask.
+
+## Answer
+
+**Shared control schema — reuse `bookkeeping` + `change_ledger` as-is, no
+schema change.** GLEIF's enrichment pipeline is a new `command_name` value
+in `bookkeeping.pipeline_run` (the root run) and new `source_family`
+values flowing through `change_ledger`'s existing `source_fetch_decision`/
+`source_revision`/`source_registry_version`/`source_fetch_transition` tables
+(the acquisition-side evidence lineage). "Add new pipeline and steps that
+need to be tracked" means new *rows* — new registry entries, new source
+families — not new tables.
+
+This does **not** cover the whole 7-record schema boundary from ticket 05,
+though: `bookkeeping`/`change_ledger` are acquisition-side (source capture),
+and the review's remaining four record kinds — consumer candidate,
+stewardship decision, accepted binding/version, consumer checkpoint — are
+MDM-domain-facing, not source-evidence-facing. Per the review's own finding
+7 ("current-state MDM tables remain derived projections... add source-grained
+evidence plus append-only decisions upstream"), those four likely belong
+adjacent to Clean MDM's own `mdm_v2` schema, not a third new schema. Ticket
+05 decides this precisely — this ticket only fixes where root-run and
+source-evidence lineage live, not the domain-consumer half.
+
+This does not modify `bookkeeping` or `change_ledger`'s existing schema, and
+proposes no change to Clean MDM's `mdm_v2` — both remain read/reuse only
+from this decision.

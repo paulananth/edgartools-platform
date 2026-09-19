@@ -1,7 +1,7 @@
 # Decide S3 path templates and Snowflake native-pull manifests for enrichment evidence
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -25,3 +25,16 @@ several member artifacts) need something the existing catalog doesn't
 support?
 
 ## Comments
+
+- 2026-09-19: operator accepted the recommendation ("keep going with Q2-Q4").
+
+## Answer
+
+Reuse both existing seams: register GLEIF entries in
+`edgar_warehouse/infrastructure/dataset_path_catalog.py` and follow the
+existing `infra/snowflake/sql/bootstrap/` native-pull pattern. One addition:
+a manifest artifact at the *publication* level, enumerating a publication's
+member artifacts' catalog entries — the one level today's per-artifact
+catalog rows don't cover, needed because a GLEIF publication (ticket 02) is
+several artifacts (Level 1 + RR + RE, or one mapping file) that must be
+verified complete together, not one payload.

@@ -65,27 +65,34 @@ had never itself been through a decision process.
 
 ## Decisions so far
 
-(none yet — first grilling round in progress)
+- [Decide where the persistent root run and phase-attempt model live](issues/01-decide-root-run-location.md)
+  — shared control schema, realized as the **existing** `bookkeeping`
+  (root `pipeline_run`) and `change_ledger` (`source_*` evidence lineage)
+  databases, unchanged. GLEIF becomes new `command_name`/`source_family`
+  values, not new tables. Consumer-facing concepts (candidate, stewardship
+  decision, accepted binding, checkpoint) don't fit this acquisition-side
+  shape and are ticket 05's to place.
+- [Decide the GLEIF publication-family taxonomy for the shared foundation](issues/02-decide-gleif-publication-family-taxonomy.md)
+  — Level 1 + Relationship Records + Reporting Exceptions as one Golden
+  Copy publication family; one independent publication family per
+  identifier mapping (ISIN, OpenCorporates, BIC, MIC, QCC, GEM, deferred
+  CIQ), generalizing the GLEIF Company map's own tickets 07/09/11.
+- [Decide delta continuity proof fields and the recovery-order algorithm](issues/03-decide-delta-continuity-and-recovery-order.md)
+  — generalized verbatim from GLEIF Company ticket 14: per-family
+  continuity proof, smallest-covering-delta-first recovery, full
+  reconciliation only for the family that fails continuity.
+- [Decide S3 path templates and Snowflake native-pull manifests](issues/04-decide-s3-path-and-snowflake-manifest-conventions.md)
+  — reuse `dataset_path_catalog.py` and the existing bootstrap-SQL
+  native-pull pattern; add one manifest artifact at the publication level,
+  above today's per-artifact catalog rows.
 
 ## Not yet specified
 
-- Exact table names, keys, FKs, and temporal-uniqueness rules for the 5-item
-  minimum schema boundary (source publication, publication artifact, source
-  record version, consumer candidate, stewardship decision, accepted
-  binding/version, consumer checkpoint) — deliberately not ticketed until
-  root-run placement (ticket 01) is decided, since the review's own finding 4
-  ties schema shape to where run lineage lives.
-- Exact transaction boundary between accepted decision, current MDM
-  projection, and checkpoint advancement — same dependency.
-- Role grants for capture worker, publication coordinator, domain publisher,
-  steward, Release Owner, retention operator — depends on the table set
-  above.
 - Generic legal-entity registry representation for accepted records that
   don't justify a dedicated domain table (workstream 00's own bullet) — may
   already be substantially answered by the parent program's
   [ticket 12](../mdm-enrichment-program/issues/12-route-international-organizations-through-common-entity.md);
-  revisit once the round-1 tickets below are resolved rather than re-opening
-  it blind.
+  revisit once ticket 05 is resolved rather than re-opening it blind.
 
 ## Out of scope
 
