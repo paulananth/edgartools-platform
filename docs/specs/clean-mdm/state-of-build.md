@@ -4,7 +4,24 @@ Checkpoint: 2026-09-19. This is a local development handoff, not a release or
 cutover approval. The shared core and first native Company preparation path
 are implemented; the complete redesign remains in progress.
 
-## Start here and preserve ownership
+## Current continuation — after merge and Claude handoff
+
+PR #657 merged as `e2807e52` after all seven CI checks passed, including all
+83 PostgreSQL integration tests without skips. The CI-image prerequisite and
+conflict-fixture migration gap mentioned later in this checkpoint were fixed.
+
+Continue in `../edgartools-platform-sec-gleif-company` on
+`codex/sec-gleif-company`, rebased onto `b87fc05a` (PRs #658/#659 included).
+[Company Q1–Q12](company-policy.md) supersede the old manual-default and
+blanket deferred-match completion rules. Read the
+[handoff reconciliation](design-reconciliation-2026-09-19.md) and settle
+[design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md)
+before implementation. The earlier integration worktree is preserved.
+
+The sections below describe the original check-in and its evidence. Where its
+branch, PR-draft status or next steps differ, this continuation takes precedence.
+
+## Start here and preserve ownership (original checkpoint)
 
 - Continue from branch `codex/clean-mdm-integration` in
   `../edgartools-platform-clean-mdm-integration` or create your own runtime

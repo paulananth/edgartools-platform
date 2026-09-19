@@ -4,6 +4,16 @@ Status: local atomic commit, attempts, publication recovery and Bookkeeping
 reconciliation are implemented. Hosted consumers, complete source disposition
 accounting and staged large-generation recovery remain acceptance requirements.
 
+## Company outcome amendment — 2026-09-19
+
+[Accepted Company Q6/Q12](company-policy.md) permit audited match deferral as
+an explicit outcome while SEC-backed Companies continue publishing. Milestone
+completion requires qualified multisource proof and all required source,
+recovery and consumer checks; it does not mean every Company is GLEIF-enriched.
+Implement this separately from malformed-record and source-integrity failures.
+The current migration 027 blocking-review guard remains in effect until a new,
+audited disposition capability is installed; no installed migration is rewritten.
+
 ## Ownership
 
 “Change Journal” in the user's plan means the MDM evidence/decision/transition

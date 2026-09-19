@@ -28,6 +28,18 @@ consumer's publication intent. Return the durable batch result, including
 unresolved dispositions. No adapter, API override, bulk loader, seed, repair,
 or reconciliation path writes master state around this entry point.
 
+## Company policy amendment — 2026-09-19
+
+[Company Q1–Q12](company-policy.md) supersede the earlier steward-only Company
+consolidation boundary below. Qualified fuzzy source binding is automatic by
+default; consolidation of published IDs additionally requires verified shared
+authoritative identifiers, whole-component consistency and its own independent
+qualification. Ambiguous matches defer without stopping SEC publication;
+identity-contradicting links suspend and replay remaining trusted evidence.
+The statistical gate and single master transaction remain mandatory.
+These are accepted requirements; the current core still rejects automatic rules.
+Persisted assessment coverage is pending [design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md).
+
 ## Identity matching policy proposal
 
 Score candidates only within the same accepted identity kind and approved
