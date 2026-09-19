@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Create the local bookkeeping and Change Ledger databases on the Clean MDM
-# PostgreSQL 16 instance and install their schemas.
+# Create the local bookkeeping, Change Ledger, and silver databases on the
+# Clean MDM PostgreSQL 16 instance and install their schemas.
 #
-# MDM stays in `mdm`. Bookkeeping and the Change Ledger each get their own
-# database on the same loopback instance. Production still co-hosts the
+# MDM stays in `mdm`. Bookkeeping, Change Ledger, and silver each get their
+# own database on the same loopback instance. Production still co-hosts the
 # Change Ledger on the MDM instance unless CHANGE_LEDGER_DATABASE_URL is set.
+# Silver landing is loaded separately with load_local_silver_landing.py.
 #
 # Usage:
 #   bash infra/scripts/provision-local-postgres-stores.sh
@@ -19,6 +20,7 @@ PASSWORD="test"
 MDM_DATABASE="mdm"
 BOOKKEEPING_DATABASE="bookkeeping"
 CHANGE_LEDGER_DATABASE="change_ledger"
+SILVER_DATABASE="silver"
 BIND="127.0.0.1:5432"
 
 while [[ $# -gt 0 ]]; do
@@ -72,9 +74,11 @@ ensure_database() {
 
 ensure_database "$BOOKKEEPING_DATABASE"
 ensure_database "$CHANGE_LEDGER_DATABASE"
+ensure_database "$SILVER_DATABASE"
 
 BOOKKEEPING_URL="postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${BOOKKEEPING_DATABASE}"
 CHANGE_LEDGER_URL="postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${CHANGE_LEDGER_DATABASE}"
+SILVER_URL="postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${SILVER_DATABASE}"
 MDM_URL="postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${MDM_DATABASE}"
 
 log "Installing bookkeeping schema"
@@ -107,6 +111,8 @@ fi
 log "mdm:           $MDM_URL"
 log "bookkeeping:   $BOOKKEEPING_URL"
 log "change_ledger: $CHANGE_LEDGER_URL"
+log "silver:        $SILVER_URL"
 log "export MDM_DATABASE_URL=$MDM_URL"
 log "export BOOKKEEPING_DATABASE_URL=$BOOKKEEPING_URL"
 log "export CHANGE_LEDGER_DATABASE_URL=$CHANGE_LEDGER_URL"
+log "export SILVER_DATABASE_URL=$SILVER_URL"

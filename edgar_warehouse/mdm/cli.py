@@ -810,18 +810,17 @@ def _get_mdm_engine():
 
 
 def _silver_reader():
-    """MDM's silver reader. Always EDGARTOOLS_SILVER via SnowflakeSilverReader.
+    """MDM's silver reader.
 
-    DuckDB Retirement Cutover Ticket 05: hard cutover, no transition window
-    (this map's own "Decide MDM's ShardedSilverReader Replacement Mechanics"
-    answer -- the minimal SilverReader Protocol and small blast radius argued
-    against carrying toggle-flag state that itself needs testing and
-    eventual removal). The MDM_SILVER_READ_TARGET env var (silver-snowflake-
-    migration map, Ticket 12) that used to gate this call site between
-    "duckdb" and "snowflake" is retired -- every value, including unset, now
-    reaches Snowflake. The DuckDB reader the parity commands kept alive is
-    deleted with those commands (silver-merge-engine-migration Ticket 08).
+    Production (unset SILVER_DATABASE_URL) stays on Snowflake EDGARTOOLS_SILVER.
+    Local offline work sets SILVER_DATABASE_URL to a Postgres DSN; mastering
+    then reads the same .fetch() seam without Snowflake.
     """
+    if os.environ.get("SILVER_DATABASE_URL", "").strip():
+        from edgar_warehouse.silver_support.postgres_reader import PostgresSilverReader
+
+        return PostgresSilverReader.connect()
+
     from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 
     return SnowflakeSilverReader.connect()
@@ -841,7 +840,7 @@ def _open_snowflake_silver_reader(command_name: str) -> tuple:
     try:
         reader = _silver_reader()
     except Exception as exc:
-        print(f"{command_name}: cannot open Snowflake silver reader -- {exc}", file=sys.stderr)
+        print(f"{command_name}: cannot open silver reader -- {exc}", file=sys.stderr)
         return None, 1
     return reader, 0
 
@@ -1528,20 +1527,14 @@ def _seed_mdm_from_silver(
 ) -> dict[str, Any]:
     """Shared silver→MDM universe import used by seed-universe and seed-from-silver.
 
-    DuckDB Retirement Cutover Ticket 05: hard cutover to EDGARTOOLS_SILVER via
-    SnowflakeSilverReader. The old ``--silver-path``/local-DuckDB-file and
-    WAREHOUSE_STORAGE_ROOT shard-hydration branches are retired outright
-    rather than kept as a dead flag that can't be honored against a
-    Snowflake-only reader -- confirmed via deploy-aws-application.sh that no
-    state machine ever passed ``--silver-path``, and this command's only
-    live prod invocation (``mdm seed-universe --tracking-status ... --limit
-    ...``, the ``MdmSeedUniverse`` state) never set it either, so retiring it
-    changes no deployed behavior.
+    DuckDB Retirement Cutover Ticket 05: hard cutover off local DuckDB.
+    Production (unset SILVER_DATABASE_URL) still reads EDGARTOOLS_SILVER via
+    SnowflakeSilverReader. Local offline work sets SILVER_DATABASE_URL and
+    goes through the same ``_silver_reader()`` seam as mastering.
     """
     from edgar_warehouse.mdm.universe import bulk_upsert_universe
-    from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 
-    reader = SnowflakeSilverReader.connect()
+    reader = _silver_reader()
     try:
         query = (
             "SELECT cik, current_ticker, NULL as exchange, tracking_status "
