@@ -63,6 +63,12 @@ View Mode** vs **Explore Mode**; Agent View Mode may only project the contract.
   agent saw.
 - v2 public-internet serving is a **Mongo Decision Projection**, not a
   second v1 SoE: [0009-mongo-decision-projection.md](0009-mongo-decision-projection.md).
+- The "Unit of read" and "Mismatch" rows in the table above are
+  **partially superseded** by [0014-agent-open-query-surface.md](0014-agent-open-query-surface.md):
+  a Decision Graph Bundle is no longer the only unit an agent may read.
+  The Snowflake Decision Contract and Mongo Decision Projection keep
+  their fail-closed Agent-Grade Read guarantee for whatever still reads
+  them; ADR 0014 adds a separate, ungated Agent Query Surface alongside.
 
 Glossary: `CONTEXT.md` (Agent decision support section).
 Product decision table: `docs/product-questions-and-dashboards.md`.

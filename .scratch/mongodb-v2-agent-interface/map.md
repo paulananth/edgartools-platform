@@ -41,11 +41,21 @@ Contract as v1 SoE.
   ([Incremental Change Propagation](../change-propagation/map.md)).
 - Ask the operator one grilling question at a time. Standing preference:
   recommended answers unless the operator overrides.
-- Isolation: Grok worktree
-  `edgartools-platform-worktrees/grok-agent-decision-data-plane-wayfinder`
-  on `grok/mongodb-v2-agent-interface`. Do not switch Claude's shared
-  checkout (`claude/mdm-tail-single-machine-wayfinder`). Do not implement
-  v1 factor tickets (Claude). Charting does not resolve grilling.
+- Ownership: Grok's `grok/mongodb-v2-agent-interface` branch merged to
+  `main` via PR #606 (2026-09-12); the branch no longer exists. The prior
+  Grok-worktree isolation note above no longer applies — confirmed live
+  2026-09-19 (`gh pr list --head grok/mongodb-v2-agent-interface` shows
+  `MERGED`, no matching local or remote branch). Claude now stewards this
+  map, including its 4 open `v2-mongo-decision-projection` implementation
+  tickets (01-04). Do not implement v1 factor tickets (Claude's own,
+  unrelated map).
+- Reopened 2026-09-19 at operator request: whether SPARQL/RDF should serve
+  some or all of this v2 layer instead of, or alongside, MongoDB is back
+  under active grilling — the "decision-complete" state below predates
+  this. ADR 0009 stays accepted until/unless that grilling produces a
+  supersession; MongoDB implementation tickets 01-04 are not blocked by
+  it in the meantime. See `.scratch/agent-contract-query-interface-options/`
+  for the SPARQL-hosting research feeding this.
 
 ## Decisions so far
 
@@ -59,10 +69,12 @@ Contract as v1 SoE.
 - [Lock how v2 agents authenticate to Atlas](issues/07-lock-v2-agent-auth.md) — One read-only SCRAM user for internet agents; separate publisher write user; product OAuth later; plugin OAuth is operator-only.
 - [Lock how the v2 publisher is tested](issues/08-lock-v2-publisher-test-strategy.md) — Mock Mongo driver in unit tests; optional operator M0 smoke; no Atlas secrets in CI.
 - [ADR 0009 Mongo Decision Projection](../../docs/adr/0009-mongo-decision-projection.md) — v2 Atlas projection; v1 Snowflake SoE unchanged.
+- [Survey free/public serving options for the v2 relationship-edge layer](issues/09-survey-relationship-edge-serving-options.md) — No SPARQL/RDF, hosted property-graph (AuraDB/ArangoDB/TigerGraph/Neptune), GraphQL-over-HTTP, or static-JSON option clears the free-tier + public-reachability bar as cleanly as Atlas M0 already does; AuraDB Free comes closest but auto-deletes after 30 days idle. `IS_INSIDER`/`EMPLOYED_BY` are already embedded in the existing Mongo bundle, not homeless. [research](research/09-relationship-edge-serving-survey.md)
 
 ## Not yet specified
 
-<!-- destination is decision-complete; leftover is operator/implement work -->
+<!-- MongoDB implementation is decision-complete (tickets 01-08); the
+     SPARQL/RDF reopening below is not yet ticketed pending grilling -->
 
 - Operator: provision M0, apply `$jsonSchema`, create read-only agent user
   + publisher write user, set `0.0.0.0/0`.
@@ -71,6 +83,15 @@ Contract as v1 SoE.
 
 ## Out of scope
 
+- **A generalized agent interface for all MDM, graph, and gold data**
+  (operator ask, 2026-09-19) — larger than this map's destination (a v2
+  read layer projecting v1 Agent-Grade Input Facts only, not MDM
+  Postgres, not gold, not a Snowflake Decision Contract replacement).
+  [Decide whether the v2 layer needs a second relationship-edge store](issues/10-decide-second-edge-store-need.md)
+  is closed (superseded) rather than answered, since its own question
+  turned out to be a narrower instance of this larger ask. Tracked as a
+  new effort; not resumed here unless the new effort's destination
+  narrows back down to this map's scope.
 - Replacing Snowflake as v1 Agent SoE (ADR 0001; contract ticket 10).
 - Ingest, bronze, PostgreSQL ledger, edgartools gateway.
 - Manager ADV / `MANAGES_FUND` agent-grade sections.
