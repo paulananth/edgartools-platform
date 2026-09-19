@@ -12,6 +12,11 @@ SEC + GLEIF must pass local acceptance before other entity integrations.
 For current implementation, verification, ownership and next steps, start with
 [state of the build](state-of-build.md). Historical evidence below remains dated.
 
+[Current accepted Company policy](company-policy.md) records Q1–Q12.
+[Claude handoff reconciliation](design-reconciliation-2026-09-19.md) records
+verified corrections, the Agent Query Surface boundary and the remaining
+pre-application assessment decision.
+
 ## Read in delivery order
 
 1. [Domain model](domain-model.md) and [pipeline inventory](pipeline-inventory.md).

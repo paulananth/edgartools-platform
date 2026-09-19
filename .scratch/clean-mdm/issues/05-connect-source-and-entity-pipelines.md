@@ -19,6 +19,14 @@ relationships, source changes and end-to-end local recovery. Do not close this
 ticket from a SEC-only Company loader or advance other entity integration
 before that gate passes. Broader ticket scope remains pending afterward.
 
+## Current policy and pre-implementation review
+
+[Company Q1–Q12](../../../docs/specs/clean-mdm/company-policy.md) replace the
+manual-default linking/consolidation and blanket deferred-match blocking rules.
+[Design gate 08](08-confirm-company-candidate-assessment.md) is the remaining
+assessment-coverage decision from Claude’s handoff; no runtime implementation
+started during this review.
+
 ## Evidence
 
 First bounded native SEC Company preparation/normalization is implemented and

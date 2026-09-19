@@ -6,6 +6,10 @@ supersedes the earlier handoff sequence that moved from the SEC-only sample
 to Person/ADV. Shared recovery work necessary for Company remains in scope.
 This document is a delivery gate, not a claim of implementation.
 
+[Accepted Company Q1–Q12](company-policy.md) now govern this milestone.
+[Claude handoff reconciliation](design-reconciliation-2026-09-19.md) records
+the remaining assessment-coverage gate before implementation.
+
 ## Local milestone
 
 A governed Company can retain SEC and GLEIF records under one immutable
@@ -26,7 +30,7 @@ Merge Stage, transactional journal and bounded recovery contract.
 | 1 | Repair PostgreSQL CI prerequisites and finish Company-relevant recovery | Mandatory PG16 tests run without prerequisite skips; audited deferred resolutions; bounded review checks and resumable large-component replay/reversal |
 | 2 | Pin approved multisource inputs and concrete adapter contracts | SEC Company/ticker publication, complete GLEIF Level 1 baseline, coordinated relationship/reporting-exception baseline, and OpenCorporates mapping; source registry authority, exact bytes/hashes/counts, schema versions, publication ordering and explicit scope |
 | 3 | Implement shared GLEIF capture and normalization | Stream bounded XML ZIP processing; retain complete source records and unsupported kinds; normalize eligible Company evidence; no direct master writes; every input has an accounted disposition |
-| 4 | Establish governed Company-to-LEI bindings | Reviewed evidence ties SEC CIK and GLEIF LEI to one immutable Company; uniqueness and incompatible-kind/identifier guards; aliases and audited revalidation/unlink/reversal; no name-only or unqualified automatic rules |
+| 4 | Establish governed Company-to-LEI bindings | Qualified automatic decisions tie SEC CIK and GLEIF LEI to one immutable Company; uniqueness and incompatible-kind/identifier guards; aliases and audited revalidation/unlink/reversal; no name-only or unqualified automatic rules |
 | 5 | Implement Company field policies | Versioned type/field rules distinguish different concepts, retain comparable disagreement and select only approved fields; per-value source, assertion, rule and effective/observed-time provenance |
 | 6 | Integrate Company relationships and lifecycle | Separate direct/ultimate accounting consolidation from ownership and reported from calculated parents; dated edges only between accepted Company endpoints; cycles, conflicting parents and invalid intervals rejected/reviewed; reporting exceptions preserved |
 | 7 | Exercise updates and reconciliation | Daily 24-hour GLEIF delta, monthly complete reconciliation, gap recovery and independent family checkpoints; revalidate changed/retired/successor LEIs; no retirement from partial-delta absence |
@@ -51,8 +55,9 @@ Use the resolved GLEIF decisions rather than reopening the architecture:
 - [Binding lifecycle](../../../.scratch/gleif-company-augmentation/issues/13-decide-accepted-link-publication-policy.md):
   retain decisions and source history when a link closes; successors require a
   new decision. The later Clean MDM Q16 rule still disables every unqualified
-  automatic rule. Reviewed binding can prove this milestone without waiting
-  for automatic matching calibration.
+  automatic rule. The later Company interview requires demonstrated qualified
+  automatic multisource matching for completion; review-only execution alone
+  no longer satisfies that milestone. Consolidation is separately qualified.
 
 The three-company SEC bundle is a preparation smoke test. It does not establish
 multisource coverage. Choose an approved cohort containing real linked records,
@@ -60,11 +65,13 @@ unmatched records, conflicting legal fields, parent/exception cases and source
 changes; supplement unavailable failure cases with clearly labeled synthetic
 fixtures. Pin the cohort before measuring acceptance.
 
-Each required record/candidate needs a terminal governed disposition. Ambiguity
-must not disappear by dropping rows or bypassing reviews. Deferred records
-outside an approved publishing scope remain retained; required unresolved
-records continue to block completeness until their audited resolution contract
-permits closure.
+Each required record/candidate needs a governed disposition. Company Q6/Q12
+permit audited deferred matches while SEC publication continues and the local
+milestone may complete under its qualified-matching and verified-receipt gates.
+Ambiguity must not disappear by dropping records. This does not waive malformed
+source evidence, incomplete publication inventory or hard integrity failures;
+their mandatory contracts still govern completion. Explicitly distinguish
+source processing, matching coverage and verified publication.
 
 ## Delivery boundary
 

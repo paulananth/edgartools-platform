@@ -11,6 +11,12 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Notes
 
+- Current design review: [Claude handoff reconciliation](../../docs/specs/clean-mdm/design-reconciliation-2026-09-19.md).
+  [Company Q1–Q12](../../docs/specs/clean-mdm/company-policy.md) are accepted.
+  [Gate 08](issues/08-confirm-company-candidate-assessment.md) asks only the
+  breadth of mandatory pre-application assessment persistence; resolve it
+  before starting that implementation.
+
 - User priority, 2026-09-19: complete SEC + GLEIF multisource Company mastering
   before other entity integrations. [Company completion gate](../../docs/specs/clean-mdm/company-completion.md)
   defines the required scope and evidence; the SEC-only sample is insufficient.
@@ -30,10 +36,11 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 - No implementation tickets until the Merge Stage policy gate is resolved.
   Draft specifications are proposals, never evidence of implementation.
 - Interview rounds contain at most three questions (user instruction, 2026-09-18).
-- Current worktree: `../edgartools-platform-clean-mdm-integration`; branch:
-  `codex/clean-mdm-integration`. User assigned this fresh branch on 2026-09-19
-  after Grok PRs #655/#656 landed in `codex/clean-mdm`. Both PRs are preserved;
-  the integration branch is rebased onto `origin/main` at `5fe70798`.
+- Current worktree: `../edgartools-platform-sec-gleif-company`; branch:
+  `codex/sec-gleif-company`, rebased onto `origin/main` at `b87fc05a`.
+  PR #657 merged the earlier integration branch at `e2807e52`, preserving
+  Grok PRs #655/#656. PRs #658/#659 supply the new query ADR and Claude handoff.
+  Earlier worktrees remain protected rollback anchors.
 - Local PostgreSQL 16 worktree: `../edgartools-platform-grok-local-postgres`;
   DSN/provision branch: `grok/clean-mdm-local-postgres` (PR #655);
   bounded local mastering branch: `grok/local-mdm-bounded-mastering`.
