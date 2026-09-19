@@ -35,10 +35,12 @@ time.
   rejected as insufficient on its own: it never covered gold, and its
   routers serve the query shapes they were written for, not arbitrary
   questions. May still be reused as one access path; not decided here.
-- **Require every Agent Query Surface result to carry a full Decision
-  Watermark before an agent may use it** — rejected as a hard
-  requirement; whether *some* provenance metadata still travels,
-  without gating, is open — see
+- **Attach provenance/watermark metadata to results without gating on
+  it** (graph generation id, gold `run_id`, silver completeness,
+  carried as inspectable fields) — considered, then explicitly declined
+  by the operator (2026-09-19, reversing an initial "yes"): an Agent
+  Query Surface result carries no freshness or point-in-time identity
+  of any kind. See
   [Decide whether provenance metadata travels with Agent Query Surface results](../../.scratch/agent-open-query-interface/issues/01-decide-provenance-metadata-travels.md).
 - **Retire the Snowflake Decision Contract / Mongo Decision Projection
   now that an open surface exists** — rejected for this ADR; both

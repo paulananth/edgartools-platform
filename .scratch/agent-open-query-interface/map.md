@@ -58,16 +58,17 @@ pre-approved questions.
 
 ## Decisions so far
 
-<!-- destination just locked; no tickets resolved yet -->
+- [Decide whether provenance metadata travels with Agent Query Surface results](issues/01-decide-provenance-metadata-travels.md) — No. Reversed from an initial "yes, by default": no graph generation id, gold `run_id`, silver-completeness flag, or any point-in-time identity travels with an Agent Query Surface result, by default or on request. Plain live reads only. Does not touch the Snowflake Decision Contract / Mongo Decision Projection's own Decision Watermark, which is unchanged.
 
 ## Not yet specified
 
-- Whether provenance/watermark metadata (graph generation id, gold
-  `run_id`, silver completeness) travels with every Agent Query Surface
-  result as inspectable metadata, even though it does not gate the
-  query — a design question inside the Option A decision, not a
-  reopening of it. See
-  [Decide whether provenance metadata travels with Agent Query Surface results](issues/01-decide-provenance-metadata-travels.md).
+- Whatever eventually forms a real Trading Decision from an Agent Query
+  Surface read needs some safety/freshness story from *somewhere* —
+  ticket 01 explicitly declined to put it on this surface, so it has to
+  come from elsewhere (the existing Decision Contract path, a
+  consuming agent's own logic, or something not yet named) if it's
+  needed at all. Not yet a question anyone has asked; flagged so it
+  isn't lost.
 - Query substrate / how the Agent Query Catalog is exposed to the agent:
   raw SQL access, an MCP server, a semantic layer / text-to-SQL tool, or
   some combination. The SM3 benchmark argues toward SQL and away from

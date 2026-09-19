@@ -1,7 +1,7 @@
 # Decide whether provenance metadata travels with Agent Query Surface results
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -34,3 +34,34 @@ Lock:
    Decision the way a Decision Watermark does?
 
 ## Comments
+
+- 2026-09-19 Q1 first answered "yes, by default." Operator then reversed
+  this explicitly ("i changed my mind no freshness needed as part of
+  agent contract") before Q2/Q3 were answered. Final answer is the
+  reversal, not the first pass — recorded below. Q2 (freshness-mismatch
+  flagging) and Q3 (vocabulary reuse) are both moot under the final
+  answer: nothing to flag or name when nothing is exposed.
+
+## Answer
+
+**No provenance or freshness metadata is part of the Agent Query
+Surface contract.** An Agent Query Surface result is a plain live read —
+no graph generation id, no gold `run_id`, no silver-completeness flag,
+no point-in-time identity of any kind travels with it, by default or on
+request. This is a deliberate, explicit reversal of this ticket's first
+answer, not an oversight.
+
+Consequence for [ADR 0014](../../../docs/adr/0014-agent-open-query-surface.md):
+its "Require every Agent Query Surface result to carry a full Decision
+Watermark" rejected-option entry is now fully closed, not left open —
+provenance was considered and explicitly declined, not deferred.
+
+This does not touch the Snowflake Decision Contract / Mongo Decision
+Projection, which keep their full Decision Watermark and Agent-Grade
+Read gate unchanged for whatever still reads them (ADR 0014's own
+scope boundary). It also does not resolve whether whatever eventually
+forms a real Trading Decision from an Agent Query Surface read needs
+some other safety story — that stays open map fog, now sharper: since
+this surface carries no freshness signal at all, anything treating its
+output as trade-safe would need to get that assurance from somewhere
+else entirely, not from a lighter version of what this ticket declined.
