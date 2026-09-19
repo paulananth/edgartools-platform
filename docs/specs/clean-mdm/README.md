@@ -6,6 +6,9 @@ No hosted qualification or consumer cutover has occurred.
 Inspected code: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`, fetched from
 `origin/main` on 2026-09-17. No production state is asserted by this record.
 
+The next milestone is [multisource Company mastering](company-completion.md):
+SEC + GLEIF must pass local acceptance before other entity integrations.
+
 For current implementation, verification, ownership and next steps, start with
 [state of the build](state-of-build.md). Historical evidence below remains dated.
 

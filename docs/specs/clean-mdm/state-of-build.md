@@ -126,6 +126,14 @@ checkpoint does not claim repository-wide lint or test success.
 
 ## Next agent: ordered work
 
+Priority update, 2026-09-19: the user requires **SEC + GLEIF multisource
+Company mastering before other entity integrations**. Follow the
+[Company completion gate](company-completion.md); the SEC-only pilot is a
+preparation check, not Company completion. PR #657
+(https://github.com/paulananth/edgartools-platform/pull/657) is open/draft.
+A subsequent CI check found the PG16 image prerequisite missing in the
+integration job; fix that first. Local 134-test evidence remains valid.
+
 1. Fetch the published integration branch and read tickets 04 and 05 plus this
    evidence. Preserve disabled automatic rules and opt-in consumer behavior.
 2. Finish ticket 04's reviewed deferred disposition lifecycle and staged,
@@ -140,9 +148,12 @@ checkpoint does not claim repository-wide lint or test success.
    run a bounded evidence-only ingestion. Review bindings before creating
    master identities. Publish/reconcile all required local contracts under one
    root run. Record actual results; the prepared bundle is not execution proof.
-4. Connect Person, ADV roles/funds, audit, securities, ownership/13F and other
-   approved domains through the shared stage. Implement complete-publication
-   dispositions and validate source retirement; preserve unsupported evidence.
+4. Implement GLEIF Level 1, relationships/reporting exceptions and accepted
+   OpenCorporates corroboration; prove joint SEC/GLEIF Company binding, field
+   policies, lifecycle, complete-publication accounting, reconciliation and
+   local consumer parity. Only after the Company completion gate passes,
+   connect Person, ADV roles/funds, audit, securities, ownership/13F and other
+   approved domains through the shared stage.
 5. Finish API/export/graph consumer migration and hosted materialization with
    explicit completeness and idempotent recovery checks. Then qualify the
    identical migrations on the user-selected hosted target when requested.

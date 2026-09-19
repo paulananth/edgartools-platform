@@ -11,6 +11,10 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Notes
 
+- User priority, 2026-09-19: complete SEC + GLEIF multisource Company mastering
+  before other entity integrations. [Company completion gate](../../docs/specs/clean-mdm/company-completion.md)
+  defines the required scope and evidence; the SEC-only sample is insufficient.
+
 - Latest handoff: [state of the build](../../docs/specs/clean-mdm/state-of-build.md).
 
 - This map carries execution after the explicit design gates. The user's
