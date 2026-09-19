@@ -1,7 +1,7 @@
 # Inventory MDM Postgres DDL as input to the Agent Query Catalog
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -39,3 +39,39 @@ Save findings at
 `.scratch/agent-open-query-interface/research/05-mdm-postgres-ddl-inventory.md`.
 
 ## Comments
+
+- 2026-09-19: run against the live local Postgres instance (read-only
+  introspection, container already running — no Clean MDM file/branch/
+  worktree touched). Full findings in the research file below.
+
+## Answer
+
+27 tables in the `mdm` database (+ 11 in `change_ledger` = 38, matching
+Clean MDM ticket 03's figure; `bookkeeping`'s 10 and `silver`'s 6 tables
+are separate, non-MDM concerns). Full column/PK/FK inventory, by
+category (entity identity, source binding, relationship model,
+governance config, operational/staging, graph generation bookkeeping),
+plus current row counts, in
+`.scratch/agent-open-query-interface/research/05-mdm-postgres-ddl-inventory.md`.
+
+Two facts worth carrying forward into catalog design:
+
+1. The relationship data (`mdm_relationship_instance`/
+   `mdm_relationship_type`) already lives in the same Postgres database
+   as the entity tables — "MDM" and "graph (Postgres mirror)," named
+   separately in this map's Destination, are one database locally, not
+   two connections.
+2. `mdm_relationship_instance` carries its own versioning
+   (`superseded_by_version_id`) and temporal validity
+   (`valid_from_date`/`valid_to_date`) — an agent needs to know to filter
+   on these for "current" relationships, echoing `CONTEXT.md`'s Current
+   Neighborhood rule for the bundle-based surfaces. Whether the catalog
+   states this explicitly is a catalog-design question, not resolved
+   here.
+
+Left open, not resolved by this ticket: whether `change_ledger`/
+`bookkeeping` belong in the Agent Query Catalog's "MDM" scope at all
+(my read: no, they're warehouse/acquisition internals, not domain data
+an agent would ask about — but this wasn't decided), and whether
+operational/staging/governance tables should be catalog-visible or
+excluded as internal-only.

@@ -79,6 +79,7 @@ pre-approved questions.
 - [Lock the Agent Query Surface's query substrate](issues/02-lock-query-substrate.md) — Gold/graph/MDM all reduce to plain SQL across exactly two backends (Snowflake, Postgres); no RDF/SPARQL/Cypher-only store was ever structurally required. Transport is an MCP server; the agent writes raw SQL directly (no text-to-SQL translation layer); results return as raw JSON (no typed response envelope).
 - [Lock access control for the Agent Query Surface](issues/03-lock-access-control.md) — One shared service credential (same `X-API-Key` pattern as the existing MDM API), not per-caller. A dedicated read-only DB role (`SELECT`-only, same shape as `EDGARTOOLS_PROD_READER`) is the real enforcement boundary, not server-side parsing alone. Agent queries run on a separate warehouse/connection pool with a statement timeout so they cannot degrade production refresh or MDM's operational workload — exact numbers deferred.
 - [Decide whether v1/v2 get retired now that the Agent Query Surface exists](issues/04-decide-v1-v2-fate.md) — v1/v2 stay. Forced by ticket 01, not a preference: the Agent Query Surface has no freshness identity, so it cannot produce an Agent-Grade Read, and ADR 0001 requires one for any Trading Decision. Retiring v1/v2 would leave nothing able to satisfy that.
+- [Inventory MDM Postgres DDL as input to the Agent Query Catalog](issues/05-inventory-mdm-postgres-ddl.md) — 27 tables in `mdm` (+ 11 in `change_ledger` = 38, matching Clean MDM ticket 03). Full column/PK/FK inventory by category in [research](research/05-mdm-postgres-ddl-inventory.md). The relationship data already lives in the same database as the entities — "MDM" and "graph (Postgres mirror)" are one connection locally, not two. Current-state, expected to move under Clean MDM's active rebuild.
 
 ## Not yet specified
 
@@ -97,10 +98,15 @@ pre-approved questions.
   Snowflake + Postgres) but not yet locked.
 - Whether/how the existing undeployed MDM FastAPI surface
   (`edgar_warehouse/mdm/api/`) is reused, replaced, or left as-is.
-- MDM Postgres DDL inventory for the Agent Query Catalog is in progress:
-  see [Inventory MDM Postgres DDL as input to the Agent Query Catalog](issues/05-inventory-mdm-postgres-ddl.md)
-  (open). Gold/graph-side catalog inventory is deferred per the
-  Sequencing note above.
+- Whether the Agent Query Catalog's "MDM" scope is the `mdm` database
+  only (27 tables) or also covers `change_ledger`/`bookkeeping` — ticket
+  05 surfaced this but didn't decide it.
+- Whether operational/staging/governance tables (pipeline leases,
+  staging rows, normalization rules) belong in the agent-facing catalog
+  or should be excluded as internal-only — same source, ticket 05.
+- Gold/graph-side (Snowflake) catalog inventory is deferred per the
+  Sequencing note above, pending Clean MDM's local-Postgres-first
+  qualification gate.
 
 ## Out of scope
 
