@@ -1,0 +1,40 @@
+{
+  "command": "uv run --frozen --extra s3 --extra mdm-runtime --extra mdm pytest tests/integration/test_clean_mdm_postgres.py tests/mdm/test_api.py tests/mdm/test_publication_drain_cli.py tests/mdm/test_graph_publication_queue.py -q --tb=short --junitxml=.scratch/clean-mdm/core-acceptance.xml",
+  "duration_seconds": 52.353,
+  "existing_api_publication_tests": 86,
+  "hosted_qualification": false,
+  "junit_sha256": "708fc91000bb1b7c8f56e55a7e229904d0b5125effb6fde6e312823f1a168c17",
+  "migration_sha256": {
+    "edgar_warehouse/mdm/migrations/023_clean_mdm.sql": "44374b8b47061dd4aa8fc3b600a76bb2c5a28870f044f5f6834e4a701ca942a1",
+    "edgar_warehouse/mdm/migrations/024_clean_mdm_mirror.sql": "cd734e86b17942e1dca36c4ac0643bb4b829e7744b05c7040931c83cff5170f2",
+    "edgar_warehouse/mdm/migrations/025_clean_mdm_indexes.sql": "b87b6bb876542ae69fa05b72bfc67f397aa05590e3c9a168aeeb823105d6966e",
+    "edgar_warehouse/mdm/migrations/026_clean_mdm_attempts.sql": "1b8ce3ac39f71aadd985d1f3fe6ae9c3fa236b084d828461d4f3a0749b1060a3"
+  },
+  "native_source_integration_complete": false,
+  "postgres_tests": 30,
+  "source_sha256": {
+    "edgar_warehouse/mdm/api/main.py": "93f9c3790ba64906c3541431550521e0f4c5a129f5000f6f15eb2881cd2fb460",
+    "edgar_warehouse/mdm/api/routers/clean.py": "638a552d42392c217b7949c38ef23ce5619ba3da2431c8a9cc684f8e8a20d651",
+    "edgar_warehouse/mdm/clean/__init__.py": "fddd62c707ddc2026f82a6adb357afc33514c5b12ee68a3ce4f9585186bf4fb7",
+    "edgar_warehouse/mdm/clean/adapters.py": "45ba76fc7edc599a3ff2079ced9eb9ed6bd2e0e1457f5482c976394573054d2d",
+    "edgar_warehouse/mdm/clean/bookkeeping.py": "8d95037d26c5db146095cd8bf027b3a5b3d5d99d1e190d20963f65bc3b3518fa",
+    "edgar_warehouse/mdm/clean/cli.py": "0974f55a2d31a69a6595cd6f0b288cdd3e5309528bf5b9b2186410d92db25636",
+    "edgar_warehouse/mdm/clean/consumer.py": "dcaba8a87ae402eab0518caa45493a35dc7f3ca58960dc1fe15f5b8ae58d62b0",
+    "edgar_warehouse/mdm/clean/evidence.py": "6f660e49360ff223d8474a3fa4116dd30534ed4dd45a0517c658e05159ed081e",
+    "edgar_warehouse/mdm/clean/identity.py": "040b1595d6c1b0cc15d6fddbaaf3afd2cf4084b8559e7afff896526d0d0677dc",
+    "edgar_warehouse/mdm/clean/merge.py": "044f6071b41b88b72bbbe07be433e0a681ec12429bcd0295aa0dcaa2d5599c85",
+    "edgar_warehouse/mdm/clean/publication.py": "958ad3e40cd671bfe0a327a4d1d9b061dcfd79be2a07452736042eefae76d4be",
+    "edgar_warehouse/mdm/clean/relationships.py": "1eedd0ccc46d12d103d9811b7a83189916c81ceaa2bd6f8f157cdfebca3c57ed",
+    "edgar_warehouse/mdm/clean/store.py": "93c7739addd3ba1c3c7bec7f7b7b5bd3f570c86d7272946e016ce7d6c31d464b",
+    "edgar_warehouse/mdm/clean/survivorship.py": "b58f6c240bcaa4ad94c7755bd0832430881f9d0511ceca72d53365fa0e173a20",
+    "edgar_warehouse/mdm/cli.py": "60b8fdaa5444f514f05234b5ce051b54f92a2a852c9d491f698af9725faf1766",
+    "tests/integration/test_clean_mdm_postgres.py": "d5e4b6d05b080ce3d9958b3e7ee793d7c636675797cf37d008fe82d94c7bcdc5"
+  },
+  "started_at": "2026-09-18T18:07:00.669870-04:00",
+  "suite": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 116
+  }
+}

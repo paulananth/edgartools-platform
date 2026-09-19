@@ -1,0 +1,10 @@
+{"adviser_registration":"SYN-ADV-1","audit_registration":"SYN-AUD-1","key":"company","kind":"company","managed_fund":"fund","name":"Synthetic Adviser and Auditor","valid_from":"2026-01-01T00:00:00+00:00"}
+{"adviser_registration":"SYN-ADV-2","key":"person","kind":"person","name":"Synthetic Individual Adviser","valid_from":"2026-01-01T00:00:00+00:00"}
+{"fund_registration":"SYN-FUND-1","key":"fund","kind":"fund_structure","name":"Synthetic Contractual Fund","parent_fund":"fund_company","valid_from":"2026-01-01T00:00:00+00:00"}
+{"auditor":"company","fund_registration":"SYN-FUND-2","key":"fund_company","kind":"company","name":"Synthetic Incorporated Fund","valid_from":"2026-01-01T00:00:00+00:00"}
+{"issuer":"fund_company","key":"security","kind":"security","name":"Synthetic Fund Share","valid_from":"2026-01-01T00:00:00+00:00"}
+{"head_office":"company","key":"branch","kind":"branch","name":"Synthetic Branch","valid_from":"2026-01-01T00:00:00+00:00"}
+{"key":"government","kind":"government","name":"Synthetic Government Body","valid_from":"2026-01-01T00:00:00+00:00"}
+{"key":"venue","kind":"venue","name":"Synthetic Venue","operator":"company","valid_from":"2026-01-01T00:00:00+00:00"}
+{"key":"international","kind":"international_organization","name":"Synthetic International Organization","valid_from":"2026-01-01T00:00:00+00:00"}
+{"holding":"security","key":"manager13f","kind":"company","name":"Synthetic 13F Manager","valid_from":"2026-01-01T00:00:00+00:00"}

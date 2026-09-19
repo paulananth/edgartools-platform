@@ -42,7 +42,7 @@ from edgar_warehouse.application.workflows.acquisition_run_writes import (
     write_consolidated_run_manifest,
     write_declared_layer_manifests,
 )
-from edgar_warehouse.mdm.database import get_engine
+from edgar_warehouse.acquisition.database import get_engine
 
 DEFAULT_LEASE_SECONDS = 300
 COMMAND_NAME = "capture-filing-artifact"

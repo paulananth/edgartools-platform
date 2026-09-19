@@ -4,6 +4,68 @@ The shared language for the AWS-first SEC EDGAR data platform: production operat
 
 ## Language
 
+### Clean MDM identities and mastering
+
+**Company Identity**:
+The identity of one accepted company, shared by its governed Adviser, Audit Firm, and legally applicable Fund profiles.
+_Avoid_: A second identity per role, Person, a Fund name as proof of company legal form
+
+**Person Identity**:
+The identity of one natural person, distinct from a Company and shared with an applicable individual Adviser profile.
+_Avoid_: Employer identity, role as identity, same name as proof of sameness
+
+**Governed Role Profile**:
+An evidence-backed, dated registration or capacity attached to an identity without creating another identity for its holder.
+_Avoid_: Duplicate legal entity, permanent role inferred from a filing name
+
+**Merge Stage**:
+The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
+_Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
+
+**Fund Structure**:
+A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
+_Avoid_: treating every fund as a Company, treating a fund share as the fund itself
+
+**Branch Identity**:
+The identity of a separately identified branch establishment linked to its head office, including where the branch is not a separate legal person.
+_Avoid_: Head-office identity, subsidiary Company inferred from branch status
+
+**Government Entity**:
+A government body represented in its own right, distinct from a legally incorporated Company whose owner is a government.
+_Avoid_: Government ownership as an identity kind, International Organization
+
+**Market/Venue**:
+A trading market or venue distinct from the organization operating it. Operating and segment venues relate through a venue hierarchy.
+_Avoid_: Operator Company, corporate ownership hierarchy
+
+**Source Record Binding**:
+The evidence-backed assignment of one source record to the Company Identity, Person Identity, or other accepted identity that it describes.
+_Avoid_: Combining two existing identities, selecting a winning field value
+
+**Identity Consolidation**:
+The decision that two existing master identities describe the same subject and will be represented by one surviving identity, with their prior identities and evidence retained in history.
+_Avoid_: Source Record Binding, corporate acquisition, merging fields because their values are similar
+
+**Field Survivorship**:
+The rules that select a master field value from eligible source claims after identity has been resolved, while retaining the claims that were not selected.
+_Avoid_: Proof of identity, source rank as permission to merge identities
+
+**Match Exclusion**:
+An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.
+_Avoid_: Low match score, deleting source evidence, a permanent ban without reviewable grounds
+
+**MDM Change Journal**:
+The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
+_Avoid_: A second root-run authority, mutable log of only the latest result
+
+**Reported Ultimate Parent**:
+The ultimate-parent relationship asserted by a source for its stated hierarchy scope and time.
+_Avoid_: Calculated Ultimate Parent, ownership and accounting consolidation treated as interchangeable
+
+**Calculated Ultimate Parent**:
+The terminal parent derived from accepted hierarchy edges for a specified scope, time and derivation rule, with the supporting path retained.
+_Avoid_: Reported Ultimate Parent, a result from an incomplete or cyclic hierarchy
+
 ### Snowflake operational roles
 
 **Deployer Role**:
