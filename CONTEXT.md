@@ -624,6 +624,14 @@ _Avoid_: Baking a one-off auth scheme into the bundle schema, blocking go-live o
 A Subject Bundle Read or Subject Feature Screen result whose Decision Watermark components are present and aligned, including the Bronze digest, over a non-empty Decision Subject Universe; only Agent-Grade Reads are valid inputs to a Trading Decision. Missing bronze digest or empty universe is not READY and not agent-grade (no tradeable payload). An empty or unavailable neighborhood section does not by itself fail the bundle. If the active graph generation changes, agent-grade reads fail closed; the old READY publication is not rewritten.
 _Avoid_: Best-effort mismatched graph and features, silent degraded data for trading, READY publication without bronze digest, READY publication of an empty universe, serving a retired graph generation as agent-grade, failing a bundle because one issuer has no insiders, treating missing bronze as coverage-only, failing gold or MDM because the contract is not READY, "prefer gold" or "prefer graph" without invalidation
 
+**Agent Query Surface**:
+An open-query interface (ADR 0014) where an automated agent composes its own query over MDM, graph, and gold data, guided by a published Agent Query Catalog, instead of reading a pre-materialized Decision Graph Bundle. No Agent-Grade Read gate applies; there is no fixed bundle to gate. Additive to, not a replacement for, the Snowflake Decision Contract and Mongo Decision Projection, which keep gating whatever still reads them.
+_Avoid_: Calling this the Agent Decision Surface (distinct concept — that one is the fixed, watermarked, pre-materialized contract), treating an Agent Query Surface result as automatically safe for a Trading Decision, assuming it replaces v1/v2 by default
+
+**Agent Query Catalog**:
+The published description an agent uses to compose its own Agent Query Surface query: data definitions (entities, fields, documented meaning, null semantics) and relationships (foreign keys, graph edges) across MDM, graph, and gold. Not a pre-materialized bundle and not query results themselves — only the map an agent reads before writing its own query.
+_Avoid_: A running query cache, a fixed answer set, conflating this with a Decision Feature's documented meaning (that's bundle-scoped; this is catalog-scoped and spans stores the bundle never did)
+
 ### Deployment orchestration (Step Functions)
 
 **MDM Utility Machine**:
