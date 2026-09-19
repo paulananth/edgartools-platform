@@ -61,6 +61,15 @@ boundary as [the pre-merge staging proposal](../clean-mdm-premerge-staging-propo
   lineage — `source_revision` alone has `parser_version`, `schema_version`,
   `configuration_version`, `contract_version`, matching the review's
   "image/parser/config identities" ask.
+- 2026-09-19, later the same session (while opening ticket 05): Clean MDM
+  reached this answer independently, in shipped DDL —
+  `edgar_warehouse/mdm/migrations/023_clean_mdm.sql` line 2: "No parallel
+  root-run table: run_id refers to the existing Bookkeeping owner", and
+  `026_clean_mdm_attempts.sql` line 1: "Operational attempts refer to the
+  existing Bookkeeping root, not a new run" (read-only, on
+  `origin/codex/clean-mdm-integration`). `mdm_v2.batch.run_id` and
+  `mdm_v2.attempt_event.run_id` are that Bookkeeping `pipeline_run_id`.
+  Stronger corroboration than the live introspection alone.
 
 ## Answer
 
