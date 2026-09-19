@@ -12,7 +12,7 @@ from uuid import UUID
 from sqlalchemy import text
 
 from . import relationships
-from .evidence import instant, validate_assertion
+from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
 from .store import Conflict, Store, digest, rows
 from .survivorship import current_claims, select_fields
@@ -126,15 +126,23 @@ class MergeStage:
         decisions: list[dict] | None = None,
         identities: list[dict] | None = None,
         preview: bool = False,
+        deferred: list[dict] | None = None,
     ) -> dict:
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
         decisions = sorted(decisions or [], key=lambda d: (d["at"], d["decision_id"]))
         identities = sorted(identities or [], key=lambda i: i["entity_id"])
+        deferred = sorted(deferred or [], key=lambda d: d["deferred_id"])
         instant(as_of)
-        if len(assertions) > 1000 or len(decisions) > 1000 or len(identities) > 1000:
+        if (
+            len(assertions) + len(deferred) > 1000
+            or len(decisions) > 1000
+            or len(identities) > 1000
+        ):
             raise ValueError("Unbounded batch")
         for a in assertions:
             validate_assertion(a)
+        for record in deferred:
+            validate_deferred(record)
         for d in decisions:
             if (
                 digest({k: v for k, v in d.items() if k != "decision_id"})
@@ -152,6 +160,9 @@ class MergeStage:
             "decisions": decisions,
             "identities": identities,
         }
+        # Preserve hashes of commands committed before deferred support existed.
+        if deferred:
+            command["deferred"] = deferred
         input_hash = digest(command)
         with self.store.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
@@ -324,6 +335,22 @@ class MergeStage:
                 }
                 for r in reviews
             )
+            projections.extend(
+                {
+                    "object_type": "review",
+                    "object_id": r["deferred_id"],
+                    "body": {
+                        "reason": r["reason"],
+                        "deferred_id": r["deferred_id"],
+                        "source_code": r["source_code"],
+                        "publication_key": r["publication_key"],
+                        "record_locator": r["record_locator"],
+                        "open": True,
+                        "blocking": True,
+                    },
+                }
+                for r in deferred
+            )
             # Retire old projected edges/reviews in the affected component only.
             old = rows(
                 conn,
@@ -359,6 +386,11 @@ class MergeStage:
                 "projections": sorted(
                     projections, key=lambda p: (p["object_type"], p["object_id"])
                 ),
+                "source_accounting": {
+                    "normalized": len(assertions),
+                    "deferred": len(deferred),
+                    "total": len(assertions) + len(deferred),
+                },
             }
             result = self.store.commit(conn, request, run_id)
             if preview:

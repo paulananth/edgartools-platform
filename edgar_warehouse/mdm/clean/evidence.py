@@ -115,6 +115,43 @@ def validate_assertion(body: dict) -> None:
         raise Conflict("Normalized assertion hash or shape mismatch")
 
 
+def deferred_record(
+    *,
+    source_code: str,
+    publication_key: str,
+    record_locator: str,
+    schema_version: str,
+    reason: str,
+    raw_record: Any,
+    provenance: dict,
+) -> dict:
+    if not all((source_code, publication_key, record_locator, schema_version, reason)):
+        raise ValueError(
+            "Deferred evidence requires dataset/publication/record location and reason"
+        )
+    body = {
+        "source_code": source_code,
+        "publication_key": publication_key,
+        "record_locator": record_locator,
+        "schema_version": schema_version,
+        "reason": reason,
+        "raw_record": raw_record,
+        "provenance": provenance,
+    }
+    return {**body, "deferred_id": digest(body)}
+
+
+def validate_deferred(body: dict) -> None:
+    try:
+        expected = deferred_record(
+            **{k: v for k, v in body.items() if k != "deferred_id"}
+        )
+    except (TypeError, ValueError) as exc:
+        raise Conflict("Invalid deferred evidence") from exc
+    if expected != body:
+        raise Conflict("Deferred evidence hash mismatch")
+
+
 def decision(operation: str, *, actor: str, reason: str, at: str, **values) -> dict:
     if not actor or not reason:
         raise ValueError("Steward decisions require actor and evidence-bound reason")

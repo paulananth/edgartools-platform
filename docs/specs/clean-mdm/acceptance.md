@@ -117,8 +117,10 @@ For large sources run a bounded sample first, then the resumable full build.
    Activate only after it passes. Keep old MDM read-only for audit and in a
    demonstrably recoverable state for the agreed rollback window.
 
-Before an actual switch, the release owner must settle the target identity,
-consumer routing mechanism, acceptable pause/lag, legacy catch-up method,
-rollback triggers and retention period. The window is currently unspecified;
-do not invent one or delete old MDM. SEC capture, Snowflake silver and unrelated
-analytics stay outside this migration.
+The user selected local PostgreSQL for continued qualification on 2026-09-19;
+Snowflake qualification is deferred. The accepted rollback retention period is
+30 days after cutover. Before an actual switch, settle the exact target identity,
+consumer routing mechanism, acceptable pause/lag, legacy catch-up method and
+rollback triggers. Retain old MDM through that window; this is not an automatic
+deletion schedule. SEC capture, Snowflake silver and unrelated analytics stay
+outside this migration.

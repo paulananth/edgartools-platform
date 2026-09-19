@@ -19,3 +19,12 @@ Bounded reversal preview, immutable invocation attempts, temporal-parent tests
 and resolution-publication dependencies are now implemented. Full source
 disposition accounting and staged large-component reversal remain before this
 ticket closes. Runtime source integration is still required by ticket 05.
+
+## Integration checkpoint, 2026-09-19
+
+Native batch accounting and immutable deferred records now commit atomically;
+SQL requires blocking reviews in every observing batch and rejects premature
+closure. Independent Standards/Spec/GoF reviews of this increment completed,
+and their findings were fixed. Reviewed deferred resolution, complete source
+publication accounting and staged large-component reversal still block closure.
+See [build state](../../../docs/specs/clean-mdm/state-of-build.md).

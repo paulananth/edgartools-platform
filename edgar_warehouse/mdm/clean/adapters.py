@@ -6,6 +6,30 @@ from .evidence import assertion, subject_key
 from .store import canonical
 
 
+class UnsupportedRecord(ValueError):
+    """A source defect or unsupported domain, not an adapter programming error."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def format_value(item, format_name=None):
+    if format_name is None:
+        return str(item).strip()
+    if format_name == "sec_cik":
+        value = str(item).strip()
+        if (
+            not value.isascii()
+            or not value.isdigit()
+            or len(value) > 10
+            or int(value) == 0
+        ):
+            raise UnsupportedRecord("invalid_cik")
+        return value.zfill(10)
+    raise ValueError("Unconfigured identifier format")
+
+
 def value(row: dict, path: str):
     result = row
     for part in path.split("."):
@@ -18,7 +42,7 @@ def value(row: dict, path: str):
 def record_key(row: dict, paths: list[str]) -> str:
     parts = [value(row, p) for p in paths]
     if not parts or any(v is None or v == "" for v in parts):
-        raise ValueError("Missing source-record identity")
+        raise UnsupportedRecord("missing_record_identity")
     return str(parts[0]) if len(parts) == 1 else canonical(parts)
 
 
@@ -32,22 +56,32 @@ def normalize(
     their source artifact until a registered adapter contract supports them.
     """
     mapping = contract["adapter"]
+    if not isinstance(row, dict):
+        raise UnsupportedRecord("invalid_record_shape")
     kind = mapping.get("kind")
     if "kind_field" in mapping:
-        kind = mapping["kind_values"].get(value(row, mapping["kind_field"]))
+        source_kind = value(row, mapping["kind_field"])
+        if source_kind is not None and not isinstance(source_kind, str):
+            raise UnsupportedRecord("invalid_identity_kind")
+        kind = mapping["kind_values"].get(source_kind)
     if not kind:
-        raise ValueError(
-            "Unresolved source identity kind; retain source artifact for review"
-        )
+        raise UnsupportedRecord("unsupported_identity_kind")
     key = record_key(row, mapping["record_key"])
+    key = format_value(key, mapping.get("record_key_format"))
     identifiers = {}
     for namespace, path in mapping.get("identifiers", {}).items():
         item = value(row, path)
         if item is not None and str(item).strip():
-            identifiers[namespace] = str(item).strip()
+            identifiers[namespace] = format_value(
+                item, mapping.get("identifier_formats", {}).get(namespace)
+            )
     fields = {
         name: value(row, path) for name, path in mapping.get("fields", {}).items()
     }
+    if mapping.get("field_shape") == "nullable_text" and any(
+        v is not None and not isinstance(v, str) for v in fields.values()
+    ):
+        raise UnsupportedRecord("invalid_field_shape")
     profiles = []
     for spec in mapping.get("profiles", []):
         registration = value(row, spec["registration"])
@@ -92,6 +126,22 @@ def normalize(
                 },
             }
         )
+    provenance = {
+        "artifact_sha256": publication["artifact_sha256"],
+        "member": publication["member"],
+        "record_key": key,
+        "adapter_version": mapping["version"],
+    }
+    if publication.get("record_locator"):
+        provenance["record_locator"] = publication["record_locator"]
+    if mapping.get("source_record_provenance"):
+        # Delivery member paths, hashes and line positions describe occurrences,
+        # not source assertions. They remain pinned in the input manifest.
+        provenance = {"record_key": key, "adapter_version": mapping["version"]}
+    if mapping.get("provenance"):
+        provenance["source"] = {
+            name: value(row, path) for name, path in mapping["provenance"].items()
+        }
     return assertion(
         source_code=source_code,
         record_key=key,
@@ -104,10 +154,5 @@ def normalize(
         profiles=profiles,
         relationships=relationships,
         schema_version=contract["schema_version"],
-        provenance={
-            "artifact_sha256": publication["artifact_sha256"],
-            "member": publication["member"],
-            "record_key": key,
-            "adapter_version": mapping["version"],
-        },
+        provenance=provenance,
     )

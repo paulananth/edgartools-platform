@@ -4,6 +4,14 @@ Date: 2026-09-18
 Status: policy gate resolved; local foundation and shared merge core implemented.
 Source integrations and hosted qualification/cutover remain incomplete.
 
+## Current checkpoint
+
+The [2026-09-19 build state](state-of-build.md) supersedes current-state claims
+below. It preserves Grok PRs #655/#656, adds bounded Company preparation and
+deferred evidence, and records completed independent increment reviews.
+[Integration acceptance](../../../.scratch/clean-mdm/integration-acceptance.json)
+records final checks. The following 2026-09-18 evidence remains historical.
+
 ## Completed investigation
 
 - Recorded acceptance of Q1–Q16 and the explicit three-database local layout.
@@ -107,7 +115,7 @@ Clean MDM identities, Merge Stage, consumer contracts or reversal behavior.
 | Merge policy gate | Resolved | Q1–Q16 accepted; unqualified automatic rules disabled |
 | Detailed migrations, schemas and adapter policies | Foundation installed locally | Complete concrete source adapter contracts and source integration |
 | PostgreSQL 16 core | 30 integration tests pass | Complete source disposition/large-component acceptance and independent review; automatic matching remains unqualified |
-| Native entity/profile/relationship pipelines | Not implemented | Every current writer routed through Merge Stage and downstream contracts verified |
+| Native entity/profile/relationship pipelines | First bounded Company adapter; remaining paths pending | Every current writer routed through Merge Stage and downstream contracts verified |
 | API/export/graph migration | Opt-in v2 reads tested; local envelope delivery only | Hosted consumers, crosswalks and complete compatibility/completeness evidence |
 | Snowflake Postgres qualification | Not run | Same migrations/tests on isolated target with effective-role evidence |
 | Rebuild/catch-up/cutover/rollback | Not run | Pinned approved inputs, live downstream reconciliation, rehearsal and release decision |

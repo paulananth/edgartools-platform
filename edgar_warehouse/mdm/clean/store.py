@@ -82,7 +82,11 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
                 ),
                 {"name": path.name, "checksum": checksum},
             )
-        for name in ("025_clean_mdm_indexes.sql", "026_clean_mdm_attempts.sql"):
+        for name in (
+            "025_clean_mdm_indexes.sql",
+            "026_clean_mdm_attempts.sql",
+            "027_clean_mdm_deferred.sql",
+        ):
             extra = path.with_name(name)
             extra_source = extra.read_text()
             extra_hash = hashlib.sha256(extra_source.encode()).hexdigest()

@@ -1,7 +1,8 @@
 # Local operation and reversal procedure
 
-Status: implemented local commands and opt-in read API. Native source adapters,
-hosted export/graph materialization and production qualification are pending.
+Status: implemented local commands, bounded Company preparation and opt-in
+read API. Other native adapters, hosted materialization and production
+qualification are pending. See [state of the build](state-of-build.md).
 
 ## Acceptance runner
 
@@ -31,7 +32,8 @@ contains the existing root `pipeline_run`. One UUID identifies the root across
 all three. No transaction is claimed across databases.
 
 Owner migration command: `edgar-warehouse mdm migrate --model clean
---application-role application`. Migrations 023, 025 and 026 are checksummed.
+--application-role application`. Migrations 023, 025, 026 and 027 are checksummed. Migration 027 adds immutable
+deferred evidence and cannot be bypassed through the older SQL capability.
 Mirror installation uses `clean.publication.migrate_mirror` with migration 024
 and a separate owner connection. Runtime commands select
 `MDM_APPLICATION_ROLE` (default `application`) and cannot write the tables
@@ -115,3 +117,29 @@ legacy contracts; no compatibility crosswalk or consumer cutover is implied.
 Snapshot generation and each object's projection as-of are distinct: an object
 may have been last projected before the selected global generation. Future or
 missing generations return 404. An unconfigured v2 API has no v2 routes.
+
+## Prepare a native Company sample
+
+This command needs local files and no database credentials:
+
+```bash
+edgar-warehouse mdm prepare-clean-company \
+  --landing-root "$COMPANY_LANDING_ROOT" \
+  --landing-manifest "$COMPANY_LANDING_MANIFEST" \
+  --output "$CLEAN_MDM_INPUT_DIRECTORY" \
+  --as-of 2026-09-19T00:00:00Z --revision 0 --limit 3
+```
+
+It copies and hashes the original Company Parquet and landing manifest, emits
+bounded JSONL, and writes reviewable dataset/policy/manifest/inventory files.
+An existing different bundle is rejected; identical preparation is idempotent.
+The explicit revision is source-publication order, not ingestion order. Only
+`operating` companies and nullable text fields are currently supported.
+Malformed/unsupported rows are retained with blocking reviews during ingestion.
+No deferred-resolution capability exists yet. Source record counts include
+duplicate occurrences; identical assertions have one business effect.
+
+The preparation does not activate source coverage or allocate identities.
+Unknown effective time remains unknown; a sample never retires absent records.
+Apply owner migrations and approved registry/dataset/policy registration before
+using its manifest with the normal bounded Clean MDM commands.

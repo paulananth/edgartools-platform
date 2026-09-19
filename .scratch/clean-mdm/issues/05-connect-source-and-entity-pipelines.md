@@ -11,4 +11,8 @@ Route supported source adapters and existing mastering, relationship, stewardshi
 
 ## Evidence
 
-Pending.
+First bounded native SEC Company preparation/normalization is implemented and
+tested. A three-company candidate is pinned locally, but coverage activation,
+identity review and persistent Clean MDM ingestion have not occurred. Other
+source/role/relationship pipelines remain pending. Ticket 04 is still open.
+See [build state](../../../docs/specs/clean-mdm/state-of-build.md).

@@ -1,9 +1,10 @@
 # Source registry and evidence contract
 
 Status: dataset metadata pinned to the existing acquisition authority and a
-configuration-selected JSONL adapter are implemented. Native source contracts,
-complete-publication accounting and unsupported-domain dispositions remain
-integration work; the requirements below are not all implementation evidence.
+configuration-selected JSONL adapter are implemented. The bounded native SEC
+Company adapter and immutable deferred records are implemented; reviewed
+deferred resolution, other native contracts and complete-publication accounting
+remain integration work. See [state of the build](state-of-build.md).
 
 ## Extend the existing authority
 

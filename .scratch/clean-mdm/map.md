@@ -11,6 +11,8 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Notes
 
+- Latest handoff: [state of the build](../../docs/specs/clean-mdm/state-of-build.md).
+
 - This map carries execution after the explicit design gates. The user's
   delivery sequence is domain model and inventory, merge/recovery contracts,
   local implementation and evidence, then target qualification and cutover.
@@ -24,7 +26,10 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 - No implementation tickets until the Merge Stage policy gate is resolved.
   Draft specifications are proposals, never evidence of implementation.
 - Interview rounds contain at most three questions (user instruction, 2026-09-18).
-- Worktree: `../edgartools-platform-clean-mdm`; branch: `codex/clean-mdm`.
+- Current worktree: `../edgartools-platform-clean-mdm-integration`; branch:
+  `codex/clean-mdm-integration`. User assigned this fresh branch on 2026-09-19
+  after Grok PRs #655/#656 landed in `codex/clean-mdm`. Both PRs are preserved;
+  the integration branch is rebased onto `origin/main` at `5fe70798`.
 - Local PostgreSQL 16 worktree: `../edgartools-platform-grok-local-postgres`;
   DSN/provision branch: `grok/clean-mdm-local-postgres` (PR #655);
   bounded local mastering branch: `grok/local-mdm-bounded-mastering`.
@@ -39,7 +44,7 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   — primary-source comparison separates source binding, consolidation and
   field selection; revises unsupported threshold and survivor-ID proposals.
 - [Apply current MDM schema to local PostgreSQL 16](issues/03-apply-current-mdm-schema-to-local-postgres.md)
-  — current runtime schema (38 tables, migrations 001–022) is live on
+  — historical prerequisite checkpoint: schema (38 tables, migrations 001–022) on
   PostgreSQL 16.15 at `127.0.0.1:5432/mdm`; domain golden records empty except
   10 seeded audit firms; Clean MDM shared-identity tables were not created.
 
@@ -52,7 +57,8 @@ automatic binding stays disabled while local implementation proceeds.
 - Detailed adapter schemas and acceptance fixtures follow the policy gate.
 - Target qualification must resolve actual Snowflake Postgres privileges and
   version compatibility, pinned source inventory, consumer migration manifest,
-  and the release owner's rollback window before activation.
+  before activation. The user selected local PostgreSQL for the current target
+  and a 30-day legacy rollback window; Snowflake qualification is deferred.
 - Exact resource sizing and scheduling follow measured accepted workloads.
 
 ## Out of scope

@@ -1,0 +1,59 @@
+{
+  "date": "2026-09-19",
+  "branch": "codex/clean-mdm-integration",
+  "base_before_increment": "e14eb74be3b5cd585b736ae5edf01ff629c2d649",
+  "upstream_main": "5fe70798097830af651c59473988ccd0dc8db044",
+  "command": "uv run --frozen --extra s3 --extra mdm-runtime --extra mdm pytest tests/mdm/test_clean_company_source.py tests/integration/test_clean_mdm_postgres.py tests/mdm/test_api.py tests/mdm/test_publication_drain_cli.py tests/mdm/test_graph_publication_queue.py tests/unit/test_postgres_silver_reader.py tests/mdm/test_silver_reader_read_target.py tests/acquisition/test_change_ledger_engine.py -q --junitxml=.scratch/clean-mdm/integration-acceptance.xml",
+  "results": {
+    "tests": 134,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "pytest_seconds": 83.2,
+  "junit_path": ".scratch/clean-mdm/integration-acceptance.xml",
+  "junit_sha256": "5359823e906bff99f5a80be50c8be172466a5aae4d3e986374b0daa5dea543df",
+  "sha256": {
+    "edgar_warehouse/mdm/clean/__init__.py": "fddd62c707ddc2026f82a6adb357afc33514c5b12ee68a3ce4f9585186bf4fb7",
+    "edgar_warehouse/mdm/clean/adapters.py": "c6c44b0dc82780486e20c4f07129c08cd59a761156bfad0d1cce05ae72f4728b",
+    "edgar_warehouse/mdm/clean/bookkeeping.py": "8d95037d26c5db146095cd8bf027b3a5b3d5d99d1e190d20963f65bc3b3518fa",
+    "edgar_warehouse/mdm/clean/cli.py": "4f53eba5022f30ea04983edcca86d3b4da38e9322a12dca627e227d69d5552f7",
+    "edgar_warehouse/mdm/clean/company_source.py": "f2c11745eee78ff825338fd4c68cc9b6fdffc07ed0ee8116d7ec8d2e219b1983",
+    "edgar_warehouse/mdm/clean/consumer.py": "dcaba8a87ae402eab0518caa45493a35dc7f3ca58960dc1fe15f5b8ae58d62b0",
+    "edgar_warehouse/mdm/clean/evidence.py": "b5e2c493f7bace4d1e7395136afd7096001c3751ce7b7cbd8052710234cc49a8",
+    "edgar_warehouse/mdm/clean/identity.py": "040b1595d6c1b0cc15d6fddbaaf3afd2cf4084b8559e7afff896526d0d0677dc",
+    "edgar_warehouse/mdm/clean/merge.py": "bde1019b494d854ba925ceece197a4401f6d451e705ff17d4d2bc8eed1304968",
+    "edgar_warehouse/mdm/clean/publication.py": "958ad3e40cd671bfe0a327a4d1d9b061dcfd79be2a07452736042eefae76d4be",
+    "edgar_warehouse/mdm/clean/relationships.py": "1eedd0ccc46d12d103d9811b7a83189916c81ceaa2bd6f8f157cdfebca3c57ed",
+    "edgar_warehouse/mdm/clean/store.py": "a6f2e0c234ead27de164175a5e127dcb4211fc138fa48d7bea9022f4a5c377ec",
+    "edgar_warehouse/mdm/clean/survivorship.py": "b58f6c240bcaa4ad94c7755bd0832430881f9d0511ceca72d53365fa0e173a20",
+    "edgar_warehouse/mdm/cli.py": "7e5b27e1d7cfb21df74e0c4dc1ce8910a910e9e213b03aa136938bea2fe35a1f",
+    "edgar_warehouse/mdm/migrations/023_clean_mdm.sql": "44374b8b47061dd4aa8fc3b600a76bb2c5a28870f044f5f6834e4a701ca942a1",
+    "edgar_warehouse/mdm/migrations/024_clean_mdm_mirror.sql": "cd734e86b17942e1dca36c4ac0643bb4b829e7744b05c7040931c83cff5170f2",
+    "edgar_warehouse/mdm/migrations/025_clean_mdm_indexes.sql": "b87b6bb876542ae69fa05b72bfc67f397aa05590e3c9a168aeeb823105d6966e",
+    "edgar_warehouse/mdm/migrations/026_clean_mdm_attempts.sql": "1b8ce3ac39f71aadd985d1f3fe6ae9c3fa236b084d828461d4f3a0749b1060a3",
+    "edgar_warehouse/mdm/migrations/027_clean_mdm_deferred.sql": "d34641669802a44924dde46c48239432927eaeb899bb03325a185075cd594c0e",
+    "tests/integration/test_clean_mdm_postgres.py": "e4edb251334a041747c396a9924e197485028b3560ab96a868d854d8832a308d",
+    "tests/mdm/test_clean_company_source.py": "adce3252b6d7e95e92c92208d5d88ef0ba331162639ce8596c1762b97040e1ad"
+  },
+  "lint": {
+    "clean_package_and_changed_acceptance_tests": "passed",
+    "legacy_cli_existing_findings": 17,
+    "legacy_cli_new_findings": 0
+  },
+  "local_read_only_observation": {
+    "postgres": "16.15",
+    "legacy_entities": 13,
+    "silver_companies": 3,
+    "clean_batches": 0,
+    "clean_datasets": 0,
+    "source_registry_versions": 0,
+    "migration_027_installed_in_persistent_mdm": false
+  },
+  "limits": [
+    "No full source rebuild or registry activation",
+    "Migration 027 tested on disposable PostgreSQL only",
+    "Deferred resolution and staged large closure remain pending",
+    "No hosted export, graph, Snowflake qualification or cutover"
+  ]
+}

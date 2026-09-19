@@ -11,7 +11,8 @@ Use same migrations on an isolated target after local acceptance. Pin approved i
 
 ## Evidence
 
-Not run. Requested the pinned source snapshot/publication identity, isolated
-Snowflake Postgres target/connection name and rollback retention window from
-the user. Answers are pending; no defaults have been treated as approval.
-Local source/consumer integration gates must also finish before qualification.
+On 2026-09-19 the user selected local PostgreSQL for continued qualification
+and 30 days of legacy retention after cutover. Snowflake qualification is
+deferred. The user asked for an explanation of pinned inputs; the inherited
+three-company local landing bundle is being inspected as a candidate.
+Source/consumer integration gates must finish before any consumer cutover.

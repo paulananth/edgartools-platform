@@ -39,6 +39,15 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     decisions.add_argument("--dry-run", action="store_true", help="Preview the next bounded decision batch; roll back every effect")
     decisions.set_defaults(model="clean", handler=_logged_handler("apply-decisions", _handle_clean_decisions))
 
+    prepare = mdm_sub.add_parser("prepare-clean-company", help="Pin a bounded local Company landing snapshot without writing master state")
+    prepare.add_argument("--landing-root", required=True)
+    prepare.add_argument("--landing-manifest", required=True)
+    prepare.add_argument("--output", required=True)
+    prepare.add_argument("--as-of", required=True)
+    prepare.add_argument("--revision", type=int, required=True)
+    prepare.add_argument("--limit", type=int, default=100)
+    prepare.set_defaults(model="clean", handler=_logged_handler("prepare-clean-company", _handle_clean_decisions))
+
     counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")
     counts.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
     counts.set_defaults(handler=_logged_handler("counts", _handle_counts))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import time
@@ -1603,3 +1604,255 @@ def test_version_two_api_auth_history_pagination_and_profile_provenance(
             client.get(alias_endpoint + "?generation=1").json()["canonical_id"]
             == right["entity_id"]
         )
+
+
+def test_native_company_batch_retains_unsupported_records_atomically(
+    database, command_databases, tmp_path
+):
+    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+    from edgar_warehouse.mdm.clean.cli import batch_evidence, execute_manifest
+    from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    with database.admin.begin() as conn:
+        conn.execute(
+            text("""INSERT INTO source_registry_coverage(version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
+            VALUES(:v,'submissions','carry_forward','fixture','fixture','fixture','2026-01-01')"""),
+            {"v": database.registry},
+        )
+        register_dataset(conn, SOURCE_CODE, database.registry, CONTRACT)
+        policy = register_policy(conn, POLICY)
+    raw = (
+        b"\n".join(
+            [
+                json.dumps(
+                    {
+                        "cik": 123,
+                        "entity_type": "operating",
+                        "entity_name": "Synthetic Company",
+                    }
+                ).encode(),
+                json.dumps(
+                    {
+                        "cik": 456,
+                        "entity_type": "other",
+                        "entity_name": "Unknown legal kind",
+                    }
+                ).encode(),
+                json.dumps(
+                    {"entity_type": "operating", "entity_name": "Missing CIK"}
+                ).encode(),
+                b"{broken json",
+                b'{"cik":789,"entity_type":"operating","entity_name":[1,2]}',
+                b'{"cik":790,"entity_type":"operating","entity_name":{"op":"bogus"}}',
+                b'{"cik":791,"entity_type":"operating","entity_name":1e999}',
+            ]
+        )
+        + b"\n"
+    )
+    (tmp_path / "records.jsonl").write_bytes(raw)
+    batch = {
+        "batch_id": "native-company-1",
+        "stage": "mastering",
+        "consumer": "native-company",
+        "expected_checkpoint": 0,
+        "checkpoint": 1,
+        "input": {
+            "path": "records.jsonl",
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "source_code": SOURCE_CODE,
+            "record_count": 7,
+            "publication": {
+                "publication_key": "capture-1",
+                "revision": 0,
+                "effective_at": None,
+            },
+        },
+    }
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "contract_version": 2,
+                "policy_digest": policy,
+                "as_of": AS_OF,
+                "batches": [batch],
+            }
+        )
+    )
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    run = str(uuid4())
+    args = {"path": str(manifest), "run_id": run, "stage": "mastering", "limit": 7}
+    report = execute_manifest(store, coordinator, **args)
+    assert report["records_processed"] == 7 and report["unresolved_reviews"] == 7
+    assert not report["end_to_end_complete"]
+    assert execute_manifest(store, coordinator, **args)["records_processed"] == 0
+    evidence, deferred = batch_evidence(batch, tmp_path, store)
+    assert len(evidence) == 1 and len(deferred) == 6
+    assert {r["reason"] for r in deferred} == {
+        "unsupported_identity_kind",
+        "missing_record_identity",
+        "invalid_json_record",
+        "invalid_field_shape",
+    }
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 6
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+        assert conn.scalar(
+            text("SELECT effects->'source_accounting' FROM mdm_v2.batch")
+        ) == {"total": 7, "normalized": 1, "deferred": 6}
+    entity, bind = identity_and_binding(evidence[0])
+    MergeStage(store).apply(
+        batch_id="native-company-2",
+        run_id=run,
+        policy_digest=policy,
+        consumer="native-company",
+        expected_checkpoint=1,
+        checkpoint=2,
+        as_of=AS_OF,
+        identities=[entity],
+        decisions=[bind],
+    )
+    assert (
+        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
+        == "Synthetic Company"
+    )
+    assert sum(r["open"] for r in documents(database, "review").values()) == 6
+    # The restricted SQL capability cannot bypass source accounting, omit a
+    # deferred review, or close one in a subsequent otherwise valid commit.
+    with database.application.connect() as conn:
+        retained = conn.scalar(
+            text("SELECT effects FROM mdm_v2.batch WHERE batch_id='native-company-1'")
+        )
+    for defect in (
+        "missing_review",
+        "replayed_without_review",
+        "closed_review",
+        "accounting",
+    ):
+        request = {
+            **retained,
+            "batch_id": f"bypass-{defect}",
+            "expected_generation": 2,
+            "expected_checkpoint": 2,
+            "checkpoint": 3,
+        }
+        if defect == "missing_review":
+            new_record = deferred_record(
+                **{
+                    **{k: v for k, v in deferred[0].items() if k != "deferred_id"},
+                    "record_locator": "new-occurrence",
+                }
+            )
+            request.update(
+                assertions=[],
+                deferred=[new_record],
+                projections=[],
+                source_accounting={"normalized": 0, "deferred": 1, "total": 1},
+            )
+        elif defect == "replayed_without_review":
+            request["projections"] = []
+        elif defect == "closed_review":
+            request.update(
+                assertions=[],
+                deferred=[],
+                source_accounting={"normalized": 0, "deferred": 0, "total": 0},
+                projections=[
+                    {
+                        "object_type": "review",
+                        "object_id": deferred[0]["deferred_id"],
+                        "body": {"open": False, "blocking": False},
+                    }
+                ],
+            )
+        else:
+            request["source_accounting"] = {"normalized": 0, "deferred": 0, "total": 0}
+        with (
+            pytest.raises(DBAPIError, match="blocking review|source accounting"),
+            database.application.begin() as conn,
+        ):
+            store.commit(conn, request, run)
+    changed = deferred_record(
+        **{
+            **{k: v for k, v in deferred[0].items() if k != "deferred_id"},
+            "raw_record": {"different": True},
+        }
+    )
+    with pytest.raises(DBAPIError, match="collision"):
+        MergeStage(store).apply(
+            batch_id="native-company-collision",
+            run_id=run,
+            policy_digest=policy,
+            consumer="native-company",
+            expected_checkpoint=2,
+            checkpoint=3,
+            as_of=AS_OF,
+            deferred=[changed],
+        )
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 6
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT position FROM mdm_v2.checkpoint WHERE consumer='native-company'"
+                )
+            )
+            == 2
+        )
+    with (
+        pytest.raises(DBAPIError, match="permission denied"),
+        database.application.begin() as conn,
+    ):
+        conn.execute(
+            text("SELECT mdm_v2.commit_batch_core('{}',CAST(:r AS uuid))"), {"r": run}
+        )
+    with pytest.raises(DBAPIError), database.application.begin() as conn:
+        conn.execute(text("DELETE FROM mdm_v2.deferred_record"))
+    with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
+        conn.execute(text("DELETE FROM mdm_v2.deferred_record"))
+    # Duplicate lines and later delivery of the same source revision remain one
+    # business assertion, even when the transport member/hash/ordinal change.
+    from edgar_warehouse.mdm.clean.adapters import normalize
+
+    duplicate = normalize(
+        {"cik": 123, "entity_type": "operating", "entity_name": "Synthetic Company"},
+        source_code=SOURCE_CODE,
+        contract=CONTRACT,
+        publication={
+            "publication_key": "capture-1",
+            "revision": 0,
+            "effective_at": None,
+            "artifact_sha256": "b" * 64,
+            "member": "another.jsonl",
+            "record_locator": "line:27",
+        },
+    )
+    assert duplicate == evidence[0]
+    MergeStage(store).apply(
+        batch_id="native-company-duplicates",
+        run_id=run,
+        policy_digest=policy,
+        consumer="native-company",
+        expected_checkpoint=2,
+        checkpoint=3,
+        as_of=AS_OF,
+        assertions=[duplicate, evidence[0]],
+    )
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+        assert conn.scalar(
+            text(
+                "SELECT effects->'source_accounting' FROM mdm_v2.batch WHERE batch_id='native-company-duplicates'"
+            )
+        ) == {
+            "total": 2,
+            "normalized": 2,
+            "deferred": 0,
+        }
+    assert (
+        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
+        == "Synthetic Company"
+    )
+    assert sum(r["open"] for r in documents(database, "review").values()) == 6

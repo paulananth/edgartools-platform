@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from functools import partial
 from pathlib import Path
@@ -11,11 +12,23 @@ from uuid import UUID
 
 from sqlalchemy import create_engine, event, text
 
-from .adapters import normalize
+from .adapters import UnsupportedRecord, normalize
 from .bookkeeping import RunCoordinator
+from .evidence import deferred_record
 from .merge import MergeStage
 from .publication import JournalMirror, LocalContractSink
 from .store import Conflict, Store
+
+
+def _reject_json_constant(value):
+    raise ValueError(f"Non-JSON numeric constant: {value}")
+
+
+def _finite_json_float(value):
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError("JSON number exceeds finite float range")
+    return result
 
 
 def engine_from_env(name: str, *, restricted: bool = True):
@@ -49,8 +62,19 @@ def read_manifest(path: str) -> tuple[dict, str, Path]:
 
 
 def batch_assertions(batch: dict, root: Path, store: Store) -> list[dict]:
+    assertions, deferred = batch_evidence(batch, root, store)
+    if deferred:
+        raise Conflict("Deferred records require the full batch_evidence contract")
+    return assertions
+
+
+def batch_evidence(
+    batch: dict, root: Path, store: Store
+) -> tuple[list[dict], list[dict]]:
     if "input" not in batch:
-        return batch.get("assertions", [])
+        return batch.get("assertions", []), batch.get("deferred", [])
+    if batch.get("assertions") or batch.get("deferred"):
+        raise ValueError("A source batch cannot mix file input and inline evidence")
     spec = batch["input"]
     file = (root / spec["path"]).resolve()
     if not file.is_relative_to(root):
@@ -70,26 +94,70 @@ def batch_assertions(batch: dict, root: Path, store: Store) -> list[dict]:
     if contract is None:
         raise Conflict("Unregistered dataset")
     result = []
-    for line in raw.splitlines():
+    deferred = []
+    retains_deferred = contract["adapter"].get("retain_deferred", False)
+    if retains_deferred and type(spec.get("record_count")) is not int:
+        raise ValueError("A source member requires an exact record_count")
+    for ordinal, line in enumerate(raw.splitlines(), 1):
         if not line.strip():
             continue
-        if len(result) >= 1000:
+        if len(result) + len(deferred) >= 1000:
             raise ValueError(
                 "Source member exceeds bounded 1000-record batch; partition the manifest"
             )
-        result.append(
-            normalize(
-                json.loads(line),
-                source_code=spec["source_code"],
-                contract=contract,
-                publication={
-                    **spec["publication"],
-                    "artifact_sha256": spec["sha256"],
-                    "member": spec["path"],
-                },
+        publication = {
+            **spec["publication"],
+            "artifact_sha256": spec["sha256"],
+            "member": spec["path"],
+        }
+        if retains_deferred:
+            publication["record_locator"] = f"{spec['sha256']}:line:{ordinal}"
+        try:
+            row = json.loads(
+                line,
+                parse_constant=_reject_json_constant,
+                parse_float=_finite_json_float,
             )
-        )
-    return result
+        except (ValueError, UnicodeDecodeError):
+            # The immutable file remains authoritative for malformed bytes.
+            import base64
+
+            row = {"raw_bytes_base64": base64.b64encode(line).decode("ascii")}
+            problem = "invalid_json_record"
+        else:
+            problem = None
+        try:
+            if problem:
+                raise UnsupportedRecord(problem)
+            result.append(
+                normalize(
+                    row,
+                    source_code=spec["source_code"],
+                    contract=contract,
+                    publication=publication,
+                )
+            )
+        except UnsupportedRecord as exc:
+            if not retains_deferred:
+                raise
+            deferred.append(
+                deferred_record(
+                    source_code=spec["source_code"],
+                    publication_key=publication["publication_key"],
+                    record_locator=publication["record_locator"],
+                    schema_version=contract["schema_version"],
+                    reason=exc.reason,
+                    raw_record=row,
+                    provenance={
+                        "artifact_sha256": spec["sha256"],
+                        "member": spec["path"],
+                        "adapter_version": contract["adapter"]["version"],
+                    },
+                )
+            )
+    if "record_count" in spec and len(result) + len(deferred) != spec["record_count"]:
+        raise Conflict("Source member record_count mismatch")
+    return result, deferred
 
 
 def execute_manifest(
@@ -141,13 +209,13 @@ def execute_manifest(
             continue
         if not prerequisites <= observed:
             raise Conflict("Complete preceding manifest batches before this stage")
-        assertions = batch_assertions(batch, root, store)
+        assertions, deferred = batch_evidence(batch, root, store)
         cost = (
             0
             if batch["batch_id"] in retained
             else max(
                 1,
-                len(assertions),
+                len(assertions) + len(deferred),
                 len(batch.get("decisions", [])),
                 len(batch.get("identities", [])),
             )
@@ -168,6 +236,7 @@ def execute_manifest(
             "identities": batch.get("identities", []),
             "decisions": batch.get("decisions", []),
             "preview": preview,
+            "deferred": deferred,
         }
         if preview:
             result = MergeStage(store).apply(**command)
@@ -192,6 +261,19 @@ def execute_manifest(
 
 
 def handle(command: str, args) -> int:
+    if command == "prepare-clean-company":
+        from .company_source import prepare_company_bundle
+
+        report = prepare_company_bundle(
+            landing_root=args.landing_root,
+            landing_manifest=args.landing_manifest,
+            output=args.output,
+            limit=args.limit,
+            as_of=args.as_of,
+            revision=args.revision,
+        )
+        print(json.dumps(report, sort_keys=True))
+        return 0
     supported = {
         "mastering",
         "apply-decisions",

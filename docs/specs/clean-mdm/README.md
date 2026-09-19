@@ -6,6 +6,9 @@ No hosted qualification or consumer cutover has occurred.
 Inspected code: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`, fetched from
 `origin/main` on 2026-09-17. No production state is asserted by this record.
 
+For current implementation, verification, ownership and next steps, start with
+[state of the build](state-of-build.md). Historical evidence below remains dated.
+
 ## Read in delivery order
 
 1. [Domain model](domain-model.md) and [pipeline inventory](pipeline-inventory.md).
