@@ -25,7 +25,8 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   Draft specifications are proposals, never evidence of implementation.
 - Worktree: `../edgartools-platform-clean-mdm`; branch: `codex/clean-mdm`.
 - Local PostgreSQL 16 worktree: `../edgartools-platform-grok-local-postgres`;
-  branch: `grok/clean-mdm-local-postgres`.
+  DSN/provision branch: `grok/clean-mdm-local-postgres` (PR #655);
+  bounded local mastering branch: `grok/local-mdm-bounded-mastering`.
 - Local Postgres DSNs, start commands, and last observed state:
   [local-postgres.md](local-postgres.md).
 - Inspected base: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`.
