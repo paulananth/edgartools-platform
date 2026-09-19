@@ -79,11 +79,14 @@ Contract as v1 SoE.
   + publisher write user, set `0.0.0.0/0`.
 - Implementation: separate publisher after READY (not this map unless a
   later Notes override). Use `/to-tickets` to slice that work.
-- SPARQL/RDF as an alternative or complement to MongoDB for this layer:
-  scope (whole projection vs. relationship-edges-only), comparison set
-  (SPARQL-only vs. open survey of other serving shapes), and whether
-  fail-closed watermark semantics must be preserved exactly or may be
-  redesigned RDF-native — grilling in progress, not yet sharp enough to
+- Scope locked 2026-09-19: SPARQL/RDF evaluated for the relationship-edge
+  half only (`IS_INSIDER`/`EMPLOYED_BY`), not the tabular features; open
+  survey, not SPARQL-only; fail-closed *outcome* required, mechanism may
+  be RDF-native. See
+  [Survey free/public serving options for the v2 relationship-edge layer](issues/09-survey-relationship-edge-serving-options.md)
+  (claimed, in progress).
+  Which option wins, and whether that reopens ADR 0009, is a follow-on
+  grilling ticket once that survey lands — not yet sharp enough to
   ticket.
 
 ## Out of scope
