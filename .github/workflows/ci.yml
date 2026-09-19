@@ -100,12 +100,15 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
-      # mdm-runtime, not the broader mdm extra the sibling jobs above use:
-      # every file under tests/integration/ only needs psycopg2/sqlalchemy/
-      # the warehouse-runtime surface, never fastapi/sqladmin/splink (the
-      # mdm-only extras) -- verified against these tests' actual imports.
+      # Clean MDM exercises the authenticated API as well as database runtime
+      # behavior. Match the locked local acceptance dependencies.
       - name: Install dependencies
-        run: uv sync --extra mdm-runtime
+        run: uv sync --frozen --extra s3 --extra mdm-runtime --extra mdm
+
+      # Fixtures inspect the image before starting their disposable databases.
+      # Provision it explicitly so a fresh runner cannot skip/fail setup.
+      - name: Pull PostgreSQL 16 test image
+        run: docker pull postgres:16-alpine
 
       - name: Run integration tests
         run: uv run pytest tests/integration/ -v --tb=short
