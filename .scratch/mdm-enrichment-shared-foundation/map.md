@@ -85,6 +85,16 @@ had never itself been through a decision process.
   — reuse `dataset_path_catalog.py` and the existing bootstrap-SQL
   native-pull pattern; add one manifest artifact at the publication level,
   above today's per-artifact catalog rows.
+- [Define the publication-aggregate schema (table names, keys, FKs)](issues/05-define-publication-aggregate-schema.md)
+  — **no new tables anywhere.** A publication is *derived* from existing
+  `change_ledger.source_revision` rows sharing `(source_family,
+  source_native_revision)` (manifest file included); "complete" is a
+  read-time precondition, not stored status. Five of the GoF review's seven
+  records already exist as Clean MDM's tables; the consumer candidate is the
+  pre-merge staging proposal already handed over; the checkpoint key needs a
+  per-family amendment, handed to Codex as a proposal (ticket 08). There is
+  one MDM and one set of MDM tables: the spec points at Clean MDM's, cites
+  the defining migration, and never restates them.
 
 ## Not yet specified
 

@@ -1,7 +1,7 @@
 # Define the publication-aggregate schema (table names, keys, FKs)
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none (01 and 02 resolved)
 
 ## Question
@@ -47,3 +47,50 @@ So the open decisions are:
    `mdm_v2` (another Codex-owned change)?
 3. **How the spec refers to the five existing `mdm_v2` records** — restate
    them as a versioned contract the foundation depends on, or redefine them?
+
+## Comments
+
+- 2026-09-19, Q1 (checkpoint key): operator chose **(a)** — this map
+  specifies the required key and hands it to Codex as a proposal; it does
+  not decide `mdm_v2` DDL.
+- 2026-09-19, Q2 (publication inventory): first posed as two new
+  `change_ledger` tables (`source_publication` + `source_publication_member`).
+  Operator challenged: "why GLEIF cannot be verified one file at a time, why
+  complicate for no advantage?" Correct challenge — per-file verification
+  already works; the only real coupling is *meaning*, not verification (an
+  RR "no parent row" is ambiguous until the same date's REPEX file is also
+  present — GLEIF Company ticket 07's "coordinate RR with REPEX"). That is
+  a read-time precondition, not stored state. Option (a) withdrawn; revised
+  Q2 ("derive completeness from existing rows, zero new tables") accepted.
+- 2026-09-19, Q3 (how the spec refers to Clean MDM's tables): operator —
+  "i did not approve mdm_v2; if it is the new mdm so be it, there is one
+  mdm set of tables." Accepted **(a)**: point at them, never redefine.
+  Note for the spec: `mdm_v2` is Clean MDM's *schema name* (chosen by that
+  build to sit beside legacy until legacy is dropped), not an operator
+  decision — the spec should say "the MDM tables" and cite the defining
+  Clean MDM migration, not lean on the `_v2` suffix as if it were a second
+  MDM.
+
+## Answer
+
+**No new tables anywhere.** The 7-record boundary resolves to existing
+rows plus one proposal:
+
+| GoF record | Resolution |
+| --- | --- |
+| Source publication | **Derived**, not stored: the set of `change_ledger.source_revision` rows sharing `(source_family, source_native_revision)` — one row per file, including the ticket-04 manifest file itself. "Complete" = the manifest row is present and every member it lists has a verified row. Enforced as a read-time precondition in the consumer (the Golden Copy consumer runs only when RR and REPEX for the same publication date both have verified rows), never as a stored status. Supersession = newer publication date. |
+| Publication artifact | `change_ledger.source_revision`, as-is. |
+| Source record version | The MDM assertion table (Clean MDM migration 023), as-is. |
+| Consumer candidate | The [pre-merge staging proposal](../../clean-mdm-premerge-staging-proposal/map.md) already handed to Codex — not re-decided here. |
+| Stewardship decision | The MDM decision table (023), as-is. |
+| Accepted binding/version | The MDM identity + projection tables (023), as-is. |
+| Consumer checkpoint | The MDM checkpoint table (023) **as amended by a proposal this map hands to Codex**: key `(consumer, source_family, publication_family)` with committed publication and continuity proof, per GoF item 3 and this map's tickets 02/03. Clean MDM's own `recovery.md` already describes that shape; the DDL lags it. Writing and handing over that proposal is [ticket 08](08-write-checkpoint-key-proposal-for-clean-mdm.md). |
+
+**How the spec refers to MDM tables**: there is one MDM and one set of MDM
+tables — Clean MDM's. The spec points at each table by name and cites the
+Clean MDM migration file (and its checksum, so drift is visible) that
+defines it. It never restates their columns. `mdm_v2` is that build's
+schema name, not a second MDM.
+
+Root run: confirmed a third time — `023_clean_mdm.sql` line 2 and `026`
+line 1 both bind `run_id` to the existing Bookkeeping `pipeline_run`.

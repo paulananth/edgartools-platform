@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 05-define-publication-aggregate-schema.md
+Blocked by: none (05 resolved)
 
 ## Question
 
