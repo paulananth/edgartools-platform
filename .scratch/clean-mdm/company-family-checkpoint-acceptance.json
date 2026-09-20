@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-20",
+  "base": "f3f924a9",
+  "upstream": "dc55bf1d",
+  "scope": "independent family checkpoints and existing manifest routing; not source completeness or Company matching qualification",
+  "environment": "disposable PostgreSQL 16 and restricted application role",
+  "tests": 47,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "seconds": 67.229,
+  "report": ".scratch/clean-mdm/company-family-checkpoint-acceptance.xml",
+  "report_sha256": "e274a9ff10be8a66b7798beaa4de69f429b02d49deffe68e425ff0a8bf19c078",
+  "source_sha256": {
+    "edgar_warehouse/mdm/clean/cli.py": "80540c8b12614a6f8260ad02ee394d3b0725e137fbee552f93e8433f869b558c",
+    "edgar_warehouse/mdm/clean/merge.py": "24934a439332f9a516ce0d7aa00b98e68d99d82c120974ac535ee5ba0ba341a9",
+    "edgar_warehouse/mdm/clean/store.py": "81c28b9df925158f0f7c20f3c29d59a170a4a383ed7c7a49eb38f32b79e09d84",
+    "edgar_warehouse/mdm/migrations/029_clean_mdm_family_checkpoint.sql": "5614a1aa0610236952271ab5b5c2ccac172731536c5ec5c79c44e16354322472",
+    "tests/integration/test_clean_mdm_postgres.py": "9576702e08705df62de0c164ce698f7fda67f9cafec3770c4d1ee0716133398b"
+  }
+}

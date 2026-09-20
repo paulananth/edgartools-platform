@@ -11,6 +11,12 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Notes
 
+- 2026-09-20: [Company pickup from Claude](../handover/2026-09-20-codex-company-enrichment-reconciliation.md).
+  Rebased onto `dc55bf1d`; assessment foundation preserved as `f3f924a9`.
+  [Ticket 10](issues/10-build-family-checkpoints.md) is verified (47 tests, no skips).
+  Next: [ticket 11](issues/11-verify-enrichment-publication-inventory.md), source
+  inventory/continuity verification before GLEIF consumer integration.
+
 - Current design review: [Claude handoff reconciliation](../../docs/specs/clean-mdm/design-reconciliation-2026-09-19.md).
   [Company Q1–Q13](../../docs/specs/clean-mdm/company-policy.md) are accepted.
   [Gate 08](issues/08-confirm-company-candidate-assessment.md) is accepted:
@@ -38,7 +44,7 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   Draft specifications are proposals, never evidence of implementation.
 - Interview rounds contain at most three questions (user instruction, 2026-09-18).
 - Current worktree: `../edgartools-platform-sec-gleif-company`; branch:
-  `codex/sec-gleif-company`, rebased onto `origin/main` at `b87fc05a`.
+  `codex/sec-gleif-company`, rebased onto `origin/main` at `dc55bf1d`.
   PR #657 merged the earlier integration branch at `e2807e52`, preserving
   Grok PRs #655/#656. PRs #658/#659 supply the new query ADR and Claude handoff.
   Earlier worktrees remain protected rollback anchors.

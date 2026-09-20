@@ -137,6 +137,7 @@ def initialize_database(admin, app):
                 {
                     "provider": "test",
                     "family": "fixture",
+                    "publication_families": ["golden_copy", "opencorporates"],
                     "schema_version": "1",
                     "record_key": "key",
                     "publication_key": "version",
@@ -2221,3 +2222,222 @@ def test_assessment_resume_uses_timezone_independent_dependency_snapshot(databas
         assert result["generation"] == 2
     finally:
         other.dispose()
+
+
+def family_metadata(family, publication="p1"):
+    # Synthetic proof checks persistence/fencing, not live source completeness.
+    return {
+        "source_family": "fixture",
+        "publication_family": family,
+        "committed_publication": publication,
+        "continuity_proof": {"rule_version": "fixture-1", "inventory_digest": "a" * 64},
+    }
+
+
+def test_family_checkpoints_isolate_progress_and_atomic_failure(database):
+    stage = MergeStage(Store(database.application))
+    first = assessment_command(database, **family_metadata("golden_copy"))
+    candidate = stage.assess(**first)
+    other = {
+        **first,
+        **family_metadata("opencorporates"),
+        "batch_id": "mapping",
+        "assertions": [],
+        "identities": [],
+        "decisions": [],
+    }
+    stage.apply(**other)
+    # Same consumer, independent family: staged Golden Copy remains usable.
+    stage.apply_assessment(candidate["assessment_id"], run_id=first["run_id"])
+    with database.application.connect() as conn:
+        state = conn.execute(
+            text(
+                "SELECT publication_family,position,committed_publication,continuity_proof FROM mdm_v2.checkpoint ORDER BY publication_family"
+            )
+        ).all()
+        assert [(r[0], r[1], r[2]) for r in state] == [
+            ("golden_copy", 1, "p1"),
+            ("opencorporates", 1, "p1"),
+        ]
+        assert all(r[3] == first["continuity_proof"] for r in state)
+    with pytest.raises(DBAPIError, match="checkpoint"):
+        stage.apply(**{**other, "batch_id": "stale-mapping", "checkpoint": 2})
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
+        assert conn.execute(
+            text("SELECT position FROM mdm_v2.checkpoint ORDER BY publication_family")
+        ).scalars().all() == [1, 1]
+    stage.apply(
+        **{
+            **other,
+            **family_metadata("opencorporates", "p2"),
+            "batch_id": "mapping-2",
+            "expected_checkpoint": 1,
+            "checkpoint": 2,
+        }
+    )
+    with database.application.connect() as conn:
+        assert conn.execute(
+            text("SELECT position FROM mdm_v2.checkpoint ORDER BY publication_family")
+        ).scalars().all() == [1, 2]
+    assert stage.apply(**other)["duplicate"]
+
+
+def test_family_checkpoint_keeps_legacy_cursor_and_guards_partial_metadata(database):
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database, assertions=[], identities=[], decisions=[])
+    stage.apply(**command)
+    stage.apply(**{**command, **family_metadata("golden_copy"), "batch_id": "scoped"})
+    with database.application.connect() as conn:
+        assert conn.execute(
+            text(
+                "SELECT source_family,publication_family,position FROM mdm_v2.checkpoint ORDER BY source_family"
+            )
+        ).all() == [("", "", 1), ("fixture", "golden_copy", 1)]
+    with pytest.raises(ValueError, match="both families"):
+        stage.apply(**{**command, "source_family": "fixture"})
+    with pytest.raises(DBAPIError, match="Unknown publication family"):
+        stage.apply(
+            **{
+                **command,
+                **family_metadata("unregistered"),
+                "batch_id": "unknown-family",
+            }
+        )
+    with (
+        pytest.raises(DBAPIError, match="checkpoint_scope"),
+        database.application.begin() as conn,
+    ):
+        stage.store.commit(
+            conn,
+            request(
+                database,
+                batch_id="missing-proof",
+                expected_generation=2,
+                source_family="fixture",
+                publication_family="golden_copy",
+                committed_publication="p1",
+            ),
+            command["run_id"],
+        )
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
+
+
+def test_family_checkpoint_upgrade_preserves_old_batch_and_pending_assessment(database):
+    # Recreate 028 only in this disposable test database, then migrate normally.
+    with database.admin.begin() as conn:
+        policy_body = conn.scalar(
+            text("SELECT body FROM mdm_v2.policy WHERE digest=:d"),
+            {"d": database.policy},
+        )
+        datasets = conn.execute(
+            text("SELECT source_code,registry_version,body FROM mdm_v2.dataset")
+        ).all()
+        conn.execute(text("DROP SCHEMA mdm_v2 CASCADE"))
+        directory = Path(__file__).parents[2] / "edgar_warehouse/mdm/migrations"
+        for name in [
+            "023_clean_mdm.sql",
+            "025_clean_mdm_indexes.sql",
+            "026_clean_mdm_attempts.sql",
+            "027_clean_mdm_deferred.sql",
+            "028_clean_mdm_assessment.sql",
+        ]:
+            raw = (directory / name).read_text()
+            conn.execute(text(raw))
+            conn.execute(
+                text("INSERT INTO mdm_v2.migration(name,checksum) VALUES(:n,:h)"),
+                {"n": name, "h": hashlib.sha256(raw.encode()).hexdigest()},
+            )
+        register_policy(conn, policy_body)
+        for code, registry, body in datasets:
+            from edgar_warehouse.mdm.clean.store import canonical
+
+            conn.execute(
+                text("INSERT INTO mdm_v2.dataset VALUES(:c,:v,CAST(:b AS jsonb))"),
+                {"c": code, "v": registry, "b": canonical(body)},
+            )
+        conn.execute(text("GRANT USAGE ON SCHEMA mdm_v2 TO clean_application"))
+        conn.execute(
+            text("GRANT SELECT ON ALL TABLES IN SCHEMA mdm_v2 TO clean_application")
+        )
+        for signature in [
+            "commit_batch(text,uuid)",
+            "preview_batch(text,uuid)",
+            "record_assessment(text,uuid)",
+            "assessment_snapshot(jsonb)",
+        ]:
+            conn.execute(
+                text(
+                    f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO clean_application"
+                )
+            )
+    store = Store(database.application)
+    old_request = request(database)
+    run = str(uuid4())
+    with database.application.begin() as conn:
+        store.commit(conn, old_request, run)
+    command = assessment_command(database)
+    stage = MergeStage(store)
+    candidate = stage.assess(**command)
+    migrate(database.admin, application_role="clean_application")
+    with database.application.begin() as conn:
+        assert store.commit(conn, old_request, run)["duplicate"]
+    assert (
+        stage.apply_assessment(candidate["assessment_id"], run_id=run)["generation"]
+        == 2
+    )
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.checkpoint WHERE source_family='' AND publication_family=''"
+                )
+            )
+            == 2
+        )
+
+
+def test_manifest_cli_passes_family_scope_to_atomic_commit(
+    database, command_databases, tmp_path
+):
+    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+    from edgar_warehouse.mdm.clean.cli import execute_manifest
+
+    manifest = {
+        "contract_version": 2,
+        "policy_digest": database.policy,
+        "as_of": AS_OF,
+        "batches": [
+            {
+                "batch_id": family,
+                "stage": "mastering",
+                "consumer": "company",
+                "expected_checkpoint": 0,
+                "checkpoint": 1,
+                **family_metadata(family),
+            }
+            for family in ["golden_copy", "opencorporates"]
+        ],
+    }
+    path = tmp_path / "families.json"
+    path.write_text(json.dumps(manifest))
+    store = Store(database.application)
+    result = execute_manifest(
+        store,
+        RunCoordinator(command_databases[0], store),
+        path=str(path),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=2,
+    )
+    assert result["observed_batches"] == 2
+    assert not result[
+        "end_to_end_complete"
+    ]  # Required publication receipts remain absent.
+    with database.application.connect() as conn:
+        assert conn.execute(
+            text(
+                "SELECT publication_family FROM mdm_v2.checkpoint ORDER BY publication_family"
+            )
+        ).scalars().all() == ["golden_copy", "opencorporates"]

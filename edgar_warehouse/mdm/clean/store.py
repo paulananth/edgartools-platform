@@ -87,6 +87,7 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "026_clean_mdm_attempts.sql",
             "027_clean_mdm_deferred.sql",
             "028_clean_mdm_assessment.sql",
+            "029_clean_mdm_family_checkpoint.sql",
         ):
             extra = path.with_name(name)
             extra_source = extra.read_text()

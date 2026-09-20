@@ -4,7 +4,21 @@ Checkpoint: 2026-09-19. This is a local development handoff, not a release or
 cutover approval. The shared core and first native Company preparation path
 are implemented; the complete redesign remains in progress.
 
-## Current continuation — after merge and Claude handoff
+## Current continuation — Company pickup on 2026-09-20
+
+Rebased onto `origin/main` `dc55bf1d`; Company scope remains in
+`codex/sec-gleif-company`. [Latest pickup reconciliation](../../../.scratch/handover/2026-09-20-codex-company-enrichment-reconciliation.md)
+records the disposition of Claude’s proposals and differences from the newer
+accepted Company policy. Assessment work is preserved as `f3f924a9`.
+Migration 029 adds family-scoped cursors and existing-manifest support; see
+[family checkpoints](family-checkpoints.md). All 47 current Clean MDM PostgreSQL
+and native Company checks passed without skips; [evidence](../../../.scratch/clean-mdm/company-family-checkpoint-acceptance.json)
+pins the tested files. The next prerequisite is
+[ticket 11](../../../.scratch/clean-mdm/issues/11-verify-enrichment-publication-inventory.md),
+immutable source inventory/continuity verification. Neither checkpoint metadata
+nor an assessment proves GLEIF source completeness or matching qualification.
+
+## Prior continuation — after merge and Claude handoff
 
 PR #657 merged as `e2807e52` after all seven CI checks passed, including all
 83 PostgreSQL integration tests without skips. The CI-image prerequisite and
