@@ -95,6 +95,14 @@ had never itself been through a decision process.
   per-family amendment, handed to Codex as a proposal (ticket 08). There is
   one MDM and one set of MDM tables: the spec points at Clean MDM's, cites
   the defining migration, and never restates them.
+- [Define the exact transaction boundary between accepted decision, MDM projection, and checkpoint advancement](issues/06-define-consumer-checkpoint-transaction-boundary.md)
+  — two transactions, fixed order, nothing spans databases: capture commits
+  Logical Source Revisions in `change_ledger`; the consumer checks
+  publication completeness against those immutable rows; then one
+  `commit_batch` call (Clean MDM's own boundary, adopted verbatim) writes
+  decision + projection + Commit Evidence + Checkpoint + publication intents
+  or nothing, with the consumed publication recorded in the checkpoint row.
+  Bookkeeping observes afterward.
 
 ## Not yet specified
 
