@@ -193,8 +193,14 @@ before the commit.
 generalized from GLEIF Company ticket 14:
 
 - Every publication family proves continuity through its own sequence/hash
-  chain. Continuity-proof fields are declared per family in
-  `change_ledger.source_registry_coverage`, not hardcoded.
+  chain. The family's `change_ledger.source_registry_coverage.completeness_policy`
+  (migration 014) **names** its continuity rule; it is a text policy name,
+  not a field set. *Open (found in documentation review, 2026-09-19)*: where
+  the rule's field definitions live. Recommended: the versioned dataset
+  contract in `mdm_v2.dataset.body`, which Clean MDM's `source-evidence.md`
+  already scopes to "publication key/order rules, time semantics, declared
+  completeness scope" — one home, versioned by `registry_version`, no new
+  column anywhere. Not decided here.
 - Recovery order: **(1)** the smallest delta span that closes the gap and
   still proves continuity; **(2)** if none does, a full
   Golden-Copy-equivalent reconciliation for that family only. A sibling
@@ -318,8 +324,25 @@ implementation — only when all hold:
    than one family may not until the per-family key exists.
 3. Every *Open* item above is either decided or explicitly assigned to a
    named cross-cutting workstream with a link.
-4. The parent program and GLEIF Company maps have been re-audited against
-   the legacy-decommission directive (flagged there, not yet done).
+4. ~~The parent program and GLEIF Company maps have been re-audited against
+   the legacy-decommission directive.~~ **Done 2026-09-19.** Of 28 + 16
+   resolved tickets, only program tickets 10 (Branch) and 11 (Government
+   Entity) and workstreams 02/04/06 name a legacy mechanism
+   (`mdm_entity.entity_type` plus a per-domain `mdm_*` table); each decision
+   stands and each mechanism is superseded by `mdm_v2.identity.kind` +
+   `projection`, annotated in place. Every other ticket is evidence-level.
+
+## Verification log
+
+- 2026-09-19, documentation review (this spec and the Company consumer
+  spec against their maps and the repository): five findings, all applied
+  in the same change — the continuity-proof home above was over-specified
+  and is now *Open*; `source_registry_coverage` is migration 014 not 013;
+  the Company spec's consolidation figures were coarse and are now exact;
+  the `gleif.*` dataset codes are proposed in Clean MDM's spec, not
+  installed; gate 4 closed as recorded. Checksums, role names, table and
+  column names, relationship type names, cohort counts, and every cited
+  file were verified present and as stated.
 
 ## Non-goals
 

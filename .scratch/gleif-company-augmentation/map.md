@@ -15,18 +15,15 @@ enrichment.
 
 ## Notes
 
-- **Flagged 2026-09-19, not yet propagated below**: legacy MDM is being
-  decommissioned; Clean MDM (`mdm_v2`) is the sole MDM target going forward
-  — locked on the
-  [Shared Enrichment Foundation map](../mdm-enrichment-shared-foundation/map.md),
-  which [ticket 17](issues/17-write-and-verify-gleif-mdm-spec.md) is blocked
-  on. When `spec.md` is finally written, its identity/relationship contract
-  targets Clean MDM's `mdm_v2` schema and Merge Stage
-  (`edgar_warehouse/mdm/clean/`), not legacy `edgar_warehouse/mdm/`. The
-  decisions already resolved below (source authority, cadence, field
-  selection, first delivery slice) are evidence-level and source-side —
-  they don't name a target MDM schema — so they likely survive unchanged,
-  but this hasn't been re-checked ticket-by-ticket.
+- **Locked 2026-09-19, re-audited the same day**: legacy MDM is being
+  decommissioned; Clean MDM (`mdm_v2`) is the sole MDM target — locked on the
+  [Shared Enrichment Foundation map](../mdm-enrichment-shared-foundation/map.md).
+  All 16 resolved tickets re-checked: every one is evidence-level and
+  source-side; none names a legacy table or module. The only legacy names
+  that appear ([relationship-type routing](issues/10-decide-gleif-relationship-type-routing.md)'s
+  `HAS_PARENT_COMPANY`/`MANAGES_FUND`) appear as things *not* to reuse.
+  [`spec.md`](spec.md) binds these decisions to `mdm_v2` and the Merge
+  Stage (`edgar_warehouse/mdm/clean/`).
 
 - Parent program: [MDM Enrichment Program](../mdm-enrichment-program/map.md).
   This map owns the evidence and first Company consumer; later consumers and

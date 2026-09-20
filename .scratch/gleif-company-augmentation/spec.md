@@ -119,7 +119,7 @@ rows:
 | Concept | Where |
 | --- | --- |
 | Captured files | `change_ledger.source_revision`, one row per file (L1, RR, REPEX, manifest), `source_family = 'gleif'` |
-| Dataset contracts | `mdm_v2.dataset` rows `gleif.lei`, `gleif.relationship`, `gleif.reporting_exception`, `gleif.opencorporates_lei` (names per Clean MDM's `source-evidence.md`) |
+| Dataset contracts | `mdm_v2.dataset` rows `gleif.lei`, `gleif.relationship`, `gleif.reporting_exception`, `gleif.opencorporates_lei` (codes *proposed* in Clean MDM's `source-evidence.md` GLEIF table, not yet installed rows) |
 | Every Level 1 / RR / REPEX record, source grain | `mdm_v2.assertion` keyed `(source_code, record_key = LEI or RR key, publication_key)` |
 | Company-to-LEI binding | `mdm_v2.decision` (`bind` / `revoke` / `override`) |
 | Company | `mdm_v2.identity` (`kind = 'company'`) + `mdm_v2.projection` |
@@ -162,9 +162,11 @@ different source, direction, and meaning. Consolidation is **never**
 interpreted as ownership, control, or a generic parent. A missing local
 endpoint blocks the edge; no generic entity is created. A reporting
 exception is retained with its reason and never read as "no parent."
-Measured baseline: 30 of 308 accepted companies have consolidation
-evidence, 262 have typed exceptions
-([ticket 04](issues/04-measure-accounting-parent-evidence.md)).
+Measured baseline ([ticket 04](issues/04-measure-accounting-parent-evidence.md)):
+of 308 accepted companies, 23 have both direct and ultimate consolidation
+records, 7 have an ultimate record plus a direct reporting exception, 255
+have both exception categories, 23 have neither; only 3 relationship
+records have both endpoints accepted inside the cohort.
 
 ## Temporal behavior
 

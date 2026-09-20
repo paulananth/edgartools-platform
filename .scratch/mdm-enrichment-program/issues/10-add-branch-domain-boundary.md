@@ -28,3 +28,13 @@ an extension of the current separate-domain model, not a multi-role identity
 redesign.
 
 Accepted by the user during the 2026-09-13 Wayfinder session.
+
+## Comments
+
+- 2026-09-19, decommission re-audit (Shared Foundation spec release gate 4):
+  the **decision stands** — a Branch is its own identity, never a Company/Adviser/head-office ID. The **mechanism** named above
+  (`mdm_entity.entity_type` plus a per-domain `mdm_branch` table) is legacy MDM's
+  and is superseded: legacy MDM is being decommissioned, and Clean MDM's
+  `mdm_v2.identity.kind` already admits `branch` with the domain projection
+  in `mdm_v2.projection`. No new table. See
+  `docs/specs/mdm-enrichment/shared-foundation.md`, "Governing directive".
