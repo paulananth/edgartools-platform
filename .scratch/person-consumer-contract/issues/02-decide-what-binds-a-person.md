@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 01-measure-name-only-source-overlap.md
+Blocked by: none (01 resolved with a measured gap; see ticket 09)
 
 ## Question
 

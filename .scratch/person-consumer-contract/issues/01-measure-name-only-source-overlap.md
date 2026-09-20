@@ -1,7 +1,7 @@
 # Measure how far name-only Person sources can be bound deterministically
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -26,3 +26,22 @@ against a frozen extract. Record the query, the run identity, row counts,
 and SHA-256 of the result set, the way
 `.scratch/gleif-company-augmentation/research/01-*` did. **Needs operator
 go-ahead before running against prod.**
+
+## Answer
+
+Partially measured 2026-09-19; findings in
+[`research/01-name-only-source-overlap.md`](../research/01-name-only-source-overlap.md).
+Prod Snowflake is suspended ("free trial has ended"), and the S3 landing
+prefix is empty, so `sec_ownership_reporting_owner` was unreachable; the
+name-only sources were measured from the latest full-snapshot S3 exports.
+
+- Proxy `exec_name` is 47% role text — a parser defect
+  (ticket 10), not a matching question. Proxy cannot bind until fixed.
+- 8-K names are 97.7% clean; `(issuer CIK, normalized name)` is the only
+  deterministic key; 398 of 10,042 plausible names appear under more than
+  one issuer, so a name never binds alone or across issuers.
+- Reporting-owner-side questions (1 and 3) remain unmeasured → ticket 09.
+
+Ticket 02 is unblocked on these facts: the reporting-owner numbers would
+refine a binding rule's expected hit rate, not change which evidence is
+allowed to bind.

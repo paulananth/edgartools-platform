@@ -1,0 +1,143 @@
+{
+ "rows": {
+  "executive_record": 14755,
+  "sec_employment_event": 7878,
+  "ownership_holdings": 42518,
+  "ownership_activity": 81455
+ },
+ "proxy_distinct_issuer_name": 8091,
+ "proxy_distinct_names": 6205,
+ "proxy_names_under_multiple_issuers": 187,
+ "proxy_names_under_multiple_issuers_examples": [
+  [
+   "chief financial officer",
+   203
+  ],
+  [
+   "chief executive officer",
+   182
+  ],
+  [
+   "president and",
+   140
+  ],
+  [
+   "former",
+   129
+  ],
+  [
+   "executive vice",
+   84
+  ]
+ ],
+ "proxy_issuers": 903,
+ "event_distinct_issuer_name": 7003,
+ "event_distinct_names": 6270,
+ "event_names_under_multiple_issuers": 383,
+ "event_issuers": 1742,
+ "event_types": [
+  [
+   "appointment",
+   4695
+  ],
+  [
+   "departure",
+   3181
+  ],
+  [
+   "compensation_change",
+   2
+  ]
+ ],
+ "event_pairs_matching_proxy_same_issuer": 209,
+ "event_pairs_matching_proxy_name_only_diff_issuer": 7699,
+ "ownership_distinct_party_keys": 8944,
+ "ownership_rows_with_null_party_key": 0,
+ "ownership_issuers": 4364,
+ "proxy_roles_top": [
+  [
+   null,
+   8454
+  ],
+  [
+   "President",
+   1445
+  ],
+  [
+   "CEO",
+   1325
+  ],
+  [
+   "CFO",
+   1131
+  ],
+  [
+   "General Counsel",
+   402
+  ],
+  [
+   "COO",
+   324
+  ],
+  [
+   "EVP",
+   179
+  ],
+  [
+   "CLO",
+   116
+  ]
+ ],
+ "event_roles_top": [
+  [
+   "Director",
+   2661
+  ],
+  [
+   null,
+   2637
+  ],
+  [
+   "a member",
+   246
+  ],
+  [
+   "a director",
+   197
+  ],
+  [
+   "Chief Financial Officer",
+   137
+  ],
+  [
+   "President",
+   108
+  ],
+  [
+   "directors",
+   84
+  ],
+  [
+   "Chief Executive Officer",
+   82
+  ]
+ ],
+ "inputs": {
+  "ownership_activity": {
+   "s3_key": "warehouse/artifacts/snowflake_exports/ownership_activity/business_date=2026-09-06/run_id=50c0407f-9bad-8ea5-47d7-10ac5bb388be_e7ad4bb4-1321-81a0-e1d3-d211ab0d66d1/ownership_activity.parquet",
+   "sha256": "065f9f246e11d395fa10aac28b1fab482de8bc203be3badfe9fee350ad1441be"
+  },
+  "executive_record": {
+   "s3_key": "warehouse/artifacts/snowflake_exports/executive_record/business_date=2026-09-06/run_id=50c0407f-9bad-8ea5-47d7-10ac5bb388be_e7ad4bb4-1321-81a0-e1d3-d211ab0d66d1/executive_record.parquet",
+   "sha256": "b6b1c419aca75f6f031501ada38f14645f4ca04cbd3371375f8d907cbcc3a93e"
+  },
+  "sec_employment_event": {
+   "s3_key": "warehouse/artifacts/snowflake_exports/sec_employment_event/business_date=2026-09-14/run_id=daily-incremental-ticket17-verify-1789514832/sec_employment_event.parquet",
+   "sha256": "8e21ed8d11e5b08685a9f36c97e50b80203ffcc415bc0174fb5951b7ce25d138"
+  },
+  "ownership_holdings": {
+   "s3_key": "warehouse/artifacts/snowflake_exports/ownership_holdings/business_date=2026-09-06/run_id=50c0407f-9bad-8ea5-47d7-10ac5bb388be_e7ad4bb4-1321-81a0-e1d3-d211ab0d66d1/ownership_holdings.parquet",
+   "sha256": "04afb3c63760c8612da04ae212008ccd4590da95c1d7d612a8ac8c19887c8731"
+  }
+ }
+}

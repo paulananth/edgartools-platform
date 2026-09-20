@@ -62,7 +62,20 @@ migration, no edit to any Clean MDM file. Written at
 
 ## Decisions so far
 
-(none yet)
+- [Measure how far name-only Person sources can be bound deterministically](issues/01-measure-name-only-source-overlap.md)
+  — measured from S3 export snapshots (prod Snowflake is suspended:
+  "free trial has ended"; the reporting-owner half waits on
+  ticket 09). Proxy `exec_name` is 47% role text — a parser defect
+  (ticket 10), so proxy cannot bind until fixed. 8-K names are 97.7% clean;
+  `(issuer CIK, normalized name)` is the only deterministic key; 398 of
+  10,042 names appear under more than one issuer, so a name never binds
+  alone or across issuers. Findings:
+  [research/01](research/01-name-only-source-overlap.md).
+
+## Blocked on the operator
+
+- **Snowflake billing.** Prod warehouses are suspended; ticket 09 (and
+  any re-measurement) waits until billing is restored.
 
 ## Not yet specified
 
