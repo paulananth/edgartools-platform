@@ -64,18 +64,21 @@ migration, no edit to any Clean MDM file. Written at
 
 - [Measure how far name-only Person sources can be bound deterministically](issues/01-measure-name-only-source-overlap.md)
   — measured from S3 export snapshots (prod Snowflake is suspended:
-  "free trial has ended"; the reporting-owner half waits on
-  ticket 09). Proxy `exec_name` is 47% role text — a parser defect
+  "free trial has ended", and will not be restored — the reporting-owner
+  half now comes from the code traces in tickets 11–14). Proxy `exec_name` is 47% role text — a parser defect
   (ticket 10), so proxy cannot bind until fixed. 8-K names are 97.7% clean;
   `(issuer CIK, normalized name)` is the only deterministic key; 398 of
   10,042 names appear under more than one issuer, so a name never binds
   alone or across issuers. Findings:
   [research/01](research/01-name-only-source-overlap.md).
 
-## Blocked on the operator
+## Operator directives
 
-- **Snowflake billing.** Prod warehouses are suspended; ticket 09 (and
-  any re-measurement) waits until billing is restored.
+- **2026-09-19: "snowflake will not be restored."** No data-side
+  measurement is possible; every fact this map needs comes from code
+  traces (tickets 11–14, one per Person pipeline). Noted, not decided
+  here: silver and gold are Snowflake-only, so this directive reaches far
+  beyond Person — the platform's data layer, not just this contract.
 
 ## Not yet specified
 
@@ -93,6 +96,9 @@ migration, no edit to any Clean MDM file. Written at
   tickets 03 and 04.
 
 ## Out of scope
+
+- [Measure reporting-owner overlap once Snowflake is reachable](issues/09-measure-reporting-owner-overlap-when-snowflake-returns.md)
+  — closed 2026-09-19: Snowflake will not be restored.
 
 - Implementation, migrations, schedules, deployment — Codex/Grok's, after
   their Company gate.
