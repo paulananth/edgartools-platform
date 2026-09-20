@@ -11,6 +11,15 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Notes
 
+- 2026-09-20: ticket 11 implemented on `codex/company-publication-verification`
+  in `../edgartools-platform-company-publication-verification`, based on
+  `codex/sec-gleif-company` at `7784c0e3`. This is an isolated stacked branch;
+  the parent has not merged. [Source-publication contract](../../docs/specs/clean-mdm/source-publications.md)
+  and [review](company-publication-review.md) describe the source-only fixture.
+  Next: [ticket 12](issues/12-integrate-native-gleif-company-publications.md),
+  native metadata/normalization, verified batch membership and consumption
+  accounting. Company matching qualification remains a separate requirement.
+
 - 2026-09-20: [Company pickup from Claude](../handover/2026-09-20-codex-company-enrichment-reconciliation.md).
   Rebased onto `dc55bf1d`; assessment foundation preserved as `f3f924a9`.
   [Ticket 10](issues/10-build-family-checkpoints.md) is verified (47 tests, no skips).
