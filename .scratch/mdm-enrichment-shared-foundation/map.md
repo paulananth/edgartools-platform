@@ -125,10 +125,12 @@ had never itself been through a decision process.
 
 ## Destination reached
 
-All decisions locked, 2026-09-19. No open tickets, no fog. The next
-deliverable — outside this map, per its Destination — is writing
-`docs/specs/mdm-enrichment/shared-foundation.md` from the nine resolved
-tickets above, then unblocking
+All decisions locked, 2026-09-19. No open tickets, no fog. The deliverable
+— outside this map, per its Destination — is written:
+[`docs/specs/mdm-enrichment/shared-foundation.md`](../../docs/specs/mdm-enrichment/shared-foundation.md)
+(same day). It is decision-complete for the GoF review's seven items and
+names its own *Open* items (costs, observability thresholds, storage-class
+schedule, IAM) and release gates. It unblocks
 [GLEIF MDM enrichment evidence ticket 17](../gleif-company-augmentation/issues/17-write-and-verify-gleif-mdm-spec.md).
 Two proposals are pending Codex's review and are inputs to that spec, not
 blockers for writing it: the
