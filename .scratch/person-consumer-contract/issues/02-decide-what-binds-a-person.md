@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: none (15 resolved; Q2 re-posed on its facts)
+Blocked by: 16-research-schedule-ab-ownerid-meaning.md (Q2 waits on it)
 
 ## Question
 
@@ -31,3 +31,10 @@ the veto when a CIK and a CRD claim the same person but names disagree.
   CRD and owner_cik and if needed they need to be merged to form a unique
   identifier; need full understanding before deciding." Opened
   [ticket 15](15-research-crd-vs-cik-identifier-semantics.md); Q2 waits.
+- 2026-09-20, Q2 re-posed on research 15: (a) Person by `owner_cik` only,
+  ADV owner/executive rows unread for now; (b′) same plus prove what
+  `OwnerID` is so Schedule A/B can bind deterministically if it is the
+  individual CRD. Operator asked why (b) needs a Steward — answer: only
+  because `OwnerID` is unproven; if proven it binds like `owner_cik`.
+  Operator: "research OwnerID before deciding." Opened
+  [ticket 16](16-research-schedule-ab-ownerid-meaning.md); Q2 waits.
