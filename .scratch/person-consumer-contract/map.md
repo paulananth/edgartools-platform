@@ -91,8 +91,37 @@ migration, no edit to any Clean MDM file. Written at
   registrant from a firm; `IS_PERSON_OF` has no reader anywhere; Schedule
   A/B and Part 2B persons are not parsed on any path.
   [research/14](research/14-adv-individual-person-pipeline.md).
+- [Research CRD versus CIK: what each identifies, and whether they can be merged into one Person key](issues/15-research-crd-vs-cik-identifier-semantics.md)
+  — CIK is an SEC filer account (people included); CRD is a FINRA/IARD
+  registration record, firm and individual numbers distinct; no
+  individual-level crosswalk exists; IARD and CRD share one number space;
+  the bulk archive is firms-only for IARs **but already contains
+  `IA_Schedule_A_B`** (11,126 individual owner rows with an unpublished
+  `OwnerID`) and `IA_1D3_CIK`, both unread today. Two typed identifiers,
+  not one mergeable key. [research/15](research/15-crd-vs-cik-identifier-semantics.md).
+- [Research what ADV Schedule A/B `OwnerID` is](issues/16-research-schedule-ab-ownerid-meaning.md)
+  — it is a CRD-system individual record id (IARD FAQ: "Create Individual
+  … to assign the individual a CRD number"); 99.6% present, disjoint from
+  firm CRDs, 5,322/5,322 stable month to month, 110/110 name-exact where
+  IAPD resolves it. **Not** unique per natural person (duplicates exist by
+  the issuer's own admission; two both-resolving same-person pairs found),
+  and only ~54% corroborate publicly. [research/16](research/16-schedule-ab-ownerid-meaning.md).
+
+- [Decide which evidence may bind a source record to a Person Identity](issues/02-decide-what-binds-a-person.md)
+  — **one Person, one MDM id; every source id is a cross-reference.**
+  `owner_cik` and Schedule A/B `OwnerID` bind deterministically (one id →
+  exactly one Person; duplicate CRD records collapse onto one Person);
+  no Person is created without a match attempt; tiers A (shared id, auto)
+  / B (compound context key, auto at a measured ≥ **99%** precision — an
+  operator amendment to Clean MDM's 99.9%, proposed to Codex) / C (fuzzy,
+  Steward) / D (reject). Reading `IA_Schedule_A_B` is in scope.
 
 ## Operator directives
+
+- **2026-09-20: Tier B auto-merge bar is 99% measured precision, not
+  99.9%** — "don't want to create manual work." Sent to Codex as a
+  Person-kind amendment to accepted Q11:
+  [proposal](../clean-mdm-person-q11-amendment-proposal/map.md).
 
 - **2026-09-19: "snowflake will not be restored."** No data-side
   measurement is possible; every fact this map needs comes from code
@@ -102,15 +131,9 @@ migration, no edit to any Clean MDM file. Written at
 
 ## Not yet specified
 
-- **ADV Schedule A/B owners and Part 2B supervised persons** — confirmed
-  by research 14: not parsed on any path, and whether the IAPD archive even
-  contains them is not code-determinable. "Complete Person scope" therefore
-  needs a scope decision (new capture, or explicitly excluded) — sharpens
-  into a ticket once ticket 02 fixes what an ADV person would bind on.
-- **Name-only matching calibration** — whatever ticket 02 allows for proxy
-  and 8-K names will need the same independent-holdout proof Clean MDM
-  demands for Company (Q11 bar). Whether that's a Person research corpus
-  like the GLEIF 1,000-company cohort, and who freezes it, waits on 02.
+- **Part 2B supervised persons and IARs** — not in the bulk download at
+  all (research 15/16). Whether "complete Person scope" reaches them needs
+  a new source, which is a capture decision for after this contract.
 - **Person data in the graph and the Agent Query Surface** — `IS_INSIDER`
   and `HOLDS` are the heaviest-used graph edges; what the Person consumer
   owes downstream consumers (parity, redaction at the API) sharpens after
