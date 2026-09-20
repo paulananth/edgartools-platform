@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: none (11–14 resolved)
+Blocked by: 15-research-crd-vs-cik-identifier-semantics.md (Q1 answered; Q2 waits on it)
 
 ## Question
 
@@ -19,3 +19,15 @@ never binds and Clean MDM's Q11/Q16 disabling unqualified automatic rules:
 
 Also: uniqueness (one active CIK per Person, one active CRD per Person) and
 the veto when a CIK and a CRD claim the same person but names disagree.
+
+## Comments
+
+- 2026-09-20, Q1 (`owner_cik`): operator chose **(a)** — `owner_cik` binds
+  a Person deterministically, one CIK ↔ one Person enforced in both
+  directions, second claimant vetoed to Steward review, and only after
+  ticket 03 classifies the row as a natural person.
+- 2026-09-20, Q2 (CRD): posed as "CRD never binds a Person; ADV attaches as
+  a profile on a CIK-bound Person." Operator: "research differences between
+  CRD and owner_cik and if needed they need to be merged to form a unique
+  identifier; need full understanding before deciding." Opened
+  [ticket 15](15-research-crd-vs-cik-identifier-semantics.md); Q2 waits.
