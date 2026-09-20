@@ -1,0 +1,1235 @@
+{
+ "ticket": 16,
+ "run_date": "2026-09-20",
+ "seed": "20260920",
+ "files": {
+  "16-sample.jsonl": {
+   "sha256": "535763e05154706b550c304e3f217aafbb14b37c3149badda420d0766a662bc7",
+   "rows": 248
+  },
+  "16-results.jsonl": {
+   "sha256": "c8e7845bb89208ec989b34ccd63086151f86e25cae8909fcd3ac42260cb34669",
+   "rows": 267
+  },
+  "16-iapd-requests.jsonl": {
+   "sha256": "08251eaf3d4e7c819dc9a4b802e88f4b8edcc4394826aba42c2676de27a7272b",
+   "rows": 273
+  }
+ },
+ "requests": {
+  "total": 273,
+  "first_ts_utc": "2026-09-20T10:57:09.352034+00:00",
+  "last_ts_utc": "2026-09-20T11:09:02.113492+00:00",
+  "status_counts": {
+   "200": 273
+  },
+  "http_403_or_429": 0,
+  "by_host": {
+   "api.adviserinfo.sec.gov": 270,
+   "reports.adviserinfo.sec.gov": 3
+  },
+  "api_individual": 235,
+  "api_firm": 35,
+  "cap": 300
+ },
+ "selection_sql": {
+  "main": "\nWITH i_rows AS (\n  SELECT a.\"FilingID\" filing_id, b.firm_crd, b.firm_name, a.\"Schedule\" schedule,\n         a.\"Full Legal Name\" full_legal_name, a.\"Title or Status\" title, a.\"Ownership Code\" ownership_code,\n         a.\"Control Person\" control_person, trim(a.\"OwnerID\") owner_id, cast(trim(a.\"OwnerID\") as bigint) owner_id_num\n  FROM ab a JOIN base b ON a.\"FilingID\" = b.\"FilingID\"\n  WHERE a.\"DE/FE/I\" = 'I' AND nullif(trim(a.\"OwnerID\"), '') IS NOT NULL\n), classed AS (\n  SELECT *,\n    CASE WHEN owner_id_num <= 2894234.75 THEN 'Q1' WHEN owner_id_num <= 5072455 THEN 'Q2'\n         WHEN owner_id_num <= 6629159 THEN 'Q3' ELSE 'Q4' END AS magnitude_quartile,\n    CASE WHEN regexp_matches(upper(title), 'CHIEF|\\bCEO\\b|\\bCFO\\b|\\bCCO\\b|\\bCOO\\b|\\bCIO\\b|PRESIDENT|OFFICER|GENERAL COUNSEL|SECRETARY|TREASURER|MANAGING DIRECTOR|PRINCIPAL|CHAIRMAN|FOUNDER|\\bHEAD\\b|PORTFOLIO MANAGER|COUNSEL') THEN 'EXEC'\n         WHEN regexp_matches(upper(title), 'DIRECTOR|TRUSTEE|MANAGER|MANAGING MEMBER|MANAGING PARTNER|GENERAL PARTNER|BOARD') THEN 'GOVERNANCE'\n         ELSE 'OWNER_ONLY' END AS title_class,\n    hash(concat_ws('|', filing_id, owner_id, full_legal_name, '20260920')) AS h\n  FROM i_rows\n), one_row_per_ownerid AS (\n  SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY owner_id ORDER BY h) rn FROM classed) WHERE rn = 1\n), ranked AS (\n  SELECT *, row_number() OVER (PARTITION BY magnitude_quartile, title_class ORDER BY h) cell_rank FROM one_row_per_ownerid\n)\nSELECT * FROM ranked WHERE cell_rank <= 17 ORDER BY magnitude_quartile, title_class, cell_rank\n",
+  "low_digit_I": "\nSELECT a.\"FilingID\" filing_id, b.firm_crd, b.firm_name, a.\"Schedule\" schedule, a.\"Full Legal Name\" full_legal_name, a.\"Title or Status\" title,\n       a.\"Ownership Code\" ownership_code, a.\"Control Person\" control_person, trim(a.\"OwnerID\") owner_id\nFROM ab a JOIN base b ON a.\"FilingID\"=b.\"FilingID\"\nWHERE a.\"DE/FE/I\"='I' AND length(trim(a.\"OwnerID\"))<=6\nQUALIFY row_number() OVER (PARTITION BY trim(a.\"OwnerID\") ORDER BY hash(concat_ws('|', a.\"FilingID\", trim(a.\"OwnerID\"), a.\"Full Legal Name\", '20260920'))) = 1\nORDER BY hash(concat_ws('|', trim(a.\"OwnerID\"), '20260920')) LIMIT 15",
+  "DEFE": "\nSELECT a.\"FilingID\" filing_id, b.firm_crd, b.firm_name, a.\"Schedule\" schedule, a.\"Full Legal Name\" full_legal_name, a.\"DE/FE/I\" defei, a.\"Title or Status\" title,\n       a.\"Ownership Code\" ownership_code, a.\"Control Person\" control_person, trim(a.\"OwnerID\") owner_id\nFROM ab a JOIN base b ON a.\"FilingID\"=b.\"FilingID\"\nWHERE a.\"DE/FE/I\" IN ('DE','FE') AND nullif(trim(a.\"OwnerID\"),'') IS NOT NULL\nQUALIFY row_number() OVER (PARTITION BY trim(a.\"OwnerID\") ORDER BY hash(concat_ws('|', a.\"FilingID\", trim(a.\"OwnerID\"), a.\"Full Legal Name\", '20260920'))) = 1\nORDER BY hash(concat_ws('|', trim(a.\"OwnerID\"), '20260920')) LIMIT 20",
+  "same_name_pairs": [
+   [
+    "106125",
+    "4361188"
+   ],
+   [
+    "106125",
+    "5801517"
+   ],
+   [
+    "106125",
+    "6643761"
+   ],
+   [
+    "106125",
+    "6859158"
+   ],
+   [
+    "150884",
+    "1611616"
+   ],
+   [
+    "150884",
+    "6954252"
+   ],
+   [
+    "108249",
+    "2894648"
+   ],
+   [
+    "108249",
+    "4390339"
+   ],
+   [
+    "291484",
+    "1010011"
+   ],
+   [
+    "291484",
+    "2940858"
+   ]
+  ]
+ },
+ "main_sample": {
+  "n": 204,
+  "distinct_filing_ids": 188,
+  "distinct_firm_crds": 184,
+  "resolves": 110,
+  "hits_with_individualId_not_equal_queried": 0,
+  "hits_total_distribution": {
+   "1": 110,
+   "0": 94
+  },
+  "name_match_among_resolved": {
+   "exact": 107,
+   "token-partial": 3
+  },
+  "name_match_note": "the 3 token-partial rows each equal an otherNames entry exactly (see results)",
+  "filing_firm_in_history_among_resolved": 80,
+  "filing_firm_list_distribution": {
+   "currentIAEmployments": 66,
+   "(absent)": 30,
+   "currentIAEmployments|previousIAEmployments": 5,
+   "currentEmployments|currentIAEmployments": 7,
+   "previousIAEmployments": 2
+  },
+  "resolved_with_empty_employment_history": 16,
+  "resolved_nonempty_history_filing_firm_absent": 14,
+  "resolved_nonempty_history_filing_firm_absent_with_filing_firm_crd_ge_342000": 6,
+  "iaScope_among_resolved": {
+   "Active": 87,
+   "NotInScope": 17,
+   "InActive": 6
+  },
+  "bcScope_among_resolved": {
+   "NotInScope": 37,
+   "InActive": 34,
+   "Active": 37,
+   "Expanded": 2
+  },
+  "iaScope_active_filing_firm_in_history": [
+   78,
+   87
+  ],
+  "by_quartile": {
+   "Q1": {
+    "n": 51,
+    "resolves": 35,
+    "name_match_exact_or_othername": 35,
+    "filing_firm_in_history": 24
+   },
+   "Q2": {
+    "n": 51,
+    "resolves": 36,
+    "name_match_exact_or_othername": 36,
+    "filing_firm_in_history": 27
+   },
+   "Q3": {
+    "n": 51,
+    "resolves": 31,
+    "name_match_exact_or_othername": 31,
+    "filing_firm_in_history": 23
+   },
+   "Q4": {
+    "n": 51,
+    "resolves": 8,
+    "name_match_exact_or_othername": 8,
+    "filing_firm_in_history": 6
+   }
+  },
+  "quartile_bounds": {
+   "Q1": "<=2894234",
+   "Q2": "<=5072455",
+   "Q3": "<=6629159",
+   "Q4": ">6629159"
+  },
+  "by_title_class": {
+   "EXEC": {
+    "n": 68,
+    "resolves": 43,
+    "name_match_exact_or_othername": 43,
+    "filing_firm_in_history": 30
+   },
+   "GOVERNANCE": {
+    "n": 68,
+    "resolves": 30,
+    "name_match_exact_or_othername": 30,
+    "filing_firm_in_history": 19
+   },
+   "OWNER_ONLY": {
+    "n": 68,
+    "resolves": 37,
+    "name_match_exact_or_othername": 37,
+    "filing_firm_in_history": 31
+   }
+  },
+  "resolve_by_1M_bin": {
+   "0M": "3/5",
+   "1M": "13/18",
+   "2M": "21/32",
+   "3M": "7/8",
+   "4M": "23/33",
+   "5M": "22/31",
+   "6M": "18/40",
+   "7M": "3/25",
+   "8M": "0/12"
+  }
+ },
+ "low_digit_I": {
+  "n": 14,
+  "individual_resolves": 11,
+  "individual_name_exact": 11,
+  "firm_endpoint_resolves": 0,
+  "firm_endpoint_n": 14
+ },
+ "same_name_pairs": [
+  {
+   "firm_crd": "106125",
+   "owner_id": "4361188",
+   "csv_name": "THOMPSON, NIMROD, GORDON",
+   "resolves": true,
+   "name_match": "exact",
+   "filing_firm_in_history": true,
+   "history_firm_ids": [
+    "106125"
+   ]
+  },
+  {
+   "firm_crd": "106125",
+   "owner_id": "5801517",
+   "csv_name": "THOMPSON, NIMROD, G.",
+   "resolves": true,
+   "name_match": "exact",
+   "filing_firm_in_history": true,
+   "history_firm_ids": [
+    "106125",
+    "615"
+   ]
+  },
+  {
+   "firm_crd": "106125",
+   "owner_id": "6643761",
+   "csv_name": "Sights, Jere, Matthews",
+   "resolves": true,
+   "name_match": "exact",
+   "filing_firm_in_history": true,
+   "history_firm_ids": [
+    "106125"
+   ]
+  },
+  {
+   "firm_crd": "106125",
+   "owner_id": "6859158",
+   "csv_name": "SIGHTS, JERE, MATTHEWS",
+   "resolves": false,
+   "name_match": null,
+   "filing_firm_in_history": null,
+   "history_firm_ids": []
+  },
+  {
+   "firm_crd": "150884",
+   "owner_id": "1611616",
+   "csv_name": "MAROON, MICHAEL, ANTHONY",
+   "resolves": false,
+   "name_match": null,
+   "filing_firm_in_history": null,
+   "history_firm_ids": []
+  },
+  {
+   "firm_crd": "150884",
+   "owner_id": "6954252",
+   "csv_name": "MAROON, MICHAEL, ANTHONY",
+   "resolves": false,
+   "name_match": null,
+   "filing_firm_in_history": null,
+   "history_firm_ids": []
+  },
+  {
+   "firm_crd": "108249",
+   "owner_id": "2894648",
+   "csv_name": "SMITH, ERIC, STEVEN",
+   "resolves": true,
+   "name_match": "exact",
+   "filing_firm_in_history": true,
+   "history_firm_ids": [
+    "108249"
+   ]
+  },
+  {
+   "firm_crd": "108249",
+   "owner_id": "4390339",
+   "csv_name": "SMITH, ERIC, STEVEN",
+   "resolves": false,
+   "name_match": null,
+   "filing_firm_in_history": null,
+   "history_firm_ids": []
+  },
+  {
+   "firm_crd": "291484",
+   "owner_id": "1010011",
+   "csv_name": "MARINICH, DENNIS, PAUL",
+   "resolves": true,
+   "name_match": "exact",
+   "filing_firm_in_history": true,
+   "history_firm_ids": [
+    "291484",
+    "11025",
+    "19616",
+    "10",
+    "628"
+   ]
+  },
+  {
+   "firm_crd": "291484",
+   "owner_id": "2940858",
+   "csv_name": "MARINICH, DENNIS, PAUL",
+   "resolves": true,
+   "name_match": "exact",
+   "filing_firm_in_history": true,
+   "history_firm_ids": [
+    "35747",
+    "291484",
+    "11025",
+    "19616",
+    "10",
+    "7471"
+   ]
+  }
+ ],
+ "DEFE": {
+  "firm_endpoint_n": 20,
+  "firm_endpoint_resolves": 18,
+  "name_match": {
+   "exact": 18,
+   "None": 2
+  },
+  "iaScope": {
+   "ACTIVE": 16,
+   "None": 3,
+   "INACTIVE": 1
+  },
+  "iaSECNumberType": {
+   "801": 15,
+   "None": 4,
+   "802": 1
+  },
+  "ownerid_equals_filing_firm_crd": 0,
+  "individual_endpoint_n": 5,
+  "individual_endpoint_resolves": 0,
+  "zero_hit_ids": [
+   "292964 LONE STAR AMERICAS ACQUISITIONS, LLC",
+   "292963 LONE STAR GLOBAL ACQUISITIONS, LTD."
+  ]
+ },
+ "archive": {
+  "aug_counts": {
+   "DE": {
+    "rows": 4092,
+    "ownerid_nonnull": 88,
+    "ownerid_null_or_blank": 4004,
+    "distinct_ownerid": 55
+   },
+   "FE": {
+    "rows": 921,
+    "ownerid_nonnull": 8,
+    "ownerid_null_or_blank": 913,
+    "distinct_ownerid": 8
+   },
+   "I": {
+    "rows": 11126,
+    "ownerid_nonnull": 11086,
+    "ownerid_null_or_blank": 40,
+    "distinct_ownerid": 7060
+   }
+  },
+  "mar_counts": {
+   "DE": {
+    "rows": 22292,
+    "ownerid_nonnull": 661,
+    "ownerid_null_or_blank": 21631,
+    "distinct_ownerid": 348
+   },
+   "FE": {
+    "rows": 4518,
+    "ownerid_nonnull": 69,
+    "ownerid_null_or_blank": 4449,
+    "distinct_ownerid": 53
+   },
+   "I": {
+    "rows": 68642,
+    "ownerid_nonnull": 68457,
+    "ownerid_null_or_blank": 185,
+    "distinct_ownerid": 45441
+   }
+  },
+  "aug_I_null_rows": [
+   {
+    "FilingID": "2125042",
+    "name": "NEWTON, PAUL MAURICE",
+    "title": "CHIEF FINANCIAL OFFICER AND CHIEF COMPLIANCE OFFICER",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2125241",
+    "name": "MOORE, ROBERT HOLDEN",
+    "title": "LIMITED PARTNER",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2125241",
+    "name": "MOORE, GWYNETH CAROLINE",
+    "title": "LIMITED PARTNER",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2125241",
+    "name": "MOORE, GRETCHEN GAIL",
+    "title": "LIMITED PARTNER",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2123496",
+    "name": "CALTON, DWAYNE KENT",
+    "title": "PRESIDENT - DIRECTOR",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2123496",
+    "name": "CICCATI, JILL MARIE",
+    "title": "SHAREHOLDER",
+    "schedule": "A",
+    "control": "N"
+   },
+   {
+    "FilingID": "2123496",
+    "name": "CICCATI, ADELINE CARMELA",
+    "title": "TRUSTEE OF THE LOUIS CICCATI AND ADELINE CARMELA CICCATI REVOCABLE TRUST",
+    "schedule": "A",
+    "control": "N"
+   },
+   {
+    "FilingID": "2127943",
+    "name": "PAUL, DOUGLAS WILLIAMS",
+    "title": "CHAIRMAN",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2127943",
+    "name": "GLOWAC, BRUCE MICHAEL",
+    "title": "DIRECTOR",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2127943",
+    "name": "JACOBSON, GEOFFREY LEE",
+    "title": "DIRECTOR",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2120194",
+    "name": "ROBINS, JULIAN JOHN",
+    "title": "MANAGER",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2122913",
+    "name": "REA III, DAN",
+    "title": "MEMBER OF THE BOARD OF DIRECTORS AND INVESTMENT COMMITTEE",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2128005",
+    "name": "HENRY, WILLIAM THOMAS",
+    "title": "CHIEF EXECUTIVE OFFICE-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2128005",
+    "name": "GRIFFITH, ANN MARGARET",
+    "title": "CHIEF COMPLIANCE OFFICER-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "N"
+   },
+   {
+    "FilingID": "2125570",
+    "name": "GAGNON, NEIL JOSEPH",
+    "title": "MANAGER/CEO",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2125570",
+    "name": "GAGNON, BRIAN JOSEPH",
+    "title": "MEMBER",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2125570",
+    "name": "DREW, MAUREEN ONEILL",
+    "title": "MEMBER",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2125570",
+    "name": "LEE, DWIGHT EISENHOWER",
+    "title": "MEMBER",
+    "schedule": "A",
+    "control": "N"
+   },
+   {
+    "FilingID": "2125455",
+    "name": "ROSE, THOMAS A",
+    "title": "GENERAL PARTNER",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2129742",
+    "name": "KRISHNAMURTHY, KARTHIK",
+    "title": "SECRETARY",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2129241",
+    "name": "KRISHNAMURTHY, KARTHIK",
+    "title": "SECRETARY",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126821",
+    "name": "MYERS, JEFFREY JOSEPH",
+    "title": "CHIEF COMPLIANCE OFFICER",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2128053",
+    "name": "CARNEGIE, ALLISON J",
+    "title": "TRUSTEE",
+    "schedule": "B",
+    "control": "N"
+   },
+   {
+    "FilingID": "2126985",
+    "name": "RUTLEDGE, JOHN REYNOLDS",
+    "title": "12.240 % OWNER & CHM FIRST SECURITY BANCORP AND CHM OF CREWS CORE HOLDING COMPANY",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126986",
+    "name": "RUTLEDGE, JOHN REYNOLDS",
+    "title": "12.240 % OWNER & CHM FIRST SECURITY BANCORP AND CHM OF CREWS CORE HOLDING COMPANY",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126360",
+    "name": "RAULERSON, MATTHEW C",
+    "title": "VICE PRESIDENT AND PRINCIPAL FINANCIAL OFFICER",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126000",
+    "name": "PAUL, DOUGLAS WILLIAMS",
+    "title": "CHAIRMAN",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126000",
+    "name": "GLOWAC, BRUCE MICHAEL",
+    "title": "DIRECTOR",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126000",
+    "name": "JACOBSON, GEOFFREY LEE",
+    "title": "DIRECTOR",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2128082",
+    "name": "HENRY, WILLIAM THOMAS",
+    "title": "CHIEF EXECUTIVE OFFICE-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2128082",
+    "name": "GRIFFITH, ANN MARGARET",
+    "title": "CHIEF COMPLIANCE OFFICER-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "N"
+   },
+   {
+    "FilingID": "2126747",
+    "name": "HENRY, WILLIAM THOMAS",
+    "title": "CHIEF EXECUTIVE OFFICE-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126747",
+    "name": "GRIFFITH, ANN MARGARET",
+    "title": "CHIEF COMPLIANCE OFFICER-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "N"
+   },
+   {
+    "FilingID": "2126688",
+    "name": "WALTON, THOMAS L",
+    "title": "MANAGER, BENEFICIARY",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2126688",
+    "name": "WALTON, STEUART L",
+    "title": "MANAGER, BENEFICIARY",
+    "schedule": "B",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2113499",
+    "name": "HENRY, WILLIAM THOMAS",
+    "title": "CHIEF EXECUTIVE OFFICE-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2113499",
+    "name": "GRIFFITH, ANN MARGARET",
+    "title": "CHIEF COMPLIANCE OFFICER-INVESTMENT ADVISORY",
+    "schedule": "A",
+    "control": "N"
+   },
+   {
+    "FilingID": "2129673",
+    "name": "KRISHNAMURTHY, KARTHIK",
+    "title": "SECRETARY",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2121814",
+    "name": "NEWTON, PAUL MAURICE",
+    "title": "CHIEF FINANCIAL OFFICER AND CHIEF COMPLIANCE OFFICER",
+    "schedule": "A",
+    "control": "Y"
+   },
+   {
+    "FilingID": "2124217",
+    "name": "BODART, CLAIRE J",
+    "title": "CHIEF COMPLIANCE OFFICER EZ-NA",
+    "schedule": "A",
+    "control": "Y"
+   }
+  ],
+  "aug_I_null_by_control": [
+   [
+    "N",
+    8
+   ],
+   [
+    "Y",
+    32
+   ]
+  ],
+  "aug_I_null_by_schedule": [
+   [
+    "A",
+    31
+   ],
+   [
+    "B",
+    9
+   ]
+  ],
+  "aug_I_null_distinct_filings": 24,
+  "aug_ownerid_len": [
+   [
+    "DE",
+    5,
+    5
+   ],
+   [
+    "DE",
+    6,
+    83
+   ],
+   [
+    "FE",
+    6,
+    8
+   ],
+   [
+    "I",
+    5,
+    9
+   ],
+   [
+    "I",
+    6,
+    133
+   ],
+   [
+    "I",
+    7,
+    10944
+   ]
+  ],
+  "aug_I_ownerid_quantiles": [
+   13479,
+   2894234.75,
+   5072455.0,
+   6629159.0,
+   8337562
+  ],
+  "aug_firm_crd_range": [
+   250,
+   344307,
+   1867
+  ],
+  "mar_firm_crd_range": [
+   70,
+   341725,
+   13222
+  ],
+  "aug_DEFE_ownerid_matching_firm_crd": 44,
+  "aug_DEFE_ownerid_matching_own_filing_crd": 4,
+  "aug_DEFE_ownerid_nonnull_rows": 96,
+  "aug_I_ownerid_matching_firm_crd": 0,
+  "aug_ownerid_in_both_I_and_DEFE": 0,
+  "aug_I_low_digit_rows": [
+   142,
+   95
+  ],
+  "aug_I_ownerid_multi_row": 2273,
+  "aug_I_ownerid_multi_filing": 1594,
+  "aug_I_ownerid_multi_firm": 430,
+  "aug_I_ownerid_collision_strict_lastfirst_differs": 2,
+  "aug_I_ownerid_collision_loose_middle_suffix_only": 23,
+  "aug_I_collision_examples_strict": [
+   {
+    "OwnerID": "5006680",
+    "names": [
+     "ALLEN, TAMARA, JEANNE",
+     "OLSZEWSKI, TAMARA, JEANNE"
+    ],
+    "firm_crds": [
+     "146385"
+    ]
+   },
+   {
+    "OwnerID": "7437570",
+    "names": [
+     "Forman, Raquel",
+     "TEICH, RAQUEL"
+    ],
+    "firm_crds": [
+     "119800"
+    ]
+   }
+  ],
+  "aug_I_collision_examples_loose": [
+   {
+    "OwnerID": "4094102",
+    "names": [
+     "STARK, BRADLEY, RICHARD",
+     "Stark, Bradley, R"
+    ]
+   },
+   {
+    "OwnerID": "7884720",
+    "names": [
+     "LEM, SCOTT, CHRISTOPHER",
+     "Lem, Scott"
+    ]
+   },
+   {
+    "OwnerID": "8327507",
+    "names": [
+     "GOMEZ, JAMES, OLIVER",
+     "Gomez, James"
+    ]
+   },
+   {
+    "OwnerID": "7194915",
+    "names": [
+     "Nederveld, Paul",
+     "Nederveld, Paul, Lester"
+    ]
+   },
+   {
+    "OwnerID": "7894694",
+    "names": [
+     "O'LEARY, ROBERT, JAMES",
+     "O'Leary, Robert, J"
+    ]
+   },
+   {
+    "OwnerID": "3204950",
+    "names": [
+     "MADRIGAL, GEORGE",
+     "MADRIGAL, GEORGE, NMN"
+    ]
+   },
+   {
+    "OwnerID": "6986069",
+    "names": [
+     "MCCLEAN, JEFFREY",
+     "MCCLEAN, JEFFREY, THOMAS"
+    ]
+   },
+   {
+    "OwnerID": "6482083",
+    "names": [
+     "GINTER, LISA",
+     "GINTER, LISA ROSELLE"
+    ]
+   }
+  ],
+  "aug_pairs_firm_name": 7618,
+  "aug_pairs_firm_name_multi_ownerid": 21,
+  "aug_pairs_firm_name_multi_examples": [
+   {
+    "crd": "125112",
+    "name": "hamm|william",
+    "rows": [
+     [
+      "1227713",
+      "HAMM, WILLIAM, EUGENE",
+      "EXECUTIVE CHAIRMAN"
+     ],
+     [
+      "5814331",
+      "HAMM, WILLIAM, CHRISTOPHER",
+      "PRESIDENT, CHIEF EXECUTIVE OFFICER"
+     ]
+    ]
+   },
+   {
+    "crd": "3496",
+    "name": "stephens|warren",
+    "rows": [
+     [
+      "1033710",
+      "STEPHENS, WARREN AMERINE",
+      "TRUSTEE"
+     ],
+     [
+      "5399161",
+      "STEPHENS, WARREN MILES AMERINE",
+      "BENEFICIARY/TRUSTEE"
+     ],
+     [
+      "5399161",
+      "STEPHENS, WARREN MILES AMERINE",
+      "CO-CHIEF EXECUTIVE OFFICER"
+     ],
+     [
+      "5399161",
+      "STEPHENS, WARREN MILES AMERINE",
+      "TRUSTEE"
+     ]
+    ]
+   },
+   {
+    "crd": "321609",
+    "name": "farrell|neil",
+    "rows": [
+     [
+      "2616378",
+      "FARRELL, NEIL, JOSEPH",
+      "PRESIDENT"
+     ],
+     [
+      "7594002",
+      "FARRELL, NEIL, VINCENT",
+      "VICE PRESIDENT"
+     ]
+    ]
+   },
+   {
+    "crd": "106125",
+    "name": "thompson|nimrod",
+    "rows": [
+     [
+      "4361188",
+      "THOMPSON, NIMROD, GORDON",
+      "MANAGING MEMBER"
+     ],
+     [
+      "4361188",
+      "THOMPSON, NIMROD, GORDON",
+      "TRUSTEE"
+     ],
+     [
+      "5801517",
+      "THOMPSON, NIMROD, G.",
+      "MEMBER"
+     ]
+    ]
+   },
+   {
+    "crd": "106125",
+    "name": "sights|jere",
+    "rows": [
+     [
+      "6643761",
+      "Sights, Jere, Matthews",
+      "MEMBER"
+     ],
+     [
+      "6859158",
+      "SIGHTS, JERE, MATTHEWS",
+      "DIRECTOR"
+     ]
+    ]
+   },
+   {
+    "crd": "147350",
+    "name": "follett|richard",
+    "rows": [
+     [
+      "2729084",
+      "FOLLETT, RICHARD, LYNN",
+      "MANAGING MEMBER"
+     ],
+     [
+      "2729084",
+      "FOLLETT, RICHARD, LYNN",
+      "PRESIDENT"
+     ],
+     [
+      "2729084",
+      "FOLLETT, RICHARD, LYNN",
+      "VICE PRESIDENT AND SECRETARY"
+     ],
+     [
+      "4031384",
+      "FOLLETT, RICHARD, L",
+      "MEMBER"
+     ]
+    ]
+   },
+   {
+    "crd": "322374",
+    "name": "desmarais|paul",
+    "rows": [
+     [
+      "1498208",
+      "DESMARAIS, PAUL, GUY",
+      "TRUSTEE"
+     ],
+     [
+      "4832995",
+      "DESMARAIS III, PAUL, GUY",
+      "CHAIRMAN AND CHIEF EXECUTIVE OFFICER"
+     ]
+    ]
+   },
+   {
+    "crd": "343646",
+    "name": "muth|keith",
+    "rows": [
+     [
+      "2822562",
+      "MUTH, KEITH, LAVERN",
+      "CEO/CHIEF COMPLIANCE OFFICER"
+     ],
+     [
+      "7434493",
+      "Muth, Keith",
+      "PRESIDENT"
+     ]
+    ]
+   },
+   {
+    "crd": "167103",
+    "name": "beirne|john",
+    "rows": [
+     [
+      "17064",
+      "BEIRNE, JOHN, ANTHONY",
+      "MANAGING DIRECTOR, CIO AND FOUNDING PARTNER"
+     ],
+     [
+      "5737703",
+      "BEIRNE, JOHN-OLIVER",
+      "MANAGING DIRECTOR"
+     ],
+     [
+      "5737703",
+      "BEIRNE, JOHN-OLIVER",
+      "PRESIDENT"
+     ],
+     [
+      "5737703",
+      "BEIRNE, JOHN-OLIVER",
+      "TRUSTEE"
+     ]
+    ]
+   },
+   {
+    "crd": "110890",
+    "name": "tilson|robert",
+    "rows": [
+     [
+      "1685948",
+      "TILSON, ROBERT",
+      "PRESIDENT/CHIEF COMPLIANCE OFFICER"
+     ],
+     [
+      "5690828",
+      "TILSON, ROBERT, SCOTT",
+      "OWNER"
+     ]
+    ]
+   },
+   {
+    "crd": "150884",
+    "name": "maroon|michael",
+    "rows": [
+     [
+      "1611616",
+      "MAROON, MICHAEL, ANTHONY",
+      "MANAGING PARTNER, CHIEF EXECUTIVE OFFICER"
+     ],
+     [
+      "1611616",
+      "MAROON, MICHAEL, ANTHONY",
+      "MEMBER"
+     ],
+     [
+      "6954252",
+      "MAROON, MICHAEL, ANTHONY",
+      "EXECUTIVE VICE PRESIDENT"
+     ]
+    ]
+   },
+   {
+    "crd": "120952",
+    "name": "traitel|david",
+    "rows": [
+     [
+      "8314572",
+      "TRAITEL II, DAVID, S",
+      "CO-TRUSTEE"
+     ],
+     [
+      "8314572",
+      "TRAITEL II, DAVID, S",
+      "MEMBER"
+     ],
+     [
+      "8314572",
+      "TRAITEL II, DAVID, S",
+      "TRUSTEE"
+     ],
+     [
+      "8314580",
+      "TRAITEL II, DAVID, T.",
+      "SOLE MEMBER"
+     ]
+    ]
+   },
+   {
+    "crd": "322871",
+    "name": "martire|frank",
+    "rows": [
+     [
+      "6706812",
+      "MARTIRE, FRANK",
+      "CO-MANAGING MEMBER"
+     ],
+     [
+      "7606007",
+      "MARTIRE, FRANK, R.",
+      "CO-MANAGING MEMBER"
+     ]
+    ]
+   },
+   {
+    "crd": "108249",
+    "name": "smith|eric",
+    "rows": [
+     [
+      "2894648",
+      "SMITH, ERIC, STEVEN",
+      "PRESIDENT & CCO"
+     ],
+     [
+      "4390339",
+      "SMITH, ERIC, STEVEN",
+      "MAJORITY SHAREHOLDER & DIRECTOR & CEO OF CSSC"
+     ]
+    ]
+   },
+   {
+    "crd": "124209",
+    "name": "emmerling|thomas",
+    "rows": [
+     [
+      "4634251",
+      "EMMERLING, THOMAS, RAYMOND",
+      "MANAGING MEMBER"
+     ],
+     [
+      "7400560",
+      "Emmerling, Thomas, Joseph",
+      "MEMBER"
+     ]
+    ]
+   },
+   {
+    "crd": "314171",
+    "name": "dietrich|paul",
+    "rows": [
+     [
+      "4389176",
+      "DIETRICH, PAUL, GEORGE",
+      "PRESIDENT AND CHIEF EXECUTIVE OFFICER"
+     ],
+     [
+      "7502650",
+      "Dietrich, Paul",
+      "MEMBER"
+     ]
+    ]
+   },
+   {
+    "crd": "291484",
+    "name": "marinich|dennis",
+    "rows": [
+     [
+      "1010011",
+      "MARINICH, DENNIS, PAUL",
+      "MANAGING MEMBER"
+     ],
+     [
+      "2940858",
+      "MARINICH, DENNIS, PAUL",
+      "MANAGING MEMBER AND CCO"
+     ]
+    ]
+   },
+   {
+    "crd": "156315",
+    "name": "millington|charles",
+    "rows": [
+     [
+      "1032017",
+      "MILLINGTON, CHARLES, GLENN",
+      "CEO"
+     ],
+     [
+      "4683520",
+      "MILLINGTON, CHARLES, FRANCIS",
+      "PRESIDENT / CCO"
+     ]
+    ]
+   },
+   {
+    "crd": "304914",
+    "name": "guida|frank",
+    "rows": [
+     [
+      "1499368",
+      "GUIDA, FRANK",
+      "MANAGING MEMBER"
+     ],
+     [
+      "7396287",
+      "GUIDA, FRANK",
+      "PRESIDENT/CCO"
+     ]
+    ]
+   },
+   {
+    "crd": "167696",
+    "name": "loper|charles",
+    "rows": [
+     [
+      "1489450",
+      "LOPER, CHARLES, ALBERT",
+      "MANAGING MEMBER"
+     ],
+     [
+      "4155205",
+      "LOPER, CHARLES, A",
+      "MANAGING MEMBER"
+     ]
+    ]
+   },
+   {
+    "crd": "172591",
+    "name": "schneeweis|robert",
+    "rows": [
+     [
+      "2012770",
+      "SCHNEEWEIS, ROBERT, EUGENE",
+      "CHIEF EXECUTIVE OFFICER"
+     ],
+     [
+      "7511869",
+      "SCHNEEWEIS, ROBERT, J",
+      "CHIEF OPERATING OFFICER, CHIEF COMPLIANCE OFFICER"
+     ]
+    ]
+   }
+  ],
+  "aug_names_anyfirm": 6990,
+  "aug_names_anyfirm_multi_ownerid": 71,
+  "stability_common_firm_name_pairs": 5322,
+  "stability_common_firms": 1227,
+  "stability_same_ownerid_set": 5322,
+  "stability_subset_ownerid_set": 0,
+  "stability_different_ownerid": 0,
+  "stability_diff_examples": [],
+  "stability_common_ownerids": 5107,
+  "stability_common_ownerids_name_disjoint": 1,
+  "stability_common_ownerids_name_disjoint_examples": [
+   {
+    "OwnerID": "6121402",
+    "aug": [
+     "jewett|megan"
+    ],
+    "mar": [
+     "brenner|megan"
+    ]
+   }
+  ],
+  "stability_common_ownerids_firm_overlap": null,
+  "mar_I_null_rate": 0.0026951429154162174,
+  "aug_I_null_rate": 0.003595182455509617
+ }
+}

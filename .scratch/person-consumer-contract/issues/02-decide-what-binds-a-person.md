@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 16-research-schedule-ab-ownerid-meaning.md (Q2 waits on it)
+Blocked by: none (16 resolved; Q2 re-posed)
 
 ## Question
 

@@ -99,6 +99,13 @@ migration, no edit to any Clean MDM file. Written at
   `IA_Schedule_A_B`** (11,126 individual owner rows with an unpublished
   `OwnerID`) and `IA_1D3_CIK`, both unread today. Two typed identifiers,
   not one mergeable key. [research/15](research/15-crd-vs-cik-identifier-semantics.md).
+- [Research what ADV Schedule A/B `OwnerID` is](issues/16-research-schedule-ab-ownerid-meaning.md)
+  — it is a CRD-system individual record id (IARD FAQ: "Create Individual
+  … to assign the individual a CRD number"); 99.6% present, disjoint from
+  firm CRDs, 5,322/5,322 stable month to month, 110/110 name-exact where
+  IAPD resolves it. **Not** unique per natural person (duplicates exist by
+  the issuer's own admission; two both-resolving same-person pairs found),
+  and only ~54% corroborate publicly. [research/16](research/16-schedule-ab-ownerid-meaning.md).
 
 ## Operator directives
 

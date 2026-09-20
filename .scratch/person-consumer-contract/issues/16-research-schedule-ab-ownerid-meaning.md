@@ -1,7 +1,7 @@
 # Research what ADV Schedule A/B `OwnerID` is, and whether it can be a deterministic Person identifier
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -47,3 +47,29 @@ with the operator's contact email as SEC's fair-access policy asks, stop
 at the first HTTP 403/429. Record the exact query, timestamps, and a
 SHA-256 of the sample and results next to research 15. Write to
 `research/16-schedule-ab-ownerid-meaning.md` in the same shape.
+
+## Answer
+
+[research/16](../research/16-schedule-ab-ownerid-meaning.md), 2026-09-20.
+273 IAPD requests at 1/s, identified, all HTTP 200; sample, results,
+and request log committed with SHA-256s in `16-summary.json`.
+
+- **`OwnerID` is a CRD-system individual record id.** IARD's own filing
+  FAQ: every Schedule A/B individual is matched to an existing CRD record
+  or gets one via "Create Individual … to assign the individual a CRD
+  number." The link from that field to the FOIA column named `OwnerID` is
+  empirical (no SEC text names the column) but strong: present on 99.6%
+  of individual rows; disjoint from firm CRDs; **5,322/5,322** same
+  firm+name pairs keep the identical id between the March and August
+  archives; a strict id lookup on IAPD returns the same person's name
+  **110/110** times where it resolves.
+- **It falls short of "unique per natural person."** The issuer's FAQ
+  warns filers not to create duplicate records — so duplicates exist by
+  design; the archive shows same-firm identical-name pairs with two ids,
+  and two of those pairs both resolve on IAPD with overlapping histories.
+  One id → two names: 2 of 7,060, both surname changes.
+- **Only ~54% corroborate publicly** (110/204), collapsing to 15.7% in
+  the newest id quartile and 0/12 above 8M — the rest are opaque ids
+  with a name.
+- `DE`/`FE` rows carry no comparable id (98% blank; when present it is
+  the entity's firm CRD).
