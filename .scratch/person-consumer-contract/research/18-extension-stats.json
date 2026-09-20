@@ -1,0 +1,98 @@
+{
+ "files": 112490,
+ "ownership_files": 91110,
+ "non_ownership_files": 21380,
+ "bad_files": 0,
+ "rows": 101137,
+ "distinct_owners": 19735,
+ "forms": {
+  "4": 91475,
+  "3": 7725,
+  "4/A": 1341,
+  "5": 341,
+  "3/A": 250,
+  "5/A": 5
+ },
+ "flag_combo_rows": {
+  "officer": 39481,
+  "director": 33175,
+  "officer+director": 10191,
+  "10pct": 9883,
+  "director+10pct": 3558,
+  "officer+director+10pct": 2669,
+  "other": 1107,
+  "10pct+other": 342,
+  "director+other": 311,
+  "director+10pct+other": 189,
+  "officer+other": 81,
+  "officer+10pct": 74,
+  "officer+director+10pct+other": 43,
+  "officer+director+other": 27,
+  "officer+10pct+other": 6
+ },
+ "token_by_flag_combo_rows": {
+  "director": {
+   "notoken": 32496,
+   "token": 679
+  },
+  "officer+director": {
+   "notoken": 10191
+  },
+  "officer": {
+   "notoken": 39473,
+   "token": 8
+  },
+  "10pct": {
+   "token": 8185,
+   "notoken": 1698
+  },
+  "director+10pct": {
+   "notoken": 1763,
+   "token": 1795
+  },
+  "director+other": {
+   "notoken": 207,
+   "token": 104
+  },
+  "other": {
+   "notoken": 681,
+   "token": 426
+  },
+  "officer+director+other": {
+   "notoken": 27
+  },
+  "officer+other": {
+   "notoken": 81
+  },
+  "officer+director+10pct": {
+   "notoken": 2628,
+   "token": 41
+  },
+  "director+10pct+other": {
+   "notoken": 118,
+   "token": 71
+  },
+  "10pct+other": {
+   "notoken": 90,
+   "token": 252
+  },
+  "officer+10pct": {
+   "notoken": 74
+  },
+  "officer+director+10pct+other": {
+   "notoken": 43
+  },
+  "officer+10pct+other": {
+   "notoken": 6
+  }
+ },
+ "multi_owner_rows": 12788,
+ "owner_cik_missing_rows": 0,
+ "deputization_strict_rows": 3133,
+ "period_min": "0001-01-01",
+ "period_max": "2026-09-01",
+ "owners_also_in_primary": 2839,
+ "token_owners": 2037,
+ "token_owners_not_in_primary": 1755,
+ "token_owners_not_in_primary_with_bronze_submissions": 1044
+}

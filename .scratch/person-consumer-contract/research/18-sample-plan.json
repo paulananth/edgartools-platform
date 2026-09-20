@@ -1,0 +1,94 @@
+{
+ "10pct+other|notoken": {
+  "population_owners": 6,
+  "sampled": 6
+ },
+ "10pct+other|token": {
+  "population_owners": 10,
+  "sampled": 10
+ },
+ "10pct|notoken": {
+  "population_owners": 68,
+  "sampled": 60
+ },
+ "10pct|token": {
+  "population_owners": 271,
+  "sampled": 271
+ },
+ "director+10pct+other|notoken": {
+  "population_owners": 3,
+  "sampled": 3
+ },
+ "director+10pct+other|token": {
+  "population_owners": 2,
+  "sampled": 2
+ },
+ "director+10pct|notoken": {
+  "population_owners": 45,
+  "sampled": 45
+ },
+ "director+10pct|token": {
+  "population_owners": 32,
+  "sampled": 32
+ },
+ "director+other|notoken": {
+  "population_owners": 12,
+  "sampled": 12
+ },
+ "director|notoken": {
+  "population_owners": 1575,
+  "sampled": 200
+ },
+ "director|token": {
+  "population_owners": 29,
+  "sampled": 29
+ },
+ "officer+10pct+other|notoken": {
+  "population_owners": 1,
+  "sampled": 1
+ },
+ "officer+10pct|notoken": {
+  "population_owners": 6,
+  "sampled": 6
+ },
+ "officer+director+10pct+other|notoken": {
+  "population_owners": 1,
+  "sampled": 1
+ },
+ "officer+director+10pct|notoken": {
+  "population_owners": 103,
+  "sampled": 60
+ },
+ "officer+director+10pct|token": {
+  "population_owners": 2,
+  "sampled": 2
+ },
+ "officer+director+other|notoken": {
+  "population_owners": 4,
+  "sampled": 4
+ },
+ "officer+director|notoken": {
+  "population_owners": 524,
+  "sampled": 200
+ },
+ "officer+other|notoken": {
+  "population_owners": 3,
+  "sampled": 3
+ },
+ "officer|notoken": {
+  "population_owners": 2061,
+  "sampled": 200
+ },
+ "officer|token": {
+  "population_owners": 1,
+  "sampled": 1
+ },
+ "other|notoken": {
+  "population_owners": 59,
+  "sampled": 59
+ },
+ "other|token": {
+  "population_owners": 13,
+  "sampled": 13
+ }
+}

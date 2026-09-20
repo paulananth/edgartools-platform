@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 02-decide-what-binds-a-person.md, 03-decide-reporting-owner-classification.md
+Blocked by: none (02 and 03 resolved 2026-09-20)
 
 ## Question
 

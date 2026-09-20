@@ -115,6 +115,26 @@ migration, no edit to any Clean MDM file. Written at
   / B (compound context key, auto at a measured ≥ **99%** precision — an
   operator amendment to Clean MDM's 99.9%, proposed to Codex) / C (fuzzy,
   Steward) / D (reject). Reading `IA_Schedule_A_B` is in scope.
+- [Measure which reporting-owner classification rule reaches 99% precision](issues/18-measure-reporting-owner-classification-precision.md)
+  — from bronze (5,743 owner rows, 4,831 CIKs, all with a captured
+  `submissions.json`; 1,220 labeled): SEC `entityType='other'` is 71%
+  person and `10%-only` is 72% entity, so neither may decide; "no legal-form
+  token + structurally-empty SEC profile + person-shaped name" is 841/841
+  for person; unambiguous-token entity is 518/520 with both misses being
+  persons whose surname is a token. Flags add nothing. edgartools already
+  fetches every owner's submissions live at parse time and computes an
+  `is_company` the repo discards. [research/18](research/18-reporting-owner-classification-precision.md).
+- [Decide how Form 3/4/5 reporting owners are classified as Person vs entity](issues/03-decide-reporting-owner-classification.md)
+  — **rule C-J**, per owner CIK: no `submissions.json` → deferred; SEC
+  `operating`/`investment` → company (bind by CIK); unambiguous legal-form
+  token → entity of undetermined kind (terminal for Person, retained, no
+  review) unless the single-token surname guard defers it; token-free +
+  structurally empty + person-shaped → **person, automatic**; else Steward
+  (~1.1% of owners, mostly persons SEC tagged with a state/FYE). Flags,
+  `other`, and deputization text are evidence, never deciders; category,
+  legal form, and kind recorded separately in `assertion.body` with rule
+  id/version; kind correction is review + rebuild, never merge. Automatic
+  entity decisions gated on re-measuring the post-hoc guards in production.
 
 ## Operator directives
 
@@ -137,7 +157,17 @@ migration, no edit to any Clean MDM file. Written at
 - **Person data in the graph and the Agent Query Surface** — `IS_INSIDER`
   and `HOLDS` are the heaviest-used graph edges; what the Person consumer
   owes downstream consumers (parity, redaction at the API) sharpens after
-  tickets 03 and 04.
+  ticket 04.
+- **Parser evidence capture** — ticket 03 needs `otherText` and footnote
+  text kept per reporting owner (deputization evidence), and the classifier
+  must read the bronze `submissions.json` instead of edgartools' live
+  per-owner SEC fetch inside `Ownership.from_xml`. Both are parser-owner
+  work like ticket 10; whether they become one task or two is decided when
+  ticket 04 fixes the field set.
+- **Reporting-owner entities of undetermined kind** — trusts, LLCs, funds
+  holding 10%: retained as deferred records outside the Person scope. Which
+  future consumer (Fund Structure, Company) claims them is that consumer's
+  charting, not this map's.
 
 ## Out of scope
 
