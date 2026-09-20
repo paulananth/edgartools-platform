@@ -135,6 +135,20 @@ migration, no edit to any Clean MDM file. Written at
   legal form, and kind recorded separately in `assertion.body` with rule
   id/version; kind correction is review + rebuild, never merge. Automatic
   entity decisions gated on re-measuring the post-hoc guards in production.
+- [Decide the projected Person field set, privacy classification, and retention](issues/04-decide-person-fields-and-privacy.md)
+  — the projection carries `legal_name` (survived by source rank),
+  `display_name` (derived reorder rule), `name_variants[]`, the
+  cross-reference identifiers, kind evidence, `profiles[]` (adviser by
+  reference only), `last_observed`, **and a `roles[]` summary** — the
+  operator chose read speed over an invariant-only identity, with three
+  guards: same assertions and rule version as the relationship edges, same
+  batch, and no matching rule may read it. Each role row carries
+  `start_date`/`end_date` (null = no end known), `date_basis` ∈ {stated,
+  observed} and `last_observed`, so "still serving" is never confused with
+  "stopped filing". Compensation is retained, never projected; reporting-owner
+  addresses are not captured at all (two booleans only). Privacy:
+  public-record class, no redaction, no new role, four structural gates
+  plus a Steward takedown path. Retention: permanent, no timer.
 
 ## Operator directives
 
@@ -156,14 +170,9 @@ migration, no edit to any Clean MDM file. Written at
   a new source, which is a capture decision for after this contract.
 - **Person data in the graph and the Agent Query Surface** — `IS_INSIDER`
   and `HOLDS` are the heaviest-used graph edges; what the Person consumer
-  owes downstream consumers (parity, redaction at the API) sharpens after
-  ticket 04.
-- **Parser evidence capture** — ticket 03 needs `otherText` and footnote
-  text kept per reporting owner (deputization evidence), and the classifier
-  must read the bronze `submissions.json` instead of edgartools' live
-  per-owner SEC fetch inside `Ownership.from_xml`. Both are parser-owner
-  work like ticket 10; whether they become one task or two is decided when
-  ticket 04 fixes the field set.
+  owes downstream consumers (graph parity, and the derived read view the
+  `roles[]` summary competes with) sharpens with ticket 05, which must
+  define the edges and the summary together.
 - **Reporting-owner entities of undetermined kind** — trusts, LLCs, funds
   holding 10%: retained as deferred records outside the Person scope. Which
   future consumer (Fund Structure, Company) claims them is that consumer's
