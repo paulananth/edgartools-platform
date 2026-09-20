@@ -18,6 +18,8 @@ verified corrections, the Agent Query Surface boundary and the now-accepted
 pre-application assessment coverage decision.
 [Candidate assessments](candidate-assessments.md) describes the persistence and
 recovery API, SQL inspection and verification boundary.
+[Family checkpoints](family-checkpoints.md) describes independent source progress
+and the remaining source-verification precondition.
 
 ## Read in delivery order
 

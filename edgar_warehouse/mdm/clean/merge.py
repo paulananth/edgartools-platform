@@ -216,6 +216,10 @@ class MergeStage:
         identities: list[dict] | None = None,
         preview: bool = False,
         deferred: list[dict] | None = None,
+        source_family: str | None = None,
+        publication_family: str | None = None,
+        committed_publication: str | None = None,
+        continuity_proof: dict | None = None,
         assessment_id: str | None = None,
         _context: dict | None = None,
     ) -> dict:
@@ -254,6 +258,29 @@ class MergeStage:
         # Preserve hashes of commands committed before deferred support existed.
         if deferred:
             command["deferred"] = deferred
+        family_metadata = {
+            "source_family": source_family,
+            "publication_family": publication_family,
+            "committed_publication": committed_publication,
+            "continuity_proof": continuity_proof,
+        }
+        if any(value is not None for value in family_metadata.values()):
+            if (
+                not all(
+                    isinstance(value, str) and value.strip()
+                    for value in (
+                        source_family,
+                        publication_family,
+                        committed_publication,
+                    )
+                )
+                or not isinstance(continuity_proof, dict)
+                or not continuity_proof
+            ):
+                raise ValueError(
+                    "Family checkpoint requires both families, publication identity and continuity proof"
+                )
+            command.update(family_metadata)
         input_hash = digest(command)
         with self.store.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
@@ -295,6 +322,11 @@ class MergeStage:
                     "consumer": consumer,
                     "sources": sorted({a["source_code"] for a in all_assertions}),
                 }
+                if source_family is not None:
+                    scope.update(
+                        source_family=source_family,
+                        publication_family=publication_family,
+                    )
                 context.update(
                     {
                         "scope": scope,

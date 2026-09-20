@@ -79,9 +79,9 @@ these external enrichment adapters is implemented in the inspected runtime.
 
 | Proposed dataset code | Publication/completeness family | Eligible consumer scope |
 | --- | --- | --- |
-| `gleif.lei` | Level 1 XML ZIP; independent baseline/delta/checkpoint | Accepted legal identity evidence; domain classification gates still apply |
-| `gleif.relationship` | RR XML ZIP coordinated with reporting exceptions | Exact source-directed accounting, fund and branch relationships |
-| `gleif.reporting_exception` | REPEX XML ZIP coordinated with RR | Preserve reason/exception evidence; missing parent is not proof of no parent |
+| `gleif.lei` | Level 1 XML ZIP; coordinated Golden Copy baseline/delta/checkpoint | Accepted legal identity evidence; domain classification gates still apply |
+| `gleif.relationship` | RR XML ZIP in coordinated Golden Copy family | Exact source-directed accounting, fund and branch relationships |
+| `gleif.reporting_exception` | REPEX XML ZIP in coordinated Golden Copy family | Preserve reason/exception evidence; missing parent is not proof of no parent |
 | `gleif.isin_lei` | Independent complete pair snapshot | Security identifier to accepted issuer identity; no legacy-Security retirement from absence |
 | `gleif.bic_lei` | Independent complete pair snapshot | Governed organization/Branch mapping; identifier semantics decide the endpoint |
 | `gleif.mic_lei` | Independent complete pair snapshot | Venue-to-operator evidence; MIC is not a Company identifier |
@@ -93,8 +93,9 @@ S&P CIQ bulk, OpenFIGI or other identifier services, market data, sanctions,
 ESG, credit and commercial company feeds are not made approved implementation
 scope by this table. Preserve the earlier program's conditional-source gates.
 
-RR plus reporting exceptions must meet a coordinated completeness boundary;
-Level 1 remains independent. Each of the six mappings has its own publication,
+The operator-accepted [foundation taxonomy](../../../.scratch/mdm-enrichment-shared-foundation/issues/02-decide-gleif-publication-family-taxonomy.md)
+on 2026-09-19 supersedes the earlier Level 1 split: Level 1, RR and reporting
+exceptions share one coordinated Golden Copy completeness/checkpoint family. Each of the six mappings has its own publication,
 cadence, checkpoint and recovery. A consumer may require several families,
 and advances only when all of its prerequisites are verified.
 
