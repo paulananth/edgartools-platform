@@ -1,0 +1,58 @@
+{
+  "inventory_digest": "b9fc9784935e563c9deafef466bf464c0696009a6cd89f4cd969b015d52c53ee",
+  "normalized_assertions_digest": "7b43be1f543b0ae31efcb6cb249b988dcf84049a57a7c7dc7d7f07d97237d082",
+  "normalized_assertions": [
+    {
+      "source_code": "fixture.publication",
+      "record_key": "SYNTHETIC-COMPANY-A",
+      "publication_key": "synthetic-2026-09-20",
+      "revision": 1,
+      "schema_version": "1",
+      "effective_at": "2026-09-20T00:00:00+00:00",
+      "kind": "company",
+      "subject": "d5c151f818af56f775f6eba4482c787405f0361af3aa8f09726cb7567b8bdae7",
+      "fields": {
+        "name": {
+          "op": "value",
+          "value": "Synthetic Company A"
+        }
+      },
+      "identifiers": {
+        "lei": "SYNTHETIC-COMPANY-A"
+      },
+      "profiles": [],
+      "relationships": [],
+      "provenance": {
+        "record_key": "SYNTHETIC-COMPANY-A",
+        "adapter_version": "fixture-v1"
+      },
+      "assertion_id": "490476fa1814173712c6fba39e7e80aac01d5d3cdd573ef899b1bea76590cb95"
+    },
+    {
+      "source_code": "fixture.publication",
+      "record_key": "SYNTHETIC-COMPANY-B",
+      "publication_key": "synthetic-2026-09-20",
+      "revision": 1,
+      "schema_version": "1",
+      "effective_at": "2026-09-20T00:00:00+00:00",
+      "kind": "company",
+      "subject": "0691f9747bd90cdac8223b67c07b19441a91885df5a159cfae38d2c51f802f97",
+      "fields": {
+        "name": {
+          "op": "value",
+          "value": "Synthetic Company B"
+        }
+      },
+      "identifiers": {
+        "lei": "SYNTHETIC-COMPANY-B"
+      },
+      "profiles": [],
+      "relationships": [],
+      "provenance": {
+        "record_key": "SYNTHETIC-COMPANY-B",
+        "adapter_version": "fixture-v1"
+      },
+      "assertion_id": "8486b617d2a95af1bd726b18c2fa8bd40ba26204e5c0e02f0eb117a25b561144"
+    }
+  ]
+}

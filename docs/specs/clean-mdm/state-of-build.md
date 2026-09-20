@@ -4,7 +4,33 @@ Checkpoint: 2026-09-19. This is a local development handoff, not a release or
 cutover approval. The shared core and first native Company preparation path
 are implemented; the complete redesign remains in progress.
 
-## Current continuation — Company pickup on 2026-09-20
+## Current continuation — source-only Company prerequisite, 2026-09-20
+
+Ticket 11 is implemented on `codex/company-publication-verification` in
+`../edgartools-platform-company-publication-verification`, based on the unmerged
+Company branch at `7784c0e3`. The PR is stacked on `codex/sec-gleif-company`;
+merge its parent first, then rebase/retarget this increment before landing on main.
+Existing worktrees are preserved; `.planning/active-workstream` is unchanged.
+
+The [source-publication verifier](source-publications.md) checks retained manifest
+and member bytes against immutable acquisition evidence, distinguishes delivery
+from source coverage and proposes deterministic per-family recovery. The synthetic
+fixture publishes zero domain records. No new table, role, migration or native
+consumer activation was introduced. The existing generic CLI still accepts caller
+proof metadata; native source consumers must call the verifier before Merge Stage.
+
+Verification: 89 broader tests and 12 final continuity tests passed without skips
+(11 overlap; 90 distinct cases). [Evidence](../../../.scratch/clean-mdm/company-publication-acceptance.json)
+pins commands, report hashes and the final guard's targeted verification.
+[Review](../../../.scratch/clean-mdm/company-publication-review.md) records boundaries.
+No persistent local database changes, hosted deployment or source deletion occurred.
+
+Next is [ticket 12](../../../.scratch/clean-mdm/issues/12-integrate-native-gleif-company-publications.md):
+qualify native GLEIF metadata and normalization, integrate verified batch membership
+and exact whole-publication consumption accounting. SEC + GLEIF Company mastering
+and its matching qualification remain incomplete; continue Company before Person.
+
+## Prior continuation — Company pickup on 2026-09-20
 
 Rebased onto `origin/main` `dc55bf1d`; Company scope remains in
 `codex/sec-gleif-company`. [Latest pickup reconciliation](../../../.scratch/handover/2026-09-20-codex-company-enrichment-reconciliation.md)

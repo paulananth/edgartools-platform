@@ -47,8 +47,9 @@ expected/advancing cursor, and stores the supplied proof atomically. It does
 **not** authenticate source artifacts or evaluate the meaning of arbitrary proof
 fields. The source consumer must verify the immutable acquisition manifest and
 all its members, then evaluate the versioned continuity rule before calling the
-Merge Stage. That verifier remains the next implementation dependency; these
-checkpoint tests do not satisfy the foundation's source-only fixture gate.
+Merge Stage. The [source-only verifier](source-publications.md) now exercises that boundary
+on a versioned offline fixture. Native consumer wiring and whole-publication
+accounting remain required; checkpoint tests alone do not establish completeness.
 
 GLEIF's later accepted foundation taxonomy groups Level 1, RR and reporting
 exceptions into one coordinated Golden Copy publication family. Identifier

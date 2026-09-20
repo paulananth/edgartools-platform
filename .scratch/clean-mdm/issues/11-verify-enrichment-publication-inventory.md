@@ -1,7 +1,7 @@
 # Verify enrichment publication inventory and continuity before consumption
 
 Type: task
-Status: open
+Status: resolved
 Owner: Codex
 Blocked by: none (10 verified)
 
@@ -39,3 +39,23 @@ plus exactly the declared member revisions under a native publication identity.
 acquisition ledger and the pinned GLEIF research inventory. Synthetic fixture
 verification must not be represented as live source qualification or calibrated
 matching truth.
+
+## Implementation and verification — 2026-09-20
+
+Implemented the [source-only verifier contract](../../../docs/specs/clean-mdm/source-publications.md)
+without new tables, roles or migrations. It verifies exact captured inventories,
+raw bytes, interpretation hashes/versions, source coverage and predecessor chains;
+recovery proposes the smallest proven delta route or a full reconciliation for
+that family. It retains proof metadata without claiming consumption completion.
+
+89 broader regression tests passed, followed by 12 final continuity tests after
+adding the completed-native-identity reuse guard; suites overlap by 11 cases.
+All passed without skips. [Acceptance evidence](../company-publication-acceptance.json)
+pins reports, commands, tested versions and fixture hashes. [Review](../company-publication-review.md).
+The real PG16 source-only fixture publishes zero domain records; a separate
+rollback/retry test preserves source evidence and atomically retains its proof.
+
+This resolves ticket 11's offline fixture slice, not the entire shared-foundation
+release gate. [Ticket 12](12-integrate-native-gleif-company-publications.md) owns
+native GLEIF metadata/normalization, verifier integration, authenticated batch
+membership and whole-publication accounting. Automatic matching stays disabled.
