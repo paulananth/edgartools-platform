@@ -1,0 +1,521 @@
+# Mastering Policy Language
+
+Status: **proposed to Clean MDM (Codex/Grok)**, 2026-09-20. Planning only.
+Written from the resolved tickets of the
+[Mastering Policy Language](../../../.scratch/mastering-policy-language/map.md)
+wayfinder map; every decision below lives in one of those tickets and is
+gisted here, never restated at length. No code, no migration, no edit to
+any Clean MDM file is implied by this document.
+
+## 1. Purpose
+
+Clean MDM's Merge Stage already runs under a **policy document**:
+`mdm_v2.policy (digest, body jsonb)` (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:10-13`),
+one immutable body pinned per batch and loaded at
+`edgar_warehouse/mdm/clean/merge.py:179-184`. Today that body is a Python
+dict (`clean/company_source.py:62-72`) whose only declarative content is
+per-field survivorship; its `automatic_rules` list must be empty or the
+batch is refused (accepted Q16).
+
+This specification defines **what the body may declare** so that the rules
+this platform has so far written by hand — Company/GLEIF binding, Person
+rule C-J, Person Tiers A–D, the 99% and 99.9% bars — become **data**:
+authored per identity kind and per source, versioned, pinned by the
+digest, replayable, and executable by a fixed interpreter over a small
+vocabulary of named primitives. Adding a source or retuning a threshold
+becomes a document change; adding a new kind of test remains a code change.
+
+Operator's framing (2026-09-20): *"instead of hard coding all of these rules
+for de duplication and merging can we create a configuration table for each
+entity for each source … 1) de duplication rules, 2) merge rules including
+priority of sources and which fields will be in the final entity."*
+
+## 2. Scope
+
+**In**: the schema of `mdm_v2.policy.body` for three rule families
+(§4); the twelve-primitive vocabulary and its versioning (§5); rule shapes
+for classification, binding/consolidation, survivorship/projection
+(§6–§8); activation with its two kinds of proof (§9); the checks a
+registration performs (§10); replay and change (§11); worked examples (§12).
+
+**Out**: relationship publication (Clean MDM's own relationship table in
+`docs/specs/clean-mdm/domain-model.md`); the interpreter, migrations and
+any implementation (Codex/Grok's); reopening accepted Q1–Q16 — this
+document gives them a data shape, and where it asks for an amendment it
+says so (§13); legacy MDM's `mdm_match_threshold` and normalization seeds,
+which are evidence of the need and are being decommissioned with legacy.
+
+## 3. Terms
+
+From `CONTEXT.md`. The operator's "de-duplication" is **Source Record
+Binding** (a source record → the identity it describes) and **Identity
+Consolidation** (two identities → one surviving identity); the operator's
+"merge rules" are **Field Survivorship** plus the projected field set.
+Two glossary lines are properties of this language, not preferences:
+`Merge Stage` *avoids* "identity consolidation by field priority", and
+`Field Survivorship` *avoids* "source rank as permission to merge
+identities". **Source priority is never an input to a sameness rule**, and
+a registration refuses a document that tries (§10).
+
+New terms this specification introduces, to be added to `CONTEXT.md` when
+the proposal is accepted:
+
+- **Mastering Policy**: the versioned, digest-pinned document that declares
+  a kind's classification, binding and survivorship rules and the proof
+  under which each may act automatically. *Avoid*: a per-source config
+  table, a runtime switch, a place to store samples.
+- **Identifier Contract**: the declaration, per identifier namespace, of
+  who issues the value, how many identities one value may name and how
+  many values one identity may carry, the second handle used to detect a
+  violation, and the measurement that verified the claim. *Avoid*:
+  "the id is unique" as an unstated assumption.
+
+## 4. Document model
+
+### 4.1 One document per identity kind, composed into one pinned body
+
+Author **one Mastering Policy per identity kind** (`person`, `company`, …).
+Classification rules sit under the **source** they read; binding and
+consolidation rules sit at **kind** level because they compare records
+across sources; survivorship sits **per field** with an ordered source
+list. The kind documents are **composed** into the single body the Merge
+Stage pins.
+
+Why composition is not optional: a batch's closure crosses kinds through
+relationships (`clean/merge.py:38-42, 69-78, 97-102`) and every reachable
+identity is re-projected under the batch's one digest
+(`merge.py:179-184, 219-266`; `clean/survivorship.py:200`), so a body
+missing a kind silently projects that kind with zero fields. A per-(kind,
+source) document dies on survivorship alone: source rank is an ordered
+list inside a per-(kind, field) rule (`survivorship.py:203, 240`;
+`docs/specs/clean-mdm/merge-stage.md:127`). Golden-record tools (Informatica,
+Reltio, Tamr) scope match rules per entity type and survivorship per
+attribute; none scopes by (entity, source).
+Evidence: [research 01](../../../.scratch/mastering-policy-language/research/01-policy-document-granularity.md).
+
+### 4.2 Body shape
+
+```json
+{
+  "version": "edgartools-policy-v3",
+  "required_consumers": ["journal", "export", "graph"],
+  "kinds": {
+    "person":  { "version": "person-2026-09-20",  "bars": {…}, "lists": {…}, "normalizers": {…},
+                 "identifiers": {…}, "classification": {…}, "binding": {…}, "fields": {…}, "projection": {…} },
+    "company": { "version": "company-2026-09-20", "…": "…" }
+  },
+  "automatic_rules": [ … ]
+}
+```
+
+`required_consumers` and `fields` are Clean MDM's existing keys, unchanged.
+`kinds.<kind>.version` is the authored kind document's own version, carried
+so that a Person-only edit is attributable even though the composite
+digest changes (§13, item 1).
+
+### 4.3 Where classification lives
+
+Kind assignment already runs **per source, before the policy loads**:
+`clean/adapters.py:58-68` assigns a kind from the dataset contract's
+adapter block, looked up by `source_code` at `clean/cli.py:89-95`, and the
+result is hashed into `assertion_id` (`clean/evidence.py:82-90`). A
+classification rule is therefore authored under its source and must be
+reachable from the dataset contract. Whether the rule text is stored in
+`kinds.<kind>.classification.<source>` and referenced from
+`mdm_v2.dataset.body.adapter`, or stored in the adapter block itself, is
+**Open** (§15, item 2). The rule shape and vocabulary are identical either
+way; the prototype used the former.
+
+## 5. The primitive vocabulary
+
+**Structure and parameters in data; primitives in code.** The document
+declares steps, order, verdicts, thresholds, token lists, field paths and
+source ranks. Code provides a fixed vocabulary of named, versioned tests.
+Extracted from the rules already written — nothing speculative added.
+Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-primitive-vocabulary.md).
+
+| Family | Primitive | Parameters | Returns |
+| --- | --- | --- | --- |
+| shared | `normalize_text` | `field`, policy ref (case, Unicode, punctuation, `&`, suffixes) | normalized string |
+| shared | `normalize_identifier` | `field`, namespace format | normalized string or typed refusal |
+| classification | `evidence_present` | `document` (declared evidence reference) | bool |
+| classification | `field_in_set` | `field`, `values[]` | bool |
+| classification | `token_match` | `field`, `normalizer`, `token_list`, `exclude_list?`, `min_count?`, `max_count?` | bool |
+| classification | `name_shape` | `field`, `normalizer`, `min_tokens`, `max_tokens`, `suffix_list`, `forbid_digits{applies_to}`, `forbid_characters{applies_to}` | bool |
+| classification | `fields_all_empty` | `fields[]` (declared paths) | bool |
+| binding | `identifier_match` | `namespace`, `field`, `normalizer` | matching identity or none |
+| binding | `identifier_cardinality` | `namespace` (contract in §7.2) | veto or pass |
+| binding | `compound_key_equal` | `components[] {field, normalizer, comparison ∈ exact|consistent}` | bool |
+| binding | `name_similarity` | `left`, `right`, `normalizer`, `method@version`, `min_score` | bool |
+| survivorship | `select_by_source_rank` | `sources[]` (ordered), `clear_sources[]`, `allow_unknown_effective`, `max_age_days` | winner + retained conflicts |
+
+Why the line sits here: the same words (`TRUST`, `FUND`, `CO`, `HOLDINGS`)
+are entity *evidence* in rule C-J (`18-classify.py:64-80`) and are
+*deleted* by the legacy normalizer (`002_seed_data.sql:73-98`) — one
+primitive, two declared lists, opposite uses. Survivorship needs one
+primitive because Clean MDM's accepted five-step order
+(`merge-stage.md:123-130`) is fixed; the document supplies only the rank
+list and eligibility parameters.
+
+**What the vocabulary cannot express**, by design: document-supplied
+regular expressions or SQL, clock or network reads, loops, `OR` inside a
+step (first-match ordering over steps is how an *unless* is written).
+Each would make a pinned digest fail to reproduce a result.
+
+**Versioning.** Every primitive is referenced `name@version`
+(`token_match@1`, `normalize_text@edgar-conformed-v1`,
+`name_similarity@jaro_winkler-jellyfish-1.0.3`). The interpreter holds a
+registry keyed by that pair and **refuses a body naming a pair it does not
+have** — at registration (`clean/store.py:155-156`) and per batch
+(`merge.py:183-184`). A list or threshold edit needs no primitive bump: it
+re-digests the body. A corrected primitive is a **new version**; the old
+one is never modified in place. A pinned third-party dependency is part of
+the version string (`merge-stage.md:67`: "pin the similarity dependency
+*and* algorithm"). Stated plainly: **the digest pins the document, not the
+code it names** — exact replay of an old batch needs the old
+implementation still in the build, so superseded primitive versions are
+retained, the same bargain `merge-stage.md:100-104` strikes for decision
+history.
+
+## 6. Classification rules
+
+```json
+{
+  "rule_id": "C-J", "version": "2026-09-20", "family": "classification",
+  "source": "sec.ownership_reporting_owner", "evaluated_per": "sec.owner_cik",
+  "emits": ["person", "company", "entity_undetermined", "deferred"],
+  "steps": [
+    { "step": "0", "verdict": "deferred", "when": [ { "primitive": "evidence_present@1", "negate": true,
+                                                       "args": { "document": "sec.submissions.owner" } } ] },
+    { "step": "1", "verdict": "company",  "when": [ { "primitive": "field_in_set@1",
+                                                       "args": { "field": "sec.submissions.entityType", "values": ["operating", "investment"] } } ] },
+    { "step": "2-guard", "verdict": "deferred", "when": [ "token_match (exactly one)", "name_shape", "fields_all_empty" ] },
+    { "step": "2", "verdict": "entity_undetermined", "when": [ "token_match (unambiguous, ≥ 1)" ] },
+    { "step": "3", "verdict": "person", "when": [ "not token_match", "fields_all_empty", "name_shape" ] },
+    { "step": "4", "verdict": "deferred", "otherwise": true }
+  ],
+  "evidence_recorded": ["sec.submissions.entityType", "structural_fields", "entity_tokens", "person_name_shape", "deputization_text", "flags"]
+}
+```
+
+Rules:
+
+- Steps are evaluated in listed order; the **first step whose `when` list
+  holds entirely** supplies the verdict. A `when` list is a conjunction.
+- The catch-all is written `"otherwise": true`, never an empty `when`
+  (prototype finding 3; an empty list reads as "always true" and is easy to
+  mis-edit by hand). A rule without a catch-all is refused.
+- `evaluated_per` names the key one verdict is computed for; every record
+  carrying that key receives it.
+- `evidence_recorded` names what is written to the assertion regardless of
+  verdict. Source category, asserted legal form and inferred kind are
+  stored **separately** with the rule id, version and step that fired
+  (`domain-model.md:41-44`). A kind correction is review plus bounded
+  rebuild, never an entity merge.
+- Declared lists must carry `AND`, not `&`: EDGAR conformed names
+  normalize the ampersand (prototype finding 4). A registration validates
+  declared lists against the named normalizer.
+- A verdict may be `automatic` only for `(rule_id, version, verdict)`
+  entries in `automatic_rules` (§9). Every other verdict is Steward review.
+
+Rule C-J in full, with its 125 legal-form tokens, ambiguous and suffix
+lists and six structural field paths as parameters:
+[`prototype/policy-person.json`](../../../.scratch/mastering-policy-language/prototype/policy-person.json).
+Its decision and measurement:
+[Person ticket 03](../../../.scratch/person-consumer-contract/issues/03-decide-reporting-owner-classification.md),
+[research 18](../../../.scratch/person-consumer-contract/research/18-reporting-owner-classification-precision.md).
+
+## 7. Binding and consolidation rules
+
+### 7.1 Shape
+
+```json
+{
+  "rule_id": "person-tier-a-owner-cik", "version": "2026-09-20", "family": "binding",
+  "source": "sec.ownership_reporting_owner", "applies_to_verdict": "person", "emits": ["bind"],
+  "when": [
+    { "primitive": "identifier_match@1",       "args": { "namespace": "sec.cik", "field": "owner_cik", "normalizer": "normalize_identifier@sec-cik-v1" } },
+    { "primitive": "identifier_cardinality@1", "args": { "namespace": "sec.cik" } }
+  ]
+}
+```
+
+- `applies_to_verdict` restricts the rule to records a classification rule
+  has given that kind; a binding rule never runs on a `deferred` or
+  `entity_undetermined` record.
+- `emits` is `bind` (Source Record Binding), `consolidate` (Identity
+  Consolidation) or `review`. Tier C (fuzzy) emits `review` and is
+  refused if it tries to emit `bind` on `name_similarity` alone (§10).
+- A binding rule may not call `select_by_source_rank` (§3).
+- Person Tiers A–D as written:
+  [ticket 02](../../../.scratch/person-consumer-contract/issues/02-decide-what-binds-a-person.md).
+  Company/GLEIF binding as written:
+  [GLEIF consumer spec](../../../.scratch/gleif-company-augmentation/spec.md).
+
+### 7.2 The Identifier Contract
+
+Declared once per namespace under `kinds.<kind>.identifiers`. This is
+where Clean MDM's *"Exclusivity is policy-specific"*
+(`domain-model.md:46-48`) is made concrete.
+
+| Field | Meaning | `sec.cik` (Person) | `crd.individual` (Person) |
+| --- | --- | --- | --- |
+| `authority` | issuer of the value | SEC/EDGAR | FINRA/IARD |
+| `normalizer` | `name@version` | `normalize_identifier@sec-cik-v1` | `normalize_identifier@crd-v1` |
+| `claim.forward` | one value → at most N identities | **1** | **1** |
+| `claim.reverse` | one identity → at most N values | unbounded (cross-reference ids) | unbounded; duplicates measured ~12/10k |
+| `compatibility` | the second handle the runtime veto compares: `field`, `predicate@version` | `owner_name`, `name_compatible@lenient-v1` | `name`, same |
+| `verification` | the measurement that earned activation: counts, bound, corpus hash, who/when | 0/72,981 decisions, Wilson UB 0.53/10k; reverse 0/16,677 same-issuer pairs | research 16 figures; forward only |
+| `tolerance` | §9.3 | `{unit: items, warm_up_decisions: 10000, max_per_10k: 5}` | same |
+
+Why `sec.cik` can make its claim: EDGAR discards any filer-supplied
+reporting-owner name and inserts the CIK's registered name (Ownership XML
+Technical Specification v5.1 §4.3.2), so a name difference on one CIK is a
+registered-account event; 0 genuine "one CIK, two people" in 104,970 rows.
+Why `crd.individual` cannot claim the reverse: research 16. The two Tier A
+rules differ in contract, not just namespace.
+Evidence: [research 07](../../../.scratch/mastering-policy-language/research/07-owner-cik-cardinality-and-deterministic-binding.md),
+[ticket 06](../../../.scratch/mastering-policy-language/issues/06-decide-how-a-deterministic-rule-activates.md).
+
+Reverse-direction hits (an identity would acquire a second value) are
+reported as **consolidation candidates**, never vetoed — an identity holds
+any number of cross-reference ids. Collapsing them is Identity
+Consolidation with its own evidence.
+
+## 8. Survivorship and projection
+
+Clean MDM's existing `fields` block is the survivorship declaration and is
+kept as is: per kind, per field, an ordered `sources` list plus
+eligibility (`clear_sources`, `allow_unknown_effective`, `max_age_days`),
+implemented at `clean/survivorship.py:200-280` under the accepted five-step
+order (`merge-stage.md:123-130`). This document adds:
+
+- `primitive: "select_by_source_rank@1"` named explicitly per field, so
+  the version is pinned like every other primitive.
+- `field_group: [...]` for coherent groups (address components) that must
+  select from one claim together — **accepted policy with no
+  implementation** (`merge-stage.md:137-139`; `survivorship.py` is strictly
+  per-field). Raised for Codex (§13, item 3).
+- `projection: { fields: [...], evidence_only: [...] }` per kind — which
+  fields the final entity exposes and which are retained as evidence only.
+  The Person field set waits on the Person map's own field/privacy ticket
+  (§15, item 4).
+
+The Company example (SEC authoritative, GLEIF additive; a comparable GLEIF
+disagreement never overwrites an SEC value):
+[`prototype/policy-company.json`](../../../.scratch/mastering-policy-language/prototype/policy-company.json).
+
+## 9. Activation
+
+A rule in the document is **declared** (it fires; its result goes to a
+Steward) until an `automatic_rules` entry makes one of its verdicts
+**active** (it fires; the Merge Stage binds or classifies alone).
+**Activation is per `(rule_id, rule_version, verdict)`, never per rule.**
+This is what lets C-J's `person` verdict run automatically while its
+`entity_undetermined` verdict stays review-only — Person ticket 03's
+release gates 1 and 2 as data. No new table, no status column, no new
+role: policy registration is already owner-only and the runtime is already
+forbidden to change activation (`docs/specs/clean-mdm/recovery.md:51, 111`).
+Evidence: [research 02](../../../.scratch/mastering-policy-language/research/02-rule-activation-and-proof.md).
+
+### 9.1 Bars
+
+Declared per `(kind, family)` under `kinds.<kind>.bars`:
+`{ "min_precision": 0.99, "method": "wilson_lower_bound", "one_sided_confidence": 0.975 }`.
+Person is 0.99 (operator amendment, proposed to Codex); Company is 0.999
+(accepted Q11). A rule with no bar for its family cannot be activated.
+
+### 9.2 `measured` activation
+
+```json
+{ "kind": "person", "family": "classification", "rule_id": "C-J", "rule_version": "2026-09-20", "verdict": "person",
+  "activation": "measured",
+  "proof": { "method": "wilson_lower_bound", "one_sided_confidence": 0.975, "n": 841, "correct": 841, "lower_bound": 0.99545,
+             "adversarial": { "fixture_sha256": "…", "violations": 0 },
+             "cohort": { "description": "…", "source_codes": ["…"], "drawn_at": "…", "seed": "20260920", "n_population": 4831,
+                         "files": { "18-sample.jsonl": "87209b16…", "18-owners.jsonl": "8181e1bf…", "18-classify.py": "…" } },
+             "approved_by": "operator", "approved_at": "2026-09-20T…", "reason": "research 18, C-J person arm" } }
+```
+
+The proof travels **inside the body next to the rule** (~923 canonical
+bytes); labelled samples stay outside as files named by SHA-256. The Merge
+Stage check is a pure predicate over the body:
+
+```
+for entry in automatic_rules:
+    rule = kinds[kind][family].rules[rule_id]            # must exist
+    require rule.version == entry.rule_version            # a rule edited after its proof is orphaned
+    require entry.verdict in rule.emits
+    bar = kinds[kind].bars[family]                        # no default
+    require proof.method == bar.method and proof.one_sided_confidence == bar.one_sided_confidence
+    require recompute(proof) == proof.lower_bound and proof.lower_bound >= bar.min_precision
+    require proof.adversarial.violations == 0 and proof.cohort.files non-empty
+    require approved_by, approved_at, reason
+```
+
+replacing the truthiness refusal at `merge.py:183-184` and
+`store.py:155-156`. Stated plainly: **the check verifies arithmetic, not
+truth** — a fabricated `n: 1000, correct: 1000` passes. The defences are
+attribution (append-only, in every publication payload) and a CI job
+outside the Merge Stage that re-scores the named files.
+
+### 9.3 `deterministic` activation
+
+A rule whose `when` is identifier primitives only has no precision to
+measure; its failure mode is a wrong **identifier contract**, not a wrong
+score. Its activation entry names `"activation": "deterministic"` and the
+predicate checks instead that every namespace the rule names has a
+contract (§7.2) with `claim.forward`, `compatibility` (predicate, version,
+**field**), `verification` with a corpus hash, and a complete `tolerance`
+block, and that every named primitive resolves.
+
+**Runtime behaviour when the claim is violated** (ticket 06, Q2 = defer and
+count, tuned on research 07):
+
+- **Detect**: `identifier_cardinality` resolves the incoming id to an
+  existing identity and compares the incoming `compatibility.field` with
+  the names already on it using the declared predicate. A "materially
+  new" name is the candidate violation. This is a heuristic inside a
+  deterministic rule and is declared and versioned for that reason.
+- **Defer** the violating record to the Steward; the rule keeps running.
+- **Count distinct `(identifier, incoming normalized name)` items**, not
+  records — one prolific filer with one typo'd registered name is
+  otherwise a burst (27 records for one typo in the corpus).
+- **Line**: `warm_up_decisions: 10000`, `max_per_10k: 5`. Measured: never
+  trips on 72,981 real decisions; stopped an injected bulk failure within
+  8–48 decisions where defer-only silently minted 291 bogus Persons, and
+  deactivate-on-first-violation died at decision 3,107 on a middle initial.
+- **Deactivate** when the rate crosses the line after warm-up: the
+  automatic verdict is withdrawn for the rest of the batch and thereafter;
+  review until a new document with a fresh verification is registered;
+  recorded as evidence against the contract in the batch's commit evidence.
+- **A Steward resolution must record the alias**, or the same item recurs
+  on every later filing.
+
+Limits: the runtime can see only name-mismatch alarms, every one of which
+was false on real data; a different person with a compatible name is
+invisible to any runtime check — the contract's verification guards
+against that, not the runtime. The tolerance is tuned on one failure shape.
+
+## 10. Checks a registration performs
+
+Fail closed, in `store.register_policy` and again per batch. A refused
+document never becomes a digest.
+
+1. Every `primitive` is a registered `name@version`.
+2. Every classification rule has exactly one `otherwise` step and every
+   step names a verdict in `emits`.
+3. Declared lists are valid under their named normalizer (`&` → `AND`).
+4. A binding rule calls no survivorship primitive.
+5. A binding rule emitting `bind` does not rest on `name_similarity` alone.
+6. Every `automatic_rules` entry satisfies §9.2 or §9.3; no duplicate
+   `(kind, family, rule_id, verdict)`.
+7. Every namespace an activated deterministic rule names has a complete
+   Identifier Contract.
+8. Every kind that any relationship in the body can reach is present in
+   `kinds` (§4.1 — a missing kind projects zero fields).
+
+The prototype's `validate()` implements 1, 4, 5, 6 and refuses six abuse
+cases: a rule edited after its proof, a bar raised above the proof, a
+proof at a different confidence coverage, a fabricated lower bound,
+activating a verdict the rule cannot emit, and a similarity-only bind.
+
+## 11. Change and replay
+
+- A batch pins one digest; replaying it uses that body and the primitive
+  versions it names, so it reproduces the decision that day's policy
+  authorised. Old primitive versions are retained (§5).
+- Any edit mints a new digest. A rule edit changes `rule.version` and
+  orphans its activation entry; the rule silently falls back to review
+  rather than inheriting a proof measured on its predecessor.
+- A bar change re-runs the arithmetic on registration; every rule that no
+  longer clears it is refused. Nobody hunts for what a bar change
+  invalidated.
+- Which identities a re-registration must re-project is **Open**
+  (§15, item 1); bounded rebuild per `merge-stage.md` is the expected
+  mechanism.
+
+## 12. Worked examples
+
+[`prototype/`](../../../.scratch/mastering-policy-language/prototype/) —
+throwaway, marked as such. `policy-person.json` (C-J, Tiers A–D, one
+activation entry) and `policy-company.json` (CIK, Adjudicated Seed Links,
+deterministic crosswalk, no activation) read by `interpret.mjs` reproduce
+research 18 **to the row**: person 841/841, entity 353/353, 26 deferred
+over the 1,220-row labelled sample; 1.2% deferral over the whole corpus.
+`interpret-binding.mjs` runs Tier A binding with a real identity store
+over 72,981 decisions. `demo.html` opens by double-click with six guided
+cases. Survivorship was **not** exercised — it needs a populated identity
+store.
+
+## 13. Dependencies on Clean MDM and items raised for Codex
+
+This is a proposal against `mdm_v2.policy`, `clean/merge.py`,
+`clean/store.py` and `clean/adapters.py`, all Codex/Grok's. Items they must
+decide, in the order they bite:
+
+1. **Composite-digest provenance churn.** The whole-body digest is stamped
+   on every selected field (`survivorship.py:274`) and folded into
+   `business_hash` (`consumer.py:98`), so a Person-only edit changes
+   Company field provenance on the next Company batch. Churn, not a fault;
+   fixed if the kind section's own `version` (§4.2) is stamped alongside.
+2. **Q11's confidence coverage.** Accepted Q11 says one-sided **95%**;
+   research 18 measured one-sided **97.5%** (n ≥ 268 vs ≥ 381 at a 99%
+   bar; 2,703 vs 3,838 at 99.9%). Proofs at different coverage are not
+   comparable, hence the single `one_sided_confidence` field required
+   equal in bar and proof. Codex settles which Q11 means.
+3. **Two accepted rules with no implementation**: coherent field groups
+   (`merge-stage.md:137-139`) and the publication-time tiebreak
+   (`merge-stage.md:129`); `survivorship.py:239-249` skips both.
+4. **Q16 amendment.** `automatic_rules` non-empty is today a refusal; this
+   document asks that it be accepted when every entry passes §9 — the
+   proof replaces the prohibition, it does not weaken it.
+5. **Person Q11 at 99%** — the earlier proposal
+   ([handover](../../../.scratch/handover/2026-09-20-claude-to-codex-person-q11-amendment.md))
+   this document's Person bar depends on.
+6. **Q11 speaks of precision only.** The `deterministic` activation kind
+   (§9.3) is an addition to accepted policy, with its evidence.
+
+## 14. Release gates
+
+1. Registration refuses all eight checks in §10 on a fixture set that
+   includes the prototype's six abuse cases.
+2. `interpret` over the accepted Person and Company documents reproduces
+   research 18 to the row and research 07's binding run to the decision.
+3. Every automatic verdict live in production has a proof in the body
+   whose sample files re-score in CI to the stated `n`/`correct`.
+4. A Person-only edit does not change Company field provenance (item 13.1
+   resolved one way or the other, recorded).
+5. The deterministic tolerance has tripped at least once on an injected
+   fault in a non-production run, and never on the production cohort,
+   before any deterministic rule runs alone.
+6. `CONTEXT.md` carries **Mastering Policy** and **Identifier Contract**.
+
+## 15. Open
+
+1. **Re-projection scope on re-registration** (§11).
+2. **Home of classification rule text** — kind document referenced from
+   the dataset contract, or the adapter block itself (§4.3). With it, the
+   **field-alias map** (document field path → source column) that the
+   prototype had to hard-code: it is the dataset contract's adapter block
+   and nothing has yet specified it.
+3. **Authoring surface** — repo files registered by `store.register_policy`
+   is the assumed default; how the composition is built and validated
+   before registration is not specified.
+4. **Person projection** — the field set, privacy classification and
+   retention wait on the Person map's ticket 04.
+5. **Migration of rules already written** — restated in policy documents
+   (the prototype's approach) or referenced from their tickets.
+
+## 16. Evidence
+
+| Decision | Ticket | Evidence |
+| --- | --- | --- |
+| Destination, boundary, families | map Q1–Q3 | grilled 2026-09-20 |
+| One document per kind, composed | [01](../../../.scratch/mastering-policy-language/issues/01-research-policy-document-granularity.md) | research 01 |
+| Activation per verdict, proof beside the rule | [02](../../../.scratch/mastering-policy-language/issues/02-research-rule-activation-and-proof.md) | research 02 |
+| Twelve primitives, versioning | [03](../../../.scratch/mastering-policy-language/issues/03-define-primitive-vocabulary.md) | research 03 |
+| The language holds; four findings | [04](../../../.scratch/mastering-policy-language/issues/04-prototype-person-and-company-documents.md) | prototype |
+| Deterministic activation, defer and count | [06](../../../.scratch/mastering-policy-language/issues/06-decide-how-a-deterministic-rule-activates.md) | research 07 |
+| Rule C-J | Person [03](../../../.scratch/person-consumer-contract/issues/03-decide-reporting-owner-classification.md) | research 18 |
+| Tiers A–D | Person [02](../../../.scratch/person-consumer-contract/issues/02-decide-what-binds-a-person.md) | research 15, 16 |

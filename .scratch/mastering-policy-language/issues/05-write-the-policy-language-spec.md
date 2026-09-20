@@ -1,7 +1,7 @@
 # Write the mastering policy language specification and hand it to Codex
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: none (06 resolved 2026-09-20)
 
 ## Question
@@ -21,3 +21,23 @@ accepted Q11 (research 02). Then write the handover note under
 `.scratch/handover/` pointing a Codex session at the spec.
 
 Planning only: no code, no migration, no edit to any Clean MDM file.
+
+## Answer
+
+Resolved 2026-09-20. Written:
+
+- [`docs/specs/mdm/policy-language.md`](../../../docs/specs/mdm/policy-language.md)
+  — sixteen sections: purpose, scope, terms, document model, the twelve
+  primitives and versioning, the three rule shapes, the Identifier
+  Contract, activation (`measured` and `deterministic`, with the Merge
+  Stage predicate and the defer-and-count runtime), the eight registration
+  checks, change and replay, worked examples, six items for Codex, six
+  release gates, five Open items, and the evidence table.
+- [`.scratch/handover/2026-09-20-claude-to-codex-mastering-policy-language.md`](../../handover/2026-09-20-claude-to-codex-mastering-policy-language.md)
+  — the pointer note.
+- `CONTEXT.md` — **Mastering Policy** and **Identifier Contract** added to
+  the glossary.
+
+Not verified: the spec has not had a documentation review against the map
+and repository (the foundation spec's gate 4 pattern). Recorded as the
+next step on the map, not claimed done.

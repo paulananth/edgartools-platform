@@ -148,6 +148,19 @@ any Clean MDM file.
   claim forward 1 with evidence; `crd.individual` cannot claim reverse.
   Steward resolution must record the alias. Spec ticket unblocked.
 
+## Destination reached
+
+2026-09-20: [`docs/specs/mdm/policy-language.md`](../../docs/specs/mdm/policy-language.md),
+handed to Codex by
+[handover](../handover/2026-09-20-claude-to-codex-mastering-policy-language.md).
+Seven tickets resolved. The five Open items below are carried in the spec's
+§15 as Open, not decided. **Next**: a documentation review of the spec
+against this map and the repository before it is treated as verified.
+
+- [Write the mastering policy language specification and hand it to Codex](issues/05-write-the-policy-language-spec.md)
+  — written; glossary entries **Mastering Policy** and **Identifier
+  Contract** added to `CONTEXT.md`; not yet reviewed.
+
 ## Not yet specified
 
 - **Change and replay**: what a new policy version re-evaluates (bounded
