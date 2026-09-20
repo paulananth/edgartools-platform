@@ -109,6 +109,13 @@ had never itself been through a decision process.
   is an actor in the decision body. Business names locked and added to
   `CONTEXT.md`: Fetch Planner, Source Capturer, Revision Claimer,
   Publication Verifier, Ledger Repairer, MDM Committer, Steward.
+- [Write the per-family checkpoint-key proposal for Clean MDM and hand it over](issues/08-write-checkpoint-key-proposal-for-clean-mdm.md)
+  — done: [proposal map](../clean-mdm-checkpoint-key-proposal/map.md) +
+  [handover note](../handover/2026-09-19-claude-to-codex-mdm-checkpoint-key-proposal.md).
+  Widen `mdm_v2.checkpoint` to `(consumer, source_family,
+  publication_family)` with consumed publication and continuity proof;
+  evidenced from Clean MDM's own `recovery.md`, `source-evidence.md`, and
+  `company_source.py`'s per-batch-consumer workaround. Codex's to accept.
 
 ## Not yet specified
 
