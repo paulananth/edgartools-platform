@@ -1,7 +1,7 @@
 # Trace the DEF 14A executive-record Person pipeline from code
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -37,3 +37,20 @@ what could not be determined from code. Cover, in order:
    `docs/specs/clean-mdm/pipeline-inventory.md` and anything in
    `domain-model.md` (read from `origin/codex/clean-mdm-integration` with
    `git show`; never edit).
+
+## Answer
+
+[research/12](../research/12-proxy-executive-person-pipeline.md), 2026-09-19.
+Root cause of the 47% role-text names is **upstream in edgartools 5.30.0**
+(`edgar/proxy/html_extractor.py:857-864`, verified against the locked
+install): the row walk overwrites the current name with wrapped title
+fragments on multi-year compensation blocks; the platform copies
+`entry.name` verbatim (`proxy_fundamentals.py:108`). Ticket 10 corrected
+accordingly. Other facts: the proxy row carries no person identifier;
+silver collapse key excludes `fiscal_year`; legacy MDM bypasses
+`PersonResolver` and does an exact, case-sensitive, issuer-unscoped name
+lookup then a per-issuer UUID5 stub (so one entity named "Chief Financial
+Officer" accrues `EMPLOYED_BY` edges to every affected issuer); stubs are
+never retired; per-filing fetch has no `--force`, so a parser fix alone
+does not re-parse marked accessions; no test exercises the parser's
+name/title output.

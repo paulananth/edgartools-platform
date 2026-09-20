@@ -9,9 +9,17 @@ Blocked by: none
 Nothing to decide on this map. Research 01 found 47% of
 `sec_executive_record.exec_name` values are role vocabulary ("Chairman of
 the", "President and Chief", "Executive Officer") and the top "names" by
-issuer count are job titles. `edgar_warehouse/parsers/proxy_fundamentals.py`
-is splitting the compensation-table name/role columns wrong for roughly half
-of issuers. Until fixed, the proxy source cannot participate in any Person
+issuer count are job titles. **Corrected by research 12**: the platform's
+`edgar_warehouse/parsers/proxy_fundamentals.py:108` copies `entry.name`
+verbatim from the *edgartools* PyPI package (5.30.0,
+`edgar/proxy/html_extractor.py:857-864`), whose row walk overwrites the
+current name with wrapped title fragments on multi-year compensation
+blocks. Two repair points: upstream in edgartools, or a platform-side
+carry-forward in `proxy_fundamentals.py:100-118`. See
+[research 12](../research/12-proxy-executive-person-pipeline.md) for the
+mechanism and a proposed test. Note research 12 F8: the per-filing fetch
+has no `--force`, so a parser fix alone will not re-parse already-marked
+accessions. Until fixed, the proxy source cannot participate in any Person
 binding rule (ticket 02 treats it as review-only evidence).
 
 This is production parser code: it needs its own branch, the mandatory
