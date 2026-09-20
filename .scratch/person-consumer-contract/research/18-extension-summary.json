@@ -1,0 +1,2341 @@
+{
+ "n_extension_labeled": 160,
+ "labels": {
+  "entity": 159,
+  "person": 1
+ },
+ "rules": {
+  "R1 entityType (other->person)": {
+   "extension_decisions": {
+    "person": 151,
+    "person_wrong": 150,
+    "entity": 9
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.700854948272956,
+    1.0
+   ],
+   "pooled_decided_entity": 31,
+   "pooled_entity_correct": 31,
+   "pooled_entity_precision": 1.0,
+   "pooled_entity_wilson95": [
+    0.889744602991977,
+    1.0
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1035350",
+     "name": "SECURIAN ASSET MANAGEMENT, INC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ASSET,INC,MANAGEMENT; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=MN (weak); fye=1231 (weak); signed 'by/its' SECURIAN ASSET MANAGEMENT, INC., By: /s/ Suzette Huovinen, P"
+    },
+    {
+     "key": "1041718",
+     "name": "CEDAR CREEK PARTNERS LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,PARTNERS; issuer forms D/A; soi=WA (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1073894",
+     "name": "JOHN HANCOCK LIFE INSURANCE CO USA",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,INSURANCE,LIFE; issuer forms 424B3,8-A12B,CORRESP,EFFECT; institutional forms N-PX; EIN present; fye=1231 (weak); sic=6311 (weak); org=02 Finance (weak); signed 'by/its' Betsy Anne Seel, by Power of Attorney"
+    },
+    {
+     "key": "1127508",
+     "name": "ALLIANZ SE",
+     "decided": "person",
+     "label": "entity",
+     "reason": "Allianz SE (Societas Europaea); files 20-F/13F-HR; sic/soi/ein populated"
+    },
+    {
+     "key": "1134557",
+     "name": "MSD Portfolio L.P. - Investments",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,L P,PORTFOLIO; soi=NY (weak); fye=1231 (weak); signed 'by/its' MSD Capital, L.P., By: MSD Capital Management LLC, Its: Gene"
+    },
+    {
+     "key": "1162870",
+     "name": "WARBURG PINCUS LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; institutional forms 13F-HR,13F-HR/A,N-PX; soi=NY (weak); fye=1231 (weak); signed 'by/its' WARBURG PINCUS LLC, By: /s/ Harsha Marti, General Counsel & "
+    },
+    {
+     "key": "1166152",
+     "name": "PRESCOTT GROUP CAPITAL MANAGEMENT, L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,GROUP,L L C,MANAGEMENT; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=OK (weak); fye=1231 (weak); signed 'by/its' PRESCOTT GROUP CAPITAL MANAGEMENT, L.L.C., Name: /s/ Phil Fr"
+    },
+    {
+     "key": "1230440",
+     "name": "Neuberger Berman Investment Advisers LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISERS,INVESTMENT,LLC; issuer forms CORRESP; institutional forms N-PX; EIN present; fye=1231 (weak)"
+    },
+    {
+     "key": "1251145",
+     "name": "CF GROUP MANAGEMENT INC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GROUP,INC,MANAGEMENT"
+    },
+    {
+     "key": "1256520",
+     "name": "CORSTAR HOLDINGS INC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,INC; EIN present; signed 'by/its' By: Jeffrey Michael For: Corstar Holdings, Inc."
+    },
+    {
+     "key": "1275993",
+     "name": "SECOND 1109 HOLDCO LTD.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LTD; fye=1231 (weak)"
+    },
+    {
+     "key": "1278386",
+     "name": "BROADWOOD PARTNERS, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,PARTNERS; issuer forms D,D/A; institutional forms N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Broadwood Partners, L.P., By: Broadwood Capital, Inc., By: /"
+    },
+    {
+     "key": "1278387",
+     "name": "BROADWOOD CAPITAL INC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,INC; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=NY (weak); fye=1231 (weak); signed 'by/its' Broadwood Partners, L.P., By: Broadwood Capital, Inc., By: /"
+    },
+    {
+     "key": "1283718",
+     "name": "CANADA PENSION PLAN INVESTMENT BOARD",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENT,PENSION,PLAN; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=A6 (weak); fye=0331 (weak); signed 'by/its' CANADA PENSION PLAN INVESTMENT BOARD, By: /s/ Kathryn Daniel"
+    },
+    {
+     "key": "1283968",
+     "name": "Westend S.A.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) S A; institutional forms N-PX; soi=N4 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1289244",
+     "name": "Assured Guaranty US Holdings Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,INC; issuer forms 424B1,424B2,424B3,424B5; fye=1231 (weak); sic=6351 (weak); org=02 Finance (weak)"
+    },
+    {
+     "key": "1352851",
+     "name": "Magnetar Financial LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,LLC; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Hayley A. Stein, Attorney-in-fact for David J. Snyderman"
+    },
+    {
+     "key": "1407718",
+     "name": "New Mountain Capital, L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,L L C; institutional forms 13F-HR,N-PX; EIN present; soi=NY (weak); fye=1231 (weak); signed 'by/its' CoyCo 1, L.P., By: CoyCo GP, L.L.C., its general partner, By"
+    },
+    {
+     "key": "1421897",
+     "name": "Mastercard Foundation",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FOUNDATION; EIN present; signed 'by/its' Mastercard Foundation Asset Management Corp By: /s/ Jennifer"
+    },
+    {
+     "key": "1449433",
+     "name": "Apollo Management Holdings GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,HOLDINGS,LLC,MANAGEMENT; soi=DE (weak)"
+    },
+    {
+     "key": "1492231",
+     "name": "Stone Point GP Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LTD; soi=E9 (weak); fye=1231 (weak); signed 'by/its' SPC Field Partners LLC, By: /s/ Jacqueline M. Giammarco, Vic"
+    },
+    {
+     "key": "1517140",
+     "name": "Starboard Principal Co GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,GP,LLC; institutional forms N-PX; EIN present; signed 'by/its' Starboard Value LP, By: /s/ Lorelei Martin, Authorized Signa"
+    },
+    {
+     "key": "1519641",
+     "name": "BASSWOOD FINANCIAL FUND, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,FUND,L P; issuer forms D,D/A; soi=NY (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1530803",
+     "name": "Oasis Investments II Master Fund Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,INVESTMENTS,LTD,MASTER; soi=E9 (weak); signed 'by/its' /s/ Oasis Management Company Ltd., By: Phillip Meyer, its Ge"
+    },
+    {
+     "key": "1535264",
+     "name": "AWM Investment Company, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) COMPANY,INC,INVESTMENT; institutional forms 13F-HR,13F-HR/A,N-PX; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1543112",
+     "name": "Morningside Venture Investments Ltd",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,LTD,VENTURE; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1554853",
+     "name": "Warburg Pincus (Cayman) XI, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1564932",
+     "name": "Redpoint Ventures V, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,VENTURES; issuer forms D; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Redpoint Ventures V, L.P. , By Redpoint Ventures V, LLC, its"
+    },
+    {
+     "key": "1565707",
+     "name": "GRAT Holdings LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=NY (weak); fye=1231 (weak); signed 'by/its' ELECTRUM STRATEGIC RESOURCES L.P., By: /s/ Michael H. Willia"
+    },
+    {
+     "key": "1566491",
+     "name": "Apollo Principal Holdings A GP Ltd",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,HOLDINGS,LTD; soi=E9 (weak)"
+    },
+    {
+     "key": "1567459",
+     "name": "J.H. Whitney Equity Partners VII, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) EQUITY,LLC,PARTNERS; institutional forms 13F-HR,N-PX; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Robert M. Williams, Jr., as Managing Member of J.H. WHIT"
+    },
+    {
+     "key": "1576146",
+     "name": "Global Atlantic Financial Group Ltd",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,GLOBAL,GROUP,LTD; issuer forms D; soi=E9 (weak); fye=1231 (weak); signed 'by/its' GLOBAL ATLANTIC LIMITED (DELAWARE), By: /s/ Gary Silber, Nam"
+    },
+    {
+     "key": "1587874",
+     "name": "RIHI, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Mark Rohr, Attorney-in-Fact"
+    },
+    {
+     "key": "1600223",
+     "name": "Apollo Capital Management VIII, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LLC,MANAGEMENT; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1602532",
+     "name": "Accel-KKR Growth Capital Partners II, LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LP,PARTNERS; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' Accel-KKR Holdings  GP, LLC, /s/ Thomas C. Barnds, as its au"
+    },
+    {
+     "key": "1603333",
+     "name": "Deerfield Private Design Fund III, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Jonathan Isler, Attorney-in-Fact"
+    },
+    {
+     "key": "1604867",
+     "name": "Solas Capital Management, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LLC,MANAGEMENT; institutional forms 13F-HR,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' SOLAS CAPITAL MANAGEMENT, LLC, By: /s/ Frederick Tucker Gold"
+    },
+    {
+     "key": "1611145",
+     "name": "Khosla Ventures Associates V, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ASSOCIATES,LLC,VENTURES; institutional forms N-PX; EIN present; fye=1231 (weak); signed 'by/its' /s/ John J. Demeter, as attorney in fact for Vinod Khosla, a"
+    },
+    {
+     "key": "1620264",
+     "name": "Ares Management GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,MANAGEMENT; soi=DE (weak); fye=1231 (weak); signed 'by/its' Ares Management LLC, By: /s/ Anton Feingold, Authorized Sign"
+    },
+    {
+     "key": "1621224",
+     "name": "Warburg Pincus Partners GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1628098",
+     "name": "Atlas Venture Fund X, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P,VENTURE; issuer forms D; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Atlas Venture Fund X, L.P., By: Atlas Venture Associates X, "
+    },
+    {
+     "key": "1642866",
+     "name": "Wolverine Trading Partners, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC,PARTNERS; soi=IL (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1646981",
+     "name": "Deerfield Healthcare Innovations Fund, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Jonathan Isler, Attorney-in-Fact"
+    },
+    {
+     "key": "1661915",
+     "name": "Hill Path Capital Partners-H LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LP,PARTNERS; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' Hill Path Capital Partners LP, By: Hill Path Capital Partner"
+    },
+    {
+     "key": "1664211",
+     "name": "Ann S. Gerdin Revocable Trust",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) REVOCABLE,TRUST; fye=1231 (weak); signed 'by/its' /s/Michael Gerdin, Co-Trustee of the Ann S. Gerdin Revocable"
+    },
+    {
+     "key": "1669983",
+     "name": "Ares Holdco LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; soi=CA (weak); signed 'by/its' Ares Management LLC, By: /s/ Anton Feingold, Authorized Sign"
+    },
+    {
+     "key": "1671122",
+     "name": "Atairos Group, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GROUP,INC; institutional forms 13F-HR,13F-HR/A,N-PX; soi=E9 (weak); signed 'by/its' A-B Parent LLC /s/ David Caplan Name: David Caplan Title: Vi"
+    },
+    {
+     "key": "1675729",
+     "name": "CRC Founders Fund, LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,LP; issuer forms D,D/A; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Denver Smith; CRC Founders Fund, LP By: /s/ Denver J. Sm"
+    },
+    {
+     "key": "1676292",
+     "name": "Hill Path Capital LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LP; institutional forms 13F-HR,N-PX; soi=DE (weak); fye=1231 (weak); signed 'by/its' Hill Path Capital Partners LP, By: Hill Path Capital Partner"
+    },
+    {
+     "key": "1684171",
+     "name": "ACOF Investment Management LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENT,LLC,MANAGEMENT; institutional forms N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Ares Management LLC, By: /s/ Anton Feingold, Authorized Sign"
+    },
+    {
+     "key": "1687181",
+     "name": "Oaktree Huntington Investment Fund II, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,INVESTMENT,L P; soi=DE (weak); fye=1231 (weak); signed 'by/its' Oaktree Capital Group Holdings GP, LLC, By: /s/ Henry Orren,"
+    },
+    {
+     "key": "1694481",
+     "name": "AGI-T, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P; signed 'by/its' By: ATAIROS PARTNERS GP, INC., by /s/ David L. Caplan, Vice "
+    },
+    {
+     "key": "1717275",
+     "name": "Blackstone Treasury Holdings III L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,L L C; soi=DE (weak); fye=1231 (weak); signed 'by/its' Blackstone Treasury Holdings III L.L.C., By: /s/ Joseph Rocc"
+    },
+    {
+     "key": "1718156",
+     "name": "Diamond HTH Stock Co GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,GP,LLC; soi=TX (weak); fye=1231 (weak); signed 'by/its' /s/ Gerald J. Ford; DIAMOND HTH STOCK COMPANY, LP By: Diamon"
+    },
+    {
+     "key": "1728970",
+     "name": "Vivo Opportunity, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,OPPORTUNITY; soi=DE (weak); fye=1231 (weak); signed 'by/its' VIVO OPPORTUNITY, LLC, By: /s/ Kevin Dai; VIVO OPPORTUNITY F"
+    },
+    {
+     "key": "1731509",
+     "name": "SB INVESTMENT ADVISERS (UK) LTD",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISERS,INVESTMENT,LTD; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=X0 (weak); fye=0331 (weak); signed 'by/its' SVF Pauling (Cayman) Limited, By: /s/ Nilani Perera, Directo"
+    },
+    {
+     "key": "1732534",
+     "name": "AE INDUSTRIAL PARTNERS FUND II-A, LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,LP,PARTNERS; issuer forms D,D/A; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Sean Ricker, by Power of Attorney"
+    },
+    {
+     "key": "1734961",
+     "name": "Khosla Ventures VI, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,VENTURES; issuer forms D; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ John J. Demeter, as attorney in fact for Vinod Khosla, a"
+    },
+    {
+     "key": "1742455",
+     "name": "Zeev Ventures IV, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,VENTURES; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Oren Zeev, Director; Zeev Opportunity Fund I, L.P., By: "
+    },
+    {
+     "key": "1777015",
+     "name": "Parkman Healthcare Partners LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,PARTNERS; institutional forms 13F-HR,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Parkman Healthcare Partners LLC, By: /s/ Gregory Martinez, C"
+    },
+    {
+     "key": "1778909",
+     "name": "HM GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); signed 'by/its' Hill Path Capital Partners Co-Investment S LP, By: Hill Path"
+    },
+    {
+     "key": "1787613",
+     "name": "SOFTBANK VISION FUND II-2 L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P; soi=Y9 (weak); fye=1231 (weak); signed 'by/its' SoftBank Group Corp., By : /s/ Yuko Yamamoto, Head of Corpor"
+    },
+    {
+     "key": "1791889",
+     "name": "5AM Partners V, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,PARTNERS; soi=DE (weak); fye=1231 (weak); signed 'by/its' 5AM Ventures V, L.P., By: 5AM Partners V, LLC, its General P"
+    },
+    {
+     "key": "1792549",
+     "name": "Topline Capital Management, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LLC,MANAGEMENT; institutional forms 13F-HR; soi=CA (weak); fye=1231 (weak); signed 'by/its' Topline Capital Management, LLC,  By: Collin McBirney, its M"
+    },
+    {
+     "key": "1793548",
+     "name": "ASOF Investment Management LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENT,LLC,MANAGEMENT; institutional forms N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Ares Management LLC, By: /s/ Anton Feingold, Authorized Sign"
+    },
+    {
+     "key": "1795052",
+     "name": "UAW Ford Retirees Medical Benefits Plan",
+     "decided": "person",
+     "label": "entity",
+     "reason": "UAW Ford Retirees Medical Benefits Plan (VEBA trust); signed by the plan"
+    },
+    {
+     "key": "1803391",
+     "name": "SoftVest Advisors, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISORS,LLC; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Eric Lee. Oliver; SoftVest Advisors, LLC By: /s/ Eric Le"
+    },
+    {
+     "key": "1807622",
+     "name": "Certares Management LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,MANAGEMENT; institutional forms 13F-HR,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' CERTARES LTRIP LLC, By: /s/ Linda C. Frazier as Attorney-in-"
+    },
+    {
+     "key": "1814533",
+     "name": "Bregal Investments, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC,INVESTMENTS; institutional forms 13F-HR; soi=DE (weak); fye=1231 (weak); signed 'by/its' BREGAL SAGEMOUNT I, L.P., By:  Bregal North America General "
+    },
+    {
+     "key": "1820059",
+     "name": "Gary W. Rollins Revocable Trust",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) REVOCABLE,TRUST; soi=GA (weak); fye=1231 (weak); signed 'by/its' /s/ Gary W. Rollins Revocable Trust, By: Gary W. Rollins, Tr"
+    },
+    {
+     "key": "1820491",
+     "name": "Gary W. Rollins Voting Trust U/A dated September 14, 1994",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) TRUST; soi=GA (weak); fye=1231 (weak); signed 'by/its' /s/ W. Keith Wilkes, Jr., Attorney-in-Fact"
+    },
+    {
+     "key": "1820515",
+     "name": "R. Randall Rollins Voting Trust U/A dated August 25, 1994",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) TRUST; soi=GA (weak); fye=1231 (weak); signed 'by/its' /s/ W. Keith Wilkes, Jr., Attorney-in-Fact"
+    },
+    {
+     "key": "1828214",
+     "name": "Khosla Ventures VII, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,VENTURES; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' Khosla Ventures VII, LP, By: Khosla Ventures Opportunity Ass"
+    },
+    {
+     "key": "1828762",
+     "name": "CFAC Holdings V, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Howard Lutnick By: Howard Lutnick; /s/ Brandon Lutnick, "
+    },
+    {
+     "key": "1830481",
+     "name": "Stone Point Credit LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CREDIT,LLC; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' SPC Field Partners LLC, By: /s/ Jacqueline M. Giammarco, Vic"
+    },
+    {
+     "key": "1831834",
+     "name": "Tigris Financial Group Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,GROUP,LTD; soi=DE (weak); fye=1231 (weak); signed 'by/its' Tigris Financial Group Ltd., By: /s/ Andrew M. Shapiro, Pres"
+    },
+    {
+     "key": "1841189",
+     "name": "HFCP X (Parallel-A), L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' By: /s/ Jacob Best; Jacob Best, Vice President of H&F Corpor"
+    },
+    {
+     "key": "1841271",
+     "name": "TVP Bitcoin Venture Fund I, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P,VENTURE; issuer forms D,D/A; soi=DE (weak); fye=1231 (weak); signed 'by/its' TVP Bitcoin Venture GP II, L.L.C., By /s/ Christopher Calico"
+    },
+    {
+     "key": "1841430",
+     "name": "Hellman & Friedman Capital Partners X (Parallel), L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) &,CAPITAL,L P,PARTNERS; issuer forms D; soi=E9 (weak); fye=1231 (weak); signed 'by/its' By: /s/ Jacob Best; Jacob Best, Vice President of H&F Corpor"
+    },
+    {
+     "key": "1846013",
+     "name": "IDG-Accel China Capital GP II Associates Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ASSOCIATES,CAPITAL,GP,LTD; institutional forms 13F-HR; EIN present; soi=E9 (weak); fye=1231 (weak); signed 'by/its' Chuang Xi Capital Limited, By: /s/ Quan Zhou, Authorized Sig"
+    },
+    {
+     "key": "1857469",
+     "name": "Providence Equity GP VII-A L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) EQUITY,GP,L P; soi=E9 (weak); fye=1231 (weak); signed 'by/its' Providence VII U.S. Holdings L.P.: /s/ Sarah N. Conde, Gener"
+    },
+    {
+     "key": "1861216",
+     "name": "GV 2021 GP, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,L P; issuer forms D,D/A; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1861359",
+     "name": "ZEEV OPPORTUNITY FUND I, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P,OPPORTUNITY; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Oren Zeev, Director; Zeev Opportunity Fund I, L.P., By: "
+    },
+    {
+     "key": "1864748",
+     "name": "ICONIQ Strategic Partners VI GP, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,L P,PARTNERS; institutional forms N-PX; EIN present; soi=E9 (weak); fye=1231 (weak); signed 'by/its' ICONIQ Strategic Partners VI, L.P., By: ICONIQ Strategic Par"
+    },
+    {
+     "key": "1868392",
+     "name": "Hellman & Friedman Investors X, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) &,INVESTORS,L P; institutional forms N-PX; soi=E9 (weak); fye=1231 (weak); signed 'by/its' By: /s/ Jacob Best; Jacob Best, Vice President of H&F Corpor"
+    },
+    {
+     "key": "1877428",
+     "name": "AP Dakota Co-Invest GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1877482",
+     "name": "AP VIII Dakota Holdings, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,L P; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1885449",
+     "name": "PayU Fintech Investments B.V.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) B V,INVESTMENTS; EIN present; fye=0331 (weak); signed 'by/its' By: Nico Marais, Authorized Representative Naspers Limited; "
+    },
+    {
+     "key": "1910615",
+     "name": "JHW Iliad Holdings II LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; EIN present; soi=DE (weak); signed 'by/its' /s/ Paul R. Vigano; /s/ Paul R. Vigano, as Member of  J.H. W"
+    },
+    {
+     "key": "1912562",
+     "name": "Galaxy Group Investments LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GROUP,INVESTMENTS,LLC; institutional forms 13F-HR,13F-HR/A; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Francesca Don Angelo, Attorney-in-Fact for Galaxy Group "
+    },
+    {
+     "key": "1912810",
+     "name": "Lightspeed General Partner Select III, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P; soi=DE (weak); fye=1231 (weak); signed 'by/its' Lightspeed Venture Partners Select II, L.P., By: Lightspeed "
+    },
+    {
+     "key": "1915431",
+     "name": "Insight Associates (EU) XII, S.a.r.l.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ASSOCIATES,S A R L; soi=N4 (weak); signed 'by/its' Insight Holdings Group, LLC, By: /s/ Andrew Prodromos/Author"
+    },
+    {
+     "key": "1920246",
+     "name": "New York City Advisors, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISORS,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1930214",
+     "name": "Vivo Opportunity Fund Holdings, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,HOLDINGS,L P,OPPORTUNITY; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' VIVO OPPORTUNITY, LLC, By: /s/ Kevin Dai; VIVO OPPORTUNITY F"
+    },
+    {
+     "key": "1932516",
+     "name": "Foresite Capital Fund VI LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,FUND,LP; issuer forms D,D/A; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' FORESITE CAPITAL MANAGEMENT V, LLC, By: /s/ James B. Tananba"
+    },
+    {
+     "key": "1943462",
+     "name": "Dellora Investments LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,LP; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Dellora Investments LP, /s/ Kevin Pyun, Principal, Dellora I"
+    },
+    {
+     "key": "1959730",
+     "name": "Fund 1 Investments, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,INVESTMENTS,LLC; institutional forms 13F-HR,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Fund 1 Investments, LLC by: Benjamin C. Cable, Chief Ope"
+    },
+    {
+     "key": "1961798",
+     "name": "Imperial Capital Group Holdings II, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,GROUP,HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' Jason Reese, By: /s/ Jason Reese; Long Ball Partners, LLC, B"
+    },
+    {
+     "key": "1973229",
+     "name": "GNI USA, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC; signed 'by/its' /s/ Thomas Eastling, as attorney-in-fact for GNI Group Ltd.;"
+    },
+    {
+     "key": "1978187",
+     "name": "Lightspeed Strategic Partners General Partner I L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,PARTNERS; signed 'by/its' Lightspeed Venture Partners X, L.P., By: Lightspeed General "
+    },
+    {
+     "key": "1981100",
+     "name": "8 Rivers Capital, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LLC; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' By: /s/ Min Lee, General Counsel of 8 Rivers Capital, LLC; B"
+    },
+    {
+     "key": "1983637",
+     "name": "Ospraie Real Assets Fund LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ASSETS,FUND,LP; issuer forms D; soi=DE (weak); signed 'by/its' Ospraie Real Assets Fund LP By: Ospraie Real Assets GP LLC, "
+    },
+    {
+     "key": "1992147",
+     "name": "Activant Ventures Advisors III, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISORS,LLC,VENTURES; EIN present; soi=DE (weak)"
+    },
+    {
+     "key": "1994188",
+     "name": "Nirland Ltd",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LTD; EIN present; soi=Y7 (weak); fye=1231 (weak); signed 'by/its' Nirland Limited, By: /s/ David Rowland, Director; Stockton L"
+    },
+    {
+     "key": "2003368",
+     "name": "WARBURG PINCUS (CALLISTO) GLOBAL GROWTH 14 (CAYMAN), L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003491",
+     "name": "WARBURG PINCUS (CAYMAN) GLOBAL GROWTH 14 GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003512",
+     "name": "WARBURG PINCUS (CAYMAN) FINANCIAL SECTOR II GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,FINANCIAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2005039",
+     "name": "Great Elm Strategic Partnership I, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,PARTNERSHIP; signed 'by/its' /s/ Adam M. Kleinman, attorney-in-fact"
+    },
+    {
+     "key": "2009522",
+     "name": "Lunate Holding RSC Ltd",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDING,LTD; institutional forms 13F-HR; soi=C0 (weak); fye=1231 (weak); signed 'by/its' Alpha Wave Global, LP, /s/ Richard Gerson, Chairman and CIO;"
+    },
+    {
+     "key": "2015536",
+     "name": "Deep Track Biotechnology Master Fund, Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,LTD,MASTER; soi=E9 (weak); fye=1231 (weak); signed 'by/its' Deep Track Biotechology Master Fund, Ltd. /s/ David Kroin, D"
+    },
+    {
+     "key": "2025342",
+     "name": "BCPE Derby Investor, LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTOR,LP; institutional forms N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Bain Capital Investors, LLC, By: /s/ David Humphrey, Title: "
+    },
+    {
+     "key": "2027026",
+     "name": "AG Asset Strategies LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) AG,ASSET,LLC,STRATEGIES; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2039469",
+     "name": "Blackstone Holdings AI L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,L P; issuer forms 424B5; soi=DE (weak); fye=1231 (weak); signed 'by/its' Blackstone Holdings AI L.P. By: /s/ Victoria Portnoy, Name a"
+    },
+    {
+     "key": "2051763",
+     "name": "WD Thunder CV Ultimate GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; institutional forms 13F-HR; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' WD Thunder CV Ultimate GP LLC, By: /s/ Varun Babbili, Varun "
+    },
+    {
+     "key": "2057997",
+     "name": "Inscobee Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC; EIN present; signed 'by/its' /s/ Nelson Mullins Riley & Scarborough LLP, Attorney-in-Fact"
+    },
+    {
+     "key": "2059843",
+     "name": "TVP Bitcoin Venture Fund II, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P,VENTURE; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' TVP Bitcoin Venture GP II, L.L.C., By /s/ Christopher Calico"
+    },
+    {
+     "key": "2062644",
+     "name": "TCG Crossover Fund III, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ TCG Crossover GP II, LLC /s/ Craig Skaling, Authorized S"
+    },
+    {
+     "key": "2065665",
+     "name": "Sowell Investments Holding Co., LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,HOLDING,INVESTMENTS,LLC; soi=TX (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2074972",
+     "name": "Mend Partners GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; soi=DE (weak); fye=1231 (weak); signed 'by/its' By: /s/ Jacob Best; Jacob Best, Vice President of H&F Corpor"
+    },
+    {
+     "key": "2080821",
+     "name": "OnePointTwo Capital Ventures II LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LLC,VENTURES; issuer forms D; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2084966",
+     "name": "BMA VIII L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L L C; soi=DE (weak); fye=1231 (weak); signed 'by/its' LEGENCE PARENT LLC, By: /s/ Bryce Seki, Name: Bryce Seki, Ti"
+    },
+    {
+     "key": "2086155",
+     "name": "Five Point Energy GP I LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ENERGY,GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' WBR Holdings LLC, By:  /s/ Harrison Bolling, Executive Vice "
+    },
+    {
+     "key": "2086162",
+     "name": "NDB Holdings LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' WBR Holdings LLC, By:  /s/ Harrison Bolling, Executive Vice "
+    },
+    {
+     "key": "2087488",
+     "name": "FTV NE-Aggregator, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' FTV VII, L.P., By: FTV Management VII, L.P., its General Par"
+    },
+    {
+     "key": "2095697",
+     "name": "Innovative Cellular Therapeutics Holdings Ltd",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LTD; soi=E9 (weak); fye=1231 (weak); signed 'by/its' Innovative Cellular Therapeutics Holdings Limited By: /s/ Le"
+    },
+    {
+     "key": "2097698",
+     "name": "Liberty Mutual Foundation Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FOUNDATION,INC; EIN present; soi=MA (weak); fye=1231 (weak); signed 'by/its' LIBERTY MUTUAL FOUNDATION INC., By: Vlad Barbalat, Title: Ex"
+    },
+    {
+     "key": "2100320",
+     "name": "Liberty Energy Holdings, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ENERGY,HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' PT INDEPENDENCE ENERGY HOLDINGS LLC, By: Brandi Kendall, Tit"
+    },
+    {
+     "key": "2106210",
+     "name": "GL Part SPV I, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,SPV; soi=WY (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2106590",
+     "name": "GL Part SPV II, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,SPV; soi=WY (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2108828",
+     "name": "Neos Partners I GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; fye=1231 (weak); signed 'by/its' NEOS PARTNERS, LP, By: See Exhibit 99.2 for Signatures"
+    },
+    {
+     "key": "2110501",
+     "name": "BDTCP GP II-A (DEL), LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Mary Ann Todd, Attorney-in-Fact"
+    },
+    {
+     "key": "2116124",
+     "name": "Mountain Crest Holdings 6 LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=D8 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2130065",
+     "name": "TVP Bitcoin Venture GP I, L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,L L C,VENTURE; soi=DE (weak); fye=1231 (weak); signed 'by/its' TVP Bitcoin Venture GP II, L.L.C., By /s/ Christopher Calico"
+    },
+    {
+     "key": "2131198",
+     "name": "KC Armada LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LP; soi=Y9 (weak); fye=1231 (weak); signed 'by/its' /s/ Edward Patrick Butler, as attorney-in-fact for Ernesto B"
+    },
+    {
+     "key": "2132038",
+     "name": "AI DEN-MAB LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Alejandro Moreno for AI DEN-MAB LLC; /s/ Alejandro Moren"
+    },
+    {
+     "key": "2133115",
+     "name": "KKR AMG Managing Member LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2133820",
+     "name": "Insight Satellite Co-Invest GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' Insight Holdings Group, LLC, By: /s/ Andrew Prodromos/Author"
+    },
+    {
+     "key": "2136426",
+     "name": "Jefferies Credit Partners Structured Solutions LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CREDIT,LLC,PARTNERS; soi=DE (weak); fye=1231 (weak); signed 'by/its' JEFFERIES CREDIT PARTNERS STRUCTURED SOLUTIONS LLC, By: Jeff"
+    },
+    {
+     "key": "2137420",
+     "name": "SNOW ROTHSCHILD ACQUISITION SPONSOR LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ACQUISITION,LLC,SPONSOR; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Ian Snow, Managing Member of Snow Rothschild Acquisition"
+    },
+    {
+     "key": "2137640",
+     "name": "Honeywell Holdings International Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,INC,INTERNATIONAL; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2138020",
+     "name": "WPFS II Orion Investments, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,L P; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2146311",
+     "name": "Inflection Point Holdings VIII LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2146930",
+     "name": "Fundomo SN-001 GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' Fundomo SN-001, LP. By: Fundomo SN-001 GP, LLC, its general "
+    },
+    {
+     "key": "2147119",
+     "name": "Grafiti Group LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GROUP,LLC; soi=NV (weak); fye=1231 (weak); signed 'by/its' Grafiti Group LLC By: Nadir Ali, as General Manager; /s/ Nad"
+    },
+    {
+     "key": "2148329",
+     "name": "WSLS EMP OFFSHORE INVESTMENTS, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,L P; soi=E9 (weak); fye=1231 (weak); signed 'by/its' /s/ Crystal Orgill, Attorney-in-fact"
+    },
+    {
+     "key": "2149544",
+     "name": "GPI SA",
+     "decided": "person",
+     "label": "entity",
+     "reason": "GPI SA (Luxembourg societe anonyme); soi=N4; signed by LNA Holding SRL as proxy holder"
+    },
+    {
+     "key": "2151901",
+     "name": "Rivercrest Capital II GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' Rivercrest Capital Partners LP By: /s/ Jamie Hayes, attorney"
+    },
+    {
+     "key": "854157",
+     "name": "STATE OF WISCONSIN INVESTMENT BOARD",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENT; institutional forms 13F-HR,13F-HR/A,N-PX; EIN present; soi=WI (weak); fye=1231 (weak); sic=0000 (weak)"
+    },
+    {
+     "key": "936828",
+     "name": "GIC Private Ltd",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LTD; EIN present; soi=U0 (weak); fye=1231 (weak); signed 'by/its' GIC Private Ltd, By: /s/ Jo-Ann Khor Hey Ming, Name: Jo-Ann "
+    },
+    {
+     "key": "947724",
+     "name": "Basswood Financial Fund, Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,FUND,LTD; issuer forms D,D/A,REGDEX; EIN present; soi=E9 (weak); fye=1231 (weak)"
+    }
+   ]
+  },
+  "R1b entityType (other->deferred)": {
+   "extension_decisions": {
+    "deferred": 151,
+    "entity": 9
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.700854948272956,
+    1.0
+   ],
+   "pooled_decided_entity": 31,
+   "pooled_entity_correct": 31,
+   "pooled_entity_precision": 1.0,
+   "pooled_entity_wilson95": [
+    0.889744602991977,
+    1.0
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": []
+  },
+  "R2 flags (off/dir->person, 10%/other->entity)": {
+   "extension_decisions": {
+    "entity": 133,
+    "person": 27,
+    "person_wrong": 26
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.9719276678814986,
+    1.0
+   ],
+   "pooled_decided_entity": 552,
+   "pooled_entity_correct": 436,
+   "pooled_entity_precision": 0.7898550724637681,
+   "pooled_entity_wilson95": [
+    0.7539234092523311,
+    0.8217803186488623
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1162870",
+     "name": "WARBURG PINCUS LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; institutional forms 13F-HR,13F-HR/A,N-PX; soi=NY (weak); fye=1231 (weak); signed 'by/its' WARBURG PINCUS LLC, By: /s/ Harsha Marti, General Counsel & "
+    },
+    {
+     "key": "1278386",
+     "name": "BROADWOOD PARTNERS, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,PARTNERS; issuer forms D,D/A; institutional forms N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Broadwood Partners, L.P., By: Broadwood Capital, Inc., By: /"
+    },
+    {
+     "key": "1283968",
+     "name": "Westend S.A.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) S A; institutional forms N-PX; soi=N4 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1407718",
+     "name": "New Mountain Capital, L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,L L C; institutional forms 13F-HR,N-PX; EIN present; soi=NY (weak); fye=1231 (weak); signed 'by/its' CoyCo 1, L.P., By: CoyCo GP, L.L.C., its general partner, By"
+    },
+    {
+     "key": "1455863",
+     "name": "AMERICOLD REALTY TRUST",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) TRUST; tickers/exchanges; issuer forms 10-K,10-K/A,10-Q,424B2; EIN present; soi=MD (weak); fye=1231 (weak); sic=6798 (weak); org=05 Real Estate & Construction (weak); signed 'by/its' /s/ Nathan H. Harwell, attorney-in-fact"
+    },
+    {
+     "key": "1519641",
+     "name": "BASSWOOD FINANCIAL FUND, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,FUND,L P; issuer forms D,D/A; soi=NY (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1554853",
+     "name": "Warburg Pincus (Cayman) XI, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1621224",
+     "name": "Warburg Pincus Partners GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1646981",
+     "name": "Deerfield Healthcare Innovations Fund, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Jonathan Isler, Attorney-in-Fact"
+    },
+    {
+     "key": "1694481",
+     "name": "AGI-T, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P; signed 'by/its' By: ATAIROS PARTNERS GP, INC., by /s/ David L. Caplan, Vice "
+    },
+    {
+     "key": "1732534",
+     "name": "AE INDUSTRIAL PARTNERS FUND II-A, LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,LP,PARTNERS; issuer forms D,D/A; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Sean Ricker, by Power of Attorney"
+    },
+    {
+     "key": "1742455",
+     "name": "Zeev Ventures IV, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,VENTURES; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Oren Zeev, Director; Zeev Opportunity Fund I, L.P., By: "
+    },
+    {
+     "key": "1807622",
+     "name": "Certares Management LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,MANAGEMENT; institutional forms 13F-HR,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' CERTARES LTRIP LLC, By: /s/ Linda C. Frazier as Attorney-in-"
+    },
+    {
+     "key": "1819796",
+     "name": "GCM Grosvenor Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC; tickers/exchanges; issuer forms 10-K,10-K/A,10-Q,10-Q/A; EIN present; soi=DE (weak); fye=1231 (weak); sic=6282 (weak); org=02 Finance (weak); signed 'by/its' GCM Grosvenor Inc., By: /s/ Burke J. Montgomery, Authorized "
+    },
+    {
+     "key": "1861359",
+     "name": "ZEEV OPPORTUNITY FUND I, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P,OPPORTUNITY; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Oren Zeev, Director; Zeev Opportunity Fund I, L.P., By: "
+    },
+    {
+     "key": "1992147",
+     "name": "Activant Ventures Advisors III, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISORS,LLC,VENTURES; EIN present; soi=DE (weak)"
+    },
+    {
+     "key": "2003368",
+     "name": "WARBURG PINCUS (CALLISTO) GLOBAL GROWTH 14 (CAYMAN), L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003491",
+     "name": "WARBURG PINCUS (CAYMAN) GLOBAL GROWTH 14 GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003512",
+     "name": "WARBURG PINCUS (CAYMAN) FINANCIAL SECTOR II GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,FINANCIAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2051763",
+     "name": "WD Thunder CV Ultimate GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; institutional forms 13F-HR; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' WD Thunder CV Ultimate GP LLC, By: /s/ Varun Babbili, Varun "
+    },
+    {
+     "key": "2100320",
+     "name": "Liberty Energy Holdings, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ENERGY,HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' PT INDEPENDENCE ENERGY HOLDINGS LLC, By: Brandi Kendall, Tit"
+    },
+    {
+     "key": "2108828",
+     "name": "Neos Partners I GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; fye=1231 (weak); signed 'by/its' NEOS PARTNERS, LP, By: See Exhibit 99.2 for Signatures"
+    },
+    {
+     "key": "2110501",
+     "name": "BDTCP GP II-A (DEL), LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Mary Ann Todd, Attorney-in-Fact"
+    },
+    {
+     "key": "2138020",
+     "name": "WPFS II Orion Investments, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,L P; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2146311",
+     "name": "Inflection Point Holdings VIII LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "947724",
+     "name": "Basswood Financial Fund, Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,FUND,LTD; issuer forms D,D/A,REGDEX; EIN present; soi=E9 (weak); fye=1231 (weak)"
+    }
+   ]
+  },
+  "R2b flags (off/dir->person, rest deferred)": {
+   "extension_decisions": {
+    "deferred": 133,
+    "person": 27,
+    "person_wrong": 26
+   },
+   "extension_entity_precision": NaN,
+   "extension_entity_wilson95": [
+    NaN,
+    NaN
+   ],
+   "pooled_decided_entity": 0,
+   "pooled_entity_correct": 0,
+   "pooled_entity_precision": NaN,
+   "pooled_entity_wilson95": [
+    NaN,
+    NaN
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1162870",
+     "name": "WARBURG PINCUS LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; institutional forms 13F-HR,13F-HR/A,N-PX; soi=NY (weak); fye=1231 (weak); signed 'by/its' WARBURG PINCUS LLC, By: /s/ Harsha Marti, General Counsel & "
+    },
+    {
+     "key": "1278386",
+     "name": "BROADWOOD PARTNERS, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,PARTNERS; issuer forms D,D/A; institutional forms N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' Broadwood Partners, L.P., By: Broadwood Capital, Inc., By: /"
+    },
+    {
+     "key": "1283968",
+     "name": "Westend S.A.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) S A; institutional forms N-PX; soi=N4 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1407718",
+     "name": "New Mountain Capital, L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,L L C; institutional forms 13F-HR,N-PX; EIN present; soi=NY (weak); fye=1231 (weak); signed 'by/its' CoyCo 1, L.P., By: CoyCo GP, L.L.C., its general partner, By"
+    },
+    {
+     "key": "1455863",
+     "name": "AMERICOLD REALTY TRUST",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) TRUST; tickers/exchanges; issuer forms 10-K,10-K/A,10-Q,424B2; EIN present; soi=MD (weak); fye=1231 (weak); sic=6798 (weak); org=05 Real Estate & Construction (weak); signed 'by/its' /s/ Nathan H. Harwell, attorney-in-fact"
+    },
+    {
+     "key": "1519641",
+     "name": "BASSWOOD FINANCIAL FUND, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,FUND,L P; issuer forms D,D/A; soi=NY (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1554853",
+     "name": "Warburg Pincus (Cayman) XI, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1621224",
+     "name": "Warburg Pincus Partners GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1646981",
+     "name": "Deerfield Healthcare Innovations Fund, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Jonathan Isler, Attorney-in-Fact"
+    },
+    {
+     "key": "1694481",
+     "name": "AGI-T, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P; signed 'by/its' By: ATAIROS PARTNERS GP, INC., by /s/ David L. Caplan, Vice "
+    },
+    {
+     "key": "1732534",
+     "name": "AE INDUSTRIAL PARTNERS FUND II-A, LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,LP,PARTNERS; issuer forms D,D/A; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Sean Ricker, by Power of Attorney"
+    },
+    {
+     "key": "1742455",
+     "name": "Zeev Ventures IV, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,VENTURES; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Oren Zeev, Director; Zeev Opportunity Fund I, L.P., By: "
+    },
+    {
+     "key": "1807622",
+     "name": "Certares Management LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,MANAGEMENT; institutional forms 13F-HR,N-PX; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' CERTARES LTRIP LLC, By: /s/ Linda C. Frazier as Attorney-in-"
+    },
+    {
+     "key": "1819796",
+     "name": "GCM Grosvenor Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC; tickers/exchanges; issuer forms 10-K,10-K/A,10-Q,10-Q/A; EIN present; soi=DE (weak); fye=1231 (weak); sic=6282 (weak); org=02 Finance (weak); signed 'by/its' GCM Grosvenor Inc., By: /s/ Burke J. Montgomery, Authorized "
+    },
+    {
+     "key": "1861359",
+     "name": "ZEEV OPPORTUNITY FUND I, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P,OPPORTUNITY; issuer forms D; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Oren Zeev, Director; Zeev Opportunity Fund I, L.P., By: "
+    },
+    {
+     "key": "1992147",
+     "name": "Activant Ventures Advisors III, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISORS,LLC,VENTURES; EIN present; soi=DE (weak)"
+    },
+    {
+     "key": "2003368",
+     "name": "WARBURG PINCUS (CALLISTO) GLOBAL GROWTH 14 (CAYMAN), L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003491",
+     "name": "WARBURG PINCUS (CAYMAN) GLOBAL GROWTH 14 GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003512",
+     "name": "WARBURG PINCUS (CAYMAN) FINANCIAL SECTOR II GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,FINANCIAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2051763",
+     "name": "WD Thunder CV Ultimate GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; institutional forms 13F-HR; EIN present; soi=DE (weak); fye=1231 (weak); signed 'by/its' WD Thunder CV Ultimate GP LLC, By: /s/ Varun Babbili, Varun "
+    },
+    {
+     "key": "2100320",
+     "name": "Liberty Energy Holdings, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ENERGY,HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' PT INDEPENDENCE ENERGY HOLDINGS LLC, By: Brandi Kendall, Tit"
+    },
+    {
+     "key": "2108828",
+     "name": "Neos Partners I GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; fye=1231 (weak); signed 'by/its' NEOS PARTNERS, LP, By: See Exhibit 99.2 for Signatures"
+    },
+    {
+     "key": "2110501",
+     "name": "BDTCP GP II-A (DEL), LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Mary Ann Todd, Attorney-in-Fact"
+    },
+    {
+     "key": "2138020",
+     "name": "WPFS II Orion Investments, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,L P; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2146311",
+     "name": "Inflection Point Holdings VIII LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "947724",
+     "name": "Basswood Financial Fund, Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,FUND,LTD; issuer forms D,D/A,REGDEX; EIN present; soi=E9 (weak); fye=1231 (weak)"
+    }
+   ]
+  },
+  "R3 name tokens (token->entity, person-shape->person)": {
+   "extension_decisions": {
+    "entity": 160,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.99375,
+   "extension_entity_wilson95": [
+    0.9654510136686295,
+    0.9988958682428154
+   ],
+   "pooled_decided_entity": 520,
+   "pooled_entity_correct": 518,
+   "pooled_entity_precision": 0.9961538461538462,
+   "pooled_entity_wilson95": [
+    0.9860862433028268,
+    0.998944611456088
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "R3b name tokens strict (ambiguous token->deferred)": {
+   "extension_decisions": {
+    "entity": 157,
+    "deferred": 3,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.9936305732484076,
+   "extension_entity_wilson95": [
+    0.9648071297132559,
+    0.9988747535404445
+   ],
+   "pooled_decided_entity": 514,
+   "pooled_entity_correct": 512,
+   "pooled_entity_precision": 0.9961089494163424,
+   "pooled_entity_wilson95": [
+    0.9859251296486234,
+    0.998932284243582
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "R4 submissions structural-empty (other & no sic/state/ein/ticker/org/fye -> person)": {
+   "extension_decisions": {
+    "entity": 154,
+    "person": 6,
+    "person_wrong": 5
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.9756625483030732,
+    1.0
+   ],
+   "pooled_decided_entity": 514,
+   "pooled_entity_correct": 506,
+   "pooled_entity_precision": 0.9844357976653697,
+   "pooled_entity_wilson95": [
+    0.9695915546516211,
+    0.9920927436195913
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1251145",
+     "name": "CF GROUP MANAGEMENT INC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GROUP,INC,MANAGEMENT"
+    },
+    {
+     "key": "1694481",
+     "name": "AGI-T, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P; signed 'by/its' By: ATAIROS PARTNERS GP, INC., by /s/ David L. Caplan, Vice "
+    },
+    {
+     "key": "1973229",
+     "name": "GNI USA, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC; signed 'by/its' /s/ Thomas Eastling, as attorney-in-fact for GNI Group Ltd.;"
+    },
+    {
+     "key": "1978187",
+     "name": "Lightspeed Strategic Partners General Partner I L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,PARTNERS; signed 'by/its' Lightspeed Venture Partners X, L.P., By: Lightspeed General "
+    },
+    {
+     "key": "2005039",
+     "name": "Great Elm Strategic Partnership I, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,PARTNERSHIP; signed 'by/its' /s/ Adam M. Kleinman, attorney-in-fact"
+    }
+   ]
+  },
+  "R4b structural-empty, token->deferred": {
+   "extension_decisions": {
+    "entity": 154,
+    "deferred": 6
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.9756625483030732,
+    1.0
+   ],
+   "pooled_decided_entity": 514,
+   "pooled_entity_correct": 506,
+   "pooled_entity_precision": 0.9844357976653697,
+   "pooled_entity_wilson95": [
+    0.9695915546516211,
+    0.9920927436195913
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": []
+  },
+  "R5 form history (only 3/4/5 -> person; issuer/institutional forms -> entity)": {
+   "extension_decisions": {
+    "entity": 76,
+    "deferred": 28,
+    "person": 56,
+    "person_wrong": 55
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.9518864142123544,
+    0.9999999999999998
+   ],
+   "pooled_decided_entity": 228,
+   "pooled_entity_correct": 224,
+   "pooled_entity_precision": 0.9824561403508771,
+   "pooled_entity_wilson95": [
+    0.9557674056058781,
+    0.9931569199291895
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1251145",
+     "name": "CF GROUP MANAGEMENT INC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GROUP,INC,MANAGEMENT"
+    },
+    {
+     "key": "1275993",
+     "name": "SECOND 1109 HOLDCO LTD.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LTD; fye=1231 (weak)"
+    },
+    {
+     "key": "1492231",
+     "name": "Stone Point GP Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LTD; soi=E9 (weak); fye=1231 (weak); signed 'by/its' SPC Field Partners LLC, By: /s/ Jacqueline M. Giammarco, Vic"
+    },
+    {
+     "key": "1530803",
+     "name": "Oasis Investments II Master Fund Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,INVESTMENTS,LTD,MASTER; soi=E9 (weak); signed 'by/its' /s/ Oasis Management Company Ltd., By: Phillip Meyer, its Ge"
+    },
+    {
+     "key": "1554853",
+     "name": "Warburg Pincus (Cayman) XI, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1565707",
+     "name": "GRAT Holdings LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=NY (weak); fye=1231 (weak); signed 'by/its' ELECTRUM STRATEGIC RESOURCES L.P., By: /s/ Michael H. Willia"
+    },
+    {
+     "key": "1600223",
+     "name": "Apollo Capital Management VIII, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,LLC,MANAGEMENT; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1621224",
+     "name": "Warburg Pincus Partners GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1642866",
+     "name": "Wolverine Trading Partners, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC,PARTNERS; soi=IL (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1664211",
+     "name": "Ann S. Gerdin Revocable Trust",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) REVOCABLE,TRUST; fye=1231 (weak); signed 'by/its' /s/Michael Gerdin, Co-Trustee of the Ann S. Gerdin Revocable"
+    },
+    {
+     "key": "1669983",
+     "name": "Ares Holdco LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; soi=CA (weak); signed 'by/its' Ares Management LLC, By: /s/ Anton Feingold, Authorized Sign"
+    },
+    {
+     "key": "1718156",
+     "name": "Diamond HTH Stock Co GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,GP,LLC; soi=TX (weak); fye=1231 (weak); signed 'by/its' /s/ Gerald J. Ford; DIAMOND HTH STOCK COMPANY, LP By: Diamon"
+    },
+    {
+     "key": "1778909",
+     "name": "HM GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); signed 'by/its' Hill Path Capital Partners Co-Investment S LP, By: Hill Path"
+    },
+    {
+     "key": "1787613",
+     "name": "SOFTBANK VISION FUND II-2 L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,L P; soi=Y9 (weak); fye=1231 (weak); signed 'by/its' SoftBank Group Corp., By : /s/ Yuko Yamamoto, Head of Corpor"
+    },
+    {
+     "key": "1791889",
+     "name": "5AM Partners V, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,PARTNERS; soi=DE (weak); fye=1231 (weak); signed 'by/its' 5AM Ventures V, L.P., By: 5AM Partners V, LLC, its General P"
+    },
+    {
+     "key": "1795052",
+     "name": "UAW Ford Retirees Medical Benefits Plan",
+     "decided": "person",
+     "label": "entity",
+     "reason": "UAW Ford Retirees Medical Benefits Plan (VEBA trust); signed by the plan"
+    },
+    {
+     "key": "1820059",
+     "name": "Gary W. Rollins Revocable Trust",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) REVOCABLE,TRUST; soi=GA (weak); fye=1231 (weak); signed 'by/its' /s/ Gary W. Rollins Revocable Trust, By: Gary W. Rollins, Tr"
+    },
+    {
+     "key": "1820491",
+     "name": "Gary W. Rollins Voting Trust U/A dated September 14, 1994",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) TRUST; soi=GA (weak); fye=1231 (weak); signed 'by/its' /s/ W. Keith Wilkes, Jr., Attorney-in-Fact"
+    },
+    {
+     "key": "1831834",
+     "name": "Tigris Financial Group Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FINANCIAL,GROUP,LTD; soi=DE (weak); fye=1231 (weak); signed 'by/its' Tigris Financial Group Ltd., By: /s/ Andrew M. Shapiro, Pres"
+    },
+    {
+     "key": "1857469",
+     "name": "Providence Equity GP VII-A L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) EQUITY,GP,L P; soi=E9 (weak); fye=1231 (weak); signed 'by/its' Providence VII U.S. Holdings L.P.: /s/ Sarah N. Conde, Gener"
+    },
+    {
+     "key": "1877428",
+     "name": "AP Dakota Co-Invest GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1877482",
+     "name": "AP VIII Dakota Holdings, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,L P; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1912810",
+     "name": "Lightspeed General Partner Select III, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P; soi=DE (weak); fye=1231 (weak); signed 'by/its' Lightspeed Venture Partners Select II, L.P., By: Lightspeed "
+    },
+    {
+     "key": "1915431",
+     "name": "Insight Associates (EU) XII, S.a.r.l.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ASSOCIATES,S A R L; soi=N4 (weak); signed 'by/its' Insight Holdings Group, LLC, By: /s/ Andrew Prodromos/Author"
+    },
+    {
+     "key": "1920246",
+     "name": "New York City Advisors, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ADVISORS,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "1973229",
+     "name": "GNI USA, Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INC; signed 'by/its' /s/ Thomas Eastling, as attorney-in-fact for GNI Group Ltd.;"
+    },
+    {
+     "key": "1978187",
+     "name": "Lightspeed Strategic Partners General Partner I L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L P,PARTNERS; signed 'by/its' Lightspeed Venture Partners X, L.P., By: Lightspeed General "
+    },
+    {
+     "key": "2003368",
+     "name": "WARBURG PINCUS (CALLISTO) GLOBAL GROWTH 14 (CAYMAN), L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,L P; soi=E9 (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003491",
+     "name": "WARBURG PINCUS (CAYMAN) GLOBAL GROWTH 14 GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,GLOBAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2003512",
+     "name": "WARBURG PINCUS (CAYMAN) FINANCIAL SECTOR II GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAYMAN,FINANCIAL,GP,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2015536",
+     "name": "Deep Track Biotechnology Master Fund, Ltd.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) FUND,LTD,MASTER; soi=E9 (weak); fye=1231 (weak); signed 'by/its' Deep Track Biotechology Master Fund, Ltd. /s/ David Kroin, D"
+    },
+    {
+     "key": "2027026",
+     "name": "AG Asset Strategies LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) AG,ASSET,LLC,STRATEGIES; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2065665",
+     "name": "Sowell Investments Holding Co., LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,HOLDING,INVESTMENTS,LLC; soi=TX (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2074972",
+     "name": "Mend Partners GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; soi=DE (weak); fye=1231 (weak); signed 'by/its' By: /s/ Jacob Best; Jacob Best, Vice President of H&F Corpor"
+    },
+    {
+     "key": "2084966",
+     "name": "BMA VIII L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) L L C; soi=DE (weak); fye=1231 (weak); signed 'by/its' LEGENCE PARENT LLC, By: /s/ Bryce Seki, Name: Bryce Seki, Ti"
+    },
+    {
+     "key": "2086155",
+     "name": "Five Point Energy GP I LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ENERGY,GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' WBR Holdings LLC, By:  /s/ Harrison Bolling, Executive Vice "
+    },
+    {
+     "key": "2087488",
+     "name": "FTV NE-Aggregator, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' FTV VII, L.P., By: FTV Management VII, L.P., its General Par"
+    },
+    {
+     "key": "2100320",
+     "name": "Liberty Energy Holdings, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ENERGY,HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' PT INDEPENDENCE ENERGY HOLDINGS LLC, By: Brandi Kendall, Tit"
+    },
+    {
+     "key": "2106210",
+     "name": "GL Part SPV I, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,SPV; soi=WY (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2106590",
+     "name": "GL Part SPV II, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC,SPV; soi=WY (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2108828",
+     "name": "Neos Partners I GP LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC,PARTNERS; fye=1231 (weak); signed 'by/its' NEOS PARTNERS, LP, By: See Exhibit 99.2 for Signatures"
+    },
+    {
+     "key": "2110501",
+     "name": "BDTCP GP II-A (DEL), LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Mary Ann Todd, Attorney-in-Fact"
+    },
+    {
+     "key": "2130065",
+     "name": "TVP Bitcoin Venture GP I, L.L.C.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,L L C,VENTURE; soi=DE (weak); fye=1231 (weak); signed 'by/its' TVP Bitcoin Venture GP II, L.L.C., By /s/ Christopher Calico"
+    },
+    {
+     "key": "2131198",
+     "name": "KC Armada LP",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LP; soi=Y9 (weak); fye=1231 (weak); signed 'by/its' /s/ Edward Patrick Butler, as attorney-in-fact for Ernesto B"
+    },
+    {
+     "key": "2133115",
+     "name": "KKR AMG Managing Member LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2133820",
+     "name": "Insight Satellite Co-Invest GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CO,GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' Insight Holdings Group, LLC, By: /s/ Andrew Prodromos/Author"
+    },
+    {
+     "key": "2137420",
+     "name": "SNOW ROTHSCHILD ACQUISITION SPONSOR LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) ACQUISITION,LLC,SPONSOR; soi=DE (weak); fye=1231 (weak); signed 'by/its' /s/ Ian Snow, Managing Member of Snow Rothschild Acquisition"
+    },
+    {
+     "key": "2137640",
+     "name": "Honeywell Holdings International Inc.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,INC,INTERNATIONAL; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2138020",
+     "name": "WPFS II Orion Investments, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,L P; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2146311",
+     "name": "Inflection Point Holdings VIII LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) HOLDINGS,LLC; soi=DE (weak); fye=1231 (weak)"
+    },
+    {
+     "key": "2146930",
+     "name": "Fundomo SN-001 GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' Fundomo SN-001, LP. By: Fundomo SN-001 GP, LLC, its general "
+    },
+    {
+     "key": "2147119",
+     "name": "Grafiti Group LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) GROUP,LLC; soi=NV (weak); fye=1231 (weak); signed 'by/its' Grafiti Group LLC By: Nadir Ali, as General Manager; /s/ Nad"
+    },
+    {
+     "key": "2148329",
+     "name": "WSLS EMP OFFSHORE INVESTMENTS, L.P.",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) INVESTMENTS,L P; soi=E9 (weak); fye=1231 (weak); signed 'by/its' /s/ Crystal Orgill, Attorney-in-fact"
+    },
+    {
+     "key": "2149544",
+     "name": "GPI SA",
+     "decided": "person",
+     "label": "entity",
+     "reason": "GPI SA (Luxembourg societe anonyme); soi=N4; signed by LNA Holding SRL as proxy holder"
+    },
+    {
+     "key": "2151901",
+     "name": "Rivercrest Capital II GP, LLC",
+     "decided": "person",
+     "label": "entity",
+     "reason": "entity legal-form/name token; entity token(s) CAPITAL,GP,LLC; soi=DE (weak); fye=1231 (weak); signed 'by/its' Rivercrest Capital Partners LP By: /s/ Jamie Hayes, attorney"
+    }
+   ]
+  },
+  "C-A off/dir & no token & structural-empty -> person; struct/token -> entity": {
+   "extension_decisions": {
+    "entity": 160,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.99375,
+   "extension_entity_wilson95": [
+    0.9654510136686295,
+    0.9988958682428154
+   ],
+   "pooled_decided_entity": 537,
+   "pooled_entity_correct": 527,
+   "pooled_entity_precision": 0.9813780260707635,
+   "pooled_entity_wilson95": [
+    0.9660637816386707,
+    0.9898540599213849
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "C-B no token & structural-empty & person-shape -> person (flags not required)": {
+   "extension_decisions": {
+    "entity": 160,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.99375,
+   "extension_entity_wilson95": [
+    0.9654510136686295,
+    0.9988958682428154
+   ],
+   "pooled_decided_entity": 537,
+   "pooled_entity_correct": 527,
+   "pooled_entity_precision": 0.9813780260707635,
+   "pooled_entity_wilson95": [
+    0.9660637816386707,
+    0.9898540599213849
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "C-C C-B + deputization text -> deferred": {
+   "extension_decisions": {
+    "entity": 160,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.99375,
+   "extension_entity_wilson95": [
+    0.9654510136686295,
+    0.9988958682428154
+   ],
+   "pooled_decided_entity": 537,
+   "pooled_entity_correct": 527,
+   "pooled_entity_precision": 0.9813780260707635,
+   "pooled_entity_wilson95": [
+    0.9660637816386707,
+    0.9898540599213849
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "C-D C-B + form-history guard": {
+   "extension_decisions": {
+    "entity": 160,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.99375,
+   "extension_entity_wilson95": [
+    0.9654510136686295,
+    0.9988958682428154
+   ],
+   "pooled_decided_entity": 538,
+   "pooled_entity_correct": 528,
+   "pooled_entity_precision": 0.9814126394052045,
+   "pooled_entity_wilson95": [
+    0.966126222188833,
+    0.9898729755644732
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "C-E C-D, person only for off/dir rows": {
+   "extension_decisions": {
+    "entity": 160,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.99375,
+   "extension_entity_wilson95": [
+    0.9654510136686295,
+    0.9988958682428154
+   ],
+   "pooled_decided_entity": 538,
+   "pooled_entity_correct": 528,
+   "pooled_entity_precision": 0.9814126394052045,
+   "pooled_entity_wilson95": [
+    0.966126222188833,
+    0.9898729755644732
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "R6 edgartools 5.58.0 _classify_is_individual (offline on bronze submissions)": {
+   "extension_decisions": {
+    "entity": 158,
+    "person": 2,
+    "person_wrong": 1
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.97626406170675,
+    1.0
+   ],
+   "pooled_decided_entity": 537,
+   "pooled_entity_correct": 527,
+   "pooled_entity_precision": 0.9813780260707635,
+   "pooled_entity_wilson95": [
+    0.9660637816386707,
+    0.9898540599213849
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1795052",
+     "name": "UAW Ford Retirees Medical Benefits Plan",
+     "decided": "person",
+     "label": "entity",
+     "reason": "UAW Ford Retirees Medical Benefits Plan (VEBA trust); signed by the plan"
+    }
+   ]
+  },
+  "C-F edgartools person & name/structural/deputization checks agree, else deferred": {
+   "extension_decisions": {
+    "entity": 158,
+    "deferred": 2
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.97626406170675,
+    1.0
+   ],
+   "pooled_decided_entity": 537,
+   "pooled_entity_correct": 527,
+   "pooled_entity_precision": 0.9813780260707635,
+   "pooled_entity_wilson95": [
+    0.9660637816386707,
+    0.9898540599213849
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": []
+  },
+  "C-G C-F, person only for off/dir rows": {
+   "extension_decisions": {
+    "entity": 158,
+    "deferred": 2
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.97626406170675,
+    1.0
+   ],
+   "pooled_decided_entity": 537,
+   "pooled_entity_correct": 527,
+   "pooled_entity_precision": 0.9813780260707635,
+   "pooled_entity_wilson95": [
+    0.9660637816386707,
+    0.9898540599213849
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": []
+  },
+  "C-H person: no token & structural-empty & person-shape; entity: entityType op/inv OR unambiguous token": {
+   "extension_decisions": {
+    "entity": 157,
+    "deferred": 3,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.9936305732484076,
+   "extension_entity_wilson95": [
+    0.9648071297132559,
+    0.9988747535404445
+   ],
+   "pooled_decided_entity": 514,
+   "pooled_entity_correct": 512,
+   "pooled_entity_precision": 0.9961089494163424,
+   "pooled_entity_wilson95": [
+    0.9859251296486234,
+    0.998932284243582
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "C-I C-H + two-word surname-token names deferred": {
+   "extension_decisions": {
+    "entity": 157,
+    "deferred": 3,
+    "entity_wrong": 1
+   },
+   "extension_entity_precision": 0.9936305732484076,
+   "extension_entity_wilson95": [
+    0.9648071297132559,
+    0.9988747535404445
+   ],
+   "pooled_decided_entity": 513,
+   "pooled_entity_correct": 512,
+   "pooled_entity_precision": 0.9980506822612085,
+   "pooled_entity_wilson95": [
+    0.9890419595385953,
+    0.9996558146416341
+   ],
+   "pooled_clears_99_lcb_entity": false,
+   "errors": [
+    {
+     "key": "1788616",
+     "name": "Council LaVerne H",
+     "decided": "entity",
+     "label": "person",
+     "reason": "'Council LaVerne H' - natural person (director) whose surname is the token COUNCIL; POA signature 'for LaVerne H. Council'; no structural field"
+    }
+   ]
+  },
+  "C-J C-H + single-token person-shaped structural-empty names deferred": {
+   "extension_decisions": {
+    "entity": 154,
+    "deferred": 6
+   },
+   "extension_entity_precision": 1.0,
+   "extension_entity_wilson95": [
+    0.9756625483030732,
+    1.0
+   ],
+   "pooled_decided_entity": 507,
+   "pooled_entity_correct": 507,
+   "pooled_entity_precision": 1.0,
+   "pooled_entity_wilson95": [
+    0.9924801348549341,
+    1.0
+   ],
+   "pooled_clears_99_lcb_entity": true,
+   "errors": []
+  }
+ },
+ "sha256": {
+  "18-extension-sample.jsonl": "31d358f94935fc08278e313dd3b9c458946f4e2860b857a65ab1f870a64229c2"
+ }
+}

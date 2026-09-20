@@ -2,7 +2,7 @@
 
 Type: research
 Status: open
-Blocked by: 03-decide-reporting-owner-classification.md
+Blocked by: none (03 resolved 2026-09-20)
 
 ## Question
 
