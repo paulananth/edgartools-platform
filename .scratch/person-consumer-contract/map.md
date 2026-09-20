@@ -149,6 +149,23 @@ migration, no edit to any Clean MDM file. Written at
   addresses are not captured at all (two booleans only). Privacy:
   public-record class, no redaction, no new role, four structural gates
   plus a Steward takedown path. Retention: permanent, no timer.
+- [Calibrate the Person Tier B compound context key on a held-out sample](issues/17-calibrate-person-tier-b-context-key.md)
+  — 921 labelled pairs, offline (ADV Schedule A/B March+August, 8-K and
+  DEF 14A export snapshots, bronze Form 3/4/5), IAPD only to settle
+  labels. **Tier B's stated home and its measured home are opposite.** On
+  id-bearing sources Tier A binds first, so Tier B sees only the residual
+  (same firm, same name, *different* ids): ADV 1 same / 27 different
+  (precision 0.018), Form 3/4/5 residual empty. On the name-only sources
+  it was written for it works: pooled 8-K + DEF 14A at the middle-initial
+  variant, 269/269, **LCB95 0.99033 — clears 99%**, LCB97.5 0.98632 —
+  does not (104 more labellable pairs exist). Homonyms are the failure
+  mode (35 ADV pairs are separately registered individuals; father/son
+  separated only by `JR`/`III`); reused ids do not exist (all 84 splits
+  are one person under a name variant — pure recall cost); transitive
+  bridges cannot exist under an equality key, but the looser Tier C
+  comparator produces 48 chains of which 42 are false. Findings:
+  [research/17](research/17-tier-b-context-key-calibration.md); the four
+  consequent decisions: [ticket 20](issues/20-redecide-tier-b-after-calibration.md).
 
 ## Operator directives
 

@@ -1,0 +1,42 @@
+{
+ "H-adv-a937180ee96c": {
+  "label": "unknown",
+  "evidence": "research 16 F2 read this pair as a probable duplicate (both ids resolve, four shared firms, identical name); the 'II' in 2940858's otherNames and its two extra firms are equally consistent with a son; left unsettled",
+  "rule": "L-OVR unsettled: duplicate vs II"
+ },
+ "R-adv-f1ebdfaa30bc": {
+  "label": "same",
+  "evidence": "IAPD 8234676 resolves to PAULA KAY BINDERT, single registration at the filing firm 341361 from 4/16/2026; the March 'LAURA' is a data-entry error on the same record (17-iapd-results.jsonl)",
+  "rule": "L-OVR IAPD settles typo on one id"
+ },
+ "R-f4-64e2d8401a6b": {
+  "label": "same",
+  "evidence": "one CIK; 'Owen Adams Catherine' vs 'Owen Catherine E.' is a compound-surname/middle rewrite of one registered name (research 07 labelled all 42 two-name CIKs as one person; this is its 'name variant' class)",
+  "rule": "L-OVR research 07 name-variant class"
+ },
+ "H-f4-276e81423132": {
+  "label": "different",
+  "evidence": "Edoardo vs Angelo Zegna: different given names; the multi-word surname 'Zegna di Monte Rubello' defeats the EDGAR LAST FIRST parse (first token 'DI'), so this pair is a normalizer artifact, not a homonym",
+  "rule": "L-OVR different given names (parse artifact)"
+ },
+ "B-proxy-b4db0bd43436": {
+  "label": "same",
+  "evidence": "'Matthew (Matt) Furlong' / 'Matthew Furlong' / 'Matt Furlong' at one issuer, CEO row of successive proxy years: a nickname rendering of one executive",
+  "rule": "L-OVR nickname rendering"
+ },
+ "B-proxy-9a544ef120e2": {
+  "label": "same",
+  "evidence": "'Matthew (Matt) Furlong' / 'Matthew Furlong' / 'Matt Furlong' at one issuer, CEO row of successive proxy years: a nickname rendering of one executive",
+  "rule": "L-OVR nickname rendering"
+ },
+ "B-proxy-c36e6eb38d3b": {
+  "label": "same",
+  "evidence": "'Matthew (Matt) Furlong' / 'Matthew Furlong' / 'Matt Furlong' at one issuer, CEO row of successive proxy years: a nickname rendering of one executive",
+  "rule": "L-OVR nickname rendering"
+ },
+ "K-8k-4f410feca401": {
+  "label": "unknown",
+  "evidence": "'Effective Date' is not a person name (parser artifact that the role-text filter missed); not a Tier B candidate",
+  "rule": "L-OVR not a person name"
+ }
+}

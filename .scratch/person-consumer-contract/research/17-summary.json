@@ -1,0 +1,1612 @@
+{
+ "run_et": "2026-09-20T18:54:39-04:00",
+ "wilson": {
+  "z_one_sided_95": 1.6448536269514722,
+  "z_one_sided_975": 1.959963984540054,
+  "n_zero_errors_for_0.99_at_95": 268,
+  "n_zero_errors_for_0.99_at_975": 381,
+  "n_one_error_for_0.99_at_95": 446,
+  "n_one_error_for_0.99_at_975": 563
+ },
+ "sources": {
+  "adv": {
+   "records": 79768,
+   "person_shaped": 79766,
+   "xref_present": 79543,
+   "xref_blank": 225,
+   "distinct_ctx": 13856,
+   "distinct_xref": 47394,
+   "not_eligible_per_1000": 0.03,
+   "variants": {
+    "full": {
+     "groups_multi_record": 16641,
+     "records_in_multi_groups": 41965,
+     "decisions": 25324,
+     "review_per_1000": 7.6,
+     "records_block_cand_no_key_cand": 606,
+     "groups_with_2plus_xref": 55,
+     "groups_with_xref_and_blank": 13,
+     "recall_id_groups": 0.99645,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 59,
+     "residual": {
+      "n": 55,
+      "same": 1,
+      "different": 27,
+      "unknown": 27,
+      "precision_pessimistic": 0.01818,
+      "precision_optimistic": 0.50909,
+      "pessimistic": {
+       "lcb95": 0.00407,
+       "lcb975": 0.00322
+      },
+      "optimistic": {
+       "lcb95": 0.40042,
+       "lcb975": 0.38076
+      },
+      "settled_only": {
+       "n": 28,
+       "precision": 0.03571,
+       "lcb95": 0.00801,
+       "lcb975": 0.00633
+      }
+     },
+     "population": {
+      "n": 16641,
+      "same": 16587,
+      "different": 27,
+      "unknown": 27,
+      "precision_pessimistic": 0.99676,
+      "precision_optimistic": 0.99838,
+      "pessimistic": {
+       "lcb95": 0.99594,
+       "lcb975": 0.99577
+      },
+      "optimistic": {
+       "lcb95": 0.99778,
+       "lcb975": 0.99764
+      },
+      "settled_only": {
+       "n": 16614,
+       "precision": 0.99837,
+       "lcb95": 0.99777,
+       "lcb975": 0.99764
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|different": 10,
+      "inconsistent|same": 1,
+      "inconsistent|unknown": 13,
+      "consistent|different": 17,
+      "consistent|same": 160,
+      "consistent|unknown": 14
+     }
+    },
+    "nosuffix": {
+     "groups_multi_record": 16646,
+     "records_in_multi_groups": 41982,
+     "decisions": 25336,
+     "review_per_1000": 7.38,
+     "records_block_cand_no_key_cand": 589,
+     "groups_with_2plus_xref": 66,
+     "groups_with_xref_and_blank": 13,
+     "recall_id_groups": 0.99651,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 58,
+     "residual": {
+      "n": 66,
+      "same": 1,
+      "different": 38,
+      "unknown": 27,
+      "precision_pessimistic": 0.01515,
+      "precision_optimistic": 0.42424,
+      "pessimistic": {
+       "lcb95": 0.00339,
+       "lcb975": 0.00268
+      },
+      "optimistic": {
+       "lcb95": 0.32911,
+       "lcb975": 0.31243
+      },
+      "settled_only": {
+       "n": 39,
+       "precision": 0.02564,
+       "lcb95": 0.00574,
+       "lcb975": 0.00454
+      }
+     },
+     "population": {
+      "n": 16646,
+      "same": 16581,
+      "different": 38,
+      "unknown": 27,
+      "precision_pessimistic": 0.9961,
+      "precision_optimistic": 0.99772,
+      "pessimistic": {
+       "lcb95": 0.99522,
+       "lcb975": 0.99503
+      },
+      "optimistic": {
+       "lcb95": 0.99702,
+       "lcb975": 0.99687
+      },
+      "settled_only": {
+       "n": 16619,
+       "precision": 0.99771,
+       "lcb95": 0.99702,
+       "lcb975": 0.99686
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|different": 15,
+      "inconsistent|same": 1,
+      "inconsistent|unknown": 13,
+      "consistent|different": 23,
+      "consistent|same": 160,
+      "consistent|unknown": 14
+     }
+    },
+    "mi": {
+     "groups_multi_record": 16666,
+     "records_in_multi_groups": 42042,
+     "decisions": 25376,
+     "review_per_1000": 6.63,
+     "records_block_cand_no_key_cand": 529,
+     "groups_with_2plus_xref": 91,
+     "groups_with_xref_and_blank": 14,
+     "recall_id_groups": 0.99735,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 44,
+     "residual": {
+      "n": 91,
+      "same": 1,
+      "different": 51,
+      "unknown": 39,
+      "precision_pessimistic": 0.01099,
+      "precision_optimistic": 0.43956,
+      "pessimistic": {
+       "lcb95": 0.00246,
+       "lcb975": 0.00194
+      },
+      "optimistic": {
+       "lcb95": 0.35695,
+       "lcb975": 0.34209
+      },
+      "settled_only": {
+       "n": 52,
+       "precision": 0.01923,
+       "lcb95": 0.0043,
+       "lcb975": 0.0034
+      }
+     },
+     "population": {
+      "n": 16666,
+      "same": 16576,
+      "different": 51,
+      "unknown": 39,
+      "precision_pessimistic": 0.9946,
+      "precision_optimistic": 0.99694,
+      "pessimistic": {
+       "lcb95": 0.99358,
+       "lcb975": 0.99337
+      },
+      "optimistic": {
+       "lcb95": 0.99615,
+       "lcb975": 0.99598
+      },
+      "settled_only": {
+       "n": 16627,
+       "precision": 0.99693,
+       "lcb95": 0.99614,
+       "lcb975": 0.99597
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|different": 21,
+      "inconsistent|same": 1,
+      "inconsistent|unknown": 19,
+      "consistent|different": 30,
+      "consistent|same": 160,
+      "consistent|unknown": 20
+     }
+    },
+    "fl": {
+     "groups_multi_record": 16705,
+     "records_in_multi_groups": 42181,
+     "decisions": 25476,
+     "review_per_1000": 4.89,
+     "records_block_cand_no_key_cand": 390,
+     "groups_with_2plus_xref": 155,
+     "groups_with_xref_and_blank": 14,
+     "recall_id_groups": 0.99952,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 8,
+     "residual": {
+      "n": 155,
+      "same": 1,
+      "different": 104,
+      "unknown": 50,
+      "precision_pessimistic": 0.00645,
+      "precision_optimistic": 0.32903,
+      "pessimistic": {
+       "lcb95": 0.00144,
+       "lcb975": 0.00114
+      },
+      "optimistic": {
+       "lcb95": 0.27035,
+       "lcb975": 0.25998
+      },
+      "settled_only": {
+       "n": 105,
+       "precision": 0.00952,
+       "lcb95": 0.00213,
+       "lcb975": 0.00168
+      }
+     },
+     "population": {
+      "n": 16705,
+      "same": 16551,
+      "different": 104,
+      "unknown": 50,
+      "precision_pessimistic": 0.99078,
+      "precision_optimistic": 0.99377,
+      "pessimistic": {
+       "lcb95": 0.98948,
+       "lcb975": 0.98921
+      },
+      "optimistic": {
+       "lcb95": 0.99269,
+       "lcb975": 0.99246
+      },
+      "settled_only": {
+       "n": 16655,
+       "precision": 0.99376,
+       "lcb95": 0.99267,
+       "lcb975": 0.99244
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|different": 45,
+      "inconsistent|same": 1,
+      "inconsistent|unknown": 23,
+      "consistent|different": 59,
+      "consistent|same": 160,
+      "consistent|unknown": 27
+     }
+    }
+   }
+  },
+  "f4": {
+   "records": 72981,
+   "person_shaped": 72980,
+   "xref_present": 72981,
+   "xref_blank": 0,
+   "distinct_ctx": 4010,
+   "distinct_xref": 14566,
+   "not_eligible_per_1000": 0.01,
+   "variants": {
+    "full": {
+     "groups_multi_record": 9332,
+     "records_in_multi_groups": 65636,
+     "decisions": 56304,
+     "review_per_1000": 0.41,
+     "records_block_cand_no_key_cand": 30,
+     "groups_with_2plus_xref": 0,
+     "groups_with_xref_and_blank": 0,
+     "recall_id_groups": 0.99732,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 25,
+     "residual": {
+      "n": 0,
+      "same": 0,
+      "different": 0,
+      "unknown": 0
+     },
+     "population": {
+      "n": 9332,
+      "same": 9332,
+      "different": 0,
+      "unknown": 0,
+      "precision_pessimistic": 1.0,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.99971,
+       "lcb975": 0.99959
+      },
+      "optimistic": {
+       "lcb95": 0.99971,
+       "lcb975": 0.99959
+      },
+      "settled_only": {
+       "n": 9332,
+       "precision": 1.0,
+       "lcb95": 0.99971,
+       "lcb975": 0.99959
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|same": 1,
+      "consistent|same": 109
+     }
+    },
+    "nosuffix": {
+     "groups_multi_record": 9329,
+     "records_in_multi_groups": 65640,
+     "decisions": 56311,
+     "review_per_1000": 0.36,
+     "records_block_cand_no_key_cand": 26,
+     "groups_with_2plus_xref": 6,
+     "groups_with_xref_and_blank": 0,
+     "recall_id_groups": 0.99743,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 24,
+     "residual": {
+      "n": 6,
+      "same": 0,
+      "different": 6,
+      "unknown": 0,
+      "precision_pessimistic": 0.0,
+      "precision_optimistic": 0.0,
+      "pessimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "optimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "settled_only": {
+       "n": 6,
+       "precision": 0.0,
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      }
+     },
+     "population": {
+      "n": 9329,
+      "same": 9323,
+      "different": 6,
+      "unknown": 0,
+      "precision_pessimistic": 0.99936,
+      "precision_optimistic": 0.99936,
+      "pessimistic": {
+       "lcb95": 0.99876,
+       "lcb975": 0.9986
+      },
+      "optimistic": {
+       "lcb95": 0.99876,
+       "lcb975": 0.9986
+      },
+      "settled_only": {
+       "n": 9329,
+       "precision": 0.99936,
+       "lcb95": 0.99876,
+       "lcb975": 0.9986
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|different": 1,
+      "inconsistent|same": 1,
+      "consistent|different": 5,
+      "consistent|same": 109
+     }
+    },
+    "mi": {
+     "groups_multi_record": 9326,
+     "records_in_multi_groups": 65640,
+     "decisions": 56314,
+     "review_per_1000": 0.36,
+     "records_block_cand_no_key_cand": 26,
+     "groups_with_2plus_xref": 7,
+     "groups_with_xref_and_blank": 0,
+     "recall_id_groups": 0.99764,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 22,
+     "residual": {
+      "n": 7,
+      "same": 0,
+      "different": 7,
+      "unknown": 0,
+      "precision_pessimistic": 0.0,
+      "precision_optimistic": 0.0,
+      "pessimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "optimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "settled_only": {
+       "n": 7,
+       "precision": 0.0,
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      }
+     },
+     "population": {
+      "n": 9326,
+      "same": 9319,
+      "different": 7,
+      "unknown": 0,
+      "precision_pessimistic": 0.99925,
+      "precision_optimistic": 0.99925,
+      "pessimistic": {
+       "lcb95": 0.99862,
+       "lcb975": 0.99845
+      },
+      "optimistic": {
+       "lcb95": 0.99862,
+       "lcb975": 0.99845
+      },
+      "settled_only": {
+       "n": 9326,
+       "precision": 0.99925,
+       "lcb95": 0.99862,
+       "lcb975": 0.99845
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|different": 1,
+      "inconsistent|same": 1,
+      "consistent|different": 6,
+      "consistent|same": 109
+     }
+    },
+    "fl": {
+     "groups_multi_record": 9324,
+     "records_in_multi_groups": 65649,
+     "decisions": 56325,
+     "review_per_1000": 0.23,
+     "records_block_cand_no_key_cand": 17,
+     "groups_with_2plus_xref": 11,
+     "groups_with_xref_and_blank": 0,
+     "recall_id_groups": 0.99839,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 15,
+     "residual": {
+      "n": 11,
+      "same": 0,
+      "different": 10,
+      "unknown": 1,
+      "precision_pessimistic": 0.0,
+      "precision_optimistic": 0.09091,
+      "pessimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "optimistic": {
+       "lcb95": 0.02055,
+       "lcb975": 0.01623
+      },
+      "settled_only": {
+       "n": 10,
+       "precision": 0.0,
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      }
+     },
+     "population": {
+      "n": 9324,
+      "same": 9313,
+      "different": 10,
+      "unknown": 1,
+      "precision_pessimistic": 0.99882,
+      "precision_optimistic": 0.99893,
+      "pessimistic": {
+       "lcb95": 0.99807,
+       "lcb975": 0.99789
+      },
+      "optimistic": {
+       "lcb95": 0.99821,
+       "lcb975": 0.99803
+      },
+      "settled_only": {
+       "n": 9323,
+       "precision": 0.99893,
+       "lcb95": 0.99821,
+       "lcb975": 0.99803
+      },
+      "note": "unit = multi-record (ctx, key) group; groups with one id are pure by the id label (see Limits: id labels are partly name-derived)"
+     },
+     "role_consistency": {
+      "inconsistent|different": 1,
+      "inconsistent|same": 1,
+      "consistent|different": 9,
+      "consistent|same": 109,
+      "consistent|unknown": 1
+     }
+    }
+   }
+  },
+  "8k": {
+   "records": 7878,
+   "person_shaped": 4193,
+   "xref_present": 0,
+   "xref_blank": 7878,
+   "distinct_ctx": 1742,
+   "distinct_xref": 0,
+   "not_eligible_per_1000": 467.76,
+   "variants": {
+    "full": {
+     "groups_multi_record": 295,
+     "records_in_multi_groups": 633,
+     "decisions": 338,
+     "review_per_1000": 15.26,
+     "records_block_cand_no_key_cand": 64,
+     "within_source": {
+      "n": 123,
+      "same": 121,
+      "different": 0,
+      "unknown": 2,
+      "precision_pessimistic": 0.98374,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.95205,
+       "lcb975": 0.94265
+      },
+      "optimistic": {
+       "lcb95": 0.97848,
+       "lcb975": 0.96971
+      },
+      "settled_only": {
+       "n": 121,
+       "precision": 1.0,
+       "lcb95": 0.97813,
+       "lcb975": 0.96923
+      },
+      "rules": {
+       "L-K5 no anchor; appointment-then-departure continuity": 35,
+       "L-K7 no anchor; officer/director role change (promotion or board seat)": 23,
+       "L-K8 no anchor; repeated departure or departure-then-reappointment": 15,
+       "L-K1 single Form 3/4/5 CIK at the issuer anchors both events": 18,
+       "L-K6 no anchor; repeated appointments of the same role": 30,
+       "L-OVR not a person name": 1,
+       "L-K4 no anchor, role classes differ": 1
+      }
+     },
+     "cross_source_vs_f4": {
+      "n": 85,
+      "same": 81,
+      "different": 0,
+      "unknown": 4,
+      "precision_pessimistic": 0.95294,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.89924,
+       "lcb975": 0.88516
+      },
+      "optimistic": {
+       "lcb95": 0.96915,
+       "lcb975": 0.95676
+      },
+      "settled_only": {
+       "n": 81,
+       "precision": 1.0,
+       "lcb95": 0.96768,
+       "lcb975": 0.95472
+      },
+      "rules": {
+       "L-X4 homonym at issuer (two CIKs)": 1,
+       "L-X1 role + date anchor": 55,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 26,
+       "L-X3 timeline contradiction": 1,
+       "L-X5 role disagreement": 2
+      }
+     },
+     "pooled": {
+      "n": 208,
+      "same": 202,
+      "different": 0,
+      "unknown": 6,
+      "precision_pessimistic": 0.97115,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.9452,
+       "lcb975": 0.93851
+      },
+      "optimistic": {
+       "lcb95": 0.98716,
+       "lcb975": 0.98187
+      },
+      "settled_only": {
+       "n": 202,
+       "precision": 1.0,
+       "lcb95": 0.98678,
+       "lcb975": 0.98134
+      }
+     },
+     "anchored_only": {
+      "n": 74,
+      "same": 73,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.98649,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.94168,
+       "lcb975": 0.92735
+      },
+      "optimistic": {
+       "lcb95": 0.96473,
+       "lcb975": 0.95065
+      },
+      "settled_only": {
+       "n": 73,
+       "precision": 1.0,
+       "lcb95": 0.96426,
+       "lcb975": 0.95001
+      }
+     },
+     "role_consistency": {
+      "inconsistent|same": 32,
+      "inconsistent|unknown": 5,
+      "consistent|same": 170,
+      "consistent|unknown": 1
+     }
+    },
+    "nosuffix": {
+     "groups_multi_record": 295,
+     "records_in_multi_groups": 634,
+     "decisions": 339,
+     "review_per_1000": 15.03,
+     "records_block_cand_no_key_cand": 63,
+     "within_source": {
+      "n": 124,
+      "same": 122,
+      "different": 0,
+      "unknown": 2,
+      "precision_pessimistic": 0.98387,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.95243,
+       "lcb975": 0.9431
+      },
+      "optimistic": {
+       "lcb95": 0.97865,
+       "lcb975": 0.96995
+      },
+      "settled_only": {
+       "n": 122,
+       "precision": 1.0,
+       "lcb95": 0.9783,
+       "lcb975": 0.96947
+      },
+      "rules": {
+       "L-K5 no anchor; appointment-then-departure continuity": 35,
+       "L-K7 no anchor; officer/director role change (promotion or board seat)": 23,
+       "L-K8 no anchor; repeated departure or departure-then-reappointment": 15,
+       "L-K1 single Form 3/4/5 CIK at the issuer anchors both events": 19,
+       "L-K6 no anchor; repeated appointments of the same role": 30,
+       "L-OVR not a person name": 1,
+       "L-K4 no anchor, role classes differ": 1
+      }
+     },
+     "cross_source_vs_f4": {
+      "n": 87,
+      "same": 83,
+      "different": 0,
+      "unknown": 4,
+      "precision_pessimistic": 0.95402,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.90147,
+       "lcb975": 0.88767
+      },
+      "optimistic": {
+       "lcb95": 0.96984,
+       "lcb975": 0.95771
+      },
+      "settled_only": {
+       "n": 83,
+       "precision": 1.0,
+       "lcb95": 0.96843,
+       "lcb975": 0.95576
+      },
+      "rules": {
+       "L-X4 homonym at issuer (two CIKs)": 1,
+       "L-X1 role + date anchor": 55,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 28,
+       "L-X3 timeline contradiction": 1,
+       "L-X5 role disagreement": 2
+      }
+     },
+     "pooled": {
+      "n": 211,
+      "same": 205,
+      "different": 0,
+      "unknown": 6,
+      "precision_pessimistic": 0.97156,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.94596,
+       "lcb975": 0.93936
+      },
+      "optimistic": {
+       "lcb95": 0.98734,
+       "lcb975": 0.98212
+      },
+      "settled_only": {
+       "n": 205,
+       "precision": 1.0,
+       "lcb95": 0.98697,
+       "lcb975": 0.98161
+      }
+     },
+     "anchored_only": {
+      "n": 75,
+      "same": 74,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.98667,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.94242,
+       "lcb975": 0.92827
+      },
+      "optimistic": {
+       "lcb95": 0.96518,
+       "lcb975": 0.95128
+      },
+      "settled_only": {
+       "n": 74,
+       "precision": 1.0,
+       "lcb95": 0.96473,
+       "lcb975": 0.95065
+      }
+     },
+     "role_consistency": {
+      "inconsistent|same": 33,
+      "inconsistent|unknown": 5,
+      "consistent|same": 172,
+      "consistent|unknown": 1
+     }
+    },
+    "mi": {
+     "groups_multi_record": 295,
+     "records_in_multi_groups": 634,
+     "decisions": 339,
+     "review_per_1000": 15.03,
+     "records_block_cand_no_key_cand": 63,
+     "within_source": {
+      "n": 124,
+      "same": 122,
+      "different": 0,
+      "unknown": 2,
+      "precision_pessimistic": 0.98387,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.95243,
+       "lcb975": 0.9431
+      },
+      "optimistic": {
+       "lcb95": 0.97865,
+       "lcb975": 0.96995
+      },
+      "settled_only": {
+       "n": 122,
+       "precision": 1.0,
+       "lcb95": 0.9783,
+       "lcb975": 0.96947
+      },
+      "rules": {
+       "L-K5 no anchor; appointment-then-departure continuity": 35,
+       "L-K7 no anchor; officer/director role change (promotion or board seat)": 23,
+       "L-K8 no anchor; repeated departure or departure-then-reappointment": 15,
+       "L-K1 single Form 3/4/5 CIK at the issuer anchors both events": 19,
+       "L-K6 no anchor; repeated appointments of the same role": 30,
+       "L-OVR not a person name": 1,
+       "L-K4 no anchor, role classes differ": 1
+      }
+     },
+     "cross_source_vs_f4": {
+      "n": 99,
+      "same": 95,
+      "different": 0,
+      "unknown": 4,
+      "precision_pessimistic": 0.9596,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.91301,
+       "lcb975": 0.90068
+      },
+      "optimistic": {
+       "lcb95": 0.9734,
+       "lcb975": 0.96265
+      },
+      "settled_only": {
+       "n": 95,
+       "precision": 1.0,
+       "lcb95": 0.97231,
+       "lcb975": 0.96114
+      },
+      "rules": {
+       "L-X4 homonym at issuer (two CIKs)": 1,
+       "L-X1 role + date anchor": 61,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 34,
+       "L-X3 timeline contradiction": 1,
+       "L-X5 role disagreement": 2
+      }
+     },
+     "pooled": {
+      "n": 223,
+      "same": 217,
+      "different": 0,
+      "unknown": 6,
+      "precision_pessimistic": 0.97309,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.94882,
+       "lcb975": 0.94255
+      },
+      "optimistic": {
+       "lcb95": 0.98801,
+       "lcb975": 0.98307
+      },
+      "settled_only": {
+       "n": 217,
+       "precision": 1.0,
+       "lcb95": 0.98769,
+       "lcb975": 0.98261
+      }
+     },
+     "anchored_only": {
+      "n": 81,
+      "same": 80,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.98765,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.94654,
+       "lcb975": 0.93333
+      },
+      "optimistic": {
+       "lcb95": 0.96768,
+       "lcb975": 0.95472
+      },
+      "settled_only": {
+       "n": 80,
+       "precision": 1.0,
+       "lcb95": 0.96729,
+       "lcb975": 0.95418
+      }
+     },
+     "role_consistency": {
+      "inconsistent|same": 33,
+      "inconsistent|unknown": 5,
+      "consistent|same": 184,
+      "consistent|unknown": 1
+     }
+    },
+    "fl": {
+     "groups_multi_record": 315,
+     "records_in_multi_groups": 676,
+     "decisions": 361,
+     "review_per_1000": 5.01,
+     "records_block_cand_no_key_cand": 21,
+     "within_source": {
+      "n": 140,
+      "same": 137,
+      "different": 0,
+      "unknown": 3,
+      "precision_pessimistic": 0.97857,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.94759,
+       "lcb975": 0.9389
+      },
+      "optimistic": {
+       "lcb95": 0.98104,
+       "lcb975": 0.97329
+      },
+      "settled_only": {
+       "n": 137,
+       "precision": 1.0,
+       "lcb95": 0.98063,
+       "lcb975": 0.97272
+      },
+      "rules": {
+       "L-K5 no anchor; appointment-then-departure continuity": 37,
+       "L-K7 no anchor; officer/director role change (promotion or board seat)": 24,
+       "L-K4 no anchor, role classes differ": 2,
+       "L-K8 no anchor; repeated departure or departure-then-reappointment": 21,
+       "L-K1 single Form 3/4/5 CIK at the issuer anchors both events": 21,
+       "L-K6 no anchor; repeated appointments of the same role": 34,
+       "L-OVR not a person name": 1
+      }
+     },
+     "cross_source_vs_f4": {
+      "n": 141,
+      "same": 133,
+      "different": 1,
+      "unknown": 7,
+      "precision_pessimistic": 0.94326,
+      "precision_optimistic": 0.99291,
+      "pessimistic": {
+       "lcb95": 0.9021,
+       "lcb975": 0.89204
+      },
+      "optimistic": {
+       "lcb95": 0.96884,
+       "lcb975": 0.96092
+      },
+      "settled_only": {
+       "n": 134,
+       "precision": 0.99254,
+       "lcb95": 0.96725,
+       "lcb975": 0.95894
+      },
+      "rules": {
+       "L-H1 conflicting middle names": 1,
+       "L-X4 homonym at issuer (two CIKs)": 1,
+       "L-X1 role + date anchor": 86,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 47,
+       "L-X3 timeline contradiction": 2,
+       "L-X5 role disagreement": 4
+      }
+     },
+     "pooled": {
+      "n": 281,
+      "same": 270,
+      "different": 1,
+      "unknown": 10,
+      "precision_pessimistic": 0.96085,
+      "precision_optimistic": 0.99644,
+      "pessimistic": {
+       "lcb95": 0.93702,
+       "lcb975": 0.93127
+      },
+      "optimistic": {
+       "lcb95": 0.98421,
+       "lcb975": 0.98012
+      },
+      "settled_only": {
+       "n": 271,
+       "precision": 0.99631,
+       "lcb95": 0.98363,
+       "lcb975": 0.9794
+      }
+     },
+     "anchored_only": {
+      "n": 109,
+      "same": 107,
+      "different": 1,
+      "unknown": 1,
+      "precision_pessimistic": 0.98165,
+      "precision_optimistic": 0.99083,
+      "pessimistic": {
+       "lcb95": 0.94606,
+       "lcb975": 0.93556
+      },
+      "optimistic": {
+       "lcb95": 0.95992,
+       "lcb975": 0.94985
+      },
+      "settled_only": {
+       "n": 108,
+       "precision": 0.99074,
+       "lcb95": 0.95956,
+       "lcb975": 0.94941
+      }
+     },
+     "role_consistency": {
+      "inconsistent|same": 37,
+      "inconsistent|unknown": 8,
+      "consistent|different": 1,
+      "consistent|same": 233,
+      "consistent|unknown": 2
+     }
+    }
+   },
+   "eligibility": {
+    "records": 7878,
+    "person_shaped_no_role_text": 4193,
+    "share_eligible": 0.5322
+   }
+  },
+  "proxy": {
+   "records": 14755,
+   "person_shaped": 6091,
+   "xref_present": 0,
+   "xref_blank": 14755,
+   "distinct_ctx": 903,
+   "distinct_xref": 0,
+   "not_eligible_per_1000": 587.19,
+   "variants": {
+    "full": {
+     "groups_multi_record": 1279,
+     "records_in_multi_groups": 4348,
+     "decisions": 3069,
+     "review_per_1000": 6.4,
+     "records_block_cand_no_key_cand": 39,
+     "within_source": {
+      "n": 0,
+      "same": 0,
+      "different": 0,
+      "unknown": 0,
+      "rules": {}
+     },
+     "cross_source_vs_f4": {
+      "n": 51,
+      "same": 50,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.98039,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.91677,
+       "lcb975": 0.89695
+      },
+      "optimistic": {
+       "lcb95": 0.94962,
+       "lcb975": 0.92995
+      },
+      "settled_only": {
+       "n": 50,
+       "precision": 1.0,
+       "lcb95": 0.94867,
+       "lcb975": 0.92865
+      },
+      "rules": {
+       "L-X4 homonym at issuer (two CIKs)": 1,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 50
+      }
+     },
+     "pooled": {
+      "n": 51,
+      "same": 50,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.98039,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.91677,
+       "lcb975": 0.89695
+      },
+      "optimistic": {
+       "lcb95": 0.94962,
+       "lcb975": 0.92995
+      },
+      "settled_only": {
+       "n": 50,
+       "precision": 1.0,
+       "lcb95": 0.94867,
+       "lcb975": 0.92865
+      }
+     },
+     "anchored_only": {
+      "n": 1,
+      "same": 0,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.0,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "optimistic": {
+       "lcb95": 0.26987,
+       "lcb975": 0.20655
+      },
+      "settled_only": {
+       "n": 0,
+       "precision": null
+      }
+     },
+     "role_consistency": {
+      "consistent|same": 50,
+      "consistent|unknown": 1
+     }
+    },
+    "nosuffix": {
+     "groups_multi_record": 1273,
+     "records_in_multi_groups": 4354,
+     "decisions": 3081,
+     "review_per_1000": 5.42,
+     "records_block_cand_no_key_cand": 33,
+     "within_source": {
+      "n": 0,
+      "same": 0,
+      "different": 0,
+      "unknown": 0,
+      "rules": {}
+     },
+     "cross_source_vs_f4": {
+      "n": 51,
+      "same": 50,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.98039,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.91677,
+       "lcb975": 0.89695
+      },
+      "optimistic": {
+       "lcb95": 0.94962,
+       "lcb975": 0.92995
+      },
+      "settled_only": {
+       "n": 50,
+       "precision": 1.0,
+       "lcb95": 0.94867,
+       "lcb975": 0.92865
+      },
+      "rules": {
+       "L-X4 homonym at issuer (two CIKs)": 1,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 50
+      }
+     },
+     "pooled": {
+      "n": 51,
+      "same": 50,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.98039,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.91677,
+       "lcb975": 0.89695
+      },
+      "optimistic": {
+       "lcb95": 0.94962,
+       "lcb975": 0.92995
+      },
+      "settled_only": {
+       "n": 50,
+       "precision": 1.0,
+       "lcb95": 0.94867,
+       "lcb975": 0.92865
+      }
+     },
+     "anchored_only": {
+      "n": 1,
+      "same": 0,
+      "different": 0,
+      "unknown": 1,
+      "precision_pessimistic": 0.0,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "optimistic": {
+       "lcb95": 0.26987,
+       "lcb975": 0.20655
+      },
+      "settled_only": {
+       "n": 0,
+       "precision": null
+      }
+     },
+     "role_consistency": {
+      "consistent|same": 50,
+      "consistent|unknown": 1
+     }
+    },
+    "mi": {
+     "groups_multi_record": 1273,
+     "records_in_multi_groups": 4354,
+     "decisions": 3081,
+     "review_per_1000": 5.42,
+     "records_block_cand_no_key_cand": 33,
+     "within_source": {
+      "n": 0,
+      "same": 0,
+      "different": 0,
+      "unknown": 0,
+      "rules": {}
+     },
+     "cross_source_vs_f4": {
+      "n": 54,
+      "same": 52,
+      "different": 0,
+      "unknown": 2,
+      "precision_pessimistic": 0.96296,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.89408,
+       "lcb975": 0.87465
+      },
+      "optimistic": {
+       "lcb95": 0.95229,
+       "lcb975": 0.93359
+      },
+      "settled_only": {
+       "n": 52,
+       "precision": 1.0,
+       "lcb95": 0.95054,
+       "lcb975": 0.93121
+      },
+      "rules": {
+       "L-X4 homonym at issuer (two CIKs)": 2,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 52
+      }
+     },
+     "pooled": {
+      "n": 54,
+      "same": 52,
+      "different": 0,
+      "unknown": 2,
+      "precision_pessimistic": 0.96296,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.89408,
+       "lcb975": 0.87465
+      },
+      "optimistic": {
+       "lcb95": 0.95229,
+       "lcb975": 0.93359
+      },
+      "settled_only": {
+       "n": 52,
+       "precision": 1.0,
+       "lcb95": 0.95054,
+       "lcb975": 0.93121
+      }
+     },
+     "anchored_only": {
+      "n": 2,
+      "same": 0,
+      "different": 0,
+      "unknown": 2,
+      "precision_pessimistic": 0.0,
+      "precision_optimistic": 1.0,
+      "pessimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "optimistic": {
+       "lcb95": 0.42503,
+       "lcb975": 0.34238
+      },
+      "settled_only": {
+       "n": 0,
+       "precision": null
+      }
+     },
+     "role_consistency": {
+      "consistent|same": 52,
+      "consistent|unknown": 2
+     }
+    },
+    "fl": {
+     "groups_multi_record": 1269,
+     "records_in_multi_groups": 4368,
+     "decisions": 3099,
+     "review_per_1000": 3.12,
+     "records_block_cand_no_key_cand": 19,
+     "within_source": {
+      "n": 0,
+      "same": 0,
+      "different": 0,
+      "unknown": 0,
+      "rules": {}
+     },
+     "cross_source_vs_f4": {
+      "n": 72,
+      "same": 67,
+      "different": 3,
+      "unknown": 2,
+      "precision_pessimistic": 0.93056,
+      "precision_optimistic": 0.95833,
+      "pessimistic": {
+       "lcb95": 0.86413,
+       "lcb975": 0.84752
+      },
+      "optimistic": {
+       "lcb95": 0.90024,
+       "lcb975": 0.88451
+      },
+      "settled_only": {
+       "n": 70,
+       "precision": 0.95714,
+       "lcb95": 0.89752,
+       "lcb975": 0.8814
+      },
+      "rules": {
+       "L-X4 homonym at issuer (two CIKs)": 2,
+       "L-H1 conflicting middle names": 3,
+       "L-X2 role agreement, timeline compatible (no date anchor)": 67
+      }
+     },
+     "pooled": {
+      "n": 72,
+      "same": 67,
+      "different": 3,
+      "unknown": 2,
+      "precision_pessimistic": 0.93056,
+      "precision_optimistic": 0.95833,
+      "pessimistic": {
+       "lcb95": 0.86413,
+       "lcb975": 0.84752
+      },
+      "optimistic": {
+       "lcb95": 0.90024,
+       "lcb975": 0.88451
+      },
+      "settled_only": {
+       "n": 70,
+       "precision": 0.95714,
+       "lcb95": 0.89752,
+       "lcb975": 0.8814
+      }
+     },
+     "anchored_only": {
+      "n": 5,
+      "same": 0,
+      "different": 3,
+      "unknown": 2,
+      "precision_pessimistic": 0.0,
+      "precision_optimistic": 0.4,
+      "pessimistic": {
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      },
+      "optimistic": {
+       "lcb95": 0.14271,
+       "lcb975": 0.11762
+      },
+      "settled_only": {
+       "n": 3,
+       "precision": 0.0,
+       "lcb95": 0.0,
+       "lcb975": 0.0
+      }
+     },
+     "role_consistency": {
+      "consistent|different": 3,
+      "consistent|same": 67,
+      "consistent|unknown": 2
+     }
+    }
+   },
+   "eligibility": {
+    "records": 14755,
+    "person_shaped_no_role_text": 6091,
+    "share_eligible": 0.4128
+   }
+  }
+ },
+ "hard_cases": {
+  "homonyms_adv": {
+   "id_pairs_same_ctx_same_fl": 155,
+   "by_variant": {
+    "full": {
+     "different": 27,
+     "unknown": 27,
+     "same": 1
+    },
+    "nosuffix": {
+     "different": 38,
+     "unknown": 27,
+     "same": 1
+    },
+    "mi": {
+     "different": 51,
+     "unknown": 39,
+     "same": 1
+    },
+    "fl": {
+     "different": 104,
+     "unknown": 50,
+     "same": 1
+    }
+   },
+   "rules": {
+    "L-H1 different ids and conflicting middle names": 58,
+    "L-H7 two IAPD-registered individuals with distinct registration histories": 35,
+    "L-H2 different ids and conflicting generational suffix": 2,
+    "L-H6 identical/compatible names, two CRD records; public data cannot settle": 49,
+    "L-H2b different ids, generational suffix on one side only (father/son)": 9,
+    "L-H8 duplicate CRD records with one registration history": 1,
+    "L-OVR unsettled: duplicate vs II": 1
+   },
+   "iapd_settled": 36
+  },
+  "reused_ids_adv": {
+   "id_split_pairs": 59,
+   "labels": {
+    "same": 59
+   },
+   "rules": {
+    "L-R2 same id, nickname or typo": 4,
+    "L-R1 same id, name variant (middle/initial/suffix/typo)": 48,
+    "L-R3 same id, surname change (legal name change)": 5,
+    "L-R4 same id, token reorder": 1,
+    "L-OVR IAPD settles typo on one id": 1
+   },
+   "captured_by_variant": {
+    "full": 0,
+    "nosuffix": 1,
+    "mi": 15,
+    "fl": 51
+   },
+   "unexplained": []
+  },
+  "homonyms_f4": {
+   "id_pairs_same_ctx_same_fl": 11,
+   "by_variant": {
+    "full": {},
+    "nosuffix": {
+     "different": 6
+    },
+    "mi": {
+     "different": 7
+    },
+    "fl": {
+     "different": 10,
+     "unknown": 1
+    }
+   },
+   "rules": {
+    "L-H2b different ids, generational suffix on one side only (father/son)": 5,
+    "L-H1 different ids and conflicting middle names": 3,
+    "L-H5 two CIKs, compatible names (unsettled)": 1,
+    "L-OVR different given names (parse artifact)": 1,
+    "L-H2 different ids and conflicting generational suffix": 1
+   },
+   "iapd_settled": 0
+  },
+  "reused_ids_f4": {
+   "id_split_pairs": 25,
+   "labels": {
+    "same": 25
+   },
+   "rules": {
+    "L-R4 same id, token reorder": 4,
+    "L-R1 same id, name variant (middle/initial/suffix/typo)": 10,
+    "L-R3 same id, surname change (legal name change)": 6,
+    "L-OVR research 07 name-variant class": 1,
+    "L-R2 same id, nickname or typo": 4
+   },
+   "captured_by_variant": {
+    "full": 0,
+    "nosuffix": 1,
+    "mi": 3,
+    "fl": 10
+   },
+   "unexplained": []
+  },
+  "bridges": {
+   "fl_groups_with_3plus_full_keys": 0,
+   "note": "no (ctx, last|first) group in any source holds three distinct full keys, so no A~B~C chain exists under the exact-equality key; bridges were constructed at the Tier C comparator (surname + first initial)",
+   "block_groups_with_3plus_full_keys": {
+    "adv": 42,
+    "f4": 3,
+    "proxy": 3
+   },
+   "pairs": 48,
+   "labels": {
+    "adv|different": 39,
+    "adv|unknown": 2,
+    "adv|same": 1,
+    "f4|different": 3,
+    "proxy|same": 3
+   },
+   "fl_equal_pairs_inside_block_groups": {
+    "adv|different": 3,
+    "adv|unknown": 2,
+    "adv|same": 1,
+    "proxy|same": 1
+   }
+  }
+ },
+ "strata": {
+  "counts": {
+   "B|adv|different": 39,
+   "B|adv|same": 1,
+   "B|adv|unknown": 2,
+   "B|f4|different": 3,
+   "B|proxy|same": 3,
+   "H|adv|different": 104,
+   "H|adv|same": 1,
+   "H|adv|unknown": 50,
+   "H|f4|different": 10,
+   "H|f4|unknown": 1,
+   "K|8k|same": 137,
+   "K|8k|unknown": 3,
+   "P|adv|same": 160,
+   "P|f4|same": 110,
+   "R|adv|same": 59,
+   "R|f4|same": 25,
+   "X|8k|different": 1,
+   "X|8k|same": 133,
+   "X|8k|unknown": 7,
+   "X|proxy|different": 3,
+   "X|proxy|same": 67,
+   "X|proxy|unknown": 2
+  },
+  "rules": {
+   "L-H1 different ids and conflicting middle names": 62,
+   "L-H7 two IAPD-registered individuals with distinct registration histories": 36,
+   "L-H2 different ids and conflicting generational suffix": 3,
+   "L-H6 identical/compatible names, two CRD records; public data cannot settle": 51,
+   "L-H2b different ids, generational suffix on one side only (father/son)": 15,
+   "L-H8 duplicate CRD records with one registration history": 1,
+   "L-OVR unsettled: duplicate vs II": 1,
+   "L-H5 two CIKs, compatible names (unsettled)": 1,
+   "L-OVR different given names (parse artifact)": 1,
+   "L-R2 same id, nickname or typo": 8,
+   "L-R1 same id, name variant (middle/initial/suffix/typo)": 58,
+   "L-R3 same id, surname change (legal name change)": 11,
+   "L-R4 same id, token reorder": 5,
+   "L-OVR IAPD settles typo on one id": 1,
+   "L-OVR research 07 name-variant class": 1,
+   "L-B1 different given names (block-only match)": 39,
+   "L-P1 shared id": 1,
+   "L-OVR nickname rendering": 3,
+   "L-P1 shared id + corroboration": 269,
+   "L-P1 shared id only": 1,
+   "L-K5 no anchor; appointment-then-departure continuity": 37,
+   "L-K7 no anchor; officer/director role change (promotion or board seat)": 24,
+   "L-K4 no anchor, role classes differ": 2,
+   "L-K8 no anchor; repeated departure or departure-then-reappointment": 21,
+   "L-K1 single Form 3/4/5 CIK at the issuer anchors both events": 21,
+   "L-K6 no anchor; repeated appointments of the same role": 34,
+   "L-OVR not a person name": 1,
+   "L-H1 conflicting middle names": 4,
+   "L-X4 homonym at issuer (two CIKs)": 3,
+   "L-X1 role + date anchor": 86,
+   "L-X2 role agreement, timeline compatible (no date anchor)": 114,
+   "L-X3 timeline contradiction": 2,
+   "L-X5 role disagreement": 4
+  },
+  "total_pairs": 921,
+  "overrides": 8
+ },
+ "adv_firm_cik_bridge": {
+  "adv_filings_with_1d3_cik": 4697,
+  "distinct_1d3_ciks_in_loaded_months": 3981,
+  "of_which_are_f4_issuers_in_corpus": 3
+ },
+ "inputs": {
+  "adv_mar_ab": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx_202603/IA_Schedule_A_B_20260301_20260331.csv",
+   "sha256": "3637532307369c897ba73779f9924be97c0ea30d2cbf485f13affe0664a5b764"
+  },
+  "adv_aug_ab": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx/IA_Schedule_A_B_20260801_20260831.csv",
+   "sha256": "fe4fc0cb423ff03733ccb073aa6ee982efacc370691717836ad26c6dfdc6a206"
+  },
+  "adv_mar_base": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx_202603/IA_ADV_Base_A_20260301_20260331.csv",
+   "sha256": "34b9a7ba487ae7ce875cbc6dc21bf5d7ce46ff750cc72c5a93b71a7254022613"
+  },
+  "adv_aug_base": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx/IA_ADV_Base_A_20260801_20260831.csv",
+   "sha256": "ed098484d79537dfa644e995a1f081c9e3101a2b148d37b806182daad2046162"
+  },
+  "f4_union": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/r07/07-union-corpus.jsonl",
+   "sha256": "9daf08fb01011dc6f0ac8261086034d63ebd81a8c1649a220034b44b45b45e4d"
+  },
+  "eightk": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/person-research/sec_employment_event.parquet",
+   "sha256": "8e21ed8d11e5b08685a9f36c97e50b80203ffcc415bc0174fb5951b7ce25d138"
+  },
+  "proxy": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/person-research/executive_record.parquet",
+   "sha256": "b6b1c419aca75f6f031501ada38f14645f4ca04cbd3371375f8d907cbcc3a93e"
+  },
+  "17-pairs.jsonl": {
+   "sha256": "1f3a091ab79b5feec9149ebeb0d8fb3af580ebae19f8ceccb676e5c1615c7b7a"
+  },
+  "17-iapd-results.jsonl": {
+   "sha256": "23d8201aa35d2ae46601983337bb5ca1f00a313d40a09407b7dcaccb6ad4ab51"
+  },
+  "17-iapd-requests.jsonl": {
+   "sha256": "dcf87eb4819f0683792afe00301e7e2459dad90f51c121c6bbefcb777efd80ab",
+   "requests": 207
+  }
+ }
+}
