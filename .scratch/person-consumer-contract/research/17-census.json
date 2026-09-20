@@ -1,0 +1,371 @@
+{
+ "run_et": "2026-09-20T18:49:51-04:00",
+ "inputs": {
+  "adv_mar_ab": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx_202603/IA_Schedule_A_B_20260301_20260331.csv",
+   "sha256": "3637532307369c897ba73779f9924be97c0ea30d2cbf485f13affe0664a5b764"
+  },
+  "adv_aug_ab": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx/IA_Schedule_A_B_20260801_20260831.csv",
+   "sha256": "fe4fc0cb423ff03733ccb073aa6ee982efacc370691717836ad26c6dfdc6a206"
+  },
+  "adv_mar_base": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx_202603/IA_ADV_Base_A_20260301_20260331.csv",
+   "sha256": "34b9a7ba487ae7ce875cbc6dc21bf5d7ce46ff750cc72c5a93b71a7254022613"
+  },
+  "adv_aug_base": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/advx/IA_ADV_Base_A_20260801_20260831.csv",
+   "sha256": "ed098484d79537dfa644e995a1f081c9e3101a2b148d37b806182daad2046162"
+  },
+  "f4_union": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/r07/07-union-corpus.jsonl",
+   "sha256": "9daf08fb01011dc6f0ac8261086034d63ebd81a8c1649a220034b44b45b45e4d"
+  },
+  "eightk": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/person-research/sec_employment_event.parquet",
+   "sha256": "8e21ed8d11e5b08685a9f36c97e50b80203ffcc415bc0174fb5951b7ce25d138"
+  },
+  "proxy": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/person-research/executive_record.parquet",
+   "sha256": "b6b1c419aca75f6f031501ada38f14645f4ca04cbd3371375f8d907cbcc3a93e"
+  }
+ },
+ "sources": {
+  "adv": {
+   "records": 79768,
+   "person_shaped": 79766,
+   "xref_present": 79543,
+   "xref_blank": 225,
+   "distinct_ctx": 13856,
+   "distinct_xref": 47394,
+   "variants": {
+    "full": {
+     "groups": 54442,
+     "groups_multi_record": 16641,
+     "records_in_multi_groups": 41965,
+     "groups_with_2plus_xref": 55,
+     "groups_with_2plus_xref_and_blank": 13,
+     "records_with_key_cand": 41965,
+     "records_with_block_cand": 42571,
+     "records_block_cand_no_key_cand": 606,
+     "review_per_1000": 7.6,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 59,
+     "id_groups_raw_name_varies": 95,
+     "recall_id_groups": 0.99645
+    },
+    "nosuffix": {
+     "groups": 54430,
+     "groups_multi_record": 16646,
+     "records_in_multi_groups": 41982,
+     "groups_with_2plus_xref": 66,
+     "groups_with_2plus_xref_and_blank": 13,
+     "records_with_key_cand": 41982,
+     "records_with_block_cand": 42571,
+     "records_block_cand_no_key_cand": 589,
+     "review_per_1000": 7.38,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 58,
+     "id_groups_raw_name_varies": 95,
+     "recall_id_groups": 0.99651
+    },
+    "mi": {
+     "groups": 54390,
+     "groups_multi_record": 16666,
+     "records_in_multi_groups": 42042,
+     "groups_with_2plus_xref": 91,
+     "groups_with_2plus_xref_and_blank": 14,
+     "records_with_key_cand": 42042,
+     "records_with_block_cand": 42571,
+     "records_block_cand_no_key_cand": 529,
+     "review_per_1000": 6.63,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 44,
+     "id_groups_raw_name_varies": 95,
+     "recall_id_groups": 0.99735
+    },
+    "fl": {
+     "groups": 54290,
+     "groups_multi_record": 16705,
+     "records_in_multi_groups": 42181,
+     "groups_with_2plus_xref": 155,
+     "groups_with_2plus_xref_and_blank": 14,
+     "records_with_key_cand": 42181,
+     "records_with_block_cand": 42571,
+     "records_block_cand_no_key_cand": 390,
+     "review_per_1000": 4.89,
+     "id_groups_multi": 16601,
+     "id_groups_key_split": 8,
+     "id_groups_raw_name_varies": 95,
+     "recall_id_groups": 0.99952
+    }
+   },
+   "shaped_records": 79766
+  },
+  "f4": {
+   "records": 104970,
+   "person_shaped": 101419,
+   "xref_present": 104970,
+   "xref_blank": 0,
+   "distinct_ctx": 4299,
+   "distinct_xref": 21727,
+   "variants": {
+    "full": {
+     "groups": 23974,
+     "groups_multi_record": 14048,
+     "records_in_multi_groups": 91493,
+     "groups_with_2plus_xref": 2,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 91493,
+     "records_with_block_cand": 91830,
+     "records_block_cand_no_key_cand": 337,
+     "review_per_1000": 3.32,
+     "id_groups_multi": 14032,
+     "id_groups_key_split": 37,
+     "id_groups_raw_name_varies": 66,
+     "recall_id_groups": 0.99736
+    },
+    "nosuffix": {
+     "groups": 23914,
+     "groups_multi_record": 14025,
+     "records_in_multi_groups": 91530,
+     "groups_with_2plus_xref": 52,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 91530,
+     "records_with_block_cand": 91830,
+     "records_block_cand_no_key_cand": 300,
+     "review_per_1000": 2.96,
+     "id_groups_multi": 14032,
+     "id_groups_key_split": 36,
+     "id_groups_raw_name_varies": 66,
+     "recall_id_groups": 0.99743
+    },
+    "mi": {
+     "groups": 23749,
+     "groups_multi_record": 13945,
+     "records_in_multi_groups": 91615,
+     "groups_with_2plus_xref": 175,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 91615,
+     "records_with_block_cand": 91830,
+     "records_block_cand_no_key_cand": 215,
+     "review_per_1000": 2.12,
+     "id_groups_multi": 14032,
+     "id_groups_key_split": 33,
+     "id_groups_raw_name_varies": 66,
+     "recall_id_groups": 0.99765
+    },
+    "fl": {
+     "groups": 23439,
+     "groups_multi_record": 13808,
+     "records_in_multi_groups": 91788,
+     "groups_with_2plus_xref": 334,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 91788,
+     "records_with_block_cand": 91830,
+     "records_block_cand_no_key_cand": 42,
+     "review_per_1000": 0.41,
+     "id_groups_multi": 14032,
+     "id_groups_key_split": 23,
+     "id_groups_raw_name_varies": 66,
+     "recall_id_groups": 0.99836
+    }
+   },
+   "shaped_records": 101419
+  },
+  "8k": {
+   "records": 7878,
+   "person_shaped": 4193,
+   "xref_present": 0,
+   "xref_blank": 7878,
+   "distinct_ctx": 1742,
+   "distinct_xref": 0,
+   "variants": {
+    "full": {
+     "groups": 3855,
+     "groups_multi_record": 295,
+     "records_in_multi_groups": 633,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 633,
+     "records_with_block_cand": 697,
+     "records_block_cand_no_key_cand": 64,
+     "review_per_1000": 15.26
+    },
+    "nosuffix": {
+     "groups": 3854,
+     "groups_multi_record": 295,
+     "records_in_multi_groups": 634,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 634,
+     "records_with_block_cand": 697,
+     "records_block_cand_no_key_cand": 63,
+     "review_per_1000": 15.03
+    },
+    "mi": {
+     "groups": 3854,
+     "groups_multi_record": 295,
+     "records_in_multi_groups": 634,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 634,
+     "records_with_block_cand": 697,
+     "records_block_cand_no_key_cand": 63,
+     "review_per_1000": 15.03
+    },
+    "fl": {
+     "groups": 3832,
+     "groups_multi_record": 315,
+     "records_in_multi_groups": 676,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 676,
+     "records_with_block_cand": 697,
+     "records_block_cand_no_key_cand": 21,
+     "review_per_1000": 5.01
+    }
+   },
+   "shaped_records": 4193
+  },
+  "proxy": {
+   "records": 14755,
+   "person_shaped": 6091,
+   "xref_present": 0,
+   "xref_blank": 14755,
+   "distinct_ctx": 903,
+   "distinct_xref": 0,
+   "variants": {
+    "full": {
+     "groups": 3022,
+     "groups_multi_record": 1279,
+     "records_in_multi_groups": 4348,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 4348,
+     "records_with_block_cand": 4387,
+     "records_block_cand_no_key_cand": 39,
+     "review_per_1000": 6.4
+    },
+    "nosuffix": {
+     "groups": 3010,
+     "groups_multi_record": 1273,
+     "records_in_multi_groups": 4354,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 4354,
+     "records_with_block_cand": 4387,
+     "records_block_cand_no_key_cand": 33,
+     "review_per_1000": 5.42
+    },
+    "mi": {
+     "groups": 3010,
+     "groups_multi_record": 1273,
+     "records_in_multi_groups": 4354,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 4354,
+     "records_with_block_cand": 4387,
+     "records_block_cand_no_key_cand": 33,
+     "review_per_1000": 5.42
+    },
+    "fl": {
+     "groups": 2992,
+     "groups_multi_record": 1269,
+     "records_in_multi_groups": 4368,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 4368,
+     "records_with_block_cand": 4387,
+     "records_block_cand_no_key_cand": 19,
+     "review_per_1000": 3.12
+    }
+   },
+   "shaped_records": 6091
+  },
+  "f4_person": {
+   "records": 72981,
+   "person_shaped": 72980,
+   "xref_present": 72981,
+   "xref_blank": 0,
+   "distinct_ctx": 4010,
+   "distinct_xref": 14566,
+   "variants": {
+    "full": {
+     "groups": 16676,
+     "groups_multi_record": 9332,
+     "records_in_multi_groups": 65636,
+     "groups_with_2plus_xref": 0,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 65636,
+     "records_with_block_cand": 65666,
+     "records_block_cand_no_key_cand": 30,
+     "review_per_1000": 0.41,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 25,
+     "id_groups_raw_name_varies": 44,
+     "recall_id_groups": 0.99732
+    },
+    "nosuffix": {
+     "groups": 16669,
+     "groups_multi_record": 9329,
+     "records_in_multi_groups": 65640,
+     "groups_with_2plus_xref": 6,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 65640,
+     "records_with_block_cand": 65666,
+     "records_block_cand_no_key_cand": 26,
+     "review_per_1000": 0.36,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 24,
+     "id_groups_raw_name_varies": 44,
+     "recall_id_groups": 0.99743
+    },
+    "mi": {
+     "groups": 16666,
+     "groups_multi_record": 9326,
+     "records_in_multi_groups": 65640,
+     "groups_with_2plus_xref": 7,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 65640,
+     "records_with_block_cand": 65666,
+     "records_block_cand_no_key_cand": 26,
+     "review_per_1000": 0.36,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 22,
+     "id_groups_raw_name_varies": 44,
+     "recall_id_groups": 0.99764
+    },
+    "fl": {
+     "groups": 16655,
+     "groups_multi_record": 9324,
+     "records_in_multi_groups": 65649,
+     "groups_with_2plus_xref": 11,
+     "groups_with_2plus_xref_and_blank": 0,
+     "records_with_key_cand": 65649,
+     "records_with_block_cand": 65666,
+     "records_block_cand_no_key_cand": 17,
+     "review_per_1000": 0.23,
+     "id_groups_multi": 9323,
+     "id_groups_key_split": 15,
+     "id_groups_raw_name_varies": 44,
+     "recall_id_groups": 0.99839
+    }
+   },
+   "shaped_records": 72980
+  }
+ },
+ "adv_firm_cik_bridge": {
+  "adv_filings_with_1d3_cik": 4697,
+  "distinct_1d3_ciks_in_loaded_months": 3981,
+  "of_which_are_f4_issuers_in_corpus": 3
+ },
+ "wilson": {
+  "z_one_sided_95": 1.6448536269514722,
+  "z_one_sided_975": 1.959963984540054,
+  "n_zero_errors_for_0.99_at_95": 268,
+  "n_zero_errors_for_0.99_at_975": 381,
+  "n_one_error_for_0.99_at_95": 446,
+  "n_one_error_for_0.99_at_975": 563
+ }
+}
