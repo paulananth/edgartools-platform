@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 11-trace-ownership-person-pipeline.md, 12-trace-proxy-executive-person-pipeline.md, 13-trace-8k-employment-event-person-pipeline.md, 14-trace-adv-individual-person-pipeline.md
+Blocked by: none (11–14 resolved)
 
 ## Question
 

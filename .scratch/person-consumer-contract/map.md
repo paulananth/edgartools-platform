@@ -71,6 +71,26 @@ migration, no edit to any Clean MDM file. Written at
   10,042 names appear under more than one issuer, so a name never binds
   alone or across issuers. Findings:
   [research/01](research/01-name-only-source-overlap.md).
+- [Trace the Form 3/4/5 reporting-owner Person pipeline from code](issues/11-trace-ownership-person-pipeline.md)
+  — `owner_cik` is the only identifier, stored nullable/non-unique; the
+  legacy fuzzy "issuer context" is inoperative and REVIEW still binds;
+  classification is only "CIK ∈ company CIKs ⇒ not a person"; every
+  transaction is hard-attached to owner 1; silver's `mdm_entity_id` is
+  not a stable person key. [research/11](research/11-ownership-person-pipeline.md).
+- [Trace the DEF 14A executive-record Person pipeline from code](issues/12-trace-proxy-executive-person-pipeline.md)
+  — the 47% role-text names are an **edgartools** (PyPI) extractor defect,
+  verified; no person identifier; legacy bypasses the resolver with a
+  global exact-name lookup and per-issuer stubs that are never retired.
+  [research/12](research/12-proxy-executive-person-pipeline.md).
+- [Trace the 8-K Item 5.02 employment-event Person pipeline from code](issues/13-trace-8k-employment-event-person-pipeline.md)
+  — no identifier; `(issuer CIK, name)` is the only context and is exactly
+  legacy's stub key; `EMPLOYED_BY` from 8-K has never been graph-populated.
+  [research/13](research/13-8k-employment-event-person-pipeline.md).
+- [Trace the Form ADV individual-registrant Person pipeline from code](issues/14-trace-adv-individual-person-pipeline.md)
+  — CRD keys an Adviser, never a Person; no code tells an individual
+  registrant from a firm; `IS_PERSON_OF` has no reader anywhere; Schedule
+  A/B and Part 2B persons are not parsed on any path.
+  [research/14](research/14-adv-individual-person-pipeline.md).
 
 ## Operator directives
 
@@ -82,14 +102,15 @@ migration, no edit to any Clean MDM file. Written at
 
 ## Not yet specified
 
-- **ADV Schedule A/B owners and Part 2B supervised persons** — natural
-  persons in Form ADV that no silver table captures today. "Complete Person
-  scope" may or may not require new capture; can't be phrased sharply until
-  ticket 01 decides what binds an ADV person.
-- **Name-only matching calibration** — whatever ticket 01 allows for proxy
+- **ADV Schedule A/B owners and Part 2B supervised persons** — confirmed
+  by research 14: not parsed on any path, and whether the IAPD archive even
+  contains them is not code-determinable. "Complete Person scope" therefore
+  needs a scope decision (new capture, or explicitly excluded) — sharpens
+  into a ticket once ticket 02 fixes what an ADV person would bind on.
+- **Name-only matching calibration** — whatever ticket 02 allows for proxy
   and 8-K names will need the same independent-holdout proof Clean MDM
   demands for Company (Q11 bar). Whether that's a Person research corpus
-  like the GLEIF 1,000-company cohort, and who freezes it, waits on 01.
+  like the GLEIF 1,000-company cohort, and who freezes it, waits on 02.
 - **Person data in the graph and the Agent Query Surface** — `IS_INSIDER`
   and `HOLDS` are the heaviest-used graph edges; what the Person consumer
   owes downstream consumers (parity, redaction at the API) sharpens after

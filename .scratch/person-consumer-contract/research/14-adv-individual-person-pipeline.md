@@ -129,10 +129,13 @@ MdmAdviser.cik).where(MdmAdviser.cik.isnot(None)).where(MdmAdviser.linked_compan
 (`:4772-4780`) and calls `ensure_relationship(rel_type_name="IS_PERSON_OF", source_system="adv_filing")`
 with no properties, no `effective_from` (`:2472-2477`). `IS_ENTITY_OF` is the sibling:
 `linked_company_entity_id IS NOT NULL` (`:2314-2331`, `:4764-4770`). CRD is not in either join.
-Seed registry: `IS_PERSON_OF` is `adviser → person`, `is_temporal FALSE` (the only non-temporal type),
-`merge_strategy 'replace'`, description "Individual adviser CIK is the same natural person"
-(`002_seed_data.sql:275-279`); closing pattern `no_versioning_needed` (`pipeline.py:191`) — no
-retirement handling.
+Seed registry: `IS_PERSON_OF` is `adviser → person`, `is_temporal FALSE` (the only non-temporal type
+among the eight seeded in `002_seed_data.sql:238-279`; `EMPLOYED_BY` is seeded `TRUE` in
+`005_fundamentals_relationships.sql:86`), `merge_strategy 'replace'`, description "Individual adviser
+CIK is the same natural person" (`002_seed_data.sql:275-279`); closing pattern `no_versioning_needed`
+(`pipeline.py:191`) — no retirement handling. Change handling on the adviser side: `adv_bulk.py` has no
+`reconciliation_pass` parameter (grep: zero hits), which Clean MDM's own inventory records as "ADV bulk
+lacks this flag" (`pipeline-inventory.md:31`).
 
 **Why it is unreachable from Path A.** `MdmAdviser.cik` is `int(row["cik"])` or None
 (`adv_bulk.py:278-279,292`), and Path A writes `cik: None` for every row (`adv_bulk_ingest.py:237`).
@@ -141,16 +144,21 @@ adviser; likewise `linked_company_entity_id` is always None on that path (`:304`
 is equally unreachable, and `unclaimed_by_cik.pop(cik_int, None)` (`:281-282`) is dead code there.
 `MdmAdviser` has exactly two writers (`adv_bulk.py:345`; `pipeline.py:3401`): the second is
 `_ensure_thirteenf_manager`, which creates `cik=<13F filer CIK>`, `adviser_type="13f_manager"`, no CRD
-(`pipeline.py:3401-3406`). Those stubs are therefore the only automated-path advisers that can enter
-the `IS_PERSON_OF` join — and they match a `MdmPerson.owner_cik`, i.e. a Form 3/4/5 reporting owner
-with the same CIK as a 13F filer, which is the entity-reporting-owner case, not an individually
-registered adviser.
+(`pipeline.py:3401-3406`). Setting Path C aside (below), those stubs are the only automated-path
+advisers that can enter the `IS_PERSON_OF` join — and they match a `MdmPerson.owner_cik`, i.e. a
+Form 3/4/5 reporting owner with the same CIK as a 13F filer, which is the entity-reporting-owner case,
+not an individually registered adviser. A Path C row (`warehouse_orchestrator.py:5400,5405`) would
+carry the EDGAR filer's CIK into the same `SELECT * FROM sec_adv_filing` (`adv_bulk.py:236`) and could
+enter the join; its volume is not code-determinable, and the runbook states "ADV (Form ADV) filings
+are **not** in EDGAR. They are filed through IARD/IAPD" (`docs/aws-mdm-source-to-mdm.md:73-74`,
+a documented claim, not a code fact).
 
 The fix-pipelines ledger recorded EDGE-06 as "EXCLUDED — source-coverage exclusion scoped to the
 current tracking-list universe ... Re-check required if the adviser universe grows"
-(`06-PHASE-CLOSURE-LEDGER.md:35`); `coverage.py:258-284` reproduces the join. The code says growth
-of the ADV universe cannot change that outcome, because growth arrives via Path A with `cik = NULL`.
-The passing test supplies what production never writes: fixture adviser
+(`06-PHASE-CLOSURE-LEDGER.md:35`); `coverage.py:258-284` reproduces the join. The code says the
+trigger names the wrong variable: growth arriving via Path A (the scheduled IAPD path) cannot change
+that outcome because every such row has `cik = NULL`; only Path B/C rows could, at a volume not
+determinable from code. The passing test supplies what Path A never writes: fixture adviser
 `MdmAdviser(entity_id=individual_adviser_id, cik=910101, canonical_name="Individual Adviser (RIA)",
 linked_company_entity_id=None)` with no CRD, paired with `MdmPerson(owner_cik=910101)`
 (`tests/mdm/test_pipeline_relationships.py:276-278,295-296,503-513`).
@@ -159,8 +167,8 @@ linked_company_entity_id=None)` with no CRD, paired with `MdmPerson(owner_cik=91
 
 - Gold: `adviser_disclosures.sql` and `adviser_offices.sql` key `coalesce(f.cik, c.cik) as cik` →
   `company_key` (`adviser_disclosures.sql:24,34`; `adviser_offices.sql:25,36`) — NULL for every Path A
-  row; `private_funds.sql`, `adv_fund_count_reconciliation.sql` are fund-shaped. No gold model
-  projects a person from ADV.
+  row; `private_funds.sql` names only `fund_name` (`:27,33`) and `adv_fund_count_reconciliation.sql`
+  has no person/owner column (grep: none). No gold model projects a person from ADV.
 - Graph: `GRAPH_EDGE_IS_PERSON_OF` view exists (`snowflake_graph.py:1594-1597`) but
   `POPULATED_RELATIONSHIP_TYPES = ("COMPANY_HOLDS", "HOLDS", "ISSUED_BY", "IS_INSIDER")` (`:52`) —
   verify-graph never checks it; the comment block (`:42-50`) records "confirmed NONE reached
@@ -207,9 +215,9 @@ captured. "Complete Person scope" for ADV therefore requires new capture, not a 
   Person (`adv_bulk.py:203-207`; `database.py:275` unique). The Person hop is CIK-equality with a Form
   3/4/5 reporting owner (`pipeline.py:4776-4777`), and the scheduled path never supplies that CIK
   (`adv_bulk_ingest.py:237`). No code distinguishes an individually registered adviser from a firm (F2).
-- **03 (reporting-owner classification).** The only automated-path `IS_PERSON_OF` candidates are
-  13F-manager stubs whose CIK equals a reporting-owner CIK (F4) — the entity-owner case ticket 03 is
-  classifying. An ADV registrant cannot reach that join today.
+- **03 (reporting-owner classification).** On the scheduled IAPD path the only `IS_PERSON_OF`
+  candidates are 13F-manager stubs whose CIK equals a reporting-owner CIK (F4) — the entity-owner
+  case ticket 03 is classifying. An IAPD-sourced ADV registrant cannot reach that join today.
 - **05 (relationships).** Legacy `IS_PERSON_OF` is a propertyless, non-temporal, never-closed edge
   (`002_seed_data.sql:275-279`; `pipeline.py:191,2472-2477`) with no graph parity check, no API reader,
   no gold projection, no Agent Query Surface section (F5). Clean MDM replaces it with same-ID profile

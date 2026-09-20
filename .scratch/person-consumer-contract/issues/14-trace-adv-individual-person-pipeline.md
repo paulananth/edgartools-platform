@@ -1,7 +1,7 @@
 # Trace the Form ADV individual-registrant Person pipeline from code
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -37,3 +37,18 @@ what could not be determined from code. Cover, in order:
    `docs/specs/clean-mdm/pipeline-inventory.md` and anything in
    `domain-model.md` (read from `origin/codex/clean-mdm-integration` with
    `git show`; never edit).
+
+## Answer
+
+[research/14](../research/14-adv-individual-person-pipeline.md),
+2026-09-20. Background trace cut off during its own spot-check; key
+citations re-verified (`adv_bulk.py:203-207`, `pipeline.py:4774-4778`, and
+a grep confirming no Schedule A/B / Part 2B parsing anywhere). Key facts:
+**CRD keys an Adviser, never a Person** — the Person hop is CIK-equality
+with a Form 3/4/5 reporting owner, which the scheduled IAPD path never
+supplies, and no code distinguishes an individually registered adviser
+from a firm; legacy `IS_PERSON_OF` is propertyless, non-temporal,
+never-closed, with no reader anywhere; there is no legacy Person ID
+derived from ADV to cross-walk. **ADV fog item settled as a fact**:
+Schedule A/B owners and Part 2B supervised persons are not parsed on any
+path; whether the IAPD archive even contains them is not code-determinable.
