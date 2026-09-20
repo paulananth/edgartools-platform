@@ -103,6 +103,12 @@ had never itself been through a decision process.
   decision + projection + Commit Evidence + Checkpoint + publication intents
   or nothing, with the consumed publication recorded in the checkpoint row.
   Bookkeeping observes afterward.
+- [Define role grants for capture worker, publication coordinator, domain publisher, steward, Release Owner, retention operator](issues/07-define-role-grants.md)
+  — no new Postgres roles. GLEIF capture uses the five existing
+  `change_ledger` roles, its consumer uses Clean MDM's runtime role, Steward
+  is an actor in the decision body. Business names locked and added to
+  `CONTEXT.md`: Fetch Planner, Source Capturer, Revision Claimer,
+  Publication Verifier, Ledger Repairer, MDM Committer, Steward.
 
 ## Not yet specified
 
