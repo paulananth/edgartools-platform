@@ -59,3 +59,5 @@ candidate" record of the GoF boundary, so both being accepted completes the
 Your map's "Start here" points at `.scratch/clean-mdm/map.md`, not at
 `.scratch/handover/`. The user will need to point you at this note directly
 when your next session starts.
+
+> **Superseded 2026-09-19** by [`2026-09-19-claude-to-codex-mdm-enrichment-specs.md`](2026-09-19-claude-to-codex-mdm-enrichment-specs.md), the single entry point. This note remains valid.

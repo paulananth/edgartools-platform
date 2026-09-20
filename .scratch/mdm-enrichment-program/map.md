@@ -15,15 +15,18 @@ implementation work is created or production publication is authorized.
 
 ## Notes
 
-- **Flagged 2026-09-19, not yet propagated below**: legacy MDM is being
+- **Locked 2026-09-19, re-audited the same day**: legacy MDM is being
   decommissioned; Clean MDM (`mdm_v2`, `.scratch/clean-mdm/`, Codex/Grok-owned)
   is the sole MDM target going forward — locked on the
   [Shared Enrichment Foundation map](../mdm-enrichment-shared-foundation/map.md).
+  All 28 resolved tickets and 26 workstreams were re-checked: only
+  [Add the Branch domain boundary](issues/10-add-branch-domain-boundary.md),
+  [Add the Government Entity domain boundary](issues/11-add-government-entity-domain-boundary.md),
+  and workstreams 02/04/06 named a legacy mechanism (`mdm_entity.entity_type`
+  + a per-domain `mdm_*` table); each decision stands, each mechanism is
+  superseded by `mdm_v2.identity.kind` + `projection`, annotated in place.
   "MDM writes use Snowflake Postgres through the repository's existing
-  runtime contracts" below, and any decision so far that cites legacy
-  `edgar_warehouse/mdm/` tables, was written before this constraint existed.
-  Re-auditing this program's already-resolved decisions against it is its
-  own piece of work — not done here, flagged so it isn't silently lost.
+  runtime contracts" below now means Clean MDM's `commit_batch`.
 - AWS is the only deployment path. Source artifacts use S3, warehouse exports
   use the existing Snowflake native-pull path, and MDM writes use Snowflake
   Postgres through the repository's existing runtime contracts.

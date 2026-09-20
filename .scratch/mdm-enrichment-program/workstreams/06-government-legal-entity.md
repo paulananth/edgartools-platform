@@ -5,6 +5,13 @@ Status: planned
 Depends on: shared foundation; explicit Government Entity domain
 Future spec: `docs/specs/mdm-enrichment/government-entity.md`
 
+> **Re-audited 2026-09-19 against the legacy-decommission directive.** The
+> domain decision stands; the mechanism named here (`mdm_entity`/`mdm_*`
+> tables) is legacy MDM's and is superseded by Clean MDM's
+> `mdm_v2.identity.kind = 'government'` + `mdm_v2.projection`. The consumer spec
+> for this workstream targets `mdm_v2` only. See
+> `docs/specs/mdm-enrichment/shared-foundation.md`, "Governing directive".
+
 ## Destination
 
 Route `RESIDENT_GOVERNMENT_ENTITY` and accepted related mapping evidence to a

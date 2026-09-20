@@ -54,3 +54,5 @@ that session starts.
 
 Landed on `main` via PR #658 (`cee23b11`), merged 2026-09-19. This handover
 note is on `claude/agent-open-query-interface`, not yet merged as of writing.
+
+> **Superseded 2026-09-19** by [`2026-09-19-claude-to-codex-mdm-enrichment-specs.md`](2026-09-19-claude-to-codex-mdm-enrichment-specs.md), the single entry point. This note remains valid.
