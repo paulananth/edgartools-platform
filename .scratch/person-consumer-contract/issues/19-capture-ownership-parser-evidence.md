@@ -27,6 +27,13 @@ same area, for whoever owns `edgar_warehouse/parsers/`:
    Q4: no street/city/state/zip may enter silver, an assertion, or a
    projection. Keep only `address_is_care_of` and `address_non_us` as
    classification evidence; bronze retains the raw artifact unchanged.
+4. **Emit the real `owner_index` on transaction rows.** Added by ticket 05.
+   Every transaction row hardcodes `"owner_index": 1`
+   (`edgar_warehouse/parsers/ownership.py:47`, `:66`), so on a multi-owner
+   Form 4 all transactions join to reporting owner 1 (`pipeline.py:1979-1980`;
+   `ownership_holdings.sql:38-39`) — one owner's positions attributed to
+   another named person. This is a release gate for publishing any Person
+   holdings edge, alongside the Security identity gate.
 
 Production parser code: its own branch, the mandatory
 `/gof-refactor-reviewer` consult, the three-axis `/code-review`. Note
@@ -35,5 +42,6 @@ alone does not re-parse already-marked accessions. Sibling of
 [ticket 10](10-fix-proxy-executive-name-parser-leak.md); the two touch
 different parsers and can land independently.
 
-Resolved when the three fields/behaviours are present in a re-exported
-silver sample and rule C-J can be evaluated without any SEC request.
+Resolved when the four fields/behaviours are present in a re-exported
+silver sample, rule C-J can be evaluated without any SEC request, and a
+multi-owner Form 4 shows each owner's own transactions.
