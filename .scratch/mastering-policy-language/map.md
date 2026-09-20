@@ -92,6 +92,28 @@ any Clean MDM file.
   (n ≥ 268 vs 381 at a 99% bar). The check verifies arithmetic, not honesty
   — mitigated by attribution plus a CI re-scoring job.
   [research/02](research/02-rule-activation-and-proof.md).
+- [Research: the primitive vocabulary the policy language may call](issues/03-define-primitive-vocabulary.md)
+  — **twelve primitives**: 2 shared normalizers, 5 classification
+  (`evidence_present`, `field_in_set`, `token_match`, `name_shape`,
+  `fields_all_empty`), 4 binding (`identifier_match`, `identifier_cardinality`,
+  `compound_key_equal`, `name_similarity`), 1 survivorship
+  (`select_by_source_rank` — small because `merge-stage.md:123-130` fixes the
+  total order, so the document supplies only the rank list and eligibility
+  parameters). Everything large is a *parameter*; the proof is that
+  `TRUST`/`FUND`/`CO`/`HOLDINGS` are entity evidence in `18-classify.py:64-80`
+  and *deleted* by the legacy normalizer at `002_seed_data.sql:73-98` — one
+  primitive, two declared lists, opposite uses. Excluded after arguing both
+  ways: `kind_compatible` (already unconditional, `identity.py:94-95`),
+  `digest_tuple`, `field_group_together`, publication-time tiebreak. Two
+  exclusions are repo-specific and statically checkable: a binding rule may not
+  reach a survivorship primitive (`CONTEXT.md:23,51`) nor decide on similarity
+  alone (`spec.md:95`). Versioning is `name@version` with a fail-closed
+  registry; list edits need no bump (they re-digest the body); the honest limit
+  is that exact replay needs the old implementation still in the build.
+  **Two gaps for Codex**: coherent field groups (`merge-stage.md:137-139`) and
+  the publication-time tiebreak (`merge-stage.md:129`) are accepted policy with
+  no implementation in `survivorship.py`.
+  [research/03](research/03-primitive-vocabulary.md).
 
 ## Not yet specified
 
