@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: none — the [Shared Foundation spec](../../../docs/specs/mdm-enrichment/shared-foundation.md) exists as of 2026-09-19. Its release gates (offline fixture, Clean MDM proposal outcomes) gate *implementation*, not writing this consumer spec.
+Blocked by: operator decision — the [Shared Foundation spec](../../../docs/specs/mdm-enrichment/shared-foundation.md) was written 2026-09-19 but is not yet "fixed" in this ticket's sense: it carries marked *Open* items (costs, observability thresholds, storage-class schedule, IAM) and two Clean MDM proposals still awaiting review (pre-merge candidate table, per-family checkpoint key). Whether this consumer spec may be written against that state, or must wait for those to close, is the operator's call — not decided here.
 
 ## Outcome
 
