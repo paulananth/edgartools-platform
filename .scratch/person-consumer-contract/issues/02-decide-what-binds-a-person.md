@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 15-research-crd-vs-cik-identifier-semantics.md (Q1 answered; Q2 waits on it)
+Blocked by: none (15 resolved; Q2 re-posed on its facts)
 
 ## Question
 

@@ -91,6 +91,14 @@ migration, no edit to any Clean MDM file. Written at
   registrant from a firm; `IS_PERSON_OF` has no reader anywhere; Schedule
   A/B and Part 2B persons are not parsed on any path.
   [research/14](research/14-adv-individual-person-pipeline.md).
+- [Research CRD versus CIK: what each identifies, and whether they can be merged into one Person key](issues/15-research-crd-vs-cik-identifier-semantics.md)
+  — CIK is an SEC filer account (people included); CRD is a FINRA/IARD
+  registration record, firm and individual numbers distinct; no
+  individual-level crosswalk exists; IARD and CRD share one number space;
+  the bulk archive is firms-only for IARs **but already contains
+  `IA_Schedule_A_B`** (11,126 individual owner rows with an unpublished
+  `OwnerID`) and `IA_1D3_CIK`, both unread today. Two typed identifiers,
+  not one mergeable key. [research/15](research/15-crd-vs-cik-identifier-semantics.md).
 
 ## Operator directives
 
@@ -102,11 +110,12 @@ migration, no edit to any Clean MDM file. Written at
 
 ## Not yet specified
 
-- **ADV Schedule A/B owners and Part 2B supervised persons** — confirmed
-  by research 14: not parsed on any path, and whether the IAPD archive even
-  contains them is not code-determinable. "Complete Person scope" therefore
-  needs a scope decision (new capture, or explicitly excluded) — sharpens
-  into a ticket once ticket 02 fixes what an ADV person would bind on.
+- **ADV Schedule A/B owners** — research 15 settled the fact: they are
+  *in* the archive the platform already downloads (`IA_Schedule_A_B`,
+  unread). "Complete Person scope" therefore needs a scope decision —
+  read that member (a parser extension, with `OwnerID`'s meaning still
+  unpublished) or explicitly exclude — which ticket 02 Q2 now poses. Part
+  2B supervised persons and IARs are *not* in the bulk download at all.
 - **Name-only matching calibration** — whatever ticket 02 allows for proxy
   and 8-K names will need the same independent-holdout proof Clean MDM
   demands for Company (Q11 bar). Whether that's a Person research corpus

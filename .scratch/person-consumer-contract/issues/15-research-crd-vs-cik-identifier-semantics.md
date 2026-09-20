@@ -1,7 +1,7 @@
 # Research CRD versus CIK: what each identifies, and whether they can be merged into one Person key
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -51,3 +51,43 @@ determined". External sources: SEC EDGAR filer-manual / CIK definitions,
 SEC IAPD data download documentation, FINRA CRD/BrokerCheck definitions,
 Form ADV instructions and glossary. Primary sources only, no secondary
 summaries.
+
+## Answer
+
+[research/15](../research/15-crd-vs-cik-identifier-semantics.md), 2026-09-20,
+primary sources (SEC EDGAR filer manual, Form ADV instructions, FINRA CRD
+pages, SEC release 34-88760, Ownership XML spec v5.1) plus the real
+`ADV_Filing_Data_*.zip` the platform downloads. Verified: cited repo paths
+exist; `adv_bulk_ingest.py:126` reads only Base_A/ERA_Base + Schedule D
+7.B members.
+
+- **CIK** = an SEC EDGAR *filer account*, "corporations and individual
+  people", permanent. **CRD** = a FINRA/IARD *registration record*, firm or
+  individual, with **distinct numbers even for a sole proprietor** (firm
+  `1E1` vs the person's Schedule A `OwnerID`). Neither issuer references
+  the other for individuals; the only published crosswalk is firm-level
+  (Form ADV Item 1.D(3) CIKs ↔ 1.E CRD, with "do not provide the CRD number
+  of one of your officers, employees, or affiliates").
+- Forms 3/4/5 carry `rptOwnerCik` only — no CRD element in the schema.
+- **The archive the platform already downloads contains the natural
+  persons**: `IA_Schedule_A_B` (16,139 rows, 11,126 flagged `I` =
+  individual, with name, title, ownership code, control flag, and an
+  `OwnerID` whose definition is unpublished — 2 of 4 probes matched an
+  IAPD individual id), Item 3.A organization form (8 sole proprietorships),
+  and `IA_1D3_CIK` (the firm CIKs research 14 said the scheduled path never
+  supplies). All three members are **unread** today. Closes research 14's
+  ADV fog item as a fact.
+- **IAPD/IARD/CRD/BrokerCheck**: IAPD is the SEC's public site; IARD the
+  adviser filing depository; CRD FINRA's registration depository;
+  BrokerCheck FINRA's public site. IARD and CRD share **one number space**
+  (Form ADV Item 1.E: "assigned by the FINRA's CRD system or by the IARD
+  system"). The bulk download is **firms-only**; IAR (individual)
+  records are not in it. The SEC 801-/802- file number is a third,
+  firm-only identifier already stored as `sec_file_number`.
+- Neither identifier is one-per-natural-person by the issuer's own rules;
+  CRD persistence across firms is supported by U4 wording, not an explicit
+  sentence.
+- Conclusion for Q2: a CRD can bind a Person **only** if the platform
+  adopts Schedule A/B `OwnerID` as that value; nothing written to silver
+  today can. CIK and CRD are two typed identifiers from two issuers, not
+  one mergeable key.
