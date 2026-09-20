@@ -116,14 +116,28 @@ had never itself been through a decision process.
   publication_family)` with consumed publication and continuity proof;
   evidenced from Clean MDM's own `recovery.md`, `source-evidence.md`, and
   `company_source.py`'s per-batch-consumer workaround. Codex's to accept.
+- [Confirm the generic legal-entity registry representation](issues/09-confirm-generic-legal-entity-registry-representation.md)
+  — already answered by Clean MDM: `mdm_v2.identity` has
+  `kind = 'international_organization'` in its CHECK constraint; the
+  generic registry is `identity` + `assertion` + `projection`, same shape
+  as Company. Source-classification history is the assertion chain. No new
+  table, no dedicated consumer, per parent ticket 12.
+
+## Destination reached
+
+All decisions locked, 2026-09-19. No open tickets, no fog. The next
+deliverable — outside this map, per its Destination — is writing
+`docs/specs/mdm-enrichment/shared-foundation.md` from the nine resolved
+tickets above, then unblocking
+[GLEIF MDM enrichment evidence ticket 17](../gleif-company-augmentation/issues/17-write-and-verify-gleif-mdm-spec.md).
+Two proposals are pending Codex's review and are inputs to that spec, not
+blockers for writing it: the
+[pre-merge staging proposal](../clean-mdm-premerge-staging-proposal/map.md)
+and the [checkpoint-key proposal](../clean-mdm-checkpoint-key-proposal/map.md).
 
 ## Not yet specified
 
-- Generic legal-entity registry representation for accepted records that
-  don't justify a dedicated domain table (workstream 00's own bullet) — may
-  already be substantially answered by the parent program's
-  [ticket 12](../mdm-enrichment-program/issues/12-route-international-organizations-through-common-entity.md);
-  revisit once ticket 05 is resolved rather than re-opening it blind.
+- None.
 
 ## Out of scope
 
