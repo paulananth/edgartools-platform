@@ -1,0 +1,152 @@
+{
+ "_prototype": "THROWAWAY \u2014 Mastering Policy Language prototype, ticket 04. Not production.",
+ "kind": "company",
+ "version": "company-2026-09-20",
+ "bars": {
+  "binding": {
+   "min_precision": 0.999,
+   "one_sided_confidence": 0.975
+  }
+ },
+ "lists": {},
+ "normalizers": {
+  "conformed": "normalize_text@edgar-conformed-v1"
+ },
+ "rules": [
+  {
+   "rule_id": "company-tier-a-cik",
+   "version": "2026-09-20",
+   "family": "binding",
+   "source": "sec.company",
+   "note": "SEC CIK is authoritative for Company identity.",
+   "emits": [
+    "bind"
+   ],
+   "when": [
+    {
+     "primitive": "identifier_match@1",
+     "args": {
+      "namespace": "sec.cik",
+      "field": "cik",
+      "normalizer": "normalize_identifier@sec-cik-v1"
+     }
+    },
+    {
+     "primitive": "identifier_cardinality@1",
+     "args": {
+      "namespace": "sec.cik",
+      "max_identities": 1
+     }
+    }
+   ]
+  },
+  {
+   "rule_id": "gleif-adjudicated-seed-link",
+   "version": "2026-09-20",
+   "family": "binding",
+   "source": "gleif.golden_copy",
+   "note": "GLEIF Company consumer spec: only revalidated Adjudicated Seed Links (308) publish.",
+   "emits": [
+    "bind"
+   ],
+   "when": [
+    {
+     "primitive": "evidence_present@1",
+     "args": {
+      "document": "gleif.adjudicated_seed_link.revalidated"
+     }
+    },
+    {
+     "primitive": "identifier_match@1",
+     "args": {
+      "namespace": "gleif.lei",
+      "field": "lei",
+      "normalizer": "normalize_identifier@lei-v1"
+     }
+    },
+    {
+     "primitive": "identifier_cardinality@1",
+     "args": {
+      "namespace": "gleif.lei",
+      "max_identities": 1,
+      "max_identifiers_per_identity": 1,
+      "note": "one active binding per side"
+     }
+    }
+   ]
+  },
+  {
+   "rule_id": "gleif-deterministic-crosswalk",
+   "version": "2026-09-20",
+   "family": "binding",
+   "source": "gleif.golden_copy",
+   "note": "Verified deterministic crosswalk. Name match alone is never sufficient \u2014 a similarity-only binding rule is refused at registration.",
+   "emits": [
+    "bind"
+   ],
+   "when": [
+    {
+     "primitive": "identifier_match@1",
+     "args": {
+      "namespace": "gleif.lei",
+      "field": "lei",
+      "normalizer": "normalize_identifier@lei-v1"
+     }
+    },
+    {
+     "primitive": "evidence_present@1",
+     "args": {
+      "document": "gleif.crosswalk.verified"
+     }
+    }
+   ]
+  }
+ ],
+ "automatic_rules": [],
+ "survivorship": {
+  "legal_name": {
+   "sources": [
+    "sec.company",
+    "gleif.golden_copy"
+   ],
+   "primitive": "select_by_source_rank@1",
+   "allow_unknown_effective": false,
+   "note": "SEC authoritative, GLEIF additive: a comparable GLEIF disagreement never overwrites an SEC value."
+  },
+  "legal_form": {
+   "sources": [
+    "gleif.golden_copy"
+   ],
+   "primitive": "select_by_source_rank@1",
+   "allow_unknown_effective": true
+  },
+  "registered_address": {
+   "sources": [
+    "gleif.golden_copy",
+    "sec.company"
+   ],
+   "primitive": "select_by_source_rank@1",
+   "field_group": [
+    "street",
+    "city",
+    "region",
+    "postal_code",
+    "country"
+   ],
+   "_open": "coherent field groups are accepted policy (merge-stage.md:137-139) with no implementation in survivorship.py \u2014 flagged to Codex by research 03."
+  }
+ },
+ "projection": {
+  "fields": [
+   "legal_name",
+   "legal_form",
+   "registered_address",
+   "lei"
+  ],
+  "evidence_only": [
+   "former_names",
+   "gleif_events",
+   "successor_lei"
+  ]
+ }
+}

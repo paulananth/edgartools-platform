@@ -114,6 +114,20 @@ any Clean MDM file.
   the publication-time tiebreak (`merge-stage.md:129`) are accepted policy with
   no implementation in `survivorship.py`.
   [research/03](research/03-primitive-vocabulary.md).
+- [Prototype a Person and a Company policy document](issues/04-prototype-person-and-company-documents.md)
+  — **the language holds**: both documents written in the twelve primitives,
+  and a throwaway interpreter reading them reproduces research 18 exactly
+  (person 841/841, entity 353/353, 26 deferred; 1.2% deferral over the whole
+  corpus), with C-J's `person` verdict automatic and its `entity` verdict
+  Steward-review from one rule. The registration checks refuse all six abuse
+  cases. Artifacts in [prototype/](prototype/): the two documents, a pure
+  `interpret.mjs`, `run-check.mjs`, and a double-click `demo.html` with six
+  guided cases. Four findings for the spec: **deterministic binding rules have
+  no home in the activation model** (Tier A fires but cannot be automatic
+  without a precision proof it does not need — the largest open question); the
+  field-alias map (document path → source column) is undeclared; the catch-all
+  step needs a keyword; `&` must be written `AND` in a declared list.
+  Survivorship could not be exercised — it needs a populated identity store.
 
 ## Not yet specified
 
@@ -124,7 +138,12 @@ any Clean MDM file.
 - **Authoring surface**: where the kind documents are written (repo files
   registered by `store.register_policy`) and how the composition into one
   pinned body is built and validated before registration — including the
-  provenance-churn caveat research 01 raised for Codex.
+  provenance-churn caveat research 01 raised for Codex, and the
+  **field-alias map** (document field path → source column) the prototype
+  found has no declared home.
+- **Language ergonomics from the prototype**: a keyword for the catch-all
+  step instead of an empty `when`, and a validation rule for declared lists
+  (`&` must be written `AND`, since EDGAR conformed names normalize it).
 - **Projection**: how "which fields the final entity shows" is declared
   alongside survivorship, and which fields stay evidence-only. Waits on
   the Person map's own field/privacy ticket.
