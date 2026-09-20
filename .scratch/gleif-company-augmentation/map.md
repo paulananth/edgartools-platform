@@ -93,9 +93,11 @@ enrichment.
 None. The Company decision frontier is resolved; only specification writing and
 verification remain. Later-domain questions are owned by the parent program.
 
+- [Write and verify the GLEIF MDM enrichment specification](issues/17-write-and-verify-gleif-mdm-spec.md) — [`spec.md`](spec.md) written 2026-09-19 against Clean MDM's `mdm_v2`, as the consumer contract that Clean MDM's `company-completion.md` gate implements. Documentation review still to run.
+
 ## Decision frontier
 
-- [Write and verify the GLEIF MDM enrichment specification](issues/17-write-and-verify-gleif-mdm-spec.md) — after the parent foundation contract is fixed, create the Company consumer spec from the accepted decisions; no implementation or deployment.
+None. Destination reached; the spec's own Dependencies table lists what gates implementation.
 
 ## Out of scope
 
