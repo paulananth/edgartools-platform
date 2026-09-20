@@ -1,0 +1,37 @@
+{
+ "proxy": {
+  "rows_with_name": 14755,
+  "role_text_in_name": 6889,
+  "single_token_name": 987,
+  "plausible_person_name": 7600,
+  "plausible_pct": 51.5
+ },
+ "event": {
+  "rows_with_name": 7878,
+  "role_text_in_name": 171,
+  "single_token_name": 7,
+  "plausible_person_name": 7700,
+  "plausible_pct": 97.7
+ },
+ "plausible_event_pairs": 6834,
+ "plausible_proxy_pairs": 4111,
+ "plausible_event_pairs_matching_proxy_same_issuer": 204,
+ "plausible_names_shared_across_different_issuers": 398,
+ "plausible_distinct_names_total": 10042,
+ "examples_role_text_proxy": [
+  "Chairman of the",
+  "Executive Vice",
+  "Finance and Chief",
+  "President and Chief",
+  "Chairman of the Board",
+  "Executive Officer"
+ ],
+ "examples_plausible_proxy": [
+  "Brian B. Yoor,",
+  "Hubert L. Allen,",
+  "Miles D. White,",
+  "Robert B. Ford,",
+  "Stephen R. Fussell,",
+  "Brian B. Yoor,(1)"
+ ]
+}
