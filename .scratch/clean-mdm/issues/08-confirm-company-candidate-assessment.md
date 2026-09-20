@@ -1,7 +1,7 @@
 # Confirm pre-application Company candidate assessment coverage
 
 Type: grilling
-Status: open
+Status: resolved
 Owner: Codex
 Blocked by: none
 
@@ -24,7 +24,8 @@ stale assessments and preserve rejected/superseded history.
 
 - [Rebased Claude handoff review](../../../docs/specs/clean-mdm/design-reconciliation-2026-09-19.md)
   corrects the claims about preview and existing durable reviews.
-- [Accepted Company Q1–Q12](../../../docs/specs/clean-mdm/company-policy.md)
+- [Accepted Company Q1–Q13](../../../docs/specs/clean-mdm/company-policy.md)
   sets automatic processing, deferred outcomes and separate consolidation gates.
-- This is Company interview Q13. Await the user's answer before implementing
-  this assessment coverage rule. Other accepted decisions are not reopened.
+- Company Q13 accepted by the user ("yes"), 2026-09-19. Implement the
+  recommended coverage; other accepted decisions are not reopened.
+- Implementation: [ticket 09](09-build-company-candidate-assessment.md).

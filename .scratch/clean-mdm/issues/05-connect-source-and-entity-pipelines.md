@@ -21,11 +21,11 @@ before that gate passes. Broader ticket scope remains pending afterward.
 
 ## Current policy and pre-implementation review
 
-[Company Q1–Q12](../../../docs/specs/clean-mdm/company-policy.md) replace the
+[Company Q1–Q13](../../../docs/specs/clean-mdm/company-policy.md) replace the
 manual-default linking/consolidation and blanket deferred-match blocking rules.
-[Design gate 08](08-confirm-company-candidate-assessment.md) is the remaining
-assessment-coverage decision from Claude’s handoff; no runtime implementation
-started during this review.
+[Design gate 08](08-confirm-company-candidate-assessment.md) is accepted.
+[Ticket 09](09-build-company-candidate-assessment.md) implements assessment
+persistence before Company matching and source integration.
 
 ## Evidence
 

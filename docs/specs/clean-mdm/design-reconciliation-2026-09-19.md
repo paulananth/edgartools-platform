@@ -14,7 +14,7 @@ pre-implementation review. No runtime code, database schema or data changed.
   merged `b87fc05a`. Its sentence saying the handoff was not yet merged is now
   historical. The proposal itself remains a recommendation, not an accepted
   Clean MDM table design.
-- [Company Q1–Q12](company-policy.md): current user answers govern scope,
+- [Company Q1–Q13](company-policy.md): current user answers govern scope,
   automatic linking/consolidation, exception handling and milestone completion.
 
 The primary Claude checkout, its untracked deployment backup, Grok worktree,
@@ -71,10 +71,10 @@ Constraints follow existing accepted boundaries:
    Audited deferrals can count under Company Q12 only with its separate source,
    qualification, recovery and publication evidence.
 
-One policy choice remains: required assessment coverage for **every** binding/
-consolidation proposal versus only deferred/review proposals. Recommend every
-identity proposal so automatically executed decisions have equally inspectable
-pre-commit evidence; avoid an extra staging gate for ordinary field-only updates.
+Q13 resolution after this review: the user accepted assessment coverage for
+**every** binding/consolidation proposal, including automatic decisions. Ordinary
+field-only updates retain the existing evidence path. This resolves the last
+coverage choice identified in the handoff review.
 See [design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md).
 
 ## Reconcile other newly landed decisions

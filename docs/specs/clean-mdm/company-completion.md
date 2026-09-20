@@ -6,9 +6,9 @@ supersedes the earlier handoff sequence that moved from the SEC-only sample
 to Person/ADV. Shared recovery work necessary for Company remains in scope.
 This document is a delivery gate, not a claim of implementation.
 
-[Accepted Company Q1–Q12](company-policy.md) now govern this milestone.
+[Accepted Company Q1–Q13](company-policy.md) now govern this milestone.
 [Claude handoff reconciliation](design-reconciliation-2026-09-19.md) records
-the remaining assessment-coverage gate before implementation.
+the accepted assessment-coverage gate and implementation order.
 
 ## Local milestone
 

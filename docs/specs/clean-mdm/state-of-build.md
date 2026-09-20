@@ -12,11 +12,27 @@ conflict-fixture migration gap mentioned later in this checkpoint were fixed.
 
 Continue in `../edgartools-platform-sec-gleif-company` on
 `codex/sec-gleif-company`, rebased onto `b87fc05a` (PRs #658/#659 included).
-[Company Q1–Q12](company-policy.md) supersede the old manual-default and
+[Company Q1–Q13](company-policy.md) supersede the old manual-default and
 blanket deferred-match completion rules. Read the
-[handoff reconciliation](design-reconciliation-2026-09-19.md) and settle
-[design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md)
-before implementation. The earlier integration worktree is preserved.
+[handoff reconciliation](design-reconciliation-2026-09-19.md).
+[Design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md)
+is accepted; the candidate-assessment foundation is implemented in
+[ticket 09](../../../.scratch/clean-mdm/issues/09-build-company-candidate-assessment.md).
+The earlier integration worktree is preserved.
+
+Candidate-assessment checkpoint (2026-09-20): migration 028 retains every
+proposed binding/consolidation before application; shared `apply()` proceeds
+without a new manual pause. Rejected proposals retain veto/context; application
+revalidates affected state, supersedes stale proposals and retries boundedly.
+Applied events commit with the master journal/checkpoint/outbox. Preview stays
+rollback-only. [Recovery API](candidate-assessments.md).
+
+Verification: 665 broader checks passed; final assessment changes passed 9
+focused PostgreSQL tests, all without skips (overlapping suites). Source hashes
+and reports: [assessment evidence](../../../.scratch/clean-mdm/company-assessment-acceptance.json).
+No persistent schema/data migration or hosted deployment occurred. Fuzzy
+matching, rule qualification and complete SEC + GLEIF Company mastering remain
+unimplemented; this is an assessment foundation checkpoint.
 
 The sections below describe the original check-in and its evidence. Where its
 branch, PR-draft status or next steps differ, this continuation takes precedence.

@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-20",
+  "scope": "candidate assessment foundation; Company matching remains incomplete",
+  "environment": "disposable PostgreSQL 16, restricted application role; no hosted changes",
+  "reports": [
+    {
+      "path": ".scratch/clean-mdm/company-assessment-acceptance.xml",
+      "sha256": "b3dd393c7547f68a5e534b3c2c9c68a13cc151fc72b15756e1590fc80926da69",
+      "tests": 665,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 338.53
+    },
+    {
+      "path": ".scratch/clean-mdm/company-assessment-final.xml",
+      "sha256": "86f655cad5cfd7fcf2108cd4150bc522e5bbe1a4888b4cca68a0f1f6a853da01",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 18.072
+    }
+  ],
+  "validation_note": "665 broader checks passed; final before-projection retention and timezone changes are covered by the 9-test final assessment run. Counts overlap.",
+  "source_sha256": {
+    "edgar_warehouse/mdm/clean/assessment.py": "961b168c42e5fbe868d22e5df2b18172ff77c217b94f2cc6831b653c095b62c6",
+    "edgar_warehouse/mdm/clean/merge.py": "206fa5dbb66c6f56232d12368f34a32828d4aeb3bd4b2e4be943f881078a8da4",
+    "edgar_warehouse/mdm/clean/store.py": "f043d9b1f5282a4eef87f2cdf32537d99f6bd38e8467c5222c4557ea0ffdc1c0",
+    "edgar_warehouse/mdm/migrations/028_clean_mdm_assessment.sql": "5a94a84d90f86d928c03902e0f260054da9242c3d4f864042eef1281de83600f",
+    "tests/integration/test_clean_mdm_postgres.py": "a86f0921fe4373ec0a1119d0f2d700050dafe4067cd7a45f09e3775dca203779"
+  }
+}

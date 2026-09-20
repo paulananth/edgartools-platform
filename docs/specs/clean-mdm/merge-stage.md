@@ -30,7 +30,7 @@ or reconciliation path writes master state around this entry point.
 
 ## Company policy amendment — 2026-09-19
 
-[Company Q1–Q12](company-policy.md) supersede the earlier steward-only Company
+[Company Q1–Q13](company-policy.md) supersede the earlier steward-only Company
 consolidation boundary below. Qualified fuzzy source binding is automatic by
 default; consolidation of published IDs additionally requires verified shared
 authoritative identifiers, whole-component consistency and its own independent
@@ -38,7 +38,10 @@ qualification. Ambiguous matches defer without stopping SEC publication;
 identity-contradicting links suspend and replay remaining trusted evidence.
 The statistical gate and single master transaction remain mandatory.
 These are accepted requirements; the current core still rejects automatic rules.
-Persisted assessment coverage is pending [design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md).
+[Design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md)
+is accepted. [Candidate assessments](candidate-assessments.md) documents the
+implemented persistence/recovery foundation; scoring and qualification remain
+separate work.
 
 ## Identity matching policy proposal
 

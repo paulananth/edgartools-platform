@@ -1,6 +1,6 @@
 # SEC + GLEIF Company policy — accepted interview decisions
 
-Date: 2026-09-19. The user accepted Company Q1–Q12, one question at a time,
+Date: 2026-09-19. The user accepted Company Q1–Q13, one question at a time,
 after PR #657 merged. These decisions supersede conflicting earlier Company
 recommendations; they are requirements, not implementation or calibration proof.
 The original Clean MDM Q1–Q16 numbering is a different interview.
@@ -19,6 +19,7 @@ The original Clean MDM Q1–Q16 numbering is a different interview.
 | Q10 | Automatic consolidation of two published IDs requires a verified shared authoritative identifier and no conflicting authoritative identifiers across the entire component. Fuzzy similarity alone is insufficient. |
 | Q11 | Independently qualify automatic consolidation to the same accepted 99.9% precision target, demonstrated by a one-sided 95% lower confidence bound, plus zero hard-veto violations in adversarial tests. Exact matching has no exemption. Unqualified consolidations defer while other qualified work proceeds. |
 | Q12 | The local Company milestone may complete with audited linked, verified-unmatched and deferred outcomes for every scoped Company, provided qualified multisource matching is demonstrated and required source, recovery and publication checks pass. Report deferrals explicitly; do not claim full enrichment. |
+| Q13 | Retain a durable pre-commit assessment for every proposed binding and published-ID consolidation, including automatic proposals. Qualified proposals proceed immediately; field-only refreshes keep their existing evidence path. |
 
 ## Preserved decisions
 
@@ -55,12 +56,11 @@ deferred counts, affected Company IDs, reasons and retry triggers must make
 the boundary checkable. A run that merely defers everything without qualified
 multisource proof does not establish this milestone.
 
-## Remaining design gate
+## Assessment coverage — accepted Q13
 
 Claude's persisted pre-merge candidate proposal has been reviewed in
-[handoff reconciliation](design-reconciliation-2026-09-19.md). The remaining
-question is whether to retain an assessment before **every new binding and
-published-ID consolidation**, or only for deferred/review candidates.
-Recommendation: every identity proposal, with immediate automatic progression
-when qualified; field-only refreshes keep the existing evidence/effects path.
-This assessment coverage recommendation is not yet user-accepted.
+[handoff reconciliation](design-reconciliation-2026-09-19.md). The user accepted
+Q13 on 2026-09-19: retain an assessment before **every new
+binding and published-ID consolidation**, including automatically approved
+proposals. Qualified proposals progress immediately; field-only refreshes keep
+the existing evidence/effects path. No manual approval gate is introduced.
