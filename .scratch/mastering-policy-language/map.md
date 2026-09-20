@@ -128,6 +128,25 @@ any Clean MDM file.
   field-alias map (document path → source column) is undeclared; the catch-all
   step needs a keyword; `&` must be written `AND` in a declared list.
   Survivorship could not be exercised — it needs a populated identity store.
+- [Measure the `owner_cik` cardinality claim and test deterministic binding at runtime](issues/07-measure-owner-cik-cardinality-and-test-deterministic-binding.md)
+  — **the claim holds**: 0 genuine "one CIK, two people" in 104,970 rows /
+  21,727 CIKs (0 of 72,981 person decisions, Wilson UB 0.53/10k); EDGAR
+  inserts the CIK's registered name and discards the filer's (Ownership
+  XML spec v5.1 §4.3.2); reverse 0 same-issuer duplicates in 16,677 pairs
+  (CRD `OwnerID` runs ~12/10k). Binding run for real: (b) died at decision
+  3,107 on a middle initial; (a) silently minted 291 bogus Persons under an
+  injected bulk failure; tuned (c) never trips on real data and stopped
+  the injection in 8–48 decisions. [research/07](research/07-owner-cik-cardinality-and-deterministic-binding.md).
+- [Decide how a deterministic binding rule activates](issues/06-decide-how-a-deterministic-rule-activates.md)
+  — **two activation kinds**: `deterministic` activates on an identifier
+  contract (authority, namespace, normalizer, forward/reverse claim,
+  compatibility predicate + version + **field**, measured verification)
+  declared per namespace in the kind document — Clean MDM's "exclusivity
+  is policy-specific" hook. On violation: **defer the record and count
+  distinct `(identifier, name)` items** after a 10,000-decision warm-up,
+  deactivate at 5 per 10k (declared, pinned parameters). `sec.cik` can
+  claim forward 1 with evidence; `crd.individual` cannot claim reverse.
+  Steward resolution must record the alias. Spec ticket unblocked.
 
 ## Not yet specified
 
