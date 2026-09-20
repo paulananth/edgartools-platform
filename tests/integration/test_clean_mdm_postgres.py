@@ -1856,3 +1856,368 @@ def test_native_company_batch_retains_unsupported_records_atomically(
         == "Synthetic Company"
     )
     assert sum(r["open"] for r in documents(database, "review").values()) == 6
+
+
+def assessment_command(db, **changes):
+    a = source()
+    identity, binding = identity_and_binding(a)
+    return {
+        "batch_id": "assessed-company",
+        "run_id": str(uuid4()),
+        "policy_digest": db.policy,
+        "consumer": "assessed-company",
+        "expected_checkpoint": 0,
+        "checkpoint": 1,
+        "as_of": AS_OF,
+        "assertions": [a],
+        "identities": [identity],
+        "decisions": [binding],
+        **changes,
+    }
+
+
+def test_identity_assessment_is_durable_before_master_and_resumes(database):
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database)
+    prepared = stage.assess(**command)
+    assert prepared["before"] == []
+    # A new connection sees the assessment but no master/checkpoint/outbox.
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 1
+        for table in (
+            "batch",
+            "assertion",
+            "identity",
+            "decision",
+            "projection",
+            "checkpoint",
+            "publication",
+        ):
+            assert conn.scalar(text(f"SELECT count(*) FROM mdm_v2.{table}")) == 0
+    assert stage.assess(**command)["assessment_id"] == prepared["assessment_id"]
+    result = stage.apply_assessment(prepared["assessment_id"], run_id=command["run_id"])
+    assert result["generation"] == 1
+    duplicate = stage.apply(**{**command, "run_id": str(uuid4())})
+    assert duplicate["duplicate"]
+    with database.application.connect() as conn:
+        events = (
+            conn.execute(
+                text("SELECT event FROM mdm_v2.assessment_event ORDER BY event_id")
+            )
+            .scalars()
+            .all()
+        )
+        assert events == ["ready", "observed", "applied"]
+        assert (
+            conn.scalar(text("SELECT effects->>'assessment_id' FROM mdm_v2.batch"))
+            == prepared["assessment_id"]
+        )
+    stage.apply(
+        **{
+            **command,
+            "batch_id": "fields-only",
+            "expected_checkpoint": 1,
+            "checkpoint": 2,
+            "identities": [],
+            "decisions": [],
+            "assertions": [source(revision=2, fields={"name": "New name"})],
+        }
+    )
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 1
+
+
+def test_assessment_stale_dependency_and_unrelated_progress(database):
+    from edgar_warehouse.mdm.clean.assessment import StaleAssessment
+
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database)
+    candidate = stage.assess(**command)
+    apply(database, 1, assertions=[source("unrelated")])
+    # Global generation changed; the assessed Company and its checkpoint did not.
+    assert (
+        stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])[
+            "generation"
+        ]
+        == 2
+    )
+    b = source(source_code="fixture.secondary")
+    _, bind_b = identity_and_binding(b, command["identities"][0]["entity_id"])
+    next_command = {
+        **command,
+        "batch_id": "link-second",
+        "expected_checkpoint": 1,
+        "checkpoint": 2,
+        "identities": [],
+        "assertions": [b],
+        "decisions": [bind_b],
+    }
+    candidate = stage.assess(**next_command)
+    assert any(
+        p["object_type"] == "entity" and p["body"]["fields"]["name"]["value"] == "Acme"
+        for p in candidate["before"]
+    )
+    apply(database, 2, assertions=[source(revision=2, fields={"name": "Corrected"})])
+    with pytest.raises(StaleAssessment):
+        stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text("SELECT count(*) FROM mdm_v2.batch WHERE batch_id='link-second'")
+            )
+            == 0
+        )
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='superseded'"
+                )
+            )
+            == 1
+        )
+    refreshed = stage.assess(**next_command)
+    assert refreshed["assessment_id"] != candidate["assessment_id"]
+    stage.apply_assessment(refreshed["assessment_id"], run_id=command["run_id"])
+
+
+def test_rejected_identity_proposal_retains_veto_without_master_change(database):
+    a, b = source("a", identifiers={"cik": "1"}), source("b", identifiers={"cik": "2"})
+    i, da = identity_and_binding(a)
+    j, db = identity_and_binding(b)
+    apply(database, 1, assertions=[a, b], identities=[i, j], decisions=[da, db])
+    merge = decision(
+        "merge",
+        actor="steward",
+        reason="candidate",
+        at=AS_OF,
+        left=i["entity_id"],
+        right=j["entity_id"],
+    )
+    before = documents(database, "entity")
+    with pytest.raises(Conflict, match="authoritative"):
+        apply(database, 2, decisions=[merge])
+    with database.application.connect() as conn:
+        rejected = conn.execute(
+            text(
+                "SELECT assessment_id,body FROM mdm_v2.assessment WHERE body->>'outcome'='rejected'"
+            )
+        ).one()
+        assert rejected[1]["command"]["decisions"] == [merge]
+        assert "authoritative" in rejected[1]["vetoes"][0]
+        assert set(rejected[1]["retained"]["assertion_ids"]) == {
+            a["assertion_id"],
+            b["assertion_id"],
+        }
+    with pytest.raises(Conflict, match="Rejected"):
+        MergeStage(Store(database.application)).apply_assessment(
+            rejected[0], run_id=str(uuid4())
+        )
+    assert documents(database, "entity") == before
+
+
+def test_assessment_application_failure_rolls_back_applied_event(database, monkeypatch):
+    store = Store(database.application)
+    stage = MergeStage(store)
+    command = assessment_command(database)
+    candidate = stage.assess(**command)
+    commit = store.commit
+
+    def fail_after_sql(*args, **kwargs):
+        commit(*args, **kwargs)
+        raise RuntimeError("crash before transaction commit")
+
+    monkeypatch.setattr(store, "commit", fail_after_sql)
+    with pytest.raises(RuntimeError, match="crash"):
+        stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 0
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='applied'"
+                )
+            )
+            == 0
+        )
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 1
+    monkeypatch.setattr(store, "commit", commit)
+    stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])
+
+
+def test_assessment_sql_fences_bypass_stale_and_modified_effects(database):
+    from edgar_warehouse.mdm.clean.store import canonical
+
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database)
+    candidate = stage.assess(**command)
+    effects = {**candidate["effects"], "expected_generation": 0}
+    with (
+        pytest.raises(DBAPIError, match="ready assessment"),
+        database.application.begin() as conn,
+    ):
+        stage.store.commit(conn, effects, command["run_id"])
+    assessed = {**effects, "assessment_id": candidate["assessment_id"]}
+    with (
+        pytest.raises(DBAPIError, match="differs from assessed"),
+        database.application.begin() as conn,
+    ):
+        stage.store.commit(conn, {**assessed, "projections": []}, command["run_id"])
+    # The capability requires a previously committed assessment, even for the
+    # privileged runtime API; staging plus application in one txn is rejected.
+    body = {k: v for k, v in candidate.items() if k != "assessment_id"}
+    body["rule_version"] = "same-transaction-test"
+    with (
+        pytest.raises(DBAPIError, match="ready assessment"),
+        database.application.begin() as conn,
+    ):
+        key = conn.scalar(
+            text("SELECT mdm_v2.record_assessment(:body,CAST(:run AS uuid))"),
+            {"body": canonical(body), "run": command["run_id"]},
+        )
+        stage.store.commit(conn, {**effects, "assessment_id": key}, command["run_id"])
+    apply(database, 1, assertions=[source(revision=2)])
+    with (
+        pytest.raises(DBAPIError, match="Stale identity assessment"),
+        database.application.begin() as conn,
+    ):
+        stage.store.commit(
+            conn, {**assessed, "expected_generation": 1}, command["run_id"]
+        )
+
+
+def test_preview_capability_cannot_commit_or_leak_assessments(database):
+    from edgar_warehouse.mdm.clean.store import canonical
+
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database)
+    preview = stage.apply(**command, preview=True)
+    # Commit the caller transaction deliberately: SQL preview still persists none.
+    with database.application.begin() as conn:
+        conn.execute(
+            text("SELECT mdm_v2.preview_batch(:body,CAST(:run AS uuid))"),
+            {"body": canonical(preview["effects"]), "run": command["run_id"]},
+        )
+    with database.application.connect() as conn:
+        for table in (
+            "batch",
+            "assessment",
+            "assessment_event",
+            "identity",
+            "checkpoint",
+            "publication",
+        ):
+            assert conn.scalar(text(f"SELECT count(*) FROM mdm_v2.{table}")) == 0
+    for function in ("commit_batch_evidence", "commit_batch_core"):
+        with (
+            pytest.raises(DBAPIError, match="permission denied"),
+            database.application.begin() as conn,
+        ):
+            conn.execute(
+                text(f"SELECT mdm_v2.{function}('{{}}',CAST(:run AS uuid))"),
+                {"run": command["run_id"]},
+            )
+
+
+def test_assessment_history_permissions_and_concurrent_lost_ack(database):
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database)
+    prepared = stage.assess(**command)
+
+    def deliver(_):
+        return stage.apply_assessment(prepared["assessment_id"], run_id=str(uuid4()))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(deliver, range(2)))
+    assert sorted(r["duplicate"] for r in results) == [False, True]
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='applied'"
+                )
+            )
+            == 1
+        )
+    for table in ("assessment", "assessment_event"):
+        with (
+            pytest.raises(DBAPIError, match="permission denied"),
+            database.application.begin() as conn,
+        ):
+            conn.execute(text(f"DELETE FROM mdm_v2.{table}"))
+        with (
+            pytest.raises(DBAPIError, match="append-only"),
+            database.admin.begin() as conn,
+        ):
+            conn.execute(text(f"DELETE FROM mdm_v2.{table}"))
+
+
+def test_automatic_progression_reassesses_a_concurrent_correction(
+    database, monkeypatch
+):
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database)
+    original = stage.apply_assessment
+    raced = False
+
+    def race_once(key, *, run_id):
+        nonlocal raced
+        if not raced:
+            raced = True
+            apply(
+                database, 1, assertions=[source(revision=2, fields={"name": "Current"})]
+            )
+        return original(key, run_id=run_id)
+
+    monkeypatch.setattr(stage, "apply_assessment", race_once)
+    result = stage.apply(**command)
+    assert result["generation"] == 2
+    entity = command["identities"][0]["entity_id"]
+    assert documents(database, "entity")[entity]["fields"]["name"]["value"] == "Current"
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 2
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='superseded'"
+                )
+            )
+            == 1
+        )
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='applied'"
+                )
+            )
+            == 1
+        )
+
+
+def test_assessment_resume_uses_timezone_independent_dependency_snapshot(database):
+    stage = MergeStage(Store(database.application))
+    command = assessment_command(database)
+    stage.apply(**command)
+    b = source(source_code="fixture.secondary")
+    _, bind_b = identity_and_binding(b, command["identities"][0]["entity_id"])
+    prepared = stage.assess(
+        **{
+            **command,
+            "batch_id": "second-timezone",
+            "expected_checkpoint": 1,
+            "checkpoint": 2,
+            "identities": [],
+            "assertions": [b],
+            "decisions": [bind_b],
+        }
+    )
+    other = create_engine(
+        database.application.url,
+        connect_args={"options": "-c timezone=America/New_York"},
+    )
+    try:
+        result = MergeStage(Store(other)).apply_assessment(
+            prepared["assessment_id"], run_id=command["run_id"]
+        )
+        assert result["generation"] == 2
+    finally:
+        other.dispose()

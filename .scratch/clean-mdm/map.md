@@ -12,10 +12,11 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 ## Notes
 
 - Current design review: [Claude handoff reconciliation](../../docs/specs/clean-mdm/design-reconciliation-2026-09-19.md).
-  [Company Q1–Q12](../../docs/specs/clean-mdm/company-policy.md) are accepted.
-  [Gate 08](issues/08-confirm-company-candidate-assessment.md) asks only the
-  breadth of mandatory pre-application assessment persistence; resolve it
-  before starting that implementation.
+  [Company Q1–Q13](../../docs/specs/clean-mdm/company-policy.md) are accepted.
+  [Gate 08](issues/08-confirm-company-candidate-assessment.md) is accepted:
+  persist every proposed binding/consolidation before application, without
+  a manual pause for qualified proposals.
+  [Ticket 09](issues/09-build-company-candidate-assessment.md) implements the foundation.
 
 - User priority, 2026-09-19: complete SEC + GLEIF multisource Company mastering
   before other entity integrations. [Company completion gate](../../docs/specs/clean-mdm/company-completion.md)

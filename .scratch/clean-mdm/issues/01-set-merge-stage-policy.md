@@ -199,7 +199,7 @@ it would not certify rule accuracy or production readiness.
 
 ## Later Company-specific amendments
 
-[Company interview Q1–Q12](../../../docs/specs/clean-mdm/company-policy.md),
+[Company interview Q1–Q13](../../../docs/specs/clean-mdm/company-policy.md),
 accepted 2026-09-19, supersede conflicting steward-only Company consolidation,
 routine manual-review and blanket deferred-match completion recommendations.
 The original source-binding precision gate remains; automatic consolidation

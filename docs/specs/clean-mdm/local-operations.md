@@ -32,8 +32,11 @@ contains the existing root `pipeline_run`. One UUID identifies the root across
 all three. No transaction is claimed across databases.
 
 Owner migration command: `edgar-warehouse mdm migrate --model clean
---application-role application`. Migrations 023, 025, 026 and 027 are checksummed. Migration 027 adds immutable
-deferred evidence and cannot be bypassed through the older SQL capability.
+--application-role application`. Migrations 023 and 025–028 are checksummed.
+Migration 027 adds immutable deferred evidence. Migration 028 adds
+[candidate assessments](candidate-assessments.md), durable-before-application
+coverage and a rollback-only preview capability. Older commit capabilities
+remain inaccessible to the runtime role.
 Mirror installation uses `clean.publication.migrate_mirror` with migration 024
 and a separate owner connection. Runtime commands select
 `MDM_APPLICATION_ROLE` (default `application`) and cannot write the tables
