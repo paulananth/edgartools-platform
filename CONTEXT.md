@@ -54,6 +54,14 @@ _Avoid_: Proof of identity, source rank as permission to merge identities
 An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.
 _Avoid_: Low match score, deleting source evidence, a permanent ban without reviewable grounds
 
+**Mastering Policy**:
+The versioned, digest-pinned document that declares, per identity kind, the classification, binding and survivorship rules and the proof under which each verdict may act without a Steward.
+_Avoid_: A per-source configuration table, a runtime switch, a place to store samples, source rank as an input to sameness
+
+**Identifier Contract**:
+The declaration, per identifier namespace, of who issues the value, how many identities one value may name and how many values one identity may carry, the second handle used to detect a violation, and the measurement that verified the claim.
+_Avoid_: "The id is unique" as an unstated assumption, a name match as the claim, a contract without a measurement
+
 **MDM Change Journal**:
 The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
 _Avoid_: A second root-run authority, mutable log of only the latest result
