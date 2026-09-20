@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mastering Policy — prototype</title>
+<style>
+  :root{--bg:#fbfbfa;--fg:#1c1c1a;--mut:#6b6b66;--line:#e2e2dd;--card:#fff;
+        --ok:#1a7f4b;--no:#a33;--wait:#8a6d1f;--acc:#2d5d8a}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#16161a;--fg:#e8e8e4;--mut:#9a9a94;--line:#2e2e34;--card:#1e1e24;
+    --ok:#4cc08a;--no:#e2807f;--wait:#d6b34d;--acc:#7fb0e0}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 16px 72px}
+  h1{font-size:22px;margin:0 0 4px}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:28px 0 10px}
+  p{margin:0 0 12px}
+  .intro{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0 8px}
+  .intro strong{font-weight:650}
+  .warn{font-size:13px;color:var(--wait);margin-top:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px}
+  label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-bottom:4px}
+  input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;
+    background:var(--bg);color:var(--fg);font:inherit}
+  .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .row>div{flex:1 1 200px}
+  .checks{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut)}
+  .checks label{display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:13px;margin:0}
+  button{font:inherit;padding:7px 13px;border:1px solid var(--line);border-radius:7px;
+    background:var(--card);color:var(--fg);cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  .verdict{font-size:26px;font-weight:650;margin:2px 0 2px}
+  .verdict small{font-size:13px;font-weight:400;color:var(--mut);display:block;margin-top:2px}
+  .auto{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 8px;border-radius:20px;margin-left:8px;vertical-align:middle}
+  .auto.y{background:var(--ok);color:#fff}
+  .auto.n{background:var(--line);color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);font-weight:600}
+  tr.fired td{background:color-mix(in srgb,var(--ok) 12%,transparent)}
+  td.y{color:var(--ok)} td.n{color:var(--no)}
+  code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mut)}
+  .walk{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Mastering Policy — prototype</h1>
+
+<div class="intro">
+  <p><strong>The question:</strong> can de-duplication and merge rules live in a
+  configuration document instead of in code — and can an operator read that
+  document and predict what it will do?</p>
+  <p>Below, a reporting owner from a Form 3/4/5 filing is classified by
+  <strong>rule C-J</strong>, read out of
+  <code>policy-person.json</code>. Nothing here is hard-coded: the steps, their
+  order, the 125 legal-form words, the six SEC profile fields and the 99% bar all
+  come from that file. Change the name or a field below and watch which step
+  fires.</p>
+  <p>A verdict is <strong>automatic</strong> only when the document carries a
+  proof for that exact rule version and that exact verdict. C-J has one for
+  <em>person</em> and none for <em>entity</em> — which is why the same rule runs
+  alone for one answer and goes to a <strong>Steward</strong> for the other.</p>
+  <div class="warn">Throwaway prototype for wayfinder ticket 04. Not production code.</div>
+</div>
+
+<h2>Guided cases</h2>
+<div class="walk" id="walk"></div>
+
+<div class="card">
+  <div class="row">
+    <div><label>Owner name (as EDGAR conforms it)</label>
+      <input type="text" id="name" value="Sibold William John"></div>
+    <div><label>SEC entityType</label>
+      <input type="text" id="etype" value="other"></div>
+  </div>
+  <div class="row">
+    <div><label>SIC</label><input type="text" id="sic"></div>
+    <div><label>State of incorporation</label><input type="text" id="soi"></div>
+    <div><label>Fiscal year end</label><input type="text" id="fye"></div>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="present" checked> SEC profile captured</label>
+    <label><input type="checkbox" id="dir"> director</label>
+    <label><input type="checkbox" id="off" checked> officer</label>
+    <label><input type="checkbox" id="ten"> 10% owner</label>
+  </div>
+</div>
+
+<div class="card">
+  <div class="verdict" id="verdict">—<small id="vnote"></small></div>
+</div>
+
+<h2>What the document did, step by step</h2>
+<div class="card"><table id="trace"><tbody></tbody></table></div>
+
+<h2>Binding rules for this record</h2>
+<div class="card"><table id="binds"><tbody></tbody></table></div>
+
+<h2>Flags are evidence, never deciders</h2>
+<div class="card" id="flagnote"></div>
+
+</div>
+
+<script type="module">
+// INLINED by build-demo.mjs — edit interpret.mjs / policy-person.json, then rebuild.
+// THROWAWAY PROTOTYPE — Mastering Policy Language, ticket 04.
+//
+// The question this answers: can a policy document written in the twelve-primitive
+// vocabulary (research 03) express rule C-J and the Person/Company binding rules,
+// and does a machine reading that document reproduce research 18's measured result?
+//
+// This module is the part worth keeping if the answer is yes: a pure interpreter,
+// no DOM, no I/O. The page and the checker call into it; nothing flows back.
+
+// ---------------------------------------------------------------------------
+// Primitive registry. `name@version` — an unknown pair is refused, fail closed.
+// Only the primitives the two prototype documents actually call are implemented.
+// ---------------------------------------------------------------------------
+
+const NORMALIZERS = {
+  'normalize_text@edgar-conformed-v1': (s) =>
+    String(s ?? '')
+      .toUpperCase()
+      .replace(/&/g, ' AND ')
+      .replace(/[.,;:/()'"\-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  'normalize_identifier@sec-cik-v1': (s) =>
+    String(s ?? '').replace(/\D/g, '').replace(/^0+/, ''),
+  'normalize_identifier@crd-v1': (s) => String(s ?? '').replace(/\D/g, ''),
+  'normalize_identifier@lei-v1': (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''),
+};
+
+const isEmpty = (v) =>
+  v === null || v === undefined || v === '' || v === 0 ||
+  (Array.isArray(v) && v.length === 0) ||
+  (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0);
+
+// token_match: which entries of a declared list appear in a normalized name as
+// whole tokens. `&` is its own signal in EDGAR conformed names (it normalizes to
+// ' AND '), so the list carries "AND" and the ampersand adds one synthetic token.
+function tokensFound(rawName, list, normalize) {
+  const n = normalize(rawName);
+  const found = new Set();
+  const padded = ` ${n} `;
+  for (const t of list) {
+    if (t === 'AND') continue;
+    const tok = t.replace(/\s+/g, ' ');
+    const re = new RegExp(`(?<![A-Z0-9])${tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Z0-9])`);
+    if (re.test(n)) found.add(t);
+  }
+  if (String(rawName ?? '').includes('&') && padded.includes(' AND ')) found.add('&');
+  return [...found].sort();
+}
+
+const PRIMITIVES = {
+  'evidence_present@1': (rec, args) => !isEmpty(rec.get(args.document)),
+
+  'field_in_set@1': (rec, args) => args.values.includes(rec.get(args.field)),
+
+  'token_match@1': (rec, args, doc) => {
+    const list = doc.lists[args.token_list] ?? [];
+    const exclude = new Set(args.exclude_list ? doc.lists[args.exclude_list] ?? [] : []);
+    const norm = NORMALIZERS[doc.normalizers[args.normalizer] ?? args.normalizer];
+    let found = tokensFound(rec.get(args.field), list, norm);
+    if (exclude.size) found = found.filter((t) => !exclude.has(t));
+    const n = found.length;
+    if (args.min_count !== undefined && n < args.min_count) return false;
+    if (args.max_count !== undefined && n > args.max_count) return false;
+    return true;
+  },
+
+  // Raw-text checks (digits, '&') run on the ORIGINAL string, tokenization on the
+  // normalized one — research 03 §6 flagged that collapsing this kills both checks.
+  'name_shape@1': (rec, args, doc) => {
+    const raw = String(rec.get(args.field) ?? '').trim();
+    if (!raw) return false;
+    for (const ch of args.forbid_characters?.value ?? []) if (raw.includes(ch)) return false;
+    if (args.forbid_digits?.value && /\d/.test(raw)) return false;
+    const norm = NORMALIZERS[doc.normalizers[args.normalizer] ?? args.normalizer];
+    const toks = norm(raw).split(/[\s,]+/).filter(Boolean);
+    if (toks.length < args.min_tokens || toks.length > args.max_tokens) return false;
+    const suffixes = new Set(doc.lists[args.suffix_list] ?? []);
+    if (toks.filter((t) => !suffixes.has(t)).length < 2) return false;
+    return toks.every((t) => /^[A-Z]+$/.test(t));
+  },
+
+  'fields_all_empty@1': (rec, args, doc) => {
+    const fields = Array.isArray(args.fields) ? args.fields : doc.lists[args.fields] ?? [];
+    return fields.every((f) => isEmpty(rec.get(f)));
+  },
+
+  // Binding primitives. The prototype's checker does not exercise these (they need
+  // a populated identity store); they are here so the documents parse and so the
+  // static checks below have something to inspect.
+  'identifier_match@1': (rec, args) => !isEmpty(rec.get(args.field)),
+  'identifier_cardinality@1': () => true,
+  'compound_key_equal@1': (rec, args) =>
+    args.components.every((c) => !isEmpty(rec.get(c.field))),
+  'name_similarity@1': () => false,
+  'select_by_source_rank@1': () => true,
+};
+
+// ---------------------------------------------------------------------------
+// Static checks performed at registration — research 03 §4. Fail closed.
+// ---------------------------------------------------------------------------
+
+const SURVIVORSHIP_PRIMITIVES = new Set(['select_by_source_rank@1']);
+
+function validate(doc) {
+  const errors = [];
+  const seen = new Set();
+
+  const checkCall = (call, where) => {
+    if (!PRIMITIVES[call.primitive]) errors.push(`${where}: unknown primitive ${call.primitive}`);
+    seen.add(call.primitive);
+  };
+
+  for (const rule of doc.rules ?? []) {
+    const calls = rule.family === 'classification'
+      ? (rule.steps ?? []).flatMap((s) => s.when ?? [])
+      : rule.when ?? [];
+    calls.forEach((c) => checkCall(c, rule.rule_id));
+
+    if (rule.family === 'binding') {
+      // A binding rule may not reach a survivorship primitive (CONTEXT.md:23,51).
+      for (const c of calls) {
+        if (SURVIVORSHIP_PRIMITIVES.has(c.primitive))
+          errors.push(`${rule.rule_id}: a binding rule may not call ${c.primitive}`);
+      }
+      // A binding rule may not decide on name similarity alone (GLEIF spec:95).
+      const sims = calls.filter((c) => c.primitive.startsWith('name_similarity@'));
+      if (sims.length && sims.length === calls.length && rule.emits?.includes('bind'))
+        errors.push(`${rule.rule_id}: name similarity alone may not bind`);
+    }
+  }
+
+  // Every activation entry must name a rule at that exact version and a verdict
+  // the rule emits, and must clear its family's declared bar at equal coverage.
+  for (const a of doc.automatic_rules ?? []) {
+    const rule = (doc.rules ?? []).find((r) => r.rule_id === a.rule_id);
+    if (!rule) { errors.push(`activation ${a.rule_id}: no such rule`); continue; }
+    if (rule.version !== a.rule_version)
+      errors.push(`activation ${a.rule_id}: proof measured on version ${a.rule_version}, rule is ${rule.version}`);
+    if (!(rule.emits ?? []).includes(a.verdict))
+      errors.push(`activation ${a.rule_id}: rule does not emit verdict ${a.verdict}`);
+    const bar = doc.bars?.[rule.family];
+    if (!bar) { errors.push(`activation ${a.rule_id}: no bar declared for family ${rule.family}`); continue; }
+    if (bar.one_sided_confidence !== a.proof.one_sided_confidence)
+      errors.push(`activation ${a.rule_id}: proof coverage ${a.proof.one_sided_confidence} != bar coverage ${bar.one_sided_confidence}`);
+    const lb = wilsonLowerBound(a.proof.n, a.proof.correct, a.proof.one_sided_confidence);
+    if (Math.abs(lb - a.proof.lower_bound) > 0.0005)
+      errors.push(`activation ${a.rule_id}: stated lower bound ${a.proof.lower_bound}, recomputed ${lb.toFixed(4)}`);
+    if (lb < bar.min_precision)
+      errors.push(`activation ${a.rule_id}: lower bound ${lb.toFixed(4)} below bar ${bar.min_precision}`);
+  }
+  return { ok: errors.length === 0, errors, primitives_used: [...seen].sort() };
+}
+
+function wilsonLowerBound(n, correct, oneSided) {
+  const z = oneSided === 0.975 ? 1.959963985 : oneSided === 0.95 ? 1.644853627 : NaN;
+  if (!n || Number.isNaN(z)) return NaN;
+  const p = correct / n;
+  const d = 1 + (z * z) / n;
+  const c = p + (z * z) / (2 * n);
+  const s = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return (c - s) / d;
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation. A record is anything with .get(path).
+// ---------------------------------------------------------------------------
+
+function holds(call, rec, doc) {
+  const fn = PRIMITIVES[call.primitive];
+  if (!fn) throw new Error(`unknown primitive ${call.primitive}`);
+  const v = fn(rec, call.args ?? {}, doc);
+  return call.negate ? !v : v;
+}
+
+/** Run a classification rule. Returns {verdict, step, trace, automatic}. */
+function classify(doc, ruleId, rec) {
+  const rule = doc.rules.find((r) => r.rule_id === ruleId && r.family === 'classification');
+  if (!rule) throw new Error(`no classification rule ${ruleId}`);
+  const trace = [];
+  for (const step of rule.steps) {
+    const results = (step.when ?? []).map((c) => ({
+      primitive: c.primitive, negate: !!c.negate, args: c.args, held: holds(c, rec, doc),
+    }));
+    const all = results.every((r) => r.held);
+    trace.push({ step: step.step, verdict: step.verdict, note: step.note, results, fired: all });
+    if (all) {
+      const active = (doc.automatic_rules ?? []).some(
+        (a) => a.rule_id === rule.rule_id && a.rule_version === rule.version && a.verdict === step.verdict);
+      return { verdict: step.verdict, step: step.step, trace, automatic: active };
+    }
+  }
+  return { verdict: 'deferred', step: null, trace, automatic: false };
+}
+
+/** Which binding rules fire for a record, and whether each may bind automatically. */
+function bindings(doc, rec, { verdict } = {}) {
+  return (doc.rules ?? [])
+    .filter((r) => r.family === 'binding')
+    .filter((r) => !r.applies_to_verdict || !verdict || r.applies_to_verdict === verdict)
+    .map((r) => ({
+      rule_id: r.rule_id,
+      fires: (r.when ?? []).every((c) => holds(c, rec, doc)),
+      emits: r.emits,
+      automatic: (doc.automatic_rules ?? []).some(
+        (a) => a.rule_id === r.rule_id && a.rule_version === r.version && a.verdict === 'bind'),
+      note: r.note,
+    }));
+}
+
+const record = (obj, alias = {}) => ({
+  get: (path) => (path in alias ? obj[alias[path]] : obj[path]),
+  raw: obj,
+});
+
+const person = {
+ "_prototype": "THROWAWAY \u2014 Mastering Policy Language prototype, ticket 04. Not production.",
+ "kind": "person",
+ "version": "person-2026-09-20",
+ "bars": {
+  "classification": {
+   "min_precision": 0.99,
+   "one_sided_confidence": 0.975
+  },
+  "binding": {
+   "min_precision": 0.99,
+   "one_sided_confidence": 0.975
+  }
+ },
+ "lists": {
+  "entity_legal_form": [
+   "A S",
+   "AB",
+   "ACQUISITION",
+   "ACQUISITIONS",
+   "ADVISERS",
+   "ADVISORS",
+   "ADVISORY",
+   "AG",
+   "AS",
+   "ASSET",
+   "ASSETS",
+   "ASSOCIATES",
+   "ASSOCIATION",
+   "B V",
+   "BANK",
+   "BHD",
+   "BV",
+   "CAPITAL",
+   "CAYMAN",
+   "CHURCH",
+   "CO",
+   "COMPANY",
+   "CORP",
+   "CORPORATION",
+   "COUNCIL",
+   "CREDIT",
+   "DELAWARE",
+   "ENERGY",
+   "ENTERPRISES",
+   "EQUITIES",
+   "EQUITY",
+   "ESOP",
+   "ESTATE",
+   "FAMILY",
+   "FBO",
+   "FEEDER",
+   "FIDUCIARY",
+   "FINANCE",
+   "FINANCIAL",
+   "FOUNDATION",
+   "FUND",
+   "FUNDS",
+   "GLOBAL",
+   "GMBH",
+   "GP",
+   "GROUP",
+   "HOLDING",
+   "HOLDINGS",
+   "INC",
+   "INCORPORATED",
+   "INDUSTRIES",
+   "INSURANCE",
+   "INTERNATIONAL",
+   "INVESTMENT",
+   "INVESTMENTS",
+   "INVESTOR",
+   "INVESTORS",
+   "IRREVOCABLE",
+   "KABUSHIKI",
+   "KG",
+   "KK",
+   "L L C",
+   "L P",
+   "LIFE",
+   "LIMITADA",
+   "LIMITED",
+   "LIVING",
+   "LLC",
+   "LLLP",
+   "LLP",
+   "LP",
+   "LTD",
+   "LTDA",
+   "MANAGEMENT",
+   "MASTER",
+   "MGMT",
+   "N V",
+   "NOMINEE",
+   "NOMINEES",
+   "NV",
+   "OPPORTUNITIES",
+   "OPPORTUNITY",
+   "OY",
+   "PARTNERS",
+   "PARTNERS LP",
+   "PARTNERSHIP",
+   "PENSION",
+   "PLAN",
+   "PLC",
+   "PORTFOLIO",
+   "PTE",
+   "PTY",
+   "REAL ESTATE",
+   "REIT",
+   "RESOURCES",
+   "RETIREMENT",
+   "REVOCABLE",
+   "S A",
+   "S A R L",
+   "S P A",
+   "SA",
+   "SARL",
+   "SAS",
+   "SDN",
+   "SE",
+   "SECURITIES",
+   "SERVICES",
+   "SOCIETY",
+   "SPA",
+   "SPONSOR",
+   "SPONSORS",
+   "SPV",
+   "STRATEGIES",
+   "SYSTEM",
+   "SYSTEMS",
+   "TECHNOLOGIES",
+   "TR",
+   "TRUST",
+   "TRUST CO",
+   "TRUSTEE",
+   "TRUSTEES",
+   "TRUSTS",
+   "UNIVERSITY",
+   "VENTURE",
+   "VENTURES"
+  ],
+  "ambiguous": [
+   "AB",
+   "AG",
+   "AS",
+   "BANK",
+   "CAPITAL",
+   "CAYMAN",
+   "CHURCH",
+   "CO",
+   "CREDIT",
+   "DELAWARE",
+   "ENERGY",
+   "EQUITY",
+   "FAMILY",
+   "GLOBAL",
+   "GP",
+   "KG",
+   "LIFE",
+   "LIVING",
+   "MASTER",
+   "OY",
+   "PLAN",
+   "SA",
+   "SE",
+   "SPONSOR",
+   "SYSTEM",
+   "TR",
+   "TRUSTEE"
+  ],
+  "person_suffix": [
+   "CFA",
+   "CPA",
+   "DDS",
+   "DR",
+   "ESQ",
+   "II",
+   "III",
+   "IV",
+   "JR",
+   "MD",
+   "MR",
+   "MRS",
+   "MS",
+   "PHD",
+   "SR",
+   "V"
+  ],
+  "structural_fields": [
+   "sec.submissions.sic",
+   "sec.submissions.stateOfIncorporation",
+   "sec.submissions.ein",
+   "sec.submissions.tickers",
+   "sec.submissions.ownerOrg",
+   "sec.submissions.fiscalYearEnd"
+  ]
+ },
+ "normalizers": {
+  "conformed": "normalize_text@edgar-conformed-v1"
+ },
+ "rules": [
+  {
+   "rule_id": "C-J",
+   "version": "2026-09-20",
+   "family": "classification",
+   "source": "sec.ownership_reporting_owner",
+   "evaluated_per": "sec.owner_cik",
+   "emits": [
+    "person",
+    "company",
+    "entity_undetermined",
+    "deferred"
+   ],
+   "note": "Person Consumer Contract ticket 03. First step whose `when` holds entirely supplies the verdict.",
+   "steps": [
+    {
+     "step": "0",
+     "verdict": "deferred",
+     "note": "No captured submissions.json \u2014 capture first, not a Steward item.",
+     "when": [
+      {
+       "primitive": "evidence_present@1",
+       "negate": true,
+       "args": {
+        "document": "sec.submissions.owner"
+       }
+      }
+     ]
+    },
+    {
+     "step": "1",
+     "verdict": "company",
+     "note": "SEC says reporting company. Binds by CIK under the Company document's Tier A.",
+     "when": [
+      {
+       "primitive": "field_in_set@1",
+       "args": {
+        "field": "sec.submissions.entityType",
+        "values": [
+         "operating",
+         "investment"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "step": "2-guard",
+     "verdict": "deferred",
+     "note": "Surname guard: person-shaped, structurally empty, exactly one token ('Trust Jane', 'Council LaVerne H'). Post-hoc \u2014 release gate 2.",
+     "when": [
+      {
+       "primitive": "token_match@1",
+       "args": {
+        "field": "owner_name",
+        "normalizer": "conformed",
+        "token_list": "entity_legal_form",
+        "min_count": 1,
+        "max_count": 1
+       }
+      },
+      {
+       "primitive": "name_shape@1",
+       "args": {
+        "field": "owner_name",
+        "normalizer": "conformed",
+        "min_tokens": 2,
+        "max_tokens": 5,
+        "suffix_list": "person_suffix",
+        "forbid_digits": {
+         "value": true,
+         "applies_to": "raw"
+        },
+        "forbid_characters": {
+         "value": [
+          "&"
+         ],
+         "applies_to": "raw"
+        }
+       }
+      },
+      {
+       "primitive": "fields_all_empty@1",
+       "args": {
+        "fields": "structural_fields"
+       }
+      }
+     ]
+    },
+    {
+     "step": "2",
+     "verdict": "entity_undetermined",
+     "note": "Unambiguous legal-form token. Terminal for the Person consumer: retained outside its publishing scope, no review.",
+     "when": [
+      {
+       "primitive": "token_match@1",
+       "args": {
+        "field": "owner_name",
+        "normalizer": "conformed",
+        "token_list": "entity_legal_form",
+        "exclude_list": "ambiguous",
+        "min_count": 1
+       }
+      }
+     ]
+    },
+    {
+     "step": "3",
+     "verdict": "person",
+     "note": "No token at all, structurally empty, person-shaped.",
+     "when": [
+      {
+       "primitive": "token_match@1",
+       "negate": true,
+       "args": {
+        "field": "owner_name",
+        "normalizer": "conformed",
+        "token_list": "entity_legal_form",
+        "min_count": 1
+       }
+      },
+      {
+       "primitive": "fields_all_empty@1",
+       "args": {
+        "fields": "structural_fields"
+       }
+      },
+      {
+       "primitive": "name_shape@1",
+       "args": {
+        "field": "owner_name",
+        "normalizer": "conformed",
+        "min_tokens": 2,
+        "max_tokens": 5,
+        "suffix_list": "person_suffix",
+        "forbid_digits": {
+         "value": true,
+         "applies_to": "raw"
+        },
+        "forbid_characters": {
+         "value": [
+          "&"
+         ],
+         "applies_to": "raw"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "step": "4",
+     "verdict": "deferred",
+     "note": "Everything else \u2014 Steward.",
+     "when": []
+    }
+   ],
+   "evidence_recorded": [
+    "sec.submissions.entityType",
+    "structural_fields",
+    "entity_tokens",
+    "person_name_shape",
+    "deputization_text",
+    "flags"
+   ]
+  },
+  {
+   "rule_id": "person-tier-a-owner-cik",
+   "version": "2026-09-20",
+   "family": "binding",
+   "source": "sec.ownership_reporting_owner",
+   "applies_to_verdict": "person",
+   "note": "Ticket 02 Tier A. owner_cik is a cross-reference id; one id resolves to exactly one Person.",
+   "emits": [
+    "bind"
+   ],
+   "when": [
+    {
+     "primitive": "identifier_match@1",
+     "args": {
+      "namespace": "sec.cik",
+      "field": "owner_cik",
+      "normalizer": "normalize_identifier@sec-cik-v1"
+     }
+    },
+    {
+     "primitive": "identifier_cardinality@1",
+     "args": {
+      "namespace": "sec.cik",
+      "max_identities": 1
+     }
+    }
+   ]
+  },
+  {
+   "rule_id": "person-tier-a-adv-ownerid",
+   "version": "2026-09-20",
+   "family": "binding",
+   "source": "adv.schedule_a_b",
+   "applies_to_verdict": "person",
+   "note": "Ticket 02 Tier A. CRD individual record id; duplicate CRD records collapse onto one Person.",
+   "emits": [
+    "bind"
+   ],
+   "when": [
+    {
+     "primitive": "identifier_match@1",
+     "args": {
+      "namespace": "crd.individual",
+      "field": "OwnerID",
+      "normalizer": "normalize_identifier@crd-v1"
+     }
+    }
+   ]
+  },
+  {
+   "rule_id": "person-tier-b-issuer-name-role",
+   "version": "2026-09-20",
+   "family": "binding",
+   "source": "*",
+   "applies_to_verdict": "person",
+   "note": "Ticket 02 Tier B compound context key. NO activation entry \u2014 calibration is Person ticket 17, still open. Fires as Steward review.",
+   "emits": [
+    "bind"
+   ],
+   "when": [
+    {
+     "primitive": "compound_key_equal@1",
+     "args": {
+      "components": [
+       {
+        "field": "issuer_or_firm_cik",
+        "normalizer": "normalize_identifier@sec-cik-v1"
+       },
+       {
+        "field": "person_name",
+        "normalizer": "conformed"
+       },
+       {
+        "field": "role_class"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "rule_id": "person-tier-c-fuzzy",
+   "version": "2026-09-20",
+   "family": "binding",
+   "source": "*",
+   "applies_to_verdict": "person",
+   "note": "Ticket 02 Tier C. Never automatic: a binding rule may not decide on name similarity alone (statically refused at registration if it tried).",
+   "emits": [
+    "review"
+   ],
+   "when": [
+    {
+     "primitive": "compound_key_equal@1",
+     "args": {
+      "components": [
+       {
+        "field": "issuer_or_firm_cik",
+        "normalizer": "normalize_identifier@sec-cik-v1"
+       }
+      ]
+     }
+    },
+    {
+     "primitive": "name_similarity@1",
+     "args": {
+      "left": "person_name",
+      "right": "candidate_name",
+      "method": "jaro_winkler@1",
+      "min_score": 0.92,
+      "normalizer": "conformed"
+     }
+    }
+   ]
+  }
+ ],
+ "automatic_rules": [
+  {
+   "rule_id": "C-J",
+   "rule_version": "2026-09-20",
+   "verdict": "person",
+   "proof": {
+    "n": 841,
+    "correct": 841,
+    "lower_bound": 0.9955,
+    "one_sided_confidence": 0.975,
+    "cohort": "bronze filing_artifact 2026-09-02..2026-09-12; 4,831 owner CIKs",
+    "sample_sha256": "see .scratch/person-consumer-contract/research/18-summary.json",
+    "adversarial": "labels are the researcher's reading; 4 uncertain and 16 overrides listed by name"
+   },
+   "approved_by": "operator",
+   "approved_at": "2026-09-20",
+   "reason": "Person ticket 03 release gate 1"
+  }
+ ],
+ "survivorship": {
+  "person_name": {
+   "sources": [
+    "sec.ownership_reporting_owner",
+    "adv.schedule_a_b",
+    "sec.employment_event"
+   ],
+   "primitive": "select_by_source_rank@1",
+   "allow_unknown_effective": false
+  },
+  "primary_role": {
+   "sources": [
+    "sec.ownership_reporting_owner",
+    "sec.employment_event"
+   ],
+   "primitive": "select_by_source_rank@1",
+   "allow_unknown_effective": true
+  }
+ },
+ "projection": {
+  "fields": [
+   "person_name",
+   "primary_role"
+  ],
+  "evidence_only": [
+   "addresses",
+   "officer_title_history",
+   "deputization_text"
+  ],
+  "_open": "Person map ticket 04 (fields, privacy, retention) has not resolved \u2014 this block is a placeholder the prototype needs to be runnable."
+ }
+};
+
+const $ = (id) => document.getElementById(id);
+const ALIAS = {
+  'sec.submissions.owner':'present','sec.submissions.entityType':'etype',
+  'sec.submissions.sic':'sic','sec.submissions.stateOfIncorporation':'soi',
+  'sec.submissions.ein':'ein','sec.submissions.tickers':'tickers',
+  'sec.submissions.ownerOrg':'org','sec.submissions.fiscalYearEnd':'fye',
+  owner_name:'name', owner_cik:'cik',
+};
+
+const CASES = [
+  ['A company officer', {name:'Sibold William John', etype:'other', off:true}],
+  ['A fund holding 10%', {name:'Silver Lake Partners IV, L.P.', etype:'other', ten:true}],
+  ['A person SEC tagged', {name:'MALONE JOHN C', etype:'other', soi:'CO', fye:'1231', dir:true}],
+  ['Surname is a legal word', {name:'Trust Jane', etype:'other', dir:true}],
+  ['An operating company', {name:'BERKSHIRE HATHAWAY INC', etype:'operating', ten:true}],
+  ['Never captured', {name:'SMITH ALEX', present:false}],
+];
+
+function readForm(){
+  return {
+    name:$('name').value, etype:$('etype').value, sic:$('sic').value,
+    soi:$('soi').value, fye:$('fye').value, ein:'', tickers:0, org:'',
+    present:$('present').checked ? 1 : 0, cik:'1518611',
+    dir:$('dir').checked, off:$('off').checked, ten:$('ten').checked,
+  };
+}
+
+function render(){
+  const row = readForm();
+  const rec = record(row, ALIAS);
+  const { verdict, step, trace, automatic } = classify(person, 'C-J', rec);
+
+  const LABEL = {person:'Person', company:'Company', entity_undetermined:'Entity — kind undetermined', deferred:'Deferred'};
+  $('verdict').innerHTML =
+    `${LABEL[verdict]}<span class="auto ${automatic?'y':'n'}">${automatic?'automatic':'steward review'}</span>` +
+    `<small>${trace.find(t=>t.fired)?.note ?? ''}</small>`;
+
+  const rows = trace.map(t => {
+    const tests = (t.results||[]).map(r =>
+      `<code>${r.negate?'not ':''}${r.primitive}</code> <span class="${r.held?'y':'n'}">${r.held?'yes':'no'}</span>`
+    ).join('<br>') || '<code>always</code>';
+    return `<tr class="${t.fired?'fired':''}">
+      <td><strong>${t.step}</strong></td><td>${tests}</td>
+      <td>${t.fired ? '→ '+LABEL[t.verdict] : ''}</td></tr>`;
+  }).join('');
+  $('trace').querySelector('tbody').innerHTML =
+    `<tr><th>step</th><th>tests from the document</th><th>verdict</th></tr>${rows}`;
+
+  const bs = bindings(person, rec, {verdict}).map(b =>
+    `<tr><td>${b.fires?'fires':'quiet'}</td><td><code>${b.rule_id}</code></td>
+     <td>${b.automatic?'<span class="auto y">automatic</span>':'<span class="auto n">steward review</span>'}</td>
+     <td>${b.note??''}</td></tr>`).join('');
+  $('binds').querySelector('tbody').innerHTML =
+    `<tr><th></th><th>rule</th><th></th><th>why</th></tr>${bs}`;
+
+  $('flagnote').innerHTML =
+    `Director ${row.dir?'yes':'no'}, officer ${row.off?'yes':'no'}, 10% owner ${row.ten?'yes':'no'} —
+     none of these changed the verdict above, and none appears in any step of the document.
+     Measured: SEC's <code>other</code> is only 71% person, and a 10%-only row is only 72% entity.
+     The flags are recorded as evidence and used for role facts, never to decide what something is.`;
+}
+
+$('walk').innerHTML = CASES.map(([n],i)=>`<button data-i="${i}">${n}</button>`).join('');
+$('walk').addEventListener('click', e => {
+  const i = e.target.dataset.i; if (i === undefined) return;
+  const [, c] = CASES[i];
+  $('name').value = c.name ?? ''; $('etype').value = c.etype ?? '';
+  $('sic').value = c.sic ?? ''; $('soi').value = c.soi ?? ''; $('fye').value = c.fye ?? '';
+  $('present').checked = c.present !== false;
+  $('dir').checked = !!c.dir; $('off').checked = !!c.off; $('ten').checked = !!c.ten;
+  [...$('walk').children].forEach(b => b.classList.toggle('on', b.dataset.i === i));
+  render();
+});
+document.querySelectorAll('input').forEach(el => el.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>

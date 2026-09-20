@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mastering Policy — prototype</title>
+<style>
+  :root{--bg:#fbfbfa;--fg:#1c1c1a;--mut:#6b6b66;--line:#e2e2dd;--card:#fff;
+        --ok:#1a7f4b;--no:#a33;--wait:#8a6d1f;--acc:#2d5d8a}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#16161a;--fg:#e8e8e4;--mut:#9a9a94;--line:#2e2e34;--card:#1e1e24;
+    --ok:#4cc08a;--no:#e2807f;--wait:#d6b34d;--acc:#7fb0e0}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 16px 72px}
+  h1{font-size:22px;margin:0 0 4px}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:28px 0 10px}
+  p{margin:0 0 12px}
+  .intro{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0 8px}
+  .intro strong{font-weight:650}
+  .warn{font-size:13px;color:var(--wait);margin-top:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px}
+  label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-bottom:4px}
+  input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;
+    background:var(--bg);color:var(--fg);font:inherit}
+  .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .row>div{flex:1 1 200px}
+  .checks{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut)}
+  .checks label{display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:0;font-size:13px;margin:0}
+  button{font:inherit;padding:7px 13px;border:1px solid var(--line);border-radius:7px;
+    background:var(--card);color:var(--fg);cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  .verdict{font-size:26px;font-weight:650;margin:2px 0 2px}
+  .verdict small{font-size:13px;font-weight:400;color:var(--mut);display:block;margin-top:2px}
+  .auto{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 8px;border-radius:20px;margin-left:8px;vertical-align:middle}
+  .auto.y{background:var(--ok);color:#fff}
+  .auto.n{background:var(--line);color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);font-weight:600}
+  tr.fired td{background:color-mix(in srgb,var(--ok) 12%,transparent)}
+  td.y{color:var(--ok)} td.n{color:var(--no)}
+  code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mut)}
+  .walk{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Mastering Policy — prototype</h1>
+
+<div class="intro">
+  <p><strong>The question:</strong> can de-duplication and merge rules live in a
+  configuration document instead of in code — and can an operator read that
+  document and predict what it will do?</p>
+  <p>Below, a reporting owner from a Form 3/4/5 filing is classified by
+  <strong>rule C-J</strong>, read out of
+  <code>policy-person.json</code>. Nothing here is hard-coded: the steps, their
+  order, the 125 legal-form words, the six SEC profile fields and the 99% bar all
+  come from that file. Change the name or a field below and watch which step
+  fires.</p>
+  <p>A verdict is <strong>automatic</strong> only when the document carries a
+  proof for that exact rule version and that exact verdict. C-J has one for
+  <em>person</em> and none for <em>entity</em> — which is why the same rule runs
+  alone for one answer and goes to a <strong>Steward</strong> for the other.</p>
+  <div class="warn">Throwaway prototype for wayfinder ticket 04. Not production code.</div>
+</div>
+
+<h2>Guided cases</h2>
+<div class="walk" id="walk"></div>
+
+<div class="card">
+  <div class="row">
+    <div><label>Owner name (as EDGAR conforms it)</label>
+      <input type="text" id="name" value="Sibold William John"></div>
+    <div><label>SEC entityType</label>
+      <input type="text" id="etype" value="other"></div>
+  </div>
+  <div class="row">
+    <div><label>SIC</label><input type="text" id="sic"></div>
+    <div><label>State of incorporation</label><input type="text" id="soi"></div>
+    <div><label>Fiscal year end</label><input type="text" id="fye"></div>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="present" checked> SEC profile captured</label>
+    <label><input type="checkbox" id="dir"> director</label>
+    <label><input type="checkbox" id="off" checked> officer</label>
+    <label><input type="checkbox" id="ten"> 10% owner</label>
+  </div>
+</div>
+
+<div class="card">
+  <div class="verdict" id="verdict">—<small id="vnote"></small></div>
+</div>
+
+<h2>What the document did, step by step</h2>
+<div class="card"><table id="trace"><tbody></tbody></table></div>
+
+<h2>Binding rules for this record</h2>
+<div class="card"><table id="binds"><tbody></tbody></table></div>
+
+<h2>Flags are evidence, never deciders</h2>
+<div class="card" id="flagnote"></div>
+
+</div>
+
+<script type="module">
+// The interpreter and the documents are inlined by build-demo.mjs so this file
+// opens by double-click with no server. Regenerate with: node build-demo.mjs
+import { classify, bindings, record, validate } from './interpret.mjs';
+const person = await (await fetch('./policy-person.json')).json();
+
+const $ = (id) => document.getElementById(id);
+const ALIAS = {
+  'sec.submissions.owner':'present','sec.submissions.entityType':'etype',
+  'sec.submissions.sic':'sic','sec.submissions.stateOfIncorporation':'soi',
+  'sec.submissions.ein':'ein','sec.submissions.tickers':'tickers',
+  'sec.submissions.ownerOrg':'org','sec.submissions.fiscalYearEnd':'fye',
+  owner_name:'name', owner_cik:'cik',
+};
+
+const CASES = [
+  ['A company officer', {name:'Sibold William John', etype:'other', off:true}],
+  ['A fund holding 10%', {name:'Silver Lake Partners IV, L.P.', etype:'other', ten:true}],
+  ['A person SEC tagged', {name:'MALONE JOHN C', etype:'other', soi:'CO', fye:'1231', dir:true}],
+  ['Surname is a legal word', {name:'Trust Jane', etype:'other', dir:true}],
+  ['An operating company', {name:'BERKSHIRE HATHAWAY INC', etype:'operating', ten:true}],
+  ['Never captured', {name:'SMITH ALEX', present:false}],
+];
+
+function readForm(){
+  return {
+    name:$('name').value, etype:$('etype').value, sic:$('sic').value,
+    soi:$('soi').value, fye:$('fye').value, ein:'', tickers:0, org:'',
+    present:$('present').checked ? 1 : 0, cik:'1518611',
+    dir:$('dir').checked, off:$('off').checked, ten:$('ten').checked,
+  };
+}
+
+function render(){
+  const row = readForm();
+  const rec = record(row, ALIAS);
+  const { verdict, step, trace, automatic } = classify(person, 'C-J', rec);
+
+  const LABEL = {person:'Person', company:'Company', entity_undetermined:'Entity — kind undetermined', deferred:'Deferred'};
+  $('verdict').innerHTML =
+    `${LABEL[verdict]}<span class="auto ${automatic?'y':'n'}">${automatic?'automatic':'steward review'}</span>` +
+    `<small>${trace.find(t=>t.fired)?.note ?? ''}</small>`;
+
+  const rows = trace.map(t => {
+    const tests = (t.results||[]).map(r =>
+      `<code>${r.negate?'not ':''}${r.primitive}</code> <span class="${r.held?'y':'n'}">${r.held?'yes':'no'}</span>`
+    ).join('<br>') || '<code>always</code>';
+    return `<tr class="${t.fired?'fired':''}">
+      <td><strong>${t.step}</strong></td><td>${tests}</td>
+      <td>${t.fired ? '→ '+LABEL[t.verdict] : ''}</td></tr>`;
+  }).join('');
+  $('trace').querySelector('tbody').innerHTML =
+    `<tr><th>step</th><th>tests from the document</th><th>verdict</th></tr>${rows}`;
+
+  const bs = bindings(person, rec, {verdict}).map(b =>
+    `<tr><td>${b.fires?'fires':'quiet'}</td><td><code>${b.rule_id}</code></td>
+     <td>${b.automatic?'<span class="auto y">automatic</span>':'<span class="auto n">steward review</span>'}</td>
+     <td>${b.note??''}</td></tr>`).join('');
+  $('binds').querySelector('tbody').innerHTML =
+    `<tr><th></th><th>rule</th><th></th><th>why</th></tr>${bs}`;
+
+  $('flagnote').innerHTML =
+    `Director ${row.dir?'yes':'no'}, officer ${row.off?'yes':'no'}, 10% owner ${row.ten?'yes':'no'} —
+     none of these changed the verdict above, and none appears in any step of the document.
+     Measured: SEC's <code>other</code> is only 71% person, and a 10%-only row is only 72% entity.
+     The flags are recorded as evidence and used for role facts, never to decide what something is.`;
+}
+
+$('walk').innerHTML = CASES.map(([n],i)=>`<button data-i="${i}">${n}</button>`).join('');
+$('walk').addEventListener('click', e => {
+  const i = e.target.dataset.i; if (i === undefined) return;
+  const [, c] = CASES[i];
+  $('name').value = c.name ?? ''; $('etype').value = c.etype ?? '';
+  $('sic').value = c.sic ?? ''; $('soi').value = c.soi ?? ''; $('fye').value = c.fye ?? '';
+  $('present').checked = c.present !== false;
+  $('dir').checked = !!c.dir; $('off').checked = !!c.off; $('ten').checked = !!c.ten;
+  [...$('walk').children].forEach(b => b.classList.toggle('on', b.dataset.i === i));
+  render();
+});
+document.querySelectorAll('input').forEach(el => el.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>
