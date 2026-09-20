@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "source_family": "fixture",
+  "publication_family": "golden_copy",
+  "publication": "synthetic-2026-09-20",
+  "sequence": 1,
+  "mode": "full",
+  "coverage": "COMPLETE",
+  "replacement_scope": "synthetic-company-fixture",
+  "predecessor": null,
+  "members": [
+    {
+      "member": "level1",
+      "logical_source_key": "fixture/level1",
+      "bytes": 118,
+      "raw_evidence_hash": "6c9f7ae9fe59e4172d01ce58d5c1bf9b46a176bea18c66bfe19641e3879ad5c7",
+      "canonical_source_hash": "6c9f7ae9fe59e4172d01ce58d5c1bf9b46a176bea18c66bfe19641e3879ad5c7",
+      "domain_content_hash": "6c9f7ae9fe59e4172d01ce58d5c1bf9b46a176bea18c66bfe19641e3879ad5c7"
+    },
+    {
+      "member": "relationships",
+      "logical_source_key": "fixture/relationships",
+      "bytes": 97,
+      "raw_evidence_hash": "b40346d5d0b4347ec28c591d25eac577f7ade028c8f0f5060c7cbd4885b9fc93",
+      "canonical_source_hash": "b40346d5d0b4347ec28c591d25eac577f7ade028c8f0f5060c7cbd4885b9fc93",
+      "domain_content_hash": "b40346d5d0b4347ec28c591d25eac577f7ade028c8f0f5060c7cbd4885b9fc93"
+    },
+    {
+      "member": "reporting_exceptions",
+      "logical_source_key": "fixture/reporting_exceptions",
+      "bytes": 60,
+      "raw_evidence_hash": "344bfe4391d335c08b76902bac625069289aac78151e524d9f1d393c3227ecda",
+      "canonical_source_hash": "344bfe4391d335c08b76902bac625069289aac78151e524d9f1d393c3227ecda",
+      "domain_content_hash": "344bfe4391d335c08b76902bac625069289aac78151e524d9f1d393c3227ecda"
+    }
+  ]
+}

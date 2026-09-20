@@ -1,0 +1,32 @@
+{
+  "provider": "synthetic-offline-gleif-shape",
+  "family": "fixture",
+  "publication_families": ["golden_copy"],
+  "schema_version": "1",
+  "record_key": "key",
+  "publication_key": "publication",
+  "effective_time": "explicit publication effective time",
+  "semantics": "patch",
+  "publication_contract": {
+    "version": 1,
+    "format": "clean-mdm-publication-v1",
+    "continuity": "sequence-predecessor-sha256-v1",
+    "publication_family": "golden_copy",
+    "required_members": ["level1", "relationships", "reporting_exceptions"],
+    "replacement_scope": "synthetic-company-fixture",
+    "revision_versions": {
+      "contract_version": "fixture-v1",
+      "parser_version": "fixture-v1",
+      "schema_version": "1",
+      "configuration_version": "fixture-v1"
+    }
+  },
+  "adapter": {
+    "version": "fixture-v1",
+    "kind": "company",
+    "record_key": ["key"],
+    "identifiers": {"lei": "key"},
+    "fields": {"name": "name"},
+    "source_record_provenance": true
+  }
+}

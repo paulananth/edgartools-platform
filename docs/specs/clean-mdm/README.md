@@ -19,7 +19,9 @@ pre-application assessment coverage decision.
 [Candidate assessments](candidate-assessments.md) describes the persistence and
 recovery API, SQL inspection and verification boundary.
 [Family checkpoints](family-checkpoints.md) describes independent source progress
-and the remaining source-verification precondition.
+and the source-verification precondition.
+[Source publications](source-publications.md) specifies the offline inventory and
+continuity verifier and the remaining native Company integration boundary.
 
 ## Read in delivery order
 
