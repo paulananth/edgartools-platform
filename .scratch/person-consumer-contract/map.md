@@ -166,6 +166,23 @@ migration, no edit to any Clean MDM file. Written at
   comparator produces 48 chains of which 42 are false. Findings:
   [research/17](research/17-tier-b-context-key-calibration.md); the four
   consequent decisions: [ticket 20](issues/20-redecide-tier-b-after-calibration.md).
+- [Decide which Person relationships publish and their semantics](issues/05-decide-person-relationships.md)
+  — **a relationship is one mastered fact that every form contributes
+  dated evidence to, not one edge per form** (operator requirement). Two
+  types publish: `EMPLOYED_BY` (director/officer/employee) and `CONTROLS`
+  (ten-percent owner, ADV owner with band, control person) — split by
+  meaning, never by form. Key = (Person, Company, capacity); title is a
+  dated property, not part of the key; each edge holds a **list of dated
+  intervals**, so a departure and a re-appointment are never one span.
+  Intervals close on a stated 8-K departure, on a later Form 3/4/5 that
+  omits a previously-carried capacity flag, or on absence from a later ADV
+  Schedule A/B roster — never on silence. Conflicts resolve stated-over-
+  observed on **event dates**, so reporting lag is not a conflict and an
+  announced departure is never silently reopened. Holdings (needs a
+  Security identity **and** the `owner_index` parser fix) and
+  `MANAGES_FUND` (needs Fund Structure) are **deferred records** that
+  publish from history when their endpoint is accepted; `IS_PERSON_OF` is
+  gone; `IS_INSIDER` survives as a view, not a mastered edge.
 
 ## Operator directives
 
@@ -185,11 +202,13 @@ migration, no edit to any Clean MDM file. Written at
 - **Part 2B supervised persons and IARs** — not in the bulk download at
   all (research 15/16). Whether "complete Person scope" reaches them needs
   a new source, which is a capture decision for after this contract.
-- **Person data in the graph and the Agent Query Surface** — `IS_INSIDER`
-  and `HOLDS` are the heaviest-used graph edges; what the Person consumer
-  owes downstream consumers (graph parity, and the derived read view the
-  `roles[]` summary competes with) sharpens with ticket 05, which must
-  define the edges and the summary together.
+- **Person data in the graph and the Agent Query Surface** — ticket 05
+  settled the mastered shape (two types, `IS_INSIDER` as a view, holdings
+  deferred). What remains is the publication side: how the view and the
+  interval list materialize into `MDM_GRAPH_EDGES`, what graph parity
+  means when an edge has several intervals, and what the Agent Query
+  Surface (ADR 0014, no result-level gate) may read. Sharpens with
+  ticket 07 (cadence) and is settled in the spec, ticket 08.
 - **Reporting-owner entities of undetermined kind** — trusts, LLCs, funds
   holding 10%: retained as deferred records outside the Person scope. Which
   future consumer (Fund Structure, Company) claims them is that consumer's
