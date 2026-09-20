@@ -1,9 +1,9 @@
 # Shared enrichment foundation
 
 Classification: mandatory foundation
-Status: planned
+Status: specified 2026-09-19 (decision-complete for the GoF review items; open items and release gates listed in the spec; not yet verified)
 Depends on: accepted program decisions
-Future spec: `docs/specs/mdm-enrichment/shared-foundation.md`
+Spec: [`docs/specs/mdm-enrichment/shared-foundation.md`](../../../docs/specs/mdm-enrichment/shared-foundation.md)
 
 ## Destination
 

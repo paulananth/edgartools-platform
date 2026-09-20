@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: parent Shared enrichment foundation specification
+Blocked by: none — the [Shared Foundation spec](../../../docs/specs/mdm-enrichment/shared-foundation.md) exists as of 2026-09-19. Its release gates (offline fixture, Clean MDM proposal outcomes) gate *implementation*, not writing this consumer spec.
 
 ## Outcome
 
