@@ -15,6 +15,19 @@ enrichment.
 
 ## Notes
 
+- **Flagged 2026-09-19, not yet propagated below**: legacy MDM is being
+  decommissioned; Clean MDM (`mdm_v2`) is the sole MDM target going forward
+  — locked on the
+  [Shared Enrichment Foundation map](../mdm-enrichment-shared-foundation/map.md),
+  which [ticket 17](issues/17-write-and-verify-gleif-mdm-spec.md) is blocked
+  on. When `spec.md` is finally written, its identity/relationship contract
+  targets Clean MDM's `mdm_v2` schema and Merge Stage
+  (`edgar_warehouse/mdm/clean/`), not legacy `edgar_warehouse/mdm/`. The
+  decisions already resolved below (source authority, cadence, field
+  selection, first delivery slice) are evidence-level and source-side —
+  they don't name a target MDM schema — so they likely survive unchanged,
+  but this hasn't been re-checked ticket-by-ticket.
+
 - Parent program: [MDM Enrichment Program](../mdm-enrichment-program/map.md).
   This map owns the evidence and first Company consumer; later consumers and
   production delivery remain visible and owned by the parent plan.

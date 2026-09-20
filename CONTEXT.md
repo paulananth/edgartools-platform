@@ -318,6 +318,34 @@ _Avoid_: Generic placeholder entity, coercion into Company, dropped unsupported 
 An immutable, evidence-and-run-bound human resolution of an identity link, field conflict, relationship endpoint, or identifier-mapping conflict. It may authorize a source projection but never silently merges MDM entities.
 _Avoid_: Log-only review, mutable decision row, review acceptance as entity merge
 
+**Fetch Planner**:
+The acquisition actor that decides which source files to get and records that as a Change Ledger Fetch Decision; it never downloads or verifies bytes itself.
+_Avoid_: Worker that plans its own work, fetch without a recorded decision
+
+**Source Capturer**:
+The acquisition actor that downloads one source file, verifies its hash, and records the capture as Bronze Persist evidence; it never decides what to fetch or what the bytes mean.
+_Avoid_: Capture as processing, unverified download recorded as evidence
+
+**Revision Claimer**:
+The acquisition actor that marks one verified Logical Source Revision as being processed so it is processed exactly once; it seals what the revision requires without producing outputs.
+_Avoid_: Processing without a claim, two claimers on one revision
+
+**Publication Verifier**:
+The file-grained acquisition actor that records whether a Source Publication's declared members are all captured, verified, and produced, or failed; a consumer may start only after it records complete. It knows nothing about entities.
+_Avoid_: Pre-merge candidate review, entity matching, partial publication recorded as complete
+
+**Ledger Repairer**:
+The human-driven acquisition actor for quarantine, exclusion, and superseded-artifact deletion evidence in the Change Ledger; the physical deletion is an infrastructure permission, not a ledger role.
+_Avoid_: Routine pipeline writes, silent repair without evidence
+
+**MDM Committer**:
+The single path that writes MDM master tables: one atomic bounded batch holding decisions, projection, MDM Commit Evidence, Consumer Checkpoint, and publication intents, or nothing. Applications hold no direct master-table write.
+_Avoid_: Direct table write, partial batch, nested commit
+
+**Steward**:
+The person or deterministic rule recorded as the actor of an Enrichment Stewardship Decision; an attribute of the decision, not a database role.
+_Avoid_: Separate database role, decision without a named actor
+
 **Adjudicated Seed Link**:
 A previously reviewed external-identity link imported with its complete decision evidence and revalidated against the current source baseline and uniqueness rules before publication.
 _Avoid_: Trusted static mapping, population-wide auto-link rule, unvalidated historical approval
