@@ -1,0 +1,645 @@
+{
+ "_throwaway": "research 07 measurement; inputs and their SHA-256 below",
+ "inputs": {
+  "primary": {
+   "path": "../../person-consumer-contract/research/18-owners.jsonl",
+   "sha256": "8181e1bf6e17b1476d9e080a96c69e2093fb708849c391e0961703abda19ff1c",
+   "rows": 5743
+  },
+  "legacy": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/r18/legacy_rows.jsonl",
+   "sha256": "c00b035171e8f387bc7148960fc65d1673e9a1a96c652cc24f515b1f5989fec1",
+   "rows": 101137
+  },
+  "legacy_submissions_join": {
+   "joined_rows": 79598,
+   "rows_without_submissions": 21539,
+   "ciks_looked_up": 19735,
+   "ciks_with_submissions": 14128
+  },
+  "union": {
+   "rows": 104970,
+   "duplicate_accession_owner_index_dropped": 1910
+  }
+ },
+ "cj_verdicts": {
+  "primary": {
+   "person": 5145,
+   "entity": 530,
+   "deferred": 68
+  },
+  "legacy": {
+   "person": 69515,
+   "deferred": 22686,
+   "entity": 8936
+  },
+  "union": {
+   "person": 72981,
+   "deferred": 22735,
+   "entity": 9254
+  }
+ },
+ "corpora": {
+  "primary": {
+   "all_rows": {
+    "rows": 5743,
+    "distinct_owner_ciks": 4831,
+    "forward": {
+     "names_per_cik_distribution": {
+      "1": 4831
+     },
+     "ciks_with_multiple_names": 0,
+     "rows_under_multi_name_ciks": 0,
+     "rows_carrying_a_non_majority_name": 0,
+     "auto_class_of_multi_name_ciks": {},
+     "candidate_different_person_ciks": 0,
+     "candidate_different_person_rows_non_majority": 0,
+     "rate_any_second_name_per_10k_ciks": {
+      "k": 0,
+      "n": 4831,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       7.945
+      ]
+     },
+     "rate_any_second_name_per_10k_rows": {
+      "k": 0,
+      "n": 5743,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       6.684
+      ]
+     },
+     "rate_candidate_violation_per_10k_ciks_UNLABELLED": {
+      "k": 0,
+      "n": 4831,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       7.945
+      ]
+     },
+     "rate_candidate_violation_per_10k_rows_UNLABELLED": {
+      "k": 0,
+      "n": 5743,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       6.684
+      ]
+     }
+    },
+    "reverse": {
+     "ciks_per_name_distribution": {
+      "1": 4829,
+      "2": 1
+     },
+     "ciks_per_issuer_name_distribution": {
+      "1": 5013
+     },
+     "distinct_names": 4830,
+     "names_with_multiple_ciks": 1,
+     "rows_under_multi_cik_names": 2,
+     "issuer_name_pairs": 5013,
+     "issuer_name_pairs_with_multiple_ciks": 0,
+     "rows_under_multi_cik_issuer_name_pairs": 0,
+     "rate_name_collision_per_10k_names": {
+      "k": 1,
+      "n": 4830,
+      "rate_per_10k": 2.07,
+      "wilson95_per_10k": [
+       0.365,
+       11.719
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_pairs": {
+      "k": 0,
+      "n": 5013,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       7.657
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_rows": {
+      "k": 0,
+      "n": 5743,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       6.684
+      ]
+     }
+    }
+   },
+   "cj_person_rows": {
+    "rows": 5145,
+    "distinct_owner_ciks": 4426,
+    "forward": {
+     "names_per_cik_distribution": {
+      "1": 4426
+     },
+     "ciks_with_multiple_names": 0,
+     "rows_under_multi_name_ciks": 0,
+     "rows_carrying_a_non_majority_name": 0,
+     "auto_class_of_multi_name_ciks": {},
+     "candidate_different_person_ciks": 0,
+     "candidate_different_person_rows_non_majority": 0,
+     "rate_any_second_name_per_10k_ciks": {
+      "k": 0,
+      "n": 4426,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       8.672
+      ]
+     },
+     "rate_any_second_name_per_10k_rows": {
+      "k": 0,
+      "n": 5145,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       7.461
+      ]
+     },
+     "rate_candidate_violation_per_10k_ciks_UNLABELLED": {
+      "k": 0,
+      "n": 4426,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       8.672
+      ]
+     },
+     "rate_candidate_violation_per_10k_rows_UNLABELLED": {
+      "k": 0,
+      "n": 5145,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       7.461
+      ]
+     }
+    },
+    "reverse": {
+     "ciks_per_name_distribution": {
+      "1": 4424,
+      "2": 1
+     },
+     "ciks_per_issuer_name_distribution": {
+      "1": 4576
+     },
+     "distinct_names": 4425,
+     "names_with_multiple_ciks": 1,
+     "rows_under_multi_cik_names": 2,
+     "issuer_name_pairs": 4576,
+     "issuer_name_pairs_with_multiple_ciks": 0,
+     "rows_under_multi_cik_issuer_name_pairs": 0,
+     "rate_name_collision_per_10k_names": {
+      "k": 1,
+      "n": 4425,
+      "rate_per_10k": 2.26,
+      "wilson95_per_10k": [
+       0.399,
+       12.791
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_pairs": {
+      "k": 0,
+      "n": 4576,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       8.388
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_rows": {
+      "k": 0,
+      "n": 5145,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       7.461
+      ]
+     }
+    }
+   }
+  },
+  "legacy": {
+   "all_rows": {
+    "rows": 101137,
+    "distinct_owner_ciks": 19735,
+    "forward": {
+     "names_per_cik_distribution": {
+      "1": 19694,
+      "2": 41
+     },
+     "ciks_with_multiple_names": 41,
+     "rows_under_multi_name_ciks": 423,
+     "rows_carrying_a_non_majority_name": 117,
+     "auto_class_of_multi_name_ciks": {
+      "variant_subset": 24,
+      "one_shared_other_token": 7,
+      "variant_reorder_or_middle": 7,
+      "no_overlap": 1,
+      "suffix_differs": 1,
+      "one_shared_first_token": 1
+     },
+     "candidate_different_person_ciks": 2,
+     "candidate_different_person_rows_non_majority": 8,
+     "rate_any_second_name_per_10k_ciks": {
+      "k": 41,
+      "n": 19735,
+      "rate_per_10k": 20.775,
+      "wilson95_per_10k": [
+       15.319,
+       28.17
+      ]
+     },
+     "rate_any_second_name_per_10k_rows": {
+      "k": 117,
+      "n": 101137,
+      "rate_per_10k": 11.568,
+      "wilson95_per_10k": [
+       9.654,
+       13.861
+      ]
+     },
+     "rate_candidate_violation_per_10k_ciks_UNLABELLED": {
+      "k": 2,
+      "n": 19735,
+      "rate_per_10k": 1.013,
+      "wilson95_per_10k": [
+       0.278,
+       3.695
+      ]
+     },
+     "rate_candidate_violation_per_10k_rows_UNLABELLED": {
+      "k": 8,
+      "n": 101137,
+      "rate_per_10k": 0.791,
+      "wilson95_per_10k": [
+       0.401,
+       1.561
+      ]
+     }
+    },
+    "reverse": {
+     "ciks_per_name_distribution": {
+      "1": 19762,
+      "2": 7
+     },
+     "ciks_per_issuer_name_distribution": {
+      "1": 22674,
+      "2": 2
+     },
+     "distinct_names": 19769,
+     "names_with_multiple_ciks": 7,
+     "rows_under_multi_cik_names": 65,
+     "issuer_name_pairs": 22676,
+     "issuer_name_pairs_with_multiple_ciks": 2,
+     "rows_under_multi_cik_issuer_name_pairs": 7,
+     "rate_name_collision_per_10k_names": {
+      "k": 7,
+      "n": 19769,
+      "rate_per_10k": 3.541,
+      "wilson95_per_10k": [
+       1.715,
+       7.308
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_pairs": {
+      "k": 2,
+      "n": 22676,
+      "rate_per_10k": 0.882,
+      "wilson95_per_10k": [
+       0.242,
+       3.216
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_rows": {
+      "k": 7,
+      "n": 101137,
+      "rate_per_10k": 0.692,
+      "wilson95_per_10k": [
+       0.335,
+       1.429
+      ]
+     }
+    }
+   },
+   "cj_person_rows": {
+    "rows": 69515,
+    "distinct_owner_ciks": 12658,
+    "forward": {
+     "names_per_cik_distribution": {
+      "1": 12633,
+      "2": 25
+     },
+     "ciks_with_multiple_names": 25,
+     "rows_under_multi_name_ciks": 256,
+     "rows_carrying_a_non_majority_name": 74,
+     "auto_class_of_multi_name_ciks": {
+      "variant_subset": 15,
+      "one_shared_other_token": 5,
+      "variant_reorder_or_middle": 3,
+      "suffix_differs": 1,
+      "one_shared_first_token": 1
+     },
+     "candidate_different_person_ciks": 1,
+     "candidate_different_person_rows_non_majority": 6,
+     "rate_any_second_name_per_10k_ciks": {
+      "k": 25,
+      "n": 12658,
+      "rate_per_10k": 19.75,
+      "wilson95_per_10k": [
+       13.382,
+       29.141
+      ]
+     },
+     "rate_any_second_name_per_10k_rows": {
+      "k": 74,
+      "n": 69515,
+      "rate_per_10k": 10.645,
+      "wilson95_per_10k": [
+       8.481,
+       13.361
+      ]
+     },
+     "rate_candidate_violation_per_10k_ciks_UNLABELLED": {
+      "k": 1,
+      "n": 12658,
+      "rate_per_10k": 0.79,
+      "wilson95_per_10k": [
+       0.139,
+       4.474
+      ]
+     },
+     "rate_candidate_violation_per_10k_rows_UNLABELLED": {
+      "k": 6,
+      "n": 69515,
+      "rate_per_10k": 0.863,
+      "wilson95_per_10k": [
+       0.396,
+       1.883
+      ]
+     }
+    },
+    "reverse": {
+     "ciks_per_name_distribution": {
+      "1": 12677,
+      "2": 3
+     },
+     "ciks_per_issuer_name_distribution": {
+      "1": 14513
+     },
+     "distinct_names": 12680,
+     "names_with_multiple_ciks": 3,
+     "rows_under_multi_cik_names": 39,
+     "issuer_name_pairs": 14513,
+     "issuer_name_pairs_with_multiple_ciks": 0,
+     "rows_under_multi_cik_issuer_name_pairs": 0,
+     "rate_name_collision_per_10k_names": {
+      "k": 3,
+      "n": 12680,
+      "rate_per_10k": 2.366,
+      "wilson95_per_10k": [
+       0.805,
+       6.954
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_pairs": {
+      "k": 0,
+      "n": 14513,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       2.646
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_rows": {
+      "k": 0,
+      "n": 69515,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       0.553
+      ]
+     }
+    }
+   }
+  },
+  "union": {
+   "all_rows": {
+    "rows": 104970,
+    "distinct_owner_ciks": 21727,
+    "forward": {
+     "names_per_cik_distribution": {
+      "1": 21685,
+      "2": 42
+     },
+     "ciks_with_multiple_names": 42,
+     "rows_under_multi_name_ciks": 437,
+     "rows_carrying_a_non_majority_name": 119,
+     "auto_class_of_multi_name_ciks": {
+      "variant_subset": 25,
+      "one_shared_other_token": 7,
+      "variant_reorder_or_middle": 7,
+      "no_overlap": 1,
+      "suffix_differs": 1,
+      "one_shared_first_token": 1
+     },
+     "candidate_different_person_ciks": 2,
+     "candidate_different_person_rows_non_majority": 8,
+     "rate_any_second_name_per_10k_ciks": {
+      "k": 42,
+      "n": 21727,
+      "rate_per_10k": 19.331,
+      "wilson95_per_10k": [
+       14.305,
+       26.117
+      ]
+     },
+     "rate_any_second_name_per_10k_rows": {
+      "k": 119,
+      "n": 104970,
+      "rate_per_10k": 11.337,
+      "wilson95_per_10k": [
+       9.475,
+       13.563
+      ]
+     },
+     "rate_candidate_violation_per_10k_ciks_UNLABELLED": {
+      "k": 2,
+      "n": 21727,
+      "rate_per_10k": 0.921,
+      "wilson95_per_10k": [
+       0.252,
+       3.356
+      ]
+     },
+     "rate_candidate_violation_per_10k_rows_UNLABELLED": {
+      "k": 8,
+      "n": 104970,
+      "rate_per_10k": 0.762,
+      "wilson95_per_10k": [
+       0.386,
+       1.504
+      ]
+     }
+    },
+    "reverse": {
+     "ciks_per_name_distribution": {
+      "1": 21749,
+      "2": 10
+     },
+     "ciks_per_issuer_name_distribution": {
+      "1": 24942,
+      "2": 2
+     },
+     "distinct_names": 21759,
+     "names_with_multiple_ciks": 10,
+     "rows_under_multi_cik_names": 83,
+     "issuer_name_pairs": 24944,
+     "issuer_name_pairs_with_multiple_ciks": 2,
+     "rows_under_multi_cik_issuer_name_pairs": 7,
+     "rate_name_collision_per_10k_names": {
+      "k": 10,
+      "n": 21759,
+      "rate_per_10k": 4.596,
+      "wilson95_per_10k": [
+       2.497,
+       8.459
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_pairs": {
+      "k": 2,
+      "n": 24944,
+      "rate_per_10k": 0.802,
+      "wilson95_per_10k": [
+       0.22,
+       2.923
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_rows": {
+      "k": 7,
+      "n": 104970,
+      "rate_per_10k": 0.667,
+      "wilson95_per_10k": [
+       0.323,
+       1.377
+      ]
+     }
+    }
+   },
+   "cj_person_rows": {
+    "rows": 72981,
+    "distinct_owner_ciks": 14566,
+    "forward": {
+     "names_per_cik_distribution": {
+      "1": 14540,
+      "2": 26
+     },
+     "ciks_with_multiple_names": 26,
+     "rows_under_multi_name_ciks": 269,
+     "rows_carrying_a_non_majority_name": 75,
+     "auto_class_of_multi_name_ciks": {
+      "variant_subset": 16,
+      "one_shared_other_token": 5,
+      "variant_reorder_or_middle": 3,
+      "suffix_differs": 1,
+      "one_shared_first_token": 1
+     },
+     "candidate_different_person_ciks": 1,
+     "candidate_different_person_rows_non_majority": 6,
+     "rate_any_second_name_per_10k_ciks": {
+      "k": 26,
+      "n": 14566,
+      "rate_per_10k": 17.85,
+      "wilson95_per_10k": [
+       12.185,
+       26.142
+      ]
+     },
+     "rate_any_second_name_per_10k_rows": {
+      "k": 75,
+      "n": 72981,
+      "rate_per_10k": 10.277,
+      "wilson95_per_10k": [
+       8.2,
+       12.879
+      ]
+     },
+     "rate_candidate_violation_per_10k_ciks_UNLABELLED": {
+      "k": 1,
+      "n": 14566,
+      "rate_per_10k": 0.687,
+      "wilson95_per_10k": [
+       0.121,
+       3.888
+      ]
+     },
+     "rate_candidate_violation_per_10k_rows_UNLABELLED": {
+      "k": 6,
+      "n": 72981,
+      "rate_per_10k": 0.822,
+      "wilson95_per_10k": [
+       0.377,
+       1.794
+      ]
+     }
+    },
+    "reverse": {
+     "ciks_per_name_distribution": {
+      "1": 14580,
+      "2": 6
+     },
+     "ciks_per_issuer_name_distribution": {
+      "1": 16677
+     },
+     "distinct_names": 14586,
+     "names_with_multiple_ciks": 6,
+     "rows_under_multi_cik_names": 57,
+     "issuer_name_pairs": 16677,
+     "issuer_name_pairs_with_multiple_ciks": 0,
+     "rows_under_multi_cik_issuer_name_pairs": 0,
+     "rate_name_collision_per_10k_names": {
+      "k": 6,
+      "n": 14586,
+      "rate_per_10k": 4.114,
+      "wilson95_per_10k": [
+       1.885,
+       8.972
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_pairs": {
+      "k": 0,
+      "n": 16677,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       2.303
+      ]
+     },
+     "rate_issuer_name_collision_per_10k_rows": {
+      "k": 0,
+      "n": 72981,
+      "rate_per_10k": 0.0,
+      "wilson95_per_10k": [
+       0.0,
+       0.526
+      ]
+     }
+    }
+   }
+  }
+ },
+ "union_corpus_file": {
+  "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/r07/07-union-corpus.jsonl",
+  "sha256": "9daf08fb01011dc6f0ac8261086034d63ebd81a8c1649a220034b44b45b45e4d",
+  "order": "(accession, owner_index), the key stage_sample uses (18-classify.py:435)"
+ }
+}
