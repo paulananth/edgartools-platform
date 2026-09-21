@@ -216,6 +216,19 @@ same-issuer homonym CIK pairs — 1 of 11 becomes 0 of 11), `V` wrongly read as
 a generational suffix (discarding 241 middle initials), and `DATE`/`BANK`
 missing from the eligibility vocabulary. None touches the key.
 
+The repairs exist: `edgar_warehouse/domain/policy/person_name.py`,
+**`person-name@v2`** (`parse_conformed` for EDGAR `LAST FIRST MIDDLE`,
+`parse_western` for free text, `is_person_name_candidate` for eligibility,
+`PersonName.key_mi` and `.generational` for ticket 20's key and veto). Tier B
+activation must use it; research 17's normalizer (`v1`) is superseded (kept in
+`research/17-common.py` for replay of research 21). Re-scored
+on research 21's census (`research/25-rescore.json`): false merges against the
+11 homonym CIK pairs **1 → 0**, ineligible rows reaching the key 2 → 0,
+precision unchanged (1.0 optimistic, 0.99848 conservative); n 659 → 656, so
+LCB97.5 0.99146 → **0.99142** conservative, still clear of 99%; recall
+0.7045 → 0.7013, three `same` pairs lost to a now-kept middle initial `V` on
+one side (2) and a surname-only row made ineligible (1).
+
 That confirms ticket 20's suffix veto empirically: against those same 11
 homonym pairs, plain `mi` merges 7, **the veto prevents 6**, and the fixed key
 merges 1.
@@ -248,7 +261,7 @@ From [ticket 04](../../../.scratch/person-consumer-contract/issues/04-decide-per
 | Field | Content | Rule |
 | --- | --- | --- |
 | `legal_name` | survived verbatim | `select_by_source_rank`: SEC-registered name for an `owner_cik` > ADV `Full Legal Name` > 8-K `person_name` > proxy `exec_name` |
-| `display_name` | "First Middle Last" | derived from `legal_name` by a versioned reorder rule (`name_shape@v`). EDGAR conforms names to `Last First Middle`; the rule lives once in the Mastering Policy, never in a reader |
+| `display_name` | "First Middle Last" | derived from `legal_name` by a versioned reorder rule (`name_shape@v`). EDGAR conforms names to `Last First Middle`; the rule lives once in the Mastering Policy, never in a reader — the parse is `person-name@v2` (`edgar_warehouse/domain/policy/person_name.py`); the reorder must reuse it, not re-parse |
 | `name_variants[]` | every name seen: value, source, last observed | retained **on the projection** so any seen name is searchable without a join |
 | identifiers | `owner_cik`s, `OwnerID`s — each with source, validity | cross-references; a Person holds any number |
 | kind evidence | rule id, version, step (C-J) | separate from source category and asserted legal form |
@@ -400,7 +413,7 @@ directorship on the daily path.
 | --- | --- | --- |
 | 1 | every reporting owner and every ADV Schedule A/B row binding at **Tier A**, plus rule C-J's automatic person arm | none — deterministic; ~100% of both id-bearing sources; empty review queue |
 | 2 | rule C-J's **entity** arm | its post-hoc guards re-measured in production |
-| 3 | 8-K Item 5.02 (4,193 eligible rows) | **cleared** by research 21 (LCB97.5 0.99146 conservative, n = 659); ships with the [ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs |
+| 3 | 8-K Item 5.02 (4,147 eligible rows under `person-name@v2`; 4,193 under v1) | **cleared** by research 21 (n = 659, LCB97.5 0.99146 conservative); under `person-name@v2`, n = 656, LCB97.5 **0.99142** ([ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md)), which ships in the same release |
 | 4 | DEF 14A (6,091 eligible rows) | ticket 10 lands, re-export, own re-measurement |
 
 Waves are gated on evidence, never time-boxed. Company bounded its first slice
@@ -577,9 +590,10 @@ All required:
    guards are re-measured in production** before entity decisions are automatic.
 2. **Zero** automatic Tier B decisions on any population that has not itself
    cleared ≥ 99% at a one-sided 97.5% lower bound. 8-K is cleared
-   (research 21, n = 659); DEF 14A and every id-bearing source are not, and
+   (research 21, n = 659; re-scored under `person-name@v2`, n = 656,
+   LCB97.5 0.99142 conservative); DEF 14A and every id-bearing source are not, and
    bind at Tier C or through the identifier veto. Tier B activation requires
-   the ticket 25 normalizer repairs in the same release.
+   the ticket 25 normalizer (`person-name@v2`) in the same release.
 3. **Zero** name-only automatic binds; **zero** duplicate active
    cross-reference bindings.
 4. Complete provenance on every projected value, role row and edge.
@@ -609,7 +623,7 @@ Plus the foundation's own gates, inherited.
 | Ticket 10 (proxy name parser) | blocks DEF 14A entirely |
 | Ticket 19 (ownership parser evidence, incl. the joint-filing marker `reporting_owner_count`) | **done** — classification evidence from bronze with zero SEC requests; holdings still wait on Security identity |
 | Ticket 21 (8-K labelling to n ≥ 381) | **done** — research 21 cleared 8-K at n = 659 |
-| [Ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs | ships in the same release as Tier B activation |
+| [Ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs | **done** — `person-name@v2` (`edgar_warehouse/domain/policy/person_name.py`); Tier B activation must use it |
 | Security identity + consumer | blocks holdings |
 | Fund Structure identity + consumer | blocks `MANAGES_FUND` |
 
@@ -658,5 +672,5 @@ Every decision above traces to one resolved ticket on the
 | No legacy crosswalk | 06 | verified holders, 2026-09-20 |
 | Cadence, backfill waves, replay, id survival | 07 | — |
 | Tier B calibration | 17 | research 17 — 921 labelled pairs |
-| Tier B qualified for 8-K | 21 | research 21 — 938-pair census, n = 659, LCB97.5 0.99146 conservative |
+| Tier B qualified for 8-K | 21, 25 | research 21 — 938-pair census, n = 659, LCB97.5 0.99146 conservative; v2 re-score n = 656, 0.99142 (ticket 25) |
 | Tier B redefinition: identifier veto, 97.5%, the key | 20 | research 17 |

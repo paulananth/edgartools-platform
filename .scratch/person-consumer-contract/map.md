@@ -20,8 +20,6 @@ handed over in
 What remains on this map is not decisions:
 [ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md) is resolved — Tier B
 is qualified for 8-K — leaving code-owner tasks only:
-[25](issues/25-fix-person-name-normalizer-defects.md) (normalizer repairs that
-ship with activation),
 [10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser —
 **fixed 2026-09-20**, 48.6% → 100% plausible names on real filings; open until
 a full local re-parse of bronze is measured — the production re-export is
@@ -310,6 +308,16 @@ distinct-CIK count borrowed from a different study. Detail on
   real `owner_index` — transactions carry `reporting_owner_count`, gold
   stops attributing joint filings to owner 1 (486 rows, 4.43%), and
   consumer.md's holdings gate now reads "single-owner filings only".
+
+- [Fix three name-normalizer defects before Tier B activates](issues/25-fix-person-name-normalizer-defects.md)
+  — the repaired normalizer is now production code Codex's Person consumer
+  imports: `edgar_warehouse/domain/policy/person_name.py`, `person-name@v2`
+  (particles join the surname, `V` is a middle initial, `DATE`/`BANK`
+  ineligible; `DAS`/`DO`/`DU`/`LE` kept as standalone surnames; 52 tests).
+  Research 21's census re-scored: homonym false merges **1 of 11 → 0 of 11**,
+  precision unchanged, LCB97.5 0.99146 → 0.99142 on n 656 — three `same`
+  pairs v1 matched in breach of ticket 20's own key. No Form 3/4/5 record
+  loses its shape.
 
 ## Operator directives
 
