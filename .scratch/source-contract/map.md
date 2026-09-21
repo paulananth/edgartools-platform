@@ -153,6 +153,9 @@ no edit to any Clean MDM file.
   literally; check 4 holds only in part (libpq and DNS bypass a Python
   guard, so no-network must live below Python). Main finding for Codex: the adapter needs a kind per row, but
   C-J is a policy classification. [prototype/](prototype/README.md).
+- [Write the Source Contract spec and the Codex handover](issues/08-write-the-source-contract-spec-and-codex-handover.md)
+  — **spec written and handover sent as one note** (GLEIF first; 5 blocking
+  requests). [spec](../../docs/specs/source-contract/spec.md).
 
 ## Not yet specified
 
