@@ -294,6 +294,15 @@ distinct-CIK count borrowed from a different study. Detail on
   `sec_company_ticker` and `sec_filing_text`. Deploy needs `--full-refresh`
   on both tables, silver first; the re-export sequence is on ticket 10.
 
+- [Give per-filing fundamentals a force/reprocess path](issues/24-reprocess-already-marked-fundamentals.md)
+  — `bootstrap-fundamentals --force` now re-parses already-marked
+  accessions for per-filing **and** 13F (one shared
+  `_drop_already_processed` helper replacing two copied blocks), so ticket
+  10's `PARSER_VERSION="2"` is reachable. Skip-by-default unchanged.
+  Version-awareness on the marker table weighed and declined: a landing-zone
+  schema migration for a table with no live migration path. 128
+  fundamentals tests pass, 3 new.
+
 ## Operator directives
 
 - **2026-09-20: every source resolves every entity it carries through

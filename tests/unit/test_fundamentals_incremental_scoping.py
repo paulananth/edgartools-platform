@@ -95,6 +95,76 @@ class PerFilingSkipsAlreadyProcessedTests(unittest.TestCase):
         self.assertEqual(metrics["filings_already_processed"], 1)
         self.assertEqual(metrics["filings_parsed"], 0)
 
+    def test_force_reprocesses_an_already_marked_accession(self) -> None:
+        """Ticket 24 (Person Consumer Contract): the marker table carries no
+        parser_version, so ``force`` is the only way a corrected parser reaches
+        an accession it already wrote. With force, the marker is never even
+        consulted, the filing is parsed, and it is re-marked."""
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_fundamentals_per_filing,
+        )
+
+        source = MagicMock()
+        source.fetch.side_effect = [
+            [{"accession_number": "already-done", "cik": 1, "form": "8-K",
+              "filing_date": "2025-06-01", "items": "2.02"}],
+            # No marker lookup under force: the next fetches are the
+            # attachment and raw-object reads for the filing itself.
+            [{"raw_object_id": "raw-1", "is_primary": True}],
+            [{"raw_object_id": "raw-1", "storage_path": "s3://bucket/doc.htm"}],
+        ]
+        db = MagicMock()
+        db.merge_earnings_releases.return_value = 1
+        db.merge_executive_records.return_value = 0
+        db.merge_guidance_facts.return_value = 0
+        db.merge_guidance_fact_rejects.return_value = 0
+
+        with patch(
+            "edgar_warehouse.parsers.get_parser",
+            return_value=lambda *a, **kw: {
+                "sec_earnings_release": [{"x": 1}], "sec_executive_record": [],
+            },
+        ), patch(
+            "edgar_warehouse.infrastructure.object_storage.read_bytes",
+            return_value=b"<html>irrelevant</html>",
+        ):
+            metrics = run_bootstrap_fundamentals_per_filing(
+                cik_list=[1], source=source, db=db, sync_run_id="run-1", force=True,
+            )
+
+        marker_queries = [
+            call for call in source.fetch.call_args_list
+            if "sec_fundamentals_processed_accession" in str(call.args[0])
+        ]
+        self.assertEqual(marker_queries, [], "force must not consult the marker table")
+        self.assertEqual(metrics["filings_forced"], 1)
+        self.assertEqual(metrics["filings_already_processed"], 0)
+        self.assertEqual(metrics["filings_parsed"], 1)
+        db.mark_fundamentals_accession_processed.assert_called_once_with(
+            mode="per-filing", accession_number="already-done",
+        )
+
+    def test_force_defaults_off_so_skip_behaviour_is_unchanged(self) -> None:
+        """The default path is byte-for-byte the pre-ticket-24 behaviour."""
+        from edgar_warehouse.application.workflows.fundamentals_ingest import (
+            run_bootstrap_fundamentals_per_filing,
+        )
+
+        source = MagicMock()
+        source.fetch.side_effect = [
+            [{"accession_number": "already-done", "cik": 1, "form": "8-K",
+              "filing_date": "2025-06-01", "items": "2.02"}],
+            [{"accession_number": "already-done"}],
+        ]
+        db = MagicMock()
+        with patch("edgar_warehouse.parsers.get_parser") as mock_get_parser:
+            metrics = run_bootstrap_fundamentals_per_filing(
+                cik_list=[1], source=source, db=db, sync_run_id="run-1",
+            )
+        mock_get_parser.assert_not_called()
+        self.assertEqual(metrics["filings_forced"], 0)
+        self.assertEqual(metrics["filings_already_processed"], 1)
+
     def test_new_accession_in_same_cik_window_still_processed(self) -> None:
         from edgar_warehouse.application.workflows.fundamentals_ingest import (
             run_bootstrap_fundamentals_per_filing,
@@ -159,6 +229,33 @@ class ThirteenfSkipsAlreadyProcessedTests(unittest.TestCase):
         db.mark_fundamentals_accession_processed.assert_not_called()
         self.assertEqual(metrics["filings_already_processed"], 1)
         self.assertEqual(metrics["filings_parsed"], 0)
+
+    def test_force_skips_the_marker_lookup_for_thirteenf_too(self) -> None:
+        """Ticket 24: one --force flag, one meaning across per-filing and 13F."""
+        from edgar_warehouse.application.workflows.fundamentals_ingest import run_bootstrap_thirteenf
+
+        source = MagicMock()
+        # Under force the marker table is never queried; the filing then fails
+        # its attachment lookup (empty result), which is enough to prove the
+        # bypass without simulating a whole 13F parse.
+        source.fetch.side_effect = [
+            [{"accession_number": "already-done", "cik": 9, "report_date": "2024-03-31",
+              "filing_date": "2024-05-01", "form": "13F-HR"}],
+            [],
+        ]
+        db = MagicMock()
+
+        metrics = run_bootstrap_thirteenf(
+            cik_list=[9], source=source, db=db, sync_run_id="run-1", force=True,
+        )
+
+        marker_queries = [
+            call for call in source.fetch.call_args_list
+            if "sec_fundamentals_processed_accession" in str(call.args[0])
+        ]
+        self.assertEqual(marker_queries, [])
+        self.assertEqual(metrics["filings_forced"], 1)
+        self.assertEqual(metrics["filings_already_processed"], 0)
 
     def test_new_accession_in_same_cik_window_still_processed(self) -> None:
         from edgar_warehouse.application.workflows.fundamentals_ingest import run_bootstrap_thirteenf
