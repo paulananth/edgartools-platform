@@ -1,8 +1,9 @@
 # Write the Person consumer specification
 
 Type: task
-Status: open
-Blocked by: 02-decide-what-binds-a-person.md, 03-decide-reporting-owner-classification.md, 04-decide-person-fields-and-privacy.md, 05-decide-person-relationships.md, 06-decide-legacy-person-id-crosswalk.md, 07-decide-cadence-and-backfill.md
+Status: open — **unblocked 2026-09-20**
+Blocked by: none. All six decision tickets are resolved: 02, 03, 04, 05,
+06, 07 — plus 20, which supersedes ticket 02 §4's Tier B row.
 
 ## Question
 
@@ -14,3 +15,17 @@ contract headings as the Company consumer spec, from this map's resolved
 tickets; cite Clean MDM's tables and design rows, never restate them; name
 dependencies and release gates; then a handover note to Codex under
 `.scratch/handover/`.
+
+Carry these forward explicitly (they cross several tickets):
+
+- The **operator principle** — every source resolves every entity it
+  carries through MDM; no local or derived identity key anywhere
+  (ticket 20) — with its named consequence for gold's owner key.
+- The **pre-merge candidate table is a requirement**, not a proposal,
+  because replay re-enters there (ticket 07).
+- Tier B does **not** activate at release: 8-K is Tier C until ticket 21
+  clears 97.5%; DEF 14A waits on ticket 10 (tickets 20, 07).
+- Open items to state as Open, not to decide: whether legacy steward
+  decisions are still reachable (ticket 06); the graph publication side —
+  how an interval list and the `IS_INSIDER` view materialize into
+  `MDM_GRAPH_EDGES`, and what the Agent Query Surface may read.
