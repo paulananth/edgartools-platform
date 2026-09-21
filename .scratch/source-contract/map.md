@@ -146,6 +146,12 @@ no edit to any Clean MDM file.
   keys; a pinned batch gate with zero-by-default limits and a `why:` for
   each exception; `file:line`-first failures with exit codes and `--json`
   as the primary, agent-facing output.**
+- [Prototype the GLEIF and Form 3/4/5 Source Contracts](issues/07-prototype-gleif-and-form-345-source-contracts.md)
+  — **the language holds**: Form 3/4/5 reproduces `ownership.py` on 5,356 /
+  5,356 artifacts (3.3% custom); GLEIF is 93 lines and 0% custom, and proves
+  through a real Merge Stage case; eight acceptance checks exercised
+  literally. Main finding for Codex: the adapter needs a kind per row, but
+  C-J is a policy classification. [prototype/](prototype/README.md).
 
 ## Not yet specified
 

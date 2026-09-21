@@ -34,3 +34,7 @@ Send together in one note (operator, 2026-09-21), not piecemeal:
    (ticket 04 Q2a): strict YAML 1.2 → canonical JSON, same paths, same
    `primitive: {arguments}` calls, a JSON Schema; plus a kind-level
    `default_sources` list with per-field exceptions.
+6. **Kind at mapping time vs classification in the policy** (prototype
+   finding 2): let a Dataset Contract defer the identity kind to the
+   Mastering Policy's classification rules (e.g. rule C-J), or carry a
+   provisional kind the policy may override.

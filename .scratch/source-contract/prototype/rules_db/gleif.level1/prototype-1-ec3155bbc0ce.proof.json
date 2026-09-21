@@ -1,0 +1,92 @@
+{
+ "source": "gleif.level1",
+ "version": "prototype-1",
+ "digest": "ec3155bbc0ce2306c3ccf91147e410ef6dbdb013416c37dcc53772745a9e51a1",
+ "engine": "prototype-0.1",
+ "custom_digest": null,
+ "cases": 2,
+ "failures": [],
+ "merge": {
+  "cases": 1,
+  "seconds": 10.3,
+  "entities": 1,
+  "reviews": 2,
+  "batches": 2,
+  "limit": "bound checks a declared binding: automatic rules are refused today (store.py:160-161)"
+ },
+ "fixture_digests": {
+  "fixtures/three-records.jsonl": "a4774260147e85a083984268e57c5f2a6532db54f1bee41a3281daf7a2f022af"
+ },
+ "gate": {
+  "artifacts": 1,
+  "batch_hash": "a11e72ebf8f983d833aa4bdf14d9c09d454c3c728858e8d2f0646e2742fb208e",
+  "rows": {
+   "gleif_lei_record": 316
+  },
+  "seconds": 0.1,
+  "metrics": [
+   {
+    "metric": "rejected",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "type_errors",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.not_null(lei)",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.unique(lei)",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.pattern(lei)",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.in_set(entity_status)",
+    "value": 2,
+    "pct": 0.6329,
+    "limit": {
+     "max": 2,
+     "why": "GLEIF publishes the literal status NULL for 2 of the 316 records"
+    },
+    "why": "GLEIF publishes the literal status NULL for 2 of the 316 records",
+    "ok": true
+   }
+  ]
+ },
+ "state": "proven"
+}

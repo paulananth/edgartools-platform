@@ -1,0 +1,11 @@
+{
+ "artifacts": 5356,
+ "artifacts_identical": 5356,
+ "path_errors": 0,
+ "path_error_samples": [],
+ "differences": 0,
+ "unexpected_differences": 0,
+ "by_column": [],
+ "unexpected_samples": [],
+ "expected_samples": []
+}

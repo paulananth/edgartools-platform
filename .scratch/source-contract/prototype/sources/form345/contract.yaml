@@ -1,0 +1,227 @@
+# yaml-language-server: $schema=../../engine/contract.schema.json
+# PROTOTYPE Source Contract — SEC Forms 3, 4 and 5 (ownership XML).
+# Mirrors edgar_warehouse/parsers/ownership.py PARSER_VERSION 3; see expected-differences.md.
+source: sec.ownership
+version: "prototype-1"
+bronze: { family: sec.ownership_txt }
+requires: [edgartools]
+
+read:
+  format: xml
+  envelope: sgml_text                       # the <XML> block of a full SEC .txt submission
+  root: ownershipDocument                   # any other root → no rows
+  on_parse_error: retry_without_control_chars
+  tables:
+    sec_ownership_reporting_owner:
+      each: reportingOwner
+      columns:
+        accession_number:     { header: { name: ACCESSION NUMBER } }
+        owner_index:          { ordinal: {} }
+        owner_cik:            { int: { path: reportingOwnerId.rptOwnerCik.$, default: null } }
+        owner_name_raw:       { text: { path: reportingOwnerId.rptOwnerName.$, default: "" } }
+        owner_name:
+          custom: { step: owner_display_name@1,
+                    inputs: { raw: owner_name_raw, cik: owner_cik, submissions: { ref: { lookup: owner_submissions } } } }
+        owner_kind:
+          custom: { step: owner_kind@1, inputs: { cik: owner_cik, submissions: { ref: { lookup: owner_submissions } } } }
+        is_director:          { flag: { path: reportingOwnerRelationship.isDirector.$, true_set: ["1", "Y", "true", "True", "TRUE"], default: false } }
+        is_officer:           { flag: { path: reportingOwnerRelationship.isOfficer.$, true_set: ["1", "Y", "true", "True", "TRUE"], default: false } }
+        is_ten_percent_owner: { flag: { path: reportingOwnerRelationship.isTenPercentOwner.$, true_set: ["1", "Y", "true", "True", "TRUE"], default: false } }
+        is_other:             { flag: { path: reportingOwnerRelationship.isOther.$, true_set: ["1", "Y", "true", "True", "TRUE"], default: false } }
+        officer_title:
+          steps:
+            - text: { path: reportingOwnerRelationship.officerTitle.$, default: "" }
+            - when: { contains: "see remarks", ignore_case: true, then: { text: { path: remarks.$, from: document, default: "" } } }
+            - empty_to_null: {}
+        issuer_cik:           { int: { path: issuer.issuerCik.$, from: document, default: null } }
+        other_text:           { text: { path: reportingOwnerRelationship.otherText.$, default: "" } }
+        filing_footnote_text:
+          join:
+            each: footnotes.footnote
+            from: document
+            parts: [ { const: { value: "[" } }, { text: { path: "@id", default: "" } }, { const: { value: "] " } }, { text_all: { path: ".", default: "" } } ]
+            separator: " | "
+            default: ""
+        filing_remarks:       { text: { path: remarks.$, from: document, default: "" } }
+        address_is_care_of:
+          steps:
+            - text: { path: reportingOwnerAddress.rptOwnerStreet1.$, default: "" }
+            - upper: {}
+            - strip_spaces: {}
+            - starts_with: { value: "C/O" }
+        address_non_us:       { flag: { path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$, true_set: ["1", "Y", "true", "True", "TRUE"], default: false } }
+        owner_submissions_present:    { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: found, default: false } } ] }
+        owner_submissions_sha256:     { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: artifact_sha256, default: "" } } ] }
+        owner_entity_type:            { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: payload.entityType, default: "" } }, { to_text: {} } ] }
+        owner_sic:                    { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: payload.sic, default: "" } }, { to_text: {} } ] }
+        owner_state_of_incorporation: { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: payload.stateOfIncorporation, default: "" } }, { to_text: {} } ] }
+        owner_ein:                    { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: payload.ein, default: "" } }, { to_text: {} } ] }
+        owner_ticker_count:           { steps: [ { ref: { lookup: owner_submissions } }, { len: { path: payload.tickers, default: 0 } } ] }
+        owner_org:                    { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: payload.ownerOrg, default: "" } }, { to_text: {} } ] }
+        owner_fiscal_year_end:        { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: payload.fiscalYearEnd, default: "" } }, { to_text: {} } ] }
+        parser_version:       { const: { value: "source-contract:prototype-1" } }
+
+    sec_ownership_non_derivative_txn:
+      each: nonDerivativeTable.nonDerivativeTransaction
+      where: { has: [transactionAmounts, ownershipNature, postTransactionAmounts] }
+      columns: &txn
+        accession_number:          { header: { name: ACCESSION NUMBER } }
+        owner_index:               { const: { value: 1 } }
+        txn_index:                 { ordinal: {} }
+        security_title:            { value_with_footnotes: { path: securityTitle, default: "" } }
+        transaction_date:          { date_prefix: { path: transactionDate.value.$, default: null } }
+        transaction_code:          { text: { path: transactionCoding.transactionCode.$, default: "" } }
+        transaction_shares:        { number: { path: transactionAmounts.transactionShares.value.$, default: null } }
+        transaction_price:         { number: { path: transactionAmounts.transactionPricePerShare.value.$, default: null } }
+        acquired_disposed_code:    { text: { path: transactionAmounts.transactionAcquiredDisposedCode.value.$, default: "" } }
+        shares_owned_after:        { number: { path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$, default: null } }
+        ownership_direct_indirect: { text: { path: ownershipNature.directOrIndirectOwnership.value.$, default: "" } }
+        ownership_nature:          { text: { path: ownershipNature.natureOfOwnership.value.$, default: "" } }
+        reporting_owner_count:     { count: { each: reportingOwner, from: document } }
+        parser_version:            { const: { value: "source-contract:prototype-1" } }
+
+    sec_ownership_derivative_txn:
+      each: derivativeTable.derivativeTransaction
+      where: { has: [transactionAmounts, underlyingSecurity, ownershipNature, postTransactionAmounts] }
+      columns:
+        <<: *txn
+        conversion_or_exercise_price: { number: { path: conversionOrExercisePrice.value.$, default: null } }
+        exercise_date:                { date_prefix: { path: exerciseDate.value.$, default: null } }
+        expiration_date:              { date_prefix: { path: expirationDate.value.$, default: null } }
+        underlying_security_title:    { value_with_footnotes: { path: underlyingSecurity.underlyingSecurityTitle, default: "" } }
+        underlying_security_shares:   { number: { path: underlyingSecurity.underlyingSecurityShares.value.$, default: null } }
+
+lookups:
+  owner_submissions:
+    family: sec.submissions_main
+    key: owner_cik
+    select: { as_of: { header: { name: FILED AS OF DATE } }, fallback: earliest_after }
+
+silver:
+  sec_ownership_reporting_owner:
+    key: [accession_number, owner_index]
+    columns:
+      accession_number: string
+      owner_index: bigint
+      owner_cik: bigint?
+      owner_name_raw: string
+      owner_name: string
+      owner_kind: string
+      is_director: boolean
+      is_officer: boolean
+      is_ten_percent_owner: boolean
+      is_other: boolean
+      officer_title: string?
+      issuer_cik: bigint?
+      other_text: string
+      filing_footnote_text: string
+      filing_remarks: string
+      address_is_care_of: boolean
+      address_non_us: boolean
+      owner_submissions_present: boolean
+      owner_submissions_sha256: string
+      owner_entity_type: string
+      owner_sic: string
+      owner_state_of_incorporation: string
+      owner_ein: string
+      owner_ticker_count: bigint
+      owner_org: string
+      owner_fiscal_year_end: string
+      parser_version: string
+  sec_ownership_non_derivative_txn:
+    key: [accession_number, owner_index, txn_index]
+    columns: &txncols
+      accession_number: string
+      owner_index: bigint
+      txn_index: bigint
+      security_title: string
+      transaction_date: date?
+      transaction_code: string
+      transaction_shares: double?
+      transaction_price: double?
+      acquired_disposed_code: string
+      shares_owned_after: double?
+      ownership_direct_indirect: string
+      ownership_nature: string
+      reporting_owner_count: bigint
+      parser_version: string
+  sec_ownership_derivative_txn:
+    key: [accession_number, owner_index, txn_index]
+    columns:
+      <<: *txncols
+      conversion_or_exercise_price: double?
+      exercise_date: date?
+      expiration_date: date?
+      underlying_security_title: string
+      underlying_security_shares: double?
+
+dataset:                                    # Clean MDM's Dataset Contract; `adapter` block unchanged in shape
+  table: sec_ownership_reporting_owner
+  contract:
+    provider: SEC
+    family: ownership
+    schema_version: silver-ownership-owner-v1
+    record_key: accession number + owner index
+    publication_key: accession number
+    effective_time: filing acceptance time
+    semantics: patch
+    registry_evidence: prototype
+    adapter:
+      version: sec-ownership-owner-prototype-1
+      record_key: [accession_number, owner_index]
+      kind_field: owner_kind
+      kind_values: { company: company, person: person }
+      identifiers: { cik: owner_cik }
+      identifier_formats: { cik: sec_cik }
+      fields: { name: owner_name_raw }
+
+checks:
+  - unique:     { table: sec_ownership_reporting_owner, columns: [accession_number, owner_index] }
+  - not_null:   { table: sec_ownership_reporting_owner, column: owner_cik }
+  - pattern:    { table: sec_ownership_reporting_owner, column: accession_number, regex: "^\\d{10}-\\d{2}-\\d{6}$" }
+  - custom_check: { step: owner_name_has_letters@1, table: sec_ownership_reporting_owner, inputs: [owner_name_raw] }
+
+tests:
+  - case: joint filing keeps three owners; transactions attach to owner 1 and carry the owner count
+    fixture: fixtures/joint.txt
+    expect:
+      silver:
+        sec_ownership_reporting_owner:
+          - { owner_index: 1, owner_cik: 1962329, owner_name: Lei Wu, owner_kind: person }
+          - { owner_index: 2, owner_cik: 2004302, owner_name: JI XIANG HU TONG HOLDINGS LTD, owner_kind: company }
+          - { owner_index: 3, owner_cik: 2004307, owner_kind: company }
+        sec_ownership_non_derivative_txn:
+          - { owner_index: 1, txn_index: 1, reporting_owner_count: 3, transaction_shares: 413942.0 }
+        sec_ownership_derivative_txn:
+          - { txn_index: 1, security_title: Forward sale contract (obligation to sell), expiration_date: null }
+          - { txn_index: 2 }
+      mdm:
+        - { kind: person, identifiers: { cik: "0001962329" }, fields: { name: Wu Lei } }
+        - { kind: company, identifiers: { cik: "0002004302" } }
+        - { kind: company, identifiers: { cik: "0002004307" } }
+  - case: a company owner keeps its registry name; a footnote marker stays on the security title
+    fixture: fixtures/company.txt
+    expect:
+      silver:
+        sec_ownership_reporting_owner: [ { owner_name: "Hartree Partners, LP", owner_kind: company, officer_title: null } ]
+        sec_ownership_non_derivative_txn: [ { security_title: "Common Stock, par value $0.01 [F1]" } ]
+  - case: a person's name is reversed for display; a C/O street is flagged
+    fixture: fixtures/careof.txt
+    expect:
+      silver:
+        sec_ownership_reporting_owner: [ { owner_name: Dustee Jenkins, owner_name_raw: Jenkins Dustee, address_is_care_of: true } ]
+  - case: an officer title of "See Remarks" is replaced by the filing's remarks
+    fixture: fixtures/remarks.txt
+    expect:
+      silver:
+        sec_ownership_reporting_owner:
+          - { officer_title: "Chief Financial Officer and Executive Vice President, Enterprise Business Operations" }
+  - case: SYNTHETIC — a transaction missing a required block is dropped, and the rest are numbered after the filter
+    fixture: fixtures/synthetic-dropped-txn.txt
+    expect:
+      silver:
+        sec_ownership_non_derivative_txn: []
+        sec_ownership_derivative_txn: [ { txn_index: 1 }, { txn_index: 2 } ]
+
+gate:
+  batch: { family: sec.ownership_txt, select: all }

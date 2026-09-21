@@ -1,0 +1,38 @@
+{
+ "cik": "0001967030",
+ "ein": null,
+ "entityType": "other",
+ "exchanges": [],
+ "filings": {
+  "recent": {
+   "form": [
+    "4",
+    "4",
+    "4",
+    "3",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144",
+    "144"
+   ]
+  }
+ },
+ "fiscalYearEnd": null,
+ "insiderTransactionForIssuerExists": 0,
+ "insiderTransactionForOwnerExists": 1,
+ "name": "Jenkins Dustee",
+ "ownerOrg": "",
+ "sic": "",
+ "stateOfIncorporation": "",
+ "tickers": []
+}

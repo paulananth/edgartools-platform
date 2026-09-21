@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# PROTOTYPE — one command for the Source Contract runner (acceptance check 8).
+#   ./source prove sources/form345 [--gate] [--json] [--proof-dir rules_db]
+#   ./source mapdoc sources/gleif
+set -euo pipefail
+PROTO="$(cd "$(dirname "$0")" && pwd)"
+REPO="${REPO:-$(cd "$PROTO/../../.." && pwd)}"
+export PROTO
+export R18="${R18:-/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/r18}"
+export GLEIF_BATCH="${GLEIF_BATCH:-$PROTO/sources/gleif/fixtures/batch}"
+cd "$PROTO"
+exec uv run --project "$REPO" --offline --extra s3 --extra mdm-runtime --with ruamel.yaml --with jsonschema \
+  python "$PROTO/engine/source_engine.py" "$@"

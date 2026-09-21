@@ -1,0 +1,461 @@
+<SEC-DOCUMENT>0001628280-26-058507.txt : 20260821
+<SEC-HEADER>0001628280-26-058507.hdr.sgml : 20260821
+<ACCEPTANCE-DATETIME>20260821214401
+ACCESSION NUMBER:		0001628280-26-058507
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20260820
+FILED AS OF DATE:		20260821
+DATE AS OF CHANGE:		20260821
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			Wu Lei
+		CENTRAL INDEX KEY:			0001962329
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-41454
+		FILM NUMBER:		261306233
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O GIGACLOUD TECHNOLOGY INC
+		STREET 2:		4388 SHIRLEY AVE
+		CITY:			EL MONTE
+		STATE:			CA
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			SHAN LAO HU TONG LLC
+		CENTRAL INDEX KEY:			0002004307
+		ORGANIZATION NAME:           	
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-41454
+		FILM NUMBER:		261306231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		C/O GIGACLOUD TECHNOLOGY INC
+		STREET 2:		4388 SHIRLEY AVENUE
+		CITY:			EL MONTE
+		STATE:			CA
+		ZIP:			91731
+		BUSINESS PHONE:		(626) 912-8886
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O GIGACLOUD TECHNOLOGY INC
+		STREET 2:		4388 SHIRLEY AVENUE
+		CITY:			EL MONTE
+		STATE:			CA
+		ZIP:			91731
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			JI XIANG HU TONG HOLDINGS LTD
+		CENTRAL INDEX KEY:			0002004302
+		ORGANIZATION NAME:           	
+		STATE OF INCORPORATION:			D8
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-41454
+		FILM NUMBER:		261306232
+
+	BUSINESS ADDRESS:	
+		STREET 1:		C/O GIGACLOUD TECHNOLOGY INC
+		STREET 2:		4388 SHIRLEY AVENUE
+		CITY:			EL MONTE
+		STATE:			CA
+		ZIP:			91731
+		BUSINESS PHONE:		(626) 912-8886
+
+	MAIL ADDRESS:	
+		STREET 1:		C/O GIGACLOUD TECHNOLOGY INC
+		STREET 2:		4388 SHIRLEY AVENUE
+		CITY:			EL MONTE
+		STATE:			CA
+		ZIP:			91731
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			GigaCloud Technology Inc
+		CENTRAL INDEX KEY:			0001857816
+		STANDARD INDUSTRIAL CLASSIFICATION:	RETAIL-CATALOG & MAIL-ORDER HOUSES [5961]
+		ORGANIZATION NAME:           	07 Trade & Services
+		EIN:				000000000
+		STATE OF INCORPORATION:			E9
+		FISCAL YEAR END:			1231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		4388 SHIRLEY AVENUE
+		CITY:			EL MONTE
+		STATE:			CA
+		ZIP:			91731
+		BUSINESS PHONE:		1-626-912-8886
+
+	MAIL ADDRESS:	
+		STREET 1:		4388 SHIRLEY AVENUE
+		CITY:			EL MONTE
+		STATE:			CA
+		ZIP:			91731
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>wk-form4_1787363036.xml
+<DESCRIPTION>FORM 4
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-08-20</periodOfReport>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0001857816</issuerCik>
+        <issuerName>GigaCloud Technology Inc</issuerName>
+        <issuerTradingSymbol>GCT</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001962329</rptOwnerCik>
+            <rptOwnerName>Wu Lei</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O GIGACLOUD TECHNOLOGY INC</rptOwnerStreet1>
+            <rptOwnerStreet2>4388 SHIRLEY AVENUE</rptOwnerStreet2>
+            <rptOwnerCity>EL MONTE</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>91731</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>1</isDirector>
+            <isOfficer>1</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle>Chief Executive Officer</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0002004302</rptOwnerCik>
+            <rptOwnerName>JI XIANG HU TONG HOLDINGS LTD</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O GIGACLOUD TECHNOLOGY INC</rptOwnerStreet1>
+            <rptOwnerStreet2>4388 SHIRLEY AVENUE</rptOwnerStreet2>
+            <rptOwnerCity>EL MONTE</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>91731</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>1</isDirector>
+            <isOfficer>1</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle>Chief Executive Officer</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0002004307</rptOwnerCik>
+            <rptOwnerName>SHAN LAO HU TONG LLC</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O GIGACLOUD TECHNOLOGY INC</rptOwnerStreet1>
+            <rptOwnerStreet2>4388 SHIRELY AVENUE</rptOwnerStreet2>
+            <rptOwnerCity>EL MONTE</rptOwnerCity>
+            <rptOwnerState>CA</rptOwnerState>
+            <rptOwnerZipCode>91731</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>1</isDirector>
+            <isOfficer>1</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle>Chief Executive Officer</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class A Ordinary Shares, par value $0.05 per share</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-08-20</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>M</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>413942</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>700000</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Shan Lao Hu Tong LLC and Ji Xiang Hu Tong Holdings Limited</value>
+                    <footnoteId id="F1"/>
+                    <footnoteId id="F2"/>
+                    <footnoteId id="F3"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Class A Ordinary Shares, par value $0.05 per share</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>154000</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                    <footnoteId id="F3"/>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+    </nonDerivativeTable>
+
+    <derivativeTable>
+        <derivativeTransaction>
+            <securityTitle>
+                <value>Forward sale contract (obligation to sell)</value>
+            </securityTitle>
+            <conversionOrExercisePrice>
+                <footnoteId id="F4"/>
+                <footnoteId id="F5"/>
+                <footnoteId id="F6"/>
+            </conversionOrExercisePrice>
+            <transactionDate>
+                <value>2026-08-20</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>J</transactionCode>
+                <equitySwapInvolved>1</equitySwapInvolved>
+                <footnoteId id="F4"/>
+                <footnoteId id="F5"/>
+                <footnoteId id="F6"/>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>413942</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <footnoteId id="F4"/>
+                    <footnoteId id="F5"/>
+                    <footnoteId id="F6"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <exerciseDate>
+                <footnoteId id="F4"/>
+                <footnoteId id="F5"/>
+                <footnoteId id="F6"/>
+            </exerciseDate>
+            <expirationDate>
+                <footnoteId id="F4"/>
+                <footnoteId id="F5"/>
+                <footnoteId id="F6"/>
+            </expirationDate>
+            <underlyingSecurity>
+                <underlyingSecurityTitle>
+                    <value>Class A Ordinary Shares, par value $0.05 per share</value>
+                </underlyingSecurityTitle>
+                <underlyingSecurityShares>
+                    <value>413942</value>
+                </underlyingSecurityShares>
+            </underlyingSecurity>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>700000</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Shan Lao Hu Tong LLC and Ji Xiang Hu Tong Holdings Limited</value>
+                    <footnoteId id="F1"/>
+                    <footnoteId id="F2"/>
+                    <footnoteId id="F3"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </derivativeTransaction>
+        <derivativeTransaction>
+            <securityTitle>
+                <value>Class B Ordinary Shares, par value $0.05 per share</value>
+            </securityTitle>
+            <conversionOrExercisePrice>
+                <footnoteId id="F7"/>
+            </conversionOrExercisePrice>
+            <transactionDate>
+                <value>2026-08-20</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>M</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>413942</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <footnoteId id="F7"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <exerciseDate>
+                <footnoteId id="F7"/>
+            </exerciseDate>
+            <expirationDate>
+                <footnoteId id="F7"/>
+            </expirationDate>
+            <underlyingSecurity>
+                <underlyingSecurityTitle>
+                    <value>Class A Ordinary Shares, par value $0.05 per share</value>
+                </underlyingSecurityTitle>
+                <underlyingSecurityShares>
+                    <value>413942</value>
+                </underlyingSecurityShares>
+            </underlyingSecurity>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>6451732</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Shan Lao Hu Tong LLC and Ji Xiang Hu Tong Holdings Limited</value>
+                    <footnoteId id="F1"/>
+                    <footnoteId id="F3"/>
+                    <footnoteId id="F8"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </derivativeTransaction>
+        <derivativeHolding>
+            <securityTitle>
+                <value>Class B Ordinary Shares, par value $0.05 per share</value>
+            </securityTitle>
+            <conversionOrExercisePrice>
+                <footnoteId id="F7"/>
+            </conversionOrExercisePrice>
+            <exerciseDate>
+                <footnoteId id="F7"/>
+            </exerciseDate>
+            <expirationDate>
+                <footnoteId id="F7"/>
+            </expirationDate>
+            <underlyingSecurity>
+                <underlyingSecurityTitle>
+                    <value>Class A Ordinary Shares, par value $0.05 per share</value>
+                </underlyingSecurityTitle>
+                <underlyingSecurityShares>
+                    <value>5000</value>
+                </underlyingSecurityShares>
+            </underlyingSecurity>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>5000</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                    <footnoteId id="F3"/>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </derivativeHolding>
+    </derivativeTable>
+
+    <footnotes>
+        <footnote id="F1">Lei Wu (&quot;Mr. Wu&quot;) is the sole member and sole manager of a limited liability company, Shan Lao Hu Tong LLC, that is the sole shareholder of Ji Xiang Hu Tong Holdings Limited. As a result of these relationships, Mr. Wu may be deemed to be an indirect beneficial owner of the securities held by Ji Xiang Hu Tong Holdings Limited.</footnote>
+        <footnote id="F2">Represents Class A ordinary shares, par value of US$0.05 per share, of the Issuer (&quot;Class A Ordinary Shares&quot;) directly held by Ji Xiang Hu Tong Holdings Limited.</footnote>
+        <footnote id="F3">This report shall not be deemed an admission that any of the reporting persons is the beneficial owner of such securities for purposes of Section 16 of Securities Exchange Act of 1934, as amended, or for any other purpose.</footnote>
+        <footnote id="F4">On August 20, 2026, the Reporting Person entered into a variable prepaid forward sale contract with an unaffiliated third party buyer. The contract obligates the Reporting Person to deliver to the buyer up to 413,942 shares of Class A Ordinary Shares (or, at the Reporting Person's election, an equivalent amount of cash based on the market price of Class A Ordinary Shares) on six maturity dates, including up to 63,942 shares on June 8, 2029, up to 70,000 shares on June 11, 2029, up to 70,000 shares on June 12, 2029, up to 70,000 shares on June 13, 2029, up to 70,000 shares on June 14, 2029, and up to 70,000 shares on June 15, 2029, respectively (the &quot;Base Amount&quot;). In exchange for assuming this obligation, the Reporting Person received a cash payment of $16,777,636 as of the date of entering into the contract.</footnote>
+        <footnote id="F5">(Continued from footnote 4) The Reporting Person pledged 413,942 shares of Class A Ordinary Shares (the &quot;Pledged Shares&quot;) to secure his obligations under the contract, and retained dividend and voting rights in the Pledged Shares during the term of the pledge. The number of shares of Class A Ordinary Shares to be delivered by the Reporting Person to the buyer on the maturity dates is to be generally determined as follows: (a) if the volume-weighted average closing price of the Class A Ordinary Shares on the relevant valuation date (the &quot;Settlement Price&quot;) is less than $68.29 (the &quot;Cap Price&quot;) but greater than $46.10 (the &quot;Floor Price&quot;), the Reporting Person will deliver to the buyer a number of shares of Class A Ordinary Shares equal to the Base Amount multiplied by a ratio equal to the Floor Price divided by the Settlement Price;</footnote>
+        <footnote id="F6">(Continued from footnote 5) (b) if the Settlement Price is equal or greater than the Cap Price on a maturity date, the Reporting Person will deliver to the buyer a number of shares of Class A Ordinary Shares equal to the Base Amount multiplied by a ratio equal to a fraction with a numerator equal to the sum of (A) the Floor Price and (B) the excess, if any, of the Settlement Price over the Cap Price, and a denominator equal to the Settlement Price; and (c) if the Settlement Price is equal to or less than the Floor Price on a maturity date, the Reporting Person will deliver to the buyer a number of shares of Class A Ordinary Shares equal to the Base Amount.</footnote>
+        <footnote id="F7">The Class B Ordinary Shares are convertible at any time at the option of the holder into an equal number of Class A Ordinary Shares at no cost.</footnote>
+        <footnote id="F8">Represents Class B ordinary shares, par value of US$0.05 per share, of the Issuer (&quot;Class B Ordinary Shares&quot;) directly held by Ji Xiang Hu Tong Holdings Limited.</footnote>
+    </footnotes>
+
+    <remarks></remarks>
+
+    <ownerSignature>
+        <signatureName>/s/ Lei Wu</signatureName>
+        <signatureDate>2026-08-21</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>/s/ Lei Wu, for Ji Xiang Hu Tong Holdings Limited, By: Lei Wu, its director</signatureName>
+        <signatureDate>2026-08-21</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>/s/ Lei Wu, for Shan Lao Hu Tong LLC, By: Lei Wu, its sole member</signatureName>
+        <signatureDate>2026-08-21</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
