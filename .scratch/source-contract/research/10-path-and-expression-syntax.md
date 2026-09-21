@@ -82,7 +82,7 @@ Take from Airbyte: the path as data, the explicit single-object-to-list rule, an
 
 - A missing identifier returns `null`; slicing a non-array returns `null` ([spec](https://jmespath.org/specification.html), "Identifiers", "Slices"). So **missing and null are the same**.
 - Projections: "if any subsequent expression after a wildcard expression returns a null value, it is omitted from the final result list" (spec, "Wildcard Expressions"). A projection over owners would silently lose rows with no value, which would shift an `ordinal`.
-- Pipes stop projections (spec, "Pipe Expressions"). 26 built-in functions (`abs` … `values`), no user-defined functions in the spec. Order of `values()`/object wildcards is undefined.
+- Pipes stop projections (spec, "Pipe Expressions"). A fixed built-in function list (`abs` … `values`); no user-defined functions in the spec. Order of `values()`/object wildcards is undefined.
 - Identifiers that do not match `[A-Za-z_][A-Za-z0-9_]*` "must be quoted" (spec, "Identifiers" ABNF): GLEIF paths become `LEI."$"`, `Entity.LegalName."@xml:lang"`.
 - Errors: `syntax`, `invalid-type`, `invalid-value`, `unknown-function`, `invalid-arity`; the spec does not require a location.
 - Compliance tests: [jmespath/jmespath.test](https://github.com/jmespath/jmespath.test) (`given` / `cases` / `expression` / `result` or `error`).
@@ -164,6 +164,8 @@ Conclusions:
 - reaching a list in the middle of a path is an **error with a location** ("path crosses a repeating group; use `each`"), not a silent `None` as in `adapters.py:36-37`;
 - missing and JSON `null` are kept apart; `default:` applies only to missing.
 
+**Same form, different tree.** The `adapter`'s `value()` walks one **flat silver row** (live paths `_origin.sha256`, `last_sync_run_id`, `company_source.py:54-58`). The read paths walk the **Bronze Artifact tree**. That is why the adapter never needs `each`, and why research 02 (B.2, last paragraph) makes a flat silver table the thing that lets the unchanged adapter work. "Same form" means the same spelling rules, not the same paths.
+
 **XML becomes the same tree.** The `xml` reader turns each element into an object:
 
 - text goes in `$`;
@@ -181,7 +183,7 @@ Examples (from research 02):
 # Form 3/4/5 — XML, relative to one <reportingOwner>
 owner_cik:      { int:  { path: reportingOwnerId.rptOwnerCik.$, default: null } }
 owner_name_raw: { text_all: { path: reportingOwnerId.rptOwnerName, default: "" } }
-is_director:    { flag: { path: reportingOwnerRelationship.isDirector.$, true: ["1", "Y", "true", "True", "TRUE"], default: false } }
+is_director:    { flag: { path: reportingOwnerRelationship.isDirector.$, true_set: ["1", "Y", "true", "True", "TRUE"], default: false } }
 
 # GLEIF Level 1 — JSON Golden Copy
 lei:                 { text: { path: LEI.$, default: null } }
@@ -212,7 +214,7 @@ sec_ownership_non_derivative_txn:
     txn_index:             { ordinal: {} }                       # 1-based, after `where`
     owner_index:           { const: { value: 1 } }
     reporting_owner_count: { count: { each: reportingOwner, from: document } }
-    transaction_shares:    { number: { path: transactionAmounts.transactionShares.value.$, default: null } }
+    transaction_shares:    { number: { path: transactionAmounts.transactionShares.value.$, default: null } }  # reads <value> only; today's code reads all descendant text (ownership.py:283-289) — a deliberate change, pinned by a test
     transaction_date:      { date_prefix: { path: transactionDate.value.$, default: null } }
 
 # Form 3/4/5 — document footnotes joined onto each owner row: "[F1] text | [F2] text"
@@ -272,6 +274,20 @@ initial_registration_date: { timestamp: { path: Registration.InitialRegistration
 
 There is no string that the engine must parse as code. `contains: "see remarks"` is a literal, and the branch is the `when` key.
 
+**Cross-source lookup (rule C-J, 9 of 58 Form 3/4/5 columns).** `lookup` returns a record `{found, artifact_sha256, payload}` (research 02, A.3). It is declared once as a row-level value, and columns read it through `ref:` plus `get:`/`len:`. The `path:` inside `get:` is **the same dotted path language**, walking the lookup's result record instead of the artifact. It is still one path form, and "which tree" is always named by the step before it (`ref:`), never by a prefix in the path string.
+
+```yaml
+lookups:
+  owner_submissions: { lookup: { source: submissions_main, key: owner_cik, key_format: cik10, select: newest, missing: null } }
+columns:
+  owner_submissions_present: { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: found, default: false } } ] }
+  owner_submissions_sha256:  { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: artifact_sha256, default: "" } } ] }
+  owner_entity_type:         { steps: [ { ref: { lookup: owner_submissions } }, { get: { path: payload.entityType, default: "" } } ] }
+  owner_ticker_count:        { steps: [ { ref: { lookup: owner_submissions } }, { len: { path: payload.tickers, default: 0 } } ] }
+```
+
+`select: newest` copies today's behaviour. Whether it becomes `as_of(...)` is research 02's open point 1, not decided here.
+
 ### How each line is tested
 
 - **One fixture, one expected row.** A parse test case names a committed fixture artifact (a trimmed Form 4 XML, or a 2-record GLEIF JSON) and the expected row for the columns it checks. The runner evaluates each column's call alone, so a failure names the column, its contract line and expected versus actual (acceptance check 9).
@@ -304,7 +320,7 @@ Python pieces that fit this loop:
 
 ### Risks
 
-1. **YAML 1.2 versus the declared loader.** PyYAML is "a complete YAML 1.1 parser" ([PyYAML](https://pyyaml.org/wiki/PyYAML)), and it is the only YAML library in `pyproject.toml:22`. Ticket 04 Q0 requires strict YAML 1.2. ruamel.yaml "is a YAML 1.2 loader/dumper package" (0.19.1, Jan 2026, single maintainer) ([PyPI](https://pypi.org/project/ruamel.yaml/)). Its line and column API was not confirmed from that page (**unverified**). Ticket 04 must pick the loader.
+1. **YAML 1.2 versus the declared loader.** PyYAML is "a complete YAML 1.1 parser" ([PyYAML](https://pyyaml.org/wiki/PyYAML)), and it is the only YAML library in `pyproject.toml:22`. Ticket 04 Q0 requires strict YAML 1.2. ruamel.yaml "is a YAML 1.2 loader/dumper package" (0.19.1, Jan 2026, single maintainer) ([PyPI](https://pypi.org/project/ruamel.yaml/)). Its line and column API was not confirmed from that page (**unverified**). Ticket 04 must pick the loader. Strict 1.2 also limits **key** spelling: an unquoted key `true`, `false` or `null` resolves to a non-string and cannot become a canonical-JSON object key. So argument names such as `true_set` must never be bare YAML keywords, and the JSON Schema should reject them.
 2. **Our own path form has no external spec.** Agents know JSONPath and JMESPath better than "our dotted path". Two things limit this risk: the form is tiny (a key list joined by dots), and the JSON Schema pattern rejects `[`, `*`, `?` and `|`, so an invented JSONPath habit fails validation at once instead of misreading data.
 3. **The XML-to-tree rule is ours.** Mixed content (text between child elements) loses its interleaving in `$`. SEC ownership values are leaf text, and `text_all` covers the footnote case (`ownership.py:85`). A source with real mixed content would need a custom step or a new primitive. Namespaces need a declared prefix map in the reader.
 4. **Single-versus-list in XML is invisible to the tree.** An element that appears once becomes an object. That is why `each:` always wraps, and why no path may cross a list.

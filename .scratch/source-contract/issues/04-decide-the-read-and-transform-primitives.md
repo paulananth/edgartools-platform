@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: claimed
-Blocked by: 02 (Q1 onward also waits on 10)
+Blocked by: 02, 10
 
 ## Question
 
@@ -25,3 +25,5 @@ From ticket 02's inventory, decide the `read` section's vocabulary:
   Contract. Comments live in git only and never enter the digest. Rejected:
   JSON (unreadable at size, no comments), TOML (awkward nested lists),
   Python (the contract becomes code).
+  *Research 10 note:* PyYAML (declared, `pyproject.toml:22`) parses YAML
+  1.1; strict 1.2 needs ruamel.yaml, whose line/column API is unverified.

@@ -1,7 +1,7 @@
 # Research the path and expression syntax other engines use
 
 Type: research
-Status: claimed
+Status: resolved (2026-09-21)
 Blocked by: none
 
 ## Question
@@ -45,3 +45,24 @@ End with a recommendation for (a) the path syntax, (b) how repeating groups
 are written, and (c) how a transform is written (primitive-call style), each
 with an example taken from Form 3/4/5 and GLEIF (see
 [research/02](../research/02-parse-needs-inventory.md)).
+
+## Answer
+
+[research/10](../research/10-path-and-expression-syntax.md). Eleven syntaxes
+scored against the six criteria. Recommended: **(a)** a restricted dotted
+path — literal keys joined by `.`, no wildcard, index, filter, function or
+quoting, enforced by a JSON Schema pattern — over one canonical tree (XML
+text in `$`, attributes in `@name`, the shape GLEIF's JSON already has);
+crossing a list mid-path is an error with an RFC 6901 location, and missing
+is kept apart from `null`. **(b)** repeating groups only through an explicit
+`each:` block (single object = one-item list, missing = zero rows, `where:
+has:` before `ordinal`, `from: document` for outer values; `join:` with a
+`parts:` list for aggregation). **(c)** one YAML mapping per column,
+`primitive: {arguments}`, or a `steps:` chain; every path-reading primitive
+takes an explicit `default:`; the C-J lookup is `lookup` + `ref` + `get`.
+Rejected: jq, JSONata, Bloblang, VRL, JMESPath and Airbyte Jinja (logic in
+strings), XPath (XML only), JSON Pointer for authoring (no groups);
+JSONPath RFC 9535 held in reserve. **For Q0**: the declared PyYAML is a
+YAML 1.1 parser, so strict YAML 1.2 needs ruamel.yaml (line/column API
+unverified); a path starting with `@` must be quoted; `jsonschema` is only
+a transitive dependency today.

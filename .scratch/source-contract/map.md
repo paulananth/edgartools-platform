@@ -115,6 +115,13 @@ no edit to any Clean MDM file.
   deferrals and surviving fields, **not engine-chosen bindings** — those
   wait for automatic rules to be activatable. The runner needs a ≥30 s
   readiness wait. [research/03](research/03-local-mastering-tests.md).
+- [Research the path and expression syntax other engines use](issues/10-research-path-and-expression-syntax.md)
+  — **restricted dotted paths over one canonical tree, `each:` blocks for
+  repeating groups, one `primitive: {arguments}` mapping per column**:
+  readable, schema-enforced, no logic in strings, same spelling as the
+  `adapter` block; query and transform languages rejected. Strict YAML 1.2
+  needs ruamel.yaml, not the declared PyYAML.
+  [research/10](research/10-path-and-expression-syntax.md).
 
 ## Not yet specified
 
