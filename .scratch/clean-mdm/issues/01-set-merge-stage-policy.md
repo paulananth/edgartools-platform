@@ -197,6 +197,15 @@ not inferred from prior acceptance. Approval would close the present policy
 interview and permit the already requested local implementation to proceed;
 it would not certify rule accuracy or production readiness.
 
+## Later Company-specific amendments
+
+[Company interview Q1–Q13](../../../docs/specs/clean-mdm/company-policy.md),
+accepted 2026-09-19, supersede conflicting steward-only Company consolidation,
+routine manual-review and blanket deferred-match completion recommendations.
+The original source-binding precision gate remains; automatic consolidation
+now requires separate qualification at the same standard. Do not confuse the
+two interviews’ question numbering or apply Company exceptions to other kinds.
+
 ## Comments
 
 2026-09-17 — Claimed by Codex in the dedicated worktree. Code and historical

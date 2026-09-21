@@ -238,6 +238,14 @@ def execute_manifest(
             "preview": preview,
             "deferred": deferred,
         }
+        for key in (
+            "source_family",
+            "publication_family",
+            "committed_publication",
+            "continuity_proof",
+        ):
+            if key in batch:
+                command[key] = batch[key]
         if preview:
             result = MergeStage(store).apply(**command)
         else:

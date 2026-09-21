@@ -11,6 +11,28 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Notes
 
+- 2026-09-20: ticket 11 implemented on `codex/company-publication-verification`
+  in `../edgartools-platform-company-publication-verification`, based on
+  `codex/sec-gleif-company` at `7784c0e3`. This is an isolated stacked branch;
+  the parent has not merged. [Source-publication contract](../../docs/specs/clean-mdm/source-publications.md)
+  and [review](company-publication-review.md) describe the source-only fixture.
+  Next: [ticket 12](issues/12-integrate-native-gleif-company-publications.md),
+  native metadata/normalization, verified batch membership and consumption
+  accounting. Company matching qualification remains a separate requirement.
+
+- 2026-09-20: [Company pickup from Claude](../handover/2026-09-20-codex-company-enrichment-reconciliation.md).
+  Rebased onto `dc55bf1d`; assessment foundation preserved as `f3f924a9`.
+  [Ticket 10](issues/10-build-family-checkpoints.md) is verified (47 tests, no skips).
+  Next: [ticket 11](issues/11-verify-enrichment-publication-inventory.md), source
+  inventory/continuity verification before GLEIF consumer integration.
+
+- Current design review: [Claude handoff reconciliation](../../docs/specs/clean-mdm/design-reconciliation-2026-09-19.md).
+  [Company Q1–Q13](../../docs/specs/clean-mdm/company-policy.md) are accepted.
+  [Gate 08](issues/08-confirm-company-candidate-assessment.md) is accepted:
+  persist every proposed binding/consolidation before application, without
+  a manual pause for qualified proposals.
+  [Ticket 09](issues/09-build-company-candidate-assessment.md) implements the foundation.
+
 - User priority, 2026-09-19: complete SEC + GLEIF multisource Company mastering
   before other entity integrations. [Company completion gate](../../docs/specs/clean-mdm/company-completion.md)
   defines the required scope and evidence; the SEC-only sample is insufficient.
@@ -30,10 +52,11 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 - No implementation tickets until the Merge Stage policy gate is resolved.
   Draft specifications are proposals, never evidence of implementation.
 - Interview rounds contain at most three questions (user instruction, 2026-09-18).
-- Current worktree: `../edgartools-platform-clean-mdm-integration`; branch:
-  `codex/clean-mdm-integration`. User assigned this fresh branch on 2026-09-19
-  after Grok PRs #655/#656 landed in `codex/clean-mdm`. Both PRs are preserved;
-  the integration branch is rebased onto `origin/main` at `5fe70798`.
+- Current worktree: `../edgartools-platform-sec-gleif-company`; branch:
+  `codex/sec-gleif-company`, rebased onto `origin/main` at `dc55bf1d`.
+  PR #657 merged the earlier integration branch at `e2807e52`, preserving
+  Grok PRs #655/#656. PRs #658/#659 supply the new query ADR and Claude handoff.
+  Earlier worktrees remain protected rollback anchors.
 - Local PostgreSQL 16 worktree: `../edgartools-platform-grok-local-postgres`;
   DSN/provision branch: `grok/clean-mdm-local-postgres` (PR #655);
   bounded local mastering branch: `grok/local-mdm-bounded-mastering`.

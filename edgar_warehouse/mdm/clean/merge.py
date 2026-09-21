@@ -10,11 +10,12 @@ from collections import defaultdict
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
-from . import relationships
+from . import assessment, relationships
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
-from .store import Conflict, Store, digest, rows
+from .store import Conflict, Store, canonical, digest, rows
 from .survivorship import current_claims, select_fields
 
 
@@ -112,7 +113,95 @@ class MergeStage:
         self.store = store
         self.closure_limit = closure_limit
 
-    def apply(
+    def apply(self, **command) -> dict:
+        """Persist identity assessment, then automatically apply eligible work.
+
+        A crash between the transactions leaves a resumable assessment. Preview
+        and ordinary field-only updates do not create an assessment queue.
+        """
+        if command.get("preview") or not any(
+            d["operation"] in {"bind", "merge"}
+            for d in (command.get("decisions") or [])
+        ):
+            return self._execute(**command)
+        for attempt in range(3):
+            prepared = self.assess(**command)
+            if not prepared.get("assessment_id"):
+                # Duplicate delivery or decisions retained in an earlier batch.
+                return self._execute(**command)
+            try:
+                return self.apply_assessment(
+                    prepared["assessment_id"], run_id=command["run_id"]
+                )
+            except assessment.StaleAssessment:
+                if attempt == 2:
+                    raise
+        raise AssertionError("Unreachable assessment retry state")
+
+    def assess(self, **command) -> dict:
+        """Retain a proposed binding/consolidation without committing masters.
+
+        Invalid proposals retain their veto before the validation error is
+        raised. Automatic scoring and qualification remain separate contracts.
+        """
+        if not any(
+            d["operation"] in {"bind", "merge"}
+            for d in (command.get("decisions") or [])
+        ):
+            raise ValueError("Assessment requires an identity proposal")
+        run_id = command["run_id"]
+        proposal = {k: v for k, v in command.items() if k not in {"run_id", "preview"}}
+        for key, order in (
+            ("assertions", "assertion_id"),
+            ("identities", "entity_id"),
+            ("deferred", "deferred_id"),
+        ):
+            if proposal.get(key):
+                proposal[key] = sorted(proposal[key], key=lambda item: item[order])
+        proposal["decisions"] = sorted(
+            proposal["decisions"], key=lambda d: (d["at"], d["decision_id"])
+        )
+        context = {}
+        try:
+            result = self._execute(**{**command, "preview": True}, _context=context)
+        except (Conflict, DBAPIError) as exc:
+            # SQL driver exceptions can contain source values/connection details;
+            # retain the SQLSTATE, never its full rendered query/parameters.
+            veto = (
+                str(exc)
+                if isinstance(exc, Conflict)
+                else f"database_validation:{getattr(exc.orig, 'pgcode', None)}"
+            )
+            assessment.record(
+                self.store,
+                {
+                    "version": 1,
+                    "command": proposal,
+                    "outcome": "rejected",
+                    "rule_version": "merge-validation-v1",
+                    "vetoes": [veto],
+                    **context,
+                },
+                run_id,
+            )
+            raise
+        body = result.get("assessment")
+        if body is None:
+            return result
+        return assessment.record(self.store, {**body, "command": proposal}, run_id)
+
+    def apply_assessment(self, assessment_id: str, *, run_id: str) -> dict:
+        with self.store.engine.connect() as conn:
+            body = assessment.load(conn, assessment_id)
+        try:
+            return self._execute(
+                **body["command"], run_id=run_id, assessment_id=assessment_id
+            )
+        except assessment.StaleAssessment:
+            assessment.supersede(self.store, assessment_id, run_id)
+            raise
+
+    def _execute(
         self,
         *,
         batch_id: str,
@@ -127,6 +216,12 @@ class MergeStage:
         identities: list[dict] | None = None,
         preview: bool = False,
         deferred: list[dict] | None = None,
+        source_family: str | None = None,
+        publication_family: str | None = None,
+        committed_publication: str | None = None,
+        continuity_proof: dict | None = None,
+        assessment_id: str | None = None,
+        _context: dict | None = None,
     ) -> dict:
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
         decisions = sorted(decisions or [], key=lambda d: (d["at"], d["decision_id"]))
@@ -163,6 +258,29 @@ class MergeStage:
         # Preserve hashes of commands committed before deferred support existed.
         if deferred:
             command["deferred"] = deferred
+        family_metadata = {
+            "source_family": source_family,
+            "publication_family": publication_family,
+            "committed_publication": committed_publication,
+            "continuity_proof": continuity_proof,
+        }
+        if any(value is not None for value in family_metadata.values()):
+            if (
+                not all(
+                    isinstance(value, str) and value.strip()
+                    for value in (
+                        source_family,
+                        publication_family,
+                        committed_publication,
+                    )
+                )
+                or not isinstance(continuity_proof, dict)
+                or not continuity_proof
+            ):
+                raise ValueError(
+                    "Family checkpoint requires both families, publication identity and continuity proof"
+                )
+            command.update(family_metadata)
         input_hash = digest(command)
         with self.store.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
@@ -176,6 +294,8 @@ class MergeStage:
                 if preview:
                     return {"preview": True, "duplicate": True, "effects": previous}
                 return self.store.commit(conn, previous, run_id)
+            if assessment_id is not None:
+                assessment.check(conn, assessment_id)
             policy = conn.scalar(
                 text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
                 {"digest": policy_digest},
@@ -185,6 +305,43 @@ class MergeStage:
             stored_a, stored_d, stored_ids = load_closure(
                 conn, assertions, decisions, limit=self.closure_limit
             )
+            context = _context if _context is not None else {}
+            if preview and any(d["operation"] in {"bind", "merge"} for d in decisions):
+                all_assertions = [*stored_a, *assertions]
+                keys = {a["subject"] for a in all_assertions}
+                keys.update(i["entity_id"] for i in [*stored_ids, *identities])
+                keys.update(k for d in [*stored_d, *decisions] for k in anchors(d))
+                keys.update(
+                    r["target_subject"]
+                    for a in all_assertions
+                    for r in a["relationships"]
+                    if r.get("target_subject")
+                )
+                scope = {
+                    "keys": sorted(keys),
+                    "consumer": consumer,
+                    "sources": sorted({a["source_code"] for a in all_assertions}),
+                }
+                if source_family is not None:
+                    scope.update(
+                        source_family=source_family,
+                        publication_family=publication_family,
+                    )
+                context.update(
+                    {
+                        "scope": scope,
+                        "snapshot": assessment.snapshot(conn, scope),
+                        "retained": {
+                            "assertion_ids": sorted(
+                                a["assertion_id"] for a in stored_a
+                            ),
+                            "decision_ids": sorted(d["decision_id"] for d in stored_d),
+                            "identities": sorted(
+                                stored_ids, key=lambda i: i["entity_id"]
+                            ),
+                        },
+                    }
+                )
             evidence = {a["assertion_id"]: a for a in stored_a}
             for a in assertions:
                 if a["assertion_id"] in evidence and a != evidence[a["assertion_id"]]:
@@ -392,10 +549,51 @@ class MergeStage:
                     "total": len(assertions) + len(deferred),
                 },
             }
-            result = self.store.commit(conn, request, run_id)
             if preview:
                 # Exercise the identical SQL validation/permissions boundary,
-                # then roll back every effect, observation, checkpoint and intent.
+                # through a capability that always rolls back its inner writes.
+                conn.execute(
+                    text("SELECT mdm_v2.preview_batch(:request,CAST(:run AS uuid))"),
+                    {"request": canonical(request), "run": run_id},
+                )
+                candidate = None
+                if any(
+                    d["operation"] in {"bind", "merge"} for d in request["decisions"]
+                ):
+                    before = old + rows(
+                        conn,
+                        """SELECT object_type,object_id,body FROM mdm_v2.projection
+                        WHERE object_type='entity' AND object_id=ANY(:ids) LIMIT :lim""",
+                        ids=sorted(all_ids),
+                        lim=self.closure_limit + 1,
+                    )
+                    if len(before) > self.closure_limit:
+                        raise Conflict(
+                            "Assessment projection history exceeds bounded budget"
+                        )
+                    candidate = {
+                        "version": 1,
+                        "command": command,
+                        "outcome": "ready",
+                        "rule_version": "merge-validation-v1",
+                        "vetoes": [],
+                        **context,
+                        "before": sorted(
+                            before, key=lambda p: (p["object_type"], p["object_id"])
+                        ),
+                        "effects": {
+                            k: v
+                            for k, v in request.items()
+                            if k != "expected_generation"
+                        },
+                    }
                 conn.rollback()
-                return {"preview": True, "duplicate": False, "effects": request}
-            return result
+                return {
+                    "preview": True,
+                    "duplicate": False,
+                    "effects": request,
+                    "assessment": candidate,
+                }
+            if assessment_id is not None:
+                request["assessment_id"] = assessment_id
+            return self.store.commit(conn, request, run_id)

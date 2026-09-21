@@ -1,0 +1,50 @@
+{
+  "date": "2026-09-20",
+  "base": "7784c0e394277bf838cd7619c3ea08adaf0a7d3e",
+  "upstream_main": "dc55bf1d",
+  "scope": "source-only synthetic publication inventory and continuity; no native GLEIF loader or matching qualification",
+  "environment": "disposable PostgreSQL 16; separate acquisition and MDM databases; restricted runtime logins",
+  "reports": [
+    {
+      "phase": "broader regression before final native-identity guard",
+      "path": ".scratch/clean-mdm/company-publication-acceptance.xml",
+      "sha256": "67ca6621fbb4f34a34c3d922c53ad4d46e6ce4c132c32e1cbdb27143b5e0a8fa",
+      "tests": 89,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 250.588
+    },
+    {
+      "phase": "final continuity rules including native-identity reuse guard",
+      "path": ".scratch/clean-mdm/company-publication-final.xml",
+      "sha256": "3df5bc217e2ac8e8bea9996f67c5648021efff52f7e097590c2a29cc1a891d34",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.304
+    }
+  ],
+  "unique_tests": 90,
+  "note": "Broader 89-test suite and final 12-test continuity suite overlap by 11 cases. Final guard changes only plan_continuity; final source hashes below include that guard.",
+  "commands": [
+    "uv run --frozen --extra s3 --extra mdm-runtime --extra mdm pytest tests/integration/test_clean_mdm_postgres.py tests/integration/test_clean_source_publications.py tests/mdm/test_clean_publication_continuity.py tests/mdm/test_clean_company_source.py -q --junitxml=.scratch/clean-mdm/company-publication-acceptance.xml",
+    "uv run --frozen --extra s3 --extra mdm-runtime --extra mdm pytest tests/mdm/test_clean_publication_continuity.py -q --junitxml=.scratch/clean-mdm/company-publication-final.xml"
+  ],
+  "final_source_sha256": {
+    "edgar_warehouse/mdm/clean/source_publications.py": "e97e4ab6ee5c21f07b6b99b18a9dee682bb4f950e5eea970d57a389651bd84d7",
+    "tests/integration/test_clean_source_publications.py": "5e856e8d23bd77290a4edc9bb041e2da933d0faf911528d8aa3d4eb79d304b09",
+    "tests/mdm/test_clean_publication_continuity.py": "ed21cfc82bb7c02e67007413ad8ee4fe7749996ea1d543c4df4a7304bde42bd2",
+    "tests/integration/test_clean_mdm_postgres.py": "9576702e08705df62de0c164ce698f7fda67f9cafec3770c4d1ee0716133398b",
+    "tests/mdm/test_clean_company_source.py": "adce3252b6d7e95e92c92208d5d88ef0ba331162639ce8596c1762b97040e1ad",
+    "tests/fixtures/clean_mdm/publication_v1/README.md": "74ec99a6f0b61283810a706325cb30d5a317d7cc641dbe27afbae6dc8b790fb0",
+    "tests/fixtures/clean_mdm/publication_v1/dataset.json": "d38138ed7d9deb990d2e4da2c61703cf8f302a698e9949fe76a5a31830f6cab6",
+    "tests/fixtures/clean_mdm/publication_v1/expected.json": "9de0881ea92ac93b07eabf06a9730b512989dbc7affd37cbe83af9caea8d2968",
+    "tests/fixtures/clean_mdm/publication_v1/level1.jsonl": "6c9f7ae9fe59e4172d01ce58d5c1bf9b46a176bea18c66bfe19641e3879ad5c7",
+    "tests/fixtures/clean_mdm/publication_v1/manifest.json": "e06ba98cae0238a1992b8256aacd0f79bd694e06307fa55fe57d54f9d6e3eed0",
+    "tests/fixtures/clean_mdm/publication_v1/relationships.jsonl": "b40346d5d0b4347ec28c591d25eac577f7ade028c8f0f5060c7cbd4885b9fc93",
+    "tests/fixtures/clean_mdm/publication_v1/reporting_exceptions.jsonl": "344bfe4391d335c08b76902bac625069289aac78151e524d9f1d393c3227ecda"
+  },
+  "broader_suite_module_sha256": "c09b9c79c5b6226cd4cf305eaf881094310f6bc7fdba72363a4868fff32cb4bb"
+}

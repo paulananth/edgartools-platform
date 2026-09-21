@@ -86,6 +86,8 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "025_clean_mdm_indexes.sql",
             "026_clean_mdm_attempts.sql",
             "027_clean_mdm_deferred.sql",
+            "028_clean_mdm_assessment.sql",
+            "029_clean_mdm_family_checkpoint.sql",
         ):
             extra = path.with_name(name)
             extra_source = extra.read_text()
@@ -125,6 +127,10 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "claim_publication(text,text,integer)",
             "finish_publication(text,text,bigint,text,text)",
             "record_attempt(uuid,uuid,text,text,jsonb)",
+            "assessment_snapshot(jsonb)",
+            "record_assessment(text,uuid)",
+            "supersede_assessment(text,uuid)",
+            "preview_batch(text,uuid)",
         ):
             conn.exec_driver_sql(
                 f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO {runtime}"

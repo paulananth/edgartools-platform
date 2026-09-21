@@ -12,6 +12,17 @@ SEC + GLEIF must pass local acceptance before other entity integrations.
 For current implementation, verification, ownership and next steps, start with
 [state of the build](state-of-build.md). Historical evidence below remains dated.
 
+[Current accepted Company policy](company-policy.md) records Q1–Q13.
+[Claude handoff reconciliation](design-reconciliation-2026-09-19.md) records
+verified corrections, the Agent Query Surface boundary and the now-accepted
+pre-application assessment coverage decision.
+[Candidate assessments](candidate-assessments.md) describes the persistence and
+recovery API, SQL inspection and verification boundary.
+[Family checkpoints](family-checkpoints.md) describes independent source progress
+and the source-verification precondition.
+[Source publications](source-publications.md) specifies the offline inventory and
+continuity verifier and the remaining native Company integration boundary.
+
 ## Read in delivery order
 
 1. [Domain model](domain-model.md) and [pipeline inventory](pipeline-inventory.md).

@@ -4,7 +4,80 @@ Checkpoint: 2026-09-19. This is a local development handoff, not a release or
 cutover approval. The shared core and first native Company preparation path
 are implemented; the complete redesign remains in progress.
 
-## Start here and preserve ownership
+## Current continuation — source-only Company prerequisite, 2026-09-20
+
+Ticket 11 is implemented on `codex/company-publication-verification` in
+`../edgartools-platform-company-publication-verification`, based on the unmerged
+Company branch at `7784c0e3`. The PR is stacked on `codex/sec-gleif-company`;
+merge its parent first, then rebase/retarget this increment before landing on main.
+Existing worktrees are preserved; `.planning/active-workstream` is unchanged.
+
+The [source-publication verifier](source-publications.md) checks retained manifest
+and member bytes against immutable acquisition evidence, distinguishes delivery
+from source coverage and proposes deterministic per-family recovery. The synthetic
+fixture publishes zero domain records. No new table, role, migration or native
+consumer activation was introduced. The existing generic CLI still accepts caller
+proof metadata; native source consumers must call the verifier before Merge Stage.
+
+Verification: 89 broader tests and 12 final continuity tests passed without skips
+(11 overlap; 90 distinct cases). [Evidence](../../../.scratch/clean-mdm/company-publication-acceptance.json)
+pins commands, report hashes and the final guard's targeted verification.
+[Review](../../../.scratch/clean-mdm/company-publication-review.md) records boundaries.
+No persistent local database changes, hosted deployment or source deletion occurred.
+
+Next is [ticket 12](../../../.scratch/clean-mdm/issues/12-integrate-native-gleif-company-publications.md):
+qualify native GLEIF metadata and normalization, integrate verified batch membership
+and exact whole-publication consumption accounting. SEC + GLEIF Company mastering
+and its matching qualification remain incomplete; continue Company before Person.
+
+## Prior continuation — Company pickup on 2026-09-20
+
+Rebased onto `origin/main` `dc55bf1d`; Company scope remains in
+`codex/sec-gleif-company`. [Latest pickup reconciliation](../../../.scratch/handover/2026-09-20-codex-company-enrichment-reconciliation.md)
+records the disposition of Claude’s proposals and differences from the newer
+accepted Company policy. Assessment work is preserved as `f3f924a9`.
+Migration 029 adds family-scoped cursors and existing-manifest support; see
+[family checkpoints](family-checkpoints.md). All 47 current Clean MDM PostgreSQL
+and native Company checks passed without skips; [evidence](../../../.scratch/clean-mdm/company-family-checkpoint-acceptance.json)
+pins the tested files. The next prerequisite is
+[ticket 11](../../../.scratch/clean-mdm/issues/11-verify-enrichment-publication-inventory.md),
+immutable source inventory/continuity verification. Neither checkpoint metadata
+nor an assessment proves GLEIF source completeness or matching qualification.
+
+## Prior continuation — after merge and Claude handoff
+
+PR #657 merged as `e2807e52` after all seven CI checks passed, including all
+83 PostgreSQL integration tests without skips. The CI-image prerequisite and
+conflict-fixture migration gap mentioned later in this checkpoint were fixed.
+
+Continue in `../edgartools-platform-sec-gleif-company` on
+`codex/sec-gleif-company`, rebased onto `b87fc05a` (PRs #658/#659 included).
+[Company Q1–Q13](company-policy.md) supersede the old manual-default and
+blanket deferred-match completion rules. Read the
+[handoff reconciliation](design-reconciliation-2026-09-19.md).
+[Design gate 08](../../../.scratch/clean-mdm/issues/08-confirm-company-candidate-assessment.md)
+is accepted; the candidate-assessment foundation is implemented in
+[ticket 09](../../../.scratch/clean-mdm/issues/09-build-company-candidate-assessment.md).
+The earlier integration worktree is preserved.
+
+Candidate-assessment checkpoint (2026-09-20): migration 028 retains every
+proposed binding/consolidation before application; shared `apply()` proceeds
+without a new manual pause. Rejected proposals retain veto/context; application
+revalidates affected state, supersedes stale proposals and retries boundedly.
+Applied events commit with the master journal/checkpoint/outbox. Preview stays
+rollback-only. [Recovery API](candidate-assessments.md).
+
+Verification: 665 broader checks passed; final assessment changes passed 9
+focused PostgreSQL tests, all without skips (overlapping suites). Source hashes
+and reports: [assessment evidence](../../../.scratch/clean-mdm/company-assessment-acceptance.json).
+No persistent schema/data migration or hosted deployment occurred. Fuzzy
+matching, rule qualification and complete SEC + GLEIF Company mastering remain
+unimplemented; this is an assessment foundation checkpoint.
+
+The sections below describe the original check-in and its evidence. Where its
+branch, PR-draft status or next steps differ, this continuation takes precedence.
+
+## Start here and preserve ownership (original checkpoint)
 
 - Continue from branch `codex/clean-mdm-integration` in
   `../edgartools-platform-clean-mdm-integration` or create your own runtime
