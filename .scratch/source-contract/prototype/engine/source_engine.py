@@ -41,12 +41,21 @@ MISSING = object()
 
 # ---------------------------------------------------------------- network guard (check 4)
 
-def _no_network(*_a, **_k):
-    raise RuntimeError("network access is refused by the Source Contract runner")
+# Python-level guard only: C libraries (libpq under psycopg2) open sockets below it.
+# See the prototype README finding on where no-network must really live.
+_REAL_CONNECT = socket.socket.connect
+LOOPBACK_ALLOWED = False  # the merge harness turns this on for its throwaway Postgres
 
 
-socket.socket.connect = _no_network  # type: ignore[method-assign]
-socket.create_connection = _no_network  # type: ignore[assignment]
+def _guarded_connect(self, address, *rest):
+    host = address[0] if isinstance(address, tuple) else address
+    if LOOPBACK_ALLOWED and host in ("127.0.0.1", "::1", "localhost"):
+        return _REAL_CONNECT(self, address, *rest)
+    raise RuntimeError(f"network access to {host!r} is refused by the Source Contract runner")
+
+
+socket.socket.connect = _guarded_connect  # type: ignore[method-assign]
+sys.modules.setdefault("source_engine", sys.modules[__name__])
 
 
 # ---------------------------------------------------------------- errors
@@ -225,6 +234,8 @@ def read_artifact(read: dict, raw: bytes) -> list[tuple[Any, dict]]:
             if rec is not None:
                 docs.append((rec, {}))
         return docs
+    if fmt == "bytes":  # no engine parsing: every table uses a custom_reader (ticket 04 Q4)
+        return [(None, {})]
     raise ContractInvalid("/read/format", "reader", f"unknown format {fmt!r}")
 
 
@@ -470,6 +481,15 @@ class Engine:
             raise ContractInvalid(ptr, f"schema:{e.validator}", e.message)
         for tname, table in self.contract["read"]["tables"].items():
             base = f"/read/tables/{tname}"
+            if ("custom_reader" in table) == ("columns" in table):
+                raise ContractInvalid(base, "one-row-source", "a table has either columns or a custom_reader, not both or neither")
+            if "custom_reader" in table:
+                step = table["custom_reader"].get("step")
+                if step not in _REGISTRY or _REGISTRY[step]["kind"] != "table":
+                    raise ContractInvalid(base + "/custom_reader/step", "custom-declared", f"no table reader {step!r} in custom.py")
+                if tname not in self.contract["silver"]:
+                    raise ContractInvalid(base, "silver-declared", f"table {tname!r} has no silver declaration")
+                continue
             if "each" in table:
                 self._check_path(table["each"], base + "/each")
             silver_cols = self.contract["silver"][tname]["columns"] if tname in self.contract["silver"] else None
@@ -594,6 +614,27 @@ class Engine:
         out: dict[str, list[dict]] = {t: [] for t in self.contract["read"]["tables"]}
         for doc, header in read_artifact(self.contract["read"], raw):
             for tname, table in self.contract["read"]["tables"].items():
+                if "custom_reader" in table:
+                    step = table["custom_reader"]["step"]
+                    fn = _REGISTRY[step]["fn"]
+                    try:
+                        rows = list(fn(raw))
+                        if self.purity_check and list(fn(raw)) != rows:
+                            raise RuntimeError(f"table reader {step} is not deterministic")
+                    except Reject as r:
+                        self.rejects.append({"table": tname, "artifact": sha, "reason": str(r)})
+                        continue
+                    declared = set(self.contract["silver"][tname]["columns"])
+                    for row in rows:
+                        extra = set(row) - declared
+                        bad = (next(iter(extra)), f"table reader {step} returned undeclared column {next(iter(extra))!r}") if extra \
+                            else self._check_types(tname, row)
+                        if bad:
+                            self.type_errors.append({"table": tname, "column": bad[0], "message": bad[1], "artifact": sha,
+                                                     "pointer": f"/read/tables/{tname}/custom_reader" if extra else f"/silver/{tname}/columns/{bad[0]}"})
+                            continue
+                        out[tname].append(row)
+                    continue
                 items = [doc] if table.get("each", ".") == "." else as_list(resolve(doc, table["each"]))
                 has = (table.get("where") or {}).get("has") or []
                 items = [it for it in items if all(isinstance(it, dict) and h in it for h in has)]
@@ -885,6 +926,15 @@ def mapdoc(engine: Engine) -> str:
              f"Generated from `contract.yaml` (digest `{engine.digest[:12]}`). Do not edit by hand.", ""]
     total = custom = 0
     for t, table in c["read"]["tables"].items():
+        if "custom_reader" in table:
+            cols = c["silver"][t]["columns"]
+            total += len(cols)
+            custom += len(cols)
+            lines += [f"## `{t}`  (rows from **custom** table reader `{table['custom_reader']['step']}`)", "",
+                      "| Silver column | Type | From the Bronze Artifact | Into MDM |", "|---|---|---|---|"]
+            lines += [f"| `{col}` | {typ} | **custom** | {targets.get((t, col), 'evidence only' if t == ds.get('table') else '—')} |"
+                      for col, typ in cols.items()] + [""]
+            continue
         lines += [f"## `{t}`  (one row per `{table.get('each', '.')}`)", "",
                   "| Silver column | Type | From the Bronze Artifact | Into MDM |", "|---|---|---|---|"]
         for col, expr in table["columns"].items():

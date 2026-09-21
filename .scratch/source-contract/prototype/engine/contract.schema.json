@@ -13,7 +13,7 @@
     "read": {
       "type": "object", "additionalProperties": false, "required": ["format", "tables"],
       "properties": {
-        "format": {"enum": ["xml", "json"]},
+        "format": {"enum": ["xml", "json", "bytes"]},
         "envelope": {"enum": ["sgml_text"]},
         "root": {"type": "string"},
         "on_parse_error": {"enum": ["no_rows", "retry_without_control_chars"]},
@@ -22,8 +22,9 @@
         "tables": {
           "type": "object", "minProperties": 1,
           "additionalProperties": {
-            "type": "object", "additionalProperties": false, "required": ["columns"],
+            "type": "object", "additionalProperties": false,
             "properties": {
+              "custom_reader": {"type": "object", "additionalProperties": false, "required": ["step"], "properties": {"step": {"type": "string"}}},
               "each": {"type": "string"},
               "where": {"type": "object", "additionalProperties": false,
                         "properties": {"has": {"type": "array", "items": {"type": "string"}}}},

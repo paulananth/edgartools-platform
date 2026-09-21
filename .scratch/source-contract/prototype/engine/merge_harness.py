@@ -32,12 +32,12 @@ class Postgres:
         from sqlalchemy import create_engine, text
         from sqlalchemy.exc import DBAPIError
         from edgar_warehouse.mdm.migrations.runtime import _apply_source_registry_migration
-        import socket
         self.name = f"source-contract-proving-{uuid4().hex[:8]}"
         _docker("run", "-d", "--rm", "--name", self.name, "-p", "127.0.0.1::5432", "-e", "POSTGRES_PASSWORD=test", IMAGE)
         port = _docker("port", self.name, "5432/tcp").rsplit(":", 1)[1]
-        # the runner blocks the network; localhost Postgres is the one allowed peer
-        socket.socket.connect = _REAL_CONNECT
+        # the runner's guard allows loopback only once the harness asks for it
+        import sys as _sys
+        _sys.modules["source_engine"].LOOPBACK_ALLOWED = True
         self.admin = create_engine(f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres")
         deadline = time.time() + 60  # research 03: an 8 s wait failed 4 of 7 runs on Colima
         while True:
@@ -61,8 +61,6 @@ class Postgres:
         _docker("stop", self.name)
 
 
-import socket as _socket  # noqa: E402
-_REAL_CONNECT = _socket.socket.connect
 
 
 def _fresh(pg, source_code: str, dataset: dict, policy: dict) -> str:

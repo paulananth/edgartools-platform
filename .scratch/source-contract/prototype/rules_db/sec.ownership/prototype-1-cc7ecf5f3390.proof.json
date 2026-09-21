@@ -21,7 +21,7 @@
    "sec_ownership_non_derivative_txn": 8177,
    "sec_ownership_derivative_txn": 2787
   },
-  "seconds": 18.6,
+  "seconds": 11.4,
   "metrics": [
    {
     "metric": "rejected",

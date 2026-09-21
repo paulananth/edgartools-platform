@@ -12,6 +12,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -54,7 +55,9 @@ def work(paths):
             rec["error"] = f"PathError: {e}"
             out.append(rec)
             continue
-        acc = next((r["accession_number"] for t in mine.values() for r in t), None) or se._sgml_header(text).get("ACCESSION NUMBER")
+        # read independently of the contract's own header primitive, so accession_number is really compared
+        m = re.search(r"^ACCESSION NUMBER:\s*(\S+)", text, flags=re.M)
+        acc = m.group(1) if m else None
         theirs = oracle.parse_ownership(acc, text, "4", submissions_lookup=_lookup)
         for t, rows in theirs.items():
             if len(rows) != len(mine[t]):

@@ -8,7 +8,7 @@
  "failures": [],
  "merge": {
   "cases": 1,
-  "seconds": 10.3,
+  "seconds": 6.5,
   "entities": 1,
   "reviews": 2,
   "batches": 2,
