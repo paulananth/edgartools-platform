@@ -992,7 +992,7 @@ def test_silver_landing_stage_applies_files_11_through_16_before_dbt_gold(
     tmp_path: Path,
 ) -> None:
     combined = _plan_output(tmp_path)
-    for n in ("11", "12", "13", "14", "16"):
+    for n in ("11", "12", "13", "14", "16", "20"):
         assert f"infra/snowflake/sql/bootstrap/{n}_" in combined, n
     titles = _plan_stage_titles(tmp_path)
     silver_idx = titles.index("Snowflake: silver-landing schema + ingest")
@@ -1010,7 +1010,7 @@ def test_no_bootstrap_sql_file_is_missing_from_the_full_plan(tmp_path: Path) -> 
     script call, not a literal file reference)."""
     bootstrap_dir = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap"
     covered_directly = {
-        "07", "08", "06", "09", "10", "11", "12", "13", "14", "16", "17", "18", "19",
+        "07", "08", "06", "09", "10", "11", "12", "13", "14", "16", "17", "18", "19", "20",
     }
     superseded_by_terraform_or_deprecated = {"01", "02", "03", "04", "05"}
     covered_via_deploy_snowflake_stack = {"15"}
