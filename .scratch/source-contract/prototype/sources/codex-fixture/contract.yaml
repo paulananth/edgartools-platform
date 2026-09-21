@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=../../engine/contract.schema.json
+# PROTOTYPE — Codex's publication_v1 fixture (tests/fixtures/clean_mdm/publication_v1/) as a Source Contract.
+# `dataset.contract` is Codex's dataset.json verbatim (JSON is YAML 1.2), adapter block unchanged.
+source: codex.publication_v1
+version: "prototype-1"
+bronze: { family: codex.publication_v1 }
+
+read:
+  format: json
+  records: jsonl
+  tables:
+    fixture_level1:
+      each: "."
+      columns:
+        key:  { text: { path: key, default: null } }
+        name: { text: { path: name, default: null } }
+
+silver:
+  fixture_level1:
+    key: [key]
+    columns: { key: string, name: string }
+
+dataset:
+  table: fixture_level1
+  contract:
+    {
+      "provider": "synthetic-offline-gleif-shape",
+      "family": "fixture",
+      "publication_families": [
+        "golden_copy"
+      ],
+      "schema_version": "1",
+      "record_key": "key",
+      "publication_key": "publication",
+      "effective_time": "explicit publication effective time",
+      "semantics": "patch",
+      "publication_contract": {
+        "version": 1,
+        "format": "clean-mdm-publication-v1",
+        "continuity": "sequence-predecessor-sha256-v1",
+        "publication_family": "golden_copy",
+        "required_members": [
+          "level1",
+          "relationships",
+          "reporting_exceptions"
+        ],
+        "replacement_scope": "synthetic-company-fixture",
+        "revision_versions": {
+          "contract_version": "fixture-v1",
+          "parser_version": "fixture-v1",
+          "schema_version": "1",
+          "configuration_version": "fixture-v1"
+        }
+      },
+      "adapter": {
+        "version": "fixture-v1",
+        "kind": "company",
+        "record_key": [
+          "key"
+        ],
+        "identifiers": {
+          "lei": "key"
+        },
+        "fields": {
+          "name": "name"
+        },
+        "source_record_provenance": true
+      }
+    }
+
+checks:
+  - unique: { table: fixture_level1, columns: [key] }
+
+tests:
+  - case: Codex's two synthetic Level 1 records map to two Company assertions through Codex's own adapter block
+    fixture: fixtures/level1.jsonl
+    expect:
+      silver:
+        fixture_level1: [ { key: SYNTHETIC-COMPANY-A, name: Synthetic Company A }, { key: SYNTHETIC-COMPANY-B } ]
+      mdm:
+        - { kind: company, identifiers: { lei: SYNTHETIC-COMPANY-A }, fields: { name: Synthetic Company A } }
+        - { kind: company, identifiers: { lei: SYNTHETIC-COMPANY-B }, fields: { name: Synthetic Company B } }
