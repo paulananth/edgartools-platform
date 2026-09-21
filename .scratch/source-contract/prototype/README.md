@@ -116,7 +116,7 @@ loopback only for the merge harness's throwaway Postgres. That guard does
     through `getaddrinfo`, which is not guarded. Check 4 must be enforced below
     Python: run the Proving Run in a container or network namespace with no
     network, plus an explicit loopback allowance for the throwaway Postgres.
-13. **Both custom shapes ran.** The value step (`owner_display_name@1`,
+13. **All three custom shapes ran.** The value step (`owner_display_name@1`,
     `owner_kind@1`), the custom check (`owner_name_has_letters@1`) and the
     table reader (`summary_comp_table@1`, over a *synthetic* HTML table, with
     `read.format: bytes`) each pass their cases. Each output is type-checked
@@ -126,6 +126,11 @@ loopback only for the merge harness's throwaway Postgres. That guard does
     `sources/codex-fixture/` carries `publication_v1/dataset.json` verbatim
     (JSON is YAML 1.2), and Clean MDM's `normalize` maps both records as
     expected.
+15. **YAML 1.2 alone does not give "every plain value is text".** Checked
+    after the prototype: `ruamel.yaml` in 1.2 mode keeps `NO` as text, but
+    reads `010` as 10, `2026-09-21` as a date and `1e3` as 1000.0. The
+    prototype's loader kept those numbers. The real loader must read plain
+    scalars as strings and let the schema type them (spec §6).
 
 ## Limits
 

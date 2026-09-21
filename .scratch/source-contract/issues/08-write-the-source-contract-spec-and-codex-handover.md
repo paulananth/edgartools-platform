@@ -1,7 +1,7 @@
 # Write the Source Contract spec and the Codex handover
 
 Type: task
-Status: open
+Status: resolved (2026-09-21)
 Blocked by: 07
 
 ## Question
@@ -38,3 +38,25 @@ Send together in one note (operator, 2026-09-21), not piecemeal:
    finding 2): let a Dataset Contract defer the identity kind to the
    Mastering Policy's classification rules (e.g. rule C-J), or carry a
    provisional kind the policy may override.
+
+## Answer
+
+Written:
+- **Spec:** [`docs/specs/source-contract/spec.md`](../../../docs/specs/source-contract/spec.md).
+  It is self-contained for a contract author: the file format, the path
+  grammar, all 23 primitives, lookups, the three Custom Step shapes and their
+  six rules, `silver`, `dataset` (the adapter reference, condensed), checks,
+  Named Cases, the Batch Gate, output and exit codes, `source run`, no-network,
+  the Mapping Document, the lifecycle and activation, and the complete GLEIF
+  contract as its worked example. It carries the prototype's limits verbatim.
+  Two dependencies block go-live and have their own sections: the immutable
+  Dataset Contract (§23) and the identity kind at mapping time (§13.4).
+- **Handover:** [`.scratch/handover/2026-09-21-claude-to-codex-source-contract.md`](../../handover/2026-09-21-claude-to-codex-source-contract.md).
+  It leads with GLEIF, because Codex is building that loader now (this
+  replaces the separate heads-up note), then lists the 5 blocking requests
+  apart from the rest.
+- **Check 7:** six contract terms were missing from `CONTEXT.md` and are
+  now defined: Artifact Family, Primitive, Named Convention, Custom Step,
+  Named Case, Batch Gate.
+- **New finding while writing (15):** YAML 1.2 alone still types `010`,
+  dates and `1e3`. The real loader must read plain scalars as text (spec §6).

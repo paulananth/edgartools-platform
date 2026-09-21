@@ -94,6 +94,30 @@ _Avoid_: Approval inferred from silence or from an earlier approval, agent self-
 One run of a draft Source Contract or Mastering Policy version's tests and merge, in the Rules Database and never against production identities, whose passing result is the proof that makes the version proven.
 _Avoid_: Trial, dry run (the CLI flag that does nothing), canary (a small run on production), calibration (threshold tuning only)
 
+**Artifact Family**:
+A named kind of Bronze Artifact that shares one layout and meaning, which a Source Contract reads or looks up by name without knowing where its artifacts are stored.
+_Avoid_: A storage path or glob in a contract, a source (one family can serve several sources)
+
+**Primitive**:
+One named, versioned, source-independent operation a Source Contract calls with parameters to read or transform a value; the engine provides it and its own tests prove it.
+_Avoid_: Inline code or expressions in a contract, a function written for one source
+
+**Named Convention**:
+A Primitive that stands for a published format convention used by two or more sources or columns, replacing a chain of small Primitives.
+_Avoid_: A home for one source's quirks, a large Primitive admitted without the four-part rule
+
+**Custom Step**:
+Code that belongs to one source, lives in that source's folder, is declared in its Source Contract, and takes declared inputs and returns a value, rows or violations without fetching, writing or calling MDM.
+_Avoid_: Engine code named after a source, undeclared inputs, a custom step that reaches another source
+
+**Named Case**:
+A test in a Source Contract that names what it proves, points at a fixture, and states the expected silver rows, MDM assertions or merge outcomes for the columns that matter.
+_Avoid_: A snapshot as the only test, a case named by number, expectations re-recorded silently
+
+**Batch Gate**:
+The declared limits a Source Contract version must meet on a pinned batch of real Bronze Artifacts in a Proving Run, each looser-than-zero limit carrying its reason.
+_Avoid_: A limit without a reason, an unpinned batch, a gate that replaces a Mastering Policy's precision proof
+
 **MDM Change Journal**:
 The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
 _Avoid_: A second root-run authority, mutable log of only the latest result

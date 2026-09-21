@@ -1,0 +1,813 @@
+# Source Contract
+
+Status: **proposed**, 2026-09-21. Planning only: this document implies no
+code, migration or edit to any Clean MDM file. Written from the resolved
+tickets of the [Source Contract](../../../.scratch/source-contract/map.md)
+wayfinder map, which hold the reasons. This document holds the rules.
+Codex builds the real engine from it. The throwaway prototype that proved it
+is in [`.scratch/source-contract/prototype/`](../../../.scratch/source-contract/prototype/README.md).
+
+A contract author needs only this document and one example contract (§22).
+If you had to read engine code to write a contract, this document is wrong:
+report it.
+
+## 1. Purpose
+
+Today a new source means a new Python parser, a silver table written by hand
+in three places, and a hand-written Clean MDM adapter. A **Source Contract**
+replaces all of that with **one file per source**. The file declares:
+
+1. how the source's Bronze Artifacts are read (`read`);
+2. the silver table the source produces (`silver`);
+3. how silver rows map into MDM (`dataset`, Clean MDM's own Dataset Contract);
+4. the tests and data checks that prove it (`tests`, `checks`, `gate`).
+
+Adding a source becomes a file, not a module. Operator's framing
+(2026-09-21): *"how easy is to bring new data in and master and test just
+using configuration input file"*.
+
+## 2. Scope
+
+**In:** everything from an existing Bronze Artifact to a Clean MDM source
+publication, and the tests that prove it.
+
+**Out:**
+- getting data into bronze (fetch, schedule, SEC access);
+- where silver is physically stored after Snowflake;
+- generating Step Functions from config;
+- retrofitting the existing parsers;
+- the Mastering Policy rules themselves
+  ([policy language](../mdm/policy-language.md)). This document only fixes
+  their authoring convention (§4.4).
+
+## 3. Terms
+
+All terms are defined in [`CONTEXT.md`](../../../CONTEXT.md):
+- the contract and its documents: **Source Contract**, **Dataset Contract**,
+  **Mapping Document**, **Bronze Artifact**, **Artifact Family**;
+- what a contract calls: **Primitive**, **Named Convention**, **Custom Step**;
+- how it is proven and activated: **Named Case**, **Batch Gate**, **Proving
+  Run**, **Rules Database**, **Rule Activation Approval**;
+- the MDM side: **Mastering Policy**, **Identifier Contract**, **Source Record
+  Binding**.
+
+A contract may use no other domain term (acceptance check 7).
+
+## 4. Where contracts live, and their lifecycle
+
+### 4.1 The Rules Database is the master
+
+- The **Rules Database** is a Postgres database of its own, separate from
+  Clean MDM's `mdm_v2`. It is local first. It holds every version of every
+  Source Contract and Mastering Policy, with its state, its proof and its
+  approval (ticket 06 Q1–Q2).
+- YAML is the authoring and export format. The database stores each version
+  as canonical JSON with its SHA-256 digest. A stored version never changes.
+- Custom code (`custom.py`) and fixtures stay files. A stored version records
+  their digests, and the runner refuses a mismatch.
+- **Production never reads the Rules Database.** When a version becomes
+  active, the Dataset Contract is registered into Clean MDM through
+  `register_dataset`, and a Mastering Policy through `register_policy`.
+  Production merges read only `mdm_v2`, pinned by digest.
+
+### 4.2 Lifecycle
+
+`draft → proven → active → retired`
+
+| State | Enters when | By whom |
+|---|---|---|
+| draft | `source save` stores a validated new version | agent |
+| proven | a Proving Run passes every named case, every check and the Batch Gate (§16) | agent |
+| active | the version is registered into Clean MDM (§4.1) | agent, **or** a person — see §4.3 |
+| retired | a newer version of the same source becomes active; kept for replay | automatic |
+
+A failed Proving Run leaves the version in draft. The failed run is kept as
+a record.
+
+### 4.3 Who activates
+
+- A version that **only adds data** (new fields, or a new source that binds
+  nothing) may be activated by the agent.
+- A version that **can bind or merge identities** needs a **Rule Activation
+  Approval**. The agent must explicitly ask the operator before it makes
+  the version active; an approval is never inferred from silence or from an
+  earlier approval. The approver, the time and the exact digest approved are
+  stored with the proof.
+
+### 4.4 One authoring convention for both languages
+
+The Mastering Policy is authored the same way as a Source Contract (ticket 04
+Q2a):
+- strict YAML 1.2, stored as canonical JSON;
+- the same path rules;
+- the same `primitive: {arguments}` call shape;
+- a published JSON Schema.
+
+The rules themselves don't change, only how they are written. The stored
+JSON may keep the shape Codex's `register_policy` expects. A kind-level
+`default_sources` list, with per-field exceptions, makes "SEC first" one line
+a reviewer can check (handover item 5).
+
+### 4.5 Commands
+
+| Command | Does |
+|---|---|
+| `source save <file.yaml>` | load → validate → store an immutable draft version in the Rules Database |
+| `source export <name> <version>` | write a stored version back out as YAML (line numbers in errors refer to this output) |
+| `source prove <name\|file> [--gate] [--json]` | run a **Proving Run** (§17) |
+| `source run [--source <name>]` | production: parse new Bronze Artifacts for every active contract (§18) |
+| `source mapdoc <name\|file>` | print the generated Mapping Document (§20) |
+
+**Not prototyped:** `save`, `export`, the Rules Database schema, lifecycle
+states and approvals are design only. The prototype stored proofs as files.
+
+## 5. The source folder
+
+```
+sources/<name>/
+  contract.yaml                     the Source Contract (authoring copy; the Rules Database holds the master)
+  custom.py                         optional: this source's Custom Steps
+  fixtures/…                        Bronze Artifacts for Named Cases
+  fixtures/families/<family>/…      lookup targets for Named Cases (§10)
+  MAPPING.md                        generated; never edited by hand
+```
+
+Nothing outside the folder may name the source (acceptance checks 1–3). The
+one exception is machine configuration: where each Artifact Family's files
+sit on a given machine. That is environment configuration, like a deployment
+setting, and is not part of any contract.
+
+## 6. File format
+
+- **Strict YAML 1.2, with every plain scalar read as text** (ticket 04 Q0).
+  PyYAML reads YAML 1.1 and must not be used. YAML 1.2 alone is not enough:
+  `ruamel.yaml` 0.19 in 1.2 mode keeps `NO` as text, but still turns `010`
+  into the integer 10, `2026-09-21` into a date and `1e3` into a float. The
+  loader must read plain scalars as strings; the JSON Schema and the
+  primitive tables then give each argument its type. The prototype's loader
+  did not do this: it kept YAML's numbers and turned dates back into text
+  (finding 15).
+- **Stored as canonical JSON**: sorted keys, no whitespace. The digest is its
+  SHA-256. Comments stay in the YAML and never enter the digest. A reason
+  that must survive storage goes in a `why:` field, not a comment.
+- **Errors name a line and a rule.** This includes YAML syntax errors.
+  Example: an unquoted `LegalName[*]` is read as a YAML alias. The loader
+  must turn that into `yaml-syntax` at the right line, with a hint that paths
+  have no wildcards (prototype finding 3).
+- **JSON Schema.** The tables in this document are normative. The real
+  schema is generated from them and must enforce every primitive's argument
+  list, so editors autocomplete it and validation names the keyword. The
+  prototype's `contract.schema.json` is illustrative only: it checks
+  structure, and the prototype checked arguments in Python.
+- **YAML anchors and merge keys** (`&name`, `<<:`) are Open (§25, item 1).
+  The prototype used them once, to share eleven transaction columns.
+
+## 7. Top-level keys
+
+| Key | Required | Meaning |
+|---|---|---|
+| `source` | yes | the source code: lowercase dotted, e.g. `gleif.level1`. Becomes Clean MDM's `source_code` |
+| `version` | yes | the author's version label. The digest, not the label, identifies a version |
+| `bronze` | yes | `{ family: <Artifact Family> }`: what `source run` reads |
+| `requires` | if `custom.py` imports anything outside the standard library | distribution names, e.g. `[edgartools]` |
+| `read` | yes | §8 |
+| `lookups` | no | §10 |
+| `silver` | yes | §12 |
+| `dataset` | to reach MDM | §13 |
+| `checks` | no | §14 |
+| `tests` | yes (at least one Named Case) | §15 |
+| `gate` | to become proven | §16 |
+
+## 8. `read`: from a Bronze Artifact to rows
+
+### 8.1 Readers
+
+| `format` | Options | Produces |
+|---|---|---|
+| `xml` | `envelope: sgml_text` (take the `<XML>` block of a full SEC `.txt` submission and expose its header fields); `root: <tag>` (any other root gives zero rows); `on_parse_error: no_rows \| retry_without_control_chars` | one document |
+| `json` | `records: jsonl` (one document per line); `record_path: <path>` (the record inside each line) | one document per record |
+| `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
+
+A streaming reader for zipped JSON arrays (the full GLEIF Golden Copy) is
+needed and was not prototyped (§26).
+
+### 8.2 The canonical tree
+
+Every reader produces the same tree, so one path form reads XML and JSON:
+- an element or object is a map;
+- text is under `$`;
+- an attribute is under `@name`;
+- a child that occurs once is a map, and a child that repeats is a list in
+  document order;
+- a namespace prefix is kept, as in `prefix:Name` (GLEIF's `gleif:conformity`).
+
+GLEIF's JSON already has this shape. XML is converted to it.
+
+### 8.3 Paths
+
+A path is keys joined by `.`. Each key is exactly one of:
+- `$`;
+- a name, optionally prefixed: `Name` or `prefix:Name`;
+- an attribute: `@name` or `@prefix:name`.
+
+The single path `.` means "the current item".
+
+A path has no wildcards, indexes, filters, functions or quoting. The rule is
+a **whitelist**: the prototype's first "no dots or spaces" rule wrongly
+accepted `"LegalName[*].$"`. A path that starts with `@` must be quoted in
+YAML (`"@id"`).
+
+At run time:
+- **A missing path gives the `default`.** Missing and JSON `null` are both
+  "no value"; `default` applies to both.
+- **Crossing a list in the middle of a path is an error** that names the
+  location: "path crosses a repeating group; use each". It is never a silent
+  first match.
+- **Ending at a map where text is needed is an error**: "add `.$` or use
+  `text_all`".
+
+### 8.4 Tables
+
+```yaml
+read:
+  tables:
+    <silver table name>:
+      each: <path>                  # one row per item; "." = one row per document
+      where: { has: [<child>, …] }  # keep only items that have every listed child
+      columns:
+        <column>: <expression>
+    <other table>:
+      custom_reader: { step: <name>@<n> }   # instead of each/where/columns (§11)
+```
+
+- For `each`, a single map counts as a one-item list, and a missing path
+  gives zero rows. That rule settles GLEIF's "object or list" fields once.
+- `where` runs **before** `ordinal` numbers the rows.
+- Paths inside a table are relative to the item. `from: document` reads from
+  the document root instead.
+- A table has **either** `columns` **or** a `custom_reader`, never both.
+
+### 8.5 Expressions
+
+A column is exactly one of:
+- one call: `{ <primitive>: { <arguments> } }`;
+- a chain: `{ steps: [ <call>, <call>, … ] }`, where each step after the first
+  receives the previous value;
+- a Custom Step: `{ custom: { step: <name>@<n>, inputs: { … } } }`;
+- inside `custom.inputs` only: the name of a column already computed in the
+  same row.
+
+No string is ever run as code. `contains: "see remarks"` is a literal, and
+`regex:` is a literal pattern.
+
+## 9. Primitives
+
+These are the 23 that ran in the prototype. **Every primitive that reads a
+path requires an explicit `default:`**, because this repo has three different
+"absent" results (`""`, `null`, `false`). The prototype exempted
+`value_with_footnotes`; the spec does not.
+
+**Readers:** they read the current item, or the document with `from: document`.
+
+| Primitive | Required | Optional | Returns |
+|---|---|---|---|
+| `text` | `path`, `default` | `from` | the text at a `$` or `@attr` path, stripped |
+| `text_all` | `path`, `default` | `from` | all text under an element, in order, stripped. Use it where an element mixes text and children |
+| `int` | `path`, `default` | `from` | an integer, or `default` if the text is not a whole number |
+| `number` | `path`, `default` | `from` | a double, or `default` |
+| `flag` | `path`, `true_set`, `default` | `from` | `true` if the stripped text is in `true_set`, otherwise `false`. `default` applies only if the value is missing |
+| `date_prefix` | `path`, `default` | `from` | the leading `YYYY-MM-DD` of the unstripped text, otherwise `default` |
+| `timestamp` | `path`, `default` | `from` | the text as written. It does **not** convert time zones (gap G4, §24) |
+| `value_with_footnotes` | `path`, `default` | `from` | **Named Convention.** SEC's `<x><value/><footnoteId id/></x>` as `"value [F1,F2]"` |
+| `header` | `name` | `default` | a field of the reader's envelope header, e.g. `ACCESSION NUMBER` |
+| `artifact` | `name` | — | an artifact attribute; `sha256` today |
+| `const` | `value` | — | the literal |
+| `ordinal` | — | — | the 1-based position of the item after `where` |
+| `count` | `each` | `from` | how many items a group has (missing = 0) |
+| `join` | `each`, `parts`, `default` | `from`, `separator` | for each item, the `parts` (expressions) joined, stripped; the items joined by `separator`. No items gives `default` |
+| `ref` | `lookup` | — | the lookup result record (§10) |
+
+**Chain steps:** each takes the previous value.
+
+| Primitive | Required | Optional | Returns |
+|---|---|---|---|
+| `upper` | — | — | uppercase text |
+| `strip_spaces` | — | — | the text with every space removed |
+| `starts_with` | `value` | — | `true` or `false` |
+| `empty_to_null` | — | — | `null` for `""`, otherwise unchanged |
+| `when` | `contains`, `then` | `ignore_case` | the value of the `then` expression if the text contains the literal, otherwise unchanged |
+| `get` | `path`, `default` | — | the value at a path in the previous value (a lookup record) |
+| `len` | `path`, `default` | — | the length of a list at a path in the previous value |
+| `to_text` | — | `default` | the previous value as text; `null` gives `default` |
+
+**Rules for adding a primitive** (ticket 04 Q2):
+- By default, add a small primitive.
+- A **Named Convention** is admitted only if all four hold:
+  1. it names a published format convention;
+  2. two or more sources or columns use it;
+  3. it has its own unit-test table in the engine;
+  4. it has a one-line vocabulary entry that shows the chain it replaces.
+- Logic that belongs to one source is a Custom Step (§11), never a primitive.
+
+Every primitive is versioned `name@n`; an unversioned name means `@1`.
+
+## 10. `lookups`: another Artifact Family
+
+```yaml
+lookups:
+  owner_submissions:
+    family: sec.submissions_main          # an Artifact Family, never a path
+    key: owner_cik                        # a column already computed in the row
+    select: { as_of: { header: { name: FILED AS OF DATE } }, fallback: earliest_after }
+```
+
+- **Selection (ticket 04 Q3):** take the copy captured on or before `as_of`.
+  If none exists, `fallback: earliest_after` takes the earliest copy after
+  it; `fallback: none` returns "not found". This is repeatable, because
+  bronze only gains later-dated captures. The capture date is the date in the
+  bronze path, which is the fetch date by construction
+  (`edgar_warehouse/infrastructure/dataset_path_catalog.py:215-219`). S3
+  object times are **never** capture times: every submissions object carries
+  2026-07-19, the account-migration copy.
+- **Result record:** `{found, artifact_sha256, payload, selected}`, read with
+  `ref` then `get`/`len`. Record `artifact_sha256` on the row, so the copy
+  used can be named.
+- **Never fetches.** A missing copy gives `found: false`.
+- **Named Cases read the source folder's own `fixtures/families/<family>/`**,
+  never machine bronze, so a case gives the same result on every machine
+  (prototype finding 5).
+
+## 11. Custom Steps
+
+Custom code lives in the source's `custom.py` and registers itself with one
+of three shapes:
+
+| Shape | Declared as | Signature | Use |
+|---|---|---|---|
+| **value step** | `custom: { step: name@n, inputs: {…} }` in a column | named inputs → one value | one column that primitives cannot compute (Form 3/4/5 `owner_display_name@1`) |
+| **table reader** | `custom_reader: { step: name@n }` on a table | Bronze Artifact bytes → rows | a document no reader can parse (HTML tables) |
+| **custom check** | `custom_check: { step: name@n, table, inputs: […] }` in `checks` | named inputs → `null` or a problem message | a data rule the built-in checks cannot state |
+
+The six rules (ticket 04 Q4), for every shape:
+1. **Inputs are named in the contract.** The code sees nothing else.
+2. **The output is checked** against the declared silver column or table. An
+   undeclared column, or a wrong type, is a located failure.
+3. **No side effects**: no network, no file writes, no MDM call. The runner
+   calls each step twice on fixtures and fails a step whose results differ.
+4. **Imports are declared** in `requires` (distribution names). The engine
+   maps modules to distributions with `importlib.metadata`, never a
+   hand-written alias, and refuses an undeclared import.
+5. **Versioned** `@n`. Changing the logic means a new `@n`, and the old one
+   stays for replay.
+6. **Bad data is rejected, bugs stop the run.** A step may raise
+   `Reject(reason)`; the runner counts it against the gate (`rejected`) and
+   continues. Any other exception stops the run with exit 3, naming the step,
+   the version and the record.
+
+## 12. `silver`
+
+```yaml
+silver:
+  <table>:
+    key: [<column>, …]
+    columns: { <column>: <type>, … }       # type: string | bigint | double | boolean | date | timestamp; suffix ? = nullable
+```
+
+- The `read` columns and the `silver` columns must be the same set;
+  otherwise the contract is invalid.
+- Every output row is type-checked. A mismatch is a **located failure**
+  (exit 1) pointing at the silver column. It is not an engine bug (prototype
+  finding 4).
+- A column that counts real-world records uses `bigint`, never a small
+  integer (repo rule in `CLAUDE.md`).
+- The table's physical schema and its collapse rule are generated from this
+  block (map decision Q7). Where silver is stored is out of scope.
+
+## 13. `dataset`: into MDM
+
+```yaml
+dataset:
+  table: <the silver table that feeds MDM>
+  contract: <Clean MDM Dataset Contract, including its adapter block, unchanged>
+```
+
+The `contract` is Clean MDM's own Dataset Contract. Its `adapter` block is
+read by Clean MDM's `normalize`
+(`edgar_warehouse/mdm/clean/adapters.py:49-158`), one silver row to one
+assertion. The prototype carried Codex's `publication_v1/dataset.json` into
+a contract verbatim (JSON is YAML 1.2), and `normalize` mapped it as
+expected.
+
+### 13.1 Adapter keys
+
+The full reference, with `path:line` evidence for every key and every
+rejection, is in
+[research 01](../../../.scratch/source-contract/research/01-mapping-language-reference.md).
+
+| Key | Required | Meaning |
+|---|---|---|
+| `version` | yes | adapter version. It enters every `assertion_id` (§23) |
+| `kind` \| `kind_field` + `kind_values` | one of them | a fixed kind, or an exact, case-sensitive lookup with no fallback |
+| `record_key` (+ `record_key_format`) | yes | list of silver columns. One part gives the plain value; several give a JSON array string |
+| `identifiers` (+ `identifier_formats`) | no | namespace → column. Only `sec_cik` exists as a format (gap G3) |
+| `fields` | no | MDM field → column. A name not in the Mastering Policy is evidence only |
+| `field_shape` | no | only `nullable_text` has an effect; any other value is silently ignored |
+| `profiles`, `relationships` | no | Governed Role Profiles and reported edges. Their sub-keys are in research 01 §1.2–1.3 |
+| `source_record_provenance` | no | **set it to `true`** (gap X3): without it, a re-ordered file mints new assertions |
+| `provenance` | no | source values copied into provenance |
+| `retain_deferred` | no | unsupported records become deferred evidence instead of failing the batch |
+
+### 13.2 Rules the code applies that a contract author must know
+
+- A path through a list gives `null` with no error. So the `silver` table
+  must already be one row per MDM subject; `read` does the fan-out.
+- Relationships whose target key is missing are dropped with no record (gap
+  F5), and target keys are never formatted (gap F4).
+- A field value that is a map with `"op"` is an operation. Use
+  `field_shape: nullable_text` unless an operation is intended.
+- `semantics` is never read: fields always behave as patches and collections
+  as snapshots, so emit the complete identifier, profile and relationship set
+  on every row.
+
+### 13.3 Other Dataset Contract parts
+
+Only `family`, `schema_version`, `publication_families`,
+`publication_contract` and `registry_evidence` change behaviour. `provider`,
+`record_key`, `publication_key`, `effective_time` and `semantics` are required
+but free text. The **PROPOSED** closed value set for each is in research 01
+§3. The Source Contract validator should enforce those sets once Codex
+accepts them. Never author `registry_evidence`: `register_dataset` adds it.
+
+### 13.4 The identity kind (blocking for sources whose kind is decided by a rule)
+
+The adapter needs a kind for each row **at mapping time**. For Form 3/4/5
+reporting owners, the kind is decided by **rule C-J**, a Mastering Policy
+classification. Three answers exist:
+
+| Answer | Status |
+|---|---|
+| `kind_values` over `owner_entity_type` (research 01, F3) | **rejected**: `entityType` is not a person-or-company classification. That gap is why C-J exists |
+| a Custom Step computing the kind (the prototype's `owner_kind@1`, using edgartools' classifier) | **stand-in only**, for parse and mapping tests. It is not C-J and must not reach production |
+| the Dataset Contract defers the kind to the Mastering Policy's classification rules | **the spec's position**, proposed to Codex (handover item 6). The adapter names a classification rule set instead of a kind, and the Merge Stage classifies before binding |
+
+Until Codex accepts one of these, a source whose kind needs a rule must not
+go live. Form 3/4/5 is also blocked by the open Person projection and privacy
+item (gap F6; policy language §15 item 4). Its parse and mapping cases run
+today.
+
+## 14. `checks`
+
+```yaml
+checks:
+  - not_null:  { table, column }
+  - unique:    { table, columns: [...] }
+  - in_set:    { table, column, values: [...] }
+  - pattern:   { table, column, regex: "<literal>" }
+  - row_count: { table, min }
+  - custom_check: { step: name@n, table, inputs: [<column>, …] }
+```
+
+Every check returns **violations**, each with the row's silver key and a
+message, never a bare true or false. Checks run in every Named Case (where
+any violation fails the case) and in the Batch Gate (where each has a limit).
+
+## 15. `tests`: Named Cases
+
+```yaml
+tests:
+  - case: <what this proves, in words>
+    fixture: fixtures/<file>
+    given:
+      identities:
+        <name>: { fixture: fixtures/<file>, record: <record key> }
+    expect:
+      silver: { <table>: [ { <column>: <value>, … }, … ] }    # rows in order; only listed columns compared; row count exact
+      mdm:    [ { kind, identifiers: {…}, fields: {…} }, … ]   # Clean MDM assertions, in row order
+      merge:
+        - { record: <key>, outcome: bound, to: <name> }
+        - { record: <key>, outcome: binding_required }
+        - { identity: <name>, field: <field>, value: <v>, winner: <source> }
+```
+
+- **Named Cases are required.** Each known trap gets one: an object where a
+  list is expected, a row the `where` filter drops, a value next to a
+  footnote.
+- **`given.identities` are seeds.** They go through the same contract and a
+  first Merge Stage batch with a declared Steward binding, never inserted
+  rows. They are named by the case, never by a generated id.
+- **Merge outcomes:** `bound`, `new`, `binding_required`, `deferred` (with
+  reason), `quarantined`, and a field's value and `winner`. The prototype
+  implemented `bound`, `binding_required` and field value/winner only.
+- **`bound` checks a declared binding** until Codex provides a test mode for
+  automatic rules (handover item 1). The runner reports which one it
+  checked.
+- **Cost:** parse and mapping cases need no database. Merge cases need a
+  throwaway Postgres 16. The prototype measured about 10–15 s for one case,
+  including container start, with a 60 s readiness limit. Research 03 saw
+  an 8 s wait fail 4 of 7 runs on Colima.
+- **A snapshot is optional**: a regression net, not intent. A changed
+  snapshot is re-recorded only by a command that prints the row-level diff,
+  and the Proving Run records who accepted it.
+
+## 16. `gate`: the Batch Gate
+
+```yaml
+gate:
+  batch: { family: <Artifact Family>, select: all }        # or: { sample: { size: 5000, seed: 7 } }
+  limits:
+    rejected:                     { max_pct: 0.5, why: "…" }
+    type_errors:                  { max: 0 }
+    rows.<table>:                 { min: 300000 }
+    check.<check>(<arg>):         { max: 2, why: "…" }
+```
+
+- **A metric with no declared limit must be 0.** A looser limit needs `why:`;
+  the schema refuses one without it.
+- **The batch is pinned** by the SHA-256 of the list of its artifacts'
+  SHA-256s. A sample must be seeded.
+- **The proof stored with the version** contains:
+  - the contract digest, the custom-code digest and the fixture digests;
+  - the engine version and the batch hash;
+  - each metric's value, percentage, limit and `why`;
+  - the merge summary, pass or fail, the time, and the runner.
+- **The gate proves the source contract only.** A binding rule still needs
+  the policy language's precision proof and a Rule Activation Approval.
+
+## 17. Proving Run output
+
+The same facts come in two renderings. **`--json` is the primary interface**,
+because agents do most testing and validation. The terminal rendering is for
+human review.
+
+```
+FAIL  gleif/contract.yaml:72  case "address lines as a list, …"
+      gleif_lei_record  row 1
+        column    expected                actual
+        lei       08IRJODWFYBI7QWRGS31X   08IRJODWFYBI7QWRGS31   ✗
+      fixture: fixtures/three-records.jsonl
+INVALID gleif/contract.yaml:15  /read/tables/gleif_lei_record/columns/lei/text/defualt  [argument-known]
+      unknown argument 'defualt' for primitive text — did you mean 'default'?
+prove gleif.level1@prototype-1: 2 cases, 0 failures  →  version proven
+```
+
+Each `--json` failure record contains:
+- `kind`, `file`, `line`, and `pointer` (RFC 6901 into the contract);
+- `case` or `metric`;
+- `diff`, a list of `{column, expected, actual}`;
+- `fixture`, and a location inside the data where one exists;
+- for checks, `violations`, `limit` and sample row keys.
+
+| Exit | Meaning |
+|---|---|
+| 0 | proven |
+| 1 | a case, check, type or gate failure |
+| 2 | the contract is invalid (YAML, schema, path, argument, silver/read mismatch, undeclared import) |
+| 3 | an engine or Custom Step bug (fail closed) |
+
+When cases pass but the gate was not run, the prototype exited 0 with state
+`draft`. The spec requires a distinct code (Open, §25 item 2), so an agent
+never reads 0 as proven.
+
+## 18. Production: `source run`
+
+- One command runs every active contract; no source has its own pipeline
+  stage (acceptance check 1). What triggers it (a schedule, an event after a
+  bronze capture, a Step Function step) is out of scope.
+- It finds work by the contract's Artifact Family. The skip key is
+  `(artifact sha256, contract digest)`, which keys idempotency on the durable
+  artifact.
+- It parses into silver with the same engine code as `source prove`, and
+  publishes the rows to Clean MDM as a pinned source publication. The
+  Merge Stage then applies the active Mastering Policy.
+- `normalize` needs `publication_key`, `revision`, `effective_at`,
+  `artifact_sha256` and `member` from the publication, not from the row
+  (research 01 §1.4). `source run` must build them from the Artifact Family's
+  publication rules. **Not prototyped:** the prototype passed fixed values.
+- Unknown errors fail closed. Rejects are counted.
+
+## 19. No network
+
+The runner must not reach any network except, during merge cases, its
+throwaway loopback Postgres. **This cannot be a Python patch.** The prototype
+patched `socket.socket.connect` and allowed loopback only when the merge
+harness asked, but `engine/nettest.py` showed two gaps:
+- libpq, under psycopg2, opens its own socket in C. It reached for
+  `10.255.255.1` and timed out.
+- DNS lookups are not blocked: `example.com` was resolved before the connect
+  was refused.
+
+Run the Proving Run and `source run` in a container or network namespace
+with no network, plus an explicit loopback allowance for the test Postgres.
+
+## 20. Mapping Document
+
+`source mapdoc` generates it from the contract and the adapter block. It has
+one table per silver table, with these columns:
+- the silver column and its type;
+- where the value comes from in the Bronze Artifact (primitive and path,
+  **custom** marked);
+- where it goes in MDM: record key, identifier, field, identity kind, or
+  *evidence only*.
+
+It ends with the MDM kind and the **custom fraction** (check 11). It is never
+hand-written, so it cannot drift from what runs.
+
+## 21. Acceptance checks
+
+| # | Check | How it is verified | Prototype |
+|---|---|---|---|
+| 1 | adding a source changes only its own folder and Rules Database versions | freeze the engine, add a source, list the commit's files | passed (7 files, all in two new folders) |
+| 2 | deleting a source breaks nothing else | delete a folder; prove the others | passed |
+| 3 | the engine names no source | grep the engine for source names | passed |
+| 4 | no network | §19 | **partly**: needs enforcement below Python |
+| 5 | a fresh agent onboards an unseen source from this spec and one example | ticket 09 | not yet |
+| 6 | the Mapping Document is generated | `source mapdoc` | passed |
+| 7 | every contract term is in `CONTEXT.md` | grep the glossary for each term | passed (this ticket added six terms) |
+| 8 | one command proves a source end to end | `source prove --gate` | passed |
+| 9 | errors name the line and the rule | introduce a typo, a path error, a type error | passed after two fixes (findings 3–4) |
+| 10 | GLEIF fits in about 100 lines with tests | `wc -l` | passed (93) |
+| 11 | the custom fraction is shown | Mapping Document | passed (Form 3/4/5 3.3%, GLEIF 0%) |
+
+## 22. Worked example: GLEIF Level 1
+
+This is the complete contract, 93 lines. It reads real Golden Copy JSON
+records, maps them into Company, and proves over 316 real records with one
+declared exception. The Form 3/4/5 contract (227 lines, 2 Custom Steps,
+equal to `edgar_warehouse/parsers/ownership.py` on 5,356 of 5,356 artifacts)
+is at
+[`prototype/sources/form345/`](../../../.scratch/source-contract/prototype/sources/form345/contract.yaml).
+
+```yaml
+source: gleif.level1
+version: "prototype-1"
+bronze: { family: gleif.level1_records }
+
+read:
+  format: json
+  records: jsonl
+  record_path: record          # the research extract's wrapper, not GLEIF's own envelope
+  tables:
+    gleif_lei_record:
+      each: "."
+      columns:
+        lei:                 { text: { path: LEI.$, default: null } }
+        legal_name:          { text: { path: Entity.LegalName.$, default: null } }
+        legal_name_language: { text: { path: Entity.LegalName.@xml:lang, default: null } }
+        legal_jurisdiction:  { text: { path: Entity.LegalJurisdiction.$, default: null } }
+        entity_category:     { text: { path: Entity.EntityCategory.$, default: null } }
+        entity_status:       { text: { path: Entity.EntityStatus.$, default: null } }
+        legal_form_code:     { text: { path: Entity.LegalForm.EntityLegalFormCode.$, default: null } }
+        legal_address_line1: { text: { path: Entity.LegalAddress.FirstAddressLine.$, default: null } }
+        legal_address_more:  { join: { each: Entity.LegalAddress.AdditionalAddressLine, parts: [ { text: { path: $, default: "" } } ], separator: "\n", default: null } }
+        legal_city:          { text: { path: Entity.LegalAddress.City.$, default: null } }
+        legal_region:        { text: { path: Entity.LegalAddress.Region.$, default: null } }
+        legal_country:       { text: { path: Entity.LegalAddress.Country.$, default: null } }
+        hq_country:          { text: { path: Entity.HeadquartersAddress.Country.$, default: null } }
+        registration_status: { text: { path: Registration.RegistrationStatus.$, default: null } }
+        initial_registration: { timestamp: { path: Registration.InitialRegistrationDate.$, default: null } }
+        last_update:         { timestamp: { path: Registration.LastUpdateDate.$, default: null } }
+        managing_lou:        { text: { path: Registration.ManagingLOU.$, default: null } }
+
+silver:
+  gleif_lei_record:
+    key: [lei]
+    columns: { lei: string, legal_name: string, legal_name_language: string?, legal_jurisdiction: string?, entity_category: string?,
+               entity_status: string?, legal_form_code: string?, legal_address_line1: string?, legal_address_more: string?,
+               legal_city: string?, legal_region: string?, legal_country: string?, hq_country: string?, registration_status: string?,
+               initial_registration: timestamp?, last_update: timestamp?, managing_lou: string? }
+
+dataset:
+  table: gleif_lei_record
+  contract:
+    provider: GLEIF
+    family: golden_copy
+    schema_version: gleif-level1-prototype-1
+    record_key: LEI
+    publication_key: golden copy publication
+    effective_time: explicit publication effective time
+    semantics: patch
+    registry_evidence: prototype          # prototype only: never author this (§13.3)
+    adapter:
+      version: gleif-level1-prototype-1
+      kind: company
+      record_key: [lei]
+      identifiers: { lei: lei }
+      fields: { name: legal_name, jurisdiction: legal_jurisdiction, country: legal_country }
+      source_record_provenance: true
+
+checks:
+  - not_null: { table: gleif_lei_record, column: lei }
+  - unique:   { table: gleif_lei_record, columns: [lei] }
+  - pattern:  { table: gleif_lei_record, column: lei, regex: "^[A-Z0-9]{18}[0-9]{2}$" }
+  - in_set:   { table: gleif_lei_record, column: entity_status, values: [ACTIVE, INACTIVE] }
+
+tests:
+  - case: address lines as a list, as missing, and as a single object all read the same way
+    fixture: fixtures/three-records.jsonl
+    expect:
+      silver:
+        gleif_lei_record:
+          - { lei: 08IRJODWFYBI7QWRGS31, legal_address_more: 300 DESCHUTES WAY SW STE 208 MC-CSC1, legal_country: US }
+          - { lei: 21380089EIJRELKAIL21, legal_address_more: null, legal_name_language: he }
+          - { lei: SYNTHETICOBJLINE0000, legal_address_more: 300 DESCHUTES WAY SW STE 208 MC-CSC1 }
+      mdm:
+        - { kind: company, identifiers: { lei: 08IRJODWFYBI7QWRGS31 }, fields: { name: Weyerhaeuser Company, country: US } }
+        - { kind: company, identifiers: { lei: 21380089EIJRELKAIL21 }, fields: { country: IL } }
+        - { kind: company, identifiers: { lei: SYNTHETICOBJLINE0000 } }
+  - case: a record with a declared binding becomes that Company with the GLEIF name; an unbound record waits for binding
+    fixture: fixtures/three-records.jsonl
+    given:
+      identities:
+        weyerhaeuser: { fixture: fixtures/three-records.jsonl, record: 08IRJODWFYBI7QWRGS31 }
+    expect:
+      merge:
+        - { record: 08IRJODWFYBI7QWRGS31, outcome: bound, to: weyerhaeuser }
+        - { record: 21380089EIJRELKAIL21, outcome: binding_required }
+        - { identity: weyerhaeuser, field: name, value: Weyerhaeuser Company, winner: gleif.level1 }
+
+gate:
+  batch: { family: gleif.level1_records, select: all }
+  limits:
+    check.in_set(entity_status): { max: 2, why: "GLEIF publishes the literal status NULL for 2 of the 316 records" }
+```
+
+## 23. Versioning and the immutable Dataset Contract (blocking)
+
+The lifecycle in §4.2 **works only for the first version of each source**
+today:
+- Clean MDM stores one Dataset Contract body per `source_code`, forever
+  (`edgar_warehouse/mdm/clean/store.py:217-224`: "Dataset contract is
+  immutable; register a new versioned contract").
+- `adapter.version` enters every `assertion_id`, and the store is unique on
+  `(source_code, record_key, publication_key)`.
+
+So activating version 2 of a contract needs a **new `source_code`**. That
+gives every record a new subject (`subject = digest([source_code,
+record_key])`), and those subjects need new bindings before they rejoin their
+identities (research 01 rule 9).
+
+This is the map's open **Change and replay** item. It needs a Codex decision
+(handover item 4) before any source's second version can go live. First
+versions are unaffected.
+
+## 24. Dependencies on Clean MDM
+
+These are sent to Codex as one note:
+[`.scratch/handover/2026-09-21-claude-to-codex-source-contract.md`](../../../.scratch/handover/2026-09-21-claude-to-codex-source-contract.md).
+
+**Blocking:**
+
+| # | Item | Blocks |
+|---|---|---|
+| 4 | a versioning path for an immutable Dataset Contract (§23) | any second version |
+| 6 | defer the identity kind to Mastering Policy classification (§13.4) | Form 3/4/5 and any rule-classified source |
+| G3 | an `lei` identifier format, with unknown formats refused at registration | GLEIF identifiers formatted and validated |
+| F4 | formatted relationship target keys; the reporting-owner row has no issuer CIK column (`ownership.py` emits `issuer_cik`, but silver drops it) | Form 3/4/5 `INSIDER_OF` |
+| X1 | validate a Dataset Contract at registration (today any body is stored) | check 9 on the MDM side |
+
+**Not blocking:** a test mode for automatic rules (item 1), a ≥30 s Postgres
+readiness wait (item 2), a named offline registry authority (item 3),
+authoring the Mastering Policy in this convention with `default_sources`
+(item 5), deferral instead of silent relationship drops (F5), marking literal
+keys (X2), `source_record_provenance` true by default (X3), relationship
+type mapping and per-row effective time (G2, G5), and time-zone-aware dates
+(G4).
+
+## 25. Open
+
+1. **YAML anchors and merge keys.** Allow them explicitly, or add a named
+   `columns_from: <table>` and forbid anchors. Anchors are standard YAML, but
+   they are a second way to write the same thing.
+2. **Exit code for "cases passed, gate not run".** It is 0 in the prototype;
+   it needs its own code.
+3. **Change and replay** (§23). When a new version becomes active, does
+   `source run` re-parse old artifacts, and which identities re-project?
+4. **Snapshot file format** and the re-record command.
+5. **Moving an existing parser onto a contract.** Form 3/4/5 shows it *can*
+   be done; the criteria for when it *should* be done are not set.
+
+## 26. What the prototype did not prove
+
+- **The Rules Database** (`save`, `export`, states, approvals) is design only.
+- **No network** is not enforced below Python (§19).
+- **As-of lookup** was proven only on a synthetic dated layout. The local
+  submissions copy is flat, so the Form 3/4/5 comparison could not test it.
+- **The table reader** ran only on a synthetic 3-row HTML table, not a real
+  DEF 14A.
+- **GLEIF** was read from a 316-record JSONL extract. The streaming zip
+  reader is not built, and `record_path: record` is the extract's wrapper.
+- **Merge cases:** `bound` checked declared bindings only; `new`, `deferred`
+  and `quarantined` were not implemented.
+- **`source run`** and publication building (§18) were not prototyped.
+
+## 27. Evidence
+
+| What | Where |
+|---|---|
+| every decision, with reasons | [map](../../../.scratch/source-contract/map.md), tickets 01–07 |
+| Mapping Language reference | [research 01](../../../.scratch/source-contract/research/01-mapping-language-reference.md) |
+| parse needs of both proof sources | [research 02](../../../.scratch/source-contract/research/02-parse-needs-inventory.md) |
+| mastering tests on a laptop | [research 03](../../../.scratch/source-contract/research/03-local-mastering-tests.md) |
+| path and expression syntax | [research 10](../../../.scratch/source-contract/research/10-path-and-expression-syntax.md) |
+| prototype, results, 15 findings | [prototype/README.md](../../../.scratch/source-contract/prototype/README.md) |
+| equivalence with `ownership.py` | `prototype/expected-differences.md`, `prototype/equivalence.json` |
