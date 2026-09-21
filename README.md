@@ -33,7 +33,7 @@ flowchart LR
     Bronze --> Stage["Internal staging loaders<br/>JSON / index normalization"]
     Stage --> Silver["Silver tables"]
     Bronze --> Artifact["Read saved primary filing artifact"]
-    Artifact --> EdgarTools["edgartools<br/>Ownership.from_xml(...)<br/>Forms 3 / 4 / 5"]
+    Artifact --> EdgarTools["Local parser<br/>ownershipDocument XML + bronze submissions.json<br/>Forms 3 / 4 / 5"]
     Artifact --> LocalParser["Local parser<br/>ADV forms"]
     EdgarTools --> Silver
     LocalParser --> Silver
@@ -100,7 +100,7 @@ This section describes the code paths used by the warehouse runtime in developme
 
 | `edgartools` surface | How this repo uses it | Files |
 |---|---|---|
-| `edgar.ownership.Ownership` | Parses already-downloaded primary filing content for Forms 3, 4, and 5 into normalized owner, derivative, and non-derivative transaction rows that are merged into silver. Raw SEC download and bronze persistence happen earlier in the runtime and are not handled by `edgartools`. | `edgar_warehouse/runtime.py`, `edgar_warehouse/parsers/ownership.py` |
+| `reverse_name` (`edgar.display.formatting`) and `_classify_is_individual` (`edgar.entity.constants`) | Keep the Form 3/4/5 `owner_name` display reversal identical to the former `Ownership.from_xml` output. The XML itself is parsed locally, and reporting owners are classified from bronze `submissions.json` with zero SEC requests (Person Consumer Contract ticket 19). | `edgar_warehouse/parsers/ownership.py` |
 
 ### Batch and smoke-test usage
 
@@ -122,7 +122,7 @@ This section describes the code paths used by the warehouse runtime in developme
 
 - Raw SEC downloads and bronze writes are handled by this repo's own loader code in `edgar_warehouse/runtime.py` and `edgar_warehouse/artifacts.py`, not by `edgartools`.
 - In the warehouse runtime, `edgartools` currently enters at the ownership parsing step after the primary artifact has already been downloaded and stored.
-- The current warehouse runtime dependency is `edgar.ownership.Ownership` for Forms 3/4/5. ADV parsing is handled by the local parser in `edgar_warehouse/parsers/adv.py`.
+- Forms 3/4/5 are parsed locally; the runtime uses only `reverse_name` (`edgar.display.formatting`) and `_classify_is_individual` (`edgar.entity.constants`) from edgartools for them. ADV parsing is handled by the local parser in `edgar_warehouse/parsers/adv.py`.
 - Most other `edgartools` usage in this repo lives in `scripts/batch/` and functions as smoke coverage for filings, entity data, documents, and XBRL parsing.
 - The standalone dashboard in `examples/dashboard/` does not import `edgartools`; it reads already-modeled Snowflake gold tables.
 - When bumping the `edgartools` version, rerun the batch scripts to confirm that the library surfaces above still behave as expected.

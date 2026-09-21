@@ -572,6 +572,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_derivative_txn (
     parser_version TEXT,
     last_sync_run_id TEXT,
     mdm_entity_id TEXT,
+    reporting_owner_count BIGINT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -593,6 +594,7 @@ CREATE TABLE IF NOT EXISTS sec_ownership_non_derivative_txn (
     parser_version TEXT,
     last_sync_run_id TEXT,
     mdm_entity_id TEXT,
+    reporting_owner_count BIGINT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );
@@ -611,6 +613,21 @@ CREATE TABLE IF NOT EXISTS sec_ownership_reporting_owner (
     parser_version TEXT,
     last_sync_run_id TEXT,
     mdm_entity_id TEXT,
+    owner_name_raw TEXT,
+    other_text TEXT,
+    filing_footnote_text TEXT,
+    filing_remarks TEXT,
+    address_is_care_of BOOLEAN,
+    address_non_us BOOLEAN,
+    owner_submissions_present BOOLEAN,
+    owner_submissions_sha256 TEXT,
+    owner_entity_type TEXT,
+    owner_sic TEXT,
+    owner_state_of_incorporation TEXT,
+    owner_ein TEXT,
+    owner_ticker_count BIGINT,
+    owner_org TEXT,
+    owner_fiscal_year_end TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );

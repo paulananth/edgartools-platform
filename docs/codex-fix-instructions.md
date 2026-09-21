@@ -59,5 +59,5 @@ python -c "from edgar_warehouse.cli import main; print('OK')"
 - Do not commit secrets or `.tfvars` with live values
 - Preserve loader idempotency (default skips already-captured SEC files)
 - Do not broaden IAM policies
-- Do not change the `edgartools` ownership parser import path (`from edgar.ownership import Ownership`)
+- Do not change the `edgartools` ownership parser imports (`reverse_name`, `_classify_is_individual`)
 - Gold-affecting changes must verify `SERVING_EXPORT_ROOT` env var is respected

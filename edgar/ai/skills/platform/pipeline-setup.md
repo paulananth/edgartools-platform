@@ -414,7 +414,7 @@ edgar-warehouse mdm check-connectivity --neo4j
 The `edgartools` PyPI package is a required runtime dependency of this platform.
 
 - **Install**: included in `pip install -e ".[s3,snowflake]"` — do not install separately unless pinning a version
-- **Key import**: `edgar_warehouse/parsers/ownership.py` uses `from edgar.ownership import Ownership`
+- **Key imports**: `edgar_warehouse/parsers/ownership.py` parses the XML locally and uses only `reverse_name` and `_classify_is_individual` from edgartools
 - **Batch scripts**: all files in `scripts/batch/*.py` import from `edgar.*` and require `edgartools` at runtime
 - **External dashboard**: `examples/dashboard/edgar_universe_dashboard.py` does NOT require `edgartools` — it reads from Snowflake gold tables directly
 

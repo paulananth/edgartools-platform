@@ -146,7 +146,7 @@ Notes:
 ## Data And Parser Notes
 
 - Raw SEC download and bronze persistence are implemented by this repo, not by `edgartools`.
-- `edgartools` currently enters the warehouse runtime for Forms 3, 4, and 5 ownership parsing through `edgar.ownership.Ownership.from_xml(...)`.
+- Forms 3, 4, and 5 are parsed locally in `edgar_warehouse/parsers/ownership.py` (direct `ownershipDocument` XML; zero SEC requests -- reporting owners are classified from bronze `submissions.json`). `edgartools` enters only for `reverse_name` and `_classify_is_individual`, which keep `owner_name` identical to its former `Ownership.from_xml` output.
 - ADV parsing is local in `edgar_warehouse/parsers/adv.py`.
 - SEC filing artifacts are additive and immutable after capture.
 - Loaders should skip already loaded SEC files by default. Use explicit `--force` only for operator repair.
@@ -582,12 +582,11 @@ LIMIT 10;
 
 - Do not commit local secrets, `.tfvars` with live values, generated Terraform state, or application JSON containing sensitive values.
 - Do not put image digests, workflow rollout, schedules, or EDGAR identity values into AWS Terraform inputs.
-- Do not change the ownership parser import without checking the `edgartools` changelog:
+- Do not change the ownership parser's `edgartools` imports without checking the `edgartools` changelog:
 
 ```python
-from edgar.ownership import Ownership
-
-parsed = Ownership.from_xml(content)
+from edgar.display.formatting import reverse_name
+from edgar.entity.constants import _classify_is_individual
 ```
 
 - Do not broaden IAM policies casually. Keep runner roles service-assumed and scoped.

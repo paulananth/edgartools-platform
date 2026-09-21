@@ -45,7 +45,7 @@ uv run edgar-warehouse --help                 # verify CLI
 
 - One commit per issue fix: `fix(data-architecture): issue-N <description>`
 - Preserve loader idempotency (skip already-captured files by default)
-- Do not change `from edgar.ownership import Ownership` import path
+- Do not change the ownership parser's edgartools imports (`reverse_name`, `_classify_is_individual`) without checking the edgartools changelog
 - Do not commit secrets or `.tfvars` with live values
 - Do not broaden IAM policies
 - Gold-affecting changes must respect `SERVING_EXPORT_ROOT` env var

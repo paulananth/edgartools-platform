@@ -3106,6 +3106,9 @@ def _run_configured_form_artifact_pipeline(
             **capture_network.as_dict(),
         )
 
+    # Ticket 19: one lookup per run, so an owner CIK that files many Form 4s
+    # is read from bronze once, not once per filing.
+    submissions_lookup = _bronze_submissions_lookup(context)
     for accession_index, accession_number in enumerate(selected_accessions, start=1):
         if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
             remaining_accessions = len(selected_accessions) - processed_accessions
@@ -3244,6 +3247,7 @@ def _run_configured_form_artifact_pipeline(
                     bookkeeping=bookkeeping,
                     accession_number=accession_number,
                     sync_run_id=sync_run_id,
+                    submissions_lookup=submissions_lookup,
                 )
             if recurring_mode and resume_manifest is not None:
                 from edgar_warehouse.application.daily_artifact_resume import record_succeeded
@@ -5344,9 +5348,48 @@ def _run_accession_resync(
         rows_written += 1 if text_row else 0
     if include_parsers:
         rows_written += _run_parse_pipeline(
-            db=db, bookkeeping=bookkeeping, accession_number=accession_number, sync_run_id=sync_run_id
+            db=db, bookkeeping=bookkeeping, accession_number=accession_number, sync_run_id=sync_run_id,
+            submissions_lookup=_bronze_submissions_lookup(context),
         )
     return {"raw_writes": raw_writes, "rows_written": rows_written}
+
+
+def _bronze_submissions_lookup(context: WarehouseCommandContext) -> "Callable[[int], dict[str, Any] | None]":
+    """A reporting-owner CIK -> its bronze submissions.json payload, or None.
+
+    Person Consumer Contract ticket 19: the ownership parser classifies
+    reporting owners from this snapshot instead of edgartools' live SEC
+    lookup, so a parse makes zero SEC requests. Storage reads only, newest
+    captured snapshot per CIK (same glob fallback the submissions capture
+    uses); a CIK bronze has never seen resolves to None and the parser
+    records "no snapshot", which rule C-J treats as deferred.
+
+    Build it once per run: hits are cached for the lookup's lifetime.
+    Misses are not, so a snapshot captured later in the same run is found
+    (research 18: every one of 4,831 owner CIKs had one, so misses are rare).
+    """
+    resolver = default_path_resolver()
+    cache: dict[int, dict[str, Any]] = {}
+
+    def lookup(cik: int) -> dict[str, Any] | None:
+        if cik in cache:
+            return cache[cik]
+        found = _read_bronze_by_glob_if_present(
+            bronze_root=context.bronze_root,
+            source_name="submissions_main",
+            source_url="",
+            relative_glob=resolver.submissions_main_glob(cik),
+            cik=cik,
+        )
+        payload = found["payload"] if found is not None else None
+        if not isinstance(payload, dict):
+            return None
+        from edgar_warehouse.parsers.ownership import SNAPSHOT_SHA256_KEY
+
+        cache[cik] = {**payload, SNAPSHOT_SHA256_KEY: found["write_record"]["sha256"]}
+        return cache[cik]
+
+    return lookup
 
 
 def _run_parse_pipeline(
@@ -5355,6 +5398,7 @@ def _run_parse_pipeline(
     bookkeeping: "BookkeepingStore",
     accession_number: str,
     sync_run_id: str,
+    submissions_lookup: "Callable[[int], dict[str, Any] | None]",
 ) -> int:
     filing = db.get_filing(accession_number)
     if filing is None:
@@ -5395,7 +5439,7 @@ def _run_parse_pipeline(
         parser = get_parser(form_type)
         content = payload.decode("utf-8", errors="replace")
         if form_family == "ownership":
-            parsed = parser(accession_number, content, form_type)
+            parsed = parser(accession_number, content, form_type, submissions_lookup=submissions_lookup)
         else:
             parsed = parser(accession_number, content, form_type, filing.get("cik"))
         rows_written = 0

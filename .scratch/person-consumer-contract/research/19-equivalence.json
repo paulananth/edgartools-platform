@@ -1,0 +1,411 @@
+{
+ "artifacts": 5356,
+ "old_parse_errors": 2,
+ "new_parse_errors": 0,
+ "row_counts_old_new": {
+  "sec_ownership_reporting_owner": [
+   5741,
+   5741
+  ],
+  "sec_ownership_non_derivative_txn": [
+   8172,
+   8172
+  ],
+  "sec_ownership_derivative_txn": [
+   2785,
+   2785
+  ]
+ },
+ "column_diffs": {
+  "sec_ownership_reporting_owner": {
+   "same": 56846,
+   "officer_title": 550,
+   "owner_name": 14
+  },
+  "sec_ownership_non_derivative_txn": {
+   "same": 89549,
+   "transaction_price": 323,
+   "security_title": 20
+  },
+  "sec_ownership_derivative_txn": {
+   "same": 41109,
+   "underlying_security_title": 2785,
+   "transaction_price": 418,
+   "security_title": 38,
+   "transaction_shares": 4,
+   "shares_owned_after": 4
+  }
+ },
+ "numeric_values_recovered_from_footnoted_fields": {
+  "conversion_or_exercise_price": 159,
+  "underlying_security_shares": 43
+ },
+ "new_only_columns": {
+  "sec_ownership_reporting_owner": [
+   "address_is_care_of",
+   "address_non_us",
+   "filing_footnote_text",
+   "filing_remarks",
+   "other_text",
+   "owner_ein",
+   "owner_entity_type",
+   "owner_fiscal_year_end",
+   "owner_name_raw",
+   "owner_org",
+   "owner_sic",
+   "owner_state_of_incorporation",
+   "owner_submissions_present",
+   "owner_submissions_sha256",
+   "owner_ticker_count"
+  ],
+  "sec_ownership_non_derivative_txn": [
+   "ownership_nature",
+   "reporting_owner_count"
+  ],
+  "sec_ownership_derivative_txn": [
+   "ownership_nature",
+   "reporting_owner_count"
+  ]
+ },
+ "submissions_lookup_calls": 5743,
+ "examples": {
+  "sec_ownership_derivative_txn.underlying_security_title": [
+   [
+    "003576ddc4257dcbde9b0dc77524d1d171e252d796a6d74eae569d54d5e1d2bc",
+    "",
+    "Common Stock"
+   ],
+   [
+    "0051e94521fc03e75027eb7a9a4270cdb61b483e5dce5c4a1ab999b70760ce86",
+    "",
+    "Common Stock"
+   ],
+   [
+    "00895dbe2d93a1d7b1bf56bfecb03c35e718b89dec52e57b3466e4f87897f076",
+    "",
+    "Class A ordinary share"
+   ],
+   [
+    "009ef18758b8ad4c6c89a73ec13cb7079690812238becc050ffc5540916382bb",
+    "",
+    "Common Stock"
+   ],
+   [
+    "00dd12e5ade89ae7ee5d6606568d603674fe572b565959eb33dbfadfa869c956",
+    "",
+    "Common Stock"
+   ],
+   [
+    "0121d56f5a690e2b03dfa621ad42b099c019ab70500005425eb312ec2bbfec64",
+    "",
+    "Common Stock"
+   ],
+   [
+    "0121d56f5a690e2b03dfa621ad42b099c019ab70500005425eb312ec2bbfec64",
+    "",
+    "Common Stock"
+   ],
+   [
+    "0121d56f5a690e2b03dfa621ad42b099c019ab70500005425eb312ec2bbfec64",
+    "",
+    "Common Stock"
+   ]
+  ],
+  "sec_ownership_non_derivative_txn.transaction_price": [
+   [
+    "0051e94521fc03e75027eb7a9a4270cdb61b483e5dce5c4a1ab999b70760ce86",
+    NaN,
+    null
+   ],
+   [
+    "019d595103b996a2f3fa5135cd86348053c03edcfc293c398cce2bb16983fea9",
+    NaN,
+    null
+   ],
+   [
+    "019d595103b996a2f3fa5135cd86348053c03edcfc293c398cce2bb16983fea9",
+    NaN,
+    null
+   ],
+   [
+    "019d595103b996a2f3fa5135cd86348053c03edcfc293c398cce2bb16983fea9",
+    NaN,
+    null
+   ],
+   [
+    "041ce3ae0d8d914e55c4213646d5a02dd519328d2c2e23c2cbc12f053761ea5a",
+    NaN,
+    null
+   ],
+   [
+    "041ce3ae0d8d914e55c4213646d5a02dd519328d2c2e23c2cbc12f053761ea5a",
+    NaN,
+    null
+   ],
+   [
+    "041ce3ae0d8d914e55c4213646d5a02dd519328d2c2e23c2cbc12f053761ea5a",
+    NaN,
+    null
+   ],
+   [
+    "041ce3ae0d8d914e55c4213646d5a02dd519328d2c2e23c2cbc12f053761ea5a",
+    NaN,
+    null
+   ]
+  ],
+  "sec_ownership_non_derivative_txn.security_title": [
+   [
+    "013d1b06f26dd3c939bc29772be8ddafc92b7d66ae0431a3b7ed266ad1486e1d",
+    "Virtus Equity  Convertible Income Fund",
+    "Virtus Equity & Convertible Income Fund"
+   ],
+   [
+    "04dc2efb7eec9ada23b78515cfbce0f907d55cf40f0da640fbb0cd6814b5b34f",
+    "Class A ordinary shares (Class A Shares)",
+    "Class A ordinary shares (\"Class A Shares\")"
+   ],
+   [
+    "0d25c577e5799f75cdf6427cc67174c9b706022513bf8fbec9b272a98967acd1",
+    "Common Stock, par value $0.001 per share (Common Stock)",
+    "Common Stock, par value $0.001 per share (\"Common Stock\")"
+   ],
+   [
+    "0d25c577e5799f75cdf6427cc67174c9b706022513bf8fbec9b272a98967acd1",
+    "Common Stock, par value $0.001 per share (Common Stock)",
+    "Common Stock, par value $0.001 per share (\"Common Stock\")"
+   ],
+   [
+    "0e3549bf880d81e72db87a6a17894ab8ea34e4dcf6e2505f63b039a7bad0dc7f",
+    "Common Stock, par value $0.10 per share (Common Stock)",
+    "Common Stock, par value $0.10 per share (\"Common Stock\")"
+   ],
+   [
+    "1714ea892fca08894a6b6a804b90a232bcf8e45147f8d10cd1a3a96bc6d123fe",
+    "Common Stock, par value $0.0001 per share (Common Stock)",
+    "Common Stock, par value $0.0001 per share (\"Common Stock\")"
+   ],
+   [
+    "171dcf0b9a70e6a0c0ec4edcb6d907251ea5dc4a7e4f1637be472303b458f493",
+    "Common Stock, par value $0.01 per share (Common Stock)",
+    "Common Stock, par value $0.01 per share (\"Common Stock\")"
+   ],
+   [
+    "1be671b6216b2de592b6241d6549a1f76e4c1abe557845ca453837be4dc2ab1e",
+    "Common Stock, par value $0.01 per share (Common Stock)",
+    "Common Stock, par value $0.01 per share (\"Common Stock\")"
+   ]
+  ],
+  "sec_ownership_reporting_owner.officer_title": [
+   [
+    "014191d8744b81a8d909ac06f69ac597586ad4fbd018dafd84ca724595bfa6e0",
+    "Chief Digital  Tech Officer",
+    "Chief Digital & Tech Officer"
+   ],
+   [
+    "01550a51ff5a948d0ac6db447df4c1924cee438e61ca426a05c34c179d1e5a54",
+    "Ex VP  Chief Legal Officer",
+    "Ex VP & Chief Legal Officer"
+   ],
+   [
+    "04462599db0e461f80220fa53ae787203cf4dba23c997003e732351bec9c0cbb",
+    "Chairperson  CEO",
+    "Chairperson & CEO"
+   ],
+   [
+    "04acf489ef8282d9115d72281464f8f1c8c0c97d99e55089c7f960285bb0486f",
+    "Chief Technology Officer  EVP",
+    "Chief Technology Officer & EVP"
+   ],
+   [
+    "04f48b19e3f0850c283845fa5c22fa6d6c2108735f5e2686a728281c12aa1ba4",
+    "SVP  Chief Financial Officer",
+    "SVP & Chief Financial Officer"
+   ],
+   [
+    "0517c0c12b0d96daa51718a765fe6fb8302a48a9942db1d8be0d90f87fa6ab34",
+    "EVP, Sales  Marketing",
+    "EVP, Sales & Marketing"
+   ],
+   [
+    "0548614621b8f7af2eb627a5f74d730f25198f8a11cd39a1e6cf5d051c18844a",
+    "Global Head of AH",
+    "Global Head of A&H"
+   ],
+   [
+    "057b122bb299231eec92b615f933597ba3e2b1bb63fc25f0ab2cf1ab4809ccbc",
+    "EVP, Golf RD, Strategy  Fit",
+    "EVP, Golf R&D, Strategy & Fit"
+   ]
+  ],
+  "sec_ownership_derivative_txn.transaction_price": [
+   [
+    "0182ff56bb392f14f122da02ac914914982dda3ff88bbe6cb3c31aae37d5f114",
+    NaN,
+    null
+   ],
+   [
+    "0387fae8e45ce522b712bcec289bc81f84c46eaf7890db75744b3ca8d3002e4f",
+    NaN,
+    null
+   ],
+   [
+    "0387fae8e45ce522b712bcec289bc81f84c46eaf7890db75744b3ca8d3002e4f",
+    NaN,
+    null
+   ],
+   [
+    "0396084df5180b966f6e8cb889ea760e9d0a5d327236435a6dd7aa43bdf7fd6f",
+    NaN,
+    null
+   ],
+   [
+    "0396084df5180b966f6e8cb889ea760e9d0a5d327236435a6dd7aa43bdf7fd6f",
+    NaN,
+    null
+   ],
+   [
+    "0396084df5180b966f6e8cb889ea760e9d0a5d327236435a6dd7aa43bdf7fd6f",
+    NaN,
+    null
+   ],
+   [
+    "0396084df5180b966f6e8cb889ea760e9d0a5d327236435a6dd7aa43bdf7fd6f",
+    NaN,
+    null
+   ],
+   [
+    "0396084df5180b966f6e8cb889ea760e9d0a5d327236435a6dd7aa43bdf7fd6f",
+    NaN,
+    null
+   ]
+  ],
+  "sec_ownership_derivative_txn.security_title": [
+   [
+    "11517d0733757ef0ac8cd19dbfdd0471f551beb9b728890f7237988d1975c392",
+    "Class C Preferred Shares",
+    "Class \"C\" Preferred Shares"
+   ],
+   [
+    "11517d0733757ef0ac8cd19dbfdd0471f551beb9b728890f7237988d1975c392",
+    "Class C Preferred Shares",
+    "Class \"C\" Preferred Shares"
+   ],
+   [
+    "11517d0733757ef0ac8cd19dbfdd0471f551beb9b728890f7237988d1975c392",
+    "Class C Preferred Shares",
+    "Class \"C\" Preferred Shares"
+   ],
+   [
+    "11517d0733757ef0ac8cd19dbfdd0471f551beb9b728890f7237988d1975c392",
+    "Class C Preferred Shares",
+    "Class \"C\" Preferred Shares"
+   ],
+   [
+    "11517d0733757ef0ac8cd19dbfdd0471f551beb9b728890f7237988d1975c392",
+    "Class C Preferred Shares",
+    "Class \"C\" Preferred Shares"
+   ],
+   [
+    "11517d0733757ef0ac8cd19dbfdd0471f551beb9b728890f7237988d1975c392",
+    "Class C Preferred Shares",
+    "Class \"C\" Preferred Shares"
+   ],
+   [
+    "137c3979c7eedb8b28c0acadbbaf7a5082ca4cabe3352818d7d791c59fbeb6b5",
+    "Stock Option (Right to Buy)",
+    "Stock Option (\"Right to Buy\")"
+   ],
+   [
+    "2db9204b624080cf7143810816ccf220ad99721f3014e307ed999c8244c12e3f",
+    "Class C Preferred Shares",
+    "Class \"C\" Preferred Shares"
+   ]
+  ],
+  "sec_ownership_derivative_txn.transaction_shares": [
+   [
+    "13cd14cdb62bce5a0b852dc358d9f0c49b915f60977d07e1b8ae758bf6829584",
+    NaN,
+    null
+   ],
+   [
+    "435d21d72e636528a3818d8b7063988df219746d4dc43d00dd22b8166c661d53",
+    NaN,
+    null
+   ],
+   [
+    "66530eeda51a169bd6f1c2cd2f51398b28df5d3fdb1df046f783a83f9962ac91",
+    NaN,
+    null
+   ],
+   [
+    "906fdc9667e217c77a77219f336567ccc526ca817be165df1a63128353c14e37",
+    NaN,
+    null
+   ]
+  ],
+  "sec_ownership_derivative_txn.shares_owned_after": [
+   [
+    "13cd14cdb62bce5a0b852dc358d9f0c49b915f60977d07e1b8ae758bf6829584",
+    NaN,
+    null
+   ],
+   [
+    "435d21d72e636528a3818d8b7063988df219746d4dc43d00dd22b8166c661d53",
+    NaN,
+    null
+   ],
+   [
+    "66530eeda51a169bd6f1c2cd2f51398b28df5d3fdb1df046f783a83f9962ac91",
+    NaN,
+    null
+   ],
+   [
+    "906fdc9667e217c77a77219f336567ccc526ca817be165df1a63128353c14e37",
+    NaN,
+    null
+   ]
+  ],
+  "sec_ownership_reporting_owner.owner_name": [
+   [
+    "39a016b8c41e807f7a28c1e79d9a669bcac99871b51a3de8abbf7964a72322d0",
+    "BR Technology Sponsor LLC (Cayman)",
+    "B&R Technology Sponsor LLC (Cayman)"
+   ],
+   [
+    "41786cfd9d731db42b73559f809a4e0a091da65c8362c51780257b0a25a6dd22",
+    "FIDELITY  GUARANTY LIFE INSURANCE CO",
+    "FIDELITY & GUARANTY LIFE INSURANCE CO"
+   ],
+   [
+    "4e77de0b5ddf547e95ca5fdba4d856c4b9d4b8425c01f393f58f9543fd96eb4f",
+    "FIDELITY  GUARANTY LIFE INSURANCE CO",
+    "FIDELITY & GUARANTY LIFE INSURANCE CO"
+   ],
+   [
+    "8cafb6420e218b4b8706df4db4ce17aabeb288f58deaa9f2a4c4dfe53a92ac8f",
+    "FIDELITY  GUARANTY LIFE INSURANCE CO",
+    "FIDELITY & GUARANTY LIFE INSURANCE CO"
+   ],
+   [
+    "926e9e7035db7541568b75517adc0f1fa33783d68b803e86789e19847760a082",
+    "WINMILL  CO. INC",
+    "WINMILL & CO. INC"
+   ],
+   [
+    "930d2306345505a3941c8002a9328a1b86e5877d140a625ea720b3a2a623a4f1",
+    "AlTi Wealth  Capital Solutions Holdings, LLC",
+    "AlTi Wealth & Capital Solutions Holdings, LLC"
+   ],
+   [
+    "ad74430104d1faebba25089851e55b6be5ff082c5e50ef956345e654871af6be",
+    "Ault  Company, Inc.",
+    "Ault & Company, Inc."
+   ],
+   [
+    "c5a22a0cf9f7396d07ec6dbd17cc59d87d1187477d3794137c13bd753f153eb1",
+    "Ault  Company, Inc.",
+    "Ault & Company, Inc."
+   ]
+  ]
+ }
+}

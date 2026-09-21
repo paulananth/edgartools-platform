@@ -99,6 +99,7 @@ class TestParseItem502Accession:
             bookkeeping=db,
             accession_number="0001",
             sync_run_id="run-1",
+            submissions_lookup=lambda cik: None,
         )
         assert rows == 2
         assert db.complete_parse_run.call_args.kwargs["status"] == "succeeded"
