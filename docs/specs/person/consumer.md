@@ -414,7 +414,7 @@ directorship on the daily path.
 | 1 | every reporting owner and every ADV Schedule A/B row binding at **Tier A**, plus rule C-J's automatic person arm | none — deterministic; ~100% of both id-bearing sources; empty review queue |
 | 2 | rule C-J's **entity** arm | its post-hoc guards re-measured in production |
 | 3 | 8-K Item 5.02 (4,147 eligible rows under `person-name@v2`; 4,193 under v1) | **cleared** by research 21 (n = 659, LCB97.5 0.99146 conservative); under `person-name@v2`, n = 656, LCB97.5 **0.99142** ([ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md)), which ships in the same release |
-| 4 | DEF 14A (6,091 eligible rows) | ticket 10 lands, re-export, own re-measurement |
+| 4 | DEF 14A (6,091 eligible rows under the old parser) | ticket 10 resolved on bronze (99.04% plausible, 17,371 rows); [ticket 26](../../../.scratch/person-consumer-contract/issues/26-strip-footnote-markers-and-title-fragments-from-proxy-names.md) residues, then its own Tier B measurement |
 
 Waves are gated on evidence, never time-boxed. Company bounded its first slice
 by cohort because GLEIF matching was unproven; Tier A binds without judgment,
@@ -620,7 +620,7 @@ Plus the foundation's own gates, inherited.
 | Per-family checkpoints (migration 029) | **accepted and implemented** |
 | Rules-as-data policy body + Identifier Contract | **accepted for Company** as Q14 (2026-09-20); Person needs the same activation path for Tier A |
 | Person amendment to Q11 — ≥ 99% at one-sided 97.5%, with the identifier veto | **open with Codex**; Company's Q11 (99.9% at 95%) is explicitly not to be applied to other kinds |
-| Ticket 10 (proxy name parser) | blocks DEF 14A entirely |
+| Ticket 10 (proxy name parser) | **done** — full bronze re-parse, 99.04% plausible, attribution 60/60; [ticket 26](../../../.scratch/person-consumer-contract/issues/26-strip-footnote-markers-and-title-fragments-from-proxy-names.md) residues block DEF 14A Tier B |
 | Ticket 19 (ownership parser evidence, incl. the joint-filing marker `reporting_owner_count`) | **done** — classification evidence from bronze with zero SEC requests; holdings still wait on Security identity |
 | Ticket 21 (8-K labelling to n ≥ 381) | **done** — research 21 cleared 8-K at n = 659 |
 | [Ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs | **done** — `person-name@v2` (`edgar_warehouse/domain/policy/person_name.py`); Tier B activation must use it |

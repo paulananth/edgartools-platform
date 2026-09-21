@@ -1,10 +1,59 @@
 # Fix the DEF 14A executive-record parser leaking role text into exec_name
 
 Type: task
-Status: **parser fixed 2026-09-20; not yet resolved** — resolution is a full
-local re-parse of bronze (see "Resolution criterion, reworded 2026-09-21").
-Tickets 23 and 24, which blocked the re-export, are merged (#680, #681).
+Status: resolved (2026-09-21) — full local re-parse of bronze; the production
+re-export stays deferred. Residues found by the re-parse: [ticket 26](26-strip-footnote-markers-and-title-fragments-from-proxy-names.md).
 Blocked by: none
+
+## Resolution — the full bronze re-parse (2026-09-21)
+
+Every proxy filing in the S3 bronze bucket was run through the production
+parser (`parse_proxy_fundamentals`, `PARSER_VERSION="2"`) on this machine.
+The run made **zero SEC requests**: its DNS guard logged exactly one host, the
+bronze bucket, for 503,197 lookups. It made no Snowflake connection.
+Script: [`research/10-reparse-bronze.py`](../research/10-reparse-bronze.py).
+Results: [`research/10-reparse-results.json`](../research/10-reparse-results.json).
+
+**What "every" means.** Bronze holds 26,214 accessions with an HTML primary
+document, from 4,437 CIKs. Each accession's form was read from bronze, never
+from the file name:
+- 20,200 from the company's `submissions.json` (recent block, then pagination);
+- 6,006 from SEC's daily `form.idx` files captured in bronze (75 days, 17
+  April to 14 September 2026). These are August–September filings newer than
+  the company's last snapshot;
+- 8 remain unknown (July 2026 uploads), 0.03%.
+
+The scope is the four forms the pipeline routes to this parser: **9,254
+filings**, being 3,806 DEF 14A, 997 PRE 14A and 4,451 DEFA14A. The listing is
+6.06 GB, the same 510,649 filing objects as on 20 September.
+
+| | |
+|---|---|
+| filings parsed / parse errors | 9,254 / **0** |
+| filings with a Summary Compensation Table | 2,212 |
+| raw SCT entries (edgartools) | 18,044 |
+| dropped by the repair as unattributable | 575 |
+| landing rows → **collapsed** (#680 rule: latest per cik, accession, fiscal year, name) | 17,469 → **17,371** |
+| **research 01's check** (no role vocabulary, ≥ 2 tokens) | **17,204 / 17,371 = 99.04%** |
+| research 10's check (the 149-document sample's measure) | 99.85% after; **48.1%** before the repair |
+| hand-read sample, 60 rows, seed 20260921 | right executive **60 / 60**; name clean **54 / 60** |
+
+**The criterion is met.** The target was comparable to the 8-K source (~98%),
+and the result is 99.04% on the whole bronze corpus. The hand-read sample
+([`research/10-hand-read-sample.json`](../research/10-hand-read-sample.json),
+with a verdict on every row) checks the one thing the score cannot:
+attribution. In all 60 rows, the kept name is an executive in that filing's
+table with a consistent role.
+
+**What the score tolerates, measured, and ticketed rather than waved away**
+([ticket 26](26-strip-footnote-markers-and-title-fragments-from-proxy-names.md)):
+- footnote markers left on the name, in 462 rows (2.66%), e.g. `Jeff Zhu(1)`;
+- trailing title fragments, in 128 rows (0.74%), e.g. `Chi-Foon Chan Co-`;
+- the 167 rows (0.96%) the check still rejects, e.g. `VP/`, `SEVP`, `Member
+  of the`.
+
+The first residue matters for DEF 14A's own Tier B measurement: a digit takes
+the name out of the `person-name@v2` shape.
 
 ## Resolution criterion, reworded 2026-09-21 (operator)
 
