@@ -115,6 +115,8 @@ migration, no edit to any Clean MDM file. Written at
   / B (compound context key, auto at a measured ≥ **99%** precision — an
   operator amendment to Clean MDM's 99.9%, proposed to Codex) / C (fuzzy,
   Steward) / D (reject). Reading `IA_Schedule_A_B` is in scope.
+  **§4's Tier B row is superseded by [ticket 20](issues/20-redecide-tier-b-after-calibration.md)**
+  after the calibration; everything else stands.
 - [Measure which reporting-owner classification rule reaches 99% precision](issues/18-measure-reporting-owner-classification-precision.md)
   — from bronze (5,743 owner rows, 4,831 CIKs, all with a captured
   `submissions.json`; 1,220 labeled): SEC `entityType='other'` is 71%
@@ -166,6 +168,21 @@ migration, no edit to any Clean MDM file. Written at
   comparator produces 48 chains of which 42 are false. Findings:
   [research/17](research/17-tier-b-context-key-calibration.md); the four
   consequent decisions: [ticket 20](issues/20-redecide-tier-b-after-calibration.md).
+- [Re-decide Tier B now that it has been measured](issues/20-redecide-tier-b-after-calibration.md)
+  — replaces ticket 02 §4's Tier B row. **Identifiers veto, everywhere**:
+  two records carrying different values in the same namespace are vetoed
+  and counted as `distinct_identified`, never auto-merged and never
+  queued one at a time — stated in the Identifier Contract as a reason,
+  not as a source list, so Tier B fires only where no identifier exists
+  (8-K now, DEF 14A after ticket 10). **The bar becomes ≥ 99% at a
+  one-sided 97.5% Wilson bound**, not 95%, so the Person amendment to
+  Codex ships one bar; Tier B does **not** activate on today's numbers
+  and 8-K stays Tier C until [ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md)
+  measures n ≥ 381. **The key** is same MDM-resolved issuer/firm identity
+  + surname, given name and middle initial + **no generational-suffix
+  conflict** (a hard veto, not a normalization step); role and flags are
+  evidence, never key. DEF 14A is measured but not counted while 58.7% of
+  its names are role text.
 - [Decide which Person relationships publish and their semantics](issues/05-decide-person-relationships.md)
   — **a relationship is one mastered fact that every form contributes
   dated evidence to, not one edge per form** (operator requirement). Two
@@ -186,10 +203,27 @@ migration, no edit to any Clean MDM file. Written at
 
 ## Operator directives
 
+- **2026-09-20: every source resolves every entity it carries through
+  MDM** — "all sources must use MDM to resolve any entity it carries; it
+  has to go through id resolution and de-duplication and merging." No
+  local or derived identity key anywhere: gold's owner key
+  (`'cik:' || owner_cik` else `'name:' || owner_name_norm`,
+  `ownership_holdings.sql:63-67`) becomes the MDM Person id, legacy's
+  per-issuer name stubs are not carried forward, and issuers, ADV firms,
+  securities and funds referenced by a Person source resolve through MDM
+  too — which is why ticket 05 defers an edge whose far endpoint is not
+  yet accepted rather than publishing a local key.
+
 - **2026-09-20: Tier B auto-merge bar is 99% measured precision, not
   99.9%** — "don't want to create manual work." Sent to Codex as a
   Person-kind amendment to accepted Q11:
   [proposal](../clean-mdm-person-q11-amendment-proposal/map.md).
+  **Amended the same day by [ticket 20](issues/20-redecide-tier-b-after-calibration.md)**:
+  the 99% stands, but its confidence bound moves from one-sided 95% to
+  one-sided **97.5%** (matching research 18's method and removing the
+  mismatch the Mastering Policy spec flags for Codex), and an
+  identifier-namespace veto is added. The amendment to Codex is restated
+  on those terms.
 
 - **2026-09-19: "snowflake will not be restored."** No data-side
   measurement is possible; every fact this map needs comes from code
