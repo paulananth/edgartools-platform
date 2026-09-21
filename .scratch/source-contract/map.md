@@ -149,8 +149,9 @@ no edit to any Clean MDM file.
 - [Prototype the GLEIF and Form 3/4/5 Source Contracts](issues/07-prototype-gleif-and-form-345-source-contracts.md)
   — **the language holds**: Form 3/4/5 reproduces `ownership.py` on 5,356 /
   5,356 artifacts (3.3% custom); GLEIF is 93 lines and 0% custom, and proves
-  through a real Merge Stage case; eight acceptance checks exercised
-  literally. Main finding for Codex: the adapter needs a kind per row, but
+  through a real Merge Stage case; checks 1-3, 6 and 8-11 exercised
+  literally; check 4 holds only in part (libpq and DNS bypass a Python
+  guard, so no-network must live below Python). Main finding for Codex: the adapter needs a kind per row, but
   C-J is a policy classification. [prototype/](prototype/README.md).
 
 ## Not yet specified

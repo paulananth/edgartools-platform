@@ -29,9 +29,11 @@ re-opens `127.0.0.1` for its throwaway Postgres.
 | `engine/contract.schema.json` | the JSON Schema (editor autocomplete via the modeline in each contract) |
 | `engine/merge_harness.py` | `expect.merge` cases through Clean MDM's real Merge Stage in a throwaway Postgres 16 |
 | `engine/selftest.py` | as-of lookup on a synthetic dated layout |
+| `engine/nettest.py` | what the network guard does and does not cover |
 | `families.local.yaml` | engine config: artifact family → where it sits on this machine |
 | `policies/mastering-policy.yaml` | Rules Database stand-in: a Mastering Policy authored in the same YAML convention (Q2a) |
-| `sources/form345/`, `sources/gleif/` | contract, fixtures, custom code (Form 3/4/5 only), generated `MAPPING.md` |
+| `sources/form345/`, `sources/gleif/` | the two proof sources: contract, fixtures, custom code (Form 3/4/5 only), generated `MAPPING.md` |
+| `sources/codex-fixture/`, `sources/html-demo/` | the check-1 test: added after the engine was frozen (Codex's `publication_v1` adapter verbatim; the table-reader shape) |
 | `rules_db/` | proofs written by `--proof-dir` (stand-in for the Rules Database) |
 | `expected-differences.md`, `equivalence.py`, `equivalence.json` | Form 3/4/5 against `ownership.py` |
 
@@ -39,7 +41,7 @@ re-opens `127.0.0.1` for its throwaway Postgres.
 
 | | Form 3/4/5 | GLEIF Level 1 |
 |---|---|---|
-| Equivalence with today's parser | **5,356 / 5,356 artifacts identical, 0 unexpected differences, 0 path errors** (the comparison was checked to be real: un-ignoring `parser_version` makes all 683 rows of a 200-artifact sample differ) | no production parser exists |
+| Equivalence with today's parser | **5,356 / 5,356 artifacts identical, 0 unexpected differences, 0 path errors.** The comparison was checked to be real: un-ignoring `parser_version` makes all 683 rows of a 200-artifact sample differ. The parser's accession number is read from the header independently, so `accession_number` is really compared | no production parser exists |
 | Named cases | 5 pass (joint filing, company owner, C/O address, See Remarks, synthetic dropped transaction) | 2 pass, incl. one merge case |
 | Gate | 5,356 artifacts, 5,743 owner + 10,964 transaction rows, 15 s, 0 rejects, 0 violations on 4 checks | 316 records, 1 declared exception with `why:` |
 | Contract length | 227 lines | **93 lines incl. tests (check 10)** |
@@ -50,10 +52,10 @@ re-opens `127.0.0.1` for its throwaway Postgres.
 
 | Check | Result |
 |---|---|
-| 1 source-local change | each source is one folder: contract, fixtures (incl. its own lookup fixtures), optional `custom.py` |
+| 1 source-local change | **tested**: with the engine frozen (`06c5ae74`), two sources were added in commit `f925ea51`, which touches 7 files, all inside the two new folders. Caveat: gating them would also need a `families.local.yaml` entry — machine configuration saying where their bronze sits, not source code |
 | 2 delete a source | GLEIF folder deleted → Form 3/4/5 still proves |
 | 3 engine names no source | grep for form/gleif/ownership/rptOwner/lei/sec./edgar in `source_engine.py`: none |
-| 4 no network | socket connect refused process-wide; the merge harness re-opens localhost only |
+| 4 no network | **partly.** Python sockets to any host are refused, and loopback opens only when the merge harness asks. But **libpq (psycopg2) bypasses the guard** — it really tried `10.255.255.1` and timed out — and **DNS lookups are not blocked** (`engine/nettest.py`). See finding 12 |
 | 6 Mapping Document generated | `sources/*/MAPPING.md`, from the contract and the adapter block |
 | 8 one command | `./source prove <dir> --gate` |
 | 9 line and rule | argument typo → `INVALID …:15 [argument-known] … did you mean 'default'?`; YAML syntax, path syntax and silver type errors all name a line |
@@ -108,11 +110,32 @@ re-opens `127.0.0.1` for its throwaway Postgres.
     agent never reads "0" as "proven".
 11. **`requires:` names distributions; imports name modules.** Map them with
     `importlib.metadata.packages_distributions()`, never a hand-written alias.
+12. **No-network cannot be a Python monkeypatch.** The guard stops Python
+    sockets, but C clients (libpq) open their own, and DNS resolution goes
+    through `getaddrinfo`, which is not guarded. Check 4 must be enforced below
+    Python: run the Proving Run in a container or network namespace with no
+    network, plus an explicit loopback allowance for the throwaway Postgres.
+13. **Both custom shapes ran.** The value step (`owner_display_name@1`,
+    `owner_kind@1`), the custom check (`owner_name_has_letters@1`) and the
+    table reader (`summary_comp_table@1`, over a *synthetic* HTML table, with
+    `read.format: bytes`) each pass their cases. Each output is type-checked
+    against the declared silver table; an undeclared column is a located
+    failure.
+14. **Codex's adapter block works unchanged** inside a Source Contract.
+    `sources/codex-fixture/` carries `publication_v1/dataset.json` verbatim
+    (JSON is YAML 1.2), and Clean MDM's `normalize` maps both records as
+    expected.
 
 ## Limits
 
 - GLEIF was read from a 316-record JSONL extract, not the 928 MB zipped
-  Golden Copy. The streaming zip reader is not exercised.
+  Golden Copy. The streaming zip reader is not exercised. The
+  `record_path: record` wrapper comes from the research extract's shape, not
+  from GLEIF's publication envelope.
+- The table reader ran only on a synthetic 3-row HTML table, not on a real
+  DEF 14A.
+- `mapdoc` prints "MDM kind: from `None`" for a source with no Dataset
+  Contract (cosmetic; left, because the engine is frozen for the check-1 test).
 - Codex's `publication_v1` GLEIF fixture is synthetic (`key`, `name`). Its
   adapter *shape* is reused, but real Golden Copy paths are used for parsing.
 - The Rules Database is a folder of proof files. `source save`, `export`,

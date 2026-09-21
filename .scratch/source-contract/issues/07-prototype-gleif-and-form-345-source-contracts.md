@@ -36,11 +36,16 @@ loader. Use Codex's paths and fixtures where they exist.
   case runs through Clean MDM's real Merge Stage in a throwaway Postgres 16:
   a seed is bound by a declared Steward decision, and an unbound record waits
   for binding. Planted wrong expectations all fail.
-- Checks 2, 3, 4, 6, 8, 9, 10 and 11 were exercised literally.
+- Checks 1, 2, 3, 6, 8, 9, 10 and 11 were exercised literally. Check 1: two
+  more sources (Codex's `publication_v1` adapter verbatim, and a table reader
+  over a synthetic HTML table) were added in a commit that touches only their
+  folders. Check 4 holds only **partly**: libpq and DNS bypass a Python-level
+  guard, so no-network must be enforced below Python (finding 12).
+- All three custom shapes ran: value step, custom check, table reader.
 - The as-of lookup was proven on a synthetic dated layout only, because the
   local copy is flat. The path date is the fetch date by construction.
 
-Eleven findings go to the spec (README "Findings"). The one that needs Codex:
+Fourteen findings go to the spec (README "Findings"). The one that needs Codex:
 **the adapter needs a kind per row at mapping time, but rule C-J is a policy
 classification**. The prototype used a declared custom step as a stand-in.
 Limits: no streaming-zip GLEIF reader, and the Rules Database is a folder of
