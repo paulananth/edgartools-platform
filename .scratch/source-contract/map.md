@@ -139,6 +139,13 @@ no edit to any Clean MDM file.
   versions need a Rule Activation Approval the agent explicitly asks for.
   One `source run` command serves every source; `source prove` shares its
   code. Lifecycle draft → proven → active → retired.
+- [Decide the test-case and batch-gate format](issues/05-decide-the-test-case-and-batch-gate-format.md)
+  — **named cases (parse / mapping / merge in one shape, seeds through the
+  same contract, identities named by the case) plus an optional attributed
+  snapshot; built-in and custom checks that report violations with row
+  keys; a pinned batch gate with zero-by-default limits and a `why:` for
+  each exception; `file:line`-first failures with exit codes and `--json`
+  as the primary, agent-facing output.**
 
 ## Not yet specified
 
