@@ -82,6 +82,18 @@ _Avoid_: Mastering Policy (sameness and survivorship live there, not here), fiel
 The readable table, generated from a Source Contract, that traces every source path through its transforms to a silver column and on to an MDM kind and field, or marks it evidence only or custom.
 _Avoid_: A hand-written mapping spreadsheet, a document that can drift from what runs
 
+**Rules Database**:
+The database that holds every version of every Source Contract and Mastering Policy with its lifecycle state (draft, proven, active, retired), proof and approval, and where Proving Runs execute; an active version is handed to Clean MDM, which production reads.
+_Avoid_: Golden merge rule store, editing rules in the production MDM database, a place production merges read from
+
+**Rule Activation Approval**:
+The recorded consent of a named person to activate one exact version (by digest) that can bind or merge identities, given only after the agent explicitly asks for it.
+_Avoid_: Approval inferred from silence or from an earlier approval, agent self-approval of identity-changing rules
+
+**Proving Run**:
+One run of a draft Source Contract or Mastering Policy version's tests and merge, in the Rules Database and never against production identities, whose passing result is the proof that makes the version proven.
+_Avoid_: Trial, dry run (the CLI flag that does nothing), canary (a small run on production), calibration (threshold tuning only)
+
 **MDM Change Journal**:
 The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
 _Avoid_: A second root-run authority, mutable log of only the latest result
