@@ -559,7 +559,7 @@ class Engine:
         from importlib.metadata import packages_distributions
         dists = packages_distributions()  # module name → distribution names, e.g. a module shipped by a differently named package
         declared = set(self.contract.get("requires") or [])
-        allowed = set(sys.stdlib_module_names) | {"source_engine"} | {m for m, d in dists.items() if declared & set(d)}
+        allowed = set(sys.stdlib_module_names) | {"source_engine", "source_contract"} | {m for m, d in dists.items() if declared & set(d)}
         for node in ast.walk(ast.parse(src)):
             names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
             for n in names:

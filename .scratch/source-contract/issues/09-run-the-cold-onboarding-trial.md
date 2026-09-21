@@ -1,7 +1,7 @@
 # Run the cold-onboarding trial
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 08
 
 ## Question
