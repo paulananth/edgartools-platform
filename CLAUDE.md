@@ -807,10 +807,19 @@ Key import pattern (do not change without checking the edgartools changelog):
 
 ```python
 # edgar_warehouse/parsers/ownership.py
-from edgar.ownership import Ownership
-
-parsed = Ownership.from_xml(content)
+from edgar.display.formatting import reverse_name
+from edgar.entity.constants import _classify_is_individual
 ```
+
+The ownership parser no longer calls `Ownership.from_xml` (Person Consumer
+Contract ticket 19, 2026-09-21): that path ran `Entity(int(cik)).data` for
+every reporting owner at parse time -- one live SEC submissions request per
+owner, outside every artifact-fetch policy -- only to decide whether to
+reverse the owner's name. The parser now reads the `ownershipDocument` XML
+directly and classifies from the owner's bronze `submissions.json` through
+a caller-supplied `submissions_lookup`; the two imports above are what keep
+`owner_name` byte-identical to the edgartools output (verified over 5,356
+bronze artifacts, `.scratch/person-consumer-contract/research/19-equivalence.json`).
 
 Other edgartools surfaces used:
 - `edgar.filing` — filing metadata and document fetching in `runtime.py`

@@ -28,8 +28,6 @@ ship with activation),
 [10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser —
 **fixed 2026-09-20**, 48.6% → 100% plausible names on real filings; open until
 the re-export),
-[19](issues/19-capture-ownership-parser-evidence.md) (ownership parser
-evidence and `owner_index`),
 [22](issues/22-decommission-legacy-person-code-and-tests.md) (decommission
 legacy Person code, gated on the Clean MDM consumer being live).
 
@@ -302,6 +300,18 @@ distinct-CIK count borrowed from a different study. Detail on
   Version-awareness on the marker table weighed and declined: a landing-zone
   schema migration for a table with no live migration path. 128
   fundamentals tests pass, 3 new.
+
+- [Capture the reporting-owner evidence the Person contract needs, from bronze](issues/19-capture-ownership-parser-evidence.md)
+  — the ownership parser reads the XML directly and classifies from bronze
+  `submissions.json`, so a Form 3/4/5 parse makes **zero SEC requests**
+  (edgartools fetched every owner live). Owner rows keep `owner_name_raw`,
+  `other_text`, filing footnotes/remarks, two address booleans and rule
+  C-J's structural fields with the snapshot's SHA-256; rule C-J from parser
+  columns alone reproduces **841/841, 353/353, 26 deferred**. **Item 4
+  restated**: the SEC schema gives a transaction no owner, so there is no
+  real `owner_index` — transactions carry `reporting_owner_count`, gold
+  stops attributing joint filings to owner 1 (486 rows, 4.43%), and
+  consumer.md's holdings gate now reads "single-owner filings only".
 
 ## Operator directives
 

@@ -132,3 +132,41 @@ unit_tests:
           transaction_price: null
           shares_owned_after: null
           is_derivative: false
+
+  # Person Consumer Contract ticket 19: a Form 4 transaction carries no owner
+  # reference, so a joint filing (reporting_owner_count > 1) must not be
+  # attributed to reporting owner 1: the row keeps owner_index, txn_index and
+  # its transaction fields but gets a NULL party_key. Single-owner and pre-v3
+  # rows (count NULL, treated as 1) are covered by the test above, whose
+  # fixtures carry no reporting_owner_count and still expect owner keys.
+  - name: ownership_activity_does_not_attribute_joint_filing_transactions
+    model: ownership_activity
+    given:
+      - input: ref('sec_ownership_non_derivative_txn')
+        rows:
+          - accession_number: "0002000000-26-000002"
+            owner_index: 1
+            txn_index: 1
+            security_title: "Common Stock"
+            transaction_code: "S"
+            reporting_owner_count: 3
+      - input: ref('sec_ownership_derivative_txn')
+        rows: []
+      - input: ref('sec_ownership_reporting_owner')
+        rows:
+          - accession_number: "0002000000-26-000002"
+            owner_index: 1
+            owner_cik: 2222222
+            owner_name: "DST Global VI, L.P."
+      - input: ref('sec_company_filing')
+        rows:
+          - accession_number: "0002000000-26-000002"
+            cik: 320193
+            form: "4"
+            filing_date: "2026-01-15"
+    expect:
+      rows:
+        - accession_number: "0002000000-26-000002"
+          owner_index: 1
+          txn_index: 1
+          party_key: null

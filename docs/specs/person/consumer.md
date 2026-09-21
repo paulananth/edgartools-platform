@@ -126,6 +126,9 @@ and measured in research 18 (5,743 owner rows, 4,831 CIKs, 1,220 labelled):
 
 Measured: person arm **841/841** (Wilson LCB 0.9955); entity arm 507/507
 pooled under the post-hoc guard (LCB 0.9925); **~1.1%** of owners deferred.
+Silver `owner_name` is edgartools' display reversal ("Timothy D Cook") and is
+not classification evidence; rule C-J and the Person normalizer read
+`owner_name_raw`, the registry form EDGAR disseminated ("COOK TIMOTHY D").
 Flags, `entityType = 'other'` and deputization text are **evidence, never
 deciders** — `other` is 71% person and "10%-only" is 72% entity, so neither may
 decide. Category, asserted legal form and inferred kind are recorded separately
@@ -303,12 +306,23 @@ assertions. Legacy's `dedup_key_fields ["source_entity_id", "target_entity_id",
 "title"]` (`002_seed_data.sql:240-244`) is not carried forward.
 
 **Holdings publish nothing until both gates pass**: a Security identity with an
-enabled consumer exists (`domain-model.md:63`, `:69`), **and** the
-`owner_index` defect is fixed and re-exported — every transaction row hardcodes
-`"owner_index": 1` (`parsers/ownership.py:47`, `:66`), so on a multi-owner
-Form 4 all transactions join to reporting owner 1 (`pipeline.py:1979-1980`;
-`ownership_holdings.sql:38-39`), attributing one owner's positions to another
-named person. Assertions accumulate meanwhile; the edge publishes from history.
+enabled consumer exists (`domain-model.md:63`, `:69`), **and** holdings are
+attributed only where the artifact attributes them. The SEC Ownership XML
+schema gives a transaction no owner reference (`nonDerivativeTransaction` /
+`derivativeTransaction`), so a transaction on a joint filing belongs to the
+filing, not to one reporting owner; the only attribution is free text in
+`natureOfOwnership` ("By DST Global VI, L.P.", "See footnote"). Since
+[ticket 19](../../../.scratch/person-consumer-contract/issues/19-capture-ownership-parser-evidence.md)
+transaction rows carry `reporting_owner_count` and `ownership_nature`. A
+holdings edge may be derived only from a filing with `reporting_owner_count =
+1`; joint-filing transactions (4.43% of transaction rows, 110 of 5,356 filings
+in research 18's corpus) stay filing-level assertions with their
+`ownership_nature` text and never publish as a Person holding. Legacy's join
+on `owner_index` (`pipeline.py:1979-1980`) attributed them to owner 1 and is
+not carried forward; gold `ownership_holdings` / `ownership_activity` stopped
+doing so in ticket 19. Fanning a transaction out to every co-filer is ruled
+out: it would put a fund's indirect position under a natural person's name.
+Assertions accumulate meanwhile; the edge publishes from history.
 
 ## Temporal behavior
 
@@ -573,7 +587,9 @@ All required:
 6. Independent, fail-closed checkpoints per family (migration 029).
 7. Privacy gates 1–3 verified by test; the takedown path exercised end to end.
 8. Holdings publish only after a Security identity with an enabled consumer
-   **and** the `owner_index` fix (ticket 19) are both in place.
+   is in place, and only from single-owner filings (`reporting_owner_count =
+   1`, ticket 19); joint-filing transactions never publish as a Person
+   holding.
 9. Downstream parity for the same generation, including the `IS_INSIDER` view.
 10. Rollback proof, including that a retired id stays resolvable.
 11. Approved runtime / memory / storage / request cost.
@@ -591,7 +607,7 @@ Plus the foundation's own gates, inherited.
 | Rules-as-data policy body + Identifier Contract | **accepted for Company** as Q14 (2026-09-20); Person needs the same activation path for Tier A |
 | Person amendment to Q11 — ≥ 99% at one-sided 97.5%, with the identifier veto | **open with Codex**; Company's Q11 (99.9% at 95%) is explicitly not to be applied to other kinds |
 | Ticket 10 (proxy name parser) | blocks DEF 14A entirely |
-| Ticket 19 (ownership parser evidence, incl. `owner_index`) | blocks classification from bronze and all holdings |
+| Ticket 19 (ownership parser evidence, incl. the joint-filing marker `reporting_owner_count`) | **done** — classification evidence from bronze with zero SEC requests; holdings still wait on Security identity |
 | Ticket 21 (8-K labelling to n ≥ 381) | **done** — research 21 cleared 8-K at n = 659 |
 | [Ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs | ships in the same release as Tier B activation |
 | Security identity + consumer | blocks holdings |

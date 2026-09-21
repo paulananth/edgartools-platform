@@ -20,6 +20,12 @@
 --   form_key = hash(form) when form is present, else NULL (no 0 sentinel --
 --     that pattern is specific to filing_activity.sql/filing_detail.sql's
 --     own form_key, not this model)
+-- Person Consumer Contract ticket 19: the owner join requires a single-owner
+-- filing (reporting_owner_count = 1). A Form 4 transaction carries no owner
+-- reference, so on a joint filing it was attributed to reporting owner 1 --
+-- one owner's positions under another named party. Those rows now keep
+-- their txn fields and owner_index (so fact_key is unchanged) with a NULL
+-- owner_cik/owner_name/party_key. SQL-body change: deploy with --full-refresh.
 {{ gold_model_config('OWNERSHIP_ACTIVITY') }}
 
 with base as (
@@ -28,7 +34,7 @@ with base as (
         cf.cik,
         cf.form,
         cf.filing_date,
-        o.owner_index,
+        t.owner_index,
         o.owner_cik,
         o.owner_name,
         t.txn_index,
@@ -44,13 +50,16 @@ with base as (
     join {{ ref('sec_company_filing') }} cf on cf.accession_number = t.accession_number
     left join {{ ref('sec_ownership_reporting_owner') }} o
         on o.accession_number = t.accession_number and o.owner_index = t.owner_index
+        -- ticket 19: a transaction has no owner in the SEC schema; only a
+        -- single-owner filing attributes it (NULL = pre-v3 row, same as before)
+        and coalesce(t.reporting_owner_count, 1) = 1
     union all
     select
         t.accession_number,
         cf.cik,
         cf.form,
         cf.filing_date,
-        o.owner_index,
+        t.owner_index,
         o.owner_cik,
         o.owner_name,
         t.txn_index,
@@ -66,6 +75,9 @@ with base as (
     join {{ ref('sec_company_filing') }} cf on cf.accession_number = t.accession_number
     left join {{ ref('sec_ownership_reporting_owner') }} o
         on o.accession_number = t.accession_number and o.owner_index = t.owner_index
+        -- ticket 19: a transaction has no owner in the SEC schema; only a
+        -- single-owner filing attributes it (NULL = pre-v3 row, same as before)
+        and coalesce(t.reporting_owner_count, 1) = 1
 ),
 
 keyed as (

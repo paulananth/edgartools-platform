@@ -17,7 +17,7 @@ the repository-owned byte-preserving HTTP client.
   multi-attachment filings such as 13F information tables and earnings 8-K
   exhibits.
 - Structured parser surfaces after bronze capture, including ownership Forms
-  3/4/5 via `edgar.ownership.Ownership.from_xml`, financial statements/XBRL,
+  3/4/5 (locally since ticket 19; edgartools supplies only `reverse_name` and `_classify_is_individual`), financial statements/XBRL,
   exhibits, and filing text/table views where appropriate.
 
 ## Content rule

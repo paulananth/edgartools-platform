@@ -67,7 +67,7 @@ After bronze files are already stored, the warehouse uses `edgartools` as a
 
 | Form / domain | edgartools surface | Platform adapter |
 | --- | --- | --- |
-| Forms **3, 4, 5** (insider ownership) | `edgar.ownership.Ownership.from_xml(...)` | `edgar_warehouse/parsers/ownership.py` |
+| Forms **3, 4, 5** (insider ownership) | local XML parser + bronze `submissions.json` (edgartools `reverse_name` / `_classify_is_individual` only) | `edgar_warehouse/parsers/ownership.py` |
 | **13F** institutional holdings | `parse_infotable_xml` | `edgar_warehouse/parsers/thirteenf.py` |
 | **8-K** earnings releases | `EarningsRelease` | `edgar_warehouse/parsers/earnings_release.py` |
 | **DEF 14A** proxy compensation | `extract_summary_compensation` | `edgar_warehouse/parsers/proxy_fundamentals.py` |

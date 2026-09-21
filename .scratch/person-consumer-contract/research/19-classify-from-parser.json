@@ -1,0 +1,80 @@
+{
+ "owner_rows": 5743,
+ "distinct_owners": 4831,
+ "submissions_lookup_calls": 5743,
+ "sec_requests": 0,
+ "labeled_owners": 1220,
+ "rule_c_j_on_parser_output": {
+  "decided_person": 841,
+  "person_correct": 841,
+  "decided_entity": 353,
+  "entity_correct": 353,
+  "deferred": 26,
+  "missing_owner": 0,
+  "errors": [],
+  "person_precision": 1.0,
+  "person_wilson_lcb95": 0.9954530417027798,
+  "entity_precision": 1.0,
+  "entity_wilson_lcb95": 0.9892348302427106
+ },
+ "population_verdicts_owners": {
+  "person": 4426,
+  "entity": 353,
+  "deferred": 52
+ },
+ "multi_owner_filings": 119,
+ "multi_owner_all_txn_owner_index_1": true,
+ "multi_owner_all_txn_count_marked": true,
+ "multi_owner_examples": [
+  {
+   "artifact": "036394928be291dfb7b1c63bbf6c040938f9c8d845fdda4c6e615058222d6bcb",
+   "owners": 3,
+   "txn_rows": 1,
+   "all_owner_index_1": true,
+   "all_count_marked": true,
+   "nature_texts": [
+    "See footnotes"
+   ]
+  },
+  {
+   "artifact": "06dd40e0ead8d9e5ce12803532388ffcdc31c51dd6157756a9cc3fd7629e26b5",
+   "owners": 4,
+   "txn_rows": 21,
+   "all_owner_index_1": true,
+   "all_count_marked": true,
+   "nature_texts": [
+    "By DST Global VI, L.P.",
+    "By DST Global VII, L.P.",
+    "By DST Investments XXI, L.P."
+   ]
+  },
+  {
+   "artifact": "076b30127092bd74cea0c3e9dbc96ce0340821dd54504ac6c721d453eb92be5b",
+   "owners": 4,
+   "txn_rows": 4,
+   "all_owner_index_1": true,
+   "all_count_marked": true,
+   "nature_texts": [
+    "see footnote"
+   ]
+  },
+  {
+   "artifact": "09222556ef5ea34be1626dc6798d80b7513dbcb15a066b2fac87bc6bea6ee61b",
+   "owners": 2,
+   "txn_rows": 0,
+   "all_owner_index_1": true,
+   "all_count_marked": true,
+   "nature_texts": []
+  },
+  {
+   "artifact": "0b3ad74b2920aff3f64552326b8862625f708d2406c8fd0b3b96e9d34c96a65c",
+   "owners": 9,
+   "txn_rows": 3,
+   "all_owner_index_1": true,
+   "all_count_marked": true,
+   "nature_texts": [
+    "See Footnote"
+   ]
+  }
+ ]
+}
