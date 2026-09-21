@@ -20,8 +20,9 @@ R18=… PROTO=$PWD uv run --project ../../.. --offline --extra s3 --extra mdm-ru
 Local inputs only: the Form 3/4/5 gate reads the local copy of production
 bronze taken for Person research 18 (`$R18`, 5,356 artifacts, 17,956
 `submissions.json`); GLEIF reads the 316 real Level 1 records extracted by the
-GLEIF research. The runner refuses network access; only the merge harness
-re-opens `127.0.0.1` for its throwaway Postgres.
+GLEIF research. The runner refuses Python-level network access and allows
+loopback only for the merge harness's throwaway Postgres. That guard does
+**not** stop C clients (libpq) or DNS lookups — see finding 12.
 
 | Path | What |
 |---|---|
