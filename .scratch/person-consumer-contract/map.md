@@ -18,9 +18,16 @@ the spec is written: [`docs/specs/person/consumer.md`](../../docs/specs/person/c
 handed over in
 [`.scratch/handover/2026-09-20-claude-to-codex-person-consumer.md`](../handover/2026-09-20-claude-to-codex-person-consumer.md).
 What remains on this map is not decisions:
-[ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md) (research, unblocks
-Tier B activation) and three code-owner tasks —
-[10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser),
+[ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md) is resolved — Tier B
+is qualified for 8-K — leaving code-owner tasks only:
+[25](issues/25-fix-person-name-normalizer-defects.md) (normalizer repairs that
+ship with activation),
+[23](issues/23-fix-executive-record-collapse-key.md) and
+[24](issues/24-reprocess-already-marked-fundamentals.md) (both block ticket
+10's re-export),
+[10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser —
+**fixed 2026-09-20**, 48.6% → 100% plausible names on real filings; open until
+the re-export),
 [19](issues/19-capture-ownership-parser-evidence.md) (ownership parser
 evidence and `owner_index`),
 [22](issues/22-decommission-legacy-person-code-and-tests.md) (decommission
@@ -257,6 +264,23 @@ distinct-CIK count borrowed from a different study. Detail on
   `MANAGES_FUND` (needs Fund Structure) are **deferred records** that
   publish from history when their endpoint is accepted; `IS_PERSON_OF` is
   gone; `IS_INSIDER` survives as a view, not a mastered edge.
+
+- [Extend the 8-K Tier B labelling to the 97.5% sample size](issues/21-extend-tier-b-labelling-to-97-5.md)
+  — **Tier B is qualified for 8-K Item 5.02**, and for nothing else. The
+  census of the population research 17 sampled (938 candidate pairs, 661
+  matching ticket 20's fixed key): 658 `same`, **0 different**, 1 unknown, 2
+  not person names. On n = 659, LCB97.5 is **0.99420** optimistic and
+  **0.99146** conservative — both clear 99%, on n well past the 381 required.
+  Cost: recall 0.7045 (a ~30% coverage loss to middle-name asymmetry) and
+  15.26 reviews per 1,000 eligible records. **Power, not n, now binds**: every
+  one of the 657 new pairs is `same`, and the only surviving route to a
+  non-`same` label fires on 1 of 721 rows, so more labelling moves the bound
+  rather than what can be detected. Confirms ticket 20's suffix veto against
+  Form 3/4/5's 11 same-issuer homonym CIK pairs: plain `mi` merges 7, the veto
+  prevents 6, the fixed key merges 1 — and that one is a multi-word-surname
+  parse defect, not a key defect. Three normalizer repairs ship with
+  activation: [ticket 25](issues/25-fix-person-name-normalizer-defects.md).
+  Findings: [research/21](research/21-tier-b-8k-extended-labelling.md).
 
 ## Operator directives
 

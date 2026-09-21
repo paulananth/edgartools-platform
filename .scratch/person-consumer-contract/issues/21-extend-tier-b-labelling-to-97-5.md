@@ -1,8 +1,39 @@
 # Extend the 8-K Tier B labelling to the 97.5% sample size
 
 Type: research
-Status: open
-Blocked by: none (17 resolved, 20 decided the bar 2026-09-20)
+Status: resolved 2026-09-20
+
+## Answer
+
+**Activate Tier B for 8-K Item 5.02 at ticket 20's fixed key.**
+[Research 21](../research/21-tier-b-8k-extended-labelling.md) took the **census** research 17
+sampled — all 216 within-8-K groups, all 721 8-K rows with a Form 3/4/5 anchor, 938 candidate
+pairs, **661 matching the fixed key**; **658 `same`, 0 `different`, 1 `unknown`, 2 `ineligible`**
+(not person names). Eligible **n = 659**, `n/(n+z²)` at z = 1.96:
+
+| reading | precision | LCB95 | **LCB97.5** | clears? |
+|---|---|---|---|---|
+| optimistic (unsettled = same) | 1.00000 | 0.99591 | **0.99420** | yes |
+| conservative (unsettled = error) | 0.99848 | 0.99323 | **0.99146** | yes |
+| settled only, n = 658 | 1.00000 | 0.99591 | **0.99420** | yes |
+| *research 17's rules alone, conservative* | *0.94251* | *0.92574* | *0.92208* | *no* |
+
+**Two caveats.** (1) The conservative row holds only with research 21's settling rules — they
+settle 37 of 38 unknowns, 21 on a date anchor, 16 on ticket 20 Q3's own position that role is
+evidence never key; settled and optimistic clear either way. (2) **All four non-`same` labels in
+the census sit inside research 17's original 281**, and the only surviving route to a non-`same`
+label fires on 1 of 721 rows (0.14%): the discriminating stratum is exhausted and the binding
+constraint is now the method's power, not n — more labelling will not move it.
+
+5 of research 17's 6 unsettled 8-K pairs are settled (4 `same`, 1 `ineligible`); Inogen's
+`Kevin P. Smith` stays `unknown`, separable only by the middle initial, i.e. the key. On Form
+3/4/5's 11 same-issuer homonym CIK pairs, which `owner_cik` labels outright, plain `mi` merges
+**7**, the fixed key **1**, and **the suffix veto prevents 6** — ticket 20 Q3 confirmed by
+measurement, its one false merge the Zegna brothers' four-token surname defeating the parse.
+Ships alongside, none touching the key: repair that parse (0 of 11), add `DATE`/`BANK` to the
+eligibility vocabulary, drop `V` from the suffix tokens. Recall **0.7045**, review **15.26/1,000**
+eligible records — the dominant 8-K effect is ~30% coverage loss, not precision risk. Nothing
+contradicts ticket 20; the issuer component is a raw CIK only because MDM ids do not exist yet.
 
 ## Question
 

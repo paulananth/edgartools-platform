@@ -1,0 +1,211 @@
+{
+ "form345_identifier_labelled": {
+  "same_issuer_same_surname_and_given_name_cik_pairs": 11,
+  "all_known_different_by_owner_cik": true,
+  "would_be_merged_by_mi_alone": 7,
+  "would_be_merged_by_the_fixed_key": 1,
+  "prevented_by_the_suffix_veto": 6,
+  "fixed_key_auto_bind_decisions_on_form345": 56307,
+  "false_merge_rate_per_decision": 1.776e-05,
+  "false_merge_rate_per_10000_decisions": 0.1776,
+  "merged_pairs": [
+   {
+    "ctx": "1877787",
+    "a_cik": "2116391",
+    "b_cik": "2117398",
+    "a_names": [
+     "Zegna di Monte Rubello Edoardo"
+    ],
+    "b_names": [
+     "Zegna di Monte Rubello Angelo"
+    ],
+    "issuer": "Ermenegildo Zegna N.V.",
+    "fixed_key_merges": true,
+    "mi_merges": true
+   }
+  ],
+  "all_pairs": [
+   {
+    "ctx": "106532",
+    "a_cik": "1194948",
+    "b_cik": "900533",
+    "a_names": [
+     "FLORSHEIM THOMAS W JR"
+    ],
+    "b_names": [
+     "FLORSHEIM THOMAS W"
+    ],
+    "issuer": "WEYCO GROUP INC",
+    "fixed_key_merges": false,
+    "mi_merges": true
+   },
+   {
+    "ctx": "1093672",
+    "a_cik": "1183129",
+    "b_cik": "2052002",
+    "a_names": [
+     "ABERNETHY ROBERT C"
+    ],
+    "b_names": [
+     "Abernethy Robert C. JR"
+    ],
+    "issuer": "PEOPLES BANCORP OF NORTH CAROLINA INC",
+    "fixed_key_merges": false,
+    "mi_merges": true
+   },
+   {
+    "ctx": "1163389",
+    "a_cik": "1291662",
+    "b_cik": "2138367",
+    "a_names": [
+     "White Blaine Scott"
+    ],
+    "b_names": [
+     "White Blaine Scott II"
+    ],
+    "issuer": "NEW PEOPLES BANKSHARES INC",
+    "fixed_key_merges": false,
+    "mi_merges": true
+   },
+   {
+    "ctx": "1294133",
+    "a_cik": "1802639",
+    "b_cik": "2031211",
+    "a_names": [
+     "Smith Kevin Raymond Merrill"
+    ],
+    "b_names": [
+     "Smith Kevin P."
+    ],
+    "issuer": "Inogen Inc",
+    "fixed_key_merges": false,
+    "mi_merges": false
+   },
+   {
+    "ctx": "1341878",
+    "a_cik": "1529638",
+    "b_cik": "2122052",
+    "a_names": [
+     "BAQAR HASSAN"
+    ],
+    "b_names": [
+     "Baqar Hassan Sajjad"
+    ],
+    "issuer": "B-Scada, Inc.",
+    "fixed_key_merges": false,
+    "mi_merges": false
+   },
+   {
+    "ctx": "1583771",
+    "a_cik": "1532793",
+    "b_cik": "2145064",
+    "a_names": [
+     "Stetz Gary S."
+    ],
+    "b_names": [
+     "Stetz Gary S. II"
+    ],
+    "issuer": "Hepion Pharmaceuticals, Inc.",
+    "fixed_key_merges": false,
+    "mi_merges": true
+   },
+   {
+    "ctx": "1823608",
+    "a_cik": "1848737",
+    "b_cik": "2008970",
+    "a_names": [
+     "Romney Edgar"
+    ],
+    "b_names": [
+     "Romney Edgar Jr"
+    ],
+    "issuer": "Amalgamated Financial Corp.",
+    "fixed_key_merges": false,
+    "mi_merges": true
+   },
+   {
+    "ctx": "1877787",
+    "a_cik": "2116391",
+    "b_cik": "2117398",
+    "a_names": [
+     "Zegna di Monte Rubello Edoardo"
+    ],
+    "b_names": [
+     "Zegna di Monte Rubello Angelo"
+    ],
+    "issuer": "Ermenegildo Zegna N.V.",
+    "fixed_key_merges": true,
+    "mi_merges": true
+   },
+   {
+    "ctx": "2049187",
+    "a_cik": "2119278",
+    "b_cik": "2122644",
+    "a_names": [
+     "KWOK YIU WAH"
+    ],
+    "b_names": [
+     "Kwok Yiu Keung"
+    ],
+    "issuer": "K-TECH SOLUTIONS CO LTD",
+    "fixed_key_merges": false,
+    "mi_merges": false
+   },
+   {
+    "ctx": "28917",
+    "a_cik": "1179684",
+    "b_cik": "1592970",
+    "a_names": [
+     "DILLARD WILLIAM T II"
+    ],
+    "b_names": [
+     "Dillard William T. III"
+    ],
+    "issuer": "DILLARD'S, INC.",
+    "fixed_key_merges": false,
+    "mi_merges": true
+   },
+   {
+    "ctx": "65596",
+    "a_cik": "1727425",
+    "b_cik": "1813372",
+    "a_names": [
+     "Gebbia John M."
+    ],
+    "b_names": [
+     "Gebbia John J"
+    ],
+    "issuer": "SIEBERT FINANCIAL CORP",
+    "fixed_key_merges": false,
+    "mi_merges": false
+   }
+  ]
+ },
+ "v_token": {
+  "8k_records_whose_parsed_suffix_holds_V": 7,
+  "f4_records_whose_parsed_suffix_holds_V": 257,
+  "8k_of_those_with_an_otherwise_empty_middle": 7,
+  "f4_of_those_with_an_otherwise_empty_middle": 241,
+  "examples_8k": [
+   "Cydonii V. Fairfax",
+   "Mark V. Anquillare",
+   "Paul V. Stahlin",
+   "Robert V. Vitale",
+   "Stuart V Flavin",
+   "Stuart V. Flavin III"
+  ],
+  "examples_f4": [
+   "Arabia John V",
+   "Barry David V.",
+   "Bergh Charles V",
+   "CRAWFORD MATTHEW V",
+   "Caldwell Nick V.",
+   "Coloma Jason V",
+   "DODDS CHRISTOPHER V",
+   "Date Rajeev V",
+   "Di Leo Allen Bruno V",
+   "Flavin Stuart V"
+  ],
+  "note": "a record whose parsed suffix holds V and whose middle is otherwise empty has had its middle initial discarded: its `mi` key equals its `fl` key, so the key is one variant looser than ticket 20 specifies for exactly those names."
+ }
+}

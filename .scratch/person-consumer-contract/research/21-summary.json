@@ -1,0 +1,765 @@
+{
+ "run_et": "2026-09-20T21:58:11-04:00",
+ "wilson": {
+  "z_one_sided_95": 1.6448536269514722,
+  "z_one_sided_975": 1.959963984540054,
+  "n_zero_errors_for_0.99_at_95": 268,
+  "n_zero_errors_for_0.99_at_975": 381,
+  "n_one_error_for_0.99_at_975": 563,
+  "n_two_errors_for_0.99_at_975": 726
+ },
+ "census": {
+  "candidate_pairs": 938,
+  "K_within_source": 216,
+  "X_cross_source": 722,
+  "already_labelled_by_r17": 281,
+  "new_in_r21": 657
+ },
+ "fixed_key": {
+  "definition": "same issuer CIK + surname|given name|middle initial (`mi`) + no generational-suffix conflict (JR/SR/II/III/IV present on one side only, or conflicting, is a veto). Ticket 20 Q3.",
+  "pooled": {
+   "n_candidates": 661,
+   "same": 658,
+   "different": 0,
+   "unknown": 1,
+   "ineligible": 2,
+   "n": 659,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.99591,
+    "lcb975": 0.9942
+   },
+   "conservative": {
+    "precision": 0.99546,
+    "lcb95": 0.9887,
+    "lcb975": 0.98674,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 659,
+    "precision": 0.99848,
+    "lcb95": 0.99323,
+    "lcb975": 0.99146,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 658,
+    "precision": 1.0,
+    "lcb95": 0.99591,
+    "lcb975": 0.9942
+   }
+  },
+  "new_pairs_only": {
+   "n_candidates": 441,
+   "same": 441,
+   "different": 0,
+   "unknown": 0,
+   "ineligible": 0,
+   "n": 441,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.9939,
+    "lcb975": 0.99136
+   },
+   "conservative": {
+    "precision": 1.0,
+    "lcb95": 0.9939,
+    "lcb975": 0.99136,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 441,
+    "precision": 1.0,
+    "lcb95": 0.9939,
+    "lcb975": 0.99136,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 441,
+    "precision": 1.0,
+    "lcb95": 0.9939,
+    "lcb975": 0.99136
+   }
+  },
+  "r17_pairs_only": {
+   "n_candidates": 220,
+   "same": 217,
+   "different": 0,
+   "unknown": 1,
+   "ineligible": 2,
+   "n": 218,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.98774,
+    "lcb975": 0.98268
+   },
+   "conservative": {
+    "precision": 0.98636,
+    "lcb95": 0.96637,
+    "lcb975": 0.96068,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 218,
+    "precision": 0.99541,
+    "lcb95": 0.9797,
+    "lcb975": 0.97448,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 217,
+    "precision": 1.0,
+    "lcb95": 0.98769,
+    "lcb975": 0.98261
+   }
+  },
+  "by_stratum": {
+   "K": {
+    "n_candidates": 195,
+    "same": 193,
+    "different": 0,
+    "unknown": 0,
+    "ineligible": 2,
+    "n": 193,
+    "optimistic": {
+     "precision": 1.0,
+     "lcb95": 0.98618,
+     "lcb975": 0.98048
+    },
+    "conservative": {
+     "precision": 0.98974,
+     "lcb95": 0.96948,
+     "lcb975": 0.96338,
+     "note": "unknown AND ineligible both counted as errors"
+    },
+    "conservative_eligible": {
+     "n": 193,
+     "precision": 1.0,
+     "lcb95": 0.98618,
+     "lcb975": 0.98048,
+     "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+    },
+    "settled": {
+     "n": 193,
+     "precision": 1.0,
+     "lcb95": 0.98618,
+     "lcb975": 0.98048
+    }
+   },
+   "X": {
+    "n_candidates": 466,
+    "same": 465,
+    "different": 0,
+    "unknown": 1,
+    "ineligible": 0,
+    "n": 466,
+    "optimistic": {
+     "precision": 1.0,
+     "lcb95": 0.99423,
+     "lcb975": 0.99182
+    },
+    "conservative": {
+     "precision": 0.99785,
+     "lcb95": 0.99044,
+     "lcb975": 0.98795,
+     "note": "unknown AND ineligible both counted as errors"
+    },
+    "conservative_eligible": {
+     "n": 466,
+     "precision": 0.99785,
+     "lcb95": 0.99044,
+     "lcb975": 0.98795,
+     "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+    },
+    "settled": {
+     "n": 465,
+     "precision": 1.0,
+     "lcb95": 0.99422,
+     "lcb975": 0.99181
+    }
+   }
+  }
+ },
+ "variants_for_comparison": {
+  "full": {
+   "n_candidates": 624,
+   "same": 621,
+   "different": 0,
+   "unknown": 1,
+   "ineligible": 2,
+   "n": 622,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.99567,
+    "lcb975": 0.99386
+   },
+   "conservative": {
+    "precision": 0.99519,
+    "lcb95": 0.98803,
+    "lcb975": 0.98596,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 622,
+    "precision": 0.99839,
+    "lcb95": 0.99283,
+    "lcb975": 0.99095,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 621,
+    "precision": 1.0,
+    "lcb95": 0.99566,
+    "lcb975": 0.99385
+   }
+  },
+  "nosuffix": {
+   "n_candidates": 634,
+   "same": 631,
+   "different": 0,
+   "unknown": 1,
+   "ineligible": 2,
+   "n": 632,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.99574,
+    "lcb975": 0.99396
+   },
+   "conservative": {
+    "precision": 0.99527,
+    "lcb95": 0.98822,
+    "lcb975": 0.98618,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 632,
+    "precision": 0.99842,
+    "lcb95": 0.99294,
+    "lcb975": 0.99109,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 631,
+    "precision": 1.0,
+    "lcb95": 0.99573,
+    "lcb975": 0.99395
+   }
+  },
+  "mi": {
+   "n_candidates": 671,
+   "same": 668,
+   "different": 0,
+   "unknown": 1,
+   "ineligible": 2,
+   "n": 669,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.99597,
+    "lcb975": 0.99429
+   },
+   "conservative": {
+    "precision": 0.99553,
+    "lcb95": 0.98887,
+    "lcb975": 0.98694,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 669,
+    "precision": 0.99851,
+    "lcb95": 0.99333,
+    "lcb975": 0.99158,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 668,
+    "precision": 1.0,
+    "lcb95": 0.99597,
+    "lcb975": 0.99428
+   }
+  },
+  "fl": {
+   "n_candidates": 938,
+   "same": 934,
+   "different": 1,
+   "unknown": 1,
+   "ineligible": 2,
+   "n": 936,
+   "optimistic": {
+    "precision": 0.99893,
+    "lcb95": 0.99523,
+    "lcb975": 0.99397
+   },
+   "conservative": {
+    "precision": 0.99574,
+    "lcb95": 0.99054,
+    "lcb975": 0.98909,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 936,
+    "precision": 0.99786,
+    "lcb95": 0.99356,
+    "lcb975": 0.99224,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 935,
+    "precision": 0.99893,
+    "lcb95": 0.99522,
+    "lcb975": 0.99397
+   }
+  },
+  "mi_without_the_suffix_veto": {
+   "n_candidates": 671,
+   "same": 668,
+   "different": 0,
+   "unknown": 1,
+   "ineligible": 2,
+   "n": 669,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.99597,
+    "lcb975": 0.99429
+   },
+   "conservative": {
+    "precision": 0.99553,
+    "lcb95": 0.98887,
+    "lcb975": 0.98694,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 669,
+    "precision": 0.99851,
+    "lcb95": 0.99333,
+    "lcb975": 0.99158,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 668,
+    "precision": 1.0,
+    "lcb95": 0.99597,
+    "lcb975": 0.99428
+   }
+  }
+ },
+ "evidence_classes": {
+  "anchored_external_cik_only": {
+   "n_candidates": 466,
+   "same": 465,
+   "different": 0,
+   "unknown": 1,
+   "ineligible": 0,
+   "n": 466,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.99423,
+    "lcb975": 0.99182
+   },
+   "conservative": {
+    "precision": 0.99785,
+    "lcb95": 0.99044,
+    "lcb975": 0.98795,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 466,
+    "precision": 0.99785,
+    "lcb95": 0.99044,
+    "lcb975": 0.98795,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 465,
+    "precision": 1.0,
+    "lcb95": 0.99422,
+    "lcb975": 0.99181
+   },
+   "note": "every pair whose label rests on a Form 3/4/5 filer CIK at the same issuer; excludes every within-8-K timeline-continuity label"
+  },
+  "within_8k_continuity_only": {
+   "n_candidates": 163,
+   "same": 163,
+   "different": 0,
+   "unknown": 0,
+   "ineligible": 0,
+   "n": 163,
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.98367,
+    "lcb975": 0.97698
+   },
+   "conservative": {
+    "precision": 1.0,
+    "lcb95": 0.98367,
+    "lcb975": 0.97698,
+    "note": "unknown AND ineligible both counted as errors"
+   },
+   "conservative_eligible": {
+    "n": 163,
+    "precision": 1.0,
+    "lcb95": 0.98367,
+    "lcb975": 0.97698,
+    "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+   },
+   "settled": {
+    "n": 163,
+    "precision": 1.0,
+    "lcb95": 0.98367,
+    "lcb975": 0.97698
+   }
+  },
+  "rules": {
+   "L-K5": 61,
+   "L-K7": 36,
+   "L-K8": 20,
+   "L-K1": 28,
+   "L-K6": 46,
+   "L-OVR": 2,
+   "L-21E": 15,
+   "L-21F": 1,
+   "L-X1": 238,
+   "L-X2": 192,
+   "L-21C": 1,
+   "L-21A": 12,
+   "L-21B": 9
+  },
+  "rules_new_pairs": {
+   "L-K7": 13,
+   "L-K8": 5,
+   "L-K5": 26,
+   "L-K6": 17,
+   "L-K1": 10,
+   "L-21E": 14,
+   "L-X2": 160,
+   "L-X1": 177,
+   "L-21A": 11,
+   "L-21B": 8
+  }
+ },
+ "hard_cases": {
+  "homonyms_same_issuer": {
+   "8k_blocks_with_2plus_full_keys": 34,
+   "8k_blocks_total": 3821,
+   "pairs_from_those_blocks": {
+    "n_candidates": 6,
+    "same": 6,
+    "different": 0,
+    "unknown": 0,
+    "ineligible": 0,
+    "n": 6,
+    "optimistic": {
+     "precision": 1.0,
+     "lcb95": 0.68922,
+     "lcb975": 0.60967
+    },
+    "conservative": {
+     "precision": 1.0,
+     "lcb95": 0.68922,
+     "lcb975": 0.60967,
+     "note": "unknown AND ineligible both counted as errors"
+    },
+    "conservative_eligible": {
+     "n": 6,
+     "precision": 1.0,
+     "lcb95": 0.68922,
+     "lcb975": 0.60967,
+     "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+    },
+    "settled": {
+     "n": 6,
+     "precision": 1.0,
+     "lcb95": 0.68922,
+     "lcb975": 0.60967
+    }
+   },
+   "x_pairs_with_2plus_f4_ciks": {
+    "n_candidates": 1,
+    "same": 0,
+    "different": 0,
+    "unknown": 1,
+    "ineligible": 0,
+    "n": 1,
+    "optimistic": {
+     "precision": 1.0,
+     "lcb95": 0.26987,
+     "lcb975": 0.20655
+    },
+    "conservative": {
+     "precision": 0.0,
+     "lcb95": 0.0,
+     "lcb975": 0.0,
+     "note": "unknown AND ineligible both counted as errors"
+    },
+    "conservative_eligible": {
+     "n": 1,
+     "precision": 0.0,
+     "lcb95": 0.0,
+     "lcb975": 0.0,
+     "note": "unknown counted as an error; `ineligible` rows dropped, since a row that is not a person never reaches a tier and cannot be a merge error"
+    },
+    "settled": {
+     "n": 0,
+     "precision": null
+    }
+   },
+   "x_rows_with_2plus_f4_ciks": 2,
+   "note": "the within-issuer homonym base rate among Form 3/4/5 filers: 1 of 721 8-K rows with an anchor has two owner CIKs sharing surname + given name at the issuer"
+  },
+  "reused_identifiers": {
+   "pairs_whose_anchor_cik_carries_2plus_names": {
+    "n_candidates": 0,
+    "same": 0,
+    "different": 0,
+    "unknown": 0,
+    "ineligible": 0
+   },
+   "note": "8-K carries no identifier of its own; this is the Form 3/4/5 anchor side, i.e. research 17 F4's stratum seen from the 8-K"
+  },
+  "transitive_bridges": {
+   "8k_only_blocks_with_3plus_full_keys": 0,
+   "8k_plus_f4_blocks_with_3plus_full_keys": 0,
+   "note": "a bridge needs a third key value between two others. None exists, for the same structural reason research 17 F5 gives: an exact-equality key makes 'shares a key with' an equivalence relation."
+  }
+ },
+ "suffix_veto": {
+  "pairs_matching_mi_but_vetoed": 10,
+  "labels": {
+   "same": 10
+  },
+  "examples": [
+   {
+    "a": "Stuart V Flavin",
+    "a_suffix": "V",
+    "b": "Stuart V. Flavin III",
+    "b_suffix": "III V",
+    "label": "same"
+   },
+   {
+    "a": "John K. Whiting",
+    "a_suffix": "",
+    "b": "Whiting John Kimball IV",
+    "b_suffix": "IV",
+    "label": "same"
+   },
+   {
+    "a": "Ronald G. Lehman II",
+    "a_suffix": "II",
+    "b": "Lehman Ronald G.",
+    "b_suffix": "",
+    "label": "same"
+   },
+   {
+    "a": "Ray N. Walker",
+    "a_suffix": "",
+    "b": "Walker Ray N JR",
+    "b_suffix": "JR",
+    "label": "same"
+   },
+   {
+    "a": "Ralph L. Hunter",
+    "a_suffix": "",
+    "b": "Hunter Ralph L. JR",
+    "b_suffix": "JR",
+    "label": "same"
+   },
+   {
+    "a": "Stuart V. Flavin III",
+    "a_suffix": "III V",
+    "b": "Flavin Stuart V",
+    "b_suffix": "V",
+    "label": "same"
+   },
+   {
+    "a": "Mary Alice Dorrance Malone",
+    "a_suffix": "",
+    "b": "Malone Mary Alice Dorrance JR",
+    "b_suffix": "JR",
+    "label": "same"
+   },
+   {
+    "a": "William Bruce Swain",
+    "a_suffix": "",
+    "b": "SWAIN WILLIAM B JR",
+    "b_suffix": "JR",
+    "label": "same"
+   },
+   {
+    "a": "J. Henry Smith",
+    "a_suffix": "",
+    "b": "Smith J. Henry IV",
+    "b_suffix": "IV",
+    "label": "same"
+   },
+   {
+    "a": "Mr. Robert A. Lopes",
+    "a_suffix": "",
+    "b": "Lopes Robert A. Jr.",
+    "b_suffix": "JR",
+    "label": "same"
+   }
+  ],
+  "with_V_in_the_token_set": 12
+ },
+ "recall": {
+  "labelled_same_pairs_raised_by_tier_c": 934,
+  "of_which_the_fixed_key_matches": 658,
+  "recall": 0.7045,
+  "lost_to_the_middle_name_requirement": 266,
+  "lost_to_the_suffix_veto": 10
+ },
+ "review_volume": {
+  "eligible_8k_records": 4193,
+  "records_with_a_tier_c_candidate": 697,
+  "records_with_a_fixed_key_candidate": 633,
+  "records_to_review_fixed_key": 64,
+  "review_per_1000_fixed_key": 15.26,
+  "review_per_1000_mi_without_veto": 15.03,
+  "auto_bind_decisions_fixed_key": 338
+ },
+ "pooled_with_research_17": {
+  "r17_8k_pairs_at_mi": 223,
+  "r17_labels_at_mi": {
+   "same": 217,
+   "unknown": 6
+  },
+  "all_r17_8k_pairs_are_in_this_census": true,
+  "note": "research 21 relabelled research 17's own 281 8-K pairs with the same rules (verified identical at the draft stage) and then labelled 657 more from the same population. The pooled figure IS the census figure; nothing is added twice.",
+  "r17_relabelled_deltas": [
+   {
+    "pair_id": "K-8k-56cdd48ba155",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21E role disagreement is not evidence of a different person"
+   },
+   {
+    "pair_id": "K-8k-4f410feca401",
+    "r17": "unknown",
+    "r21": "ineligible",
+    "rule": "L-OVR not a person name"
+   },
+   {
+    "pair_id": "K-8k-6a1211ea79c9",
+    "r17": "same",
+    "r21": "ineligible",
+    "rule": "L-OVR not a person name"
+   },
+   {
+    "pair_id": "K-8k-cb137645e75d",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21E role disagreement is not evidence of a different person"
+   },
+   {
+    "pair_id": "X-8k-9b97291ae393",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21C timeline contradiction withdrawn (Form 4 does not date the relationship)"
+   },
+   {
+    "pair_id": "X-8k-cea90a9da6a6",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21C timeline contradiction withdrawn (Form 4 does not date the relationship)"
+   },
+   {
+    "pair_id": "X-8k-0adec994d495",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21A Form 3 initial-statement date anchor (role not consulted)"
+   },
+   {
+    "pair_id": "X-8k-28c1da02a690",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21B 8-K event inside the anchor CIK's reporting window"
+   },
+   {
+    "pair_id": "X-8k-7a486411a033",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21E role disagreement is not evidence of a different person"
+   },
+   {
+    "pair_id": "X-8k-3b1480cb7192",
+    "r17": "unknown",
+    "r21": "same",
+    "rule": "L-21E role disagreement is not evidence of a different person"
+   }
+  ]
+ },
+ "sensitivity_to_pass_2": {
+  "pass2_settlements_at_the_fixed_key": {
+   "date_anchored_L21A_L21B": 21,
+   "argued_L21E_L21C": 16,
+   "left_unsettled_L21F": 1
+  },
+  "pass_1_only": {
+   "n": 661,
+   "labels": {
+    "same": 623,
+    "unknown": 38
+   },
+   "unknown_rules": {
+    "L-K4": 2,
+    "L-X4": 1,
+    "L-X3": 1,
+    "L-X5": 34
+   },
+   "conservative": {
+    "precision": 0.94251,
+    "lcb95": 0.92574,
+    "lcb975": 0.92208
+   },
+   "optimistic": {
+    "precision": 1.0,
+    "lcb95": 0.99592,
+    "lcb975": 0.99422
+   },
+   "settled": {
+    "n": 623,
+    "precision": 1.0,
+    "lcb95": 0.99568,
+    "lcb975": 0.99387
+   }
+  },
+  "date_anchored_settlements_only": {
+   "n": 661,
+   "same": 644,
+   "precision": 0.97428,
+   "lcb95": 0.96206,
+   "lcb975": 0.9592,
+   "note": "L-21E and L-21C settlements and the one L-21F unsettled pair all counted as errors"
+  },
+  "reading": "the conservative reading clears 99% at 97.5% only because of pass 2. The `settled` reading clears either way (pass 1 alone: LCB97.5 0.99387 on n = 623)."
+ },
+ "coverage": {
+  "fixed_key_pairs": 661,
+  "distinct_issuers": 441,
+  "distinct_8k_records": 640,
+  "distinct_names_issuer_scoped": 640,
+  "max_pairs_from_one_issuer": 6,
+  "note": "one pair per (issuer, 8-K name) in the X stratum and one per (issuer, fl key) group in K, so a pair is close to one distinct person; the Wilson bound still assumes independence it cannot fully have."
+ },
+ "iapd": {
+  "requests": 0,
+  "reason": "IAPD's individual endpoint is a strict lookup by CRD/OwnerID (research 16 F2). 8-K Item 5.02 persons carry no CRD, so there is no key to look them up by, and every label here was settled from SEC-sourced data already on disk. `21-iapd-requests.jsonl` is present and empty: zero requests, zero 403s, zero 429s."
+ },
+ "inputs": {
+  "records_parquet": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/r17/records.parquet",
+   "sha256": "a88ee20d75890212d364c93e2b0c509a97d3922ee5b885d2729f82bed0a2dc9f"
+  },
+  "21-pairs.jsonl": {
+   "sha256": "ab1023dc205d02961c6221db6e727325a2391ce7d6265080ac57c15e66086c19"
+  },
+  "17-pairs.jsonl": {
+   "sha256": "1f3a091ab79b5feec9149ebeb0d8fb3af580ebae19f8ceccb676e5c1615c7b7a"
+  },
+  "sec_employment_event.parquet": {
+   "sha256": "8e21ed8d11e5b08685a9f36c97e50b80203ffcc415bc0174fb5951b7ce25d138"
+  },
+  "07-union-corpus.jsonl": {
+   "sha256": "9daf08fb01011dc6f0ac8261086034d63ebd81a8c1649a220034b44b45b45e4d"
+  }
+ }
+}

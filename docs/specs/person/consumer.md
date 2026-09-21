@@ -180,14 +180,47 @@ reject 33 same-person pairs and catch 10 that the name already catches
 (research 17 F6; research 18 F7 found the same). The key is pure equality plus
 one veto — no `name_similarity` primitive appears in it.
 
-**Tier B does not activate at release.** Measured today on 8-K at the
-middle-initial variant: 223 pairs, 0 contradictions, LCB95 0.98801, **LCB97.5
-0.98307**. It clears the bar only after
-[ticket 21](../../../.scratch/person-consumer-contract/issues/21-extend-tier-b-labelling-to-97-5.md)
-labels to n ≥ 381. Until then **8-K binds at Tier C**. DEF 14A is measured but
-does not count toward activation while only 41.3% of its rows are
-person-shaped; it
-activates on its own n after ticket 10 and a re-export.
+**Tier B is qualified for 8-K Item 5.02, and for nothing else.**
+[Research 21](../../../.scratch/person-consumer-contract/research/21-tier-b-8k-extended-labelling.md)
+took the census of the population research 17 sampled — all 216 within-8-K
+groups and all 721 8-K rows carrying a same-issuer Form 3/4/5 anchor, 938
+candidate pairs, **661 matching the fixed key**: 658 `same`, **0 different**,
+1 unknown, 2 not person names. On the eligible n = 659, `n/(n+z²)` at
+z = 1.96:
+
+| Reading | Precision | LCB95 | LCB97.5 | Clears 99%? |
+| --- | --- | --- | --- | --- |
+| optimistic (unknown = same) | 1.00000 | 0.99591 | **0.99420** | yes |
+| conservative (unknown = error) | 0.99848 | 0.99323 | **0.99146** | yes |
+| settled only (n = 658) | 1.00000 | 0.99591 | **0.99420** | yes |
+
+Cost and caveats, all measured: candidate **recall is 0.7045** — 266
+known-same pairs are lost to middle-name asymmetry and 10 to the suffix veto,
+a ~30% coverage loss this contract accepts in exchange for the bound; review
+volume is **15.26 per 1,000** eligible 8-K records; the issuer component is a
+raw CIK because MDM issuer ids do not exist yet.
+
+**Power, not sample size, now binds.** Every one of the 657 pairs added beyond
+research 17's original 281 is `same`, and after settling, the only surviving
+route to a non-`same` label fires on 1 of 721 rows. More labelling moves the
+bound, not what can be detected; going further needs an MDM Person id on the
+8-K side or a constructed adversarial fixture set per Q11.
+
+Activation ships **with** the three normalizer repairs research 21 measured
+([ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md)):
+multi-word surnames (the key's only false merge against Form 3/4/5's 11
+same-issuer homonym CIK pairs — 1 of 11 becomes 0 of 11), `V` wrongly read as
+a generational suffix (discarding 241 middle initials), and `DATE`/`BANK`
+missing from the eligibility vocabulary. None touches the key.
+
+That confirms ticket 20's suffix veto empirically: against those same 11
+homonym pairs, plain `mi` merges 7, **the veto prevents 6**, and the fixed key
+merges 1.
+
+DEF 14A remains **unqualified** and binds at Tier C: only 41.3% of its rows
+are person-shaped, and it activates on its own n after ticket 10 and a
+re-export. ADV Schedule A/B and Form 3/4/5 are not Tier B populations at all —
+their records carry identifiers, so the veto applies instead.
 
 **Scope**: reading `IA_Schedule_A_B` is in scope. `DE`/`FE` rows never create a
 Person. Firm CRD stays an Adviser-profile attribute, never a Person key — CIK
@@ -353,7 +386,7 @@ directorship on the daily path.
 | --- | --- | --- |
 | 1 | every reporting owner and every ADV Schedule A/B row binding at **Tier A**, plus rule C-J's automatic person arm | none — deterministic; ~100% of both id-bearing sources; empty review queue |
 | 2 | rule C-J's **entity** arm | its post-hoc guards re-measured in production |
-| 3 | 8-K Item 5.02 (4,193 eligible rows) | ticket 21 clears Tier B at one-sided 97.5% |
+| 3 | 8-K Item 5.02 (4,193 eligible rows) | **cleared** by research 21 (LCB97.5 0.99146 conservative, n = 659); ships with the [ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs |
 | 4 | DEF 14A (6,091 eligible rows) | ticket 10 lands, re-export, own re-measurement |
 
 Waves are gated on evidence, never time-boxed. Company bounded its first slice
@@ -528,8 +561,11 @@ All required:
 
 1. Rule C-J reproduces its measured corpus, and its **entity arm's post-hoc
    guards are re-measured in production** before entity decisions are automatic.
-2. **Zero** automatic Tier B decisions until ticket 21 clears ≥ 99% at a
-   one-sided 97.5% lower bound; 8-K is Tier C until then.
+2. **Zero** automatic Tier B decisions on any population that has not itself
+   cleared ≥ 99% at a one-sided 97.5% lower bound. 8-K is cleared
+   (research 21, n = 659); DEF 14A and every id-bearing source are not, and
+   bind at Tier C or through the identifier veto. Tier B activation requires
+   the ticket 25 normalizer repairs in the same release.
 3. **Zero** name-only automatic binds; **zero** duplicate active
    cross-reference bindings.
 4. Complete provenance on every projected value, role row and edge.
@@ -556,7 +592,8 @@ Plus the foundation's own gates, inherited.
 | Person amendment to Q11 — ≥ 99% at one-sided 97.5%, with the identifier veto | **open with Codex**; Company's Q11 (99.9% at 95%) is explicitly not to be applied to other kinds |
 | Ticket 10 (proxy name parser) | blocks DEF 14A entirely |
 | Ticket 19 (ownership parser evidence, incl. `owner_index`) | blocks classification from bronze and all holdings |
-| Ticket 21 (8-K labelling to n ≥ 381) | blocks Tier B activation |
+| Ticket 21 (8-K labelling to n ≥ 381) | **done** — research 21 cleared 8-K at n = 659 |
+| [Ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs | ships in the same release as Tier B activation |
 | Security identity + consumer | blocks holdings |
 | Fund Structure identity + consumer | blocks `MANAGES_FUND` |
 
@@ -605,4 +642,5 @@ Every decision above traces to one resolved ticket on the
 | No legacy crosswalk | 06 | verified holders, 2026-09-20 |
 | Cadence, backfill waves, replay, id survival | 07 | — |
 | Tier B calibration | 17 | research 17 — 921 labelled pairs |
+| Tier B qualified for 8-K | 21 | research 21 — 938-pair census, n = 659, LCB97.5 0.99146 conservative |
 | Tier B redefinition: identifier veto, 97.5%, the key | 20 | research 17 |
