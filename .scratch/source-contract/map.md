@@ -92,12 +92,21 @@ no edit to any Clean MDM file.
   Document**, added to `CONTEXT.md`.
 - Scope (Q11): the three exclusions below stay out; how a contract is
   registered and run by one generic stage becomes a ticket.
+- [Inventory what Form 3/4/5 and GLEIF parsing needs](issues/02-inventory-what-form-345-and-gleif-parsing-needs.md)
+  — **16 primitives plus one custom step cover both**: Form 3/4/5 is 57/58
+  columns generic (custom: `owner_display_name`, 1.7%) given a generic
+  `lookup`; GLEIF 0% custom but needs a streaming zipped-JSON reader that
+  handles object-or-list fields. The C-J lookup reads the newest snapshot,
+  not the as-of one — a replay risk.
+  [research/02](research/02-parse-needs-inventory.md).
 
 ## Not yet specified
 
 - **Change and replay**: when a Source Contract's version changes, which
   silver rows are re-parsed, which assertions are re-published, and how
-  that meets the Merge Stage's bounded rebuild.
+  that meets the Merge Stage's bounded rebuild. Sharper after research 02:
+  a `lookup` that reads the newest snapshot makes a re-parse depend on when
+  it runs; the contract may need as-of lookups.
 - **Moving an old parser**: the prototype shows whether Form 3/4/5 *can* be
   expressed; the criteria for when an existing parser *should* move are for
   after the prototype.
