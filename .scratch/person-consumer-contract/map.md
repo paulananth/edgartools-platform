@@ -199,6 +199,24 @@ migration, no edit to any Clean MDM file. Written at
   Decommissioning the legacy Person code, its 15 test files and the dead
   columns: [ticket 22](issues/22-decommission-legacy-person-code-and-tests.md),
   gated on the Clean MDM Person consumer being live.
+- [Decide Person processing cadence and the initial backfill scope](issues/07-decide-cadence-and-backfill.md)
+  — three jobs, mirroring Company: **daily** on the issuers
+  `daily_incremental` touched (never rematches the universe), **weekly**
+  backstop over deferred records and Tier C candidates, **monthly** full
+  reconciliation keyed to the ADV archive's release — the **only job that
+  may close an interval by absence**, because two of ticket 05's three
+  closers need a complete later filing set. Backfill is bounded by
+  **evidence class**: wave 1 every Tier A bind plus rule C-J's person arm
+  (deterministic, no review queue); wave 2 C-J's entity arm after its
+  guards are re-measured; wave 3 8-K after ticket 21. **Replay re-enters
+  at the pre-merge candidate stage** (operator), not at re-projection —
+  only that corrects a wrong *binding* — which makes the pre-merge
+  candidate table a requirement, not a proposal; a digest change is a
+  bounded rebuild over the identities the changed rules reach.
+  **Ids survive replay**: same id when the decision is unchanged, a split
+  keeps the id holding the surviving authoritative identifier, a merge
+  retires the loser with `superseded_by`, nothing is deleted and retired
+  ids stay resolvable forever.
 - [Decide which Person relationships publish and their semantics](issues/05-decide-person-relationships.md)
   — **a relationship is one mastered fact that every form contributes
   dated evidence to, not one edge per form** (operator requirement). Two
