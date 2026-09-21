@@ -183,6 +183,22 @@ migration, no edit to any Clean MDM file. Written at
   conflict** (a hard veto, not a normalization step); role and flags are
   evidence, never key. DEF 14A is measured but not counted while 58.7% of
   its names are role text.
+- [Decide how legacy Person IDs and silver back-propagated IDs map to mdm_v2](issues/06-decide-legacy-person-id-crosswalk.md)
+  — **no crosswalk; legacy Person IDs are dropped, not mapped.** The
+  operator asked why they are needed at all, and the holders answer it:
+  legacy MDM Postgres is being decommissioned, silver's `mdm_entity_id`
+  and the graph's person nodes live only in a Snowflake that will not be
+  restored, the API is undeployed, and **gold never used them** (owners
+  are keyed on a `cik:`/`name:` hash, `ownership_holdings.sql:63-67`).
+  The ids are not worth carrying either: legacy's fuzzy context check can
+  never pass, so `REVIEW` bound anything ≥ 0.80 Jaro-Winkler with no
+  human gate. What does carry is human judgment — resolved
+  `mdm_match_review` rows and merge tombstones, harvested as **source
+  assertions** to be re-adjudicated, if that store is still reachable.
+  Silver's column is frozen as legacy, never read or rewritten.
+  Decommissioning the legacy Person code, its 15 test files and the dead
+  columns: [ticket 22](issues/22-decommission-legacy-person-code-and-tests.md),
+  gated on the Clean MDM Person consumer being live.
 - [Decide which Person relationships publish and their semantics](issues/05-decide-person-relationships.md)
   — **a relationship is one mastered fact that every form contributes
   dated evidence to, not one edge per form** (operator requirement). Two
