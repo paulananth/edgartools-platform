@@ -1,0 +1,155 @@
+{
+ "labelled_pairs": 938,
+ "v1": {
+  "key_matched_eligible": 661,
+  "labels": {
+   "same": 658,
+   "ineligible": 2,
+   "unknown": 1
+  },
+  "n": 659,
+  "precision_optimistic": 1.0,
+  "lcb975_optimistic": 0.9942,
+  "precision_conservative": 0.99848,
+  "lcb975_conservative": 0.99146,
+  "ineligible_that_reach_the_key": 2
+ },
+ "v2": {
+  "key_matched_eligible": 656,
+  "labels": {
+   "same": 655,
+   "unknown": 1
+  },
+  "n": 656,
+  "precision_optimistic": 1.0,
+  "lcb975_optimistic": 0.99418,
+  "precision_conservative": 0.99848,
+  "lcb975_conservative": 0.99142,
+  "ineligible_that_reach_the_key": 0
+ },
+ "recall": {
+  "labelled_same_raised_by_tier_c": 934,
+  "v1_fixed_key_matches": 658,
+  "v2_fixed_key_matches": 655,
+  "v1_recall": 0.7045,
+  "v2_recall": 0.70128
+ },
+ "pairs_whose_decision_changed": [
+  {
+   "a": "Effective Date",
+   "b": "Effective Date",
+   "label": "ineligible",
+   "v1_key": true,
+   "v2_key": true,
+   "v2_eligible": false
+  },
+  {
+   "a": "Manufacturers Bank",
+   "b": "Manufacturers Bank",
+   "label": "ineligible",
+   "v1_key": true,
+   "v2_key": true,
+   "v2_eligible": false
+  },
+  {
+   "a": "Mr. van Tilburg",
+   "b": "Mr. van Tilburg",
+   "label": "same",
+   "v1_key": true,
+   "v2_key": false,
+   "v2_eligible": false
+  },
+  {
+   "a": "Daniel Leff",
+   "b": "LEFF DANIEL V",
+   "label": "same",
+   "v1_key": true,
+   "v2_key": false,
+   "v2_eligible": true
+  },
+  {
+   "a": "Mr. David Barry",
+   "b": "Barry David V.",
+   "label": "same",
+   "v1_key": true,
+   "v2_key": false,
+   "v2_eligible": true
+  }
+ ],
+ "form345_homonym_cik_pairs": {
+  "v1_pairs": 11,
+  "v1_fixed_key_merges": 1,
+  "v1_merged": [
+   {
+    "issuer": "Ermenegildo Zegna N.V.",
+    "a": [
+     "Zegna di Monte Rubello Edoardo"
+    ],
+    "b": [
+     "Zegna di Monte Rubello Angelo"
+    ],
+    "merged": true
+   }
+  ],
+  "same_11_pairs_v2_fixed_key_merges": 0,
+  "v2_pairs_reenumerated_by_v2_surname_and_given": 11,
+  "v2_fixed_key_merges": 0,
+  "v2_merged": []
+ },
+ "defect_counts": {
+  "8k": {
+   "records": 4193,
+   "v1_middle_initial_lost_to_V": 7,
+   "v2_middle_initial_lost_to_V": 0,
+   "v1_given_name_is_a_particle": 18,
+   "v2_given_name_is_a_particle": 0
+  },
+  "form345": {
+   "records": 72980,
+   "v1_middle_initial_lost_to_V": 241,
+   "v2_middle_initial_lost_to_V": 0,
+   "v1_given_name_is_a_particle": 105,
+   "v2_given_name_is_a_particle": 9
+  },
+  "form345_shape_change": {
+   "v1_shape_v2_not": 0,
+   "v2_shape_v1_not": 1,
+   "v1_shape_v2_not_names": [],
+   "v2_shape_v1_not_names": [
+    "DO CUONG V"
+   ]
+  },
+  "8k_eligibility": {
+   "v1_eligible": 4193,
+   "v2_eligible": 4147,
+   "eligible_v1_not_v2": [
+    "Del Pozzo",
+    "Di Salvo",
+    "Effective Date",
+    "First National Bank",
+    "Heritage Bank",
+    "Manufacturers Bank",
+    "Mr. Di Donato",
+    "Mr. Le Merle",
+    "Mr. Van Hauwermeiren",
+    "Mr. Van Mourick",
+    "Mr. Van Vleet",
+    "Mr. Van de Ven",
+    "Mr. de Boer",
+    "Mr. la Aguilera",
+    "Mr. van Tilburg",
+    "Ms. Van Heerden",
+    "Presidio Bank",
+    "Start Date",
+    "Transition Date",
+    "United Community Bank",
+    "Van Dore"
+   ],
+   "eligible_v2_not_v1": [],
+   "effective_date_eligible_v2": false,
+   "manufacturers_bank_eligible_v2": false
+  }
+ },
+ "normalizer": "person-name@v2",
+ "records_parquet_sha256": "a88ee20d75890212d364c93e2b0c509a97d3922ee5b885d2729f82bed0a2dc9f"
+}
