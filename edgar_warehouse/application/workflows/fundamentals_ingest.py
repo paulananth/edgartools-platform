@@ -133,12 +133,56 @@ def _get_processed_accessions(source: Any, *, mode: str, accession_numbers: list
     return {row["accession_number"] for row in rows}
 
 
+def _drop_already_processed(
+    filings: list[dict[str, Any]],
+    *,
+    source: Any,
+    mode: str,
+    metrics: dict[str, Any],
+    force: bool,
+) -> list[dict[str, Any]]:
+    """Remove filings already marked processed for ``mode``, unless ``force``.
+
+    Shared by the per-filing and 13F paths, which had the same block copied.
+    The marker table is keyed on ``(mode, accession_number)`` alone -- it
+    carries no parser_version -- so a parser correction cannot reach rows it
+    already wrote without this bypass (Person Consumer Contract ticket 24).
+    ``force`` is the operator's explicit repair lever, per the SEC-idempotency
+    rule: skip by default, reprocess only when asked. A ``parser_version``
+    column on the marker (skip only rows at the current version) was weighed
+    and not taken: it is a landing-zone schema change across silver_schema.py,
+    the bootstrap DDL, the snapshot test and the marker writer, for a table
+    no one can currently migrate. The flag is the smaller change.
+
+    ``source`` is read here rather than ``db`` (duckdb-retirement-cutover
+    Ticket 17): production's reader is Snowflake-backed, and ``db`` is a local
+    write target that is never hydrated.
+    """
+    if not filings:
+        return filings
+    if force:
+        metrics["filings_forced"] = len(filings)
+        _emit("fundamentals_force_reprocess", mode=mode, filing_count=len(filings))
+        return filings
+    already_processed = _get_processed_accessions(
+        source, mode=mode,
+        accession_numbers=[row["accession_number"] for row in filings],
+    )
+    if not already_processed:
+        return filings
+    remaining = [row for row in filings if row["accession_number"] not in already_processed]
+    metrics["filings_already_processed"] = len(already_processed)
+    metrics["filings_scanned"] = len(remaining)
+    return remaining
+
+
 def run_bootstrap_fundamentals_per_filing(
     *,
     cik_list: list[int],
     source,                # silver reader | None — Branch A metadata source
     db,                    # SilverLandingStore — write target
     sync_run_id: str,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Process 8-K earnings + DEF 14A proxy filings from bronze for the given CIKs.
 
@@ -146,6 +190,11 @@ def run_bootstrap_fundamentals_per_filing(
     silver tables, produced by bootstrap-next/bootstrap-batch, read from
     EDGARTOOLS_SILVER (``db`` only records writes). ``source`` may still be None in direct unit tests or ad-hoc local
     calls; this is treated as zero available filings rather than an error.
+
+    ``force`` reprocesses accessions already marked in
+    ``sec_fundamentals_processed_accession`` -- the only way a corrected parser
+    reaches what an older version already wrote (ticket 24). Re-parsed rows
+    land with a new ``parse_sequence`` and the dbt collapse keeps the latest.
 
     Returns row counts per table written.
     """
@@ -156,6 +205,7 @@ def run_bootstrap_fundamentals_per_filing(
         "filings_parsed": 0,
         "filings_skipped": 0,
         "filings_already_processed": 0,
+        "filings_forced": 0,
         "rows_earnings_release": 0,
         "rows_executive_record": 0,
         "rows_employment_event": 0,
@@ -213,19 +263,11 @@ def run_bootstrap_fundamentals_per_filing(
             )
         metrics["filings_scanned"] = len(filings)
 
-    if filings:
-        # duckdb-retirement-cutover Ticket 17: read via source (the real
-        # Snowflake-backed reader in production), not db (local, unhydrated
-        # write target) -- source is guaranteed non-None here since filings
-        # is only non-empty when source produced rows above.
-        already_processed = _get_processed_accessions(
-            source, mode="per-filing",
-            accession_numbers=[row["accession_number"] for row in filings],
-        )
-        if already_processed:
-            filings = [row for row in filings if row["accession_number"] not in already_processed]
-            metrics["filings_already_processed"] = len(already_processed)
-            metrics["filings_scanned"] = len(filings)
+    # source is guaranteed non-None here: filings is only non-empty when
+    # source produced rows above.
+    filings = _drop_already_processed(
+        filings, source=source, mode="per-filing", metrics=metrics, force=force,
+    )
 
     for filing in filings:
         accession_number = filing["accession_number"]
@@ -492,8 +534,12 @@ def run_bootstrap_thirteenf(
     source,                 # silver reader | None — Branch A metadata source
     db,                      # SilverLandingStore — write target
     sync_run_id: str,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Parse 13F-HR INFORMATION TABLE XML attachments for the given CIKs.
+
+    ``force`` reprocesses already-marked accessions; see
+    run_bootstrap_fundamentals_per_filing (ticket 24) -- one flag, one meaning.
 
     The infotable XML lives in a filing attachment with document_type matching
     '13F-HR' or 'INFORMATION TABLE'.  The primary document is the cover XML;
@@ -512,6 +558,7 @@ def run_bootstrap_thirteenf(
         "filings_parsed": 0,
         "filings_skipped": 0,
         "filings_already_processed": 0,
+        "filings_forced": 0,
         "rows_thirteenf_holding": 0,
         "rows_thirteenf_filing": 0,
     }
@@ -533,17 +580,9 @@ def run_bootstrap_thirteenf(
     )
     metrics["filings_scanned"] = len(filings)
 
-    if filings:
-        # duckdb-retirement-cutover Ticket 17: read via source, not db --
-        # see run_bootstrap_fundamentals_per_filing's identical comment.
-        already_processed = _get_processed_accessions(
-            source, mode="thirteenf",
-            accession_numbers=[row["accession_number"] for row in filings],
-        )
-        if already_processed:
-            filings = [row for row in filings if row["accession_number"] not in already_processed]
-            metrics["filings_already_processed"] = len(already_processed)
-            metrics["filings_scanned"] = len(filings)
+    filings = _drop_already_processed(
+        filings, source=source, mode="thirteenf", metrics=metrics, force=force,
+    )
 
     for filing in filings:
         accession_number = filing["accession_number"]

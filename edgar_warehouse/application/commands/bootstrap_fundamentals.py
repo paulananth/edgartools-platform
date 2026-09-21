@@ -175,6 +175,7 @@ def execute(args: Any) -> int:
                 source=source,
                 db=db,
                 sync_run_id=run_id,
+                force=bool(getattr(args, "force", False)),
             )
             metrics.update(run_metrics)
 
@@ -205,6 +206,7 @@ def execute(args: Any) -> int:
                 source=source,
                 db=db,
                 sync_run_id=run_id,
+                force=bool(getattr(args, "force", False)),
             )
             metrics.update(run_metrics)
 

@@ -1767,8 +1767,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "Force re-fetch of companyfacts (entity-facts mode) even when silver "
-            "already has facts at the current facts_parser_version"
+            "Reprocess the selected scope even when silver already has it: "
+            "per-filing and thirteenf re-parse accessions already marked in "
+            "sec_fundamentals_processed_accession (the marker carries no "
+            "parser_version, so this is how a corrected parser reaches rows it "
+            "already wrote); entity-facts re-fetches companyfacts even when "
+            "silver has facts at the current facts_parser_version"
         ),
     )
     _add_run_id_arg(bootstrap_fundamentals)
