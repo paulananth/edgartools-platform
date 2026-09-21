@@ -1,0 +1,12 @@
+{
+ "K-8k-4f410feca401": {
+  "label": "ineligible",
+  "rule": "L-OVR not a person name",
+  "evidence": "'Effective Date' is a parser artifact in sec_employment_event.person_name, not a person. Research 17 overrode this same pair to `unknown`; ticket 21 calls it `ineligible` instead, because a row that is not a person never reaches any tier and does not belong in a precision denominator. Research 17's eligibility filter (17-common.py `looks_like_role_text`) misses it: neither EFFECTIVE nor DATE is in its role vocabulary."
+ },
+ "K-8k-6a1211ea79c9": {
+  "label": "ineligible",
+  "rule": "L-OVR not a person name",
+  "evidence": "'Manufacturers Bank' is an entity, not a person; both 8-K rows at issuer 1649739 carry it as person_name with event_type=appointment, role Director. Second miss by the same eligibility filter: BANK is absent from its company vocabulary (which holds COMPANY/CORPORATION/INC/LLC/LTD/CORP/GROUP/PARTNERS/CAPITAL/FUND/TRUST/HOLDINGS)."
+ }
+}
