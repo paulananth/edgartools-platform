@@ -13,6 +13,21 @@ scope, not a slice** (operator, 2026-09-19). Planning only: no code, no
 migration, no edit to any Clean MDM file. Written at
 `docs/specs/person/consumer.md` when this map is done.
 
+**Destination reached, 2026-09-20.** Every decision ticket is resolved and
+the spec is written: [`docs/specs/person/consumer.md`](../../docs/specs/person/consumer.md),
+handed over in
+[`.scratch/handover/2026-09-20-claude-to-codex-person-consumer.md`](../handover/2026-09-20-claude-to-codex-person-consumer.md).
+What remains on this map is not decisions:
+[ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md) (research, unblocks
+Tier B activation) and three code-owner tasks —
+[10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser),
+[19](issues/19-capture-ownership-parser-evidence.md) (ownership parser
+evidence and `owner_index`),
+[22](issues/22-decommission-legacy-person-code-and-tests.md) (decommission
+legacy Person code, gated on the Clean MDM consumer being live). The spec
+has **not** had a documentation review against this map and the repository —
+the gate the foundation spec passed before being called verified.
+
 ## Notes
 
 - **Why now**: Codex's `docs/specs/clean-mdm/company-completion.md` line 71
