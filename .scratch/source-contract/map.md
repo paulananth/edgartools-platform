@@ -99,6 +99,15 @@ no edit to any Clean MDM file.
   handles object-or-list fields. The C-J lookup reads the newest snapshot,
   not the as-of one — a replay risk.
   [research/02](research/02-parse-needs-inventory.md).
+- [Write the Mapping Language reference](issues/01-write-the-mapping-language-reference.md)
+  — **the language now has a reference, and nothing enforces it**: every key
+  specified with `path:line`; Clean MDM stores any contract body unchecked,
+  and contract mistakes stop a batch instead of deferring a record. A
+  dataset body is immutable per `source_code`, so a mapping change today
+  means a new `source_code` and re-binding every record. Gaps (validation,
+  `lei` format, formatted relationship targets, deferral instead of silent
+  drops) go to Codex as proposals.
+  [research/01](research/01-mapping-language-reference.md).
 
 ## Not yet specified
 
@@ -106,7 +115,10 @@ no edit to any Clean MDM file.
   silver rows are re-parsed, which assertions are re-published, and how
   that meets the Merge Stage's bounded rebuild. Sharper after research 02:
   a `lookup` that reads the newest snapshot makes a re-parse depend on when
-  it runs; the contract may need as-of lookups.
+  it runs; the contract may need as-of lookups. Sharper after research 01:
+  a Clean MDM dataset body is immutable per `source_code`, so a Source
+  Contract version bump has no path today except a new `source_code` and
+  re-binding every record — the versioning model needs a Codex proposal.
 - **Moving an old parser**: the prototype shows whether Form 3/4/5 *can* be
   expressed; the criteria for when an existing parser *should* move are for
   after the prototype.
