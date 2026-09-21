@@ -22,12 +22,10 @@ What remains on this map is not decisions:
 is qualified for 8-K — leaving code-owner tasks only:
 [25](issues/25-fix-person-name-normalizer-defects.md) (normalizer repairs that
 ship with activation),
-[23](issues/23-fix-executive-record-collapse-key.md) and
-[24](issues/24-reprocess-already-marked-fundamentals.md) (both block ticket
-10's re-export),
 [10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser —
 **fixed 2026-09-20**, 48.6% → 100% plausible names on real filings; open until
-the re-export),
+a full local re-parse of bronze is measured — the production re-export is
+deferred until all code is written and tested locally),
 [22](issues/22-decommission-legacy-person-code-and-tests.md) (decommission
 legacy Person code, gated on the Clean MDM consumer being live).
 
@@ -315,6 +313,13 @@ distinct-CIK count borrowed from a different study. Detail on
 
 ## Operator directives
 
+- **2026-09-21: nothing is deployed or re-exported until every bit of code
+  is written and tested locally.** Code-owner tickets resolve against local
+  evidence (bronze reads, unit/dbt-parse tests, offline measurement); the
+  production steps they imply (image rollout, bootstrap SQL, `--force`
+  re-parse, `dbt run --full-refresh`) are recorded on the ticket as a
+  deferred sequence, not as its finish line. First applied to
+  [ticket 10](issues/10-fix-proxy-executive-name-parser-leak.md).
 - **2026-09-20: every source resolves every entity it carries through
   MDM** — "all sources must use MDM to resolve any entity it carries; it
   has to go through id resolution and de-duplication and merging." No

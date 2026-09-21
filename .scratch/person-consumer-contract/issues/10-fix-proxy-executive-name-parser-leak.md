@@ -1,9 +1,43 @@
 # Fix the DEF 14A executive-record parser leaking role text into exec_name
 
 Type: task
-Status: **parser fixed 2026-09-20; not yet resolved** — resolution needs the
-re-export, which is blocked by tickets 23 and 24.
+Status: **parser fixed 2026-09-20; not yet resolved** — resolution is a full
+local re-parse of bronze (see "Resolution criterion, reworded 2026-09-21").
+Tickets 23 and 24, which blocked the re-export, are merged (#680, #681).
 Blocked by: none
+
+## Resolution criterion, reworded 2026-09-21 (operator)
+
+**This ticket is resolved locally, against bronze. No Snowflake, no AWS
+compute, no deploy.** Operator direction: the pipeline re-export is not taken
+until every bit of code is written and tested locally. Snowflake is suspended
+and will not be restored, and the re-export's filing list, marker table,
+landing load and dbt collapse all live there, so the re-export cannot be the
+finish line.
+
+Resolved when, on this machine:
+
+1. Every DEF 14A primary document in the S3 bronze bucket is parsed with the
+   fixed parser (`parse_proxy_fundamentals`, `PARSER_VERSION="2"`) — bronze
+   reads only, **zero SEC requests**, no Snowflake connection.
+2. The rows are collapsed exactly as the dbt silver model now does it
+   (`sec_executive_record.sql`, #680: latest per `(cik, accession_number,
+   fiscal_year, exec_name)`), so the count reflects what silver would hold.
+3. Research 01's quality check (no role vocabulary in the field, at least two
+   tokens) runs on that collapsed set and the plausible-name rate is
+   comparable to the 8-K source (~98%), reported with n and the drop count.
+   Because the judge's vocabulary overlaps the parser's own, a hand-read
+   random sample of kept names (with the executive's row in the filing) is
+   reported alongside, as the attribution check the rate cannot give.
+4. The script and its results are committed under `research/10-*`, with
+   the bronze object count scanned and the count of documents with a
+   Summary Compensation Table.
+
+**Deferred, not part of this ticket**: the production re-export. It is the
+first thing to run once the platform is deployed again, and only after the
+code for every open ticket is written and tested locally. Its sequence is
+kept below for then; step 1's pre-flight is already answered (no writer has
+ever targeted `sec_executive_record` in the retirement table, #680).
 
 ## What was done (2026-09-20)
 
@@ -57,18 +91,21 @@ the two vocabularies. Escalated instead of silently accepted:
   per `(cik, accession_number, exec_name)` while the landing key includes
   `fiscal_year`. Corrupted names used to differ per row, so all three fiscal
   years survived under three wrong keys; correct names share one key, so two
-  of three years are discarded. **Blocks the re-export.**
+  of three years are discarded. **Resolved, #680.**
 - [Ticket 24](24-reprocess-already-marked-fundamentals.md) — the
   `PARSER_VERSION` bump is inert: the per-filing skip is keyed on accession
-  only, with no `force` path, so existing rows stay wrong. **Blocks the
-  re-export.**
+  only, with no `force` path, so existing rows stay wrong. **Resolved, #681.**
 
-This ticket resolves when research 01's quality check is re-run on a
-*re-exported* corpus, not on freshly parsed documents.
+*Superseded 2026-09-21:* "This ticket resolves when research 01's quality
+check is re-run on a *re-exported* corpus, not on freshly parsed documents."
+The criterion is now the full local bronze re-parse above. It stays a
+*collapsed* corpus, not a pile of freshly parsed rows: the local run applies
+the dbt collapse, which is what that sentence was protecting.
 
-**Re-export sequence (2026-09-21, once tickets 23 and 24 are on `main` and
-in the running warehouse image).** Neither ticket runs it; it is an operator
-action, in this order, silver before gold:
+**Deferred production re-export sequence** (not part of this ticket's
+resolution; run when the platform is deployed again, after all code is
+written and tested locally). Operator action, in this order, silver before
+gold:
 
 1. Pre-flight: `select count(*) from
    EDGARTOOLS_SILVER_LANDING.SILVER_LANDING_RETIREMENT where
@@ -105,4 +142,5 @@ This is production parser code: it needs its own branch, the mandatory
 re-export before research 01's proxy figures can be re-measured. Whoever
 owns `edgar_warehouse/parsers/` takes it; this map only needs the fixed
 export to exist. Resolved when a re-run of research 01's quality check
-shows plausible-name rate comparable to the 8-K source (~98%).
+shows plausible-name rate comparable to the 8-K source (~98%). *(Superseded
+2026-09-21 by the local bronze criterion at the top of this ticket.)*
