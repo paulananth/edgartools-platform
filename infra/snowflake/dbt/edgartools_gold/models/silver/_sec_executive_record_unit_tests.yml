@@ -1,0 +1,157 @@
+version: 2
+
+# Person Consumer Contract ticket 23 (2026-09-21): the collapse key mirrors
+# the landing dedupe key (cik, accession_number, fiscal_year, exec_name). A
+# Summary Compensation Table lists three fiscal years per executive; the old
+# (cik, accession_number, exec_name) partition kept only one of them once the
+# parser emitted the correct name on every row (ticket 10). The ticket's own
+# resolution criterion is the first test: three years in, three rows out.
+unit_tests:
+  - name: sec_executive_record_keeps_every_fiscal_year_per_executive
+    description: >
+      One accession, one executive, three fiscal years -- all three survive
+      the collapse. This is the row shape a correctly-parsed Summary
+      Compensation Table produces, and the shape comp_pct_change_yoy and the
+      dashboard's fiscal_year ordering always assumed.
+    model: sec_executive_record
+    given:
+      - input: source('edgartools_silver_landing', 'SEC_EXECUTIVE_RECORD')
+        rows:
+          - cik: 320193
+            accession_number: "TEST-SCT-0000001"
+            fiscal_year: 2023
+            exec_name: "Tim Cook"
+            exec_role: "CEO"
+            total_comp: 63000000
+            parser_version: "2"
+            parse_sequence: 1
+          - cik: 320193
+            accession_number: "TEST-SCT-0000001"
+            fiscal_year: 2022
+            exec_name: "Tim Cook"
+            exec_role: "CEO"
+            total_comp: 99000000
+            parser_version: "2"
+            parse_sequence: 1
+          - cik: 320193
+            accession_number: "TEST-SCT-0000001"
+            fiscal_year: 2021
+            exec_name: "Tim Cook"
+            exec_role: "CEO"
+            total_comp: 98000000
+            parser_version: "2"
+            parse_sequence: 1
+      - input: source('edgartools_silver_landing', 'SILVER_LANDING_RETIREMENT')
+        rows:
+          - target_table: 'no_such_table_never_matches'
+            business_key: 'unused'
+            parse_sequence: 0
+    expect:
+      rows:
+        - cik: 320193
+          accession_number: "TEST-SCT-0000001"
+          fiscal_year: 2023
+          exec_name: "Tim Cook"
+          total_comp: 63000000
+        - cik: 320193
+          accession_number: "TEST-SCT-0000001"
+          fiscal_year: 2022
+          exec_name: "Tim Cook"
+          total_comp: 99000000
+        - cik: 320193
+          accession_number: "TEST-SCT-0000001"
+          fiscal_year: 2021
+          exec_name: "Tim Cook"
+          total_comp: 98000000
+
+  - name: sec_executive_record_reparse_replaces_the_same_year_only
+    description: >
+      A re-parse (ticket 24's --force) lands the same (cik, accession,
+      fiscal_year, exec_name) again at a higher parse_sequence. The newer row
+      wins for that year and the other year is untouched -- the collapse is
+      per fiscal year, not per executive.
+    model: sec_executive_record
+    given:
+      - input: source('edgartools_silver_landing', 'SEC_EXECUTIVE_RECORD')
+        rows:
+          - cik: 320193
+            accession_number: "TEST-SCT-0000002"
+            fiscal_year: 2023
+            exec_name: "Luca Maestri"
+            exec_role: "CFO"
+            total_comp: 1
+            parser_version: "1"
+            parse_sequence: 1
+          - cik: 320193
+            accession_number: "TEST-SCT-0000002"
+            fiscal_year: 2022
+            exec_name: "Luca Maestri"
+            exec_role: "CFO"
+            total_comp: 2
+            parser_version: "1"
+            parse_sequence: 1
+          - cik: 320193
+            accession_number: "TEST-SCT-0000002"
+            fiscal_year: 2023
+            exec_name: "Luca Maestri"
+            exec_role: "CFO"
+            total_comp: 27000000
+            parser_version: "2"
+            parse_sequence: 2
+      - input: source('edgartools_silver_landing', 'SILVER_LANDING_RETIREMENT')
+        rows:
+          - target_table: 'no_such_table_never_matches'
+            business_key: 'unused'
+            parse_sequence: 0
+    expect:
+      rows:
+        - cik: 320193
+          accession_number: "TEST-SCT-0000002"
+          fiscal_year: 2023
+          exec_name: "Luca Maestri"
+          total_comp: 27000000
+          parser_version: "2"
+        - cik: 320193
+          accession_number: "TEST-SCT-0000002"
+          fiscal_year: 2022
+          exec_name: "Luca Maestri"
+          total_comp: 2
+          parser_version: "1"
+
+  - name: sec_executive_record_retirement_key_includes_fiscal_year
+    description: >
+      A retirement record keyed on the full (cik|accession|fiscal_year|name)
+      business key retires that one year and leaves the executive's other
+      year in place.
+    model: sec_executive_record
+    given:
+      - input: source('edgartools_silver_landing', 'SEC_EXECUTIVE_RECORD')
+        rows:
+          - cik: 320193
+            accession_number: "TEST-SCT-0000003"
+            fiscal_year: 2023
+            exec_name: "Kate Adams"
+            exec_role: "General Counsel"
+            total_comp: 5
+            parser_version: "2"
+            parse_sequence: 1
+          - cik: 320193
+            accession_number: "TEST-SCT-0000003"
+            fiscal_year: 2022
+            exec_name: "Kate Adams"
+            exec_role: "General Counsel"
+            total_comp: 6
+            parser_version: "2"
+            parse_sequence: 1
+      - input: source('edgartools_silver_landing', 'SILVER_LANDING_RETIREMENT')
+        rows:
+          - target_table: 'sec_executive_record'
+            business_key: '320193|TEST-SCT-0000003|2022|Kate Adams'
+            parse_sequence: 2
+    expect:
+      rows:
+        - cik: 320193
+          accession_number: "TEST-SCT-0000003"
+          fiscal_year: 2023
+          exec_name: "Kate Adams"
+          total_comp: 5

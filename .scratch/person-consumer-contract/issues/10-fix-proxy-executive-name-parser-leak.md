@@ -66,6 +66,22 @@ the two vocabularies. Escalated instead of silently accepted:
 This ticket resolves when research 01's quality check is re-run on a
 *re-exported* corpus, not on freshly parsed documents.
 
+**Re-export sequence (2026-09-21, once tickets 23 and 24 are on `main` and
+in the running warehouse image).** Neither ticket runs it; it is an operator
+action, in this order, silver before gold:
+
+1. Pre-flight: `select count(*) from
+   EDGARTOOLS_SILVER_LANDING.SILVER_LANDING_RETIREMENT where
+   lower(target_table) = 'sec_executive_record'` returns 0 (ticket 23 item 3).
+2. `edgar-warehouse bootstrap-fundamentals --mode per-filing --force` over the
+   DEF 14A-bearing CIK scope — re-parses every marked accession at
+   `PARSER_VERSION="2"` and lands new rows at a higher `parse_sequence`.
+3. `dbt run --select sec_executive_record executive_records --full-refresh`
+   — the collapse-key change is a SQL-body change, so plain `dbt run` is a
+   silent no-op.
+4. Re-run research 01's quality check on the collapsed silver and compare
+   the plausible-name rate to the 8-K source.
+
 ## Question
 
 Nothing to decide on this map. Research 01 found 47% of
