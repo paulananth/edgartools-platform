@@ -14,6 +14,14 @@ _Avoid_: A second identity per role, Person, a Fund name as proof of company leg
 The identity of one natural person, distinct from a Company and shared with an applicable individual Adviser profile.
 _Avoid_: Employer identity, role as identity, same name as proof of sameness
 
+**Relationship Capacity**:
+The kind of relationship a natural person holds at a company — director, officer, employee, ten percent owner, owner, control person — and part of that relationship's identity.
+_Avoid_: A job title, a source form name, evidence of who the person is
+
+**Relationship Interval**:
+One dated period during which a relationship held, carrying whether its dates were stated by a filing or only observed from one, with several intervals per relationship where it stopped and resumed.
+_Avoid_: A single span from first to last sighting, an end inferred from silence
+
 **Governed Role Profile**:
 An evidence-backed, dated registration or capacity attached to an identity without creating another identity for its holder.
 _Avoid_: Duplicate legal entity, permanent role inferred from a filing name

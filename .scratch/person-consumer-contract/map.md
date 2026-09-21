@@ -13,9 +13,32 @@ scope, not a slice** (operator, 2026-09-19). Planning only: no code, no
 migration, no edit to any Clean MDM file. Written at
 `docs/specs/person/consumer.md` when this map is done.
 
+**Destination reached, 2026-09-20.** Every decision ticket is resolved and
+the spec is written: [`docs/specs/person/consumer.md`](../../docs/specs/person/consumer.md),
+handed over in
+[`.scratch/handover/2026-09-20-claude-to-codex-person-consumer.md`](../handover/2026-09-20-claude-to-codex-person-consumer.md).
+What remains on this map is not decisions:
+[ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md) (research, unblocks
+Tier B activation) and three code-owner tasks —
+[10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser),
+[19](issues/19-capture-ownership-parser-evidence.md) (ownership parser
+evidence and `owner_index`),
+[22](issues/22-decommission-legacy-person-code-and-tests.md) (decommission
+legacy Person code, gated on the Clean MDM consumer being live).
+
+**Documentation review passed, 2026-09-20.** Every citation and headline
+figure in the spec re-verified against the repository and the research files;
+four defects found and fixed, all overstatements rather than wrong decisions —
+a moved line number in `company-completion.md`, gold's owner key described as
+a hash when it is a concatenated natural key, the 8-K and DEF 14A name-quality
+figures taken from research 01's looser measure instead of research 17's
+person-shape filter (53.2% and 41.3%, not 97.7% and "58.7% role text"), and a
+distinct-CIK count borrowed from a different study. Detail on
+[ticket 08](issues/08-write-person-consumer-spec.md).
+
 ## Notes
 
-- **Why now**: Codex's `docs/specs/clean-mdm/company-completion.md` line 71
+- **Why now**: Codex's `docs/specs/clean-mdm/company-completion.md` line 80
   forbids starting Person *integration* until the local Company gate
   passes. That is an implementation ordering on their side. Planning the
   Person contract in parallel is the same move that produced the Company
