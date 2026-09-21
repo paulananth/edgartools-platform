@@ -1,7 +1,8 @@
 # SEC + GLEIF Company policy — accepted interview decisions
 
-Date: 2026-09-19. The user accepted Company Q1–Q13, one question at a time,
-after PR #657 merged. These decisions supersede conflicting earlier Company
+Date: 2026-09-19; Q14 accepted 2026-09-20. The user accepted Company Q1–Q13,
+one question at a time, after PR #657 merged, then accepted deterministic
+identifier binding in Q14. These decisions supersede conflicting earlier Company
 recommendations; they are requirements, not implementation or calibration proof.
 The original Clean MDM Q1–Q16 numbering is a different interview.
 
@@ -20,11 +21,13 @@ The original Clean MDM Q1–Q16 numbering is a different interview.
 | Q11 | Independently qualify automatic consolidation to the same accepted 99.9% precision target, demonstrated by a one-sided 95% lower confidence bound, plus zero hard-veto violations in adversarial tests. Exact matching has no exemption. Unqualified consolidations defer while other qualified work proceeds. |
 | Q12 | The local Company milestone may complete with audited linked, verified-unmatched and deferred outcomes for every scoped Company, provided qualified multisource matching is demonstrated and required source, recovery and publication checks pass. Report deferrals explicitly; do not claim full enrichment. |
 | Q13 | Retain a durable pre-commit assessment for every proposed binding and published-ID consolidation, including automatic proposals. Qualified proposals proceed immediately; field-only refreshes keep their existing evidence path. |
+| Q14 | Use the rules-as-data design. Identifier-only source binding may activate through a verified, versioned Identifier Contract without a separate statistical precision qualification. An exact identifier resolving to one compatible existing Company automatically reuses that immutable Company ID. Conflicts defer; fuzzy binding and published-ID consolidation retain their separate statistical qualification gates. |
 
 ## Preserved decisions
 
-The original statistical gate continues to govern each automatic source-binding
-rule family independently. Similarity scores are not calibrated probabilities;
+The original statistical gate continues to govern each automatic fuzzy
+source-binding rule family independently. Q14 supplies a separate deterministic
+activation path for identifier-only binding. Similarity scores are not calibrated probabilities;
 no arbitrary universal cutoff is accepted. The previous 308 adjudicated seed
 links require revalidation and are not independent held-out qualification truth.
 
@@ -64,3 +67,31 @@ Q13 on 2026-09-19: retain an assessment before **every new
 binding and published-ID consolidation**, including automatically approved
 proposals. Qualified proposals progress immediately; field-only refreshes keep
 the existing evidence/effects path. No manual approval gate is introduced.
+
+## Deterministic binding — accepted Q14
+
+On 2026-09-20 the user selected Identifier Contract activation for identifier-only
+binding and rejected requiring the statistical matching gate for routine reuse
+of an established master. This is the Company-specific acceptance of the
+deterministic path in Claude's [policy-language proposal](../mdm/policy-language.md).
+
+Declare the namespace, issuing authority, normalization and primitive versions,
+scope/cardinality, compatibility checks and verification evidence in the pinned
+policy. Verify the contract to activate the rule; do not require a new precision
+study or manual approval for every later exact-match source record. Record the
+automatic binding's assessment and rule/contract evidence through Q13 and the
+shared transaction boundary.
+
+An identifier match must resolve to one compatible Company. Missing, ambiguous,
+conflicting, suspended or unsupported identifier evidence does not gain binding
+authority. Identifier values from different namespaces are not interchangeable;
+an LEI does not establish a CIK crosswalk merely because both values exist.
+Names and lapsed registration alone do not revoke established bindings (Q9).
+
+This changes the activation evidence for identifier-only **source binding**.
+It does not exempt merging two existing published IDs from Q10/Q11, qualify a
+fuzzy rule, approve the old 308 seed links, or import Person-specific tolerance
+measurements into Company policy. Required publication receipts still govern
+end-to-end completion. The runtime's blanket `automatic_rules` refusal must be
+replaced by implemented and tested activation predicates before any rule runs
+automatically; this decision is not evidence that the interpreter is installed.

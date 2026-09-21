@@ -6,7 +6,7 @@ supersedes the earlier handoff sequence that moved from the SEC-only sample
 to Person/ADV. Shared recovery work necessary for Company remains in scope.
 This document is a delivery gate, not a claim of implementation.
 
-[Accepted Company Q1–Q13](company-policy.md) now govern this milestone.
+[Accepted Company Q1–Q14](company-policy.md) now govern this milestone.
 [Claude handoff reconciliation](design-reconciliation-2026-09-19.md) records
 the accepted assessment-coverage gate and implementation order.
 
@@ -57,7 +57,9 @@ Use the resolved GLEIF decisions rather than reopening the architecture:
   new decision. The later Clean MDM Q16 rule still disables every unqualified
   automatic rule. The later Company interview requires demonstrated qualified
   automatic multisource matching for completion; review-only execution alone
-  no longer satisfies that milestone. Consolidation is separately qualified.
+  no longer satisfies that milestone. Q14 permits identifier-only binding to
+  activate through a verified Identifier Contract; it does not require the
+  fuzzy-rule statistical qualification. Consolidation is separately qualified.
 
 The three-company SEC bundle is a preparation smoke test. It does not establish
 multisource coverage. Choose an approved cohort containing real linked records,
