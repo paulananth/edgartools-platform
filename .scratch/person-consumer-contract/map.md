@@ -282,6 +282,18 @@ distinct-CIK count borrowed from a different study. Detail on
   activation: [ticket 25](issues/25-fix-person-name-normalizer-defects.md).
   Findings: [research/21](research/21-tier-b-8k-extended-labelling.md).
 
+- [Add fiscal_year to the sec_executive_record collapse and gold grain](issues/23-fix-executive-record-collapse-key.md)
+  — the silver collapse key and gold `fact_key` now carry `fiscal_year`,
+  mirroring the landing key, so a three-year Summary Compensation Table
+  yields three rows per executive (DuckDB replay: old key 1 of 3, new key 3
+  of 3; three dbt unit tests). Gold's derived columns are now computed
+  **within one filing** — a fiscal year is reported by three consecutive
+  proxies, so the old `(cik, exec_name)` windows tied on year with no
+  tiebreaker; one gold unit test covers the overlap. Zero retirement rows to
+  re-key, by construction — the retirement table's only two writers target
+  `sec_company_ticker` and `sec_filing_text`. Deploy needs `--full-refresh`
+  on both tables, silver first; the re-export sequence is on ticket 10.
+
 ## Operator directives
 
 - **2026-09-20: every source resolves every entity it carries through

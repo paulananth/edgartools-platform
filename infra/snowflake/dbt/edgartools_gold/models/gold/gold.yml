@@ -350,12 +350,22 @@ models:
           - not_null
 
   - name: executive_records
-    description: DEF 14A executive compensation with YoY change and tenure metrics per (cik, accession_number, exec_name).
+    description: DEF 14A executive compensation with YoY change and tenure metrics per (cik, accession_number, fiscal_year, exec_name).
     columns:
+      # fact_key hashes (cik, accession_number, fiscal_year, exec_name);
+      # unique on it is the grain test without a dbt_utils dependency (none
+      # installed).
+      - name: fact_key
+        tests:
+          - unique
+          - not_null
       - name: cik
         tests:
           - not_null
       - name: accession_number
+        tests:
+          - not_null
+      - name: fiscal_year
         tests:
           - not_null
       - name: exec_name

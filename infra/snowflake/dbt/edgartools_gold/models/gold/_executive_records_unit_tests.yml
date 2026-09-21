@@ -1,0 +1,109 @@
+version: 2
+
+# Person Consumer Contract ticket 23 (2026-09-21): once fiscal_year is in the
+# grain, a fiscal year is reported by up to three consecutive proxies (its
+# own, then as a prior year in the next two). The derived columns are
+# therefore computed within one filing: the windows are tie-free because the
+# grain is unique per accession, and a YoY comparison never crosses into
+# another filing's restatement. This fixture is the overlapping-year,
+# multi-accession shape the silver unit tests cannot construct.
+unit_tests:
+  - name: executive_records_derives_rank_and_yoy_within_one_filing
+    description: >
+      Two proxies from one issuer both report FY2023 for the same executive
+      (the second restates it). Rank is per (filing, fiscal_year); YoY uses
+      the same filing's prior year, not the other filing's figure; a gap
+      year yields no YoY; the first year in a filing yields no YoY.
+    model: executive_records
+    given:
+      - input: ref('sec_executive_record')
+        rows:
+          # Proxy filed 2024: FY2022 + FY2023 for one executive.
+          - cik: 320193
+            accession_number: "TEST-PROXY-2024"
+            fiscal_year: 2022
+            exec_name: "Tim Cook"
+            exec_role: "CEO"
+            total_comp: 100
+            parser_version: "2"
+          - cik: 320193
+            accession_number: "TEST-PROXY-2024"
+            fiscal_year: 2023
+            exec_name: "Tim Cook"
+            exec_role: "CEO"
+            total_comp: 110
+            parser_version: "2"
+          # Proxy filed 2025: restates FY2023 (120, not 110) and adds FY2024;
+          # two more executives, one with a gap year.
+          - cik: 320193
+            accession_number: "TEST-PROXY-2025"
+            fiscal_year: 2023
+            exec_name: "Tim Cook"
+            exec_role: "CEO"
+            total_comp: 120
+            parser_version: "2"
+          - cik: 320193
+            accession_number: "TEST-PROXY-2025"
+            fiscal_year: 2024
+            exec_name: "Tim Cook"
+            exec_role: "CEO"
+            total_comp: 150
+            parser_version: "2"
+          - cik: 320193
+            accession_number: "TEST-PROXY-2025"
+            fiscal_year: 2024
+            exec_name: "Luca Maestri"
+            exec_role: "CFO"
+            total_comp: 60
+            parser_version: "2"
+          - cik: 320193
+            accession_number: "TEST-PROXY-2025"
+            fiscal_year: 2022
+            exec_name: "Kate Adams"
+            exec_role: "General Counsel"
+            total_comp: 50
+            parser_version: "2"
+          - cik: 320193
+            accession_number: "TEST-PROXY-2025"
+            fiscal_year: 2024
+            exec_name: "Kate Adams"
+            exec_role: "General Counsel"
+            total_comp: 55
+            parser_version: "2"
+    expect:
+      rows:
+        - accession_number: "TEST-PROXY-2024"
+          fiscal_year: 2022
+          exec_name: "Tim Cook"
+          comp_rank_within_filing: 1
+          comp_pct_change_yoy: null
+        - accession_number: "TEST-PROXY-2024"
+          fiscal_year: 2023
+          exec_name: "Tim Cook"
+          comp_rank_within_filing: 1
+          comp_pct_change_yoy: 0.1
+        - accession_number: "TEST-PROXY-2025"
+          fiscal_year: 2022
+          exec_name: "Kate Adams"
+          comp_rank_within_filing: 1
+          comp_pct_change_yoy: null
+        - accession_number: "TEST-PROXY-2025"
+          fiscal_year: 2023
+          exec_name: "Tim Cook"
+          comp_rank_within_filing: 1
+          comp_pct_change_yoy: null
+        - accession_number: "TEST-PROXY-2025"
+          fiscal_year: 2024
+          exec_name: "Tim Cook"
+          comp_rank_within_filing: 1
+          comp_pct_change_yoy: 0.25
+        - accession_number: "TEST-PROXY-2025"
+          fiscal_year: 2024
+          exec_name: "Luca Maestri"
+          comp_rank_within_filing: 2
+          comp_pct_change_yoy: null
+        - accession_number: "TEST-PROXY-2025"
+          fiscal_year: 2024
+          exec_name: "Kate Adams"
+          comp_rank_within_filing: 3
+          comp_pct_change_yoy: null
