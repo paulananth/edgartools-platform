@@ -1,0 +1,13 @@
+# PROTOTYPE — Rules Database stand-in: a Mastering Policy for Company, authored in the
+# Source Contract's YAML convention (ticket 04 Q2a) and registered through Clean MDM's
+# own register_policy. Automatic rules stay empty: they are refused until Q16 changes.
+version: 1
+required_consumers: [export, graph]
+automatic_rules: []
+fields:
+  company:
+    name:         { sources: [sec.ownership, gleif.level1], allow_unknown_effective: true }
+    jurisdiction: { sources: [gleif.level1], allow_unknown_effective: true }
+    country:      { sources: [gleif.level1], allow_unknown_effective: true }
+  person:
+    name:         { sources: [sec.ownership], allow_unknown_effective: true }

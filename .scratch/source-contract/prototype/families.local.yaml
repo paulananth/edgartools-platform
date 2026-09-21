@@ -1,0 +1,23 @@
+# PROTOTYPE — engine configuration, not part of any Source Contract.
+# Maps an artifact family to where its Bronze Artifacts sit on THIS machine.
+# Contracts name families only; they never see these paths (checks 1-2).
+# $R18 is the local copy of production bronze taken for Person research 18.
+
+sec.ownership_txt:
+  root: $R18/filing_artifact
+  glob: "*"
+
+sec.submissions_main:           # flat local copy: one undated file per CIK
+  root: $R18/submissions
+  file: "{int}.json"
+  dated: false
+
+test.dated_submissions:          # synthetic dated layout: proves as_of / earliest_after
+  root: $PROTO/engine/selftest_data/submissions
+  dir: "cik={int}/main"
+  file: "CIK{pad10}.json"
+  dated: true
+
+gleif.level1_records:
+  root: $GLEIF_BATCH
+  glob: "*.jsonl"

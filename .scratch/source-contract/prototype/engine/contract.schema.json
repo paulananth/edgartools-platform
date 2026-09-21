@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source Contract (prototype)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "version", "bronze", "read", "silver"],
+  "properties": {
+    "source": {"type": "string", "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$"},
+    "version": {"type": "string"},
+    "bronze": {"type": "object", "required": ["family"], "additionalProperties": false,
+               "properties": {"family": {"type": "string"}}},
+    "requires": {"type": "array", "items": {"type": "string"}},
+    "read": {
+      "type": "object", "additionalProperties": false, "required": ["format", "tables"],
+      "properties": {
+        "format": {"enum": ["xml", "json", "bytes"]},
+        "envelope": {"enum": ["sgml_text"]},
+        "root": {"type": "string"},
+        "on_parse_error": {"enum": ["no_rows", "retry_without_control_chars"]},
+        "records": {"enum": ["jsonl"]},
+        "record_path": {"type": "string"},
+        "tables": {
+          "type": "object", "minProperties": 1,
+          "additionalProperties": {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "custom_reader": {"type": "object", "additionalProperties": false, "required": ["step"], "properties": {"step": {"type": "string"}}},
+              "each": {"type": "string"},
+              "where": {"type": "object", "additionalProperties": false,
+                        "properties": {"has": {"type": "array", "items": {"type": "string"}}}},
+              "columns": {"type": "object", "minProperties": 1}
+            }
+          }
+        }
+      }
+    },
+    "lookups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["family", "key"],
+        "properties": {
+          "family": {"type": "string"},
+          "key": {},
+          "select": {"type": "object", "additionalProperties": false,
+                     "properties": {"as_of": {}, "fallback": {"enum": ["earliest_after", "none"]}}}
+        }
+      }
+    },
+    "silver": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["columns"],
+        "properties": {
+          "key": {"type": "array", "items": {"type": "string"}},
+          "columns": {"type": "object", "additionalProperties": {
+            "type": "string", "pattern": "^(string|bigint|double|boolean|date|timestamp)\\??$"}}
+        }
+      }
+    },
+    "dataset": {
+      "type": "object", "additionalProperties": false, "required": ["table", "contract"],
+      "properties": {"table": {"type": "string"}, "contract": {"type": "object", "required": ["schema_version", "adapter"]}}
+    },
+    "checks": {"type": "array", "items": {"type": "object", "minProperties": 1, "maxProperties": 1}},
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["case", "fixture", "expect"],
+        "properties": {
+          "case": {"type": "string"},
+          "fixture": {"type": "string"},
+          "given": {"type": "object", "additionalProperties": false, "properties": {"identities": {"type": "object"}}},
+          "expect": {"type": "object", "additionalProperties": false,
+                     "properties": {"silver": {"type": "object"}, "mdm": {"type": "array"}, "merge": {"type": "array"}}}
+        }
+      }
+    },
+    "gate": {
+      "type": "object", "additionalProperties": false, "required": ["batch"],
+      "properties": {
+        "batch": {"type": "object", "required": ["family"], "properties": {"family": {"type": "string"}, "select": {}}},
+        "limits": {"type": "object", "additionalProperties": {
+          "type": "object", "additionalProperties": false,
+          "properties": {"max": {"type": "number"}, "max_pct": {"type": "number"}, "min": {"type": "number"}, "why": {"type": "string"}},
+          "if": {"anyOf": [{"required": ["max_pct"]}, {"required": ["max"], "properties": {"max": {"exclusiveMinimum": 0}}}]},
+          "then": {"required": ["why"]}
+        }}
+      }
+    }
+  }
+}

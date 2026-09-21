@@ -1,0 +1,89 @@
+{
+ "source": "sec.ownership",
+ "version": "prototype-1",
+ "digest": "cc7ecf5f339092ac3226732b52443146e939d38dbf02b1c4295b07c982d6660c",
+ "engine": "prototype-0.1",
+ "custom_digest": "0525bd1b1732737cdc35cde33fdf812bcee6cd313b9b8c745accab4b33fdcbcf",
+ "cases": 5,
+ "failures": [],
+ "fixture_digests": {
+  "fixtures/joint.txt": "320a739ee9f0a68b8ddddebbe73351c8bcab7e68fdd749a32dea6a4be8245cc6",
+  "fixtures/company.txt": "000e01fb80b63b68b82e37d4a60d1476182fca1b78bae6314a17dd71186cf9ea",
+  "fixtures/careof.txt": "0002cebba2c21228f9239f41484f9b1d4955258d550677af792c31d215b3aad6",
+  "fixtures/remarks.txt": "0101184fcf3b2f4fc33437750247b0fc391f20b20b0d913d00b7fcb1cf19796c",
+  "fixtures/synthetic-dropped-txn.txt": "4b41df9b63420ad648f4bf7d254f9e1d1f53eacdc34b23430cc84c9cf7407ad4"
+ },
+ "gate": {
+  "artifacts": 5356,
+  "batch_hash": "f43e99f3a8698558a1497f74aba862736fe709e89c4ab7af85e527839eb33688",
+  "rows": {
+   "sec_ownership_reporting_owner": 5743,
+   "sec_ownership_non_derivative_txn": 8177,
+   "sec_ownership_derivative_txn": 2787
+  },
+  "seconds": 11.4,
+  "metrics": [
+   {
+    "metric": "rejected",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "type_errors",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.unique(accession_number,owner_index)",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.not_null(owner_cik)",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.pattern(accession_number)",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   },
+   {
+    "metric": "check.custom_check(owner_name_has_letters@1)",
+    "value": 0,
+    "pct": 0.0,
+    "limit": {
+     "max": 0
+    },
+    "why": null,
+    "ok": true
+   }
+  ]
+ },
+ "state": "proven"
+}

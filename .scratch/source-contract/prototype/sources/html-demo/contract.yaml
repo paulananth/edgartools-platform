@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../engine/contract.schema.json
+# PROTOTYPE — the table-reader custom shape over a SYNTHETIC HTML table.
+source: demo.html_table
+version: "prototype-1"
+bronze: { family: demo.html_table }
+
+read:
+  format: bytes                 # the engine does not parse; the table reader does
+  tables:
+    demo_summary_comp:
+      custom_reader: { step: summary_comp_table@1 }
+
+silver:
+  demo_summary_comp:
+    key: [exec_name, fiscal_year]
+    columns: { exec_name: string, title: string?, fiscal_year: bigint, salary: double? }
+
+checks:
+  - not_null: { table: demo_summary_comp, column: exec_name }
+
+tests:
+  - case: name and title split on the line break; the Total row is not an executive
+    fixture: fixtures/summary-comp.html
+    expect:
+      silver:
+        demo_summary_comp:
+          - { exec_name: Jane Q. Doe, title: Chief Executive Officer, fiscal_year: 2025, salary: 1200000.0 }
+          - { exec_name: John Roe, salary: 750500.0 }

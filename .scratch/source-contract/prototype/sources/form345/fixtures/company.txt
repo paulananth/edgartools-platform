@@ -1,0 +1,176 @@
+<SEC-DOCUMENT>0000921895-26-002492.txt : 20260904
+<SEC-HEADER>0000921895-26-002492.hdr.sgml : 20260904
+<ACCEPTANCE-DATETIME>20260904174314
+ACCESSION NUMBER:		0000921895-26-002492
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		1
+CONFORMED PERIOD OF REPORT:	20260902
+FILED AS OF DATE:		20260904
+DATE AS OF CHANGE:		20260904
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			Hartree Partners, LP
+		CENTRAL INDEX KEY:			0001597857
+		ORGANIZATION NAME:           	
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-13412
+		FILM NUMBER:		261362943
+
+	BUSINESS ADDRESS:	
+		STREET 1:		1185 AVE OF THE AMERICAS
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10036
+		BUSINESS PHONE:		2125368000
+
+	MAIL ADDRESS:	
+		STREET 1:		1185 AVE OF THE AMERICAS
+		CITY:			NEW YORK
+		STATE:			NY
+		ZIP:			10036
+
+	FORMER NAME:	
+		FORMER CONFORMED NAME:	Hess Energy Trading Comany, LLC
+		DATE OF NAME CHANGE:	20140122
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			HUDSON TECHNOLOGIES INC /NY
+		CENTRAL INDEX KEY:			0000925528
+		STANDARD INDUSTRIAL CLASSIFICATION:	WHOLESALE-MACHINERY, EQUIPMENT & SUPPLIES [5080]
+		ORGANIZATION NAME:           	07 Trade & Services
+		EIN:				133641539
+		STATE OF INCORPORATION:			NY
+		FISCAL YEAR END:			1231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		PO BOX 1541
+		STREET 2:		ONE BLUE HILL PLAZA, 14TH FLOOR
+		CITY:			PEARL RIVER
+		STATE:			NY
+		ZIP:			10965
+		BUSINESS PHONE:		8457356000
+
+	MAIL ADDRESS:	
+		STREET 1:		PO BOX 1541
+		STREET 2:		ONE BLUE HILL PLAZA, 14TH FLOOR
+		CITY:			PEARL RIVER
+		STATE:			NY
+		ZIP:			10965
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	REFRIGERANT RECLAMATION INDUSTRIES INC
+		DATE OF NAME CHANGE:	19940617
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>form414670002_09042026.xml
+<DESCRIPTION>OWNERSHIP DOCUMENT
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-09-02</periodOfReport>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0000925528</issuerCik>
+        <issuerName>HUDSON TECHNOLOGIES INC /NY</issuerName>
+        <issuerTradingSymbol>HDSN</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001597857</rptOwnerCik>
+            <rptOwnerName>Hartree Partners, LP</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>1185 AVE OF THE AMERICAS</rptOwnerStreet1>
+            <rptOwnerStreet2></rptOwnerStreet2>
+            <rptOwnerCity>NEW YORK</rptOwnerCity>
+            <rptOwnerState>NY</rptOwnerState>
+            <rptOwnerZipCode>10036</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+            <officerTitle></officerTitle>
+            <otherText></otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock, par value $0.01</value>
+                <footnoteId id="F1"/>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-09-02</value>
+            </transactionDate>
+            <deemedExecutionDate></deemedExecutionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>5317</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>5.10</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>5205317</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">The Reporting Person disclaims beneficial ownership of the securities reported herein except to the extent of its pecuniary interest therein, and this report shall not be deemed to be an admission that the Reporting Person is the beneficial owner of such securities for purposes of Section 16 or for any other purpose.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>Hartree Partners, LP, By: /s/ Christine Stevenson, Chief Compliance Officer</signatureName>
+        <signatureDate>2026-09-04</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
