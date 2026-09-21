@@ -27,3 +27,23 @@ From ticket 02's inventory, decide the `read` section's vocabulary:
   Python (the contract becomes code).
   *Research 10 note:* PyYAML (declared, `pyproject.toml:22`) parses YAML
   1.1; strict 1.2 needs ruamel.yaml, whose line/column API is unverified.
+- **Q1 Paths, groups, transforms (2026-09-21, agreed — research 10's
+  package):** (a) restricted dotted paths over one canonical tree (XML text
+  in `$`, attributes in `@name`), schema-enforced, crossing a list is a
+  located error, missing ≠ `null`; (b) repeating groups only via an explicit
+  `each:` block (`where:` before `ordinal`, `from: document`, `join:` with
+  `parts:`); (c) one `primitive: {arguments}` mapping or a `steps:` chain per
+  column, explicit `default:` on every path read. Q0 consequence: strict
+  YAML 1.2 via ruamel.yaml, not PyYAML.
+- **Q2a One authoring convention for both languages (2026-09-21, agreed):**
+  the Mastering Policy is authored like a Source Contract — strict YAML 1.2
+  stored as canonical JSON, the same path rules, the same
+  `primitive: {arguments}` call shape, a published JSON Schema. Rules do not
+  change, only how they are written; the stored JSON can keep the shape
+  Codex expects. Operator's merge needs (field priority, ordered match
+  rules, "SEC is never overridden, only augmented") are already expressible
+  in `docs/specs/mdm/policy-language.md` §6-8; SEC-first + null-never-
+  overwrites gives augmentation, and rank precedes recency. A Steward
+  override still outranks SEC (`merge-stage.md:140`) — kept. Goes to Codex
+  with ticket 08, with a kind-level `default_sources` convenience so "SEC
+  first" is one reviewable line.

@@ -30,3 +30,7 @@ Send together in one note (operator, 2026-09-21), not piecemeal:
 4. Contract validation, `lei` format, formatted relationship targets,
    deferral instead of silent relationship drops, and a versioning path for
    an immutable dataset body (research 01).
+5. **Author the Mastering Policy in the Source Contract's convention**
+   (ticket 04 Q2a): strict YAML 1.2 → canonical JSON, same paths, same
+   `primitive: {arguments}` calls, a JSON Schema; plus a kind-level
+   `default_sources` list with per-field exceptions.
