@@ -12,7 +12,7 @@ never used.
 
 Not for implementation now: your
 [Company completion gate](../../docs/specs/clean-mdm/company-completion.md)
-line 71 stands. This is the contract to build against when Person starts.
+line 80 stands. This is the contract to build against when Person starts.
 
 ## What changed on your side already, and how this uses it
 
@@ -81,7 +81,7 @@ Net effect: **Tier B does not activate at release.** 8-K measures LCB97.5
 
 | Blocker | Blocks |
 | --- | --- |
-| Ticket 10 (proxy name parser, an edgartools defect) | DEF 14A entirely — 58.7% of `exec_name` is role text |
+| Ticket 10 (proxy name parser, an edgartools defect) | DEF 14A entirely — only 41.3% of its rows are person-shaped (47% role-text leak plus single-token/honorific rows) |
 | Ticket 19 (ownership parser: `otherText`, bronze `submissions.json`, addresses → two booleans, real `owner_index`) | classification without SEC requests; **all** holdings |
 | Ticket 21 (8-K labelling to n ≥ 381) | Tier B activation |
 | Security identity + consumer | Person → Security holdings |
@@ -96,9 +96,10 @@ is fixed would put one person's positions on another named individual.
 
 *Every source resolves every entity it carries through MDM — id
 resolution, de-duplication, merging. No local or derived identity key
-anywhere.* Its concrete casualty in this repo: gold's owner key, a hash of
-`'cik:' || owner_cik` else `'name:' || owner_name_norm`
-(`ownership_holdings.sql:63-67`), becomes the MDM Person id.
+anywhere.* Its concrete casualty in this repo: gold's owner key —
+`party_nk` = `'cik:' || owner_cik` else `'name:' || owner_name_norm`,
+surrogate-hashed into `party_key` (`ownership_holdings.sql:63-68`, `:80`) —
+becomes the MDM Person id.
 
 ## Where disagreement goes
 

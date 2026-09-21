@@ -11,7 +11,7 @@ implementation — the [release gates](#release-gates) do.
 
 **Implementation owner.** Clean MDM (`edgar_warehouse/mdm/clean/`,
 `docs/specs/clean-mdm/`, Codex/Grok-owned and read-only from here). Their
-[Company completion gate](../clean-mdm/company-completion.md) line 71 forbids
+[Company completion gate](../clean-mdm/company-completion.md) line 80 forbids
 starting Person integration until the local Company gate passes; this spec is
 the contract that integration must satisfy when it starts, not a delivery
 plan. Where this spec and a Clean MDM document disagree, the disagreement is a
@@ -33,8 +33,9 @@ in [ticket 22](../../../.scratch/person-consumer-contract/issues/22-decommission
 **Operator principle (2026-09-20), governing everything below**: *every source
 resolves every entity it carries through MDM — id resolution, de-duplication
 and merging. No local or derived identity key anywhere.* Named consequences:
-gold's owner key, today a hash of `'cik:' || owner_cik` else
-`'name:' || owner_name_norm` (`ownership_holdings.sql:63-67`), becomes the MDM
+gold's owner key, today `party_nk` = `'cik:' || owner_cik` else
+`'name:' || owner_name_norm`, surrogate-hashed into `party_key`
+(`ownership_holdings.sql:63-68`, `:80`), becomes the MDM
 Person id; legacy's per-issuer name stubs are not carried forward; and the far
 endpoints of Person edges (issuers, adviser firms, securities, funds) resolve
 through MDM too, which is why an edge whose endpoint is not yet an accepted
@@ -82,15 +83,23 @@ Measured properties that decide the rules below:
   resolves it (110/110) — **but not unique per natural person**: the issuer
   admits duplicates, and only ~54% corroborate publicly (research 16).
 - `owner_cik` is present on **100%** of reporting-owner decisions (72,981 over
-  21,727 distinct CIKs, research 17). There is **no** genuine "one CIK, two
-  people" case in that corpus (0/72,981; upper bound 0.53 per 10,000).
+  14,566 distinct owner CIKs in 4,010 issuer contexts, research 17 F1). There is
+  **no** genuine "one CIK, two people" case: 0 of 72,981 person decisions, upper
+  bound 0.53 per 10,000 (Mastering Policy research 07, a separate study over
+  104,970 rows).
 - The two id-bearing sources **do not meet**: of 3,981 distinct CIKs in
   `IA_1D3_CIK`, **3** are issuer CIKs in the Form 3/4/5 corpus (research 17).
-- 8-K names are 97.7% plausible; DEF 14A names are **41%** plausible — 58.7%
-  of `exec_name` values are role text, an edgartools extractor defect
-  (`edgar/proxy/html_extractor.py:857-864`, copied at
+- The two name-only sources lose rows before any rule runs (research 17 F1):
+  8-K is **53.2%** person-shaped and eligible (4,193 of 7,878 — the rest are
+  role phrases the parser writes into `person_name`), DEF 14A **41.3%**
+  (6,091 of 14,755). DEF 14A's loss is ticket 10's documented **47%** role-text
+  leak plus single-token and honorific-only rows — an edgartools extractor
+  defect (`edgar/proxy/html_extractor.py:857-864`, copied at
   `proxy_fundamentals.py:108`;
   [ticket 10](../../../.scratch/person-consumer-contract/issues/10-fix-proxy-executive-name-parser-leak.md)).
+  Research 01 measured 97.7% plausible names in its own 8-K export snapshot;
+  research 17's person-shape filter is stricter, and this spec uses the
+  stricter figure.
 - A name never binds across issuers: 398 of 10,042 8-K names appear under more
   than one issuer (research 01).
 
@@ -176,7 +185,8 @@ middle-initial variant: 223 pairs, 0 contradictions, LCB95 0.98801, **LCB97.5
 0.98307**. It clears the bar only after
 [ticket 21](../../../.scratch/person-consumer-contract/issues/21-extend-tier-b-labelling-to-97-5.md)
 labels to n ≥ 381. Until then **8-K binds at Tier C**. DEF 14A is measured but
-does not count toward activation while 58.7% of its names are role text; it
+does not count toward activation while only 41.3% of its rows are
+person-shaped; it
 activates on its own n after ticket 10 and a re-export.
 
 **Scope**: reading `IA_Schedule_A_B` is in scope. `DE`/`FE` rows never create a
@@ -451,7 +461,7 @@ decision, never a timer.
 ## Costs
 
 Sizing inputs, measured (research 17, 18): 72,981 reporting-owner decisions
-over 21,727 distinct owner CIKs; 79,768 ADV Schedule A/B rows; 4,193 eligible
+over 14,566 distinct owner CIKs; 79,768 ADV Schedule A/B rows; 4,193 eligible
 8-K rows; 6,091 eligible DEF 14A rows; ~1.1% of owners deferred at
 classification. Classification needs **zero SEC requests** once ticket 19 feeds
 it the bronze `submissions.json` — 4,831/4,831 owner CIKs already had one.
@@ -495,7 +505,7 @@ Beyond the foundation's:
 
 | Level | Proves |
 | --- | --- |
-| Unit | Rule C-J reproduces research 18's labelled corpus exactly (841/841 person, 507/507 entity pooled, 26 deferred) from the frozen `18-sample.jsonl` fixture |
+| Unit | Rule C-J reproduces research 18's primary labelled corpus exactly — 841/841 person, 353/353 entity, 26 deferred — from the frozen `18-sample.jsonl` fixture; the 507/507 entity figure is that corpus pooled with `18-extension-sample.jsonl` |
 | Unit | Classification never reads a flag, `entityType='other'` or deputization text as a decider |
 | Unit | The Tier B key vetoes a generational-suffix mismatch, matches a middle initial to a middle name, and ignores role/flag entirely |
 | Unit | Two records with different values in one identifier namespace never merge, and record `distinct_identified` |
@@ -539,7 +549,7 @@ Plus the foundation's own gates, inherited.
 
 | Dependency | State |
 | --- | --- |
-| Clean MDM Company completion gate (`company-completion.md:71`) | Person integration may not start before it passes |
+| Clean MDM Company completion gate (`company-completion.md:80`) | Person integration may not start before it passes |
 | Durable candidate assessments (migration 028) | **accepted and implemented** by Clean MDM Q13 — required by this contract's replay rule |
 | Per-family checkpoints (migration 029) | **accepted and implemented** |
 | Rules-as-data policy body + Identifier Contract | **accepted for Company** as Q14 (2026-09-20); Person needs the same activation path for Tier A |
