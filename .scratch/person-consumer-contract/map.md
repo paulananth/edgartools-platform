@@ -20,10 +20,9 @@ handed over in
 What remains on this map is not decisions:
 [ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md) is resolved — Tier B
 is qualified for 8-K — leaving code-owner tasks only:
-[10](issues/10-fix-proxy-executive-name-parser-leak.md) (proxy name parser —
-**fixed 2026-09-20**, 48.6% → 100% plausible names on real filings; open until
-a full local re-parse of bronze is measured — the production re-export is
-deferred until all code is written and tested locally),
+[26](issues/26-strip-footnote-markers-and-title-fragments-from-proxy-names.md)
+(footnote markers and title fragments the proxy repair still leaves — 2.66% and
+0.74% of rows; blocks DEF 14A's own Tier B measurement),
 [22](issues/22-decommission-legacy-person-code-and-tests.md) (decommission
 legacy Person code, gated on the Clean MDM consumer being live).
 
@@ -318,6 +317,15 @@ distinct-CIK count borrowed from a different study. Detail on
   precision unchanged, LCB97.5 0.99146 → 0.99142 on n 656 — three `same`
   pairs v1 matched in breach of ticket 20's own key. No Form 3/4/5 record
   loses its shape.
+
+- [Fix the DEF 14A executive-record parser leaking role text into exec_name](issues/10-fix-proxy-executive-name-parser-leak.md)
+  — resolved on a **full local re-parse of bronze**: 9,254 proxy filings
+  (form from bronze `submissions.json` and daily `form.idx`, 8 unknown), zero
+  SEC requests, #680 collapse → 17,371 rows, research 01's check **99.04%**
+  (48.1% before the repair), hand-read attribution 60/60. Residues the check
+  tolerates — footnote markers 2.66%, title fragments 0.74% — are
+  [ticket 26](issues/26-strip-footnote-markers-and-title-fragments-from-proxy-names.md).
+  The production re-export stays deferred.
 
 ## Operator directives
 

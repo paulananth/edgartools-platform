@@ -1,0 +1,495 @@
+{
+ "select": {
+  "bronze_primary_html_accessions": 26214,
+  "ciks": 4437,
+  "ciks_without_a_submissions_snapshot": 3,
+  "accessions_with_unknown_form": 8,
+  "form_source": {
+   "submissions": 20200,
+   "daily_index": 6006
+  },
+  "daily_index_files": 75,
+  "unknown_form_upload_months": {
+   "2026-07": 8
+  },
+  "proxy_forms_selected": {
+   "DEF 14A": 3806,
+   "PRE 14A": 997,
+   "DEFA14A": 4451
+  },
+  "selected": 9254,
+  "accessions_with_more_than_one_primary_html": 0,
+  "top_forms": [
+   [
+    "8-K",
+    16521
+   ],
+   [
+    "DEFA14A",
+    4451
+   ],
+   [
+    "DEF 14A",
+    3806
+   ],
+   [
+    "PRE 14A",
+    997
+   ],
+   [
+    "8-K/A",
+    383
+   ],
+   [
+    "PX14A6G",
+    15
+   ],
+   [
+    "10-Q",
+    10
+   ],
+   [
+    "<unknown>",
+    8
+   ],
+   [
+    "SC 13G/A",
+    4
+   ],
+   [
+    "SD",
+    4
+   ],
+   [
+    "424B2",
+    4
+   ],
+   [
+    "10-K",
+    3
+   ],
+   [
+    "CORRESP",
+    3
+   ],
+   [
+    "FWP",
+    2
+   ],
+   [
+    "S-8",
+    2
+   ]
+  ]
+ },
+ "filings_parsed": 9254,
+ "filings_with_a_summary_compensation_table": 2212,
+ "parse_errors": 0,
+ "extract_errors": 0,
+ "landing_rows": 17469,
+ "collapsed_rows": 17371,
+ "collapse_removed": 98,
+ "raw_entries": 18044,
+ "rows_dropped_as_unattributable_by_repair": 575,
+ "research_01_check": {
+  "plausible": 17204,
+  "n": 17371,
+  "rate": 0.99039
+ },
+ "research_10_check": {
+  "plausible": 17345,
+  "n": 17371,
+  "rate": 0.9985
+ },
+ "before_repair_research_10_check": {
+  "plausible": 8683,
+  "n": 18044,
+  "rate": 0.48121
+ },
+ "residual_footnote_marker_in_name": {
+  "rows": 462,
+  "rate": 0.0266,
+  "top": [
+   [
+    "Jeff Zhu(1)",
+    8
+   ],
+   [
+    "Aman Narang (4)",
+    6
+   ],
+   [
+    "Elena Gomez (5)",
+    6
+   ],
+   [
+    "Travis D. Stice(7)",
+    6
+   ],
+   [
+    "David S. Sheerr (6)",
+    4
+   ],
+   [
+    "JOHN J. CHADWICK(5)",
+    4
+   ],
+   [
+    "MICHELLE H. HAIRSTON(5)",
+    4
+   ],
+   [
+    "Marissa B. Espineli (6)",
+    4
+   ],
+   [
+    "Sandra Gardiner(1)",
+    4
+   ],
+   [
+    "Zachary Kirkhorn(4)",
+    4
+   ],
+   [
+    "Andrew Baglino(5)",
+    4
+   ],
+   [
+    "Dhiaa M. Jamil(1)",
+    4
+   ],
+   [
+    "Lynn J. Good(1)",
+    4
+   ],
+   [
+    "Kodwo Ghartey-Tagoe(1)",
+    4
+   ],
+   [
+    "Julia S. Janson(1)",
+    4
+   ]
+  ]
+ },
+ "residual_trailing_hyphen_fragment": {
+  "rows": 128,
+  "rate": 0.00737,
+  "top": [
+   [
+    "Chi-Foon Chan Co-",
+    9
+   ],
+   [
+    "TED SARANDOS co-",
+    9
+   ],
+   [
+    "Lori Bisson -",
+    8
+   ],
+   [
+    "Trent Smith -",
+    8
+   ],
+   [
+    "Aart J. de Geus Co-",
+    6
+   ],
+   [
+    "GREG PETERS co-",
+    6
+   ],
+   [
+    "Brad Hauser -",
+    6
+   ],
+   [
+    "Aart J. de GeusCo-",
+    4
+   ],
+   [
+    "Chi-Foon ChanCo-",
+    4
+   ],
+   [
+    "Zvi Lando -",
+    4
+   ],
+   [
+    "Ronen Faier -",
+    4
+   ],
+   [
+    "Uri Bechor -",
+    4
+   ],
+   [
+    "Landy Toth -",
+    4
+   ],
+   [
+    "Walter Klemp -",
+    4
+   ],
+   [
+    "Emiliano Kargieman -",
+    4
+   ]
+  ]
+ },
+ "remaining_implausible_distinct": 72,
+ "remaining_implausible_top": [
+  [
+   "Jeffrey H. Duncan V.P.-Manufacturing & Engineering",
+   7
+  ],
+  [
+   "Max P. Bowman, VP/",
+   6
+  ],
+  [
+   "Jeffrey H. Duncan V.P. - Manufacturing & Engineering",
+   6
+  ],
+  [
+   "Member of the",
+   5
+  ],
+  [
+   "Charles J. Hardin, VP/Sales",
+   5
+  ],
+  [
+   "of UMI",
+   5
+  ],
+  [
+   "VP/Sales",
+   4
+  ],
+  [
+   "Jr., VP/",
+   4
+  ],
+  [
+   "UTSC, and",
+   4
+  ],
+  [
+   "of the Company and State Bank",
+   4
+  ],
+  [
+   "the Company and State Bank",
+   4
+  ],
+  [
+   "Geoffrey DaviesVP &",
+   4
+  ],
+  [
+   "Operations and Supply Chain",
+   4
+  ],
+  [
+   "VP of Processing",
+   4
+  ],
+  [
+   "Scientist and",
+   4
+  ],
+  [
+   "of Production and",
+   4
+  ],
+  [
+   "Elon Musk Technoking of Tesla and",
+   4
+  ],
+  [
+   "SEVP and",
+   4
+  ],
+  [
+   "Finance and",
+   3
+  ],
+  [
+   "Label and Graphic",
+   3
+  ],
+  [
+   "Jack B. Self, VP/Operations",
+   3
+  ],
+  [
+   "1st VP/",
+   3
+  ],
+  [
+   "of the Company and the Bank",
+   3
+  ],
+  [
+   "Joseph W. LoganSales and CorporateMarketing",
+   3
+  ],
+  [
+   "Joseph W. Logan Sales and",
+   3
+  ],
+  [
+   "of the",
+   3
+  ],
+  [
+   "and Information Solutions",
+   2
+  ],
+  [
+   "Allan L. Bridgford Member of the",
+   2
+  ],
+  [
+   "Jeffrey H. Duncan (5) V.P., Manufacturing & Engineering",
+   2
+  ],
+  [
+   "Stephanie N. WilliamsVP and",
+   2
+  ],
+  [
+   "Gordon D. Wichman VP",
+   2
+  ],
+  [
+   "Gary D. FieldsSpecial Advisor to the",
+   2
+  ],
+  [
+   "Good Times Burger and Frozen Custard",
+   2
+  ],
+  [
+   "of Finance",
+   2
+  ],
+  [
+   "and Legal",
+   2
+  ],
+  [
+   "Geoffrey Davies VP &",
+   2
+  ],
+  [
+   "of Mercantile",
+   2
+  ],
+  [
+   "Richard G. Johnson Finance Advisor and",
+   2
+  ],
+  [
+   "John F. Quanci VP",
+   2
+  ],
+  [
+   "Jennifer Lew.Executive",
+   2
+  ],
+  [
+   "and Development",
+   2
+  ],
+  [
+   "Bobby L. Scott, VP/Operations",
+   1
+  ],
+  [
+   "Operational and",
+   1
+  ],
+  [
+   "Manufacturing and Engineering",
+   1
+  ],
+  [
+   "Stephanie Williams (10)VP and",
+   1
+  ],
+  [
+   "John Donahoe IIPresident and",
+   1
+  ],
+  [
+   "Strategy and Transformation",
+   1
+  ],
+  [
+   "Refining and Logistics",
+   1
+  ],
+  [
+   "David E. Benson VP",
+   1
+  ],
+  [
+   "Operations, Good Times Burger and Frozen Custard6",
+   1
+  ],
+  [
+   "and Culture",
+   1
+  ],
+  [
+   "and Technical Operations",
+   1
+  ],
+  [
+   "and Current",
+   1
+  ],
+  [
+   "Donald C. DuncanVP &",
+   1
+  ],
+  [
+   "Richard J. WehrleVP &",
+   1
+  ],
+  [
+   "Geoff Davies VP &",
+   1
+  ],
+  [
+   "Donald C. Duncan VP &",
+   1
+  ],
+  [
+   "Robert H. George VP",
+   1
+  ],
+  [
+   "Richard J. Wehrle VP &",
+   1
+  ],
+  [
+   "Aidos ZhumagulovAdvisor to the",
+   1
+  ]
+ ],
+ "rows_by_form": {
+  "DEF 14A": 15038,
+  "PRE 14A": 2321,
+  "DEFA14A": 12
+ },
+ "hosts_contacted": {
+  "edgartools-prod-bronze-690839588395.s3.amazonaws.com": 503197
+ },
+ "sec_requests": 0,
+ "hand_read_sample_size": 60,
+ "seed": 20260921
+}
