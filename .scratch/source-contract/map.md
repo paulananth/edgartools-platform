@@ -122,6 +122,13 @@ no edit to any Clean MDM file.
   `adapter` block; query and transform languages rejected. Strict YAML 1.2
   needs ruamel.yaml, not the declared PyYAML.
   [research/10](research/10-path-and-expression-syntax.md).
+- [Decide the read and transform primitives and the custom-step signature](issues/04-decide-the-read-and-transform-primitives.md)
+  — **strict YAML 1.2 → canonical JSON; dotted paths; `each:` groups; one
+  primitive call or `steps:` chain per column; small primitives plus
+  rule-bound named conventions; `lookup` as-of the filing date (else
+  earliest after); two custom-step shapes (value step, table reader) that
+  reject bad records and stop on bugs.** The Mastering Policy adopts the
+  same authoring convention (handover item).
 
 ## Not yet specified
 
@@ -129,7 +136,8 @@ no edit to any Clean MDM file.
   silver rows are re-parsed, which assertions are re-published, and how
   that meets the Merge Stage's bounded rebuild. Sharper after research 02:
   a `lookup` that reads the newest snapshot makes a re-parse depend on when
-  it runs; the contract may need as-of lookups. Sharper after research 01:
+  it runs — now settled for lookups by ticket 04 Q3 (as-of the filing date,
+  else earliest after). Sharper after research 01:
   a Clean MDM dataset body is immutable per `source_code`, so a Source
   Contract version bump has no path today except a new `source_code` and
   re-binding every record — the versioning model needs a Codex proposal.

@@ -17,3 +17,6 @@ Decide how the `tests` section is written:
 - the batch gate: which metrics (coverage, deferral rate, row counts …),
   thresholds, and how a result is recorded as proof for go-live;
 - the failure output format (check 9).
+
+Carried in from ticket 04: **custom checks** (Q6 allowed them per source) —
+their shape and rules; and the gate on custom-step `reject(reason)` counts.
