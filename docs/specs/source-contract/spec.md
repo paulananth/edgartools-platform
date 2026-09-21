@@ -64,11 +64,15 @@ A contract may use no other domain term (acceptance check 7).
 - YAML is the authoring and export format. The database stores each version
   as canonical JSON with its SHA-256 digest. A stored version never changes.
 - Custom code (`custom.py`) and fixtures stay files. A stored version records
-  their digests, and the runner refuses a mismatch.
+  their digests. **Proposed** (not decided by a ticket): the runner refuses
+  a version whose recorded digests do not match the files.
 - **Production never reads the Rules Database.** When a version becomes
   active, the Dataset Contract is registered into Clean MDM through
   `register_dataset`, and a Mastering Policy through `register_policy`.
   Production merges read only `mdm_v2`, pinned by digest.
+- **Proving Run merges happen beside the Rules Database** (ticket 06 Q3–Q4),
+  in a throwaway database created for the run and dropped after it, never in
+  production. The prototype used a throwaway Postgres 16 container for this.
 
 ### 4.2 Lifecycle
 
@@ -79,15 +83,16 @@ A contract may use no other domain term (acceptance check 7).
 | draft | `source save` stores a validated new version | agent |
 | proven | a Proving Run passes every named case, every check and the Batch Gate (§16) | agent |
 | active | the version is registered into Clean MDM (§4.1) | agent, **or** a person — see §4.3 |
-| retired | a newer version of the same source becomes active; kept for replay | automatic |
+| retired | a newer version of the same source becomes active; kept for replay (ticket 06 Q3) | the activation that replaces it |
 
 A failed Proving Run leaves the version in draft. The failed run is kept as
 a record.
 
 ### 4.3 Who activates
 
-- A version that **only adds data** (new fields, or a new source that binds
-  nothing) may be activated by the agent.
+- A version whose changes **only add data** may be activated by the agent
+  (ticket 06 Q3, option z). Where that line falls for a given change is the
+  agent's to state and the operator's to overrule.
 - A version that **can bind or merge identities** needs a **Rule Activation
   Approval**. The agent must explicitly ask the operator before it makes
   the version active; an approval is never inferred from silence or from an
@@ -112,9 +117,9 @@ a reviewer can check (handover item 5).
 
 | Command | Does |
 |---|---|
-| `source save <file.yaml>` | load → validate → store an immutable draft version in the Rules Database |
+| `source save <file.yaml\|folder>` | load → validate → store an immutable draft version in the Rules Database. Initialization is `source save` over a folder of contracts (ticket 06 Q2) |
 | `source export <name> <version>` | write a stored version back out as YAML (line numbers in errors refer to this output) |
-| `source prove <name\|file> [--gate] [--json]` | run a **Proving Run** (§17) |
+| `source prove <name\|file> [--gate] [--json] [--all]` | run a **Proving Run** (§17). `--all` prints every violation instead of a sample |
 | `source run [--source <name>]` | production: parse new Bronze Artifacts for every active contract (§18) |
 | `source mapdoc <name\|file>` | print the generated Mapping Document (§20) |
 
@@ -167,7 +172,7 @@ setting, and is not part of any contract.
 | Key | Required | Meaning |
 |---|---|---|
 | `source` | yes | the source code: lowercase dotted, e.g. `gleif.level1`. Becomes Clean MDM's `source_code` |
-| `version` | yes | the author's version label. The digest, not the label, identifies a version |
+| `version` | yes | the author's version label (a prototype convention). The digest, not the label, identifies a version |
 | `bronze` | yes | `{ family: <Artifact Family> }`: what `source run` reads |
 | `requires` | if `custom.py` imports anything outside the standard library | distribution names, e.g. `[edgartools]` |
 | `read` | yes | §8 |
@@ -186,10 +191,12 @@ setting, and is not part of any contract.
 |---|---|---|
 | `xml` | `envelope: sgml_text` (take the `<XML>` block of a full SEC `.txt` submission and expose its header fields); `root: <tag>` (any other root gives zero rows); `on_parse_error: no_rows \| retry_without_control_chars` | one document |
 | `json` | `records: jsonl` (one document per line); `record_path: <path>` (the record inside each line) | one document per record |
+| `csv` | header row, delimiter, encoding | one document per row, keyed by header names. **Decided (ticket 04), not prototyped** |
 | `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
 
-A streaming reader for zipped JSON arrays (the full GLEIF Golden Copy) is
-needed and was not prototyped (§26).
+A reader **yields documents one at a time** (an iterator, not a list), so a
+large artifact streams. A streaming reader for zipped JSON arrays (the full
+GLEIF Golden Copy) is needed and was not prototyped (§26).
 
 ### 8.2 The canonical tree
 
@@ -218,8 +225,10 @@ accepted `"LegalName[*].$"`. A path that starts with `@` must be quoted in
 YAML (`"@id"`).
 
 At run time:
-- **A missing path gives the `default`.** Missing and JSON `null` are both
-  "no value"; `default` applies to both.
+- **A missing path gives the `default`. JSON `null` is not missing** (ticket
+  04 Q1; research 10 §3): a path that reaches an explicit `null` gives
+  `null`. The prototype treated both as missing, which changed nothing on its
+  two sources but is a deviation the real engine must not copy.
 - **Crossing a list in the middle of a path is an error** that names the
   location: "path crosses a repeating group; use each". It is never a silent
   first match.
@@ -262,10 +271,12 @@ No string is ever run as code. `contains: "see remarks"` is a literal, and
 
 ## 9. Primitives
 
-These are the 23 that ran in the prototype. **Every primitive that reads a
-path requires an explicit `default:`**, because this repo has three different
-"absent" results (`""`, `null`, `false`). The prototype exempted
-`value_with_footnotes`; the spec does not.
+These are the 23 that ran in the prototype. **Every primitive that returns a
+value read from a path (`path`, or `each` for `join`) requires an explicit
+`default:`**, because this repo has three different "absent" results (`""`,
+`null`, `false`). `count` is the exception: a missing group is 0. The spec is
+stricter than the prototype in two places, and says so: the prototype did not
+require `default` on `value_with_footnotes` or `join`.
 
 **Readers:** they read the current item, or the document with `from: document`.
 
@@ -309,7 +320,16 @@ path requires an explicit `default:`**, because this repo has three different
   4. it has a one-line vocabulary entry that shows the chain it replaces.
 - Logic that belongs to one source is a Custom Step (§11), never a primitive.
 
-Every primitive is versioned `name@n`; an unversioned name means `@1`.
+Every primitive is versioned `name@n`; an unversioned name means `@1`, and
+`@1` and `@2` live side by side so old versions replay.
+
+**One descriptor per primitive is the source of truth.** The engine keeps one
+descriptor per `name@n`: each argument's kind (path, expression, expression
+list, literal), whether it reads the item or takes the previous value,
+whether `default` is required, and which argument the Mapping Document
+shows. The JSON Schema, the validator and the Mapping Document are generated
+from these descriptors, and a test checks the tables above against them. The
+prototype spread this over five places (GoF review of ticket 08).
 
 ## 10. `lookups`: another Artifact Family
 
@@ -323,7 +343,8 @@ lookups:
 
 - **Selection (ticket 04 Q3):** take the copy captured on or before `as_of`.
   If none exists, `fallback: earliest_after` takes the earliest copy after
-  it; `fallback: none` returns "not found". This is repeatable, because
+  it; `fallback: none` (a prototype addition, not a ticket decision) returns
+  "not found". This is repeatable, because
   bronze only gains later-dated captures. The capture date is the date in the
   bronze path, which is the fetch date by construction
   (`edgar_warehouse/infrastructure/dataset_path_catalog.py:215-219`). S3
@@ -335,7 +356,13 @@ lookups:
 - **Never fetches.** A missing copy gives `found: false`.
 - **Named Cases read the source folder's own `fixtures/families/<family>/`**,
   never machine bronze, so a case gives the same result on every machine
-  (prototype finding 5).
+  (prototype finding 5). The fixture folder uses the family's own layout, so
+  a dated family's fixtures are dated and exercise `as_of`. The prototype
+  supported only a flat `<key>.json` layout there.
+- **Artifact Family names** are listed by the engine's family registry
+  (`source families`, proposed), named `<authority>.<name>`
+  (`sec.submissions_main`, `gleif.level1_records`). A contract names a family;
+  the registry, per machine, says where its files are.
 
 ## 11. Custom Steps
 
@@ -348,12 +375,37 @@ of three shapes:
 | **table reader** | `custom_reader: { step: name@n }` on a table | Bronze Artifact bytes → rows | a document no reader can parse (HTML tables) |
 | **custom check** | `custom_check: { step: name@n, table, inputs: […] }` in `checks` | named inputs → `null` or a problem message | a data rule the built-in checks cannot state |
 
+```python
+# sources/<name>/custom.py — the engine provides the decorators and Reject
+from source_contract import Reject, check_step, table_reader, value_step
+
+@value_step("owner_display_name", version=1)
+def owner_display_name(raw: str, cik: int | None, submissions: dict) -> str: ...
+
+@table_reader("summary_comp_table", version=1)
+def summary_comp_table(raw: bytes):            # yields dicts: the rows of the ONE table that names it
+    yield {"exec_name": "…", "fiscal_year": 2025}
+
+@check_step("owner_name_has_letters", version=1)
+def owner_name_has_letters(owner_name_raw: str) -> str | None:   # None = fine
+    ...
+```
+
+The module name `source_contract` is the real engine's to choose; the
+prototype called it `source_engine`. **Steps are registered per source**:
+two sources may each have an `owner_kind@1`, and a duplicate `name@n` within
+one source is a load error. (The prototype used one registry shared by every
+source, where a later source would silently replace an earlier one's step.
+That is harmless for one source per process, and wrong for `source run`,
+which loads every source — GoF review of ticket 08.)
+
 The six rules (ticket 04 Q4), for every shape:
 1. **Inputs are named in the contract.** The code sees nothing else.
 2. **The output is checked** against the declared silver column or table. An
    undeclared column, or a wrong type, is a located failure.
 3. **No side effects**: no network, no file writes, no MDM call. The runner
-   calls each step twice on fixtures and fails a step whose results differ.
+   calls each step twice on fixtures; a step whose results differ is a bug
+   (exit 3).
 4. **Imports are declared** in `requires` (distribution names). The engine
    maps modules to distributions with `importlib.metadata`, never a
    hand-written alias, and refuses an undeclared import.
@@ -371,6 +423,7 @@ silver:
   <table>:
     key: [<column>, …]
     columns: { <column>: <type>, … }       # type: string | bigint | double | boolean | date | timestamp; suffix ? = nullable
+    collapse: <rule>                       # map decision Q7; grammar Open (§25 item 6)
 ```
 
 - The `read` columns and the `silver` columns must be the same set;
@@ -381,7 +434,9 @@ silver:
 - A column that counts real-world records uses `bigint`, never a small
   integer (repo rule in `CLAUDE.md`).
 - The table's physical schema and its collapse rule are generated from this
-  block (map decision Q7). Where silver is stored is out of scope.
+  block (map decision Q7). The collapse grammar (for example, the latest row
+  per key by a declared order) is not yet fixed and was not prototyped.
+  Where silver is stored is out of scope.
 
 ## 13. `dataset`: into MDM
 
@@ -412,10 +467,15 @@ rejection, is in
 | `identifiers` (+ `identifier_formats`) | no | namespace → column. Only `sec_cik` exists as a format (gap G3) |
 | `fields` | no | MDM field → column. A name not in the Mastering Policy is evidence only |
 | `field_shape` | no | only `nullable_text` has an effect; any other value is silently ignored |
-| `profiles`, `relationships` | no | Governed Role Profiles and reported edges. Their sub-keys are in research 01 §1.2–1.3 |
+| `profiles` | no | Governed Role Profiles: `role` (literal), `authority` (literal), `registration` (column; null skips the profile), `valid_from` (column, required, time-zone aware), optional `jurisdiction`, `valid_to`, `fields` |
+| `relationships` | no | reported edges: `type` (literal, a Clean MDM relationship type), `target_key` (columns), `target_source` (literal source code), `valid_from` (column, required, time-zone aware), optional `scope` (literal), `valid_to`, `properties` |
 | `source_record_provenance` | no | **set it to `true`** (gap X3): without it, a re-ordered file mints new assertions |
 | `provenance` | no | source values copied into provenance |
 | `retain_deferred` | no | unsupported records become deferred evidence instead of failing the batch |
+
+Every column the adapter names must be a column of `dataset.table`; the
+validator checks it. Literal keys (`role`, `authority`, `type`,
+`target_source`, `scope`) look like paths but are not (gap X2).
 
 ### 13.2 Rules the code applies that a contract author must know
 
@@ -450,6 +510,12 @@ classification. Three answers exist:
 | a Custom Step computing the kind (the prototype's `owner_kind@1`, using edgartools' classifier) | **stand-in only**, for parse and mapping tests. It is not C-J and must not reach production |
 | the Dataset Contract defers the kind to the Mastering Policy's classification rules | **the spec's position**, proposed to Codex (handover item 6). The adapter names a classification rule set instead of a kind, and the Merge Stage classifies before binding |
 
+**Record key for Form 3/4/5 (gap F2, not decided).** The prototype keyed
+owners by `(accession_number, owner_index)`, so every filing makes a new
+subject for the same owner. Research 01 proposes `owner_cik` as the subject
+key, with `(accession, owner_index)` kept only as a provenance locator. This
+must be settled before Form 3/4/5 goes live (§25 item 7).
+
 Until Codex accepts one of these, a source whose kind needs a rule must not
 go live. Form 3/4/5 is also blocked by the open Person projection and privacy
 item (gap F6; policy language §15 item 4). Its parse and mapping cases run
@@ -467,6 +533,11 @@ checks:
   - custom_check: { step: name@n, table, inputs: [<column>, …] }
 ```
 
+A check is named in the gate as `check.<name>(<argument>)`, where the
+argument is the column, the comma-joined columns, or the step:
+`check.not_null(lei)`, `check.unique(accession_number,owner_index)`,
+`check.custom_check(owner_name_has_letters@1)`.
+
 Every check returns **violations**, each with the row's silver key and a
 message, never a bare true or false. Checks run in every Named Case (where
 any violation fails the case) and in the Batch Gate (where each has a limit).
@@ -482,7 +553,7 @@ tests:
         <name>: { fixture: fixtures/<file>, record: <record key> }
     expect:
       silver: { <table>: [ { <column>: <value>, … }, … ] }    # rows in order; only listed columns compared; row count exact
-      mdm:    [ { kind, identifiers: {…}, fields: {…} }, … ]   # Clean MDM assertions, in row order
+      mdm:    [ { kind, identifiers: {…}, fields: {…}, evidence_only: [<column>, …] }, … ]   # Clean MDM assertions, in row order
       merge:
         - { record: <key>, outcome: bound, to: <name> }
         - { record: <key>, outcome: binding_required }
@@ -492,17 +563,22 @@ tests:
 - **Named Cases are required.** Each known trap gets one: an object where a
   list is expected, a row the `where` filter drops, a value next to a
   footnote.
+- **`evidence_only`** lists silver columns that must *not* appear as MDM
+  fields (ticket 05 Q2). Not prototyped.
 - **`given.identities` are seeds.** They go through the same contract and a
   first Merge Stage batch with a declared Steward binding, never inserted
-  rows. They are named by the case, never by a generated id.
+  rows. They are named by the case, never by a generated id. `record` is the
+  record key as the adapter builds it: the plain value for a one-part key,
+  the JSON array string for a multi-part key.
 - **Merge outcomes:** `bound`, `new`, `binding_required`, `deferred` (with
   reason), `quarantined`, and a field's value and `winner`. The prototype
   implemented `bound`, `binding_required` and field value/winner only.
 - **`bound` checks a declared binding** until Codex provides a test mode for
   automatic rules (handover item 1). The runner reports which one it
   checked.
-- **Cost:** parse and mapping cases need no database. Merge cases need a
-  throwaway Postgres 16. The prototype measured about 10–15 s for one case,
+- **Order and cost:** parse and mapping cases run first and need no
+  database; Postgres starts only if a case has `merge:` (ticket 05 Q2). Merge
+  cases need a throwaway Postgres 16 (§4.1). The prototype measured about 10–15 s for one case,
   including container start, with a 60 s readiness limit. Research 03 saw
   an 8 s wait fail 4 of 7 runs on Colima.
 - **A snapshot is optional**: a regression net, not intent. A changed
@@ -517,12 +593,22 @@ gate:
   limits:
     rejected:                     { max_pct: 0.5, why: "…" }
     type_errors:                  { max: 0 }
+    deferred:                     { max_pct: 2.0, why: "…" }
     rows.<table>:                 { min: 300000 }
     check.<check>(<arg>):         { max: 2, why: "…" }
+  snapshot: optional                                          # a regression net (§15)
 ```
 
-- **A metric with no declared limit must be 0.** A looser limit needs `why:`;
-  the schema refuses one without it.
+- **Metrics:** `rejected` (Custom Step rejects), `type_errors` (a prototype
+  addition, from finding 4), `deferred` (records the Merge Stage defers;
+  decided in ticket 05, **not prototyped**), each check, `rows.<table>`, and
+  an optional snapshot comparison.
+- **`rejected`, `type_errors`, `deferred` and every check default to 0.** A
+  looser limit needs `why:`; the schema refuses one without it. `rows` has no
+  default: it is judged only when a `min` is declared.
+- **`max`** is an absolute count, **`max_pct`** a percentage of the rows in
+  the metric's table (for `rejected` and `type_errors`, of all rows plus the
+  rejected ones), and **`min`** an absolute floor.
 - **The batch is pinned** by the SHA-256 of the list of its artifacts'
   SHA-256s. A sample must be seeded.
 - **The proof stored with the version** contains:
@@ -622,7 +708,7 @@ hand-written, so it cannot drift from what runs.
 | 4 | no network | §19 | **partly**: needs enforcement below Python |
 | 5 | a fresh agent onboards an unseen source from this spec and one example | ticket 09 | not yet |
 | 6 | the Mapping Document is generated | `source mapdoc` | passed |
-| 7 | every contract term is in `CONTEXT.md` | grep the glossary for each term | passed (this ticket added six terms) |
+| 7 | every contract term is in `CONTEXT.md` | grep the glossary for each term | passed (ticket 08 added six terms) |
 | 8 | one command proves a source end to end | `source prove --gate` | passed |
 | 9 | errors name the line and the rule | introduce a typo, a path error, a type error | passed after two fixes (findings 3–4) |
 | 10 | GLEIF fits in about 100 lines with tests | `wc -l` | passed (93) |
@@ -770,8 +856,12 @@ readiness wait (item 2), a named offline registry authority (item 3),
 authoring the Mastering Policy in this convention with `default_sources`
 (item 5), deferral instead of silent relationship drops (F5), marking literal
 keys (X2), `source_record_provenance` true by default (X3), relationship
-type mapping and per-row effective time (G2, G5), and time-zone-aware dates
-(G4).
+type mapping and per-row effective time (G2, G5), time-zone-aware dates
+(G4), a relationship-only dataset for GLEIF's separate relationship member
+(G1), and a disposition for GLEIF reporting exceptions (G6). Two more are
+ours to settle, not Codex's: the Form 3/4/5 subject key (F2, §25 item 7), and
+Person projection and privacy (F6, policy language §15 item 4), which blocks
+Form 3/4/5 go-live.
 
 ## 25. Open
 
@@ -785,6 +875,9 @@ type mapping and per-row effective time (G2, G5), and time-zone-aware dates
 4. **Snapshot file format** and the re-record command.
 5. **Moving an existing parser onto a contract.** Form 3/4/5 shows it *can*
    be done; the criteria for when it *should* be done are not set.
+6. **The silver collapse grammar** (§12).
+7. **The Form 3/4/5 subject key**: `owner_cik` or `(accession_number,
+   owner_index)` (gap F2, §13.4).
 
 ## 26. What the prototype did not prove
 
@@ -799,6 +892,9 @@ type mapping and per-row effective time (G2, G5), and time-zone-aware dates
 - **Merge cases:** `bound` checked declared bindings only; `new`, `deferred`
   and `quarantined` were not implemented.
 - **`source run`** and publication building (§18) were not prototyped.
+- **Decided but not prototyped:** the `csv` reader, the `deferred` gate
+  metric, `expect.mdm.evidence_only`, the collapse rule, and "JSON `null` is
+  not missing" (the prototype treated `null` as missing).
 
 ## 27. Evidence
 

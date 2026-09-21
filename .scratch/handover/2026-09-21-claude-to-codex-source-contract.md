@@ -55,6 +55,13 @@ One conflict to settle: your Clean MDM specs describe the Golden Copy as
 | F5 | Record relationships dropped for a missing target (today a catch-all `ValueError` drops them silently, `adapters.py:110-113`), and allow a conditional relationship from boolean role flags. |
 | X2, X3 | Mark literal keys apart from path keys; default `source_record_provenance` to true for new contracts. |
 | G2, G4, G5 | Relationship-type value mapping; time-zone-aware dates; per-row effective time. |
+| G1 | A relationship-only dataset, so GLEIF's separate relationship member can assert edges without a kind or fields. |
+| G6 | A disposition for GLEIF reporting-exception rows other than assertion or deferral. |
+
+Two related items are **ours**, not yours, but they affect how Form 3/4/5
+reaches you: the Form 3/4/5 subject key (research 01 F2: `owner_cik` rather
+than a per-filing `(accession, owner_index)`), and Person projection and
+privacy (F6, policy language §15 item 4), which blocks Form 3/4/5 go-live.
 
 The full list, with `path:line` evidence for each gap, is in
 [research 01 §4](../source-contract/research/01-mapping-language-reference.md).
@@ -73,6 +80,16 @@ The full list, with `path:line` evidence for each gap, is in
   fixed values (spec §18).
 - **The Rules Database** (`save`, `export`, states, approvals) is design
   only; nothing was prototyped (spec §4).
+- **Register Custom Steps per source** (spec §11). The prototype's single
+  shared registry would let one source silently replace another's step once
+  `source run` loads every source.
+- **One descriptor per primitive** as the source of truth, from which the
+  schema, the validator and the Mapping Document are generated (spec §9). The
+  prototype spread each primitive over five places.
+- **Readers yield documents one at a time** (spec §8.1), so the zipped
+  Golden Copy can stream.
+- **Keep JSON `null` apart from missing** (spec §8.3). The prototype merged
+  them.
 
 ## What the prototype showed, briefly
 

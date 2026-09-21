@@ -104,7 +104,7 @@ _Avoid_: Inline code or expressions in a contract, a function written for one so
 
 **Named Convention**:
 A Primitive that stands for a published format convention used by two or more sources or columns, replacing a chain of small Primitives.
-_Avoid_: A home for one source's quirks, a large Primitive admitted without the four-part rule
+_Avoid_: A home for one source's quirks, a convention used by only one source or column, a convention without its own tests
 
 **Custom Step**:
 Code that belongs to one source, lives in that source's folder, is declared in its Source Contract, and takes declared inputs and returns a value, rows or violations without fetching, writing or calling MDM.

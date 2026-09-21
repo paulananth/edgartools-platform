@@ -154,12 +154,8 @@ no edit to any Clean MDM file.
   guard, so no-network must live below Python). Main finding for Codex: the adapter needs a kind per row, but
   C-J is a policy classification. [prototype/](prototype/README.md).
 - [Write the Source Contract spec and the Codex handover](issues/08-write-the-source-contract-spec-and-codex-handover.md)
-  — **spec written** ([`docs/specs/source-contract/spec.md`](../../docs/specs/source-contract/spec.md)),
-  self-contained for a contract author, with the GLEIF contract inline and
-  the prototype's limits stated. **Handover sent as one note**, GLEIF first,
-  5 blocking requests (versioning, kind at mapping time, `lei` format,
-  formatted targets, validation at registration). Six glossary terms added
-  (check 7).
+  — **spec written and handover sent as one note** (GLEIF first; 5 blocking
+  requests). [spec](../../docs/specs/source-contract/spec.md).
 
 ## Not yet specified
 

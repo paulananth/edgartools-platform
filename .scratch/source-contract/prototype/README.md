@@ -129,7 +129,8 @@ loopback only for the merge harness's throwaway Postgres. That guard does
 15. **YAML 1.2 alone does not give "every plain value is text".** Checked
     after the prototype: `ruamel.yaml` in 1.2 mode keeps `NO` as text, but
     reads `010` as 10, `2026-09-21` as a date and `1e3` as 1000.0. The
-    prototype's loader kept those numbers. The real loader must read plain
+    prototype's loader kept those numbers and turned dates back into text.
+    The real loader must read plain
     scalars as strings and let the schema type them (spec §6).
 
 ## Limits
