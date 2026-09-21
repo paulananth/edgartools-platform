@@ -24,6 +24,9 @@ no edit to any Clean MDM file.
   **Dataset Contract** (its MDM section, Clean MDM's own concept, unchanged),
   **Mapping Document** (generated from the contract, never hand-written).
   Avoid "source config", "pipeline config", "adapter config".
+- **Where contracts live** (ticket 06): the **Rules Database** is the
+  master; YAML is the authoring and export format; Clean MDM holds only
+  active versions.
 - **File shape** (Q9):
   `source` · `read` (Bronze Artifact → rows) · `silver` (declared table) ·
   `dataset` (Dataset Contract, `adapter` block included) · `tests`.
@@ -36,9 +39,9 @@ no edit to any Clean MDM file.
   ([mastering-policy-language map](../mastering-policy-language/map.md)).
 - **Acceptance checks** (Q5, Q6) — the destination is not reached until the
   spec makes each one checkable:
-  1. Adding a source changes only files in that source's own folder
-     (contract, fixtures, optional custom code). No engine or other-source
-     file changes.
+  1. Adding a source changes only that source's own versions in the Rules
+     Database and its own folder (fixtures, optional custom code). No engine
+     or other-source change.
   2. Deleting a source's folder breaks nothing else.
   3. An architecture test fails if engine code names any source.
   4. The runner reads local Bronze Artifacts only and refuses network access.
@@ -47,8 +50,8 @@ no edit to any Clean MDM file.
      asking a question.
   6. The Mapping Document is generated from the contract.
   7. Every term a contract uses is in `CONTEXT.md`.
-  8. One command checks a source end to end locally: validate → parse tests
-     → mapping tests → mastering tests → batch gate.
+  8. One command (`source prove`) checks a source end to end locally:
+     validate → parse tests → mapping tests → mastering tests → batch gate.
   9. A config error names the line and rule; a failed test shows expected
      against actual.
   10. GLEIF's contract fits in about 100 lines, tests included, and one
@@ -129,6 +132,20 @@ no edit to any Clean MDM file.
   earliest after); two custom-step shapes (value step, table reader) that
   reject bad records and stop on bugs.** The Mastering Policy adopts the
   same authoring convention (handover item).
+- [Decide how a Source Contract is registered and run](issues/06-decide-how-a-source-contract-is-registered-and-run.md)
+  — **the Rules Database is the master store; Clean MDM is what production
+  reads**: agents save validated immutable versions, prove them in a
+  Proving Run, and activate by registering into `mdm_v2`; identity-changing
+  versions need a Rule Activation Approval the agent explicitly asks for.
+  One `source run` command serves every source; `source prove` shares its
+  code. Lifecycle draft → proven → active → retired.
+- [Decide the test-case and batch-gate format](issues/05-decide-the-test-case-and-batch-gate-format.md)
+  — **named cases (parse / mapping / merge in one shape, seeds through the
+  same contract, identities named by the case) plus an optional attributed
+  snapshot; built-in and custom checks that report violations with row
+  keys; a pinned batch gate with zero-by-default limits and a `why:` for
+  each exception; `file:line`-first failures with exit codes and `--json`
+  as the primary, agent-facing output.**
 
 ## Not yet specified
 
