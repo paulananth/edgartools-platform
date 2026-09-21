@@ -70,6 +70,18 @@ _Avoid_: A per-source configuration table, a runtime switch, a place to store sa
 The declaration, per identifier namespace, of who issues the value, how many identities one value may name and how many values one identity may carry, the second handle used to detect a violation, and the measurement that verified the claim.
 _Avoid_: "The id is unique" as an unstated assumption, a name match as the claim, a contract without a measurement
 
+**Source Contract**:
+The one versioned file that declares everything about one source after its Bronze Artifacts exist: how they are read, the silver table they produce, the Dataset Contract that maps them into MDM, and the test cases and batch gate that prove it.
+_Avoid_: Source config, pipeline config, adapter config, a contract that also fetches bronze
+
+**Dataset Contract**:
+The part of a Source Contract that tells Clean MDM what a source's records are: its authority, record key, publication and time semantics, completeness scope, and the adapter mapping from silver columns to identity kind, identifiers, fields, profiles and relationships.
+_Avoid_: Mastering Policy (sameness and survivorship live there, not here), field-alias map as a separate document
+
+**Mapping Document**:
+The readable table, generated from a Source Contract, that traces every source path through its transforms to a silver column and on to an MDM kind and field, or marks it evidence only or custom.
+_Avoid_: A hand-written mapping spreadsheet, a document that can drift from what runs
+
 **MDM Change Journal**:
 The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
 _Avoid_: A second root-run authority, mutable log of only the latest result
