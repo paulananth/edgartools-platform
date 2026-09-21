@@ -108,6 +108,13 @@ no edit to any Clean MDM file.
   `lei` format, formatted relationship targets, deferral instead of silent
   drops) go to Codex as proposals.
   [research/01](research/01-mapping-language-reference.md).
+- [Can mastering test cases run on a laptop](issues/03-can-mastering-test-cases-run-locally.md)
+  — **yes, against a local Postgres 16 container** (no SQLite path):
+  seed identities through a first `MergeStage.apply()` batch; ~45-75 s for
+  five cases. Mastering cases can assert declared binds, new identities,
+  deferrals and surviving fields, **not engine-chosen bindings** — those
+  wait for automatic rules to be activatable. The runner needs a ≥30 s
+  readiness wait. [research/03](research/03-local-mastering-tests.md).
 
 ## Not yet specified
 
