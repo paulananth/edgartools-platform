@@ -1,0 +1,457 @@
+{
+ "before_ticket_10_parser_v2": {
+  "collapsed_rows": 17371,
+  "person_name_v2": {
+   "normalizer": "person-name@v2",
+   "accepted": 16175,
+   "rate": 0.93115
+  },
+  "names_with_a_digit": {
+   "rows": 505,
+   "distinct": 327,
+   "top": [
+    [
+     "Jeff Zhu(1)",
+     8
+    ],
+    [
+     "Aman Narang (4)",
+     6
+    ],
+    [
+     "Elena Gomez (5)",
+     6
+    ],
+    [
+     "Travis D. Stice(7)",
+     6
+    ],
+    [
+     "Brendan Brothers6",
+     5
+    ],
+    [
+     "David S. Sheerr (6)",
+     4
+    ],
+    [
+     "JOHN J. CHADWICK(5)",
+     4
+    ],
+    [
+     "MICHELLE H. HAIRSTON(5)",
+     4
+    ],
+    [
+     "Marissa B. Espineli (6)",
+     4
+    ],
+    [
+     "Sandra Gardiner(1)",
+     4
+    ],
+    [
+     "Zachary Kirkhorn(4)",
+     4
+    ],
+    [
+     "Andrew Baglino(5)",
+     4
+    ],
+    [
+     "Dhiaa M. Jamil(1)",
+     4
+    ],
+    [
+     "Lynn J. Good(1)",
+     4
+    ],
+    [
+     "Kodwo Ghartey-Tagoe(1)",
+     4
+    ]
+   ]
+  },
+  "executives_spelled_several_ways_by_a_marker": {
+   "executives": 119,
+   "extra_spellings": 127,
+   "examples": [
+    [
+     "Raymond F. Lancy",
+     "Raymond F. Lancy (1)"
+    ],
+    [
+     "George Zweier",
+     "George Zweier(8)"
+    ],
+    [
+     "Mitchell Gould",
+     "Mitchell Gould(10)"
+    ],
+    [
+     "Isaac Kalish",
+     "Isaac Kalish(8)"
+    ],
+    [
+     "Hobart C. Kalkstein",
+     "Hobart C. Kalkstein(3)"
+    ],
+    [
+     "Daniel Pinto11",
+     "Daniel Pinto7",
+     "Daniel Pinto8"
+    ],
+    [
+     "Troy Rohrbaugh10",
+     "Troy Rohrbaugh7"
+    ],
+    [
+     "Bradley K. Blackwell",
+     "Bradley K. Blackwell(4)"
+    ]
+   ]
+  },
+  "person_name_v2_rejected_top": [
+   [
+    "Dr. Leighton",
+    16
+   ],
+   [
+    "Mr. McGowan",
+    16
+   ],
+   [
+    "Mr. Karon",
+    16
+   ],
+   [
+    "Catherine L. Hughes –",
+    14
+   ],
+   [
+    "Peter D. Thompson –",
+    14
+   ],
+   [
+    "Mr. Joseph",
+    14
+   ],
+   [
+    "Mr. Sundaram",
+    14
+   ],
+   [
+    "José R. Mas",
+    12
+   ],
+   [
+    "Linda Marbán, Ph.D.",
+    10
+   ],
+   [
+    "Manuel C. Alves Aivado, M.D., Ph.D.",
+    10
+   ],
+   [
+    "Kieran M. O’Sullivan",
+    9
+   ],
+   [
+    "Scott L. D’Angelo",
+    9
+   ],
+   [
+    "Sarah Gheuens, M.D., Ph.D.",
+    9
+   ],
+   [
+    "Jeff Zhu(1)",
+    8
+   ],
+   [
+    "Jeffrey H. Duncan V.P.-Manufacturing & Engineering",
+    7
+   ],
+   [
+    "Max P. Bowman, VP/",
+    6
+   ],
+   [
+    "Luis A. Müller",
+    6
+   ],
+   [
+    "Jeffrey H. Duncan V.P. - Manufacturing & Engineering",
+    6
+   ],
+   [
+    "Fredrik Nihlén",
+    6
+   ],
+   [
+    "Aman Narang (4)",
+    6
+   ],
+   [
+    "Elena Gomez (5)",
+    6
+   ],
+   [
+    "Gilmore O’Neill, M.B., M.M.Sc.",
+    6
+   ],
+   [
+    "David Chang, M.D., Ph.D.",
+    6
+   ],
+   [
+    "John Kastelein, M.D., Ph.D. FESC",
+    6
+   ],
+   [
+    "Anthony M. D’Iorio",
+    6
+   ],
+   [
+    "Travis D. Stice(7)",
+    6
+   ],
+   [
+    "Kaes Van’t Hof",
+    6
+   ],
+   [
+    "Member of the",
+    5
+   ],
+   [
+    "Charles J. Hardin, VP/Sales",
+    5
+   ],
+   [
+    "of UMI",
+    5
+   ],
+   [
+    "William Pate –",
+    5
+   ],
+   [
+    "William Monteleone –",
+    5
+   ],
+   [
+    "Luke D’Angelo",
+    5
+   ],
+   [
+    "Brendan Brothers6",
+    5
+   ],
+   [
+    "Phillip “Ben” Berry",
+    5
+   ],
+   [
+    "Tae‑Sik Yoon",
+    5
+   ],
+   [
+    "VP/Sales",
+    4
+   ],
+   [
+    "Jr., VP/",
+    4
+   ],
+   [
+    "Lynn M. Bamford –",
+    4
+   ],
+   [
+    "K. Christopher Farkas –",
+    4
+   ]
+  ]
+ },
+ "after_ticket_26_parser_v3": {
+  "collapsed_rows": 17387,
+  "person_name_v2": {
+   "normalizer": "person-name@v2",
+   "accepted": 16873,
+   "rate": 0.97044
+  },
+  "names_with_a_digit": {
+   "rows": 0,
+   "distinct": 0,
+   "top": []
+  },
+  "executives_spelled_several_ways_by_a_marker": {
+   "executives": 0,
+   "extra_spellings": 0,
+   "examples": []
+  },
+  "person_name_v2_rejected_top": [
+   [
+    "Dr. Leighton",
+    16
+   ],
+   [
+    "Mr. McGowan",
+    16
+   ],
+   [
+    "Mr. Karon",
+    16
+   ],
+   [
+    "Mr. Joseph",
+    14
+   ],
+   [
+    "Mr. Sundaram",
+    14
+   ],
+   [
+    "José R. Mas",
+    12
+   ],
+   [
+    "Linda Marbán, Ph.D.",
+    10
+   ],
+   [
+    "Manuel C. Alves Aivado, M.D., Ph.D.",
+    10
+   ],
+   [
+    "Kieran M. O’Sullivan",
+    9
+   ],
+   [
+    "Scott L. D’Angelo",
+    9
+   ],
+   [
+    "Sarah Gheuens, M.D., Ph.D.",
+    9
+   ],
+   [
+    "Luis A. Müller",
+    6
+   ],
+   [
+    "Fredrik Nihlén",
+    6
+   ],
+   [
+    "Gilmore O’Neill, M.B., M.M.Sc.",
+    6
+   ],
+   [
+    "David Chang, M.D., Ph.D.",
+    6
+   ],
+   [
+    "John Kastelein, M.D., Ph.D. FESC",
+    6
+   ],
+   [
+    "Anthony M. D’Iorio",
+    6
+   ],
+   [
+    "Kaes Van’t Hof",
+    6
+   ],
+   [
+    "Member of the",
+    5
+   ],
+   [
+    "of UMI",
+    5
+   ],
+   [
+    "Luke D’Angelo",
+    5
+   ],
+   [
+    "Phillip “Ben” Berry",
+    5
+   ],
+   [
+    "Tae‑Sik Yoon",
+    5
+   ],
+   [
+    "Richard Coté",
+    4
+   ],
+   [
+    "UTSC, and",
+    4
+   ],
+   [
+    "of the Company and State Bank",
+    4
+   ],
+   [
+    "the Company and State Bank",
+    4
+   ],
+   [
+    "ROBERT T. O’SHAUGHNESSY",
+    4
+   ],
+   [
+    "L’Sheryl D. Hudson",
+    4
+   ],
+   [
+    "Operations and Supply Chain",
+    4
+   ],
+   [
+    "Scientist and",
+    4
+   ],
+   [
+    "of Production and",
+    4
+   ],
+   [
+    "Elon Musk Technoking of Tesla and",
+    4
+   ],
+   [
+    "Todd C. Brady, M.D., Ph.D.",
+    4
+   ],
+   [
+    "Mitchell Jones, M.D., Ph.D.",
+    4
+   ],
+   [
+    "Vojislav Vukovic, M.D., Ph.D.",
+    4
+   ],
+   [
+    "Mr. Dorsey",
+    4
+   ],
+   [
+    "Ms. Ahuja",
+    4
+   ],
+   [
+    "Ms. Whiteley",
+    4
+   ],
+   [
+    "Richard Chen, M.D., M.S.",
+    4
+   ]
+  ]
+ }
+}

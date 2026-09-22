@@ -309,6 +309,31 @@ class TestTicket26Residues:
         """Only digits and single lowercase letters mark footnotes."""
         assert _names([FakeEntry("Robert (Bob) Smith", "", 2023)])[0][0] == "Robert (Bob) Smith"
 
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            # A superscript the HTML flattened to a plain digit: 56 rows of the
+            # ticket 26 re-parse. It gave one executive a different spelling in
+            # each year's filing ("Daniel Pinto7" / "Pinto8" / "Pinto11").
+            ("Brendan Brothers6", "Brendan Brothers"),
+            ("Marianne Lake11", "Marianne Lake"),
+            ("Charles R. Schwab5", "Charles R. Schwab"),
+            ("Walter W. Bettinger II6", "Walter W. Bettinger II"),
+            ("Terry D. Peterson 5", "Terry D. Peterson"),
+        ],
+    )
+    def test_a_flattened_superscript_digit_is_stripped(self, raw, expected):
+        assert _names([FakeEntry(raw, "", 2023)])[0][0] == expected
+
+    def test_digits_inside_a_position_are_not_markers(self):
+        """Only a digit glued to a word, or a lone trailing one, is a marker."""
+        repaired = _repair_entry_names([FakeEntry("Ana P. Reyes", "Chief Executive Officer", 2023)])
+        assert repaired[0].name == "Ana P. Reyes"
+        from edgar_warehouse.parsers.proxy_fundamentals import _strip_name_markers
+
+        assert _strip_name_markers("Section 16 Officer") == "Section 16 Officer"
+        assert _strip_name_markers("1st VP/") == "1st VP/"
+
     def test_a_marker_list_is_stripped(self):
         assert _names([FakeEntry("Robert M. Robuck (6, 7)", "", 2023)])[0][0] == "Robert M. Robuck"
 

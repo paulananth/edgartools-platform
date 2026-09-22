@@ -1,0 +1,309 @@
+{
+ "select": {
+  "bronze_primary_html_accessions": 26214,
+  "ciks": 4437,
+  "ciks_without_a_submissions_snapshot": 3,
+  "accessions_with_unknown_form": 8,
+  "form_source": {
+   "submissions": 20200,
+   "daily_index": 6006
+  },
+  "daily_index_files": 75,
+  "unknown_form_upload_months": {
+   "2026-07": 8
+  },
+  "proxy_forms_selected": {
+   "DEF 14A": 3806,
+   "PRE 14A": 997,
+   "DEFA14A": 4451
+  },
+  "selected": 9254,
+  "accessions_with_more_than_one_primary_html": 0,
+  "top_forms": [
+   [
+    "8-K",
+    16521
+   ],
+   [
+    "DEFA14A",
+    4451
+   ],
+   [
+    "DEF 14A",
+    3806
+   ],
+   [
+    "PRE 14A",
+    997
+   ],
+   [
+    "8-K/A",
+    383
+   ],
+   [
+    "PX14A6G",
+    15
+   ],
+   [
+    "10-Q",
+    10
+   ],
+   [
+    "<unknown>",
+    8
+   ],
+   [
+    "SC 13G/A",
+    4
+   ],
+   [
+    "SD",
+    4
+   ],
+   [
+    "424B2",
+    4
+   ],
+   [
+    "10-K",
+    3
+   ],
+   [
+    "CORRESP",
+    3
+   ],
+   [
+    "FWP",
+    2
+   ],
+   [
+    "S-8",
+    2
+   ]
+  ]
+ },
+ "filings_parsed": 9254,
+ "filings_with_a_summary_compensation_table": 2212,
+ "parse_errors": 0,
+ "extract_errors": 0,
+ "landing_rows": 17469,
+ "collapsed_rows": 17387,
+ "collapse_removed": 82,
+ "raw_entries": 18044,
+ "rows_dropped_as_unattributable_by_repair": 575,
+ "research_01_check": {
+  "plausible": 17292,
+  "n": 17387,
+  "rate": 0.99454
+ },
+ "research_10_check": {
+  "plausible": 17370,
+  "n": 17387,
+  "rate": 0.99902
+ },
+ "before_repair_research_10_check": {
+  "plausible": 8683,
+  "n": 18044,
+  "rate": 0.48121
+ },
+ "residual_footnote_marker_in_name": {
+  "rows": 0,
+  "rate": 0.0,
+  "top": []
+ },
+ "residual_trailing_hyphen_fragment": {
+  "rows": 0,
+  "rate": 0.0,
+  "top": []
+ },
+ "remaining_implausible_distinct": 44,
+ "remaining_implausible_top": [
+  [
+   "Member of the",
+   5
+  ],
+  [
+   "of UMI",
+   5
+  ],
+  [
+   "UTSC, and",
+   4
+  ],
+  [
+   "of the Company and State Bank",
+   4
+  ],
+  [
+   "the Company and State Bank",
+   4
+  ],
+  [
+   "Operations and Supply Chain",
+   4
+  ],
+  [
+   "Scientist and",
+   4
+  ],
+  [
+   "of Production and",
+   4
+  ],
+  [
+   "Elon Musk Technoking of Tesla and",
+   4
+  ],
+  [
+   "Finance and",
+   3
+  ],
+  [
+   "Label and Graphic",
+   3
+  ],
+  [
+   "of the Company and the Bank",
+   3
+  ],
+  [
+   "Joseph W. LoganSales and CorporateMarketing",
+   3
+  ],
+  [
+   "Joseph W. Logan Sales and",
+   3
+  ],
+  [
+   "of the",
+   3
+  ],
+  [
+   "and Information Solutions",
+   2
+  ],
+  [
+   "Allan L. Bridgford Member of the",
+   2
+  ],
+  [
+   "Gary D. FieldsSpecial Advisor to the",
+   2
+  ],
+  [
+   "Good Times Burger and Frozen Custard",
+   2
+  ],
+  [
+   "of Finance",
+   2
+  ],
+  [
+   "and Legal",
+   2
+  ],
+  [
+   "of Mercantile",
+   2
+  ],
+  [
+   "Richard G. Johnson Finance Advisor and",
+   2
+  ],
+  [
+   "Jennifer Lew.Executive",
+   2
+  ],
+  [
+   "and Development",
+   2
+  ],
+  [
+   "Operational and",
+   1
+  ],
+  [
+   "Manufacturing and Engineering",
+   1
+  ],
+  [
+   "John Donahoe IIPresident and",
+   1
+  ],
+  [
+   "Strategy and Transformation",
+   1
+  ],
+  [
+   "Refining and Logistics",
+   1
+  ],
+  [
+   "Operations, Good Times Burger and Frozen Custard",
+   1
+  ],
+  [
+   "and Culture",
+   1
+  ],
+  [
+   "and Technical Operations",
+   1
+  ],
+  [
+   "and Current",
+   1
+  ],
+  [
+   "Aidos ZhumagulovAdvisor to the",
+   1
+  ],
+  [
+   "Pierce H. Norton IIPresident and",
+   1
+  ],
+  [
+   "Mercantile and of Mercantile",
+   1
+  ],
+  [
+   "and Innovation",
+   1
+  ],
+  [
+   "Energy Storage and Business Development",
+   1
+  ],
+  [
+   "Square Lead and Infrastructure and Information Security Lead",
+   1
+  ],
+  [
+   "Strategy and Development",
+   1
+  ],
+  [
+   "and Divestitures and Planning",
+   1
+  ],
+  [
+   "Consultant and",
+   1
+  ],
+  [
+   "of the Company",
+   1
+  ]
+ ],
+ "rows_by_form": {
+  "DEF 14A": 15051,
+  "PRE 14A": 2324,
+  "DEFA14A": 12
+ },
+ "hosts_contacted": {
+  "edgartools-prod-bronze-690839588395.s3.amazonaws.com": 503197
+ },
+ "sec_requests": 0,
+ "hand_read_sample_size": 60,
+ "seed": 20260921
+}

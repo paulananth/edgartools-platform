@@ -138,10 +138,17 @@ _TITLE_WORDS = frozenset(
 # parenthesised nickname ("Robert (Bob) Smith") is left alone.
 _SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
 _MARKER_ITEM = rf"(?:\d+|[a-z]|[{_SUPERSCRIPT_DIGITS}]+)"
+#
+# A superscript the HTML flattened to a plain digit is the same marker:
+# "Brendan Brothers6", "Walter W. Bettinger II6", "Terry D. Peterson 5" (56
+# rows). Only one or two digits glued to the end of a word, or a lone trailing
+# number, count, so "Section 16 Officer" and "1st VP/" keep their digits.
 _NAME_MARKER_RE = re.compile(
     rf"\(\s*{_MARKER_ITEM}(?:\s*[,;]\s*{_MARKER_ITEM})*\s*\)"
     rf"|[{_SUPERSCRIPT_DIGITS}]+"
-    r"|[*†‡§¶]+",
+    r"|[*†‡§¶]+"
+    r"|(?<=[A-Za-z.])\d{1,2}(?=[\s,]|[A-Z]|$)"
+    r"|(?<=\s)\d{1,2}\s*$",
     re.IGNORECASE,
 )
 

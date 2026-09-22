@@ -1,7 +1,7 @@
 # Strip footnote markers and title fragments from DEF 14A executive names
 
 Type: task
-Status: open
+Status: resolved 2026-09-22
 Blocked by: none — blocks DEF 14A's own Tier B measurement (backfill wave 4)
 
 ## Question
@@ -46,3 +46,64 @@ so this is about 20 minutes).
 Resolved when the re-parse shows footnote-marker and fragment residues at 0
 (or each remaining one explained), with research 01's check no worse than
 99.04% and a fresh hand-read sample.
+
+## Resolution — 2026-09-22
+
+Resolved on a second full local re-parse of bronze with the same method and
+inputs as ticket 10: 9,254 proxy filings, 0 parse or extract errors, S3
+bronze reads only, zero SEC requests, #680 collapse → 17,387 rows.
+[`research/26-reparse-results.json`](../research/26-reparse-results.json),
+[`research/26-measure.json`](../research/26-measure.json) (from
+[`26-measure.py`](../research/26-measure.py)),
+[`research/26-hand-read-sample.json`](../research/26-hand-read-sample.json).
+
+| Measure | Ticket 10 (parser v2) | Ticket 26 (parser v3) |
+|---|---|---|
+| Footnote markers left in the name | 462 (2.66%) | **0** |
+| Trailing title fragments | 128 (0.74%) | **0** |
+| Names carrying any digit | 505 | **0** |
+| One executive spelled several ways across a company's filings | 119 | **0** |
+| Research 01's check | 99.039% | **99.454%** |
+| Research 10's check | 99.850% | **99.902%** |
+| `person-name@v2` accepts | 93.1% | **97.0%** |
+| Distinct implausible values | 72 | 44 |
+
+Hand-read: the score stage's seeded 60-row draw over the new rows finds a
+real person in 60 of 60, none with a marker, fragment or digit.
+
+What changed in `edgar_warehouse/parsers/proxy_fundamentals.py`
+(`PARSER_VERSION` 2 → 3):
+
+- **Footnote markers anywhere in the cell**, including lists (`(6, 7)`) and
+  superscripts. The re-parse found a layout the ticket did not list: a
+  superscript the HTML flattened to a plain digit (`Brendan Brothers6`,
+  `Walter W. Bettinger II6`, 56 rows). It gave 119 executives a different
+  spelling in different years (`Daniel Pinto7` / `Pinto8` / `Pinto11`), so
+  it is stripped too. Stripping moved into `_split_name_from_title`, ahead
+  of the no-separator split, because the name is sliced from the cell.
+- **A trailing `Co-` or lone `-` starts the title**, anchored at the end of
+  the cell. The first re-parse left 8 rows of a second layout, the separator
+  in front of a position (`Walter Klemp - Executive Chair`), now stripped at
+  the cut.
+- **`VP`, `V.P.`, `SEVP` join the cut set only.** A pre-code
+  `/gof-refactor-reviewer` consult showed a word in both vocabularies can
+  never fire as a veto, and putting `VP` in the veto set would have
+  republished `Max P. Bowman`'s pay under the previous executive. The
+  camel-case vocabulary is now regex-escaped (`v.p` is its first entry with
+  a metacharacter). The consult found no refactor justified: the block is
+  one day old, from one commit.
+
+**Remaining, explained.** 95 rows (44 distinct) still fail research 01's
+check. They are all title text with no person in them, and none of them
+contains the three spellings this ticket named: wrapped continuations with
+no title word (`Member of the`, `of UMI`, `and Legal`), and names glued to
+an unlisted title (`Elon Musk Technoking of Tesla and`, `John Donahoe
+IIPresident and`). They are 0.55% of rows and left as they are.
+
+**Found, and split out:** `person-name@v2` rejects about 316 real names
+here: 150 with a degree suffix (`Linda Marbán, Ph.D.`), 88 with an accent
+(`José R. Mas`, `Luis A. Müller`), and 74 with a curly apostrophe
+(`Kieran M. O’Sullivan`). That is the normalizer's defect, not the
+parser's: [ticket 27](27-accept-accents-apostrophes-and-degrees-in-person-names.md).
+104 honorific-only names (`Mr. McGowan`) are correctly rejected, since they
+have no given name to key on.
