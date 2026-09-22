@@ -57,7 +57,12 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Decisions so far
 
-<!-- one line per resolved ticket -->
+- [Decide how a Dataset Contract version changes without re-binding every record](issues/01-decide-dataset-contract-versioning.md)
+  — **a mapping version is a column on the assertion, not part of its hashed
+  body; a re-read adds a row instead of rewriting one; two rows are kept, the
+  current and one backup, plus any a live decision still cites; registration
+  re-reads nothing by itself; and the identity parts of a contract may never
+  change within one `source_code`.** Migration 031 designed, not written.
 
 ## Not yet specified
 
