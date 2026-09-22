@@ -68,7 +68,7 @@
         "type": "object", "additionalProperties": false, "required": ["case", "fixture", "expect"],
         "properties": {
           "case": {"type": "string"},
-          "fixture": {"type": "string"},
+          "fixture": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}]},
           "given": {"type": "object", "additionalProperties": false, "properties": {"identities": {"type": "object"}}},
           "expect": {"type": "object", "additionalProperties": false,
                      "properties": {"silver": {"type": "object"}, "mdm": {"type": "array"}, "merge": {"type": "array"}}}

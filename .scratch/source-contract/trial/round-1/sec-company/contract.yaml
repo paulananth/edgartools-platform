@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=../../engine/contract.schema.json
+# Source Contract: SEC company profile (the header of a submissions JSON document, one per CIK).
+source: sec.company_profile
+version: "trial-1"
+bronze: { family: sec.submissions_company }
+
+read:
+  format: json                 # one JSON object per file = one document (no `records:`)
+  tables:
+    sec_company_profile:
+      each: "."
+      columns:
+        cik:                    { text: { path: cik, default: null } }
+        name:                   { text: { path: name, default: null } }
+        entity_type:            { text: { path: entityType, default: null } }
+        sic:                    { steps: [ { text: { path: sic, default: null } }, { empty_to_null: {} } ] }
+        sic_description:        { steps: [ { text: { path: sicDescription, default: null } }, { empty_to_null: {} } ] }
+        state_of_incorporation: { steps: [ { text: { path: stateOfIncorporation, default: null } }, { empty_to_null: {} } ] }
+        fiscal_year_end:        { text: { path: fiscalYearEnd, default: null } }
+        tickers:                { join: { each: tickers, parts: [ { text: { path: ".", default: "" } } ], separator: ",", default: null } }
+        exchanges:              { join: { each: exchanges, parts: [ { text: { path: ".", default: "" } } ], separator: ",", default: null } }
+        ticker_count:           { count: { each: tickers } }
+        exchange_count:         { count: { each: exchanges } }
+        business_city:          { steps: [ { text: { path: addresses.business.city, default: null } }, { empty_to_null: {} } ] }
+        business_state:         { steps: [ { text: { path: addresses.business.stateOrCountry, default: null } }, { empty_to_null: {} } ] }
+        former_names:           { join: { each: formerNames, parts: [ { text: { path: name, default: "" } } ], separator: "\n", default: null } }
+        former_name_count:      { count: { each: formerNames } }
+
+silver:
+  sec_company_profile:
+    key: [cik]
+    columns: { cik: string, name: string, entity_type: string, sic: string?, sic_description: string?, state_of_incorporation: string?,
+               fiscal_year_end: string?, tickers: string?, exchanges: string?, ticker_count: bigint, exchange_count: bigint,
+               business_city: string?, business_state: string?, former_names: string?, former_name_count: bigint }
+
+dataset:
+  table: sec_company_profile
+  contract:
+    provider: SEC
+    family: submissions
+    schema_version: sec-company-profile-trial-1
+    record_key: CIK
+    publication_key: submissions capture
+    effective_time: capture date
+    semantics: patch
+    adapter:
+      version: sec-company-profile-trial-1
+      kind_field: entity_type
+      kind_values: { operating: company }      # exact, no fallback: "other" (persons AND foreign private issuers) is not a Company
+      record_key: [cik]
+      identifiers: { sec_cik: cik }
+      fields: { name: name, sic: sic, state_of_incorporation: state_of_incorporation, fiscal_year_end: fiscal_year_end, tickers: tickers }
+      field_shape: nullable_text
+      source_record_provenance: true
+
+checks:
+  - not_null: { table: sec_company_profile, column: cik }
+  - unique:   { table: sec_company_profile, columns: [cik] }
+  - pattern:  { table: sec_company_profile, column: cik, regex: "^[0-9]{10}$" }
+  - not_null: { table: sec_company_profile, column: name }
+  - in_set:   { table: sec_company_profile, column: entity_type, values: [operating, other] }
+  - pattern:  { table: sec_company_profile, column: sic, regex: "^[0-9]{4}$" }
+  - pattern:  { table: sec_company_profile, column: fiscal_year_end, regex: "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])$" }
+  - pattern:  { table: sec_company_profile, column: state_of_incorporation, regex: "^[A-Z0-9]{2}$" }
+  - custom_check: { step: tickers_pair_with_exchanges@1, table: sec_company_profile, inputs: [ticker_count, exchange_count] }
+
+tests:
+  - case: an operating company with one ticker and one former name becomes a Company keyed by its CIK
+    fixture: fixtures/1001385.json
+    expect:
+      silver:
+        sec_company_profile:
+          - { cik: "0001001385", name: "NWPX Infrastructure, Inc.", entity_type: operating, sic: "3317", state_of_incorporation: OR,
+              fiscal_year_end: "1231", tickers: NWPX, exchanges: Nasdaq, ticker_count: 1, business_city: VANCOUVER, business_state: WA,
+              former_names: NORTHWEST PIPE CO, former_name_count: 1 }
+      mdm:
+        - { kind: company, identifiers: { sec_cik: "0001001385" }, fields: { name: "NWPX Infrastructure, Inc.", sic: "3317" } }
+  - case: three tickers on three exchanges are read as parallel lists, not the first item
+    fixture: fixtures/1075415.json
+    expect:
+      silver:
+        sec_company_profile:
+          - { cik: "0001075415", tickers: "DHC,DHCNI,DHCNL", exchanges: "Nasdaq,Nasdaq,Nasdaq", ticker_count: 3, exchange_count: 3 }
+      mdm:
+        - { kind: company, identifiers: { sec_cik: "0001075415" }, fields: { name: DIVERSIFIED HEALTHCARE TRUST, tickers: "DHC,DHCNI,DHCNL" } }
+  - case: a person filer (entityType other) has null fiscal year end, empty-string SIC and state, empty lists, and is not a Company
+    fixture: fixtures/1034380.json
+    expect:
+      silver:
+        sec_company_profile:
+          - { cik: "0001034380", name: HALBERT DAVID D, entity_type: other, sic: null, state_of_incorporation: null, fiscal_year_end: null,
+              tickers: null, exchanges: null, ticker_count: 0, business_city: null, business_state: null, former_names: null, former_name_count: 0 }
+      mdm:
+        - { kind: unsupported_identity_kind }
+  - case: a listed foreign private issuer is also entityType other, so it does not become a Company either
+    fixture: fixtures/1738699.json
+    expect:
+      silver:
+        sec_company_profile:
+          - { cik: "0001738699", entity_type: other, sic: "7374", state_of_incorporation: V8, tickers: "WKEY,WSKEF", exchanges: "Nasdaq,OTC" }
+      mdm:
+        - { kind: unsupported_identity_kind }
+  - case: an operating company with an empty-string state of incorporation reads it as null; two former names keep their order
+    fixture: fixtures/1819142.json
+    expect:
+      silver:
+        sec_company_profile:
+          - { cik: "0001819142", state_of_incorporation: null, former_names: "SES AI Corp\nIvanhoe Capital Acquisition Corp.", former_name_count: 2 }
+      mdm:
+        - { kind: company, identifiers: { sec_cik: "0001819142" }, fields: { name: SES AI Corp } }
+  - case: a record with a declared Steward binding is bound to that Company
+    fixture: fixtures/1001385.json
+    given:
+      identities:
+        nwpx: { fixture: fixtures/1001385.json, record: "0001001385" }
+    expect:
+      merge:
+        - { record: "0001001385", outcome: bound, to: nwpx }
+
+gate:
+  batch: { family: sec.submissions_company, select: all }
+  limits:
+    rows.sec_company_profile: { min: 400 }

@@ -86,7 +86,8 @@ A contract may use no other domain term (acceptance check 7).
 | retired | a newer version of the same source becomes active; kept for replay (ticket 06 Q3) | the activation that replaces it |
 
 A failed Proving Run leaves the version in draft. The failed run is kept as
-a record.
+a record. **A contract with no `gate` can never become proven**: passing
+cases alone leave it in draft (ticket 09 found the prototype said "proven").
 
 ### 4.3 Who activates
 
@@ -190,7 +191,7 @@ setting, and is not part of any contract.
 | `format` | Options | Produces |
 |---|---|---|
 | `xml` | `envelope: sgml_text` (take the `<XML>` block of a full SEC `.txt` submission and expose its header fields); `root: <tag>` (any other root gives zero rows); `on_parse_error: no_rows \| retry_without_control_chars` | one document |
-| `json` | `records: jsonl` (one document per line); `record_path: <path>` (the record inside each line) | one document per record |
+| `json` | none: the whole artifact is **one document** (e.g. one SEC company profile per file). `records: jsonl`: one document per line. `record_path: <path>`: the record inside each document | one document per artifact, or per line |
 | `csv` | header row, delimiter, encoding | one document per row, keyed by header names. **Decided (ticket 04), not prototyped** |
 | `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
 
@@ -209,6 +210,15 @@ Every reader produces the same tree, so one path form reads XML and JSON:
 - a namespace prefix is kept, as in `prefix:Name` (GLEIF's `gleif:conformity`).
 
 GLEIF's JSON already has this shape. XML is converted to it.
+
+**Plain JSON values sit at their key.** Most JSON has no `$`: in
+`{"cik": "0001001385", "tickers": ["DHC", "DHCNI"]}` the path is `cik`, not
+`cik.$`. `$` exists only where the source itself puts text under `$`
+(GLEIF) or where XML was converted. **`$` on a plain value is an error**
+("use `.` for the value itself"). An item of a list of plain values is
+read with `.`: `join: { each: tickers, parts: [ { text: { path: ".", default: "" } } ], … }`.
+(Ticket 09: the trial agent copied GLEIF's `path: $` onto a list of strings;
+the prototype silently gave `""` for every item.)
 
 ### 8.3 Paths
 
@@ -265,6 +275,9 @@ A column is exactly one of:
 - a Custom Step: `{ custom: { step: <name>@<n>, inputs: { … } } }`;
 - inside `custom.inputs` only: the name of a column already computed in the
   same row.
+
+A primitive without arguments is still a call with an empty map:
+`{ upper: {} }`, `{ ordinal: {} }`, `{ empty_to_null: {} }`.
 
 No string is ever run as code. `contains: "see remarks"` is a literal, and
 `regex:` is a literal pattern.
@@ -433,6 +446,10 @@ silver:
   finding 4).
 - A column that counts real-world records uses `bigint`, never a small
   integer (repo rule in `CLAUDE.md`).
+- A contract may declare **more than one silver table**. Only
+  `dataset.table` feeds MDM; the others are evidence. Use a child table for a
+  repeating group whose members carry their own attributes (for example
+  former names with their dates), instead of joining them into one column.
 - The table's physical schema and its collapse rule are generated from this
   block (map decision Q7). The collapse grammar (for example, the latest row
   per key by a declared order) is not yet fixed and was not prototyped.
@@ -464,9 +481,9 @@ rejection, is in
 | `version` | yes | adapter version. It enters every `assertion_id` (§23) |
 | `kind` \| `kind_field` + `kind_values` | one of them | a fixed kind, or an exact, case-sensitive lookup with no fallback |
 | `record_key` (+ `record_key_format`) | yes | list of silver columns. One part gives the plain value; several give a JSON array string |
-| `identifiers` (+ `identifier_formats`) | no | namespace → column. Only `sec_cik` exists as a format (gap G3) |
+| `identifiers` (+ `identifier_formats`) | no | namespace → column; `identifier_formats` is namespace → format. **A namespace is not a format.** Clean MDM's SEC Company source uses `identifiers: { cik: cik }` with `identifier_formats: { cik: sec_cik }` (`edgar_warehouse/mdm/clean/company_source.py:50-51`). Writing `sec_cik` as the namespace silently skips formatting (ticket 09). Only `sec_cik` exists as a format (gap G3) |
 | `fields` | no | MDM field → column. A name not in the Mastering Policy is evidence only |
-| `field_shape` | no | only `nullable_text` has an effect; any other value is silently ignored |
+| `field_shape` | no | one scalar at the top of the adapter: `field_shape: nullable_text` (every field must be text or null). Any other value is silently ignored |
 | `profiles` | no | Governed Role Profiles: `role` (literal), `authority` (literal), `registration` (column; null skips the profile), `valid_from` (column, required, time-zone aware), optional `jurisdiction`, `valid_to`, `fields` |
 | `relationships` | no | reported edges: `type` (literal, a Clean MDM relationship type), `target_key` (columns), `target_source` (literal source code), `valid_from` (column, required, time-zone aware), optional `scope` (literal), `valid_to`, `properties` |
 | `source_record_provenance` | no | **set it to `true`** (gap X3): without it, a re-ordered file mints new assertions |
@@ -489,14 +506,39 @@ validator checks it. Literal keys (`role`, `authority`, `type`,
   as snapshots, so emit the complete identifier, profile and relationship set
   on every row.
 
+### 13.2a Which fields a source can win
+
+A mapped field wins in MDM only if the **active Mastering Policy** ranks
+this source for that field of that kind (Field Survivorship). A field the
+policy does not rank for the source is kept as evidence only, and the
+Mapping Document says so. So a new source that should *win* a field needs
+**two** things: its own Source Contract versions, and a new Mastering Policy
+version that ranks it. The policy is a separate document in the Rules
+Database with its own approval (§4.3), not a file in the source folder.
+Acceptance check 1 covers the source's own versions. A policy change is a
+deliberate, separately approved step, because ranking a source changes
+other sources' winners.
+
 ### 13.3 Other Dataset Contract parts
 
 Only `family`, `schema_version`, `publication_families`,
 `publication_contract` and `registry_evidence` change behaviour. `provider`,
 `record_key`, `publication_key`, `effective_time` and `semantics` are required
-but free text. The **PROPOSED** closed value set for each is in research 01
-§3. The Source Contract validator should enforce those sets once Codex
-accepts them. Never author `registry_evidence`: `register_dataset` adds it.
+but free text. Until Codex fixes closed value sets (research 01 §3,
+**PROPOSED**), write them like this:
+
+| Part | Write |
+|---|---|
+| `provider` | the authority's short name: `SEC`, `GLEIF`, `IAPD`, `PCAOB` |
+| `family` | the Clean MDM source-registry family the artifacts come from (for SEC submissions, `submissions`). It must match the registry, so it is checked at registration |
+| `schema_version` | `silver-<dataset table>-v<N>` |
+| `record_key` | the adapter's `record_key` in words, e.g. `zero-padded 10-digit CIK` |
+| `publication_key` | what identifies one publication, e.g. `capture run plus artifact sha256` |
+| `effective_time` | `unknown` (and give the policy `allow_unknown_effective`), or `publication` |
+| `semantics` | `patch` |
+| `completeness` | `bounded_sample`, `full_baseline` or `delta` |
+
+Never author `registry_evidence`: `register_dataset` adds it.
 
 ### 13.4 The identity kind (blocking for sources whose kind is decided by a rule)
 
@@ -516,6 +558,15 @@ subject for the same owner. Research 01 proposes `owner_cik` as the subject
 key, with `(accession, owner_index)` kept only as a provenance locator. This
 must be settled before Form 3/4/5 goes live (§25 item 7).
 
+**The same trap on a company source (ticket 09).** On SEC company
+profiles, `kind_values: { operating: company }` over `entityType` looks
+right, but `other` covers people **and** listed foreign companies (Wisekey,
+Brookfield Wealth Solutions, Oddity Tech in the 400-document batch). A row
+whose kind value is not in `kind_values` becomes a **deferred record**, and
+the Batch Gate counts it in `deferred`, whose limit is 0 unless declared
+with a `why:`. So a contract that maps most of its batch away cannot become
+proven by accident: it has to say how many rows it leaves out, and why.
+
 Until Codex accepts one of these, a source whose kind needs a rule must not
 go live. Form 3/4/5 is also blocked by the open Person projection and privacy
 item (gap F6; policy language §15 item 4). Its parse and mapping cases run
@@ -533,6 +584,10 @@ checks:
   - custom_check: { step: name@n, table, inputs: [<column>, …] }
 ```
 
+How `null` counts: `not_null` counts `null` and `""`; `in_set` counts `null`
+as a violation unless `null` is one of the values; `pattern` skips `null`;
+`unique` treats `null` as a value like any other.
+
 A check is named in the gate as `check.<name>(<argument>)`, where the
 argument is the column, the comma-joined columns, or the step:
 `check.not_null(lei)`, `check.unique(accession_number,owner_index)`,
@@ -547,7 +602,7 @@ any violation fails the case) and in the Batch Gate (where each has a limit).
 ```yaml
 tests:
   - case: <what this proves, in words>
-    fixture: fixtures/<file>
+    fixture: fixtures/<file>                 # or a list: [fixtures/a.json, fixtures/b.json]
     given:
       identities:
         <name>: { fixture: fixtures/<file>, record: <record key> }
@@ -563,6 +618,10 @@ tests:
 - **Named Cases are required.** Each known trap gets one: an object where a
   list is expected, a row the `where` filter drops, a value next to a
   footnote.
+- **`fixture`** is one file or a list of files. For a family with one
+  document per artifact, a case about two records lists two files. Rows are
+  concatenated in list order. A fixture that does not exist makes the
+  contract invalid (exit 2).
 - **`evidence_only`** lists silver columns that must *not* appear as MDM
   fields (ticket 05 Q2). Not prototyped.
 - **`given.identities` are seeds.** They go through the same contract and a
@@ -606,6 +665,14 @@ gate:
 - **`rejected`, `type_errors`, `deferred` and every check default to 0.** A
   looser limit needs `why:`; the schema refuses one without it. `rows` has no
   default: it is judged only when a `min` is declared.
+- **Limit names are a closed set**: `rejected`, `type_errors`, `deferred`,
+  `rows.<a declared silver table>`, and `check.<a declared check>`. Any other
+  name makes the contract invalid, with a "did you mean" hint. (Ticket 09:
+  the prototype silently ignored an unknown `deferred:` limit, so a reviewer
+  would have believed a limit was enforced.)
+- A `rows` floor is judged on the pinned batch the proof names. For a
+  growing family, set it to the batch the version is proven on; a later
+  Proving Run on a larger batch is a new proof.
 - **`max`** is an absolute count, **`max_pct`** a percentage of the rows in
   the metric's table (for `rejected` and `type_errors`, of all rows plus the
   rejected ones), and **`min`** an absolute floor.

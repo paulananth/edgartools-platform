@@ -103,7 +103,7 @@ def run_merge_case(engine, case: dict, policy: dict, pg) -> list[dict]:
                                                as_of=AS_OF, **kw)
 
     def assertions(fixture):
-        return [a for a in engine.to_assertions(engine.parse((engine.dir / fixture).read_bytes())) if "deferred" not in a]
+        return [a for a in engine.to_assertions(engine.parse_fixtures(fixture)) if "deferred" not in a]
 
     named: dict[str, str] = {}
     seed_assertions, identities, decisions = [], [], []

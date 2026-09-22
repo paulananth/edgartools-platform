@@ -253,6 +253,8 @@ def resolve(node: Any, path: str) -> Any:
     for i, key in enumerate(parts):
         if isinstance(cur, list):
             raise PathError(f"path {path!r} crosses a repeating group at {'.'.join(parts[:i]) or '.'}; use each")
+        if key == "$" and cur is not MISSING and not isinstance(cur, dict):
+            raise PathError(f"path {path!r}: '$' reads an element's text, but this value is a plain {type(cur).__name__}; use '.' for the value itself")
         if not isinstance(cur, dict) or key not in cur:
             return MISSING
         cur = cur[key]
@@ -502,6 +504,14 @@ class Engine:
                                       f"read and silver disagree: missing {sorted(missing)} extra {sorted(extra)}")
             for cname, expr in table["columns"].items():
                 self._check_expr(expr, f"{base}/columns/{cname}")
+        gate = self.contract.get("gate") or {}
+        known = {"rejected", "type_errors", "deferred"} | {f"rows.{t}" for t in self.contract["silver"]} \
+            | {f"check.{check_label(ch)}" for ch in (self.contract.get("checks") or [])}
+        for lname in (gate.get("limits") or {}):
+            if lname not in known:
+                hint = difflib.get_close_matches(lname, known, n=1)
+                raise ContractInvalid(f"/gate/limits/{lname}", "limit-known",
+                                      f"no metric named {lname!r}" + (f" — did you mean {hint[0]!r}?" if hint else f"; metrics: {sorted(known)}"))
         for lname, spec in (self.contract.get("lookups") or {}).items():
             if spec.get("family") not in self.families:
                 raise ContractInvalid(f"/lookups/{lname}/family", "family-known", f"unknown artifact family {spec.get('family')!r}")
@@ -655,6 +665,17 @@ class Engine:
                     out[tname].append(row)
         return out
 
+    def parse_fixtures(self, fixture) -> dict[str, list[dict]]:
+        """A case's fixture is one file or a list of files; rows are concatenated in order."""
+        out: dict[str, list[dict]] = {t: [] for t in self.contract["read"]["tables"]}
+        for f in ([fixture] if isinstance(fixture, str) else fixture):
+            path = self.dir / f
+            if not path.is_file():
+                raise ContractInvalid("/tests", "fixture-exists", f"fixture {f!r} does not exist in the source folder")
+            for t, rows in self.parse(path.read_bytes()).items():
+                out[t].extend(rows)
+        return out
+
     def _check_types(self, tname, row):
         for col, typ in self.contract["silver"][tname]["columns"].items():
             nullable = typ.endswith("?")
@@ -781,11 +802,10 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
     for i, case in enumerate(c.get("tests") or []):
         ptr = f"/tests/{i}"
         results["cases"] += 1
-        fx = engine.dir / case["fixture"]
-        raw = fx.read_bytes()
-        fixture_digests[case["fixture"]] = hashlib.sha256(raw).hexdigest()
         engine.type_errors.clear()
-        silver = engine.parse(raw)
+        silver = engine.parse_fixtures(case["fixture"])
+        for f in ([case["fixture"]] if isinstance(case["fixture"], str) else case["fixture"]):
+            fixture_digests[f] = hashlib.sha256((engine.dir / f).read_bytes()).hexdigest()
         for te in engine.type_errors:
             failures.append({"kind": "silver-type", "pointer": te["pointer"], "case": case["case"], "message": te["message"],
                              "fixture": case["fixture"]})
@@ -837,7 +857,9 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
     engine.purity_check = engine.fixture_mode = False
     if gate and not failures:
         results["gate"] = run_gate(engine, bronze_root, failures)
-    results["state"] = "proven" if not failures and (gate or not c.get("gate")) else "draft"
+    results["state"] = "proven" if not failures and gate and c.get("gate") else "draft"
+    if not failures and not c.get("gate"):
+        results["note"] = "cases passed; the contract declares no gate, so it cannot become proven"
     if results["state"] == "draft" and not failures and c.get("gate") and not gate:
         results["note"] = "cases passed; the gate was not run, so the version stays draft"
     return results
@@ -881,6 +903,10 @@ def run_gate(engine: Engine, bronze_root: Path | None, failures: list[dict]) -> 
     base_rows = sum(len(r) for r in silver.values())
     judge("rejected", len(engine.rejects), base_rows + len(engine.rejects), "/gate")
     judge("type_errors", len(engine.type_errors), base_rows + len(engine.type_errors), "/gate")
+    ds = engine.contract.get("dataset")
+    if ds:
+        mapped = engine.to_assertions(silver)
+        judge("deferred", sum(1 for a in mapped if "deferred" in a), len(mapped), "/gate")
     for t, rows in silver.items():
         lim = limits.get(f"rows.{t}")
         if lim:
@@ -914,12 +940,20 @@ def mapdoc(engine: Engine) -> str:
     ds = (c.get("dataset") or {})
     adapter = (ds.get("contract") or {}).get("adapter") or {}
     targets: dict[tuple[str, str], str] = {}
+    policy_fields: set[str] = set()  # fields whose survivorship lists this source (Rules Database stand-in)
+    pol = HERE.parent / "policies" / "mastering-policy.yaml"
+    if pol.exists():
+        kinds = {adapter.get("kind")} | set((adapter.get("kind_values") or {}).values())
+        for kind, fields in (load_contract(pol)[0].get("fields") or {}).items():
+            if kind in kinds:
+                policy_fields |= {f for f, spec in fields.items() if c["source"] in (spec.get("sources") or [])}
     for col in adapter.get("record_key", []):
         targets[(ds.get("table"), col)] = "record key"
     for ns, col in (adapter.get("identifiers") or {}).items():
         targets[(ds.get("table"), col)] = f"identifier `{ns}`"
     for f, col in (adapter.get("fields") or {}).items():
-        targets[(ds.get("table"), col)] = (targets.get((ds.get("table"), col), "") + f" field `{f}`").strip()
+        label = f"field `{f}`" if f in policy_fields else f"field `{f}` — **evidence only**: the Mastering Policy gives `{c['source']}` no rank for it"
+        targets[(ds.get("table"), col)] = (targets.get((ds.get("table"), col), "") + " " + label).strip()
     if adapter.get("kind_field"):
         targets[(ds.get("table"), adapter["kind_field"])] = "identity kind"
     lines = [f"# Mapping Document — `{c['source']}` v{c['version']}", "",

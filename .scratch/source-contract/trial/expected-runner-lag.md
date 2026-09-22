@@ -22,3 +22,17 @@ other difficulty is scored as a **spec gap**.
 Sandbox facts the agent is given (not spec content): the runner command
 (`./source`), the family name `sec.submissions_company` and that it is
 registered in `families.local.yaml`, and where the batch data sits.
+
+## After round 1 (2026-09-21)
+
+- **L11 (found by the trial, not pre-registered):** with no `gate` declared,
+  the runner printed `version proven`. The spec (§4.2, §7) already required a
+  gate; the runner was wrong. Fixed before round 2.
+- **L5, partly fixed before round 2:** the `deferred` gate metric is now
+  counted (records the adapter defers). `evidence_only` and `collapse` remain
+  unimplemented.
+- **L10 fixed before round 2:** a missing fixture is now `INVALID` (exit 2).
+- Also fixed in the runner to match the round-1 spec fixes: `$` on a plain
+  value is an error; unknown gate limit names are invalid; `fixture` may be
+  a list; the Mapping Document marks fields the Mastering Policy does not rank
+  for the source as evidence only.
