@@ -208,6 +208,121 @@ class TestNameRepair:
             entries = [FakeEntry("Ana P. Reyes", "Chief Executive Officer", 2023), FakeEntry(cell, "", 2022)]
             assert [n for n, _, _ in _names(entries)] == ["Ana P. Reyes"] * 2
 
+
+class TestTicket26Residues:
+    """The three residues ticket 10's full bronze re-parse left behind.
+
+    Every ``raw`` below is a real ``exec_name`` value from that re-parse
+    (``research/10-reparse-results.json``), so these pin the exact layouts
+    that survived the first repair, not invented ones.
+    """
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            # 462 rows kept a marker: the name alone, marker glued or spaced.
+            ("Jeff Zhu(1)", "Jeff Zhu"),
+            ("Aman Narang (4)", "Aman Narang"),
+            ("Travis D. Stice(7)", "Travis D. Stice"),
+            ("JOHN J. CHADWICK(5)", "JOHN J. CHADWICK"),
+            ("Kodwo Ghartey-Tagoe(1)", "Kodwo Ghartey-Tagoe"),
+            ("R. Bryan Riggsbee (⁸)", "R. Bryan Riggsbee"),
+            ("R. Bryan Riggsbee⁸", "R. Bryan Riggsbee"),
+            # A marker sitting between the name and its title.
+            ("Jason Dies(1)Interim", "Jason Dies"),
+            ("Stephanie Williams (10)VP and", "Stephanie Williams"),
+            ("Jeffrey H. Duncan (5) V.P., Manufacturing & Engineering", "Jeffrey H. Duncan"),
+        ],
+    )
+    def test_footnote_markers_are_stripped_wherever_they_sit(self, raw, expected):
+        assert _names([FakeEntry(raw, "", 2023)])[0][0] == expected
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            # 128 rows kept the first half of "Co-CEO" or "- Chief ...".
+            ("Chi-Foon Chan Co-", "Chi-Foon Chan"),
+            ("TED SARANDOS co-", "TED SARANDOS"),
+            ("Aart J. de Geus Co-", "Aart J. de Geus"),
+            ("Aart J. de GeusCo-", "Aart J. de Geus"),
+            ("Lori Bisson -", "Lori Bisson"),
+            ("Emiliano Kargieman -", "Emiliano Kargieman"),
+            # The same separator, this time with the position behind it.
+            ("Walter Klemp - Executive Chair (8)", "Walter Klemp"),
+            ("Mitchell B. Goldsteen - Executive Chairman", "Mitchell B. Goldsteen"),
+            ("Ariel Porat - Former", "Ariel Porat"),
+        ],
+    )
+    def test_trailing_title_fragments_start_the_title(self, raw, expected):
+        assert _names([FakeEntry(raw, "", 2023)])[0][0] == expected
+
+    def test_a_cut_fragment_becomes_title_text(self):
+        """The fragment is the start of the position, so it joins the title."""
+        repaired = _repair_entry_names(
+            [FakeEntry("Chi-Foon Chan Co-", "", 2023), FakeEntry("Chief Executive Officer", "", 2022)]
+        )
+        assert [e.name for e in repaired] == ["Chi-Foon Chan"] * 2
+        assert repaired[0].title == "Co- Chief Executive Officer"
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            # 167 rows kept role text research 01's check already rejects.
+            ("Max P. Bowman, VP/", "Max P. Bowman"),
+            ("Charles J. Hardin, VP/Sales", "Charles J. Hardin"),
+            ("Jack B. Self, VP/Operations", "Jack B. Self"),
+            ("Gordon D. Wichman VP", "Gordon D. Wichman"),
+            ("John F. Quanci VP", "John F. Quanci"),
+            ("Geoffrey Davies VP &", "Geoffrey Davies"),
+            ("Geoffrey DaviesVP &", "Geoffrey Davies"),
+            ("Richard J. WehrleVP &", "Richard J. Wehrle"),
+            ("Jeffrey H. Duncan V.P.-Manufacturing & Engineering", "Jeffrey H. Duncan"),
+            ("Jeffrey H. Duncan V.P. - Manufacturing & Engineering", "Jeffrey H. Duncan"),
+        ],
+    )
+    def test_vp_spellings_open_a_title(self, raw, expected):
+        assert _names([FakeEntry(raw, "", 2023)])[0][0] == expected
+
+    @pytest.mark.parametrize("cell", ["VP/Sales", "1st VP/", "Jr., VP/", "SEVP and", "VP of Processing"])
+    def test_vp_only_cells_are_never_names(self, cell):
+        entries = [FakeEntry("Ana P. Reyes", "Chief Executive Officer", 2023), FakeEntry(cell, "", 2022)]
+        assert [n for n, _, _ in _names(entries)] == ["Ana P. Reyes"] * 2
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "Chi-Foon Chan",
+            "Jean-Luc Picard",
+            "Mary-Kate Olsen",
+            "Vipul Shah",
+            "Sevpal Singh",
+            "Coco Deveaux",
+            "Marco Vitti",
+        ],
+    )
+    def test_names_the_new_rules_must_not_cut(self, name):
+        """Hyphenated given names, and surnames that merely contain the new
+        vocabulary, survive the trailing-fragment and VP rules intact."""
+        assert _names([FakeEntry(name, "Chief Executive Officer", 2023)])[0][0] == name
+
+    def test_a_parenthesised_nickname_is_not_a_footnote_marker(self):
+        """Only digits and single lowercase letters mark footnotes."""
+        assert _names([FakeEntry("Robert (Bob) Smith", "", 2023)])[0][0] == "Robert (Bob) Smith"
+
+    def test_a_marker_list_is_stripped(self):
+        assert _names([FakeEntry("Robert M. Robuck (6, 7)", "", 2023)])[0][0] == "Robert M. Robuck"
+
+    def test_all_three_residues_in_one_cell(self):
+        """Real cell: a glued marker in front of the new vocabulary."""
+        assert _names([FakeEntry("Malcolm G. Cooke(3)V.P.", "", 2023)])[0][0] == "Malcolm G. Cooke"
+
+    @pytest.mark.parametrize("name", ["John SmithVIP", "Ana SilvaVIP", "Raj DeviVAP"])
+    def test_the_v_p_entry_is_not_a_wildcard(self, name):
+        """Regression: "v.p" is the first vocabulary entry carrying a regex
+        metacharacter. Unescaped, its dot matches any letter, so "SmithVIP"
+        would split into a name and a title that no proxy ever wrote."""
+        assert _names([FakeEntry(name, "Chief Executive Officer", 2023)])[0][0] == name
+
     def test_empty_input(self):
         assert _repair_entry_names([]) == []
 

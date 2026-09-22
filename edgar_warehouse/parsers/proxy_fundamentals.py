@@ -20,7 +20,7 @@ import re
 from typing import Any
 
 PARSER_NAME = "proxy_fundamentals_v1"
-PARSER_VERSION = "2"
+PARSER_VERSION = "3"
 
 # Standardised role codes inferred from raw title strings
 _ROLE_MAP = {
@@ -71,7 +71,13 @@ def _infer_role(title: str | None) -> str | None:
 # disqualifies it. It therefore also carries business-unit nouns that never
 # open a title. ``_TITLE_STARTS`` below is the *cut* set: where a title begins
 # inside a joined cell, so it carries abbreviations and opening words instead.
-# A word that belongs to both must be added to both.
+#
+# Only the cut set is load-bearing for a word in both. ``_split_name_from_title``
+# breaks at the first cut word, so every token that reaches the veto check has
+# already failed the cut test: the ~23 shared entries can never fire as a veto,
+# and the veto's effective vocabulary is the business-unit nouns below. A new
+# position word therefore belongs in ``_TITLE_STARTS``. The shared entries are
+# kept as cover in case that order ever changes.
 _TITLE_WORDS = frozenset(
     {
         "officer",
@@ -121,10 +127,30 @@ _TITLE_WORDS = frozenset(
     }
 )
 
-# A trailing reference marker on a name cell: "Yoor,(1)", "Smith*", "Smith (2)",
-# "Smith†". Stripped from the name only; the extractor already handles markers
-# inside dollar cells.
-_NAME_MARKER_RE = re.compile(r"[,\s]*(?:\((?:\d+|[a-z])\)|[*†‡§¶]+)\s*$", re.IGNORECASE)
+# A reference marker on a name cell: "Yoor,(1)", "Smith*", "Smith (2)",
+# "Smith†", "Riggsbee (⁸)", "Robuck (6, 7)". Stripped from the name only; the
+# extractor already handles markers inside dollar cells.
+#
+# Matched *anywhere* in the cell, not only at its end, because a marker also
+# lands between the name and its position ("Jason Dies(1)Interim", "Stephanie
+# Williams (10)VP and") — 462 rows of the bronze re-parse kept one (ticket 26).
+# Only digits, single lowercase letters and superscripts count, so a
+# parenthesised nickname ("Robert (Bob) Smith") is left alone.
+_SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+_MARKER_ITEM = rf"(?:\d+|[a-z]|[{_SUPERSCRIPT_DIGITS}]+)"
+_NAME_MARKER_RE = re.compile(
+    rf"\(\s*{_MARKER_ITEM}(?:\s*[,;]\s*{_MARKER_ITEM})*\s*\)"
+    rf"|[{_SUPERSCRIPT_DIGITS}]+"
+    r"|[*†‡§¶]+",
+    re.IGNORECASE,
+)
+
+# The first half of a position, cut at the name/title boundary: "Chi-Foon Chan
+# Co-" (of "Co-CEO"), "Lori Bisson -" (of "- Chief ..."), and the no-space
+# variant "Aart J. de GeusCo-". 128 rows kept one (ticket 26). Anchored at the
+# end, so "Co-Founder and" — a cell that is position text throughout — and a
+# hyphenated given name are both untouched.
+_TRAILING_FRAGMENT_RE = re.compile(r"(?:\s+|(?<=[a-z]))[Cc]o-\s*$|\s+-\s*$")
 
 # ASCII-only by design. A space-separated accented name is unaffected, because
 # the returned name is sliced from the original cell rather than rebuilt from
@@ -167,6 +193,12 @@ _TITLE_STARTS = (
     "counsel",
     "evp",
     "svp",
+    # 167 rows of the bronze re-parse kept these after a name (ticket 26).
+    # "v.p" covers "V.P." and "V.P.-Manufacturing" alike, because
+    # ``_is_title_word`` strips the trailing dot from each hyphen part.
+    "vp",
+    "v.p",
+    "sevp",
     "ceo",
     "cfo",
     "coo",
@@ -187,11 +219,19 @@ _TITLE_STARTS = (
 # forms. A case-insensitive version splits ordinary surnames at their own
 # letters — "Franco" at "co", "Whitehead" at "head" — which would invent
 # people out of halves of real names.
+#
+# Each form is escaped: "v.p" is the first entry carrying a metacharacter, and
+# an unescaped dot is a wildcard that would split "John SmithVIP" into a name
+# and a title.
 _CAMEL_TITLE_RE = re.compile(
     r"(?<=[a-z])(?=(?:"
     + "|".join(
         sorted(
-            {form for word in _TITLE_STARTS for form in (word.capitalize(), word.upper())},
+            {
+                re.escape(form)
+                for word in _TITLE_STARTS
+                for form in (word.capitalize(), word.upper())
+            },
             key=len,
             reverse=True,
         )
@@ -201,21 +241,37 @@ _CAMEL_TITLE_RE = re.compile(
 
 
 def _strip_name_markers(cell: str) -> str:
-    """Remove trailing footnote/reference markers from a name cell."""
-    previous = None
-    text = cell.strip()
-    while text != previous:
-        previous = text
-        text = _NAME_MARKER_RE.sub("", text).strip()
-    return text.rstrip(",").strip()
+    """Remove footnote/reference markers from a name cell, wherever they sit.
+
+    Each marker becomes a space, so a marker glued to the position that follows
+    it ("Jason Dies(1)Interim") leaves the two separable rather than fused.
+    """
+    text = _NAME_MARKER_RE.sub(" ", cell.strip())
+    return re.sub(r"\s+", " ", text).strip().rstrip(",").strip()
+
+
+def _cut_trailing_fragment(cell: str) -> tuple[str, str]:
+    """Split off a position's first half left at the end of a name cell."""
+    match = _TRAILING_FRAGMENT_RE.search(cell)
+    if not match:
+        return cell, ""
+    return cell[: match.start()].strip(), cell[match.start() :].strip()
 
 
 def _is_title_word(token: str, vocabulary: frozenset[str] | tuple[str, ...]) -> bool:
-    """True when a token, or either half of a hyphenated one, is position text."""
+    """True when a token, or any hyphen-separated part of one, is position text.
+
+    Each part is stripped of its own punctuation, so one "v.p" entry covers
+    both "V.P." and the hyphen-glued "V.P.-Manufacturing".
+    """
     bare = token.lower().strip(".'’-")
     if bare in vocabulary:
         return True
-    return any(part and part in vocabulary for part in bare.split("-"))
+    return any(
+        stripped and stripped in vocabulary
+        for part in bare.split("-")
+        if (stripped := part.strip(".'’"))
+    )
 
 
 def _split_name_from_title(cell: str) -> tuple[str | None, str]:
@@ -233,11 +289,23 @@ def _split_name_from_title(cell: str) -> tuple[str | None, str]:
     token already begins the position ("Andrew Chief Bearheart") is read as
     title text; that costs a rare real surname and is the safe direction,
     since inventing a person is worse than deferring one.
+
+    The cell is prepared in a fixed order, and the order is the rule: footnote
+    markers go first, because one sitting between the name and its position
+    hides the boundary the next two steps look for; then the no-separator
+    split; then a trailing position fragment, which is title text and is
+    returned as such.
     """
+    cell = _strip_name_markers(cell)
     cell = _CAMEL_TITLE_RE.sub(" ", cell.strip())
+    cell, fragment = _cut_trailing_fragment(cell)
+
+    def _title_only() -> tuple[None, str]:
+        return None, " ".join(part for part in (cell.strip(), fragment) if part)
+
     tokens = _NAME_TOKEN_RE.findall(cell)
     if not tokens:
-        return None, cell.strip()
+        return _title_only()
 
     cut = len(tokens)
     for index, token in enumerate(tokens):
@@ -246,13 +314,13 @@ def _split_name_from_title(cell: str) -> tuple[str | None, str]:
             break
 
     if cut < 2:
-        return None, cell.strip()
+        return _title_only()
 
     # A cut can still leave position text in front of it ("Marketing Services",
     # "Director of Wholesale Banking"). A person's name carries no position
     # vocabulary at all.
     if any(_is_title_word(token, _TITLE_WORDS) for token in tokens[:cut]):
-        return None, cell.strip()
+        return _title_only()
 
     name_tokens = tokens[:cut]
     # Rebuild from the original cell so punctuation and spacing survive.
@@ -266,10 +334,12 @@ def _split_name_from_title(cell: str) -> tuple[str | None, str]:
             trailing = ""
     else:
         trailing = ""
-    name = name.strip().rstrip(",").strip()
+    # A cut at the position word can leave the separator that introduced it
+    # ("Walter Klemp - Executive Chair"), which is punctuation, never a name.
+    name = name.strip().rstrip(",-–—:;/|").strip()
     if len(_NAME_TOKEN_RE.findall(name)) < 2:
-        return None, cell.strip()
-    return name, trailing
+        return _title_only()
+    return name, " ".join(part for part in (trailing, fragment) if part)
 
 
 def _find_token_start(cell: str, marker: str, preceding: list[str]) -> int:
@@ -302,7 +372,7 @@ def _repair_entry_names(entries: list[Any]) -> list[Any]:
             repaired[index] = dataclasses.replace(repaired[index], title=title)
 
     for entry in entries:
-        raw_name = _strip_name_markers(str(getattr(entry, "name", "") or ""))
+        raw_name = str(getattr(entry, "name", "") or "")
         raw_title = str(getattr(entry, "title", "") or "").strip()
         name, trailing = _split_name_from_title(raw_name)
 
