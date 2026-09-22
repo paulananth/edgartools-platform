@@ -21,7 +21,7 @@ What remains on this map is not decisions:
 [ticket 21](issues/21-extend-tier-b-labelling-to-97-5.md) is resolved — Tier B
 is qualified for 8-K — leaving code-owner tasks only:
 [27](issues/27-accept-accents-apostrophes-and-degrees-in-person-names.md)
-(`person-name@v2` rejects about 316 real DEF 14A names for accents, curly
+(`person-name@v2` rejects 314 real DEF 14A names for accents, curly
 apostrophes and degree suffixes; blocks DEF 14A's own Tier B measurement),
 [22](issues/22-decommission-legacy-person-code-and-tests.md) (decommission
 legacy Person code, gated on the Clean MDM consumer being live).
@@ -330,10 +330,12 @@ distinct-CIK count borrowed from a different study. Detail on
 - [Strip footnote markers and title fragments from DEF 14A executive names](issues/26-strip-footnote-markers-and-title-fragments-from-proxy-names.md)
   — resolved on a second full bronze re-parse (same 9,254 filings, zero SEC
   requests, 17,387 rows): footnote markers **462 → 0**, trailing fragments
-  **128 → 0**, names with any digit **505 → 0** (a flattened superscript,
-  `Brendan Brothers6`, which gave 119 executives several spellings), research
-  01's check **99.04% → 99.45%**, `person-name@v2` acceptance **93.1% →
-  97.0%**, hand-read 60/60. 95 rows of title text remain, explained. The
+  **128 → 0**, names with any digit **505 → 0** (including a flattened
+  superscript, `Brendan Brothers6`), executives spelled several ways **119 →
+  0**, research 01's check **99.04% → 99.45%**, `person-name@v2` acceptance
+  **93.1% → 97.0%**, hand-read name-clean **54/60 → 60/60** (51 new rows).
+  95 rows remain and are explained, 21 of them real executives glued to an
+  unknown title. The
   normalizer's own rejections of accents, curly apostrophes and degrees are
   [ticket 27](issues/27-accept-accents-apostrophes-and-degrees-in-person-names.md).
 

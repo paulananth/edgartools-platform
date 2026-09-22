@@ -135,7 +135,10 @@ _TITLE_WORDS = frozenset(
 # lands between the name and its position ("Jason Dies(1)Interim", "Stephanie
 # Williams (10)VP and") — 462 rows of the bronze re-parse kept one (ticket 26).
 # Only digits, single lowercase letters and superscripts count, so a
-# parenthesised nickname ("Robert (Bob) Smith") is left alone.
+# parenthesised nickname ("Robert (Bob) Smith") and a bracketed capital
+# initial ("Robert (B) Smith") are left alone. The pattern is deliberately
+# case *sensitive*: lettered markers in the corpus are all lowercase
+# ("Justin Cochrane(f)", 31 rows) and capital ones occur 0 times.
 _SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
 _MARKER_ITEM = rf"(?:\d+|[a-z]|[{_SUPERSCRIPT_DIGITS}]+)"
 #
@@ -148,8 +151,7 @@ _NAME_MARKER_RE = re.compile(
     rf"|[{_SUPERSCRIPT_DIGITS}]+"
     r"|[*†‡§¶]+"
     r"|(?<=[A-Za-z.])\d{1,2}(?=[\s,]|[A-Z]|$)"
-    r"|(?<=\s)\d{1,2}\s*$",
-    re.IGNORECASE,
+    r"|(?<=\s)\d{1,2}\s*$"
 )
 
 # The first half of a position, cut at the name/title boundary: "Chi-Foon Chan
@@ -157,7 +159,12 @@ _NAME_MARKER_RE = re.compile(
 # variant "Aart J. de GeusCo-". 128 rows kept one (ticket 26). Anchored at the
 # end, so "Co-Founder and" — a cell that is position text throughout — and a
 # hyphenated given name are both untouched.
-_TRAILING_FRAGMENT_RE = re.compile(r"(?:\s+|(?<=[a-z]))[Cc]o-\s*$|\s+-\s*$")
+#
+# After a space either case counts ("TED SARANDOS co-"). With no space it must
+# be a capital "Co-", as in ``_CAMEL_TITLE_RE``: a lowercase one would cut a
+# surname that ends in "co" ("Anthony Franco-" into "Anthony Fran"). The glued
+# lowercase form occurs 0 times in the corpus.
+_TRAILING_FRAGMENT_RE = re.compile(r"\s+[Cc]o-\s*$|(?<=[a-z])Co-\s*$|\s+-\s*$")
 
 # ASCII-only by design. A space-separated accented name is unaffected, because
 # the returned name is sliced from the original cell rather than rebuilt from

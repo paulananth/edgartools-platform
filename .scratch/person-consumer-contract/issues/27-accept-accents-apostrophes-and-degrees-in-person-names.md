@@ -9,17 +9,19 @@ as ticket 26 did.
 
 Nothing to decide. This was found by [ticket 26](26-strip-footnote-markers-and-title-fragments-from-proxy-names.md)'s
 re-parse ([`research/26-measure.json`](../research/26-measure.json),
+`person_name_v2_rejections_by_cause`, with the names in
 `person_name_v2_rejected_top`).
 
 After ticket 26, `person-name@v2` (`edgar_warehouse/domain/policy/person_name.py`,
 `is_person_name_candidate`) accepts 97.0% of the 17,387 DEF 14A rows. Of the
 514 it rejects, 95 are role text and 104 are honorific-only names
 (`Mr. McGowan`, which has no given name to key on). Both are correct
-rejections. About 316 others are real people:
+rejections. One more is uncategorised (`Micro Memory Bank`). The remaining
+314 are real people:
 
 | Cause | Rows | Examples |
 |---|---|---|
-| Degree or credential suffix | 150 | `Linda Marbán, Ph.D.`, `Manuel C. Alves Aivado, M.D., Ph.D.`, `Gilmore O’Neill, M.B., M.M.Sc.` |
+| Degree or credential suffix | 152 | `Linda Marbán, Ph.D.`, `Manuel C. Alves Aivado, M.D., Ph.D.`, `Gilmore O’Neill, M.B., M.M.Sc.` |
 | Accented or other non-ASCII letter | 88 | `José R. Mas`, `Luis A. Müller`, `Fredrik Nihlén`, `Tae‑Sik Yoon` |
 | Curly apostrophe | 74 | `Kieran M. O’Sullivan`, `Scott L. D’Angelo`, `Kaes Van’t Hof` |
 

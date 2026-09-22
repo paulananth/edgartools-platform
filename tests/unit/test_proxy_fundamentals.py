@@ -18,6 +18,7 @@ import pytest
 
 from edgar_warehouse.parsers.proxy_fundamentals import (
     _repair_entry_names,
+    _strip_name_markers,
     parse_proxy_fundamentals,
 )
 
@@ -276,6 +277,7 @@ class TestTicket26Residues:
             ("Geoffrey Davies VP &", "Geoffrey Davies"),
             ("Geoffrey DaviesVP &", "Geoffrey Davies"),
             ("Richard J. WehrleVP &", "Richard J. Wehrle"),
+            ("Jane Q. Doe SEVP and", "Jane Q. Doe"),
             ("Jeffrey H. Duncan V.P.-Manufacturing & Engineering", "Jeffrey H. Duncan"),
             ("Jeffrey H. Duncan V.P. - Manufacturing & Engineering", "Jeffrey H. Duncan"),
         ],
@@ -305,9 +307,20 @@ class TestTicket26Residues:
         vocabulary, survive the trailing-fragment and VP rules intact."""
         assert _names([FakeEntry(name, "Chief Executive Officer", 2023)])[0][0] == name
 
-    def test_a_parenthesised_nickname_is_not_a_footnote_marker(self):
-        """Only digits and single lowercase letters mark footnotes."""
-        assert _names([FakeEntry("Robert (Bob) Smith", "", 2023)])[0][0] == "Robert (Bob) Smith"
+    @pytest.mark.parametrize("name", ["Robert (Bob) Smith", "Robert (B) Smith"])
+    def test_a_parenthesised_nickname_or_initial_is_not_a_footnote_marker(self, name):
+        """Only digits and single *lowercase* letters mark footnotes, so a
+        bracketed capital initial survives ("Justin Cochrane(f)" is a marker)."""
+        assert _names([FakeEntry(name, "", 2023)])[0][0] == name
+
+    def test_a_lowercase_letter_marker_is_stripped(self):
+        assert _names([FakeEntry("Justin Cochrane(f)", "", 2023)])[0][0] == "Justin Cochrane"
+
+    @pytest.mark.parametrize("name", ["Anthony Franco-", "Joseph Marco-"])
+    def test_a_surname_ending_in_co_is_not_cut(self, name):
+        """Regression: a lowercase glued "co-" would cut "Franco" to "Fran",
+        the same hazard ``_CAMEL_TITLE_RE``'s case sensitivity exists to avoid."""
+        assert _names([FakeEntry(name, "", 2023)])[0][0] == name.rstrip("-")
 
     @pytest.mark.parametrize(
         ("raw", "expected"),
@@ -329,8 +342,6 @@ class TestTicket26Residues:
         """Only a digit glued to a word, or a lone trailing one, is a marker."""
         repaired = _repair_entry_names([FakeEntry("Ana P. Reyes", "Chief Executive Officer", 2023)])
         assert repaired[0].name == "Ana P. Reyes"
-        from edgar_warehouse.parsers.proxy_fundamentals import _strip_name_markers
-
         assert _strip_name_markers("Section 16 Officer") == "Section 16 Officer"
         assert _strip_name_markers("1st VP/") == "1st VP/"
 
