@@ -70,6 +70,10 @@ class PathError(Exception):
     pass
 
 
+class ArtifactRejected(Exception):
+    """A whole artifact the reader cannot use (e.g. a declared CSV header is absent); counted as rejected."""
+
+
 class Reject(Exception):
     """Raised by custom code to reject one record with a reason (ticket 04 Q4)."""
 
@@ -234,6 +238,14 @@ def read_artifact(read: dict, raw: bytes) -> list[tuple[Any, dict]]:
             if rec is not None:
                 docs.append((rec, {}))
         return docs
+    if fmt == "csv":  # one document per row; `columns` maps path-safe names to header text
+        import csv as _csv
+        text = raw.decode(read.get("encoding", "utf-8"))
+        rows = _csv.DictReader(io.StringIO(text, newline=""), delimiter=read.get("delimiter", ","))
+        missing = [h for h in read["columns"].values() if h not in (rows.fieldnames or [])]
+        if missing:
+            raise ArtifactRejected(f"header(s) {missing} not in this artifact")
+        return [({name: row.get(h) for name, h in read["columns"].items()}, {}) for row in rows]
     if fmt == "bytes":  # no engine parsing: every table uses a custom_reader (ticket 04 Q4)
         return [(None, {})]
     raise ContractInvalid("/read/format", "reader", f"unknown format {fmt!r}")
@@ -481,6 +493,12 @@ class Engine:
             e = errs[0]
             ptr = "/" + "/".join(str(p) for p in e.absolute_path)
             raise ContractInvalid(ptr, f"schema:{e.validator}", e.message)
+        rd = self.contract["read"]
+        if rd["format"] == "csv":
+            if not rd.get("columns"):
+                raise ContractInvalid("/read", "csv-columns", "a csv reader needs columns: { <path-safe name>: \"<header text>\" }")
+            for name in rd["columns"]:
+                self._check_path(name, f"/read/columns/{name}")
         for tname, table in self.contract["read"]["tables"].items():
             base = f"/read/tables/{tname}"
             if ("custom_reader" in table) == ("columns" in table):
@@ -629,7 +647,12 @@ class Engine:
     def parse(self, raw: bytes) -> dict[str, list[dict]]:
         sha = hashlib.sha256(raw).hexdigest()
         out: dict[str, list[dict]] = {t: [] for t in self.contract["read"]["tables"]}
-        for doc, header in read_artifact(self.contract["read"], raw):
+        try:
+            documents = read_artifact(self.contract["read"], raw)
+        except ArtifactRejected as r:
+            self.rejects.append({"table": "*", "artifact": sha, "reason": str(r)})
+            documents = []
+        for doc, header in documents:
             for tname, table in self.contract["read"]["tables"].items():
                 if "custom_reader" in table:
                     step = table["custom_reader"]["step"]

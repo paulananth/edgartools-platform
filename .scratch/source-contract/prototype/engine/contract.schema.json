@@ -13,12 +13,15 @@
     "read": {
       "type": "object", "additionalProperties": false, "required": ["format", "tables"],
       "properties": {
-        "format": {"enum": ["xml", "json", "bytes"]},
+        "format": {"enum": ["xml", "json", "csv", "bytes"]},
         "envelope": {"enum": ["sgml_text"]},
         "root": {"type": "string"},
         "on_parse_error": {"enum": ["no_rows", "retry_without_control_chars"]},
         "records": {"enum": ["jsonl"]},
         "record_path": {"type": "string"},
+        "columns": {"type": "object", "additionalProperties": {"type": "string"}},
+        "delimiter": {"type": "string", "maxLength": 1},
+        "encoding": {"type": "string"},
         "tables": {
           "type": "object", "minProperties": 1,
           "additionalProperties": {

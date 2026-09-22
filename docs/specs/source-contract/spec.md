@@ -192,8 +192,14 @@ setting, and is not part of any contract.
 |---|---|---|
 | `xml` | `envelope: sgml_text` (take the `<XML>` block of a full SEC `.txt` submission and expose its header fields); `root: <tag>` (any other root gives zero rows); `on_parse_error: no_rows \| retry_without_control_chars` | one document |
 | `json` | none: the whole artifact is **one document** (e.g. one SEC company profile per file). `records: jsonl`: one document per line. `record_path: <path>`: the record inside each document | one document per artifact, or per line |
-| `csv` | header row, delimiter, encoding | one document per row, keyed by header names. **Decided (ticket 04), not prototyped** |
+| `csv` | `columns: { <path-safe name>: "<header text>" }` (required), `delimiter` (default `,`), `encoding` (default `utf-8`) | one document per row, keyed by the names in `columns`; other headers are ignored. An artifact that lacks a listed header is rejected whole and counted in `rejected` |
 | `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
+
+**Why `csv` needs a `columns` map (proposed, ticket 09):** real headers are
+not path-safe. SEC Form ADV headers are `1A`, `1E1`, `1F1-Street 1`: they start
+with digits and contain spaces and hyphens, and paths allow no quoting. The
+map gives each header a path-safe name in one reviewable place:
+`columns: { legal_name: "1A", crd: "1E1", street_1: "1F1-Street 1" }`.
 
 A reader **yields documents one at a time** (an iterator, not a list), so a
 large artifact streams. A streaming reader for zipped JSON arrays (the full
@@ -991,9 +997,10 @@ Form 3/4/5 go-live.
 - **Merge cases:** `bound` checked declared bindings only; `new`, `deferred`
   and `quarantined` were not implemented.
 - **`source run`** and publication building (§18) were not prototyped.
-- **Decided but not prototyped:** the `csv` reader, the `deferred` gate
-  metric, `expect.mdm.evidence_only`, the collapse rule, and "JSON `null` is
-  not missing" (the prototype treated `null` as missing).
+- **Decided but not prototyped:** `expect.mdm.evidence_only`, the collapse
+  rule, and "JSON `null` is not missing" (the prototype treats `null` as
+  missing). The `csv` reader and the `deferred` gate metric were added to the
+  prototype during ticket 09.
 
 ## 27. Evidence
 
