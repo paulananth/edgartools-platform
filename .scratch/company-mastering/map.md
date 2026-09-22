@@ -64,6 +64,14 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   re-reads nothing by itself; and the identity parts of a contract may never
   change within one `source_code`.** Migration 031 designed, not written.
 
+- [Settle the Mastering Policy execution boundary](issues/02-settle-the-policy-execution-boundary.md)
+  — **one home per kind (`kinds.<kind>`, fields included); classification is
+  governed by the policy but the decided kind stays stamped on the evidence;
+  a field records its kind's own digest, not the whole body's; each kind keeps
+  its own accepted bar (Company 99.9% at 95%, Person 99% at 97.5%); suspension
+  lives in its own table keyed by the rule digest and never edits the policy;
+  and coherent field groups are filled whole or left unknown.**
+
 ## Not yet specified
 
 - **Which cohort the Proving Run uses.** The 1,000-row research cohort and its
