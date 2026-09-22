@@ -195,6 +195,10 @@ setting, and is not part of any contract.
 | `csv` | `columns: { <path-safe name>: "<header text>" }` (required), `delimiter` (default `,`), `encoding` (default `utf-8`) | one document per row, keyed by the names in `columns`; other headers are ignored. An artifact that lacks a listed header is rejected whole and counted in `rejected` |
 | `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
 
+**An empty CSV cell is `""`, not missing.** The header exists, so the value
+exists; `default` does not apply. Chain `{ empty_to_null: {} }` on an
+optional column, or `int`/`number`, which give `default` for `""`.
+
 **Why `csv` needs a `columns` map (proposed, ticket 09):** real headers are
 not path-safe. SEC Form ADV headers are `1A`, `1E1`, `1F1-Street 1`: they start
 with digits and contain spaces and hyphens, and paths allow no quoting. The
@@ -290,7 +294,7 @@ No string is ever run as code. `contains: "see remarks"` is a literal, and
 
 ## 9. Primitives
 
-These are the 23 that ran in the prototype. **Every primitive that returns a
+These are the 24 that ran in the prototype. **Every primitive that returns a
 value read from a path (`path`, or `each` for `join`) requires an explicit
 `default:`**, because this repo has three different "absent" results (`""`,
 `null`, `false`). `count` is the exception: a missing group is 0. The spec is
@@ -308,6 +312,7 @@ require `default` on `value_with_footnotes` or `join`.
 | `flag` | `path`, `true_set`, `default` | `from` | `true` if the stripped text is in `true_set`, otherwise `false`. `default` applies only if the value is missing |
 | `date_prefix` | `path`, `default` | `from` | the leading `YYYY-MM-DD` of the unstripped text, otherwise `default` |
 | `timestamp` | `path`, `default` | `from` | the text as written, which must be ISO 8601 (`2012-06-06T15:51:00.000Z`). It does **not** convert time zones (gap G4, §24); the prototype accepts any text |
+| `date_format` | `path`, `format`, `default` | `from`, `to` | text in a declared `strptime` format (a literal pattern, e.g. `"%m/%d/%Y %I:%M:%S %p"`) → ISO date, or ISO timestamp with `to: timestamp`. Text that does not match gives `default`. It adds no time zone (gap G4). Added in ticket 09 for Form ADV's `03/17/2026 11:29:59 AM` |
 | `value_with_footnotes` | `path`, `default` | `from` | **Named Convention.** SEC's `<x><value/><footnoteId id/></x>` as `"value [F1,F2]"` |
 | `header` | `name` | `default` | a field of the reader's envelope header, e.g. `ACCESSION NUMBER` |
 | `artifact` | `name` | — | an artifact attribute; `sha256` today |
@@ -445,6 +450,10 @@ silver:
     collapse: <rule>                       # map decision Q7; grammar Open (§25 item 6)
 ```
 
+- What each type accepts: `string` text; `bigint` a whole number; `double` a
+  number; `boolean` `true`/`false`; `date` an ISO `YYYY-MM-DD` text;
+  `timestamp` an ISO 8601 text. Dates and timestamps are text in silver, and
+  their form is checked.
 - The `read` columns and the `silver` columns must be the same set;
   otherwise the contract is invalid.
 - Every output row is type-checked. A mismatch is a **located failure**
@@ -500,7 +509,7 @@ rejection, is in
 | `version` | yes | adapter version. It enters every `assertion_id` (§23) |
 | `kind` \| `kind_field` + `kind_values` | one of them | a fixed kind, or an exact, case-sensitive lookup with no fallback |
 | `record_key` (+ `record_key_format`) | yes | list of silver columns. One part gives the plain value; several give a JSON array string |
-| `identifiers` (+ `identifier_formats`) | no | namespace → column; `identifier_formats` is namespace → format. **A namespace is not a format.** Clean MDM's SEC Company source uses `identifiers: { cik: cik }` with `identifier_formats: { cik: sec_cik }` (`edgar_warehouse/mdm/clean/company_source.py:50-51`). Writing `sec_cik` as the namespace silently skips formatting (ticket 09). Only `sec_cik` exists as a format (gap G3) |
+| `identifiers` (+ `identifier_formats`) | no | namespace → column; `identifier_formats` is namespace → format. **A namespace is not a format.** Clean MDM's SEC Company source uses `identifiers: { cik: cik }` with `identifier_formats: { cik: sec_cik }` (`edgar_warehouse/mdm/clean/company_source.py:50-51`). Writing `sec_cik` as the namespace silently skips formatting (ticket 09). Name a namespace after the issuing register, lowercase (`cik`, `lei`, `crd`); where the Mastering Policy has an Identifier Contract for it, use that contract's namespace. Only `sec_cik` exists as a format (gap G3); an identifier with no format is kept as written |
 | `fields` | no | MDM field → column. A name not in the Mastering Policy is evidence only |
 | `field_shape` | no | one scalar at the top of the adapter: `field_shape: nullable_text` (every field must be text or null). Any other value is silently ignored |
 | `profiles` | no | Governed Role Profiles: `role` (literal), `authority` (literal), `registration` (column; null skips the profile), `valid_from` (column, required, time-zone aware), optional `jurisdiction`, `valid_to`, `fields` |
@@ -515,8 +524,13 @@ validator checks it. Literal keys (`role`, `authority`, `type`,
 
 ### 13.2 Rules the code applies that a contract author must know
 
-- A path through a list gives `null` with no error. So the `silver` table
-  must already be one row per MDM subject; `read` does the fan-out.
+- A path through a list gives `null` with no error. So each row of
+  `dataset.table` must already be **one source record** (one assertion);
+  `read` does the fan-out. Records do not have to be one per MDM identity:
+  15 Form ADV filings by one adviser are 15 records (key `filing_id`) that
+  share one identifier (`crd`), and binding, not silver, brings them to one
+  identity. Collapsing to one row per identity is the Open collapse rule
+  (§25 item 6), not a requirement.
 - Relationships whose target key is missing are dropped with no record (gap
   F5), and target keys are never formatted (gap F4).
 - A field value that is a map with `"op"` is an operation. Use
@@ -555,7 +569,7 @@ but free text. Until Codex fixes closed value sets (research 01 §3,
 | Part | Write |
 |---|---|
 | `provider` | the authority's short name: `SEC`, `GLEIF`, `IAPD`, `PCAOB` |
-| `family` | the Clean MDM source-registry family the artifacts come from (for SEC submissions, `submissions`). It must match the registry, so it is checked at registration |
+| `family` | the Clean MDM source-registry family the artifacts come from (for SEC submissions, `submissions`). It must match the registry, so it is checked at registration. A provider with no registry family yet needs one registered first: that is part of onboarding the Artifact Family, done outside the source folder, like `families.local.yaml` |
 | `schema_version` | `silver-<dataset table>-v<N>` |
 | `record_key` | the adapter's `record_key` in words, e.g. `zero-padded 10-digit CIK` |
 | `publication_key` | what identifies one publication, e.g. `capture run plus artifact sha256` |
@@ -655,12 +669,17 @@ tests:
   not in `kind_values`. A case about the identity kind must list its `mdm`
   expectations: a case that leaves `mdm` out checks nothing about MDM (ticket
   09, round 2).
+- **Cut fixtures from real artifacts** where possible: whole records, bytes
+  unchanged (for CSV, the header line plus whole rows, line endings kept).
+  A made-up fixture says `SYNTHETIC` in its case name.
 - **`fixture`** is one file or a list of files. For a family with one
   document per artifact, a case about two records lists two files. Rows are
   concatenated in list order. A fixture that does not exist makes the
   contract invalid (exit 2).
 - **`evidence_only`** lists silver columns that must *not* appear as MDM
-  fields (ticket 05 Q2). Not prototyped.
+  fields (ticket 05 Q2): a listed column that the adapter maps is a failure.
+  A runner must refuse any expectation it does not check rather than accept
+  it silently (ticket 09 round 3 found the prototype accepting it).
 - **`given.identities` are seeds.** They go through the same contract and a
   first Merge Stage batch with a declared Steward binding, never inserted
   rows. They are named by the case, never by a generated id. `record` is the
@@ -676,6 +695,8 @@ tests:
   checked.
 - **Order and cost:** parse and mapping cases run first and need no
   database; Postgres starts only if a case has `merge:` (ticket 05 Q2). Merge
+  cases need a local Docker daemon; on macOS the runner uses Colima's socket
+  unless `DOCKER_HOST` is set. Merge
   cases need a throwaway Postgres 16 (§4.1). The prototype measured about 10–15 s for one case,
   including container start, with a 60 s readiness limit. Research 03 saw
   an 8 s wait fail 4 of 7 runs on Colima.
@@ -812,7 +833,7 @@ hand-written, so it cannot drift from what runs.
 | 2 | deleting a source breaks nothing else | delete a folder; prove the others | passed |
 | 3 | the engine names no source | grep the engine for source names | passed |
 | 4 | no network | §19 | **partly**: needs enforcement below Python |
-| 5 | a fresh agent onboards an unseen source from this spec and one example | ticket 09 | not yet |
+| 5 | a fresh agent onboards an unseen source from this spec and one example | ticket 09: three fresh agents, two sources | **partly**: all three proved their source with no engine read, but logged 13, 9 and 8 real spec gaps; every one is fixed in this spec |
 | 6 | the Mapping Document is generated | `source mapdoc` | passed |
 | 7 | every contract term is in `CONTEXT.md` | grep the glossary for each term | passed (ticket 08 added six terms) |
 | 8 | one command proves a source end to end | `source prove --gate` | passed |
@@ -997,10 +1018,10 @@ Form 3/4/5 go-live.
 - **Merge cases:** `bound` checked declared bindings only; `new`, `deferred`
   and `quarantined` were not implemented.
 - **`source run`** and publication building (§18) were not prototyped.
-- **Decided but not prototyped:** `expect.mdm.evidence_only`, the collapse
-  rule, and "JSON `null` is not missing" (the prototype treats `null` as
-  missing). The `csv` reader and the `deferred` gate metric were added to the
-  prototype during ticket 09.
+- **Decided but not prototyped:** the collapse rule, and "JSON `null` is not missing" (the prototype treats `null` as
+  missing). The `csv` reader, the `deferred` gate metric, the `date_format`
+  primitive and the `evidence_only` check were added to the prototype during
+  ticket 09.
 
 ## 27. Evidence
 

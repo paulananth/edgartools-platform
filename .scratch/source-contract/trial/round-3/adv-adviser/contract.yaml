@@ -1,0 +1,164 @@
+# yaml-language-server: $schema=../../engine/contract.schema.json
+# Source Contract — SEC Form ADV Part 1A monthly bulk extract (IAPD), one silver row per adviser filing.
+source: iapd.adv_adviser
+version: "1"
+bronze: { family: iapd.adv_base_filings }
+
+read:
+  format: csv
+  columns: { filing_id: "FilingID", date_submitted: "DateSubmitted", legal_name: "1A", business_name: "1B1",
+             sec_file_number: "1D", crd: "1E1", office_city: "1F1-City", office_state: "1F1-State",
+             office_country: "1F1-Country", office_private: "1F1-Private", public_reporting: "1N",
+             public_reporting_cik: "1N-CIK", has_raum: "5F1", raum_total: "5F2c" }
+  tables:
+    iapd_adv_filing:
+      each: "."
+      columns:
+        filing_id:            { text: { path: filing_id, default: null } }
+        date_submitted_raw:   { text: { path: date_submitted, default: null } }
+        submitted_date:       { custom: { step: adv_submitted_date@1, inputs: { raw: date_submitted_raw } } }
+        crd:                  { text: { path: crd, default: null } }
+        sec_file_number:      { steps: [ { text: { path: sec_file_number, default: null } }, { empty_to_null: {} } ] }
+        legal_name:           { text: { path: legal_name, default: null } }
+        business_name:        { steps: [ { text: { path: business_name, default: null } }, { empty_to_null: {} } ] }
+        office_city:          { steps: [ { text: { path: office_city, default: null } }, { empty_to_null: {} } ] }
+        office_state:         { steps: [ { text: { path: office_state, default: null } }, { empty_to_null: {} } ] }
+        office_country_name:  { steps: [ { text: { path: office_country, default: null } }, { empty_to_null: {} } ] }
+        office_is_residence:  { flag: { path: office_private, true_set: [Y], default: null } }
+        is_public_reporting:  { flag: { path: public_reporting, true_set: [Y], default: null } }
+        public_reporting_cik: { steps: [ { text: { path: public_reporting_cik, default: null } }, { empty_to_null: {} } ] }
+        reports_raum:         { flag: { path: has_raum, true_set: [Y], default: null } }
+        raum_total_usd:       { int: { path: raum_total, default: null } }
+
+silver:
+  iapd_adv_filing:
+    key: [filing_id]
+    columns: { filing_id: string, date_submitted_raw: string, submitted_date: date, crd: string, sec_file_number: string?,
+               legal_name: string, business_name: string?, office_city: string?, office_state: string?,
+               office_country_name: string?, office_is_residence: boolean, is_public_reporting: boolean,
+               public_reporting_cik: string?, reports_raum: boolean, raum_total_usd: bigint? }
+
+dataset:
+  table: iapd_adv_filing
+  contract:
+    provider: IAPD
+    family: adv_base
+    schema_version: silver-iapd_adv_filing-v1
+    record_key: CRD number as written by IAPD (no padding)
+    publication_key: monthly extract file plus artifact sha256
+    effective_time: unknown
+    semantics: patch
+    completeness: delta
+    adapter:
+      version: iapd-adv-adviser-1
+      kind: company
+      record_key: [crd]
+      identifiers: { crd: crd }
+      fields: { name: legal_name }
+      field_shape: nullable_text
+      source_record_provenance: true
+
+checks:
+  - not_null: { table: iapd_adv_filing, column: crd }
+  - not_null: { table: iapd_adv_filing, column: legal_name }
+  - unique:   { table: iapd_adv_filing, columns: [filing_id] }
+  - pattern:  { table: iapd_adv_filing, column: crd, regex: "^[1-9][0-9]{0,7}$" }
+  - pattern:  { table: iapd_adv_filing, column: sec_file_number, regex: "^80[0-9]-[0-9]{1,6}$" }
+  - pattern:  { table: iapd_adv_filing, column: office_state, regex: "^[A-Z]{2}$" }
+  - row_count: { table: iapd_adv_filing, min: 1 }
+
+tests:
+  - case: an ordinary adviser filing reads every main field and maps to a Company keyed by CRD
+    fixture: fixtures/march-2026-seven-rows.csv
+    expect:
+      silver:
+        iapd_adv_filing:
+          - { filing_id: "2039880", crd: "336316", legal_name: "TEMPO WEALTH, LLC", business_name: TEMPO WEALTH, sec_file_number: 801-132895,
+              submitted_date: "2026-03-17", date_submitted_raw: "03/17/2026 11:29:59 AM", office_city: INDEPENDENCE, office_state: OH,
+              office_country_name: United States, office_is_residence: false, is_public_reporting: false, reports_raum: true, raum_total_usd: 804265871 }
+          - { filing_id: "2074835", crd: "19258" }
+          - { filing_id: "2069016", crd: "136174" }
+          - { filing_id: "2063387", crd: "19258" }
+          - { filing_id: "2060672", crd: "308546" }
+          - { filing_id: "2073515", crd: "79" }
+          - { filing_id: "2056680", crd: "155405" }
+      mdm:
+        - { kind: company, identifiers: { crd: "336316" }, fields: { name: "TEMPO WEALTH, LLC" }, evidence_only: [office_country_name, raum_total_usd, sec_file_number] }
+        - { kind: company, identifiers: { crd: "19258" } }
+        - { kind: company, identifiers: { crd: "136174" } }
+        - { kind: company, identifiers: { crd: "19258" } }
+        - { kind: company, identifiers: { crd: "308546" } }
+        - { kind: company, identifiers: { crd: "79" } }
+        - { kind: company, identifiers: { crd: "155405" } }
+  - case: "trap: a main office that is a private residence (1F1-Private Y) has every address field blank, read as null, not empty text"
+    fixture: fixtures/march-2026-seven-rows.csv
+    expect:
+      silver:
+        iapd_adv_filing:
+          - { filing_id: "2039880", office_is_residence: false }
+          - { filing_id: "2074835", office_is_residence: false }
+          - { filing_id: "2069016", legal_name: OIA LTD, office_is_residence: true, office_city: null, office_state: null, office_country_name: null }
+          - { filing_id: "2063387" }
+          - { filing_id: "2060672" }
+          - { filing_id: "2073515" }
+          - { filing_id: "2056680", office_city: "MONTREAL, QUEBEC", office_state: null, office_country_name: Canada }
+  - case: "trap: 1N says Y (public reporting company) but 1N-CIK is blank in the extract, so no CIK can identify the adviser"
+    fixture: fixtures/march-2026-seven-rows.csv
+    expect:
+      silver:
+        iapd_adv_filing:
+          - { filing_id: "2039880", is_public_reporting: false, public_reporting_cik: null }
+          - { filing_id: "2074835" }
+          - { filing_id: "2069016" }
+          - { filing_id: "2063387" }
+          - { filing_id: "2060672" }
+          - { filing_id: "2073515", legal_name: J.P. MORGAN SECURITIES LLC, crd: "79", is_public_reporting: true, public_reporting_cik: null }
+          - { filing_id: "2056680", is_public_reporting: true, public_reporting_cik: null }
+      mdm:
+        - { kind: company, identifiers: { crd: "336316" } }
+        - { kind: company, identifiers: { crd: "19258" } }
+        - { kind: company, identifiers: { crd: "136174" } }
+        - { kind: company, identifiers: { crd: "19258" } }
+        - { kind: company, identifiers: { crd: "308546" } }
+        - { kind: company, identifiers: { crd: "79" }, fields: { name: J.P. MORGAN SECURITIES LLC } }
+        - { kind: company, identifiers: { crd: "155405" } }
+  - case: "trap: an adviser with no regulatory AUM (5F1 N) has a blank 5F2c, read as null, never 0"
+    fixture: fixtures/march-2026-seven-rows.csv
+    expect:
+      silver:
+        iapd_adv_filing:
+          - { filing_id: "2039880" }
+          - { filing_id: "2074835", raum_total_usd: 7569614628 }
+          - { filing_id: "2069016" }
+          - { filing_id: "2063387" }
+          - { filing_id: "2060672", reports_raum: false, raum_total_usd: null }
+          - { filing_id: "2073515", raum_total_usd: 352605441286 }
+          - { filing_id: "2056680" }
+  - case: "trap: the same adviser (CRD 19258) files many times a month; each filing is its own silver row but the same MDM record"
+    fixture: fixtures/march-2026-seven-rows.csv
+    expect:
+      silver:
+        iapd_adv_filing:
+          - { filing_id: "2039880" }
+          - { filing_id: "2074835", crd: "19258", submitted_date: "2026-03-17" }
+          - { filing_id: "2069016" }
+          - { filing_id: "2063387", crd: "19258", submitted_date: "2026-03-02" }
+          - { filing_id: "2060672" }
+          - { filing_id: "2073515" }
+          - { filing_id: "2056680" }
+  - case: a filing with a declared binding becomes that Company; an unbound adviser waits for binding; the name is not won (policy gives IAPD no rank)
+    fixture: fixtures/march-2026-seven-rows.csv
+    given:
+      identities:
+        tempo: { fixture: fixtures/march-2026-seven-rows.csv, record: "336316" }
+    expect:
+      merge:
+        - { record: "336316", outcome: bound, to: tempo }
+        - { record: "136174", outcome: binding_required }
+        - { record: "19258", outcome: binding_required }     # two filings, one record
+
+gate:
+  batch: { family: iapd.adv_base_filings, select: all }
+  limits:
+    rows.iapd_adv_filing: { min: 17413 }
+    check.pattern(office_state): { max: 0 }

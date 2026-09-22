@@ -156,6 +156,10 @@ no edit to any Clean MDM file.
 - [Write the Source Contract spec and the Codex handover](issues/08-write-the-source-contract-spec-and-codex-handover.md)
   — **spec written and handover sent as one note** (GLEIF first; 5 blocking
   requests). [spec](../../docs/specs/source-contract/spec.md).
+- [Run the cold-onboarding trial](issues/09-run-the-cold-onboarding-trial.md)
+  — **check 5 partly met**: three fresh agents proved two unseen sources with
+  no engine reads, but logged 13 → 9 → 8 spec gaps, all fixed in the spec.
+  [trial/](trial/README.md).
 
 ## Not yet specified
 

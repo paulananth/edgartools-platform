@@ -396,6 +396,19 @@ def p_join(ctx, a, _):
     return a.get("separator", "").join(out)
 
 
+def p_date_format(ctx, a, _):
+    """Text in a declared strptime format → ISO date (or ISO timestamp with `to: timestamp`)."""
+    import datetime as _dt
+    v = _leaf(ctx, a)
+    if v in (MISSING, None) or not str(v).strip():
+        return a.get("default")
+    try:
+        d = _dt.datetime.strptime(str(v).strip(), a["format"])
+    except ValueError:
+        return a.get("default")
+    return d.date().isoformat() if a.get("to", "date") == "date" else d.isoformat()
+
+
 def p_timestamp(ctx, a, _):
     v = _leaf(ctx, a)
     return a.get("default") if v is MISSING or v is None else str(v).strip()
@@ -450,6 +463,7 @@ PRIMITIVES: dict[str, tuple] = {
     "flag": (p_flag, {"path", "true_set"}, {"default", "from"}, False),
     "date_prefix": (p_date_prefix, {"path"}, {"default", "from"}, False),
     "timestamp": (p_timestamp, {"path"}, {"default", "from"}, False),
+    "date_format": (p_date_format, {"path", "format"}, {"default", "from", "to"}, False),
     "value_with_footnotes": (p_value_with_footnotes, {"path"}, {"default", "from"}, False),
     "const": (p_const, {"value"}, set(), False),
     "ordinal": (p_ordinal, set(), set(), False),
@@ -853,6 +867,7 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                     failures.append({"kind": "case", "pointer": f"{ptr}/expect/silver/{tname}/{j}", "case": case["case"],
                                      "table": tname, "row": j + 1, "diff": d, "context": {k: a.get(k) for k in e}, "fixture": case["fixture"]})
         exp_mdm = case.get("expect", {}).get("mdm")
+        ds_contract = (c.get("dataset") or {}).get("contract") or {}
         if exp_mdm is not None:
             got = engine.to_assertions(silver)
             if len(got) != len(exp_mdm):
@@ -865,6 +880,12 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                         failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm/{j}", "case": case["case"], "table": "mdm",
                                          "row": j + 1, "diff": d, "fixture": case["fixture"]})
                     continue
+                mapped_cols = set(((ds_contract.get("adapter") or {}).get("fields") or {}).values())
+                for col in e.get("evidence_only") or []:
+                    if col in mapped_cols:
+                        failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm/{j}/evidence_only", "case": case["case"],
+                                         "message": f"column {col!r} is listed as evidence only but the adapter maps it to an MDM field",
+                                         "fixture": case["fixture"]})
                 flat = {"kind": a.get("kind"), **{f"identifiers.{k}": v for k, v in a.get("identifiers", {}).items()},
                         **{f"fields.{k}": (f.get("value") if f.get("op") == "value" else None) for k, f in a.get("fields", {}).items()}}
                 want = {"kind": e.get("kind"), **{f"identifiers.{k}": v for k, v in (e.get("identifiers") or {}).items()},
