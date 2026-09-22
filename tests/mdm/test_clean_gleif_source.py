@@ -219,13 +219,24 @@ def test_rr_and_repex_xml_and_json_have_the_same_simple_record(
     assert hashes[0] == hashes[1]
 
 
-def test_reporting_exception_is_retained_and_not_a_parent_edge():
+@pytest.mark.parametrize(
+    "reason,valid",
+    [
+        ([{"$": "NON_CONSOLIDATING"}], True),
+        ({"$": "NON_PUBLIC"}, True),
+        (42, False),
+        ({"bogus": "x"}, False),
+        ([{"$": "NOT_A_GLEIF_REASON"}], False),
+        ([{"$": ""}], False),
+    ],
+)
+def test_reporting_exception_is_retained_and_not_a_parent_edge(reason, valid):
     from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
 
     row = {
         "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
         "ExceptionCategory": {"$": "DIRECT_ACCOUNTING_CONSOLIDATION_PARENT"},
-        "ExceptionReason": [{"$": "NON_CONSOLIDATING"}],
+        "ExceptionReason": reason,
     }
     kind, result = record_evidence(
         row,
@@ -242,7 +253,9 @@ def test_reporting_exception_is_retained_and_not_a_parent_edge():
         },
     )
     assert kind == "deferred"
-    assert result["reason"] == "reported_parent_exception"
+    assert result["reason"] == (
+        "reported_parent_exception" if valid else "invalid_exception_reason"
+    )
     assert result["raw_record"] == row
 
 

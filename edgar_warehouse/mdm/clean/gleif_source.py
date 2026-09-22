@@ -39,6 +39,20 @@ XML = {
         "Exception",
     ),
 }
+# REPEX 2.1 retains the deprecated values for historical source compatibility.
+# See GLEIF's Reporting Exceptions 2.1 ExceptionReasonEnum.
+EXCEPTION_REASONS = {
+    "NO_LEI",
+    "NATURAL_PERSONS",
+    "NON_CONSOLIDATING",
+    "NO_KNOWN_PERSON",
+    "NON_PUBLIC",
+    "BINDING_LEGAL_COMMITMENTS",
+    "LEGAL_OBSTACLES",
+    "DISCLOSURE_DETRIMENTAL",
+    "DETRIMENT_NOT_EXCLUDED",
+    "CONSENT_NOT_OBTAINED",
+}
 
 
 def validate_metadata(member: str, metadata: dict) -> None:
@@ -503,6 +517,15 @@ def record_evidence(
                     raise UnsupportedRecord("unsupported_exception_category")
                 if not row.get("ExceptionReason"):
                     raise UnsupportedRecord("missing_exception_reason")
+                reasons = row["ExceptionReason"]
+                reasons = reasons if isinstance(reasons, list) else [reasons]
+                if any(
+                    not isinstance(r, dict)
+                    or not isinstance(r.get("$"), str)
+                    or r["$"] not in EXCEPTION_REASONS
+                    for r in reasons
+                ):
+                    raise UnsupportedRecord("invalid_exception_reason")
                 # An exception is retained source evidence, not a new Company
                 # binding or a fabricated parent edge.
                 raise UnsupportedRecord("reported_parent_exception")
