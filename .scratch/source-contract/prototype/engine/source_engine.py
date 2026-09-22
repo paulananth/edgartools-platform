@@ -504,6 +504,13 @@ class Engine:
                                       f"read and silver disagree: missing {sorted(missing)} extra {sorted(extra)}")
             for cname, expr in table["columns"].items():
                 self._check_expr(expr, f"{base}/columns/{cname}")
+        seen: dict[str, int] = {}
+        for ci, ch in enumerate(self.contract.get("checks") or []):
+            lab = check_label(ch)
+            if lab in seen:
+                raise ContractInvalid(f"/checks/{ci}", "check-label-unique",
+                                      f"checks {seen[lab]} and {ci} are both named {lab!r} in the gate; give one a label: argument")
+            seen[lab] = ci
         gate = self.contract.get("gate") or {}
         known = {"rejected", "type_errors", "deferred"} | {f"rows.{t}" for t in self.contract["silver"]} \
             | {f"check.{check_label(ch)}" for ch in (self.contract.get("checks") or [])}
@@ -778,6 +785,8 @@ def run_check(engine: Engine, check: dict, silver: dict[str, list[dict]]) -> lis
 
 def check_label(check: dict) -> str:
     (name, a), = check.items()
+    if a.get("label"):
+        return a["label"]
     return f"{name}({a.get('step') or a.get('column') or ','.join(a.get('columns', [])) or a['table']})"
 
 
@@ -827,7 +836,13 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                 failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm", "case": case["case"],
                                  "message": f"expected {len(exp_mdm)} assertions, got {len(got)}", "fixture": case["fixture"]})
             for j, (e, a) in enumerate(zip(exp_mdm, got)):
-                flat = {"kind": a.get("kind", a.get("deferred")), **{f"identifiers.{k}": v for k, v in a.get("identifiers", {}).items()},
+                if "deferred" in e or "deferred" in a:  # a deferred record: compare its reason only
+                    d = _match({"deferred": e.get("deferred")}, {"deferred": a.get("deferred")})
+                    if d:
+                        failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm/{j}", "case": case["case"], "table": "mdm",
+                                         "row": j + 1, "diff": d, "fixture": case["fixture"]})
+                    continue
+                flat = {"kind": a.get("kind"), **{f"identifiers.{k}": v for k, v in a.get("identifiers", {}).items()},
                         **{f"fields.{k}": (f.get("value") if f.get("op") == "value" else None) for k, f in a.get("fields", {}).items()}}
                 want = {"kind": e.get("kind"), **{f"identifiers.{k}": v for k, v in (e.get("identifiers") or {}).items()},
                         **{f"fields.{k}": v for k, v in (e.get("fields") or {}).items()}}
@@ -932,7 +947,8 @@ def _describe(expr) -> tuple[str, bool]:
         return " → ".join(p for p, _ in parts), any(c for _, c in parts)
     a = a or {}
     arg = a.get("path") or a.get("each") or a.get("name") or a.get("lookup") or ("" if "value" not in a else repr(a["value"]))
-    return f"`{name}`" + (f" `{arg}`" if arg else ""), False
+    where = " (from the document)" if a.get("from") == "document" else ""
+    return f"`{name}`" + (f" `{arg}`" if arg else "") + where, False
 
 
 def mapdoc(engine: Engine) -> str:

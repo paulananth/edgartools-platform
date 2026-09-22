@@ -301,7 +301,7 @@ require `default` on `value_with_footnotes` or `join`.
 | `number` | `path`, `default` | `from` | a double, or `default` |
 | `flag` | `path`, `true_set`, `default` | `from` | `true` if the stripped text is in `true_set`, otherwise `false`. `default` applies only if the value is missing |
 | `date_prefix` | `path`, `default` | `from` | the leading `YYYY-MM-DD` of the unstripped text, otherwise `default` |
-| `timestamp` | `path`, `default` | `from` | the text as written. It does **not** convert time zones (gap G4, §24) |
+| `timestamp` | `path`, `default` | `from` | the text as written, which must be ISO 8601 (`2012-06-06T15:51:00.000Z`). It does **not** convert time zones (gap G4, §24); the prototype accepts any text |
 | `value_with_footnotes` | `path`, `default` | `from` | **Named Convention.** SEC's `<x><value/><footnoteId id/></x>` as `"value [F1,F2]"` |
 | `header` | `name` | `default` | a field of the reader's envelope header, e.g. `ACCESSION NUMBER` |
 | `artifact` | `name` | — | an artifact attribute; `sha256` today |
@@ -450,6 +450,19 @@ silver:
   `dataset.table` feeds MDM; the others are evidence. Use a child table for a
   repeating group whose members carry their own attributes (for example
   former names with their dates), instead of joining them into one column.
+  A child row takes its parent's key with `from: document`:
+
+  ```yaml
+  sec_company_former_name:
+    each: formerNames
+    columns:
+      cik:         { text: { path: cik, from: document, default: null } }   # the parent's key
+      name_index:  { ordinal: {} }
+      former_name: { text: { path: name, default: null } }
+      valid_from:  { text: { path: from, default: null } }
+  ```
+
+  The Mapping Document marks such a column "(from the document)".
 - The table's physical schema and its collapse rule are generated from this
   block (map decision Q7). The collapse grammar (for example, the latest row
   per key by a declared order) is not yet fixed and was not prototyped.
@@ -519,6 +532,12 @@ Acceptance check 1 covers the source's own versions. A policy change is a
 deliberate, separately approved step, because ranking a source changes
 other sources' winners.
 
+**Map a field only if its values mean the same thing** as the MDM field's
+values from other sources. SEC state-of-incorporation codes (`DE`, `V8`) are
+not GLEIF jurisdiction codes (`US-DE`): mapping one onto `jurisdiction` would
+let two vocabularies compete in one field. Keep such a column as evidence,
+or convert it with a declared step first.
+
 ### 13.3 Other Dataset Contract parts
 
 Only `family`, `schema_version`, `publication_families`,
@@ -534,9 +553,9 @@ but free text. Until Codex fixes closed value sets (research 01 §3,
 | `schema_version` | `silver-<dataset table>-v<N>` |
 | `record_key` | the adapter's `record_key` in words, e.g. `zero-padded 10-digit CIK` |
 | `publication_key` | what identifies one publication, e.g. `capture run plus artifact sha256` |
-| `effective_time` | `unknown` (and give the policy `allow_unknown_effective`), or `publication` |
+| `effective_time` | `unknown` or `publication`. With `unknown`, a field can win only where the Mastering Policy also sets `allow_unknown_effective` for it — part of the same policy change that ranks the source (§13.2a). A source the policy does not rank needs nothing here |
 | `semantics` | `patch` |
-| `completeness` | `bounded_sample`, `full_baseline` or `delta` |
+| `completeness` | optional (not required by Clean MDM, not read by code): `bounded_sample`, `full_baseline` or `delta` |
 
 Never author `registry_evidence`: `register_dataset` adds it.
 
@@ -591,7 +610,14 @@ as a violation unless `null` is one of the values; `pattern` skips `null`;
 A check is named in the gate as `check.<name>(<argument>)`, where the
 argument is the column, the comma-joined columns, or the step:
 `check.not_null(lei)`, `check.unique(accession_number,owner_index)`,
-`check.custom_check(owner_name_has_letters@1)`.
+`check.custom_check(owner_name_has_letters@1)`. Two checks with the same
+name would collide (the same check on a same-named column in two tables), so
+names must be unique: give one of them `label: <text>`, and the gate uses
+`check.<label>`:
+
+```yaml
+  - not_null: { table: sec_company_former_name, column: cik, label: former_name_cik_present }
+```
 
 Every check returns **violations**, each with the row's silver key and a
 message, never a bare true or false. Checks run in every Named Case (where
@@ -618,6 +644,11 @@ tests:
 - **Named Cases are required.** Each known trap gets one: an object where a
   list is expected, a row the `where` filter drops, a value next to a
   footnote.
+- **A deferred record in `expect.mdm`** is written `{ deferred: <reason> }`,
+  e.g. `{ deferred: unsupported_identity_kind }` for a row whose kind value is
+  not in `kind_values`. A case about the identity kind must list its `mdm`
+  expectations: a case that leaves `mdm` out checks nothing about MDM (ticket
+  09, round 2).
 - **`fixture`** is one file or a list of files. For a family with one
   document per artifact, a case about two records lists two files. Rows are
   concatenated in list order. A fixture that does not exist makes the
@@ -627,8 +658,10 @@ tests:
 - **`given.identities` are seeds.** They go through the same contract and a
   first Merge Stage batch with a declared Steward binding, never inserted
   rows. They are named by the case, never by a generated id. `record` is the
-  record key as the adapter builds it: the plain value for a one-part key,
-  the JSON array string for a multi-part key.
+  record key as the adapter builds it, after `record_key_format` if one is
+  declared: the plain value for a one-part key, the JSON array string for a
+  multi-part key. Quote it in YAML when it has leading zeros
+  (`record: "0001001385"`).
 - **Merge outcomes:** `bound`, `new`, `binding_required`, `deferred` (with
   reason), `quarantined`, and a field's value and `winner`. The prototype
   implemented `bound`, `binding_required` and field value/winner only.
@@ -839,7 +872,6 @@ dataset:
     publication_key: golden copy publication
     effective_time: explicit publication effective time
     semantics: patch
-    registry_evidence: prototype          # prototype only: never author this (§13.3)
     adapter:
       version: gleif-level1-prototype-1
       kind: company

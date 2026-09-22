@@ -165,7 +165,6 @@ dataset:                                    # Clean MDM's Dataset Contract; `ada
     publication_key: accession number
     effective_time: filing acceptance time
     semantics: patch
-    registry_evidence: prototype
     adapter:
       version: sec-ownership-owner-prototype-1
       record_key: [accession_number, owner_index]
