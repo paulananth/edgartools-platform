@@ -117,18 +117,20 @@ class TestMissingSilverSourceFailsBeforeSession:
             "Current code calls _session() first, causing MDM_DATABASE_URL error instead."
         )
 
-    def test_missing_silver_source_error_names_snowflake(self, monkeypatch, capsys):
-        """Error output when the silver source can't be reached must name
-        the actual backend (Snowflake, DuckDB Retirement Cutover Ticket 05
-        -- MDM_SILVER_DUCKDB is no longer what _silver_reader() depends on,
-        so the error message was updated to stop naming it)."""
+    def test_missing_silver_source_reports_failure_before_mdm(self, monkeypatch, capsys):
+        """Either configured reader reports its cause before an MDM session opens."""
         import edgar_warehouse.mdm.cli as mdm_cli
 
         monkeypatch.delenv("MDM_SILVER_DUCKDB", raising=False)
         monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
 
-        # Prevent _session from opening any real DB
-        monkeypatch.setattr(mdm_cli, "_session", MagicMock(side_effect=RuntimeError("no DB")))
+        # No credentials or real source connection should influence this test.
+        monkeypatch.setattr(
+            mdm_cli, "_silver_reader",
+            MagicMock(side_effect=RuntimeError("source unavailable")),
+        )
+        session = MagicMock(side_effect=RuntimeError("no DB"))
+        monkeypatch.setattr(mdm_cli, "_session", session)
 
         import argparse
         args = argparse.Namespace(entity_type="all", limit=None)
@@ -138,9 +140,8 @@ class TestMissingSilverSourceFailsBeforeSession:
 
         assert rc != 0
         stderr_text = captured.err
-        assert "Snowflake silver reader" in stderr_text, (
-            f"Expected 'Snowflake silver reader' in stderr error message. Got:\n{stderr_text!r}"
-        )
+        assert "cannot open silver reader -- source unavailable" in stderr_text
+        session.assert_not_called()
 
     def test_handle_run_all_succeeds(self, monkeypatch):
         """_handle_run runs the relational MDM pipeline and returns 0."""

@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "date": "2026-09-22",
+  "base": "5e2e4501",
+  "runs": [
+    {
+      "name": "focused",
+      "command": "uv run --frozen pytest tests/mdm/test_clean_gleif_source.py tests/integration/test_clean_native_publications.py tests/integration/test_clean_mdm_postgres.py -q",
+      "junit_sha256": "06b3b4a0243830a9482774571289afad2e3e27abe23ad1960a61df11f116be77",
+      "summary": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "74",
+        "time": "216.772",
+        "timestamp": "2026-09-22T06:38:47.248281-04:00",
+        "hostname": "MacBook-Air.local"
+      },
+      "failures": [],
+      "skips": [],
+      "clean_mdm_cases": 74,
+      "clean_mdm_skips": 0
+    },
+    {
+      "name": "repository",
+      "command": "uv run --frozen --extra s3 --extra mdm-runtime --extra mdm pytest tests -q",
+      "junit_sha256": "ee1c71426a6ead0bcf6418f34ef056b477de3dabdc5c600ce558580f6ea679ed",
+      "summary": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "1",
+        "skipped": "5",
+        "tests": "3563",
+        "time": "613.477",
+        "timestamp": "2026-09-22T06:43:24.645887-04:00",
+        "hostname": "MacBook-Air.local"
+      },
+      "failures": [
+        {
+          "classname": "tests.mdm.test_source_to_mdm_load_path.TestMissingSilverSourceFailsBeforeSession",
+          "name": "test_missing_silver_source_error_names_snowflake",
+          "time": "0.002"
+        }
+      ],
+      "skips": [
+        {
+          "test": "tests.application.test_dual_path_capture_parity.test_dual_path_live_sec_apple",
+          "reason": "Set WAREHOUSE_LIVE_SEC=1 to run the real SEC dual-path test"
+        },
+        {
+          "test": "tests.unit.test_earnings_calendar.LiveFinnhubTests.test_fetch_window",
+          "reason": "Set ERDP03_LIVE=1 and FINNHUB_API_KEY for live Finnhub fetch."
+        },
+        {
+          "test": "tests.unit.test_market_eod_join.LiveYfinanceAcceptanceTests.test_a07_1_five_liquid_closes",
+          "reason": "Set ERDP07_LIVE=1 to run live yfinance acceptance (network)."
+        },
+        {
+          "test": "tests.unit.test_market_eod_join.LiveYfinanceAcceptanceTests.test_a07_2_cik_to_price",
+          "reason": "Set ERDP07_LIVE=1 to run live yfinance acceptance (network)."
+        },
+        {
+          "test": "tests.unit.test_market_eod_join.LiveYfinanceAcceptanceTests.test_a07_3_wacc_live_or_override",
+          "reason": "Set ERDP07_LIVE=1 to run live yfinance acceptance (network)."
+        }
+      ],
+      "clean_mdm_cases": 120,
+      "clean_mdm_skips": 0
+    },
+    {
+      "name": "final_fixes",
+      "command": "uv run --frozen pytest tests/mdm/test_source_to_mdm_load_path.py tests/mdm/test_clean_gleif_source.py -q",
+      "junit_sha256": "3e94ab1fbc7d8fcf56918c4299f96cce9bae7020dbd9ed6dafea616ae61ad753",
+      "summary": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "37",
+        "time": "4.146",
+        "timestamp": "2026-09-22T18:31:55.070471-04:00",
+        "hostname": "MacBook-Air.local"
+      },
+      "failures": [],
+      "skips": [],
+      "clean_mdm_cases": 23,
+      "clean_mdm_skips": 0
+    }
+  ],
+  "disposition": "repository run had one pre-existing stale Snowflake-message assertion; test made deterministic and all 37 cases in affected/final parser files passed; no runtime change for that assertion",
+  "code_sha256": {
+    "edgar_warehouse/mdm/clean/assessment.py": "961b168c42e5fbe868d22e5df2b18172ff77c217b94f2cc6831b653c095b62c6",
+    "edgar_warehouse/mdm/clean/store.py": "cc20bc531b455d573838b250c9af1dde95bd8848808c415b96ac7386fd27c2a3",
+    "edgar_warehouse/mdm/clean/merge.py": "32089751ccfc6e4be0691fdbd44b0ddf5cf9509f52c1ac471903d10aca5afe05",
+    "edgar_warehouse/mdm/clean/source_publications.py": "d57246914ff48aa42aab000b6ecda79e6b1dabf8a9b951fe5aa6552258d9173d",
+    "edgar_warehouse/mdm/clean/gleif_source.py": "fee861bd37e2324ab7f507bfdc2e4e52e981d61ebce1517f69f0abbc6f5660df",
+    "edgar_warehouse/mdm/clean/__init__.py": "fddd62c707ddc2026f82a6adb357afc33514c5b12ee68a3ce4f9585186bf4fb7",
+    "edgar_warehouse/mdm/clean/bookkeeping.py": "a77cd1d516f6a06e28b4bfcc08a14e8f671f3e571b4c653f23579fbf1b6a9fa0",
+    "edgar_warehouse/mdm/clean/company_source.py": "f2c11745eee78ff825338fd4c68cc9b6fdffc07ed0ee8116d7ec8d2e219b1983",
+    "edgar_warehouse/mdm/clean/cli.py": "789f57de19ea7478568d3bab4ecfd496aa04ee9966ed9fc6bc51b38f423d16aa",
+    "edgar_warehouse/mdm/clean/consumer.py": "dcaba8a87ae402eab0518caa45493a35dc7f3ca58960dc1fe15f5b8ae58d62b0",
+    "edgar_warehouse/mdm/clean/publication.py": "958ad3e40cd671bfe0a327a4d1d9b061dcfd79be2a07452736042eefae76d4be",
+    "edgar_warehouse/mdm/clean/native_consumption.py": "70b578dc0152cdfd02d2ea99390902c00838d6a6e6a23a67d9f5950058b5ecc6",
+    "edgar_warehouse/mdm/clean/survivorship.py": "b58f6c240bcaa4ad94c7755bd0832430881f9d0511ceca72d53365fa0e173a20",
+    "edgar_warehouse/mdm/clean/identity.py": "040b1595d6c1b0cc15d6fddbaaf3afd2cf4084b8559e7afff896526d0d0677dc",
+    "edgar_warehouse/mdm/clean/evidence.py": "b5e2c493f7bace4d1e7395136afd7096001c3751ce7b7cbd8052710234cc49a8",
+    "edgar_warehouse/mdm/clean/relationships.py": "0c621ac3bb97621498cf065541b7454b923f315552ba5ea87ac28b8ec327d7b8",
+    "edgar_warehouse/mdm/clean/adapters.py": "dcae45096f5e7ea15bfb179c82bf96fc5cef7ce9504add7092678a64a61bfc7b",
+    "edgar_warehouse/mdm/migrations/030_clean_mdm_evidence_disposition.sql": "6b00460aa7f59ece13bd97c376473d042018ce7906c8dc5eaec1e01a2795f30d"
+  },
+  "review": "ticket12-review.md",
+  "native_archive_qualification": "ticket12-native-qualification.json"
+}

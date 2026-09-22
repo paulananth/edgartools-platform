@@ -108,20 +108,18 @@ The result includes all selected proofs and an aggregate digest suitable for
 freeze this plan in its run input and preserve it across bounded work; repeated
 verification cannot silently replace an already frozen run plan.
 
-## Transaction boundary and remaining integration
+## Transaction boundary and native integration
 
 Verification finishes before any MDM transaction opens. Acquisition history and
-bytes survive a rolled-back MDM transaction. The existing commit capability can
-atomically retain the returned proof with its family cursor and publication
-intent, but still treats proof JSON as caller evidence. It does not call this
-verifier across databases. The existing generic manifest CLI is unchanged.
+bytes survive a rolled-back MDM transaction. Ticket 12's native manifest handler
+calls the verifier, authenticates each record range, freezes the recovery plan in
+the existing root run and derives complete predecessors from committed accounting.
+See [native GLEIF](native-gleif.md) for its versioned metadata and limits.
 
-Before native Company consumption is enabled, ticket 12 must wire this API into
-the consumer before Merge Stage, authenticate each batch's membership in the
-verified inventory, freeze the recovery plan and implement exact whole-publication
-record accounting. It must establish the completed predecessor from that
-accounting; this module cannot infer it from a partial batch cursor. Downstream
-export/graph receipts and root-run completion retain their separate gates.
+The generic commit capability still treats proof JSON as caller evidence. Native
+manifests reject caller-supplied assertions and proofs; they must use the native
+verification path. No transaction is claimed across acquisition, MDM and Bookkeeping.
+Downstream export/graph receipts and root-run completion retain their separate gates.
 
 The offline tests use actual acquisition capture/revision APIs and real PG16
 migrations with restricted runtime logins in separate MDM and acquisition

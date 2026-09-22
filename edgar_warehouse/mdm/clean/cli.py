@@ -17,7 +17,7 @@ from .bookkeeping import RunCoordinator
 from .evidence import deferred_record
 from .merge import MergeStage
 from .publication import JournalMirror, LocalContractSink
-from .store import Conflict, Store
+from .store import Conflict, Publisher, Store
 
 
 def _reject_json_constant(value):
@@ -48,7 +48,10 @@ def engine_from_env(name: str, *, restricted: bool = True):
 
 def read_manifest(path: str) -> tuple[dict, str, Path]:
     file = Path(path).resolve()
-    raw = file.read_bytes()
+    with file.open("rb") as handle:
+        raw = handle.read(32 * 1024**2 + 1)
+    if len(raw) > 32 * 1024**2:
+        raise ValueError("Input manifest exceeds 32 MiB")
     manifest = json.loads(raw)
     if manifest.get("contract_version") != 2 or not manifest.get("batches"):
         raise ValueError("A nonempty version-2 input manifest is required")
@@ -59,6 +62,32 @@ def read_manifest(path: str) -> tuple[dict, str, Path]:
     if any(b.get("stage") not in allowed for b in manifest["batches"]):
         raise ValueError("Unsupported manifest stage")
     return manifest, hashlib.sha256(raw).hexdigest(), file.parent
+
+
+def artifact_reader(root: str):
+    """Confine acquisition references to an explicitly configured local/S3 root."""
+    if root.startswith("s3://"):
+        import fsspec
+
+        prefix = root.rstrip("/") + "/"
+
+        def read_s3(reference):
+            if not reference.startswith(prefix) or any(
+                p in {".", ".."} for p in reference.split("/")
+            ):
+                raise Conflict("Source artifact is outside the approved S3 root")
+            return fsspec.open(reference, "rb").open()
+
+        return read_s3
+    approved = Path(root).resolve()
+
+    def read_local(reference):
+        path = (approved / reference).resolve()
+        if not path.is_relative_to(approved):
+            raise Conflict("Source artifact is outside the approved local root")
+        return path.open("rb")
+
+    return read_local
 
 
 def batch_assertions(batch: dict, root: Path, store: Store) -> list[dict]:
@@ -93,8 +122,8 @@ def batch_evidence(
         )
     if contract is None:
         raise Conflict("Unregistered dataset")
-    result = []
-    deferred = []
+    result: list[dict] = []
+    deferred: list[dict] = []
     retains_deferred = contract["adapter"].get("retain_deferred", False)
     if retains_deferred and type(spec.get("record_count")) is not int:
         raise ValueError("A source member requires an exact record_count")
@@ -112,6 +141,7 @@ def batch_evidence(
         }
         if retains_deferred:
             publication["record_locator"] = f"{spec['sha256']}:line:{ordinal}"
+        problem: str | None
         try:
             row = json.loads(
                 line,
@@ -169,6 +199,7 @@ def execute_manifest(
     stage: str,
     limit: int,
     preview: bool = False,
+    publication_verifier=None,
 ) -> dict:
     if not 1 <= limit <= 1000:
         raise ValueError(
@@ -176,12 +207,6 @@ def execute_manifest(
         )
     UUID(run_id)
     manifest, manifest_hash, root = read_manifest(path)
-    if not preview:
-        coordinator.start(
-            run_id,
-            [b["batch_id"] for b in manifest["batches"]],
-            manifest_digest=manifest_hash,
-        )
     handled = 0
     committed = []
     with store.engine.connect() as conn:
@@ -199,6 +224,28 @@ def execute_manifest(
                 {"ids": [b["batch_id"] for b in manifest["batches"]]},
             )
         )
+    native_scope = None
+    native_batches = {}
+    if "native_source" in manifest:
+        from .native_consumption import prepare_native
+
+        if stage != "mastering":
+            raise ValueError("Native publication manifests run through mastering")
+        native_scope, native_batches = prepare_native(
+            manifest,
+            store,
+            coordinator,
+            publication_verifier,
+            observed=observed,
+            limit=limit,
+        )
+    if not preview:
+        coordinator.start(
+            run_id,
+            [b["batch_id"] for b in manifest["batches"]],
+            manifest_digest=manifest_hash,
+            native_consumption=native_scope,
+        )
     prerequisites = set()
     for batch in manifest["batches"]:
         if batch["batch_id"] in observed:
@@ -209,7 +256,13 @@ def execute_manifest(
             continue
         if not prerequisites <= observed:
             raise Conflict("Complete preceding manifest batches before this stage")
-        assertions, deferred = batch_evidence(batch, root, store)
+        if native_scope is not None:
+            if batch["batch_id"] not in native_batches:
+                break
+            native = native_batches[batch["batch_id"]]
+            assertions, deferred = native["assertions"], native["deferred"]
+        else:
+            assertions, deferred = batch_evidence(batch, root, store)
         cost = (
             0
             if batch["batch_id"] in retained
@@ -246,6 +299,8 @@ def execute_manifest(
         ):
             if key in batch:
                 command[key] = batch[key]
+        if native_scope is not None:
+            command.update(native_batches[batch["batch_id"]])
         if preview:
             result = MergeStage(store).apply(**command)
         else:
@@ -326,6 +381,14 @@ def handle(command: str, args) -> int:
                 raise ValueError(
                     "Clean MDM scope is frozen in the manifest; do not combine it with legacy filters"
                 )
+            verifier = None
+            if "native_source" in read_manifest(args.manifest)[0]:
+                from .source_publications import PublicationVerifier
+
+                ledger = engine_from_env("CHANGE_LEDGER_DATABASE_URL", restricted=False)
+                verifier = PublicationVerifier(
+                    ledger, artifact_reader(os.environ["MDM_SOURCE_ARTIFACT_ROOT"])
+                )
             report = execute_manifest(
                 store,
                 coordinator,
@@ -334,9 +397,11 @@ def handle(command: str, args) -> int:
                 stage="stewardship" if command == "apply-decisions" else command,
                 limit=100 if getattr(args, "limit", None) is None else args.limit,
                 preview=getattr(args, "dry_run", False),
+                publication_verifier=verifier,
             )
         elif command == "publish":
             consumer = getattr(args, "consumer", None)
+            publisher: Publisher
             if consumer == "journal":
                 ledger = engine_from_env("CHANGE_LEDGER_DATABASE_URL")
                 publisher = JournalMirror(ledger)

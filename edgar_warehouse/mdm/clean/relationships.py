@@ -23,6 +23,8 @@ CONTRACTS = {
     ),
     "OWNERSHIP_PARENT": (LEGAL, LEGAL, None, None),
     "ACCOUNTING_PARENT": (LEGAL, LEGAL, None, None),
+    "IS_DIRECTLY_CONSOLIDATED_BY": ({"company"}, {"company"}, None, None),
+    "IS_ULTIMATELY_CONSOLIDATED_BY": ({"company"}, {"company"}, None, None),
     "REPORTED_ULTIMATE_PARENT": (LEGAL, LEGAL, None, None),
     "IS_INTERNATIONAL_BRANCH_OF": ({"branch"}, LEGAL, None, None),
     "VENUE_OPERATOR": ({"venue"}, LEGAL, None, None),
@@ -48,6 +50,8 @@ CONTRACTS = {
 }
 HIERARCHIES = {
     "ACCOUNTING_PARENT",
+    "IS_DIRECTLY_CONSOLIDATED_BY",
+    "IS_ULTIMATELY_CONSOLIDATED_BY",
     "IS_INTERNATIONAL_BRANCH_OF",
     "VENUE_SEGMENT_OF",
     "IS_SUBFUND_OF",
@@ -150,7 +154,11 @@ def project(
     for key, e in edges.items():
         grouped[(e["type"], e.get("scope", ""))].append((key, e))
     for (kind, scope), group in grouped.items():
-        if kind == "ACCOUNTING_PARENT":
+        if kind in {
+            "ACCOUNTING_PARENT",
+            "IS_DIRECTLY_CONSOLIDATED_BY",
+            "IS_ULTIMATELY_CONSOLIDATED_BY",
+        }:
             for i, (key, e) in enumerate(group):
                 for other_key, other in group[i + 1 :]:
                     if (
@@ -201,7 +209,7 @@ def project(
     # Calculated accounting ultimate parents preserve their full asserted path.
     now = instant(as_of)
     for (kind, scope), group in grouped.items():
-        if kind != "ACCOUNTING_PARENT":
+        if kind not in {"ACCOUNTING_PARENT", "IS_DIRECTLY_CONSOLIDATED_BY"}:
             continue
         eligible = {
             e["source_id"]: e

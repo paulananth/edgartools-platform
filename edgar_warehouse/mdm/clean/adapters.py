@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from typing import Any
+
 from .evidence import assertion, subject_key
 from .store import canonical
 
@@ -27,11 +30,19 @@ def format_value(item, format_name=None):
         ):
             raise UnsupportedRecord("invalid_cik")
         return value.zfill(10)
+    if format_name == "lei":
+        value = str(item).strip()
+        if not re.fullmatch(r"[A-Z0-9]{18}[0-9]{2}", value):
+            raise UnsupportedRecord("invalid_lei")
+        digits = "".join(str(ord(c) - 55) if c.isalpha() else c for c in value)
+        if int(digits) % 97 != 1:
+            raise UnsupportedRecord("invalid_lei_checksum")
+        return value
     raise ValueError("Unconfigured identifier format")
 
 
 def value(row: dict, path: str):
-    result = row
+    result: Any = row
     for part in path.split("."):
         if not isinstance(result, dict):
             return None
@@ -107,13 +118,18 @@ def normalize(
         )
     relationships = []
     for spec in mapping.get("relationships", []):
+        relationship_type = spec.get("type")
+        if "type_field" in spec:
+            relationship_type = spec["type_values"].get(value(row, spec["type_field"]))
+            if not relationship_type:
+                raise UnsupportedRecord("unsupported_relationship_type")
         try:
             target = record_key(row, spec["target_key"])
         except ValueError:
             continue
         relationships.append(
             {
-                "type": spec["type"],
+                "type": relationship_type,
                 "target_subject": subject_key(spec["target_source"], target),
                 "scope": spec.get("scope", ""),
                 "valid_from": value(row, spec["valid_from"]),

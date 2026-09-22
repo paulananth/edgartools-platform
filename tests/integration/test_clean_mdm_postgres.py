@@ -62,7 +62,8 @@ def postgres():
         admin = create_engine(
             f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres"
         )
-        for _ in range(80):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
             try:
                 with admin.connect() as conn:
                     conn.execute(text("SELECT 1"))
@@ -1770,7 +1771,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
         else:
             request["source_accounting"] = {"normalized": 0, "deferred": 0, "total": 0}
         with (
-            pytest.raises(DBAPIError, match="blocking review|source accounting"),
+            pytest.raises(DBAPIError, match="review.*disposition|source accounting"),
             database.application.begin() as conn,
         ):
             store.commit(conn, request, run)

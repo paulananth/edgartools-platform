@@ -79,9 +79,9 @@ these external enrichment adapters is implemented in the inspected runtime.
 
 | Proposed dataset code | Publication/completeness family | Eligible consumer scope |
 | --- | --- | --- |
-| `gleif.lei` | Level 1 XML ZIP; coordinated Golden Copy baseline/delta/checkpoint | Accepted legal identity evidence; domain classification gates still apply |
-| `gleif.relationship` | RR XML ZIP in coordinated Golden Copy family | Exact source-directed accounting, fund and branch relationships |
-| `gleif.reporting_exception` | REPEX XML ZIP in coordinated Golden Copy family | Preserve reason/exception evidence; missing parent is not proof of no parent |
+| `gleif.lei` | Level 1 JSON ZIP or pinned XML ZIP; coordinated Golden Copy baseline/delta/checkpoint | Accepted legal identity evidence; domain classification gates still apply |
+| `gleif.relationship` | RR JSON ZIP or pinned XML ZIP in coordinated Golden Copy family | Exact source-directed accounting, fund and branch relationships |
+| `gleif.reporting_exception` | REPEX JSON ZIP or pinned XML ZIP in coordinated Golden Copy family | Preserve reason/exception evidence; missing parent is not proof of no parent |
 | `gleif.isin_lei` | Independent complete pair snapshot | Security identifier to accepted issuer identity; no legacy-Security retirement from absence |
 | `gleif.bic_lei` | Independent complete pair snapshot | Governed organization/Branch mapping; identifier semantics decide the endpoint |
 | `gleif.mic_lei` | Independent complete pair snapshot | Venue-to-operator evidence; MIC is not a Company identifier |

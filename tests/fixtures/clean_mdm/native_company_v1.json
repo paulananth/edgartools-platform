@@ -1,0 +1,202 @@
+{
+  "version": 1,
+  "purpose": "source adapter/provenance fixture; binding is explicit test setup, not independent match truth",
+  "sources": {
+    "03-accepted-level1-records.jsonl": "a8372f23f6cd4be322839327145357f501c998637ae72b96c3dc34275fa51cf2",
+    "01-company-cohort-1000.jsonl": "33af2a7df8a02a0838bc2b19a72c75dbe7552e7ba73b9004862f1ae3e18f367f"
+  },
+  "gleif": {
+    "Entity": {
+      "EntityCategory": {
+        "$": "GENERAL"
+      },
+      "EntityCreationDate": {
+        "$": "1900-01-18T00:00:00.000Z"
+      },
+      "EntityStatus": {
+        "$": "ACTIVE"
+      },
+      "HeadquartersAddress": {
+        "@xml:lang": "en",
+        "City": {
+          "$": "SEATTLE"
+        },
+        "Country": {
+          "$": "US"
+        },
+        "FirstAddressLine": {
+          "$": "220 OCCIDENTAL AVE S"
+        },
+        "PostalCode": {
+          "$": "98104"
+        },
+        "Region": {
+          "$": "US-WA"
+        }
+      },
+      "LegalAddress": {
+        "@xml:lang": "en",
+        "AdditionalAddressLine": [
+          {
+            "$": "300 DESCHUTES WAY SW STE 208 MC-CSC1"
+          }
+        ],
+        "City": {
+          "$": "TUMWATER"
+        },
+        "Country": {
+          "$": "US"
+        },
+        "FirstAddressLine": {
+          "$": "C/O CORPORATION SERVICE COMPANY"
+        },
+        "PostalCode": {
+          "$": "98501"
+        },
+        "Region": {
+          "$": "US-WA"
+        }
+      },
+      "LegalForm": {
+        "EntityLegalFormCode": {
+          "$": "NHYA"
+        }
+      },
+      "LegalJurisdiction": {
+        "$": "US-WA"
+      },
+      "LegalName": {
+        "$": "Weyerhaeuser Company",
+        "@xml:lang": "en"
+      },
+      "OtherEntityNames": {
+        "OtherEntityName": [
+          {
+            "$": "Weyerhaeuser Timber Company",
+            "@type": "PREVIOUS_LEGAL_NAME",
+            "@xml:lang": "en"
+          }
+        ]
+      },
+      "RegistrationAuthority": {
+        "RegistrationAuthorityEntityID": {
+          "$": "278 012 337"
+        },
+        "RegistrationAuthorityID": {
+          "$": "RA000641"
+        }
+      }
+    },
+    "Extension": {
+      "gleif:conformity": {
+        "gleif:conformityflag": {
+          "$": "NON_CONFORMING"
+        }
+      }
+    },
+    "LEI": {
+      "$": "08IRJODWFYBI7QWRGS31"
+    },
+    "Registration": {
+      "InitialRegistrationDate": {
+        "$": "2012-06-06T15:51:00.000Z"
+      },
+      "LastUpdateDate": {
+        "$": "2026-02-06T11:44:40.455Z"
+      },
+      "ManagingLOU": {
+        "$": "5493001KJTIIGC8Y1R12"
+      },
+      "NextRenewalDate": {
+        "$": "2017-06-21T15:47:00.000Z"
+      },
+      "RegistrationStatus": {
+        "$": "LAPSED"
+      },
+      "ValidationAuthority": {
+        "ValidationAuthorityEntityID": {
+          "$": "278 012 337"
+        },
+        "ValidationAuthorityID": {
+          "$": "RA000641"
+        }
+      },
+      "ValidationSources": {
+        "$": "FULLY_CORROBORATED"
+      }
+    }
+  },
+  "sec": {
+    "addresses": [
+      {
+        "address_type": "business",
+        "city": "SEATTLE",
+        "country": "WA",
+        "last_sync_run_id": null,
+        "last_synced_at": null,
+        "state_or_country": "WA",
+        "street1": "220 OCCIDENTAL AVENUE SOUTH",
+        "street2": null,
+        "zip_code": "98104"
+      },
+      {
+        "address_type": "mailing",
+        "city": "SEATTLE",
+        "country": "WA",
+        "last_sync_run_id": null,
+        "last_synced_at": null,
+        "state_or_country": "WA",
+        "street1": "220 OCCIDENTAL AVENUE SOUTH",
+        "street2": null,
+        "zip_code": "98104"
+      }
+    ],
+    "canonical_name": "Weyerhaeuser Co",
+    "cik": 106535,
+    "cohort_ordinal": 491,
+    "cohort_stratum": "operating_and_ticker",
+    "ein": "910470860",
+    "eligibility_reason": "operating_and_ticker",
+    "entity_id": "5d59f8b4-e9ba-4e55-9e55-f730150d1b43",
+    "fiscal_year_end": "1231",
+    "former_names": [],
+    "has_canonical_ticker": true,
+    "has_relationship_evidence": false,
+    "is_operating": true,
+    "normalized_name_v1": "WEYERHAEUSER CO",
+    "parent_company_entity_id": null,
+    "primary_exchange": null,
+    "primary_ticker": "WY",
+    "sec_category": "Large accelerated filer",
+    "sec_ein": "910470860",
+    "sec_entity_name": "WEYERHAEUSER CO",
+    "sec_entity_type": "operating",
+    "sec_first_sync_run_id": null,
+    "sec_fiscal_year_end": "1231",
+    "sec_last_sync_run_id": null,
+    "sec_last_synced_at": null,
+    "sec_sic": "6798",
+    "sec_sic_description": "Real Estate Investment Trusts",
+    "sec_state_of_incorporation": "WA",
+    "sec_state_of_incorporation_desc": "WA",
+    "selection_hash": "05210c12725a010bdff4013283e9314399f202344a498fc8bb9f5c8a3f547170",
+    "sic_code": "6798",
+    "sic_description": "Real Estate Investment Trusts",
+    "state_of_incorporation": "WA",
+    "subsidiary_evidence_count": 0,
+    "ticker": "WY",
+    "tickers": [
+      {
+        "exchange": "NYSE",
+        "last_sync_run_id": "daily-incremental-verify-bookkeeping-fix-1788343855",
+        "last_synced_at": "2026-09-02 10:15:29.021 -0700",
+        "source_name": "company_tickers_exchange",
+        "source_rank": 707,
+        "ticker": "WY"
+      }
+    ],
+    "tracking_status": "active",
+    "valid_from": "2026-08-19 11:36:42.814 Z",
+    "valid_to": null
+  }
+}

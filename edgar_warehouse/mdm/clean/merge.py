@@ -492,6 +492,14 @@ class MergeStage:
                 }
                 for r in reviews
             )
+            deferred_contracts = {
+                row["source_code"]: row["body"]
+                for row in rows(
+                    conn,
+                    "SELECT source_code,body FROM mdm_v2.dataset WHERE source_code=ANY(:codes)",
+                    codes=sorted({r["source_code"] for r in deferred}),
+                )
+            }
             projections.extend(
                 {
                     "object_type": "review",
@@ -503,7 +511,10 @@ class MergeStage:
                         "publication_key": r["publication_key"],
                         "record_locator": r["record_locator"],
                         "open": True,
-                        "blocking": True,
+                        "blocking": r["reason"]
+                        not in deferred_contracts.get(r["source_code"], {}).get(
+                            "nonblocking_deferred_reasons", []
+                        ),
                     },
                 }
                 for r in deferred

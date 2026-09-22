@@ -12,6 +12,7 @@ import re
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from functools import partial
 from typing import BinaryIO
 from uuid import UUID
 
@@ -127,7 +128,14 @@ class PublicationVerifier:
             raise Conflict("Source artifact digest mismatch")
         return bytes(content), length
 
-    def verify(self, store: Store, *, source_code: str, manifest_revision_id: str):
+    def verify(
+        self,
+        store: Store,
+        *,
+        source_code: str,
+        manifest_revision_id: str,
+        on_native_record=None,
+    ):
         """Verify exactly the inventory pinned by a registered dataset contract.
 
         Artifact references come only from immutable revisions. The caller's
@@ -222,6 +230,19 @@ class PublicationVerifier:
             else:
                 raise Conflict("Unsupported publication mode")
 
+            native = dataset.get("native_contract")
+            if native is not None:
+                from .gleif_source import VERSION, validate_release
+
+                if (
+                    versions["parser_version"] != VERSION
+                    or versions["contract_version"] != VERSION
+                ):
+                    raise Conflict(
+                        "Unsupported native publication interpretation version"
+                    )
+                validate_release(manifest, native)
+
             def check_revision(revision):
                 if (
                     revision["source_family"] != family
@@ -294,7 +315,28 @@ class PublicationVerifier:
                     _hash(member.get(k)) != revision[k] for k in HASHES
                 ):
                     raise Conflict("Member identity or interpretation digest mismatch")
-                _, size = self._bytes(revision, MEMBER_LIMIT)
+                if native is None:
+                    _, size = self._bytes(revision, MEMBER_LIMIT)
+                else:
+                    from .gleif_source import inspect_archive
+
+                    with self.open_artifact(
+                        revision["bronze_artifact_reference"]
+                    ) as stream:
+                        inspected = inspect_archive(
+                            stream,
+                            member=name,
+                            metadata=member["native"],
+                            expected_sha256=revision["raw_evidence_hash"],
+                            on_record=partial(
+                                on_native_record, manifest["publication"], name
+                            )
+                            if on_native_record is not None
+                            else None,
+                        )
+                    if any(inspected[k] != revision[k] for k in HASHES):
+                        raise Conflict("Native interpretation hash mismatch")
+                    size = inspected["compressed_bytes"]
                 if type(member.get("bytes")) is not int or member["bytes"] != size:
                     raise Conflict("Member byte count mismatch")
                 inventory.append(
@@ -304,6 +346,7 @@ class PublicationVerifier:
                         "revision_id": revision_id,
                         "bytes": size,
                         **{k: revision[k] for k in HASHES},
+                        **({"native": member["native"]} if native is not None else {}),
                     }
                 )
         inventory.sort(key=lambda member: member["member"])
@@ -334,6 +377,14 @@ class PublicationVerifier:
                     "verified_bytes": manifest_size
                     + sum(m["bytes"] for m in inventory),
                     "delivery_verified": True,
+                    **(
+                        {
+                            "native_contract": native,
+                            "publication_time": manifest["publication_time"],
+                        }
+                        if native is not None
+                        else {}
+                    ),
                 }
             )
         )
@@ -371,7 +422,11 @@ def plan_continuity(
         raise Conflict("Recovery cannot mix datasets, scopes or sibling families")
     if old and old["sequence"] >= target_sequence:
         raise Conflict("Recovery target must advance the completed publication")
-    identities = {old["publication"]: previous.proof_digest} if previous else {}
+    identities = (
+        {old["publication"]: previous.proof_digest}
+        if previous is not None and old is not None
+        else {}
+    )
     for proof, doc in docs.items():
         native = doc["publication"]
         if native in identities and identities[native] != proof:
@@ -382,7 +437,7 @@ def plan_continuity(
         # Increasing source sequences form a DAG; dynamic programming retains
         # the cheapest deterministic path to each (sequence, manifest hash).
         initial = (start["sequence"], start["manifest_sha256"])
-        paths = {initial: ((0, 0, ()), [])}
+        paths: dict = {initial: ((0, 0, ()), [])}
         if baseline:
             paths[initial] = ((start["verified_bytes"], 1, (baseline,)), [baseline])
         for proof, doc in sorted(

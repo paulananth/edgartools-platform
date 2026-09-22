@@ -88,6 +88,7 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "027_clean_mdm_deferred.sql",
             "028_clean_mdm_assessment.sql",
             "029_clean_mdm_family_checkpoint.sql",
+            "030_clean_mdm_evidence_disposition.sql",
         ):
             extra = path.with_name(name)
             extra_source = extra.read_text()
@@ -190,6 +191,20 @@ def register_dataset(
     Deployment can read CHANGE_LEDGER_DATABASE_URL and write MDM_DATABASE_URL.
     The immutable attestation is a replay input, not another activation switch.
     """
+    reasons = body.get("nonblocking_deferred_reasons", [])
+    if (
+        not isinstance(reasons, list)
+        or any(not isinstance(r, str) or not r for r in reasons)
+        or len(set(reasons)) != len(reasons)
+    ):
+        raise ValueError("nonblocking_deferred_reasons requires distinct reason names")
+    adapter = body.get("adapter", {})
+    formats = [
+        adapter.get("record_key_format"),
+        *adapter.get("identifier_formats", {}).values(),
+    ]
+    if any(f not in {None, "sec_cik", "lei"} for f in formats):
+        raise ValueError("Unknown identifier format in Dataset Contract")
     registry_connection = (
         registry_connection if registry_connection is not None else conn
     )

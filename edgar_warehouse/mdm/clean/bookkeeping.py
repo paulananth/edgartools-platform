@@ -56,7 +56,12 @@ class RunCoordinator:
         return result
 
     def start(
-        self, run_id: str, expected_batches: list[str], *, manifest_digest: str
+        self,
+        run_id: str,
+        expected_batches: list[str],
+        *,
+        manifest_digest: str,
+        native_consumption: dict | None = None,
     ) -> None:
         if not expected_batches or len(expected_batches) != len(set(expected_batches)):
             raise ValueError("A root run requires a nonempty frozen batch manifest")
@@ -65,6 +70,8 @@ class RunCoordinator:
             "manifest_digest": manifest_digest,
             "contract_version": 2,
         }
+        if native_consumption is not None:
+            scope["native_consumption"] = native_consumption
         with Session(self.engine) as session:
             session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:run,0))"),
@@ -89,6 +96,16 @@ class RunCoordinator:
             )
             book.commit()
 
+    def completed_source(self, run_id: str) -> dict:
+        """A cursor is insufficient: independently reconcile whole-source work."""
+        if not self.reconcile(run_id).get("source_consumption_complete", False):
+            raise Conflict("Previous source publication is not fully consumed")
+        with Session(self.engine) as session:
+            run = BookkeepingStore(session).get_pipeline_run(run_id)
+            if run is None:
+                raise Conflict("Previous root run disappeared")
+            return json.loads(run["scope_json"])["native_consumption"]
+
     def reconcile(self, run_id: str) -> dict:
         with Session(self.engine) as session:
             session.execute(
@@ -99,7 +116,9 @@ class RunCoordinator:
             run = book.get_pipeline_run(run_id)
             if run is None:
                 raise Conflict("Root run was not registered")
-            expected = set(json.loads(run["scope_json"])["expected_batches"])
+            scope = json.loads(run["scope_json"])
+            expected = set(scope["expected_batches"])
+            source_report = {}
             with self.mdm.engine.connect().execution_options(
                 isolation_level="REPEATABLE READ"
             ) as conn:
@@ -135,13 +154,37 @@ class RunCoordinator:
                     WHERE o.run_id=CAST(:run AS uuid) AND old->>'object_type'='review' AND old->>'object_id'=p.object_id)"""),
                     {"run": run_id},
                 )
-                attempts = dict(
-                    conn.execute(
+                attempts = {
+                    event: count
+                    for event, count in conn.execute(
                         text("""SELECT event,count(*) FROM mdm_v2.attempt_event
                     WHERE run_id=CAST(:run AS uuid) GROUP BY event"""),
                         {"run": run_id},
                     ).all()
-                )
+                }
+                if "native_consumption" in scope:
+                    from .native_consumption import consumption_report
+
+                    # Only bounded per-batch summaries cross this boundary; never
+                    # reload millions of retained source records to reconcile.
+                    summaries = conn.execute(
+                        text("""SELECT b.batch_id,
+                      b.effects->'continuity_proof' AS continuity_proof,
+                      b.effects->'source_accounting' AS source_accounting,
+                      jsonb_array_length(coalesce(b.effects->'assertions','[]')) AS normalized,
+                      jsonb_array_length(coalesce(b.effects->'deferred','[]')) AS deferred,
+                      NOT EXISTS(SELECT 1 FROM jsonb_array_elements(
+                        coalesce(b.effects->'assertions','[]') || coalesce(b.effects->'deferred','[]')) r
+                        WHERE r->>'source_code' IS DISTINCT FROM b.effects->'continuity_proof'->>'source_code'
+                           OR r->>'publication_key' IS DISTINCT FROM b.effects->'continuity_proof'->>'publication') AS source_consistent
+                      FROM mdm_v2.batch b JOIN mdm_v2.observation o USING(batch_id)
+                      WHERE o.run_id=CAST(:run AS uuid)"""),
+                        {"run": run_id},
+                    ).mappings()
+                    source_report = consumption_report(
+                        scope["native_consumption"],
+                        {r["batch_id"]: dict(r) for r in summaries},
+                    )
             report = {
                 "expected_batches": len(expected),
                 "observed_batches": len(observed),
@@ -150,8 +193,14 @@ class RunCoordinator:
                 "pending_publications": pending,
                 "unresolved_reviews": unresolved,
                 "attempt_events": attempts,
+                **source_report,
             }
-            complete = expected == observed and pending == 0 and unresolved == 0
+            complete = (
+                expected == observed
+                and pending == 0
+                and unresolved == 0
+                and source_report.get("source_consumption_complete", True)
+            )
             report["end_to_end_complete"] = complete
             book.record_pipeline_verification(
                 run_id,

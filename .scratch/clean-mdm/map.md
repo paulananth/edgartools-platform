@@ -11,6 +11,16 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 
 ## Notes
 
+- 2026-09-22: [Ticket 12](issues/12-integrate-native-gleif-company-publications.md)
+  implements native GLEIF evidence and whole-publication accounting on
+  `codex/company-native-gleif`, rebased through `5e2e4501` (#691). PR #673 already
+  merged the earlier foundation; older stacked-branch notes below are historical.
+  [Acceptance](ticket12-acceptance.md) distinguishes full JSON parser qualification
+  from matching and production throughput. Next is Company Mastering Policy and
+  Dataset Contract versioning, available for [Claude handover](../handover/2026-09-22-company-mastering-to-claude.md)
+  after this PR lands. No automatic binding or consolidation rule has been activated.
+
+
 - 2026-09-20: ticket 11 implemented on `codex/company-publication-verification`
   in `../edgartools-platform-company-publication-verification`, based on
   `codex/sec-gleif-company` at `7784c0e3`. This is an isolated stacked branch;
