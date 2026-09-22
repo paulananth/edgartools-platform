@@ -1,7 +1,7 @@
 # Run the cold-onboarding trial
 
 Type: task
-Status: claimed — all three rounds run; awaiting the operator's decision on a fourth round
+Status: closed (2026-09-22) — check 5 accepted as partly met
 Blocked by: 08
 
 ## Question
@@ -33,5 +33,12 @@ where the runner was present only as compiled bytecode. Full report:
 - Method limits: the task text carried hints beyond the spec
   ([prompts.md](../trial/prompts.md)), and round 2 reused round 1's source.
 - **Check 5 is partly met.** The target was zero questions and no round
-  reached it. Whether to run a fourth round on a third source, or accept the
-  trend, is the operator's decision.
+  reached it.
+
+## Decision
+
+Operator, 2026-09-22: **accept check 5 as partly met; no fourth round.** The
+evidence is the trend (14 → 9 → 8 gaps, narrowing from how the language reads
+data to vocabulary and source-specific conventions) and three proven sources
+with no engine reads. Round 3's spec fixes stay untried by a fresh agent; the
+real engine's first new source is the next test of them.

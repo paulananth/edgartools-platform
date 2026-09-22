@@ -157,9 +157,15 @@ no edit to any Clean MDM file.
   — **spec written and handover sent as one note** (GLEIF first; 5 blocking
   requests). [spec](../../docs/specs/source-contract/spec.md).
 - [Run the cold-onboarding trial](issues/09-run-the-cold-onboarding-trial.md)
-  — *in progress, awaiting a decision on a fourth round*: three fresh agents
-  proved two unseen sources with no engine reads, but logged 14 → 9 → 8 spec
-  gaps, all written into the spec. [trial/](trial/README.md).
+  — **check 5 partly met, accepted by the operator (no fourth round)**: three
+  fresh agents proved two unseen sources with no engine reads, but logged
+  14 → 9 → 8 spec gaps, all written into the spec; round 3's fixes are
+  untried. [trial/](trial/README.md).
+- **Destination reached (2026-09-22)** with two checks accepted as partly
+  met: check 4 (no-network must be enforced below Python) and check 5 (the
+  trial did not reach zero questions). The two items under Not yet specified
+  wait on Codex's answer to the handover's blocking request 4 (versioning)
+  and on the real engine; they are follow-ups, not steps on this map.
 
 ## Not yet specified
 
