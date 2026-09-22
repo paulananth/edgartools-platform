@@ -70,6 +70,10 @@ class PathError(Exception):
     pass
 
 
+class ArtifactRejected(Exception):
+    """A whole artifact the reader cannot use (e.g. a declared CSV header is absent); counted as rejected."""
+
+
 class Reject(Exception):
     """Raised by custom code to reject one record with a reason (ticket 04 Q4)."""
 
@@ -234,6 +238,17 @@ def read_artifact(read: dict, raw: bytes) -> list[tuple[Any, dict]]:
             if rec is not None:
                 docs.append((rec, {}))
         return docs
+    if fmt == "csv":  # one document per row; `columns` maps path-safe names to header text
+        import csv as _csv
+        try:
+            text = raw.decode(read.get("encoding", "utf-8"))
+        except UnicodeDecodeError as e:
+            raise ArtifactRejected(f"bytes are not {read.get('encoding', 'utf-8')}: {e.reason} at byte {e.start}")
+        rows = _csv.DictReader(io.StringIO(text, newline=""), delimiter=read.get("delimiter", ","))
+        missing = [h for h in read["columns"].values() if h not in (rows.fieldnames or [])]
+        if missing:
+            raise ArtifactRejected(f"header(s) {missing} not in this artifact")
+        return [({name: row.get(h) for name, h in read["columns"].items()}, {}) for row in rows]
     if fmt == "bytes":  # no engine parsing: every table uses a custom_reader (ticket 04 Q4)
         return [(None, {})]
     raise ContractInvalid("/read/format", "reader", f"unknown format {fmt!r}")
@@ -253,6 +268,8 @@ def resolve(node: Any, path: str) -> Any:
     for i, key in enumerate(parts):
         if isinstance(cur, list):
             raise PathError(f"path {path!r} crosses a repeating group at {'.'.join(parts[:i]) or '.'}; use each")
+        if key == "$" and cur is not MISSING and not isinstance(cur, dict):
+            raise PathError(f"path {path!r}: '$' reads an element's text, but this value is a plain {type(cur).__name__}; use '.' for the value itself")
         if not isinstance(cur, dict) or key not in cur:
             return MISSING
         cur = cur[key]
@@ -382,6 +399,19 @@ def p_join(ctx, a, _):
     return a.get("separator", "").join(out)
 
 
+def p_date_format(ctx, a, _):
+    """Text in a declared strptime format → ISO date (or ISO timestamp with `to: timestamp`)."""
+    import datetime as _dt
+    v = _leaf(ctx, a)
+    if v in (MISSING, None) or not str(v).strip():
+        return a.get("default")
+    try:
+        d = _dt.datetime.strptime(str(v).strip(), a["format"])
+    except ValueError:
+        return a.get("default")
+    return d.date().isoformat() if a.get("to", "date") == "date" else d.isoformat()
+
+
 def p_timestamp(ctx, a, _):
     v = _leaf(ctx, a)
     return a.get("default") if v is MISSING or v is None else str(v).strip()
@@ -436,6 +466,7 @@ PRIMITIVES: dict[str, tuple] = {
     "flag": (p_flag, {"path", "true_set"}, {"default", "from"}, False),
     "date_prefix": (p_date_prefix, {"path"}, {"default", "from"}, False),
     "timestamp": (p_timestamp, {"path"}, {"default", "from"}, False),
+    "date_format": (p_date_format, {"path", "format"}, {"default", "from", "to"}, False),
     "value_with_footnotes": (p_value_with_footnotes, {"path"}, {"default", "from"}, False),
     "const": (p_const, {"value"}, set(), False),
     "ordinal": (p_ordinal, set(), set(), False),
@@ -479,6 +510,18 @@ class Engine:
             e = errs[0]
             ptr = "/" + "/".join(str(p) for p in e.absolute_path)
             raise ContractInvalid(ptr, f"schema:{e.validator}", e.message)
+        rd = self.contract["read"]
+        if rd.get("encoding"):
+            import codecs
+            try:
+                codecs.lookup(rd["encoding"])
+            except LookupError:
+                raise ContractInvalid("/read/encoding", "encoding-known", f"unknown encoding {rd['encoding']!r}")
+        if rd["format"] == "csv":
+            if not rd.get("columns"):
+                raise ContractInvalid("/read", "csv-columns", "a csv reader needs columns: { <path-safe name>: \"<header text>\" }")
+            for name in rd["columns"]:
+                self._check_path(name, f"/read/columns/{name}")
         for tname, table in self.contract["read"]["tables"].items():
             base = f"/read/tables/{tname}"
             if ("custom_reader" in table) == ("columns" in table):
@@ -502,6 +545,21 @@ class Engine:
                                       f"read and silver disagree: missing {sorted(missing)} extra {sorted(extra)}")
             for cname, expr in table["columns"].items():
                 self._check_expr(expr, f"{base}/columns/{cname}")
+        seen: dict[str, int] = {}
+        for ci, ch in enumerate(self.contract.get("checks") or []):
+            lab = check_label(ch)
+            if lab in seen:
+                raise ContractInvalid(f"/checks/{ci}", "check-label-unique",
+                                      f"checks {seen[lab]} and {ci} are both named {lab!r} in the gate; give one a label: argument")
+            seen[lab] = ci
+        gate = self.contract.get("gate") or {}
+        known = {"rejected", "type_errors", "deferred"} | {f"rows.{t}" for t in self.contract["silver"]} \
+            | {f"check.{check_label(ch)}" for ch in (self.contract.get("checks") or [])}
+        for lname in (gate.get("limits") or {}):
+            if lname not in known:
+                hint = difflib.get_close_matches(lname, known, n=1)
+                raise ContractInvalid(f"/gate/limits/{lname}", "limit-known",
+                                      f"no metric named {lname!r}" + (f" — did you mean {hint[0]!r}?" if hint else f"; metrics: {sorted(known)}"))
         for lname, spec in (self.contract.get("lookups") or {}).items():
             if spec.get("family") not in self.families:
                 raise ContractInvalid(f"/lookups/{lname}/family", "family-known", f"unknown artifact family {spec.get('family')!r}")
@@ -543,6 +601,8 @@ class Engine:
             raise ContractInvalid(f"{ptr}/{name}", "explicit-default", f"primitive {name} reads a path and needs an explicit default")
         for k in PATH_ARGS & set(args):
             self._check_path(args[k], f"{ptr}/{name}/{k}")
+        if name == "date_format" and args.get("to", "date") not in ("date", "timestamp"):
+            raise ContractInvalid(f"{ptr}/date_format/to", "argument-value", f"to must be date or timestamp, not {args['to']!r}")
         if name == "join":
             for i, part in enumerate(args["parts"]):
                 self._check_expr(part, f"{ptr}/join/parts/{i}")
@@ -559,7 +619,7 @@ class Engine:
         from importlib.metadata import packages_distributions
         dists = packages_distributions()  # module name → distribution names, e.g. a module shipped by a differently named package
         declared = set(self.contract.get("requires") or [])
-        allowed = set(sys.stdlib_module_names) | {"source_engine"} | {m for m, d in dists.items() if declared & set(d)}
+        allowed = set(sys.stdlib_module_names) | {"source_engine", "source_contract"} | {m for m, d in dists.items() if declared & set(d)}
         for node in ast.walk(ast.parse(src)):
             names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
             for n in names:
@@ -612,7 +672,12 @@ class Engine:
     def parse(self, raw: bytes) -> dict[str, list[dict]]:
         sha = hashlib.sha256(raw).hexdigest()
         out: dict[str, list[dict]] = {t: [] for t in self.contract["read"]["tables"]}
-        for doc, header in read_artifact(self.contract["read"], raw):
+        try:
+            documents = read_artifact(self.contract["read"], raw)
+        except ArtifactRejected as r:
+            self.rejects.append({"table": "*", "artifact": sha, "reason": str(r)})
+            documents = []
+        for doc, header in documents:
             for tname, table in self.contract["read"]["tables"].items():
                 if "custom_reader" in table:
                     step = table["custom_reader"]["step"]
@@ -647,12 +712,27 @@ class Engine:
                     except Reject as r:
                         self.rejects.append({"table": tname, "artifact": sha, "reason": str(r)})
                         continue
+                    except PathError as r:  # one record's shape, not the whole run: reject it, located at the column
+                        self.rejects.append({"table": tname, "artifact": sha, "reason": f"path error: {r}",
+                                             "pointer": f"/read/tables/{tname}/columns/{cname}"})
+                        continue
                     bad = self._check_types(tname, row)
                     if bad:
                         self.type_errors.append({"table": tname, "column": bad[0], "message": bad[1], "artifact": sha,
                                                  "pointer": f"/silver/{tname}/columns/{bad[0]}"})
                         continue
                     out[tname].append(row)
+        return out
+
+    def parse_fixtures(self, fixture) -> dict[str, list[dict]]:
+        """A case's fixture is one file or a list of files; rows are concatenated in order."""
+        out: dict[str, list[dict]] = {t: [] for t in self.contract["read"]["tables"]}
+        for f in ([fixture] if isinstance(fixture, str) else fixture):
+            path = self.dir / f
+            if not path.is_file():
+                raise ContractInvalid("/tests", "fixture-exists", f"fixture {f!r} does not exist in the source folder")
+            for t, rows in self.parse(path.read_bytes()).items():
+                out[t].extend(rows)
         return out
 
     def _check_types(self, tname, row):
@@ -757,6 +837,8 @@ def run_check(engine: Engine, check: dict, silver: dict[str, list[dict]]) -> lis
 
 def check_label(check: dict) -> str:
     (name, a), = check.items()
+    if a.get("label"):
+        return a["label"]
     return f"{name}({a.get('step') or a.get('column') or ','.join(a.get('columns', [])) or a['table']})"
 
 
@@ -781,11 +863,14 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
     for i, case in enumerate(c.get("tests") or []):
         ptr = f"/tests/{i}"
         results["cases"] += 1
-        fx = engine.dir / case["fixture"]
-        raw = fx.read_bytes()
-        fixture_digests[case["fixture"]] = hashlib.sha256(raw).hexdigest()
         engine.type_errors.clear()
-        silver = engine.parse(raw)
+        engine.rejects.clear()
+        silver = engine.parse_fixtures(case["fixture"])
+        for rj in engine.rejects:
+            failures.append({"kind": "rejected", "pointer": rj.get("pointer", ptr), "case": case["case"],
+                             "message": f"record rejected: {rj['reason']}", "fixture": case["fixture"]})
+        for f in ([case["fixture"]] if isinstance(case["fixture"], str) else case["fixture"]):
+            fixture_digests[f] = hashlib.sha256((engine.dir / f).read_bytes()).hexdigest()
         for te in engine.type_errors:
             failures.append({"kind": "silver-type", "pointer": te["pointer"], "case": case["case"], "message": te["message"],
                              "fixture": case["fixture"]})
@@ -801,13 +886,28 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                     failures.append({"kind": "case", "pointer": f"{ptr}/expect/silver/{tname}/{j}", "case": case["case"],
                                      "table": tname, "row": j + 1, "diff": d, "context": {k: a.get(k) for k in e}, "fixture": case["fixture"]})
         exp_mdm = case.get("expect", {}).get("mdm")
+        ds_contract = (c.get("dataset") or {}).get("contract") or {}
+        ranked = policy_ranked_fields(engine)
+        winning_cols = {col: f for f, col in (((ds_contract.get("adapter") or {}).get("fields")) or {}).items() if f in ranked}
         if exp_mdm is not None:
             got = engine.to_assertions(silver)
             if len(got) != len(exp_mdm):
                 failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm", "case": case["case"],
                                  "message": f"expected {len(exp_mdm)} assertions, got {len(got)}", "fixture": case["fixture"]})
             for j, (e, a) in enumerate(zip(exp_mdm, got)):
-                flat = {"kind": a.get("kind", a.get("deferred")), **{f"identifiers.{k}": v for k, v in a.get("identifiers", {}).items()},
+                if "deferred" in e or "deferred" in a:  # a deferred record: compare its reason only
+                    d = _match({"deferred": e.get("deferred")}, {"deferred": a.get("deferred")})
+                    if d:
+                        failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm/{j}", "case": case["case"], "table": "mdm",
+                                         "row": j + 1, "diff": d, "fixture": case["fixture"]})
+                    continue
+                for col in e.get("evidence_only") or []:
+                    if col in winning_cols:  # evidence only = cannot win a field (§13.2a): unmapped, or unranked by the policy
+                        failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm/{j}/evidence_only", "case": case["case"],
+                                         "message": f"column {col!r} is listed as evidence only, but it maps to MDM field "
+                                                    f"{winning_cols[col]!r}, which the Mastering Policy ranks this source for",
+                                         "fixture": case["fixture"]})
+                flat = {"kind": a.get("kind"), **{f"identifiers.{k}": v for k, v in a.get("identifiers", {}).items()},
                         **{f"fields.{k}": (f.get("value") if f.get("op") == "value" else None) for k, f in a.get("fields", {}).items()}}
                 want = {"kind": e.get("kind"), **{f"identifiers.{k}": v for k, v in (e.get("identifiers") or {}).items()},
                         **{f"fields.{k}": v for k, v in (e.get("fields") or {}).items()}}
@@ -835,9 +935,11 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                             "limit": "bound checks a declared binding: automatic rules are refused today (store.py:160-161)"}
     results["fixture_digests"] = fixture_digests
     engine.purity_check = engine.fixture_mode = False
-    if gate and not failures:
+    if gate and not failures and c.get("gate"):
         results["gate"] = run_gate(engine, bronze_root, failures)
-    results["state"] = "proven" if not failures and (gate or not c.get("gate")) else "draft"
+    results["state"] = "proven" if not failures and gate and c.get("gate") else "draft"
+    if not failures and not c.get("gate"):
+        results["note"] = "cases passed; the contract declares no gate, so it cannot become proven"
     if results["state"] == "draft" and not failures and c.get("gate") and not gate:
         results["note"] = "cases passed; the gate was not run, so the version stays draft"
     return results
@@ -881,6 +983,10 @@ def run_gate(engine: Engine, bronze_root: Path | None, failures: list[dict]) -> 
     base_rows = sum(len(r) for r in silver.values())
     judge("rejected", len(engine.rejects), base_rows + len(engine.rejects), "/gate")
     judge("type_errors", len(engine.type_errors), base_rows + len(engine.type_errors), "/gate")
+    ds = engine.contract.get("dataset")
+    if ds:
+        mapped = engine.to_assertions(silver)
+        judge("deferred", sum(1 for a in mapped if "deferred" in a), len(mapped), "/gate")
     for t, rows in silver.items():
         lim = limits.get(f"rows.{t}")
         if lim:
@@ -906,7 +1012,19 @@ def _describe(expr) -> tuple[str, bool]:
         return " → ".join(p for p, _ in parts), any(c for _, c in parts)
     a = a or {}
     arg = a.get("path") or a.get("each") or a.get("name") or a.get("lookup") or ("" if "value" not in a else repr(a["value"]))
-    return f"`{name}`" + (f" `{arg}`" if arg else ""), False
+    where = " (from the document)" if a.get("from") == "document" else ""
+    return f"`{name}`" + (f" `{arg}`" if arg else "") + where, False
+
+
+def policy_ranked_fields(engine: Engine) -> set[str]:
+    """MDM fields whose survivorship ranks this source, from the Rules Database stand-in."""
+    adapter = ((engine.contract.get("dataset") or {}).get("contract") or {}).get("adapter") or {}
+    pol = HERE.parent / "policies" / "mastering-policy.yaml"
+    if not pol.exists():
+        return set()
+    kinds = {adapter.get("kind")} | set((adapter.get("kind_values") or {}).values())
+    return {f for kind, fields in (load_contract(pol)[0].get("fields") or {}).items() if kind in kinds
+            for f, spec in fields.items() if engine.contract["source"] in (spec.get("sources") or [])}
 
 
 def mapdoc(engine: Engine) -> str:
@@ -914,12 +1032,14 @@ def mapdoc(engine: Engine) -> str:
     ds = (c.get("dataset") or {})
     adapter = (ds.get("contract") or {}).get("adapter") or {}
     targets: dict[tuple[str, str], str] = {}
+    policy_fields = policy_ranked_fields(engine)
     for col in adapter.get("record_key", []):
         targets[(ds.get("table"), col)] = "record key"
     for ns, col in (adapter.get("identifiers") or {}).items():
         targets[(ds.get("table"), col)] = f"identifier `{ns}`"
     for f, col in (adapter.get("fields") or {}).items():
-        targets[(ds.get("table"), col)] = (targets.get((ds.get("table"), col), "") + f" field `{f}`").strip()
+        label = f"field `{f}`" if f in policy_fields else f"field `{f}` — **evidence only**: the Mastering Policy gives `{c['source']}` no rank for it"
+        targets[(ds.get("table"), col)] = (targets.get((ds.get("table"), col), "") + " " + label).strip()
     if adapter.get("kind_field"):
         targets[(ds.get("table"), adapter["kind_field"])] = "identity kind"
     lines = [f"# Mapping Document — `{c['source']}` v{c['version']}", "",

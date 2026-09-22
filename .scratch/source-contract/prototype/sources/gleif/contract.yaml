@@ -48,7 +48,6 @@ dataset:                       # Codex's publication_v1 adapter shape (tests/fix
     publication_key: golden copy publication
     effective_time: explicit publication effective time
     semantics: patch
-    registry_evidence: prototype
     adapter:
       version: gleif-level1-prototype-1
       kind: company
