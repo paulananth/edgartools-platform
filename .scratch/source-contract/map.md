@@ -182,7 +182,10 @@ no edit to any Clean MDM file.
   re-binding every record — the versioning model needs a Codex proposal.
 - **Moving an old parser**: the prototype shows whether Form 3/4/5 *can* be
   expressed; the criteria for when an existing parser *should* move are for
-  after the prototype.
+  after the prototype. Narrowed 2026-09-22 by the fixed-shape rule above: the
+  candidates are the ownership parser (Form 3/4/5 XML) and the ADV parser
+  (CSV); the proxy parser is out of scope. Waits for the real engine's first
+  new source, so the order rests on measured evidence.
 
 ## Out of scope
 
@@ -194,5 +197,10 @@ no edit to any Clean MDM file.
   Bronze Artifact; the one piece inside scope (a generic run stage) is a
   ticket.
 - Retrofitting the existing parsers — a migration, not a design.
+- **Sources whose Bronze Artifact has no fixed shape** (operator, 2026-09-22):
+  an HTML document such as a DEF 14A proxy keeps a hand-written parser. A
+  contract reads XML, JSON or CSV. Such a source also needs state across rows,
+  which a table does not have, so a `custom_reader` would make it custom code
+  in a contract's clothing. Spec §8.1.
 - Edits to Clean MDM files — proposals via `.scratch/handover/` only.
 - The real engine's implementation.

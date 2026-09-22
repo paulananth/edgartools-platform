@@ -195,6 +195,18 @@ setting, and is not part of any contract.
 | `csv` | `columns: { <path-safe name>: "<header text>" }` (required), `delimiter` (default `,`), `encoding` (default `utf-8`) | one document per row, keyed by the names in `columns`; other headers are ignored. **Proposed:** an artifact that lacks a listed header, or whose bytes are not in the declared encoding, is rejected whole and counted in `rejected` |
 | `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
 
+**A Source Contract is for a Bronze Artifact with a fixed shape.** The three
+readers above cover XML, JSON and CSV. A source whose artifact has no fixed
+shape — an HTML document such as a DEF 14A proxy, where each company lays its
+Summary Compensation Table out differently — is **out of scope for a
+contract** and keeps a hand-written parser (operator decision, 2026-09-22). A
+second reason stands behind the first: reading such a table needs state
+across rows (the executive's name is on the first row of a block and the
+following rows carry only the wrapped title), and a table reads each row on
+its own. `bytes` with a `custom_reader` can technically carry such a source,
+but then the source is custom code in a contract's clothing, and the Mapping
+Document would report it as ~100% custom.
+
 **An empty CSV cell is `""`, not missing.** The header exists, so the value
 exists; `default` does not apply. Chain `{ empty_to_null: {} }` on an
 optional column, or `int`/`number`, which give `default` for `""`.
@@ -1030,7 +1042,12 @@ Form 3/4/5 go-live.
    `source run` re-parse old artifacts, and which identities re-project?
 4. **Snapshot file format** and the re-record command.
 5. **Moving an existing parser onto a contract.** Form 3/4/5 shows it *can*
-   be done; the criteria for when it *should* be done are not set.
+   be done; the criteria for when it *should* be done are not set. Narrowed
+   2026-09-22: only a fixed-shape source is a candidate, which today means
+   the ownership parser (Form 3/4/5 XML, already proven equal on 5,356
+   artifacts) and the ADV parser (CSV, the shape trial round 3 used). The
+   proxy parser is out. The decision waits for the real engine, so the order
+   rests on measured evidence, not a guess.
 6. **The silver collapse grammar** (§12).
 7. **The Form 3/4/5 subject key**: `owner_cik` or `(accession_number,
    owner_index)` (gap F2, §13.4).
