@@ -544,7 +544,7 @@ def test_delta_requires_fully_consumed_predecessor_and_replays_correction(
         publication_verifier=verifier,
     )
     assert result["source_consumption_complete"] is True
-    assert coordinator.completed_source(run_id)["plan"]["mode"] == "delta"
+    assert coordinator.completed_source(run_id)["plan"]["recovery_mode"] == "delta"
     replay = execute_manifest(
         store,
         coordinator,

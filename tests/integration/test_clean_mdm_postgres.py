@@ -62,7 +62,8 @@ def postgres():
         admin = create_engine(
             f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres"
         )
-        for _ in range(80):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
             try:
                 with admin.connect() as conn:
                     conn.execute(text("SELECT 1"))

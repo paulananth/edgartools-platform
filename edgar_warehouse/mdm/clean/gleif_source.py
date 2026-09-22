@@ -336,7 +336,7 @@ def validate_release(manifest: dict, native: dict) -> None:
         if not isinstance(scope, list) or not scope or len(set(scope)) != len(scope):
             raise Conflict("Native Company scope must be explicit and unique")
         for lei in scope:
-            format_value(lei, "gleif_lei")
+            format_value(lei, "lei")
     except (KeyError, ValueError, TypeError) as exc:
         raise Conflict("Invalid native release metadata or Company scope") from exc
 
@@ -357,9 +357,9 @@ def dataset_contract(member: str, *, level1_source: str = "gleif.lei.v1") -> dic
             kind_field="Entity.EntityCategory.$",
             kind_values={"GENERAL": "company"},
             record_key=["LEI.$"],
-            record_key_format="gleif_lei",
+            record_key_format="lei",
             identifiers={"lei": "LEI.$"},
-            identifier_formats={"lei": "gleif_lei"},
+            identifier_formats={"lei": "lei"},
         )
         mapping["fields"] = {
             "gleif_legal_form": "Entity.LegalForm.EntityLegalFormCode.$",
@@ -436,9 +436,9 @@ def record_evidence(
         if member == "relationships":
             row = row.get("RelationshipRecord", {})
             start = format_value(
-                value(row, "Relationship.StartNode.NodeID.$"), "gleif_lei"
+                value(row, "Relationship.StartNode.NodeID.$"), "lei"
             )
-            end = format_value(value(row, "Relationship.EndNode.NodeID.$"), "gleif_lei")
+            end = format_value(value(row, "Relationship.EndNode.NodeID.$"), "lei")
             if any(
                 value(row, f"Relationship.{side}.NodeIDType.$") != "LEI"
                 for side in ("StartNode", "EndNode")
@@ -478,7 +478,7 @@ def record_evidence(
                 "registration_status": value(row, "Registration.RegistrationStatus.$"),
             }
         else:
-            lei = format_value(value(row, "LEI.$"), "gleif_lei")
+            lei = format_value(value(row, "LEI.$"), "lei")
             if lei not in eligible_leis:
                 raise UnsupportedRecord("outside_approved_company_scope")
             effective = value(row, "Registration.LastUpdateDate.$")

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "purpose": "historical native archive parser qualification; no matching or rebuild authorization",
+  "inputs": ".scratch/gleif-company-augmentation/research/01-gleif-snapshot-manifest.json",
+  "members": [
+    {
+      "adapter_version": "gleif-native-record-v1",
+      "raw_evidence_hash": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a",
+      "canonical_source_hash": "6b96e737d5426dcc3e05df5bae104e3cd9a1e2accf87f227d281895d0ecc9f8b",
+      "record_count": 3428477,
+      "domain_content_hash": "4ec727b29ec2b14a6b20ef7a6381b3e97bac3a4bfa265ec4ef8a0499ec826df3",
+      "compressed_bytes": 927550946,
+      "expanded_bytes": 13252301819,
+      "member": "level1",
+      "seconds": 1032.888,
+      "peak_rss_bytes": 37801984
+    },
+    {
+      "adapter_version": "gleif-native-record-v1",
+      "raw_evidence_hash": "089a2513d2b5d78fc6359c87ef4bc25a56ac7f58d6b3cb740b954e3ecd2bd0c3",
+      "canonical_source_hash": "95eb10725919f8d6fe4d426ccc9154881dc8ff51ad1bf4dcbfa5f952d72e75bc",
+      "record_count": 487721,
+      "domain_content_hash": "270e5188f9f0a10ae7e5f3cd4ae58fc13cc5b04833e5d5d6bbd014d68b17f5f4",
+      "compressed_bytes": 34953042,
+      "expanded_bytes": 1120235207,
+      "member": "relationships",
+      "seconds": 43.935,
+      "peak_rss_bytes": 37801984
+    },
+    {
+      "adapter_version": "gleif-native-record-v1",
+      "raw_evidence_hash": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831",
+      "canonical_source_hash": "618f34c21b4364e844acdd6b2087ed83dbd2a2437568707f46511c312cb058cb",
+      "record_count": 6351397,
+      "domain_content_hash": "825be19b88a1743bdf5a674f6c244919ca557473a465cef2cb678c9d8a0ae2bc",
+      "compressed_bytes": 63719264,
+      "expanded_bytes": 1554543947,
+      "member": "reporting_exceptions",
+      "seconds": 107.68,
+      "peak_rss_bytes": 37801984
+    }
+  ]
+}

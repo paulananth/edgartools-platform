@@ -30,7 +30,7 @@ def format_value(item, format_name=None):
         ):
             raise UnsupportedRecord("invalid_cik")
         return value.zfill(10)
-    if format_name == "gleif_lei":
+    if format_name == "lei":
         value = str(item).strip()
         if not re.fullmatch(r"[A-Z0-9]{18}[0-9]{2}", value):
             raise UnsupportedRecord("invalid_lei")
