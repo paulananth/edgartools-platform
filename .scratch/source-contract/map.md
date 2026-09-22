@@ -165,7 +165,9 @@ no edit to any Clean MDM file.
   met: check 4 (no-network must be enforced below Python) and check 5 (the
   trial did not reach zero questions). The two items under Not yet specified
   wait on Codex's answer to the handover's blocking request 4 (versioning)
-  and on the real engine; they are follow-ups, not steps on this map.
+  and on the real engine; they are follow-ups, not steps on this map. A
+  fourth trial round, on the real engine with no task hints, is handed to
+  Codex as an acceptance step for the engine (handover note).
 
 ## Not yet specified
 

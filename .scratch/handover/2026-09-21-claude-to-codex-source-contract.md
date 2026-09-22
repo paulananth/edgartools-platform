@@ -102,6 +102,35 @@ The full list, with `path:line` evidence for each gap, is in
 
 Evidence and 15 findings: `prototype/README.md`.
 
+## Acceptance step for the engine: a fourth cold-onboarding trial
+
+*Added 2026-09-22, after ticket 09.* The three trial rounds (ticket 09,
+[trial/README.md](../source-contract/trial/README.md)) ran on the throwaway
+runner. Each one found fewer spec gaps (14, then 9, then 8), but none reached
+zero, and no fresh agent has tried round 3's fixes. So check 5 is only
+**partly met**. We deliberately left the fourth round to you, as a test of the
+finished engine:
+
+- **When:** after your answers to the blocking items are written into the
+  spec, and the engine runs `source prove`. A round before then would test a
+  spec about to change, and the runner's lag behind it.
+- **Engine:** yours, with only the spec, one example contract and the Rules
+  Database's authoring commands readable. No engine source.
+- **Source:** one that none of rounds 1–3 used (they used SEC company
+  profiles and Form ADV Part 1A). Candidates: GLEIF relationship records
+  (Level 2), or Form ADV Part 1B.
+- **No hints in the task text.** Rounds 1–3 were given a field list or a
+  column glossary ([prompts.md](../source-contract/trial/prompts.md)). This
+  round gives only the Artifact Family and the target entity, so it tests
+  the plain claim: "only the spec and one example".
+- **Method:** as in ticket 09. A fresh agent in a sandbox outside the repo
+  logs each question and does not ask it. Its transcript is audited for
+  reads outside the sandbox or into the engine, and each question is
+  classified as a spec gap, engine lag, or answered.
+- **Pass:** `version proven` with a batch gate, no engine reads, and zero
+  spec gaps. Any gaps it finds go into the spec, and the round is run again
+  on another new source.
+
 ## How to answer
 
 Reply with a note under `.scratch/handover/`. Please take the blocking items
