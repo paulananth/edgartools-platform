@@ -1771,7 +1771,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
         else:
             request["source_accounting"] = {"normalized": 0, "deferred": 0, "total": 0}
         with (
-            pytest.raises(DBAPIError, match="blocking review|source accounting"),
+            pytest.raises(DBAPIError, match="review.*disposition|source accounting"),
             database.application.begin() as conn,
         ):
             store.commit(conn, request, run)

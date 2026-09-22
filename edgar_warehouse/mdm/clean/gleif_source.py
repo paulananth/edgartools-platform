@@ -404,6 +404,11 @@ def dataset_contract(member: str, *, level1_source: str = "gleif.lei.v1") -> dic
         raise ValueError("Unknown native GLEIF member")
     return {
         "provider": "GLEIF",
+        "nonblocking_deferred_reasons": [
+            "outside_approved_company_scope",
+            "unsupported_identity_kind",
+            "reported_parent_exception",
+        ],
         "family": "gleif",
         "schema_version": VERSION,
         "publication_families": ["golden_copy"],
@@ -435,9 +440,7 @@ def record_evidence(
     try:
         if member == "relationships":
             row = row.get("RelationshipRecord", {})
-            start = format_value(
-                value(row, "Relationship.StartNode.NodeID.$"), "lei"
-            )
+            start = format_value(value(row, "Relationship.StartNode.NodeID.$"), "lei")
             end = format_value(value(row, "Relationship.EndNode.NodeID.$"), "lei")
             if any(
                 value(row, f"Relationship.{side}.NodeIDType.$") != "LEI"
@@ -482,6 +485,16 @@ def record_evidence(
             if lei not in eligible_leis:
                 raise UnsupportedRecord("outside_approved_company_scope")
             effective = value(row, "Registration.LastUpdateDate.$")
+            if member == "level1":
+                category = value(row, "Entity.EntityCategory.$")
+                if category not in {
+                    "GENERAL",
+                    "BRANCH",
+                    "FUND",
+                    "SOLE_PROPRIETOR",
+                    "INTERNATIONAL_ORGANIZATION",
+                }:
+                    raise UnsupportedRecord("invalid_identity_kind")
             if member == "reporting_exceptions":
                 if value(row, "ExceptionCategory.$") not in {
                     "DIRECT_ACCOUNTING_CONSOLIDATION_PARENT",
@@ -490,6 +503,9 @@ def record_evidence(
                     raise UnsupportedRecord("unsupported_exception_category")
                 if not row.get("ExceptionReason"):
                     raise UnsupportedRecord("missing_exception_reason")
+                # An exception is retained source evidence, not a new Company
+                # binding or a fabricated parent edge.
+                raise UnsupportedRecord("reported_parent_exception")
         result = normalize(
             {**row, "_native": raw},
             source_code=source_code,

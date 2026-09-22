@@ -40,6 +40,7 @@ def native_fixture(
     bind=False,
     publication="2026-09-11T16:00:00Z",
     previous=None,
+    additional_level1=None,
 ):
     capture = sources.Capture(source_db, root)
     codes = {
@@ -115,6 +116,7 @@ def native_fixture(
     }
     if level1:
         rows["level1"] = [level1]
+    rows["level1"].extend(additional_level1 or [])
     wrappers = {
         "level1": ("records", "LEI_3.1"),
         "relationships": ("relations", "RR_2.1"),
@@ -454,11 +456,13 @@ def test_real_sec_and_gleif_fields_share_company_with_retained_provenance(
     run["batches"][0]["identities"] = []
     path.write_text(json.dumps(run))
     store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    full_run = str(uuid4())
     result = execute_manifest(
         store,
-        RunCoordinator(command_databases[0], store),
+        coordinator,
         path=str(path),
-        run_id=str(uuid4()),
+        run_id=full_run,
         stage="mastering",
         limit=3,
         publication_verifier=PublicationVerifier(source_db, capture.reader),
@@ -473,6 +477,46 @@ def test_real_sec_and_gleif_fields_share_company_with_retained_provenance(
     assert (
         fields["gleif_legal_jurisdiction"]["winner"]["source_code"] == "gleif.level1.v1"
     )
+    # A later source lifecycle correction updates its own fields. It cannot
+    # delete the SEC Company or silently activate an identity merge/unlink rule.
+    prior = coordinator.completed_source(full_run)["plan"]["publications"][-1][
+        "evidence"
+    ]
+    corrected = json.loads(json.dumps(fixture["gleif"]))
+    corrected["Registration"]["RegistrationStatus"]["$"] = "RETIRED"
+    corrected["Registration"]["LastUpdateDate"]["$"] = "2026-09-12T16:00:00Z"
+    native_fixture(
+        database,
+        source_db,
+        tmp_path,
+        level1=corrected,
+        publication="2026-09-12T16:00:00Z",
+        previous=prior,
+    )
+    delta = json.loads(path.read_text())
+    delta["policy_digest"] = policy
+    delta["native_source"]["previous_run_id"] = full_run
+    for batch in delta["batches"]:
+        batch["batch_id"] = "correction-" + batch["batch_id"]
+        batch["expected_checkpoint"] += 3
+        batch["checkpoint"] += 3
+    path.write_text(json.dumps(delta))
+    execute_manifest(
+        store,
+        coordinator,
+        path=str(path),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=3,
+        publication_verifier=PublicationVerifier(source_db, capture.reader),
+    )
+    entities = core.documents(database, "entity")
+    assert set(entities) == {entity["entity_id"]}
+    assert (
+        entities[entity["entity_id"]]["fields"]["gleif_registration_status"]["value"]
+        == "RETIRED"
+    )
+    assert entities[entity["entity_id"]]["fields"]["name"]["value"] == "WEYERHAEUSER CO"
 
 
 def test_delta_requires_fully_consumed_predecessor_and_replays_correction(
@@ -555,3 +599,50 @@ def test_delta_requires_fully_consumed_predecessor_and_replays_correction(
         publication_verifier=verifier,
     )
     assert replay["commits"] == []
+
+
+@pytest.mark.parametrize(
+    "lei,complete", [("INR2EJN1ERAN0W5ZP974", True), ("bad-lei", False)]
+)
+def test_excluded_evidence_is_retained_without_blocking_but_malformed_records_block(
+    database, source_db, command_databases, tmp_path, lei, complete
+):
+    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+
+    capture, path = native_fixture(
+        database,
+        source_db,
+        tmp_path,
+        bind=True,
+        additional_level1=[
+            {"LEI": {"$": lei}, "Entity": {"EntityCategory": {"$": "GENERAL"}}}
+        ],
+    )
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    run_id = str(uuid4())
+    result = execute_manifest(
+        store,
+        coordinator,
+        path=str(path),
+        run_id=run_id,
+        stage="mastering",
+        limit=4,
+        publication_verifier=PublicationVerifier(source_db, capture.reader),
+    )
+    assert result["source_consumption_complete"] is True
+    sink = LocalContractSink(tmp_path / "published")
+    for consumer in ("export", "graph"):
+        while store.deliver_one(consumer, "test", sink):
+            pass
+    assert coordinator.reconcile(run_id)["end_to_end_complete"] is complete
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT body->'raw_record'->'LEI'->>'$' FROM mdm_v2.deferred_record"
+                )
+            )
+            == lei
+        )

@@ -173,32 +173,77 @@ def test_xml_external_entities_are_rejected():
         )
 
 
-@pytest.mark.parametrize("member,namespace,root,container,record,cdf,wrapper", [
-    ("relationships", "rr", "RelationshipData", "RelationshipRecords", "RelationshipRecord", "RR_2.1", "relations"),
-    ("reporting_exceptions", "repex", "ReportingExceptionData", "ReportingExceptions", "Exception", "REPEX_2.1", "exceptions"),
-])
-def test_rr_and_repex_xml_and_json_have_the_same_simple_record(member, namespace, root, container, record, cdf, wrapper):
+@pytest.mark.parametrize(
+    "member,namespace,root,container,record,cdf,wrapper",
+    [
+        (
+            "relationships",
+            "rr",
+            "RelationshipData",
+            "RelationshipRecords",
+            "RelationshipRecord",
+            "RR_2.1",
+            "relations",
+        ),
+        (
+            "reporting_exceptions",
+            "repex",
+            "ReportingExceptionData",
+            "ReportingExceptions",
+            "Exception",
+            "REPEX_2.1",
+            "exceptions",
+        ),
+    ],
+)
+def test_rr_and_repex_xml_and_json_have_the_same_simple_record(
+    member, namespace, root, container, record, cdf, wrapper
+):
     xml = f'<{root} xmlns="http://www.gleif.org/data/schema/{namespace}/2016"><Header><ContentDate>2026-09-11T16:00:00Z</ContentDate><FileContent>GLEIF_FULL_PUBLISHED</FileContent><RecordCount>1</RecordCount></Header><{container}><{record}><LEI>HWUPKR0MPOU8FGXBT394</LEI></{record}></{container}></{root}>'.encode()
     row = {"LEI": {"$": "HWUPKR0MPOU8FGXBT394"}}
     if member == "relationships":
         row = {"RelationshipRecord": row}
     hashes = []
-    for fmt, payload in [("xml.zip", xml), ("json.zip", json.dumps({wrapper: [row]}).encode())]:
+    for fmt, payload in [
+        ("xml.zip", xml),
+        ("json.zip", json.dumps({wrapper: [row]}).encode()),
+    ]:
         raw = archive_bytes(payload)
-        report = inspect_archive(io.BytesIO(raw), member=member, metadata=metadata(format=fmt, cdf_version=cdf), expected_sha256=hashlib.sha256(raw).hexdigest())
+        report = inspect_archive(
+            io.BytesIO(raw),
+            member=member,
+            metadata=metadata(format=fmt, cdf_version=cdf),
+            expected_sha256=hashlib.sha256(raw).hexdigest(),
+        )
         hashes.append(report["canonical_source_hash"])
     assert hashes[0] == hashes[1]
 
 
 def test_reporting_exception_is_retained_and_not_a_parent_edge():
     from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
-    row = {"LEI": {"$": "HWUPKR0MPOU8FGXBT394"}, "ExceptionCategory": {"$": "DIRECT_ACCOUNTING_CONSOLIDATION_PARENT"}, "ExceptionReason": [{"$": "NON_CONSOLIDATING"}]}
-    kind, result = record_evidence(row, member="reporting_exceptions", contract=dataset_contract("reporting_exceptions"),
-        source_code="gleif.reporting_exceptions.v1", eligible_leis={"HWUPKR0MPOU8FGXBT394"}, ordinal=0,
-        publication={"publication_key": "p1", "revision": 1, "artifact_sha256": "a"*64, "member": "reporting_exceptions"})
-    assert kind == "assertion"
-    assert result["relationships"] == []
-    assert result["provenance"]["source"]["native_record"] == row
+
+    row = {
+        "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+        "ExceptionCategory": {"$": "DIRECT_ACCOUNTING_CONSOLIDATION_PARENT"},
+        "ExceptionReason": [{"$": "NON_CONSOLIDATING"}],
+    }
+    kind, result = record_evidence(
+        row,
+        member="reporting_exceptions",
+        contract=dataset_contract("reporting_exceptions"),
+        source_code="gleif.reporting_exceptions.v1",
+        eligible_leis={"HWUPKR0MPOU8FGXBT394"},
+        ordinal=0,
+        publication={
+            "publication_key": "p1",
+            "revision": 1,
+            "artifact_sha256": "a" * 64,
+            "member": "reporting_exceptions",
+        },
+    )
+    assert kind == "deferred"
+    assert result["reason"] == "reported_parent_exception"
+    assert result["raw_record"] == row
 
 
 @pytest.mark.parametrize(
