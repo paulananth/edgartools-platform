@@ -240,7 +240,10 @@ def read_artifact(read: dict, raw: bytes) -> list[tuple[Any, dict]]:
         return docs
     if fmt == "csv":  # one document per row; `columns` maps path-safe names to header text
         import csv as _csv
-        text = raw.decode(read.get("encoding", "utf-8"))
+        try:
+            text = raw.decode(read.get("encoding", "utf-8"))
+        except UnicodeDecodeError as e:
+            raise ArtifactRejected(f"bytes are not {read.get('encoding', 'utf-8')}: {e.reason} at byte {e.start}")
         rows = _csv.DictReader(io.StringIO(text, newline=""), delimiter=read.get("delimiter", ","))
         missing = [h for h in read["columns"].values() if h not in (rows.fieldnames or [])]
         if missing:
@@ -508,6 +511,12 @@ class Engine:
             ptr = "/" + "/".join(str(p) for p in e.absolute_path)
             raise ContractInvalid(ptr, f"schema:{e.validator}", e.message)
         rd = self.contract["read"]
+        if rd.get("encoding"):
+            import codecs
+            try:
+                codecs.lookup(rd["encoding"])
+            except LookupError:
+                raise ContractInvalid("/read/encoding", "encoding-known", f"unknown encoding {rd['encoding']!r}")
         if rd["format"] == "csv":
             if not rd.get("columns"):
                 raise ContractInvalid("/read", "csv-columns", "a csv reader needs columns: { <path-safe name>: \"<header text>\" }")
@@ -592,6 +601,8 @@ class Engine:
             raise ContractInvalid(f"{ptr}/{name}", "explicit-default", f"primitive {name} reads a path and needs an explicit default")
         for k in PATH_ARGS & set(args):
             self._check_path(args[k], f"{ptr}/{name}/{k}")
+        if name == "date_format" and args.get("to", "date") not in ("date", "timestamp"):
+            raise ContractInvalid(f"{ptr}/date_format/to", "argument-value", f"to must be date or timestamp, not {args['to']!r}")
         if name == "join":
             for i, part in enumerate(args["parts"]):
                 self._check_expr(part, f"{ptr}/join/parts/{i}")
@@ -700,6 +711,10 @@ class Engine:
                             row[cname] = self.eval(ctx, expr, f"/read/tables/{tname}/columns/{cname}")
                     except Reject as r:
                         self.rejects.append({"table": tname, "artifact": sha, "reason": str(r)})
+                        continue
+                    except PathError as r:  # one record's shape, not the whole run: reject it, located at the column
+                        self.rejects.append({"table": tname, "artifact": sha, "reason": f"path error: {r}",
+                                             "pointer": f"/read/tables/{tname}/columns/{cname}"})
                         continue
                     bad = self._check_types(tname, row)
                     if bad:
@@ -849,7 +864,11 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
         ptr = f"/tests/{i}"
         results["cases"] += 1
         engine.type_errors.clear()
+        engine.rejects.clear()
         silver = engine.parse_fixtures(case["fixture"])
+        for rj in engine.rejects:
+            failures.append({"kind": "rejected", "pointer": rj.get("pointer", ptr), "case": case["case"],
+                             "message": f"record rejected: {rj['reason']}", "fixture": case["fixture"]})
         for f in ([case["fixture"]] if isinstance(case["fixture"], str) else case["fixture"]):
             fixture_digests[f] = hashlib.sha256((engine.dir / f).read_bytes()).hexdigest()
         for te in engine.type_errors:
@@ -868,6 +887,8 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                                      "table": tname, "row": j + 1, "diff": d, "context": {k: a.get(k) for k in e}, "fixture": case["fixture"]})
         exp_mdm = case.get("expect", {}).get("mdm")
         ds_contract = (c.get("dataset") or {}).get("contract") or {}
+        ranked = policy_ranked_fields(engine)
+        winning_cols = {col: f for f, col in (((ds_contract.get("adapter") or {}).get("fields")) or {}).items() if f in ranked}
         if exp_mdm is not None:
             got = engine.to_assertions(silver)
             if len(got) != len(exp_mdm):
@@ -880,11 +901,11 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                         failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm/{j}", "case": case["case"], "table": "mdm",
                                          "row": j + 1, "diff": d, "fixture": case["fixture"]})
                     continue
-                mapped_cols = set(((ds_contract.get("adapter") or {}).get("fields") or {}).values())
                 for col in e.get("evidence_only") or []:
-                    if col in mapped_cols:
+                    if col in winning_cols:  # evidence only = cannot win a field (§13.2a): unmapped, or unranked by the policy
                         failures.append({"kind": "case", "pointer": f"{ptr}/expect/mdm/{j}/evidence_only", "case": case["case"],
-                                         "message": f"column {col!r} is listed as evidence only but the adapter maps it to an MDM field",
+                                         "message": f"column {col!r} is listed as evidence only, but it maps to MDM field "
+                                                    f"{winning_cols[col]!r}, which the Mastering Policy ranks this source for",
                                          "fixture": case["fixture"]})
                 flat = {"kind": a.get("kind"), **{f"identifiers.{k}": v for k, v in a.get("identifiers", {}).items()},
                         **{f"fields.{k}": (f.get("value") if f.get("op") == "value" else None) for k, f in a.get("fields", {}).items()}}
@@ -914,7 +935,7 @@ def prove(engine: Engine, *, gate: bool, bronze_root: Path | None) -> dict:
                             "limit": "bound checks a declared binding: automatic rules are refused today (store.py:160-161)"}
     results["fixture_digests"] = fixture_digests
     engine.purity_check = engine.fixture_mode = False
-    if gate and not failures:
+    if gate and not failures and c.get("gate"):
         results["gate"] = run_gate(engine, bronze_root, failures)
     results["state"] = "proven" if not failures and gate and c.get("gate") else "draft"
     if not failures and not c.get("gate"):
@@ -995,18 +1016,23 @@ def _describe(expr) -> tuple[str, bool]:
     return f"`{name}`" + (f" `{arg}`" if arg else "") + where, False
 
 
+def policy_ranked_fields(engine: Engine) -> set[str]:
+    """MDM fields whose survivorship ranks this source, from the Rules Database stand-in."""
+    adapter = ((engine.contract.get("dataset") or {}).get("contract") or {}).get("adapter") or {}
+    pol = HERE.parent / "policies" / "mastering-policy.yaml"
+    if not pol.exists():
+        return set()
+    kinds = {adapter.get("kind")} | set((adapter.get("kind_values") or {}).values())
+    return {f for kind, fields in (load_contract(pol)[0].get("fields") or {}).items() if kind in kinds
+            for f, spec in fields.items() if engine.contract["source"] in (spec.get("sources") or [])}
+
+
 def mapdoc(engine: Engine) -> str:
     c = engine.contract
     ds = (c.get("dataset") or {})
     adapter = (ds.get("contract") or {}).get("adapter") or {}
     targets: dict[tuple[str, str], str] = {}
-    policy_fields: set[str] = set()  # fields whose survivorship lists this source (Rules Database stand-in)
-    pol = HERE.parent / "policies" / "mastering-policy.yaml"
-    if pol.exists():
-        kinds = {adapter.get("kind")} | set((adapter.get("kind_values") or {}).values())
-        for kind, fields in (load_contract(pol)[0].get("fields") or {}).items():
-            if kind in kinds:
-                policy_fields |= {f for f, spec in fields.items() if c["source"] in (spec.get("sources") or [])}
+    policy_fields = policy_ranked_fields(engine)
     for col in adapter.get("record_key", []):
         targets[(ds.get("table"), col)] = "record key"
     for ns, col in (adapter.get("identifiers") or {}).items():

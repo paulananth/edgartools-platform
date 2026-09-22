@@ -192,7 +192,7 @@ setting, and is not part of any contract.
 |---|---|---|
 | `xml` | `envelope: sgml_text` (take the `<XML>` block of a full SEC `.txt` submission and expose its header fields); `root: <tag>` (any other root gives zero rows); `on_parse_error: no_rows \| retry_without_control_chars` | one document |
 | `json` | none: the whole artifact is **one document** (e.g. one SEC company profile per file). `records: jsonl`: one document per line. `record_path: <path>`: the record inside each document | one document per artifact, or per line |
-| `csv` | `columns: { <path-safe name>: "<header text>" }` (required), `delimiter` (default `,`), `encoding` (default `utf-8`) | one document per row, keyed by the names in `columns`; other headers are ignored. An artifact that lacks a listed header is rejected whole and counted in `rejected` |
+| `csv` | `columns: { <path-safe name>: "<header text>" }` (required), `delimiter` (default `,`), `encoding` (default `utf-8`) | one document per row, keyed by the names in `columns`; other headers are ignored. **Proposed:** an artifact that lacks a listed header, or whose bytes are not in the declared encoding, is rejected whole and counted in `rejected` |
 | `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
 
 **An empty CSV cell is `""`, not missing.** The header exists, so the value
@@ -294,7 +294,7 @@ No string is ever run as code. `contains: "see remarks"` is a literal, and
 
 ## 9. Primitives
 
-These are the 24 that ran in the prototype. **Every primitive that returns a
+These are the 24 in the prototype. **Every primitive that returns a
 value read from a path (`path`, or `each` for `join`) requires an explicit
 `default:`**, because this repo has three different "absent" results (`""`,
 `null`, `false`). `count` is the exception: a missing group is 0. The spec is
@@ -312,7 +312,7 @@ require `default` on `value_with_footnotes` or `join`.
 | `flag` | `path`, `true_set`, `default` | `from` | `true` if the stripped text is in `true_set`, otherwise `false`. `default` applies only if the value is missing |
 | `date_prefix` | `path`, `default` | `from` | the leading `YYYY-MM-DD` of the unstripped text, otherwise `default` |
 | `timestamp` | `path`, `default` | `from` | the text as written, which must be ISO 8601 (`2012-06-06T15:51:00.000Z`). It does **not** convert time zones (gap G4, §24); the prototype accepts any text |
-| `date_format` | `path`, `format`, `default` | `from`, `to` | text in a declared `strptime` format (a literal pattern, e.g. `"%m/%d/%Y %I:%M:%S %p"`) → ISO date, or ISO timestamp with `to: timestamp`. Text that does not match gives `default`. It adds no time zone (gap G4). Added in ticket 09 for Form ADV's `03/17/2026 11:29:59 AM` |
+| `date_format` | `path`, `format`, `default` | `from`, `to` (`date` or `timestamp`) | **Proposed** (ticket 09; not yet used by a trial agent — round 3 wrote a Custom Step before it existed). Text in a declared `strptime` format (a literal pattern, e.g. `"%m/%d/%Y %I:%M:%S %p"`) → ISO date, or ISO timestamp with `to: timestamp`. Text that does not match gives `default`. It adds no time zone (gap G4). Added in ticket 09 for Form ADV's `03/17/2026 11:29:59 AM` |
 | `value_with_footnotes` | `path`, `default` | `from` | **Named Convention.** SEC's `<x><value/><footnoteId id/></x>` as `"value [F1,F2]"` |
 | `header` | `name` | `default` | a field of the reader's envelope header, e.g. `ACCESSION NUMBER` |
 | `artifact` | `name` | — | an artifact attribute; `sha256` today |
@@ -354,6 +354,23 @@ whether `default` is required, and which argument the Mapping Document
 shows. The JSON Schema, the validator and the Mapping Document are generated
 from these descriptors, and a test checks the tables above against them. The
 prototype spread this over five places (GoF review of ticket 08).
+
+### 9.1 Engine structure: one declaration per extension point
+
+The prototype changed the same places each time the trial found something.
+The real engine must have **one declaration** for each kind of thing a
+contract names, and derive everything else from it:
+
+| Extension point | One declaration holds | Derived from it |
+|---|---|---|
+| primitive | arguments and their kinds, previous-value or item, `default` rule | schema, validator, §9 tables (checked by a test), Mapping Document |
+| reader (`format`) | options schema, validation, a function that yields documents, the rule for rejecting a whole artifact | schema, validator, §8.1 table |
+| expectation (`expect.silver`, `expect.mdm[].deferred`, `expect.mdm[].evidence_only`, `expect.merge[].outcome`) | the checker and the diff it reports as `{column, expected, actual}` | the `expect` schema. **A key with no checker makes the contract invalid** |
+| gate metric (`rejected`, `type_errors`, `deferred`, `rows.<table>`, `check.<label>`) | its name pattern, its `max_pct` base, how it is computed | limit-name validation and the gate, from one list; the §16 table is checked against it |
+
+In the prototype, gate names were validated in one place and computed in
+another; that mismatch is how an unknown `deferred:` limit went unnoticed
+(GoF review of ticket 09).
 
 ## 10. `lookups`: another Artifact Family
 
@@ -525,12 +542,20 @@ validator checks it. Literal keys (`role`, `authority`, `type`,
 ### 13.2 Rules the code applies that a contract author must know
 
 - A path through a list gives `null` with no error. So each row of
-  `dataset.table` must already be **one source record** (one assertion);
-  `read` does the fan-out. Records do not have to be one per MDM identity:
-  15 Form ADV filings by one adviser are 15 records (key `filing_id`) that
-  share one identifier (`crd`), and binding, not silver, brings them to one
-  identity. Collapsing to one row per identity is the Open collapse rule
-  (§25 item 6), not a requirement.
+  `dataset.table` must already be **one assertion**; `read` does the
+  fan-out.
+- **Within one publication, a record key may appear only once.** Clean MDM
+  stores one assertion per `(source_code, record_key, publication_key)`
+  (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:50`). Round 3 of the
+  trial keyed Form ADV silver by `filing_id` but the adapter by `crd`, and one
+  adviser filed 15 times in March. Its merge case passed only because those
+  filings carried the same mapped value, so their assertions were identical
+  and the second insert was a no-op. Any difference would have failed the
+  batch. **Proposed rule:** either make the adapter's record key the silver
+  key (here `filing_id`, with `crd` as an identifier, so binding brings the
+  filings to one identity), or collapse to one row per record key first (the
+  Open collapse rule, §25 item 6). The validator should check that the
+  adapter's `record_key` columns are unique in `dataset.table`.
 - Relationships whose target key is missing are dropped with no record (gap
   F5), and target keys are never formatted (gap F4).
 - A field value that is a map with `"op"` is an operation. Use
@@ -671,15 +696,20 @@ tests:
   09, round 2).
 - **Cut fixtures from real artifacts** where possible: whole records, bytes
   unchanged (for CSV, the header line plus whole rows, line endings kept).
-  A made-up fixture says `SYNTHETIC` in its case name.
+  **Proposed:** a made-up fixture says `SYNTHETIC` in its case name, as the
+  prototype's own synthetic cases do.
 - **`fixture`** is one file or a list of files. For a family with one
   document per artifact, a case about two records lists two files. Rows are
   concatenated in list order. A fixture that does not exist makes the
   contract invalid (exit 2).
-- **`evidence_only`** lists silver columns that must *not* appear as MDM
-  fields (ticket 05 Q2): a listed column that the adapter maps is a failure.
-  A runner must refuse any expectation it does not check rather than accept
-  it silently (ticket 09 round 3 found the prototype accepting it).
+- **`evidence_only`** lists silver columns that must not **win** an MDM
+  field (ticket 05 Q2). That is the same meaning "evidence only" has in
+  §13.2a: a column is evidence only if the adapter does not map it, or maps
+  it to a field the active Mastering Policy does not rank this source for. A
+  listed column that would win a field is a failure.
+- **Unknown expectation keys make the contract invalid** (the schema closes
+  every `expect` entry). Ticket 09 round 3 found the prototype accepting an
+  expectation it never checked; §9.1 gives the structure that prevents it.
 - **`given.identities` are seeds.** They go through the same contract and a
   first Merge Stage batch with a declared Steward binding, never inserted
   rows. They are named by the case, never by a generated id. `record` is the
@@ -833,7 +863,7 @@ hand-written, so it cannot drift from what runs.
 | 2 | deleting a source breaks nothing else | delete a folder; prove the others | passed |
 | 3 | the engine names no source | grep the engine for source names | passed |
 | 4 | no network | §19 | **partly**: needs enforcement below Python |
-| 5 | a fresh agent onboards an unseen source from this spec and one example | ticket 09: three fresh agents, two sources | **partly**: all three proved their source with no engine read, but logged 13, 9 and 8 real spec gaps; every one is fixed in this spec |
+| 5 | a fresh agent onboards an unseen source from this spec and one example | ticket 09: three fresh agents, two sources | **partly**: all three proved their source with no engine read, but logged 14, 9 and 8 spec gaps; every one is written into this spec, and round 3's fixes are untested |
 | 6 | the Mapping Document is generated | `source mapdoc` | passed |
 | 7 | every contract term is in `CONTEXT.md` | grep the glossary for each term | passed (ticket 08 added six terms) |
 | 8 | one command proves a source end to end | `source prove --gate` | passed |

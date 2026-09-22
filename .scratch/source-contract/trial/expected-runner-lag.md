@@ -12,7 +12,7 @@ other difficulty is scored as a **spec gap**.
 | L2 | `default` is required on `join` and `value_with_footnotes` (§9) | optional on both |
 | L3 | Custom Steps are registered per source (§11) | one shared registry (harmless for one source per run) |
 | L4 | `csv` reader (§8.1) | not implemented |
-| L5 | `deferred` gate metric; `expect.mdm.evidence_only`; `collapse` (§12, §15, §16) | not implemented; the schema rejects `collapse` and `evidence_only` |
+| L5 | `deferred` gate metric; `expect.mdm.evidence_only`; `collapse` (§12, §15, §16) | not implemented; the schema rejects `collapse`, but silently accepts `evidence_only` (corrected after round 3 Q9 showed it) |
 | L6 | `new`, `deferred`, `quarantined` merge outcomes (§15) | only `bound`, `binding_required`, field value/winner |
 | L7 | readers yield documents one at a time (§8.1) | returns a list |
 | L8 | `--all`, `source save`, `source export`, `source families` (§4.5, §10) | not implemented |

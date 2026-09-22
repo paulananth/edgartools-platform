@@ -157,9 +157,9 @@ no edit to any Clean MDM file.
   — **spec written and handover sent as one note** (GLEIF first; 5 blocking
   requests). [spec](../../docs/specs/source-contract/spec.md).
 - [Run the cold-onboarding trial](issues/09-run-the-cold-onboarding-trial.md)
-  — **check 5 partly met**: three fresh agents proved two unseen sources with
-  no engine reads, but logged 13 → 9 → 8 spec gaps, all fixed in the spec.
-  [trial/](trial/README.md).
+  — *in progress, awaiting a decision on a fourth round*: three fresh agents
+  proved two unseen sources with no engine reads, but logged 14 → 9 → 8 spec
+  gaps, all written into the spec. [trial/](trial/README.md).
 
 ## Not yet specified
 

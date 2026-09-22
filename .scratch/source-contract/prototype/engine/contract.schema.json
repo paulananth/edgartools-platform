@@ -20,7 +20,7 @@
         "records": {"enum": ["jsonl"]},
         "record_path": {"type": "string"},
         "columns": {"type": "object", "additionalProperties": {"type": "string"}},
-        "delimiter": {"type": "string", "maxLength": 1},
+        "delimiter": {"type": "string", "minLength": 1, "maxLength": 1},
         "encoding": {"type": "string"},
         "tables": {
           "type": "object", "minProperties": 1,
@@ -74,7 +74,13 @@
           "fixture": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}]},
           "given": {"type": "object", "additionalProperties": false, "properties": {"identities": {"type": "object"}}},
           "expect": {"type": "object", "additionalProperties": false,
-                     "properties": {"silver": {"type": "object"}, "mdm": {"type": "array"}, "merge": {"type": "array"}}}
+                     "properties": {"silver": {"type": "object"},
+                       "mdm": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                               "properties": {"kind": {}, "identifiers": {"type": "object"}, "fields": {"type": "object"},
+                                              "evidence_only": {"type": "array"}, "deferred": {"type": "string"}}}},
+                       "merge": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                                 "properties": {"record": {}, "outcome": {"enum": ["bound", "binding_required"]}, "to": {"type": "string"},
+                                                "identity": {"type": "string"}, "field": {"type": "string"}, "value": {}, "winner": {"type": "string"}}}}}}
         }
       }
     },
