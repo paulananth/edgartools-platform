@@ -4,7 +4,32 @@ Checkpoint: 2026-09-19. This is a local development handoff, not a release or
 cutover approval. The shared core and first native Company preparation path
 are implemented; the complete redesign remains in progress.
 
-## Current continuation — source-only Company prerequisite, 2026-09-20
+## Current continuation — native Company evidence, 2026-09-22
+
+Ticket 12 is implemented on `codex/company-native-gleif`, rebased through
+`origin/main` `5e2e4501` (#691). PR #673 already merged the prior Company foundation;
+the older stacked-branch instructions below are historical.
+
+Native JSON ZIP/XML ZIP verification, authenticated bounded ranges, frozen recovery
+plans and exact whole-publication consumption now feed the existing Merge Stage.
+Migration 030 permits declared nonblocking retained evidence while preserving
+blocking source errors. SEC + GLEIF Company field provenance is exercised on a
+retained source fixture with an explicit test binding. No automatic rule is active.
+
+See [native operations](native-gleif.md), [Ticket 12 acceptance](../../../.scratch/clean-mdm/ticket12-acceptance.md)
+and [response to Claude](../../../.scratch/handover/2026-09-22-codex-source-contract-response.md).
+The complete September 11 JSON archives passed streaming checks (10,267,595 records,
+~38 MB RSS). Full production consumption throughput and real XML snapshot qualification
+remain unproved; bounded invocations currently reparse all raw archives.
+
+Next: Company matching/mastering through the shared Dataset Contract versioning and
+Mastering Policy execution boundary, aligned with the Source Contract design.
+Claude can own that follow-up after this PR lands, on a dedicated branch. The
+handover must preserve Company Q14, separate fuzzy/consolidation qualification and
+explicit approval before activating a binding-capable rule digest. Do not start
+Person integration ahead of the Company completion gate.
+
+## Prior continuation — source-only Company prerequisite, 2026-09-20
 
 Ticket 11 is implemented on `codex/company-publication-verification` in
 `../edgartools-platform-company-publication-verification`, based on the unmerged

@@ -1,7 +1,7 @@
 # Integrate native GLEIF publications and Company consumption accounting
 
 Type: task
-Status: in progress
+Status: resolved (local implementation and verification; production qualification excluded)
 Owner: Codex — codex/company-native-gleif
 Blocked by: none (11 offline verification passed)
 
@@ -57,3 +57,22 @@ and [machine-readable evidence](../research-reverification-20260920.json).
 [Company policy](../../../docs/specs/clean-mdm/company-policy.md),
 [Company completion gate](../../../docs/specs/clean-mdm/company-completion.md),
 [Claude pickup reconciliation](../../handover/2026-09-20-codex-company-enrichment-reconciliation.md).
+
+## Implementation — 2026-09-22
+
+Native JSON ZIP and XML ZIP readers, pinned publication metadata, authenticated
+record ranges, frozen recovery plans and exact whole-publication consumption are
+connected to the shared Merge Stage. Migration 030 retains declared out-of-scope
+evidence without blocking required completion; malformed records remain blocking.
+SEC + GLEIF field provenance and a lifecycle correction share one retained Company
+in real PostgreSQL tests. No automatic identity rule is activated.
+
+The full September 11 JSON archives passed streaming verification. XML uses
+representative fixture/fault qualification, not a full real XML publication. Full
+raw re-verification per invocation remains a production throughput limit.
+
+See [acceptance](../ticket12-acceptance.md), [review](../ticket12-review.md),
+[native contract](../../../docs/specs/clean-mdm/native-gleif.md), and
+[Claude handover](../../handover/2026-09-22-company-mastering-to-claude.md).
+Company matching/mastering is the next workstream; settle the shared Dataset
+Contract versioning and policy execution boundary before its implementation ticket.
