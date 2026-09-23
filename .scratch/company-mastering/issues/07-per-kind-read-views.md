@@ -96,6 +96,27 @@ views. That is proved rather than assumed
 (`test_the_privilege_is_what_refuses_the_write_not_the_view_shape`), because the
 refusal test would otherwise pass for the wrong reason if the shape ever changed.
 
+## What the three-axis review found, 2026-09-23
+
+GoF returned no finding — the kind list has never actually churned (`git log -p`
+shows the eight literals only as additions at creation), so consolidating it
+further would be refactoring against a hypothetical. Standards and Spec found
+six real defects between them, all repaired before the PR:
+
+| Finding | Repair |
+|---|---|
+| The drift test transcribed 033's guard instead of running it, so it proved the copy and would keep passing after the original was edited | It now reads the migration file, substitutes only the kind array, and executes the real text |
+| The column guard covered `assertion` only, while its docstring claimed the projection too | Parametrised over both bases, with `RENAMED_OR_DROPPED` naming what a view deliberately does not show and why |
+| `<kind>_master_field` dropped `kind_version`, and that view is exactly the reader `survivorship.py:316` says must not lose it | Carried, and proved with a `kinds`-shaped policy rather than asserting against a null |
+| The guard's `SELECT INTO` took the first row silently, and its regex would swallow the literals of any other condition added to the constraint | Refuses unless exactly one constraint matches, and anchors on the normalised `= ANY (ARRAY[...])` segment |
+| `effective_at` was `timestamptz` in one view and `text` in its sibling | Cast, so one name means one type |
+| `assert migrate(...)` is vacuous — the return is an always-truthy dict | Asserts the store recorded 033 instead |
+
+Two comments were also correcting rather than describing: the trailing `REVOKE`
+closes PUBLIC only and never claimed more, and the `policy_digest` column holds
+the **kind's** authority digest despite the key's name — which is ticket 02
+decision 3 working as intended, and is now said where a reader will see it.
+
 ## Not done
 
 - **Migrations 027-033 are not applied to the live store.** Codex checked

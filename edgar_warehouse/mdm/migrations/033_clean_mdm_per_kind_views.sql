@@ -30,19 +30,36 @@ DECLARE
         'branch','government','international_organization','venue'
     ];
     declared text;
+    matched int;
+    listed text;
     permitted text[];
     k text;
 BEGIN
-    SELECT pg_get_constraintdef(oid) INTO declared
+    -- Exactly one CHECK constraint may mention the kind, or the read below is
+    -- ambiguous: PL/pgSQL's SELECT INTO takes the first row and says nothing.
+    SELECT count(*), min(pg_get_constraintdef(oid))
+      INTO matched, declared
     FROM pg_constraint
     WHERE conrelid = 'mdm_v2.identity'::regclass
       AND contype = 'c'
       AND pg_get_constraintdef(oid) LIKE '%kind%';
-    IF declared IS NULL THEN
-        RAISE EXCEPTION 'No entity kind constraint on mdm_v2.identity to check against';
+    IF matched <> 1 THEN
+        RAISE EXCEPTION
+            '% CHECK constraints on mdm_v2.identity mention the kind; expected exactly one',
+            matched;
+    END IF;
+    -- Read the literals out of the kind list alone. PostgreSQL normalises
+    -- kind IN ('a','b') to kind = ANY (ARRAY['a'::text,'b'::text]), so anchor
+    -- on that: scanning the whole definition would swallow the literals of any
+    -- other condition a later migration adds beside this one.
+    listed := substring(declared from 'kind[^=]*= ANY \(ARRAY\[(.*?)\]\)');
+    IF listed IS NULL THEN
+        RAISE EXCEPTION
+            'Cannot read the permitted kinds out of mdm_v2.identity''s constraint: %',
+            declared;
     END IF;
     SELECT array_agg(m[1] ORDER BY m[1]) INTO permitted
-    FROM regexp_matches(declared, '''([a-z_]+)''', 'g') AS m;
+    FROM regexp_matches(listed, '''([a-z_]+)''', 'g') AS m;
     IF permitted IS DISTINCT FROM (SELECT array_agg(x ORDER BY x) FROM unnest(kinds) x) THEN
         RAISE EXCEPTION
             'Per-kind views name % but mdm_v2.identity permits %', kinds, permitted;
@@ -87,6 +104,10 @@ BEGIN
         $v$, k || '_master', k);
 
         -- One row per mastered field, naming the source record that won it.
+        --
+        -- A steward override wins with no source record behind it, so its
+        -- record_key and effective_at are null and its source_code reads
+        -- 'steward'. That is the value's real provenance, not missing data.
         EXECUTE format($v$
             CREATE VIEW mdm_v2.%I AS
             SELECT p.object_id AS entity_id, p.batch_id,
@@ -96,8 +117,19 @@ BEGIN
                    (f.value->>'cleared')::boolean AS cleared,
                    f.value->'winner'->>'source_code' AS source_code,
                    f.value->'winner'->>'record_key' AS record_key,
-                   f.value->'winner'->>'effective_at' AS effective_at,
+                   -- Cast, so effective_at is a timestamp here exactly as it is
+                   -- in <kind>_evidence rather than the same name at two types.
+                   (f.value->'winner'->>'effective_at')::timestamptz AS effective_at,
+                   -- Despite the key's name this is the *kind's* authority
+                   -- digest, not the digest of the policy the batch ran under:
+                   -- a classification edit elsewhere in the document must not
+                   -- churn this field (ticket 02 decision 3). It is exposed
+                   -- under the body's own name so the two agree, with the kind
+                   -- version beside it because a digest alone says only that
+                   -- something differs, never which authored document it came
+                   -- from (survivorship.py:316).
                    f.value->>'policy_digest' AS policy_digest,
+                   f.value->>'kind_version' AS kind_version,
                    jsonb_array_length(COALESCE(f.value->'conflicts','[]'::jsonb))
                        AS conflict_count
             FROM mdm_v2.projection p
@@ -118,8 +150,11 @@ CREATE INDEX clean_projection_entity_kind ON mdm_v2.projection ((body->>'kind'))
 -- PostgreSQL, so the whole-record shapes would accept an INSERT that bypassed
 -- commit_batch if the privileges ever allowed it. store.migrate() revokes and
 -- re-grants SELECT across the whole schema after every migration, and
--- ALL TABLES covers views, so the application role gets no write here. This
--- repeats the revoke for any role that reaches the schema another way, and
--- test_clean_per_kind_views.py proves the write is refused rather than trusting
--- either statement.
+-- ALL TABLES covers views, so the application role gets no write here.
+--
+-- The statement below closes PUBLIC only, which is what a newly created view
+-- would otherwise inherit if the schema's default privileges ever changed; it
+-- does nothing about a role holding a direct grant, and is not claimed to.
+-- test_clean_per_kind_views.py proves the write is actually refused for the
+-- real application role rather than trusting either statement to have run.
 REVOKE ALL ON ALL TABLES IN SCHEMA mdm_v2 FROM PUBLIC;

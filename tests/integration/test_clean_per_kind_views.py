@@ -12,10 +12,15 @@ lists, which a view freezes at creation.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 
+import edgar_warehouse.mdm.migrations
 from edgar_warehouse.mdm.clean.classification import CLASSIFICATION_VERDICTS
 from edgar_warehouse.mdm.clean.evidence import KINDS
 from tests.integration import test_clean_mdm_postgres as core
@@ -40,16 +45,27 @@ def installed_views(database) -> set[str]:
 
 
 def permitted_kinds(database) -> set[str]:
-    """The kinds mdm_v2.identity itself allows, read from its constraint."""
+    """The kinds mdm_v2.identity itself allows, read from its constraint.
+
+    Anchored on the kind list rather than scanning the whole definition, for the
+    same reason migration 033 is: a later migration may add another condition to
+    this constraint, and its literals are not kinds.
+    """
     with database.application.connect() as conn:
-        return set(
-            conn.scalar(
-                text("""SELECT array_agg(m[1]) FROM pg_constraint c,
-                LATERAL regexp_matches(pg_get_constraintdef(c.oid),'''([a-z_]+)''','g') m
-                WHERE c.conrelid='mdm_v2.identity'::regclass AND c.contype='c'
-                  AND pg_get_constraintdef(c.oid) LIKE '%kind%'""")
+        definitions = [
+            r[0]
+            for r in conn.execute(
+                text("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                WHERE conrelid='mdm_v2.identity'::regclass AND contype='c'
+                  AND pg_get_constraintdef(oid) LIKE '%kind%'""")
             )
-        )
+        ]
+    assert len(definitions) == 1, (
+        f"expected exactly one kind CHECK on mdm_v2.identity, found {definitions}"
+    )
+    listed = re.search(r"kind[^=]*= ANY \(ARRAY\[(.*?)\]\)", definitions[0])
+    assert listed, f"cannot read the permitted kinds out of {definitions[0]}"
+    return set(re.findall(r"'([a-z_]+)'", listed.group(1)))
 
 
 def columns(database, relation: str) -> list[str]:
@@ -87,21 +103,44 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     }
 
 
-def test_a_whole_record_view_shows_every_column_of_its_base_table(database):
+# What a whole-record view deliberately does not show under the base table's own
+# name, and why. Anything outside this map must appear, or a structural column
+# has gone missing from a view without anyone deciding that it should.
+RENAMED_OR_DROPPED = {
+    "assertion": {},
+    # object_id is the entity under this view; object_type is constant 'entity'
+    # for every row a <kind>_master view can return, so it carries no meaning.
+    "projection": {"object_id": "entity_id", "object_type": None},
+}
+
+
+@pytest.mark.parametrize(
+    ("base", "view"),
+    [("assertion", "company_evidence"), ("projection", "company_master")],
+)
+def test_a_whole_record_view_shows_every_column_of_its_base_table(database, base, view):
     """A view freezes its column list at creation.
 
     The migration lists columns rather than using SELECT *, precisely so that a
-    structural column added to the base table later is a deliberate edit. This
-    test is what makes that deliberate rather than silent: add a column to
-    mdm_v2.assertion or the entity projection and it fails here until 033's
-    column lists are updated to match.
+    structural column added to a base table later is a deliberate edit rather
+    than a silent omission: with SELECT * the views would keep serving the old
+    column set for ever, and nothing would say so.
+
+    This is what makes it deliberate. Add a column to mdm_v2.assertion or to
+    mdm_v2.projection and it fails here until 033's column lists are updated, or
+    until the column is named in RENAMED_OR_DROPPED with a reason.
     """
-    for base, view in (("assertion", "company_evidence"),):
-        missing = set(columns(database, base)) - set(columns(database, view))
-        assert not missing, (
-            f"mdm_v2.{base} has columns {sorted(missing)} that mdm_v2.{view} "
-            "does not show; update migration 033's column lists"
-        )
+    shown = set(columns(database, view))
+    missing = set()
+    for column in columns(database, base):
+        alias = RENAMED_OR_DROPPED[base].get(column, column)
+        if alias is not None and alias not in shown:
+            missing.add(column)
+    assert not missing, (
+        f"mdm_v2.{base} has columns {sorted(missing)} that mdm_v2.{view} does "
+        "not show; add them to migration 033's column lists, or to "
+        "RENAMED_OR_DROPPED with the reason they are left out"
+    )
 
 
 def test_a_reader_may_select_from_a_view_but_never_write_through_it(database):
@@ -170,32 +209,29 @@ def test_the_migration_refuses_a_kind_list_that_has_drifted(database):
     """Migration 033's own guard, run against a deliberately wrong list.
 
     The guard is the only thing standing between a future ninth kind and a set
-    of views that quietly omits it. A guard that cannot fail is not a guard, so
-    this runs 033's check verbatim over a two-kind list and requires the raise.
-    """
-    from sqlalchemy.exc import DBAPIError
+    of views that quietly omits it, and a guard that cannot fail is not a guard.
 
-    guard = """
-    DO $$
-    DECLARE
-        kinds text[] := ARRAY['company','person'];
-        declared text; permitted text[];
-    BEGIN
-        SELECT pg_get_constraintdef(oid) INTO declared FROM pg_constraint
-        WHERE conrelid='mdm_v2.identity'::regclass AND contype='c'
-          AND pg_get_constraintdef(oid) LIKE '%kind%';
-        SELECT array_agg(m[1] ORDER BY m[1]) INTO permitted
-        FROM regexp_matches(declared,'''([a-z_]+)''','g') AS m;
-        IF permitted IS DISTINCT FROM (SELECT array_agg(x ORDER BY x) FROM unnest(kinds) x) THEN
-            RAISE EXCEPTION 'Per-kind views name % but mdm_v2.identity permits %', kinds, permitted;
-        END IF;
-    END; $$;
+    This runs the migration's real text rather than a copy of it: the file's own
+    DO block, with nothing changed but the kind array. A transcribed guard would
+    only ever prove the transcription, and would keep passing after the original
+    was edited or deleted.
     """
+    source = (
+        Path(edgar_warehouse.mdm.migrations.__file__).parent
+        / "033_clean_mdm_per_kind_views.sql"
+    ).read_text()
+    block = source[source.index("DO $$") : source.index("$$;") + 3]
+    declared = re.search(r"kinds text\[\] := ARRAY\[[^\]]*\];", block)
+    assert declared, "migration 033 no longer declares its kind array as expected"
+    drifted = block.replace(
+        declared.group(0), "kinds text[] := ARRAY['company','person'];"
+    )
+    assert drifted != block
     with (
         pytest.raises(DBAPIError, match="but mdm_v2.identity permits"),
         database.admin.begin() as conn,
     ):
-        conn.execute(text(guard))
+        conn.execute(text(drifted))
 
 
 def test_two_kinds_from_one_batch_separate_into_their_own_views(database):
@@ -294,6 +330,68 @@ def test_the_master_field_view_names_the_source_that_won_each_field(database):
         assert conn.scalar(text("SELECT count(*) FROM mdm_v2.person_master")) == 0
 
 
+def test_the_master_field_view_carries_the_kind_version_beside_the_digest(database):
+    """survivorship.py:316 puts the version beside the digest on purpose.
+
+    A digest alone tells a reader only that something differs, never which
+    authored document it came from. <kind>_master_field is exactly the reader
+    that would otherwise lose it, so the view must carry both.
+
+    The shared fixture policy is the older `fields` shape, which authors no kind
+    version at all, so this registers a `kinds`-shaped policy of its own rather
+    than asserting against a null and calling it proof.
+    """
+    from edgar_warehouse.mdm.clean.merge import MergeStage
+    from edgar_warehouse.mdm.clean.store import Store, register_policy
+
+    sources = ["fixture.primary", "fixture.secondary"]
+    with database.admin.begin() as conn:
+        versioned = register_policy(
+            conn,
+            {
+                "version": 1,
+                "required_consumers": ["export", "graph"],
+                "automatic_rules": [],
+                "kinds": {
+                    "company": {
+                        "version": "company-1",
+                        "fields": {"name": {"sources": sources}},
+                    }
+                },
+            },
+        )
+    a = core.source(key="kv-1", fields={"name": "Acme"})
+    identity, binding = core.identity_and_binding(a)
+    MergeStage(Store(database.application)).apply(
+        batch_id="work-1",
+        run_id=str(uuid4()),
+        policy_digest=versioned,
+        consumer="fixture",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        assertions=[a],
+        identities=[identity],
+        decisions=[binding],
+    )
+    with database.application.connect() as conn:
+        field = conn.execute(
+            text(
+                "SELECT field_name,kind_version,policy_digest "
+                "FROM mdm_v2.company_master_field"
+            )
+        ).one()
+    assert field.field_name == "name"
+    assert field.kind_version == "company-1"
+    # The body's policy_digest key holds the *kind's* authority digest, not the
+    # digest of the policy the batch ran under (ticket 02 decision 3): a
+    # classification edit elsewhere in the document must not churn this field.
+    # The two are deliberately different values, which is why the version beside
+    # it is the only thing naming the authored document.
+    assert field.policy_digest != versioned
+    assert re.fullmatch(r"[0-9a-f]{64}", field.policy_digest)
+
+
 def test_migration_033_applies_to_a_populated_store(postgres):
     """CLAUDE.md: test every migration against a genuinely populated table.
 
@@ -333,7 +431,19 @@ def test_migration_033_applies_to_a_populated_store(postgres):
                 is None
             )
 
-    assert core.migrate(admin, application_role="clean_application")
+    core.migrate(admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        # migrate() returns a dict that is always truthy, so asserting on it
+        # would prove nothing. Ask the store what it recorded instead.
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.migration "
+                    "WHERE name='033_clean_mdm_per_kind_views.sql'"
+                )
+            )
+            == 1
+        )
     # The views see evidence and master records written before they existed.
     with database.application.connect() as conn:
         assert [
