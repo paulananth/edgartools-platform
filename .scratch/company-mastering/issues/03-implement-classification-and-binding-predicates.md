@@ -25,7 +25,7 @@ a stable surviving ID.
 
 ## Resolution decisions (operator, 2026-09-23)
 
-The ticket said "nothing to decide". Building it surfaced five, all taken one
+The ticket said "nothing to decide". Building it surfaced six, all taken one
 question at a time. Decisions 1 and 3 were then **challenged against the
 runtime** ([03-04 challenge](../research/03-04-challenge.md)) and both need
 amending before the code lands; see "What the challenge found" below.
@@ -103,10 +103,37 @@ amending before the code lands; see "What the challenge found" below.
    built, and building it is Codex's Source Contract area, not this ticket. If
    a draft state is ever wanted, it goes there rather than behind a flag here.
 
-   Still open, and deliberately separated: whether the recorded rule id and
-   version sit **inside** the assertion's hashed body or beside it. That
-   decides whether a rule change makes a new row or annotates the old one, and
-   it is the same shape of choice as `mapping_version`.
+6. **The record keeps the rule that labelled it, in its provenance, inside the
+   hashed body** (operator, 2026-09-23). An assertion's `provenance` block
+   gains the rule id, the version and the step that fired, which
+   `policy-language.md:210-213` already asks for. `provenance` is part of the
+   hashed body (`evidence.py:80-104`), so the record explains itself with no
+   lookup elsewhere.
+
+   **This costs no churn, which is why it can go in the hash.** The usual
+   objection — change the thing and every record gets a new identity though
+   its claim did not change — is the defect fixed twice already. It does not
+   arise here. The recorded rule can change in exactly three ways, and none
+   adds a row that something else was not already adding:
+
+   - the Dataset Contract points at a different rule version, which is a
+     contract change, which already mints a new mapping version and so a new
+     assertion id (ticket 01);
+   - the same version carries different steps, which decision 5 refuses at
+     registration;
+   - the step that fired changes, which it cannot do on its own: the step is a
+     function of the rule and the record, so fixing both fixes the step.
+
+   Rejected: a separate table outside the hash. It keeps the fingerprint
+   untouched but costs a join to answer "what labelled this?", and it breaks
+   the self-describing-evidence property the versioning work established.
+
+   **The price, stated plainly.** Records written before this lands carry no
+   rule identity and are immutable, so there will be a population labelled by
+   the Dataset Contract's lookup table and unable to say so. Absence means
+   "decided by the adapter's table, before governed rules existed" — the same
+   convention as an absent mapping version meaning reading 1
+   (`evidence.py:97-106`).
 
 ## What the challenge found, 2026-09-23
 
