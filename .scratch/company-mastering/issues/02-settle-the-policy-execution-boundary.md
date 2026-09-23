@@ -59,12 +59,43 @@ it changes, so ticket 03 implements rather than re-decides.
    rule whose family has no bar cannot be activated. The bar gates fuzzy
    rules only: Q14 identifier binding activates by verifying an Identifier
    Contract, so tickets 04 and 05 do not wait on a precision study.
-5. **Suspension lives in its own table, keyed by the rule digest** (Q5a). The
-   count survives batches and restarts; suspension is a state on that row with
-   the evidence that caused it; the registered policy is never edited, so its
-   digest stays valid. A suspended rule runs again only when a new policy
-   version with a fresh verification is registered — never automatically. The
-   measured line stands: `warm_up_decisions: 10000`, `max_per_10k: 5`.
+5. **Suspension lives in its own table** (Q5a, **amended 2026-09-22** — see
+   below). The count survives batches and restarts; suspension is a state on
+   that row with the evidence that caused it; the registered policy is never
+   edited, so its digest stays valid. A suspended rule runs again only when a
+   new policy version with a fresh verification is registered — never
+   automatically.
+
+   ~~keyed by the rule digest~~ and ~~the measured line stands for every
+   automatic verdict~~ are **struck**. The row is keyed by
+   `(policy_digest, kind, family, rule_id, rule_version)`. "Rule digest" names
+   nothing in Clean MDM: a digest there is per *document*
+   (`023_clean_mdm.sql:10-13`), and the spec's unit of rule identity is
+   `rule.version` (`policy-language.md:428`).
+
+   **The line is scoped where the spec puts it**: per `(kind, namespace)`
+   Identifier Contract, counting distinct `(identifier, incoming normalized
+   name)` **items**, and firing only on §9.3 deterministic verdicts.
+   `warm_up_decisions: 10000, max_per_10k: 5` belongs to an Identifier
+   Contract's tolerance block (`policy-language.md:269`), checked by §9.3,
+   which covers a rule "whose `when` is identifier primitives only" and which
+   therefore "has no precision to measure" (`:362-364`). A rule may name
+   several namespaces, each with its own tolerance (`:367`), so one counter per
+   rule would silently collapse distinct measured lines into one.
+
+   Why it had to move: applied to every automatic verdict, the line demands
+   99.95% at runtime from a rule accepted at 99.9%. A rule sitting exactly at
+   its bar produces ten errors per ten thousand decisions; the chance of
+   staying at or below five is about 7%, so it suspends itself permanently
+   about nine times in ten. The two numbers cannot coexist under the general
+   reading. They coexist under the spec's, because `max_per_10k` never counted
+   decision errors.
+
+   **What this leaves open, deliberately:** a rule accepted at 99.9% now has no
+   runtime kill switch. That gap is real, and the honest answer is a measured
+   line derived against that family's own bar — not `5/10k`, and not a number
+   invented today. Recorded as fog on the map, to be decided once a Proving Run
+   has produced rules to measure.
 6. **Coherent field groups are declared per kind** (Q6a). A group is filled
    whole from the highest-ranked source that can supply all of it; within one
    source the later publication wins; if no source is complete the group stays
@@ -81,14 +112,17 @@ it changes, so ticket 03 implements rather than re-decides.
 - record the kind digest on each selected field, and keep the body digest on
   the batch;
 - read the bar per `(kind, family)`, and refuse activation without one;
-- a suspension table and the runtime check that reads it before any automatic
-  verdict;
+- a suspension table keyed by `(policy_digest, kind, family, rule_id,
+  rule_version)`, and the runtime check that reads it before a **§9.3
+  deterministic** verdict, counting per `(kind, namespace)`;
 - group-aware selection in `survivorship.select_fields`.
 
 ### Acceptance tests these decisions owe
 
 A Person-only edit leaves every Company value's recorded digest unchanged; a
 group with an incomplete winner stays unknown and keeps its partial claims; a
-rule crossing the line stops and stays stopped across a batch boundary and a
-restart; a rule with no bar for its family cannot activate; a Dataset Contract
+deterministic rule crossing its namespace's line stops and stays stopped across
+a batch boundary and a restart, while a measured rule at its own bar is never
+stopped by that counter; a rule with no bar for its family cannot activate; a
+Dataset Contract
 naming a missing classification rule is refused.

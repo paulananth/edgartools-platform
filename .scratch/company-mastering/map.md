@@ -79,16 +79,30 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   governed by the policy but the decided kind stays stamped on the evidence;
   a field records its kind's own digest, not the whole body's; each kind keeps
   its own accepted bar (Company 99.9% at 95%, Person 99% at 97.5%); suspension
-  lives in its own table keyed by the rule digest and never edits the policy;
-  and coherent field groups are filled whole or left unknown.**
+  lives in its own table and never edits the policy; and coherent field groups
+  are filled whole or left unknown.** Amended after the challenge pass: the
+  suspension row is keyed by `(policy_digest, kind, family, rule_id,
+  rule_version)`, not a "rule digest", and **its line is scoped to §9.3
+  deterministic rules per namespace** — applied to every automatic verdict it
+  made a rule accepted at 99.9% suspend itself about nine times in ten.
 
 ## Not yet specified
 
 - **Which cohort the Proving Run uses.** The 1,000-row research cohort and its
   308 adjudicated links exist, but they are not independent truth. Company Q3
   wants a frozen CIK manifest. Sharpens once the policy executes.
+- **Whether a measured rule needs a runtime kill switch, and at what line.**
+  Ticket 02's amendment scopes the suspension counter to §9.3 deterministic
+  rules, where the only measured line lives. A rule accepted at 99.9% is
+  therefore stopped by nothing until the next proving run. A line for that
+  family has to be derived against its own bar, on rules that exist; sharpens
+  once a Proving Run has produced some.
+
 - **How a deferred match is retried** when evidence or rules change (Q6): what
   triggers the retry, and what bounds the re-projection.
+
+- **How the classification rule reaches the code that uses it** (ticket 02
+  answered where it sits, which was half the question).
 - **Consolidation of two published Company IDs** (Q10, Q11): its own
   statistical gate, after binding works.
 - **Relationship and lifecycle work** (parent links, duplicate LEI successors,
