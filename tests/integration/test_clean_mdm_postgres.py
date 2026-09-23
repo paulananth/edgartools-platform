@@ -18,9 +18,11 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.mdm.clean.store import (
     Conflict,
     Store,
+    canonical,
     migrate,
     register_dataset,
     register_policy,
+    rows,
 )
 from edgar_warehouse.mdm.migrations.runtime import _apply_source_registry_migration
 
@@ -2442,3 +2444,410 @@ def test_manifest_cli_passes_family_scope_to_atomic_commit(
                 "SELECT publication_family FROM mdm_v2.checkpoint ORDER BY publication_family"
             )
         ).scalars().all() == ["golden_copy", "opencorporates"]
+
+
+# --- Company mastering ticket 01: a mapping may be corrected ------------------
+# Real PG16 against migration 031. A re-read of one publication under a
+# corrected mapping must add a row beside its predecessor: before the ticket's
+# amendments a changed reading raised on the revision guard and an unchanged
+# one collided on assertion_id, so neither could ever be stored.
+
+
+def reread(a, *, mapping_version, **changes):
+    """The same record and publication, read again under a later mapping."""
+    return assertion(
+        source_code=a["source_code"],
+        record_key=a["record_key"],
+        publication_key=a["publication_key"],
+        revision=a["revision"],
+        effective_at=a["effective_at"],
+        kind=a["kind"],
+        fields=changes.pop("fields", a["fields"]),
+        mapping_version=mapping_version,
+        **changes,
+    )
+
+
+def register_reading(database, code, body):
+    with database.admin.begin() as conn:
+        register_dataset(conn, code, database.registry, body)
+    with database.application.connect() as conn:
+        return conn.scalar(
+            text(
+                "SELECT max(mapping_version) FROM mdm_v2.dataset_mapping WHERE source_code=:c"
+            ),
+            {"c": code},
+        )
+
+
+def contract_body(**changes):
+    return {
+        "provider": "test",
+        "family": "fixture",
+        "publication_families": ["golden_copy", "opencorporates"],
+        "schema_version": "1",
+        "record_key": "key",
+        "publication_key": "version",
+        "effective_time": "effective_at",
+        "semantics": "patch",
+        **changes,
+    }
+
+
+def test_a_re_read_adds_a_row_and_the_newer_reading_wins(database):
+    """The behaviour ticket 01 exists for, end to end."""
+    first = source(key="reread-1", fields={"name": "Acme Hlds"})
+    identity, binding = identity_and_binding(first)
+    apply(database, 1, assertions=[first], identities=[identity], decisions=[binding])
+    assert (
+        documents(database, "entity")[identity["entity_id"]]["fields"]["name"]["value"]
+        == "Acme Hlds"
+    )
+    assert (
+        register_reading(
+            database, "fixture.primary", contract_body(semantics="snapshot")
+        )
+        == 2
+    )
+
+    corrected = reread(first, mapping_version=2, fields={"name": "Acme Holdings"})
+    assert corrected["assertion_id"] != first["assertion_id"]
+    assert corrected["subject"] == first["subject"]
+    apply(database, 2, assertions=[corrected])
+
+    with database.application.connect() as conn:
+        stored = conn.execute(
+            text("""SELECT assertion_id,mapping_version FROM mdm_v2.assertion
+            WHERE record_key='reread-1' ORDER BY mapping_version""")
+        ).all()
+    # Both readings retained; neither row was rewritten and nothing was pruned.
+    assert [r[1] for r in stored] == [1, 2]
+    assert {r[0] for r in stored} == {first["assertion_id"], corrected["assertion_id"]}
+    # The subject never moved, so the Company keeps its identity and its id.
+    entity = documents(database, "entity")[identity["entity_id"]]
+    assert entity["fields"]["name"]["value"] == "Acme Holdings"
+    assert (
+        entity["fields"]["name"]["winner"]["assertion_id"] == corrected["assertion_id"]
+    )
+
+
+def test_a_re_read_that_changes_nothing_is_still_a_second_row(database):
+    """The silent-drop half: same content, later reading, distinct assertion."""
+    first = source(key="reread-2")
+    apply(database, 1, assertions=[first])
+    assert (
+        register_reading(
+            database, "fixture.primary", contract_body(semantics="snapshot")
+        )
+        == 2
+    )
+    same = reread(first, mapping_version=2)
+    assert same["assertion_id"] != first["assertion_id"]
+    apply(database, 2, assertions=[same])
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.assertion WHERE record_key='reread-2'"
+                )
+            )
+            == 2
+        )
+
+
+def test_one_revision_published_twice_is_still_refused(database):
+    """The guard keeps the defect it was written for."""
+    first = source(key="reread-3", fields={"name": "Acme"})
+    contradictory = assertion(
+        source_code=first["source_code"],
+        record_key=first["record_key"],
+        publication_key=first["publication_key"],
+        revision=first["revision"],
+        effective_at=first["effective_at"],
+        kind=first["kind"],
+        fields={"name": "Not Acme"},
+    )
+    apply(database, 1, assertions=[first])
+    with pytest.raises(Conflict, match="contradictory publications"):
+        apply(database, 2, assertions=[contradictory])
+
+
+def test_a_reading_the_store_does_not_know_is_refused(database):
+    """An assertion may not claim a mapping version nobody registered."""
+    unregistered = source(key="reread-4", mapping_version=7)
+    with pytest.raises(DBAPIError, match="Unsupported source schema"):
+        apply(database, 1, assertions=[unregistered])
+
+
+def test_registering_a_corrected_mapping_keeps_every_earlier_reading(database):
+    assert register_reading(database, "fixture.secondary", contract_body()) == 1
+    assert register_reading(database, "fixture.secondary", contract_body()) == 1
+    assert (
+        register_reading(
+            database, "fixture.secondary", contract_body(semantics="snapshot")
+        )
+        == 2
+    )
+    with database.application.connect() as conn:
+        readings = conn.execute(
+            text("""SELECT mapping_version,body->>'semantics' FROM mdm_v2.dataset_mapping
+            WHERE source_code='fixture.secondary' ORDER BY mapping_version""")
+        ).all()
+    assert readings == [(1, "patch"), (2, "snapshot")]
+    # The registered dataset row itself is append-only and never rewritten.
+    with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
+        conn.execute(text("UPDATE mdm_v2.dataset SET body='{}'::jsonb"))
+    with (
+        pytest.raises(DBAPIError, match="append-only"),
+        database.admin.begin() as conn,
+    ):
+        conn.execute(text("UPDATE mdm_v2.dataset_mapping SET mapping_version=9"))
+
+
+def test_a_change_that_would_move_a_record_identity_needs_a_new_source_code(database):
+    """Ticket 01 decision 5: the engine compares the protected parts itself."""
+    register_reading(database, "fixture.primary", contract_body())
+    for change in (
+        {"record_key": "other_key"},
+        {"publication_key": "other_version"},
+        {"adapter": {"record_key": ["b"], "version": "v1"}},
+        {"adapter": {"record_key": ["a"], "record_key_format": "lei", "version": "v1"}},
+        {
+            "adapter": {
+                "record_key": ["a"],
+                "identifiers": {"lei": "lei"},
+                "version": "v1",
+            }
+        },
+    ):
+        with (
+            pytest.raises(Conflict, match="Dataset identity is immutable"),
+            database.admin.begin() as conn,
+        ):
+            register_dataset(
+                conn, "fixture.primary", database.registry, contract_body(**change)
+            )
+
+
+def test_migration_031_applies_to_a_populated_store(postgres):
+    """CLAUDE.md: test every migration against a genuinely populated table.
+
+    The other tests here migrate an empty schema, so 031's backfill inserts no
+    rows and its uniqueness swap rewrites an empty index. This one commits real
+    evidence under migrations 023-030, then applies 031 over it.
+    """
+    from unittest import mock
+
+    import edgar_warehouse.mdm.clean.store as store_module
+
+    admin, app = postgres
+    through_030 = tuple(
+        name for name in store_module.CLEAN_MDM_MIGRATIONS if not name.startswith("031")
+    )
+    assert len(through_030) == len(store_module.CLEAN_MDM_MIGRATIONS) - 1
+
+    def register_pre_031(conn, code, registry_version, body):
+        """Register a dataset the way the store did before dataset_mapping."""
+        authority = rows(
+            conn,
+            """SELECT v.version_id::text,v.status,v.operator_authorization_reference,
+            c.source_family,c.coverage_action FROM public.source_registry_version v
+            JOIN public.source_registry_coverage c USING(version_id)
+            WHERE v.version_id=CAST(:v AS uuid) AND c.source_family=:family""",
+            v=registry_version,
+            family=body["family"],
+        )
+        conn.execute(
+            text(
+                "INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))"
+            ),
+            {
+                "code": code,
+                "registry": registry_version,
+                "body": canonical({**body, "registry_evidence": authority[0]}),
+            },
+        )
+
+    with (
+        mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_030),
+        mock.patch(f"{__name__}.register_dataset", side_effect=register_pre_031),
+    ):
+        database = initialize_database(admin, app)
+        a = source(key="populated-1", fields={"name": "Acme"})
+        identity, binding = identity_and_binding(a)
+        apply(database, 1, assertions=[a], identities=[identity], decisions=[binding])
+        with database.application.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+            assert (
+                conn.scalar(text("SELECT to_regclass('mdm_v2.dataset_mapping')"))
+                is None
+            )
+
+    # Now apply 031 over that populated store.
+    assert migrate(admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        # Existing evidence takes the default reading and keeps its id.
+        assert conn.execute(
+            text("SELECT assertion_id,mapping_version FROM mdm_v2.assertion")
+        ).all() == [(a["assertion_id"], 1)]
+        # Every contract registered before the migration is backfilled.
+        assert conn.execute(
+            text(
+                "SELECT source_code,mapping_version FROM mdm_v2.dataset_mapping ORDER BY source_code"
+            )
+        ).all() == [("fixture.primary", 1), ("fixture.secondary", 1)]
+        assert (
+            conn.scalar(
+                text("""SELECT count(*) FROM pg_constraint WHERE conrelid='mdm_v2.assertion'::regclass
+            AND contype='u' AND array_length(conkey,1)=4""")
+            )
+            == 1
+        )
+    # The store still works, and a re-read of the pre-migration record lands.
+    corrected = reread(a, mapping_version=2, fields={"name": "Acme Holdings"})
+    register_reading(database, "fixture.primary", contract_body(semantics="snapshot"))
+    apply(database, 2, assertions=[corrected])
+    with database.application.connect() as conn:
+        assert conn.execute(
+            text(
+                "SELECT mapping_version FROM mdm_v2.assertion ORDER BY mapping_version"
+            )
+        ).scalars().all() == [1, 2]
+    assert (
+        documents(database, "entity")[identity["entity_id"]]["fields"]["name"]["value"]
+        == "Acme Holdings"
+    )
+
+
+def test_a_corrected_mapping_reaches_the_adapter_that_reads_the_source(database):
+    """Registering a reading is worth nothing if no reader ever uses it.
+
+    The store writes every reading, but the adapters used to load the contract
+    from mdm_v2.dataset, which migration 023 froze at the first registration,
+    and to call normalize with no reading at all. Both readings then produced
+    byte-identical assertion ids: the collision the feature exists to prevent.
+    """
+    from edgar_warehouse.mdm.clean.cli import batch_assertions, read_manifest
+
+    fixture = Path(__file__).parents[1] / "fixtures" / "clean_mdm" / "v1"
+    contract = json.loads((fixture / "dataset.json").read_text())
+    manifest, _, root = read_manifest(str(fixture / "manifest.json"))
+    with database.admin.begin() as conn:
+        register_policy(conn, json.loads((fixture / "policy.json").read_text()))
+        register_dataset(conn, "fixture.representative", database.registry, contract)
+    store = Store(database.application)
+    batch = manifest["batches"][0]
+
+    first = batch_assertions(batch, root, store)
+    assert all("mapping_version" not in a for a in first)
+
+    with database.admin.begin() as conn:
+        register_dataset(
+            conn,
+            "fixture.representative",
+            database.registry,
+            {**contract, "semantics": "snapshot"},
+        )
+    corrected = batch_assertions(batch, root, store)
+    assert {a["mapping_version"] for a in corrected} == {2}
+    # Same records and publication, so the subjects stand and no Company moves;
+    # only the assertion ids differ, which is what lets both readings be stored.
+    assert [a["subject"] for a in corrected] == [a["subject"] for a in first]
+    assert not {a["assertion_id"] for a in corrected} & {
+        a["assertion_id"] for a in first
+    }
+
+
+def test_a_registry_version_bump_alone_is_not_a_new_reading(database):
+    """Nothing in the mapping changed, so no reading is minted and no id forks."""
+    with database.admin.begin() as conn:
+        register_dataset(conn, "fixture.primary", database.registry, contract_body())
+        conn.execute(text("DELETE FROM source_registry_coverage"))
+        conn.execute(text("DELETE FROM source_registry_version"))
+        later = str(uuid4())
+        conn.execute(
+            text("""INSERT INTO source_registry_version(version_id,status,operator_authorization_reference,activated_at)
+            VALUES(:v,'active','offline-fixture',now())"""),
+            {"v": later},
+        )
+        conn.execute(
+            text("""INSERT INTO source_registry_coverage(version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
+            VALUES(:v,'fixture','carry_forward','fixture','fixture','fixture','2026-01-01')"""),
+            {"v": later},
+        )
+    with (
+        pytest.raises(Conflict, match="registry version bump is not a new reading"),
+        database.admin.begin() as conn,
+    ):
+        register_dataset(conn, "fixture.primary", later, contract_body())
+
+
+def test_a_deferred_record_and_an_assertion_agree_on_the_reading(database):
+    """Both come out of one read of one artifact, so both must be accepted.
+
+    The assertion path checks the schema against the reading that produced it
+    (migration 031). The deferred path checked it against mdm_v2.dataset, which
+    migration 023 froze at the first registration, so a corrected mapping had
+    its assertions accepted and its deferred records refused.
+    """
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    assert (
+        register_reading(database, "fixture.primary", contract_body(schema_version="2"))
+        == 2
+    )
+    a = source(key="agree-1", mapping_version=2, schema_version="2")
+    d = deferred_record(
+        source_code="fixture.primary",
+        publication_key="p1",
+        record_locator="line:9",
+        schema_version="2",
+        reason="invalid_field_shape",
+        raw_record={"key": "agree-2"},
+        provenance={"adapter_version": "v1"},
+    )
+    apply(database, 1, assertions=[a], deferred=[d])
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1
+
+
+def test_a_deferred_record_for_an_unregistered_schema_is_still_refused(database):
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    d = deferred_record(
+        source_code="fixture.primary",
+        publication_key="p1",
+        record_locator="line:9",
+        schema_version="not-a-registered-schema",
+        reason="invalid_field_shape",
+        raw_record={"key": "agree-3"},
+        provenance={"adapter_version": "v1"},
+    )
+    with pytest.raises(DBAPIError, match="Unknown deferred dataset contract"):
+        apply(database, 1, deferred=[d])
+
+
+def test_a_deferred_record_that_defers_again_under_a_later_reading_is_one_row(database):
+    """A deferred body carries no reading, so a re-read is the same evidence.
+
+    This is why the reading is not added to the deferred body: its natural key
+    is (source_code, publication_key, record_locator), which a re-read reuses,
+    so a second body would collide with the first rather than sit beside it.
+    """
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    d = deferred_record(
+        source_code="fixture.primary",
+        publication_key="p1",
+        record_locator="line:9",
+        schema_version="1",
+        reason="invalid_field_shape",
+        raw_record={"key": "agree-4"},
+        provenance={"adapter_version": "v1"},
+    )
+    apply(database, 1, deferred=[d])
+    register_reading(database, "fixture.primary", contract_body(semantics="snapshot"))
+    apply(database, 2, deferred=[d])
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1

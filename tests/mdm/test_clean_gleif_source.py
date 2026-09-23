@@ -297,3 +297,39 @@ def test_native_accounting_relationships_are_typed_and_cycles_suppressed(kind):
     edges, reviews = project(claims, state, entities, "2026-01-01T00:00:00Z")
     assert not edges
     assert any(r["reason"] == "hierarchy_cycle" for r in reviews)
+
+
+def test_a_corrected_reading_of_one_gleif_publication_is_a_second_assertion():
+    """Company mastering ticket 01, through the real native GLEIF contract."""
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
+
+    record = {
+        "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+        "Entity": {
+            "EntityCategory": {"$": "GENERAL"},
+            "LegalJurisdiction": {"$": "US-CA"},
+        },
+        "Registration": {
+            "LastUpdateDate": {"$": "2026-09-10T00:00:00Z"},
+            "RegistrationStatus": {"$": "LAPSED"},
+        },
+    }
+    kwargs = {
+        "member": "level1",
+        "contract": dataset_contract("level1"),
+        "source_code": "gleif.lei.v1",
+        "eligible_leis": {"HWUPKR0MPOU8FGXBT394"},
+        "publication": {
+            "publication_key": "p1",
+            "revision": 1,
+            "artifact_sha256": "a" * 64,
+            "member": "level1",
+        },
+        "ordinal": 0,
+    }
+    _, first = record_evidence(record, **kwargs)
+    _, corrected = record_evidence(record, **kwargs, mapping_version=2)
+    assert "mapping_version" not in first
+    assert corrected["mapping_version"] == 2
+    assert corrected["assertion_id"] != first["assertion_id"]
+    assert corrected["subject"] == first["subject"]

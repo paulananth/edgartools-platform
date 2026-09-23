@@ -38,6 +38,20 @@ def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
     return [dict(r) for r in conn.execute(text(sql), params).mappings()]
 
 
+# Applied in order after 023, each once, by checksum. Named so that a test can
+# migrate a store to an earlier point and apply the rest over real rows.
+CLEAN_MDM_MIGRATIONS = (
+    "025_clean_mdm_indexes.sql",
+    "026_clean_mdm_attempts.sql",
+    "027_clean_mdm_deferred.sql",
+    "028_clean_mdm_assessment.sql",
+    "029_clean_mdm_family_checkpoint.sql",
+    "030_clean_mdm_evidence_disposition.sql",
+    "031_clean_mdm_mapping_version.sql",
+    "032_clean_mdm_deferred_reading.sql",
+)
+
+
 def migrate(engine: Engine, *, application_role: str) -> dict:
     """Explicit isolated migration with checksum validation, never legacy DDL.
 
@@ -82,14 +96,7 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
                 ),
                 {"name": path.name, "checksum": checksum},
             )
-        for name in (
-            "025_clean_mdm_indexes.sql",
-            "026_clean_mdm_attempts.sql",
-            "027_clean_mdm_deferred.sql",
-            "028_clean_mdm_assessment.sql",
-            "029_clean_mdm_family_checkpoint.sql",
-            "030_clean_mdm_evidence_disposition.sql",
-        ):
+        for name in CLEAN_MDM_MIGRATIONS:
             extra = path.with_name(name)
             extra_source = extra.read_text()
             extra_hash = hashlib.sha256(extra_source.encode()).hexdigest()
@@ -161,6 +168,11 @@ def register_policy(conn: Connection, body: dict) -> str:
     """Migration/governance owner only; runtime has no INSERT privilege."""
     if body.get("automatic_rules"):
         raise ValueError("No qualified automatic matching rules are installed")
+    # A kind's field rules live in one place. Refuse the ambiguity at
+    # registration rather than mid-merge, so a body that would silently prefer
+    # one block never reaches a batch (company mastering ticket 02, decision 1).
+    if body.get("kinds") and body.get("fields"):
+        raise ValueError("A kind's field rules belong in one place, not two")
     consumers = body.get("required_consumers", [])
     if (
         not consumers
@@ -223,29 +235,109 @@ def register_dataset(
         or authority[0]["coverage_action"] == "remove"
     ):
         raise Conflict("Dataset requires active acquisition registry coverage")
-    body = {**body, "registry_evidence": authority[0]}
+    # Pin the authority after the comparison below, not before: a registry
+    # version bump is not a mapping change, and must not mint a reading that
+    # would fork every later assertion id for a mapping nobody corrected.
+    pinned = {**body, "registry_evidence": authority[0]}
     current = rows(
         conn,
-        "SELECT body,registry_version::text FROM mdm_v2.dataset WHERE source_code=:code",
+        """SELECT body,registry_version::text,mapping_version FROM mdm_v2.dataset_mapping
+        WHERE source_code=:code ORDER BY mapping_version DESC LIMIT 1""",
         code=code,
     )
     if current:
-        if (
-            current[0]["body"] != body
-            or current[0]["registry_version"] != registry_version
-        ):
+        stored = current[0]["body"]
+        if stored == pinned and current[0]["registry_version"] == registry_version:
+            return
+        if _mapping_of(stored) == _mapping_of(pinned):
             raise Conflict(
-                "Dataset contract is immutable; register a new versioned contract"
+                "Dataset mapping is unchanged; a registry version bump is not a new reading"
             )
+        protected_change(stored, pinned)
+        conn.execute(
+            text("""INSERT INTO mdm_v2.dataset_mapping(source_code,mapping_version,body,registry_version)
+            VALUES(:code,:version,CAST(:body AS jsonb),:registry)"""),
+            {
+                "code": code,
+                "version": current[0]["mapping_version"] + 1,
+                "body": canonical(pinned),
+                "registry": str(UUID(registry_version)),
+            },
+        )
         return
-    conn.execute(
-        text("INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))"),
-        {
-            "code": code,
-            "registry": str(UUID(registry_version)),
-            "body": canonical(body),
-        },
+    for statement in (
+        "INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))",
+        """INSERT INTO mdm_v2.dataset_mapping(source_code,mapping_version,body,registry_version)
+        VALUES(:code,1,CAST(:body AS jsonb),:registry)""",
+    ):
+        conn.execute(
+            text(statement),
+            {
+                "code": code,
+                "registry": str(UUID(registry_version)),
+                "body": canonical(pinned),
+            },
+        )
+
+
+def _mapping_of(body: dict) -> dict:
+    """A contract without the registry authority pinned onto it."""
+    return {k: v for k, v in body.items() if k != "registry_evidence"}
+
+
+# Changing any of these makes the contract describe a different dataset, so a
+# record would bind to a different subject. That is the one case a new
+# source_code is right; everything else is a new reading of the same source
+# (company mastering ticket 01, decision 5).
+PROTECTED_CONTRACT_PARTS = ("record_key", "publication_key")
+PROTECTED_ADAPTER_PARTS = (
+    "record_key",
+    "record_key_format",
+    "identifiers",
+    "identifier_formats",
+)
+
+
+def current_reading(conn: Connection, code: str) -> tuple[int, dict] | None:
+    """The reading a source is read under now, with the body that defines it.
+
+    One accessor, so that a caller cannot take the contract body without the
+    reading number that produced it. Reading them apart is how an adapter ends
+    up stamping version 1 onto a record it read under a corrected mapping.
+
+    `mdm_v2.dataset` cannot answer this: migration 023 makes it append-only,
+    so its body stays whatever was registered first.
+    """
+    found = rows(
+        conn,
+        """SELECT mapping_version,body FROM mdm_v2.dataset_mapping
+        WHERE source_code=:code ORDER BY mapping_version DESC LIMIT 1""",
+        code=code,
     )
+    return (found[0]["mapping_version"], found[0]["body"]) if found else None
+
+
+def protected_change(current: dict, proposed: dict) -> None:
+    """Refuse a mapping version that would move a record's identity.
+
+    The engine compares the parts itself, so the protection never rests on how
+    an author labels the change.
+    """
+    moved = [
+        part
+        for part in PROTECTED_CONTRACT_PARTS
+        if current.get(part) != proposed.get(part)
+    ]
+    moved += [
+        f"adapter.{part}"
+        for part in PROTECTED_ADAPTER_PARTS
+        if current.get("adapter", {}).get(part) != proposed.get("adapter", {}).get(part)
+    ]
+    if moved:
+        raise Conflict(
+            "Dataset identity is immutable within one source code; "
+            f"register a new source code: {', '.join(sorted(moved))}"
+        )
 
 
 class Publisher(Protocol):

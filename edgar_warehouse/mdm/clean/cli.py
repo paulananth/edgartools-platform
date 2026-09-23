@@ -17,7 +17,7 @@ from .bookkeeping import RunCoordinator
 from .evidence import deferred_record
 from .merge import MergeStage
 from .publication import JournalMirror, LocalContractSink
-from .store import Conflict, Publisher, Store
+from .store import Conflict, Publisher, Store, current_reading
 
 
 def _reject_json_constant(value):
@@ -116,12 +116,12 @@ def batch_evidence(
     if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
     with store.engine.connect() as conn:
-        contract = conn.scalar(
-            text("SELECT body FROM mdm_v2.dataset WHERE source_code=:code"),
-            {"code": spec["source_code"]},
-        )
-    if contract is None:
+        reading = current_reading(conn, spec["source_code"])
+    if reading is None:
         raise Conflict("Unregistered dataset")
+    # A corrected mapping applies to publications read from here on, and every
+    # record says which reading produced it (ticket 01, decision 4).
+    mapping_version, contract = reading
     result: list[dict] = []
     deferred: list[dict] = []
     retains_deferred = contract["adapter"].get("retain_deferred", False)
@@ -165,6 +165,7 @@ def batch_evidence(
                     source_code=spec["source_code"],
                     contract=contract,
                     publication=publication,
+                    mapping_version=mapping_version,
                 )
             )
         except UnsupportedRecord as exc:

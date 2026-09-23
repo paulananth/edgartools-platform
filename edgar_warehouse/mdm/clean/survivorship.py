@@ -38,11 +38,21 @@ def current_claims(
         seen = {}
         for a in sorted(
             versions,
-            key=lambda a: (a["revision"], a["publication_key"], a["assertion_id"]),
+            key=lambda a: (
+                a["revision"],
+                a.get("mapping_version", 1),
+                a["publication_key"],
+                a["assertion_id"],
+            ),
         ):
-            if a["revision"] in seen and seen[a["revision"]] != a["assertion_id"]:
+            # One source native revision read once must produce one assertion;
+            # two contradictory bodies there are a defect in the source. A
+            # second *reading* of that revision is not that defect, so the key
+            # carries the mapping version (ticket 01, amendment 8).
+            reading = (a["revision"], a.get("mapping_version", 1))
+            if reading in seen and seen[reading] != a["assertion_id"]:
                 raise Conflict("Source native revision has contradictory publications")
-            seen[a["revision"]] = a["assertion_id"]
+            seen[reading] = a["assertion_id"]
             kind = a["kind"]
             for field, item in a["fields"].items():
                 if item["op"] == "unknown":
@@ -125,7 +135,6 @@ def select_fields(
     policy_digest: str,
     entity_id: str = "",
 ) -> tuple[dict, list[dict], list[dict]]:
-    candidates = defaultdict(list)
     profiles = {}
     profile_claims = defaultdict(dict)
     reviews = []
@@ -133,8 +142,6 @@ def select_fields(
         record = claims.get(subject)
         if not record:
             continue
-        for name, claim in record["fields"].items():
-            candidates[name].append(claim)
         for profile in record["profiles"]:
             role = profile["role"]
             if kind not in PROFILE_KINDS.get(role, set()):
@@ -196,8 +203,141 @@ def select_fields(
                 "profiles": [],
             }
             current.pop("fields", None)
+    recorded_digest, kind_version = _kind_authority(policy, kind, policy_digest)
+    fields, field_reviews = _select_values(
+        _rules_for(policy, kind),
+        subjects,
+        claims,
+        overrides,
+        as_of=as_of,
+        policy_digest=recorded_digest,
+        kind_version=kind_version,
+    )
+    reviews.extend(field_reviews)
+    for p in profiles.values():
+        p["evidence"] = sorted(set(p["evidence"]))
+        # Profile values use their own role/field authority policy. Keep raw
+        # disagreement in source assertions rather than copying first arrival.
+        values, problems = _select_values(
+            policy.get("profile_fields", {}).get(p["role"], {}),
+            subjects,
+            profile_claims[p["profile_id"]],
+            [
+                {k: v for k, v in o.items() if k != "profile_id"}
+                for o in overrides
+                if o.get("profile_id") == p["profile_id"]
+            ],
+            as_of=as_of,
+            # A profile role is not an identity kind and has no block of its
+            # own, so its values record the enclosing kind's digest.
+            policy_digest=recorded_digest,
+            kind_version=kind_version,
+        )
+        p["fields"] = values
+        reviews.extend({**r, "profile_id": p["profile_id"]} for r in problems)
+    return fields, sorted(profiles.values(), key=lambda p: p["profile_id"]), reviews
+
+
+def _rules_for(policy: dict, kind: str) -> dict:
+    """The field rules a kind selects under.
+
+    One resolver, so that a profile role's rules never have to be wrapped in a
+    fabricated policy body to be read, and so that the two body shapes below
+    are distinguished in exactly one place.
+
+    Ticket 02 decision 1 moves a kind's field rules under `kinds.<kind>`, so
+    that the kind's own version covers all of it. Bodies registered under the
+    old top-level `fields` block are immutable and keep working; a body
+    carrying both is refused rather than silently preferring one.
+    """
+    kinds = policy.get("kinds")
+    if not kinds:
+        return policy.get("fields", {}).get(kind, {})
+    if policy.get("fields"):
+        raise Conflict("A kind's field rules belong in one place, not two")
+    return kinds.get(kind, {}).get("fields", {})
+
+
+# Which sections of a kind's block decide the winner of a field, and which do
+# not. Written down rather than inferred from what the block happens to hold,
+# so that adding a section is a decision someone makes once, here, and not a
+# silent change to every field's recorded authority. A section in neither list
+# is refused by name.
+AUTHORITY_SECTIONS = ("fields", "field_group", "field_groups")
+NON_AUTHORITY_SECTIONS = (
+    "version",  # travels beside the digest, not inside it
+    "classification",
+    "binding",
+    "bars",
+    "lists",
+    "normalizers",
+    "identifiers",
+    "projection",
+)
+
+
+def _kind_authority(
+    policy: dict, kind: str, policy_digest: str
+) -> tuple[str, str | None]:
+    """The digest a selected field records, and the kind version behind it.
+
+    Ticket 02 decision 3: a field records its *kind's* digest, so that a
+    Person-only edit leaves every Company value's recorded digest unchanged.
+    The whole-body digest stays on the batch. A body with no `kinds` block has
+    no per-kind digest to record, and keeps recording the body's, with no kind
+    version to carry.
+
+    The version travels beside the digest because a digest alone tells a reader
+    only that something differs, never which authored document it came from.
+
+    The digest covers the sections that decide **which claim wins**, named in
+    `AUTHORITY_SECTIONS`, not the whole block. Ticket 02's own build list puts
+    classification, binding, bars and projection in that same block, and none
+    of them change a field's winner; digesting the block whole would move every
+    field's recorded digest on a classification edit, which is the churn the
+    per-kind digest exists to stop, reappearing inside one kind.
+
+    An absent or empty section is omitted rather than digested as empty: the
+    two describe the same rules, the way an absent mapping version and 1 do. A
+    populated section is meant to move the digest.
+    """
+    block = (policy.get("kinds") or {}).get(kind)
+    if not block:
+        return policy_digest, None
+    unknown = set(block) - set(AUTHORITY_SECTIONS) - set(NON_AUTHORITY_SECTIONS)
+    if unknown:
+        raise Conflict(
+            "A kind section must be declared authority-bearing or not: "
+            + ", ".join(sorted(unknown))
+        )
+    covered = {
+        "kind": kind,
+        **{name: block[name] for name in AUTHORITY_SECTIONS if block.get(name)},
+    }
+    return digest(covered), block.get("version")
+
+
+def _select_values(
+    rules: dict,
+    subjects: list[str],
+    claims: dict,
+    overrides: list[dict],
+    *,
+    as_of: str,
+    policy_digest: str,
+    kind_version: str | None = None,
+) -> tuple[dict, list[dict]]:
+    """Clean MDM's five-step order over one set of field rules."""
+    candidates = defaultdict(list)
+    for subject in subjects:
+        record = claims.get(subject)
+        if not record:
+            continue
+        for name, claim in record["fields"].items():
+            candidates[name].append(claim)
     fields = {}
-    for name, rule in policy.get("fields", {}).get(kind, {}).items():
+    reviews = []
+    for name, rule in rules.items():
         eligible = []
         for c in candidates.get(name, []):
             if c["source_code"] not in rule["sources"]:
@@ -272,31 +412,11 @@ def select_fields(
             "cleared": chosen["op"] == "clear",
             "winner": chosen,
             "policy_digest": policy_digest,
+            **({"kind_version": kind_version} if kind_version else {}),
             "conflicts": [
                 c
                 for c in eligible
                 if canonical(c.get("value")) != canonical(chosen.get("value"))
             ],
         }
-    for p in profiles.values():
-        p["evidence"] = sorted(set(p["evidence"]))
-        role_policy = {
-            "fields": {p["role"]: policy.get("profile_fields", {}).get(p["role"], {})}
-        }
-        role_overrides = [
-            {k: v for k, v in o.items() if k != "profile_id"}
-            for o in overrides
-            if o.get("profile_id") == p["profile_id"]
-        ]
-        values, _, problems = select_fields(
-            p["role"],
-            subjects,
-            profile_claims[p["profile_id"]],
-            role_policy,
-            role_overrides,
-            as_of=as_of,
-            policy_digest=policy_digest,
-        )
-        p["fields"] = values
-        reviews.extend({**r, "profile_id": p["profile_id"]} for r in problems)
-    return fields, sorted(profiles.values(), key=lambda p: p["profile_id"]), reviews
+    return fields, reviews

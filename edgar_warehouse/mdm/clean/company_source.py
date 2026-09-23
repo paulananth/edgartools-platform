@@ -63,10 +63,17 @@ POLICY = {
     "version": "sec-company-local-v1",
     "automatic_rules": [],
     "required_consumers": ["journal", "export", "graph"],
-    "fields": {
+    # A kind's rules sit under its own name, so that the kind's version covers
+    # all of them and a Person-only edit leaves every Company value's recorded
+    # digest unchanged (company mastering ticket 02, decision 1). `version` is
+    # the authored kind document's own, not the body's.
+    "kinds": {
         "company": {
-            name: {"sources": [SOURCE_CODE], "allow_unknown_effective": True}
-            for name in FIELDS
+            "version": "company-2026-09-23",
+            "fields": {
+                name: {"sources": [SOURCE_CODE], "allow_unknown_effective": True}
+                for name in FIELDS
+            },
         }
     },
 }

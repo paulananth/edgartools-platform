@@ -58,7 +58,12 @@ def record_key(row: dict, paths: list[str]) -> str:
 
 
 def normalize(
-    row: dict, *, source_code: str, contract: dict, publication: dict
+    row: dict,
+    *,
+    source_code: str,
+    contract: dict,
+    publication: dict,
+    mapping_version: int = 1,
 ) -> dict:
     """Consume approved mapping metadata and a pinned source publication.
 
@@ -170,5 +175,9 @@ def normalize(
         profiles=profiles,
         relationships=relationships,
         schema_version=contract["schema_version"],
+        # Which registered reading of this contract produced the record. A
+        # re-read under a corrected mapping states its own version, so it sits
+        # beside its predecessor rather than colliding with it.
+        mapping_version=mapping_version,
         provenance=provenance,
     )
