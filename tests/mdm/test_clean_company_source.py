@@ -150,3 +150,36 @@ def test_preparation_rejects_capture_mismatch_and_false_manifest_count(tmp_path)
     with pytest.raises(Conflict, match="row count"):
         prepare_company_bundle(**args)
     assert not (tmp_path / "pinned").exists()
+
+
+def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():
+    """Company mastering ticket 01, through the real SEC Company contract.
+
+    A mapping correction must not re-bind the record: the subject is keyed on
+    source code and record key, and neither moves.
+    """
+    publication = {
+        "publication_key": "capture-1",
+        "revision": 0,
+        "effective_at": None,
+        "artifact_sha256": "a" * 64,
+        "member": "company.parquet",
+        "record_locator": "line:1",
+    }
+    # The bundle writer renders source scalars before the adapter sees them.
+    row = source_row(320193, last_synced_at=datetime(2026, 1, 1, tzinfo=UTC).isoformat())
+    first = normalize(
+        row, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication
+    )
+    corrected = normalize(
+        row,
+        source_code=SOURCE_CODE,
+        contract=CONTRACT,
+        publication=publication,
+        mapping_version=2,
+    )
+    assert "mapping_version" not in first
+    assert corrected["mapping_version"] == 2
+    assert corrected["assertion_id"] != first["assertion_id"]
+    assert corrected["subject"] == first["subject"]
+    assert corrected["record_key"] == first["record_key"]

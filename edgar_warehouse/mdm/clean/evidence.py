@@ -45,6 +45,7 @@ def assertion(
     kind: str,
     fields: dict[str, Any],
     schema_version: str = "1",
+    mapping_version: int = 1,
     identifiers: dict[str, str] | None = None,
     profiles: list[dict] | None = None,
     relationships: list[dict] | None = None,
@@ -59,6 +60,12 @@ def assertion(
         raise ValueError(
             "Assertion requires a supported kind, source keys and nonnegative native revision"
         )
+    # The platform's own reading number, not the source's schema_version. It is
+    # hashed with the rest of the body so that a second reading of one
+    # publication is a distinct assertion rather than a silent duplicate
+    # (company mastering ticket 01, amendment 7).
+    if type(mapping_version) is not int or mapping_version < 1:
+        raise ValueError("Mapping version must be a positive integer")
     normalized = {}
     for name, item in fields.items():
         if not name:
@@ -87,6 +94,13 @@ def assertion(
         "relationships": relationships or [],
         "provenance": provenance or {},
     }
+    # The first reading has one canonical form: absent. Stating it explicitly
+    # would move every assertion id already written, orphaning the decisions
+    # that cite them, and a body that says 1 and a body that says nothing
+    # describe the same reading. A re-read states its version and so hashes
+    # differently, which is what lets it sit beside its predecessor.
+    if mapping_version > 1:
+        body["mapping_version"] = mapping_version
     body["assertion_id"] = digest(body)
     return body
 
@@ -109,7 +123,11 @@ def validate_assertion(body: dict) -> None:
                 "relationships",
                 "provenance",
             )
-        }
+        },
+        # Incoming only: `merge.py` validates what a batch carries, never a
+        # stored row, so an assertion written before mapping versions existed
+        # is not re-hashed. Absent means the first reading.
+        mapping_version=body.get("mapping_version", 1),
     )
     if expected != body:
         raise Conflict("Normalized assertion hash or shape mismatch")

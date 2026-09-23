@@ -443,6 +443,7 @@ def record_evidence(
     eligible_leis: set[str],
     publication: dict,
     ordinal: int,
+    mapping_version: int = 1,
 ) -> tuple[str, dict]:
     """Interpret one authenticated record; leave identity decisions to Merge Stage."""
     if (
@@ -534,6 +535,7 @@ def record_evidence(
             source_code=source_code,
             contract=contract,
             publication={**publication, "effective_at": effective},
+            mapping_version=mapping_version,
         )
         return "assertion", result
     except (UnsupportedRecord, ValueError, TypeError) as exc:

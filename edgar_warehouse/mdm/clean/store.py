@@ -89,6 +89,7 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "028_clean_mdm_assessment.sql",
             "029_clean_mdm_family_checkpoint.sql",
             "030_clean_mdm_evidence_disposition.sql",
+            "031_clean_mdm_mapping_version.sql",
         ):
             extra = path.with_name(name)
             extra_source = extra.read_text()
@@ -226,17 +227,27 @@ def register_dataset(
     body = {**body, "registry_evidence": authority[0]}
     current = rows(
         conn,
-        "SELECT body,registry_version::text FROM mdm_v2.dataset WHERE source_code=:code",
+        """SELECT body,registry_version::text,mapping_version FROM mdm_v2.dataset_mapping
+        WHERE source_code=:code ORDER BY mapping_version DESC LIMIT 1""",
         code=code,
     )
     if current:
         if (
-            current[0]["body"] != body
-            or current[0]["registry_version"] != registry_version
+            current[0]["body"] == body
+            and current[0]["registry_version"] == registry_version
         ):
-            raise Conflict(
-                "Dataset contract is immutable; register a new versioned contract"
-            )
+            return
+        protected_change(current[0]["body"], body)
+        conn.execute(
+            text("""INSERT INTO mdm_v2.dataset_mapping(source_code,mapping_version,body,registry_version)
+            VALUES(:code,:version,CAST(:body AS jsonb),:registry)"""),
+            {
+                "code": code,
+                "version": current[0]["mapping_version"] + 1,
+                "body": canonical(body),
+                "registry": str(UUID(registry_version)),
+            },
+        )
         return
     conn.execute(
         text("INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))"),
@@ -246,6 +257,51 @@ def register_dataset(
             "body": canonical(body),
         },
     )
+    conn.execute(
+        text("""INSERT INTO mdm_v2.dataset_mapping(source_code,mapping_version,body,registry_version)
+        VALUES(:code,1,CAST(:body AS jsonb),:registry)"""),
+        {
+            "code": code,
+            "registry": str(UUID(registry_version)),
+            "body": canonical(body),
+        },
+    )
+
+
+# Changing any of these makes the contract describe a different dataset, so a
+# record would bind to a different subject. That is the one case a new
+# source_code is right; everything else is a new reading of the same source
+# (company mastering ticket 01, decision 5).
+PROTECTED_CONTRACT_PARTS = ("record_key", "publication_key")
+PROTECTED_ADAPTER_PARTS = (
+    "record_key",
+    "record_key_format",
+    "identifiers",
+    "identifier_formats",
+)
+
+
+def protected_change(current: dict, proposed: dict) -> None:
+    """Refuse a mapping version that would move a record's identity.
+
+    The engine compares the parts itself, so the protection never rests on how
+    an author labels the change.
+    """
+    moved = [
+        part
+        for part in PROTECTED_CONTRACT_PARTS
+        if current.get(part) != proposed.get(part)
+    ]
+    moved += [
+        f"adapter.{part}"
+        for part in PROTECTED_ADAPTER_PARTS
+        if current.get("adapter", {}).get(part) != proposed.get("adapter", {}).get(part)
+    ]
+    if moved:
+        raise Conflict(
+            "Dataset identity is immutable within one source code; "
+            f"register a new source code: {', '.join(sorted(moved))}"
+        )
 
 
 class Publisher(Protocol):
