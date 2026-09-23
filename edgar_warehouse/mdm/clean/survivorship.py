@@ -218,6 +218,7 @@ def select_fields(
         p["evidence"] = sorted(set(p["evidence"]))
         # Profile values use their own role/field authority policy. Keep raw
         # disagreement in source assertions rather than copying first arrival.
+        role_digest, role_name = _role_authority(policy, p["role"], policy_digest)
         values, problems = _select_values(
             policy.get("profile_fields", {}).get(p["role"], {}),
             subjects,
@@ -228,10 +229,8 @@ def select_fields(
                 if o.get("profile_id") == p["profile_id"]
             ],
             as_of=as_of,
-            # A profile role is not an identity kind and has no block of its
-            # own, so its values record the enclosing kind's digest.
-            policy_digest=recorded_digest,
-            kind_version=kind_version,
+            policy_digest=role_digest,
+            kind_version=role_name,
         )
         p["fields"] = values
         reviews.extend({**r, "profile_id": p["profile_id"]} for r in problems)
@@ -274,6 +273,34 @@ NON_AUTHORITY_SECTIONS = (
     "identifiers",
     "projection",
 )
+
+
+def _role_authority(
+    policy: dict, role: str, policy_digest: str
+) -> tuple[str, str | None]:
+    """The digest a selected profile field records, and the role behind it.
+
+    A profile role is not an identity kind. It attaches to several of them —
+    `adviser` to a company and a person, `fund` to a company and a fund
+    structure (`evidence.PROFILE_KINDS`) — so its rules live in one top-level
+    `profile_fields` block rather than being written once per kind and left to
+    drift apart.
+
+    Its values therefore record the **role's** digest. Recording the enclosing
+    kind's made an edit to a role's rules invisible: it moved no recorded
+    digest anywhere, which is the mirror image of the churn `_kind_authority`
+    exists to stop (company mastering, decided 2026-09-23).
+
+    A body with no `kinds` block is an old registered body with no per-kind
+    digest to record, and keeps recording the body's here too, so the two
+    halves of one policy never disagree about which era they are in.
+    """
+    if not policy.get("kinds"):
+        return policy_digest, None
+    rules = (policy.get("profile_fields") or {}).get(role)
+    if not rules:
+        return policy_digest, None
+    return digest({"role": role, "fields": rules}), role
 
 
 def _kind_authority(

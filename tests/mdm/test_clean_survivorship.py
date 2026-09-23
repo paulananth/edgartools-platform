@@ -511,3 +511,122 @@ class TestWhatTheKindDigestCovers:
         assert not set(AUTHORITY_SECTIONS) & set(NON_AUTHORITY_SECTIONS)
         for kind, block in POLICY["kinds"].items():
             assert set(block) <= declared, f"{kind} has an undeclared section"
+
+
+class TestWhatAProfileFieldRecords:
+    """A profile field records its role's digest, not the enclosing kind's.
+
+    A role attaches to several kinds — `adviser` to both company and person,
+    `fund` to both company and fund_structure (`evidence.PROFILE_KINDS`) — so
+    its rules live in one top-level block. Recording the enclosing kind's
+    digest made an edit to a role's rules invisible: it changed no recorded
+    digest anywhere.
+    """
+
+    def adviser(self, **fields):
+        return {
+            "role": "adviser",
+            "authority": "IAPD",
+            "registration": "123",
+            "valid_from": "2026-01-01T00:00:00+00:00",
+            "fields": fields or {"aum": "1000"},
+        }
+
+    def policy(self, *, aum_sources=("sec.company",), company_max_age=None):
+        company = {"sources": ["sec.company"]}
+        if company_max_age:
+            company["max_age_days"] = company_max_age
+        return {
+            "kinds": {
+                "company": {"version": "company-1", "fields": {"legal_name": company}}
+            },
+            "profile_fields": {"adviser": {"aum": {"sources": list(aum_sources)}}},
+        }
+
+    def recorded(self, policy):
+        a = company(profiles=[self.adviser()])
+        claims = current_claims([a], AS_OF, set())
+        fields, profiles, _ = select_fields(
+            "company",
+            sorted(claims),
+            claims,
+            policy,
+            [],
+            as_of=AS_OF,
+            policy_digest="body-digest",
+            entity_id="entity-1",
+        )
+        return fields["legal_name"], profiles[0]["fields"]["aum"]
+
+    def test_a_profile_field_does_not_record_the_kinds_digest(self):
+        kind_field, profile_field = self.recorded(self.policy())
+        assert profile_field["policy_digest"] != kind_field["policy_digest"]
+
+    def test_editing_a_role_rule_moves_the_profile_digest(self):
+        _, before = self.recorded(self.policy())
+        _, after = self.recorded(self.policy(aum_sources=("sec.company", "gleif.lei")))
+        assert before["policy_digest"] != after["policy_digest"]
+
+    def test_editing_a_role_rule_leaves_every_kind_field_alone(self):
+        before, _ = self.recorded(self.policy())
+        after, _ = self.recorded(self.policy(aum_sources=("sec.company", "gleif.lei")))
+        assert before["policy_digest"] == after["policy_digest"]
+
+    def test_editing_a_kind_rule_leaves_the_profile_digest_alone(self):
+        _, before = self.recorded(self.policy())
+        _, after = self.recorded(self.policy(company_max_age=30))
+        assert before["policy_digest"] == after["policy_digest"]
+
+    def test_a_profile_field_carries_its_role_not_a_kind_version(self):
+        _, profile_field = self.recorded(self.policy())
+        assert profile_field["kind_version"] == "adviser"
+
+    def test_two_roles_with_identical_rules_record_different_digests(self):
+        a = company(
+            profiles=[
+                self.adviser(),
+                {
+                    "role": "audit_firm",
+                    "authority": "PCAOB",
+                    "registration": "456",
+                    "valid_from": "2026-01-01T00:00:00+00:00",
+                    "fields": {"aum": "1000"},
+                },
+            ]
+        )
+        claims = current_claims([a], AS_OF, set())
+        shared = {"aum": {"sources": ["sec.company"]}}
+        _, profiles, _ = select_fields(
+            "company",
+            sorted(claims),
+            claims,
+            {
+                "kinds": {"company": {"version": "c1", "fields": {}}},
+                "profile_fields": {"adviser": shared, "audit_firm": shared},
+            },
+            [],
+            as_of=AS_OF,
+            policy_digest="body-digest",
+            entity_id="entity-1",
+        )
+        digests = {p["role"]: p["fields"]["aum"]["policy_digest"] for p in profiles}
+        assert digests["adviser"] != digests["audit_firm"]
+
+    def test_an_old_shape_body_still_records_the_body_digest(self):
+        """A body with no kinds block has no per-kind digest, and no per-role."""
+        a = company(profiles=[self.adviser()])
+        claims = current_claims([a], AS_OF, set())
+        _, profiles, _ = select_fields(
+            "company",
+            sorted(claims),
+            claims,
+            {
+                "fields": rules("sec.company"),
+                "profile_fields": {"adviser": {"aum": {"sources": ["sec.company"]}}},
+            },
+            [],
+            as_of=AS_OF,
+            policy_digest="body-digest",
+            entity_id="entity-1",
+        )
+        assert profiles[0]["fields"]["aum"]["policy_digest"] == "body-digest"

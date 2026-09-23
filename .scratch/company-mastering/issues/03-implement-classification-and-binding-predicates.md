@@ -80,7 +80,7 @@ legally change it and none of the three would see it. The three agree with
 each other today, so nothing is broken; fixing it means changing all three
 together, and it belongs with whoever next touches the deferred path.
 
-Also still open, from the review: `profile_fields` sits at the top level,
-outside the digested block, so editing a profile role's rules changes no
-recorded digest at all — the mirror image of the churn fixed above. It belongs
-with whichever ticket moves `profile_fields` under `kinds.<kind>`.
+**Closed 2026-09-23:** `profile_fields` stays at the top level, because a role
+attaches to several kinds, and a profile field now records its **role's**
+digest rather than the enclosing kind's. See ticket 02 decision 3's second
+amendment.
