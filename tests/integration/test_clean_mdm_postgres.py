@@ -2780,3 +2780,74 @@ def test_a_registry_version_bump_alone_is_not_a_new_reading(database):
         database.admin.begin() as conn,
     ):
         register_dataset(conn, "fixture.primary", later, contract_body())
+
+
+def test_a_deferred_record_and_an_assertion_agree_on_the_reading(database):
+    """Both come out of one read of one artifact, so both must be accepted.
+
+    The assertion path checks the schema against the reading that produced it
+    (migration 031). The deferred path checked it against mdm_v2.dataset, which
+    migration 023 froze at the first registration, so a corrected mapping had
+    its assertions accepted and its deferred records refused.
+    """
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    assert (
+        register_reading(database, "fixture.primary", contract_body(schema_version="2"))
+        == 2
+    )
+    a = source(key="agree-1", mapping_version=2, schema_version="2")
+    d = deferred_record(
+        source_code="fixture.primary",
+        publication_key="p1",
+        record_locator="line:9",
+        schema_version="2",
+        reason="invalid_field_shape",
+        raw_record={"key": "agree-2"},
+        provenance={"adapter_version": "v1"},
+    )
+    apply(database, 1, assertions=[a], deferred=[d])
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1
+
+
+def test_a_deferred_record_for_an_unregistered_schema_is_still_refused(database):
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    d = deferred_record(
+        source_code="fixture.primary",
+        publication_key="p1",
+        record_locator="line:9",
+        schema_version="not-a-registered-schema",
+        reason="invalid_field_shape",
+        raw_record={"key": "agree-3"},
+        provenance={"adapter_version": "v1"},
+    )
+    with pytest.raises(DBAPIError, match="Unknown deferred dataset contract"):
+        apply(database, 1, deferred=[d])
+
+
+def test_a_deferred_record_that_defers_again_under_a_later_reading_is_one_row(database):
+    """A deferred body carries no reading, so a re-read is the same evidence.
+
+    This is why the reading is not added to the deferred body: its natural key
+    is (source_code, publication_key, record_locator), which a re-read reuses,
+    so a second body would collide with the first rather than sit beside it.
+    """
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    d = deferred_record(
+        source_code="fixture.primary",
+        publication_key="p1",
+        record_locator="line:9",
+        schema_version="1",
+        reason="invalid_field_shape",
+        raw_record={"key": "agree-4"},
+        provenance={"adapter_version": "v1"},
+    )
+    apply(database, 1, deferred=[d])
+    register_reading(database, "fixture.primary", contract_body(semantics="snapshot"))
+    apply(database, 2, deferred=[d])
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1

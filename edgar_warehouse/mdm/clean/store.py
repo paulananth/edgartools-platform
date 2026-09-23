@@ -48,6 +48,7 @@ CLEAN_MDM_MIGRATIONS = (
     "029_clean_mdm_family_checkpoint.sql",
     "030_clean_mdm_evidence_disposition.sql",
     "031_clean_mdm_mapping_version.sql",
+    "032_clean_mdm_deferred_reading.sql",
 )
 
 

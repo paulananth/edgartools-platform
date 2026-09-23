@@ -258,6 +258,24 @@ def _rules_for(policy: dict, kind: str) -> dict:
     return kinds.get(kind, {}).get("fields", {})
 
 
+# Which sections of a kind's block decide the winner of a field, and which do
+# not. Written down rather than inferred from what the block happens to hold,
+# so that adding a section is a decision someone makes once, here, and not a
+# silent change to every field's recorded authority. A section in neither list
+# is refused by name.
+AUTHORITY_SECTIONS = ("fields", "field_group", "field_groups")
+NON_AUTHORITY_SECTIONS = (
+    "version",  # travels beside the digest, not inside it
+    "classification",
+    "binding",
+    "bars",
+    "lists",
+    "normalizers",
+    "identifiers",
+    "projection",
+)
+
+
 def _kind_authority(
     policy: dict, kind: str, policy_digest: str
 ) -> tuple[str, str | None]:
@@ -271,11 +289,32 @@ def _kind_authority(
 
     The version travels beside the digest because a digest alone tells a reader
     only that something differs, never which authored document it came from.
+
+    The digest covers the sections that decide **which claim wins**, named in
+    `AUTHORITY_SECTIONS`, not the whole block. Ticket 02's own build list puts
+    classification, binding, bars and projection in that same block, and none
+    of them change a field's winner; digesting the block whole would move every
+    field's recorded digest on a classification edit, which is the churn the
+    per-kind digest exists to stop, reappearing inside one kind.
+
+    An absent or empty section is omitted rather than digested as empty: the
+    two describe the same rules, the way an absent mapping version and 1 do. A
+    populated section is meant to move the digest.
     """
     block = (policy.get("kinds") or {}).get(kind)
     if not block:
         return policy_digest, None
-    return digest(block), block.get("version")
+    unknown = set(block) - set(AUTHORITY_SECTIONS) - set(NON_AUTHORITY_SECTIONS)
+    if unknown:
+        raise Conflict(
+            "A kind section must be declared authority-bearing or not: "
+            + ", ".join(sorted(unknown))
+        )
+    covered = {
+        "kind": kind,
+        **{name: block[name] for name in AUTHORITY_SECTIONS if block.get(name)},
+    }
+    return digest(covered), block.get("version")
 
 
 def _select_values(

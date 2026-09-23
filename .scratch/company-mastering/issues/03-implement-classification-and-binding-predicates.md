@@ -53,16 +53,34 @@ classification per source record, the binding predicates that replace the
 blanket refusal, the activation bar per `(kind, family)`, the suspension table
 (keyed and scoped per ticket 02's amendment), and group-aware selection.
 
-Two things the build surfaced, for whoever takes them:
+## Also built, 2026-09-23
 
-- `030_clean_mdm_evidence_disposition.sql:26-27` still checks a deferred
-  record's `schema_version` against `mdm_v2.dataset`, which is frozen at
-  reading 1, while the assertion path now checks the reading's own body. Under
-  a corrected mapping an assertion is accepted and the deferred record from
-  the same read is refused.
-- `kind_digest` covers the whole `kinds.<kind>` block. Once classification and
-  binding rules live in that block, editing one will move every field's
-  recorded digest, which is the churn ticket 02 decision 3 exists to stop,
-  reappearing inside one kind. Narrowing it to the authority-bearing sub-block
-  is cheap now and expensive later, because no production policy carries a
-  `kinds` block yet.
+The three issues the build surfaced are closed:
+
+- migration 032 checks a deferred record's `schema_version` against any
+  registered reading, so a deferred record and an assertion from one read now
+  agree. The reading is deliberately **not** added to the deferred body: its
+  natural key is `(source_code, publication_key, record_locator)` (migration
+  027), which a re-read reuses, so a second body carrying a reading would
+  collide with the first under `030`'s read-back comparison rather than sit
+  beside it. A deferred record is evidence that a record could not be read;
+  the schema it was read under identifies its contract;
+- the kind digest is narrowed to the authority-bearing sections, named in
+  `survivorship.AUTHORITY_SECTIONS`, with an undeclared section refused by
+  name (ticket 02 decision 3, amended);
+- the real Company policy moved to `kinds.company`, with its own authored kind
+  version, so the per-kind digest and the kind version are delivered for the
+  one policy that matters rather than only in tests.
+
+**Still open, and now the oldest thing here:** the blocking disposition of a
+deferred record reads `nonblocking_deferred_reasons` from the frozen
+`mdm_v2.dataset` row in three places — `030:35`, `030:59` and `merge.py:495`
+in Python. That field is not a protected part, so a corrected mapping may
+legally change it and none of the three would see it. The three agree with
+each other today, so nothing is broken; fixing it means changing all three
+together, and it belongs with whoever next touches the deferred path.
+
+Also still open, from the review: `profile_fields` sits at the top level,
+outside the digested block, so editing a profile role's rules changes no
+recorded digest at all — the mirror image of the churn fixed above. It belongs
+with whichever ticket moves `profile_fields` under `kinds.<kind>`.

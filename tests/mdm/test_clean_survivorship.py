@@ -398,3 +398,116 @@ class TestSelectFields:
                 as_of=AS_OF,
                 policy_digest="digest-1",
             )
+
+
+class TestWhatTheKindDigestCovers:
+    """The digest answers "under which rules did this claim win?".
+
+    Ticket 02 decision 3 said "computed from that kind's block". Digesting the
+    block whole would move every field's recorded digest when a classification
+    rule changed, which does not decide any field's winner — the churn the
+    per-kind digest exists to stop, reappearing inside one kind.
+    """
+
+    def block(self, **extra):
+        return {
+            "kinds": {
+                "company": {
+                    "version": "company-1",
+                    "fields": rules("sec.company")["company"],
+                    **extra,
+                }
+            }
+        }
+
+    def recorded(self, policy):
+        a = company()
+        claims = current_claims([a], AS_OF, set())
+        fields, _, _ = select_fields(
+            "company",
+            sorted(claims),
+            claims,
+            policy,
+            [],
+            as_of=AS_OF,
+            policy_digest="body-digest",
+        )
+        return fields["legal_name"]
+
+    def test_a_rule_that_does_not_decide_a_winner_does_not_move_the_digest(self):
+        plain = self.recorded(self.block())
+        with_rules = self.recorded(
+            self.block(
+                classification={"rule_id": "C-J", "version": "2026-09-20"},
+                binding={"rule_id": "company-lei", "version": "2026-09-20"},
+                bars={"min_precision": 0.999},
+                projection={"fields": ["legal_name"]},
+            )
+        )
+        assert plain["policy_digest"] == with_rules["policy_digest"]
+
+    def test_a_changed_field_rule_does_move_the_digest(self):
+        before = self.recorded(self.block())
+        after = self.recorded(
+            {
+                "kinds": {
+                    "company": {
+                        "version": "company-1",
+                        "fields": rules("sec.company", max_age_days=30)["company"],
+                    }
+                }
+            }
+        )
+        assert before["policy_digest"] != after["policy_digest"]
+
+    def test_the_kind_version_travels_beside_the_digest_not_inside_it(self):
+        first = self.recorded(self.block())
+        renamed = self.recorded(
+            {
+                "kinds": {
+                    "company": {
+                        "version": "company-2",
+                        "fields": rules("sec.company")["company"],
+                    }
+                }
+            }
+        )
+        assert first["kind_version"] == "company-1"
+        assert renamed["kind_version"] == "company-2"
+        assert first["policy_digest"] == renamed["policy_digest"]
+
+    def test_two_kinds_with_identical_rules_still_record_different_digests(self):
+        a = company()
+        claims = current_claims([a], AS_OF, set())
+        shared = {"version": "v1", "fields": rules("sec.company")["company"]}
+        digests = []
+        for kind in ("company", "government"):
+            claims[a["subject"]]["kind"] = kind
+            fields, _, _ = select_fields(
+                kind,
+                sorted(claims),
+                claims,
+                {"kinds": {kind: shared}},
+                [],
+                as_of=AS_OF,
+                policy_digest="body-digest",
+            )
+            digests.append(fields["legal_name"]["policy_digest"])
+        assert digests[0] != digests[1]
+
+    def test_an_undeclared_section_is_refused_by_name(self):
+        """The guard that stops this rotting: a new section is a decision."""
+        with pytest.raises(Conflict, match="invented_section"):
+            self.recorded(self.block(invented_section={"a": 1}))
+
+    def test_every_section_of_the_real_company_policy_is_declared(self):
+        from edgar_warehouse.mdm.clean.company_source import POLICY
+        from edgar_warehouse.mdm.clean.survivorship import (
+            AUTHORITY_SECTIONS,
+            NON_AUTHORITY_SECTIONS,
+        )
+
+        declared = set(AUTHORITY_SECTIONS) | set(NON_AUTHORITY_SECTIONS)
+        assert not set(AUTHORITY_SECTIONS) & set(NON_AUTHORITY_SECTIONS)
+        for kind, block in POLICY["kinds"].items():
+            assert set(block) <= declared, f"{kind} has an undeclared section"

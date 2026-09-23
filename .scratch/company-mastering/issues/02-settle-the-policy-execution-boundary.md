@@ -54,6 +54,26 @@ it changes, so ticket 03 implements rather than re-decides.
    The whole-body digest stays on the batch. A Person-only edit then changes
    no Company value, which is Codex's item 4. Changes `survivorship.py:274`
    and what `consumer.py:41` passes on.
+
+   **Amended 2026-09-23, when implemented.** ~~computed from that kind's
+   block~~ — the digest covers the sections of the block that decide **which
+   claim wins**, not the block whole. This decision's own build list puts
+   classification, binding, bars and projection in that same block, and none of
+   them change a field's winner. Digesting the block whole would move every
+   field's recorded digest on a classification edit — the churn this decision
+   exists to stop, reappearing inside one kind instead of between two.
+
+   The sections are named in `survivorship.AUTHORITY_SECTIONS` and
+   `NON_AUTHORITY_SECTIONS`, following the same written-down-not-inferred
+   pattern as `store.PROTECTED_CONTRACT_PARTS`. A section in neither list is
+   refused by name, so adding one is a decision somebody makes rather than a
+   silent change to every field's recorded authority. `version` sits outside
+   the digest because it already travels beside it. An absent or empty section
+   is omitted rather than digested as empty, the way an absent mapping version
+   and 1 are the same reading; a populated one is meant to move the digest.
+
+   The one genuinely arguable member is `projection`: it changes what the
+   entity exposes, but not which claim won. It is currently non-authority.
 4. **Each kind keeps its own accepted bar** (Q4a): Company 99.9% precision at
    a one-sided 95% lower bound (Q11); Person 99% at 97.5% (its own ticket). A
    rule whose family has no bar cannot be activated. The bar gates fuzzy
