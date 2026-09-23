@@ -55,6 +55,20 @@ class RunCoordinator:
         )
         return result
 
+    def pinned_readings(self, run_id: str) -> dict:
+        """The source readings an already-started run pinned, if it started.
+
+        A run resumes under the mappings it began with. Reading the newest
+        instead makes a mapping registered mid-run change the reconstructed
+        scope, and the run can then never be resumed.
+        """
+        with Session(self.engine) as session:
+            existing = BookkeepingStore(session).get_pipeline_run(run_id)
+        if not existing:
+            return {}
+        scope = json.loads(existing["scope_json"])
+        return (scope.get("native_consumption") or {}).get("mapping_versions") or {}
+
     def start(
         self,
         run_id: str,

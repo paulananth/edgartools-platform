@@ -317,6 +317,28 @@ def current_reading(conn: Connection, code: str) -> tuple[int, dict] | None:
     return (found[0]["mapping_version"], found[0]["body"]) if found else None
 
 
+def reading_at(conn: Connection, code: str, mapping_version: int) -> tuple[int, dict]:
+    """One named reading of a source, whatever the current one is.
+
+    A run pins the readings it started under, so resuming it resolves those
+    rather than whatever has been registered since. Without this, registering
+    a corrected mapping mid-run changes the reconstructed run scope and the
+    run can never be resumed (Codex review of PR #695, P1).
+    """
+    found = rows(
+        conn,
+        """SELECT mapping_version,body FROM mdm_v2.dataset_mapping
+        WHERE source_code=:code AND mapping_version=:version""",
+        code=code,
+        version=mapping_version,
+    )
+    if not found:
+        raise Conflict(
+            f"Run pins reading {mapping_version} of {code}, which is not registered"
+        )
+    return found[0]["mapping_version"], found[0]["body"]
+
+
 def protected_change(current: dict, proposed: dict) -> None:
     """Refuse a mapping version that would move a record's identity.
 

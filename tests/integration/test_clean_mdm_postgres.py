@@ -2641,10 +2641,16 @@ def test_migration_031_applies_to_a_populated_store(postgres):
     import edgar_warehouse.mdm.clean.store as store_module
 
     admin, app = postgres
-    through_030 = tuple(
-        name for name in store_module.CLEAN_MDM_MIGRATIONS if not name.startswith("031")
+    # Everything up to but not including 031, by position rather than by name.
+    # Excluding 031 alone left 032 in, so the test installed 032 first and
+    # stopped exercising the real upgrade order (Codex review of PR #695, P2).
+    names = list(store_module.CLEAN_MDM_MIGRATIONS)
+    cut = next(i for i, name in enumerate(names) if name.startswith("031"))
+    through_030 = tuple(names[:cut])
+    assert not any(name >= "031" for name in through_030)
+    assert names[cut:] == [n for n in names if n >= "031"], (
+        "migrations must be listed in order for a staged upgrade test to mean anything"
     )
-    assert len(through_030) == len(store_module.CLEAN_MDM_MIGRATIONS) - 1
 
     def register_pre_031(conn, code, registry_version, body):
         """Register a dataset the way the store did before dataset_mapping."""
@@ -2672,18 +2678,39 @@ def test_migration_031_applies_to_a_populated_store(postgres):
         mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_030),
         mock.patch(f"{__name__}.register_dataset", side_effect=register_pre_031),
     ):
+        from edgar_warehouse.mdm.clean.evidence import deferred_record
+
         database = initialize_database(admin, app)
         a = source(key="populated-1", fields={"name": "Acme"})
         identity, binding = identity_and_binding(a)
-        apply(database, 1, assertions=[a], identities=[identity], decisions=[binding])
+        # Both kinds of retained evidence, because 031 alters the assertion
+        # table and 032 rewrites the deferred path's schema check.
+        d = deferred_record(
+            source_code="fixture.primary",
+            publication_key="p1",
+            record_locator="line:1",
+            schema_version="1",
+            reason="invalid_field_shape",
+            raw_record={"key": "populated-2"},
+            provenance={"adapter_version": "v1"},
+        )
+        apply(
+            database,
+            1,
+            assertions=[a],
+            deferred=[d],
+            identities=[identity],
+            decisions=[binding],
+        )
         with database.application.connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1
             assert (
                 conn.scalar(text("SELECT to_regclass('mdm_v2.dataset_mapping')"))
                 is None
             )
 
-    # Now apply 031 over that populated store.
+    # Now apply 031 and 032, in order, over that populated store.
     assert migrate(admin, application_role="clean_application")
     with database.application.connect() as conn:
         # Existing evidence takes the default reading and keeps its id.
@@ -2703,6 +2730,12 @@ def test_migration_031_applies_to_a_populated_store(postgres):
             )
             == 1
         )
+        # Retained deferred evidence survives both migrations unchanged.
+        assert conn.execute(
+            text(
+                "SELECT deferred_id,body->>'schema_version' FROM mdm_v2.deferred_record"
+            )
+        ).all() == [(d["deferred_id"], "1")]
     # The store still works, and a re-read of the pre-migration record lands.
     corrected = reread(a, mapping_version=2, fields={"name": "Acme Holdings"})
     register_reading(database, "fixture.primary", contract_body(semantics="snapshot"))

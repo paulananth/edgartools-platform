@@ -10,10 +10,12 @@ from collections import defaultdict
 
 from .gleif_source import VERSION, record_evidence
 from .source_publications import plan_continuity
-from .store import Conflict, canonical, current_reading, digest
+from .store import Conflict, canonical, current_reading, digest, reading_at
 
 
-def prepare_native(manifest, store, coordinator, verifier, *, observed, limit):
+def prepare_native(
+    manifest, store, coordinator, verifier, *, observed, limit, run_id=None
+):
     """Verify all source bytes before returning at most one invocation of evidence."""
     if verifier is None:
         raise Conflict(
@@ -136,15 +138,24 @@ def prepare_native(manifest, store, coordinator, verifier, *, observed, limit):
                 raise Conflict("Native delta start does not match predecessor content")
         predecessor = current
     native = plan["publications"][0]["evidence"]["native_contract"]
+    # A run resumes under the readings it started with. Reading the newest on
+    # every invocation put the current mapping digest into the reconstructed
+    # run scope, so registering a corrected mapping mid-run made the run
+    # unresumable with "Root run scope changed" (Codex review of PR #695, P1).
+    pinned = coordinator.pinned_readings(run_id) if run_id else {}
     with store.engine.connect() as conn:
         readings = {
-            code: current_reading(conn, code)
+            code: (
+                reading_at(conn, code, pinned[code])
+                if code in pinned
+                else current_reading(conn, code)
+            )
             for code in native["record_sources"].values()
         }
     if any(r is None for r in readings.values()):
         raise Conflict("Native record datasets must be registered before consumption")
-    # Each source is read under its own current mapping, and every record says
-    # which reading produced it (ticket 01, decision 4).
+    # Each source is read under its own mapping, and every record says which
+    # reading produced it (ticket 01, decision 4).
     contracts = {code: r[1] for code, r in readings.items()}
     mapping_versions = {code: r[0] for code, r in readings.items()}
     for member, code in native["record_sources"].items():
@@ -247,6 +258,10 @@ def prepare_native(manifest, store, coordinator, verifier, *, observed, limit):
         "consumer": batches[0]["consumer"],
         "plan": plan,
         "batches": expected,
+        # Pinned so a resume resolves these readings rather than whatever has
+        # been registered since. Without them the scope carries the newest
+        # mapping's digest and cannot be reproduced on a second invocation.
+        "mapping_versions": mapping_versions,
     }, prepared
 
 
