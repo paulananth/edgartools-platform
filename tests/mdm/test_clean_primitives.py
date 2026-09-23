@@ -68,7 +68,9 @@ class TestNormalizers:
         assert normalizer(CONFORMED, DOC)("Smith & Wesson") == "SMITH AND WESSON"
 
     def test_a_cik_loses_its_leading_zeros(self):
-        assert normalizer("normalize_identifier@sec-cik-v1", DOC)("0000320193") == "320193"
+        assert (
+            normalizer("normalize_identifier@sec-cik-v1", DOC)("0000320193") == "320193"
+        )
 
     def test_an_lei_is_upper_cased_and_stripped(self):
         assert (
@@ -86,7 +88,9 @@ class TestClassificationPrimitives:
         return call(name, args, record, DOC)
 
     def test_evidence_present_sees_a_value(self):
-        assert self.evaluate("evidence_present@1", {"document": "sub"}, {"sub": {"a": 1}})
+        assert self.evaluate(
+            "evidence_present@1", {"document": "sub"}, {"sub": {"a": 1}}
+        )
         assert not self.evaluate("evidence_present@1", {"document": "sub"}, {"sub": {}})
         assert not self.evaluate("evidence_present@1", {"document": "sub"}, {})
 
@@ -220,7 +224,9 @@ class TestClassificationPrimitives:
 
     def test_a_dotted_path_reads_a_nested_field(self):
         args = {"field": "sub.entityType", "values": ["operating"]}
-        assert self.evaluate("field_in_set@1", args, {"sub": {"entityType": "operating"}})
+        assert self.evaluate(
+            "field_in_set@1", args, {"sub": {"entityType": "operating"}}
+        )
 
 
 class TestWhatTheVocabularyRefuses:

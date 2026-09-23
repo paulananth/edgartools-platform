@@ -148,7 +148,9 @@ def _name_shape(args: dict, record: dict, doc: dict) -> bool:
         return False
     if (args.get("forbid_digits") or {}).get("value") and re.search(r"\d", raw):
         return False
-    tokens = [t for t in re.split(r"[\s,]+", normalizer(args["normalizer"], doc)(raw)) if t]
+    tokens = [
+        t for t in re.split(r"[\s,]+", normalizer(args["normalizer"], doc)(raw)) if t
+    ]
     if not args["min_tokens"] <= len(tokens) <= args["max_tokens"]:
         return False
     suffixes = set(declared(doc, args["suffix_list"], "suffix list"))

@@ -265,8 +265,7 @@ def _rules_for(policy: dict, kind: str) -> dict:
 AUTHORITY_SECTIONS = ("fields", "field_group", "field_groups")
 NON_AUTHORITY_SECTIONS = (
     "version",  # travels beside the digest, not inside it
-    "classification",
-    "binding",
+    "rules",  # classification and binding: they decide a kind or an identity
     "bars",
     "lists",
     "normalizers",
