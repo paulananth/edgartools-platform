@@ -1,11 +1,25 @@
 # Mastering Policy Language
 
-Status: **proposed to Clean MDM (Codex/Grok)**, 2026-09-20. Planning only.
-Written from the resolved tickets of the
+Status: proposed to Clean MDM (Codex/Grok) 2026-09-20; **partly implemented
+from 2026-09-22** under the
+[Company mastering map](../../../.scratch/company-mastering/map.md). Written
+from the resolved tickets of the
 [Mastering Policy Language](../../../.scratch/mastering-policy-language/map.md)
 wayfinder map; every decision below lives in one of those tickets and is
-gisted here, never restated at length. No code, no migration, no edit to
-any Clean MDM file is implied by this document.
+gisted here, never restated at length.
+
+**What is built** (PRs #695, #696 and the policy-runtime branch): the per-kind
+and per-role field digests (§8, closing §13 item 1); the versioned primitive
+registry and five classification primitives (§5); the classification rule
+evaluator (§6); and the Dataset Contract lifecycle the rest rests on. **What
+is not**: the binding predicates, the activation bar, the suspension table,
+group-aware selection, and the §10 registration checks other than 9 and 10.
+The runtime still refuses every `automatic_rules` body, so nothing binds
+automatically.
+
+Sections amended after implementation are marked with the date and the
+operator decision behind them. Where the code and this document disagree, the
+code is what runs and this document is the defect.
 
 ## 1. Purpose
 
@@ -116,15 +130,34 @@ digest changes (§13, item 1).
 ### 4.3 Where classification lives
 
 Kind assignment already runs **per source, before the policy loads**:
-`clean/adapters.py:58-68` assigns a kind from the dataset contract's
-adapter block, looked up by `source_code` at `clean/cli.py:89-95`, and the
-result is hashed into `assertion_id` (`clean/evidence.py:82-90`). A
+`clean/adapters.py:72-84` assigns a kind from the dataset contract's
+adapter block, looked up by `source_code` at `clean/cli.py:118-124`, and the
+result is hashed into `assertion_id` (`clean/evidence.py:80-104`). A
 classification rule is therefore authored under its source and must be
-reachable from the dataset contract. Whether the rule text is stored in
-`kinds.<kind>.classification.<source>` and referenced from
-`mdm_v2.dataset.body.adapter`, or stored in the adapter block itself, is
-**Open** (§15, item 2). The rule shape and vocabulary are identical either
-way; the prototype used the former.
+reachable from the dataset contract.
+
+**Settled** (operator, 2026-09-23; closes §15 item 2). The rule text lives in
+the **kind document**, in its flat `rules` list with `family:
+"classification"`, and the dataset contract's adapter block **names one** by
+kind, `rule_id` and `version`. The adapter block does not hold rule text.
+
+**The policy is resolved at read time**, beside the dataset contract, because
+the decided kind is hashed into `assertion_id` and so is settled when the
+record is read and never afterwards. `manifest["policy_digest"]` is already at
+the manifest's top level, so the read path reaches the pinned body without a
+new input.
+
+Two alternatives were rejected. Deciding the kind later, in the Merge Stage,
+is forbidden by the hash: the label is part of the record's identity, so
+changing it afterwards would change every id and orphan every decision citing
+them. Leaving the adapter's lookup table as the decision-maker and letting the
+policy only check the result means the measured rules never run, and an SEC
+reporting owner whose only evidence is a name is never classified.
+
+A contract that names no rule keeps the adapter's own kind mapping, which is
+how every source registered before this existed keeps working. A contract that
+names a rule the policy does not hold is **refused**, not ignored: silently
+falling back to the table would defeat the reference.
 
 ## 5. The primitive vocabulary
 
@@ -140,7 +173,7 @@ Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-
 | shared | `normalize_identifier` | `field`, namespace format | normalized string or typed refusal |
 | classification | `evidence_present` | `document` (declared evidence reference) | bool |
 | classification | `field_in_set` | `field`, `values[]` | bool |
-| classification | `token_match` | `field`, `normalizer`, `token_list`, `exclude_list?`, `min_count?`, `max_count?` | bool |
+| classification | `token_match` | `field`, `normalizer`, `token_list`, `exclude_list?`, **at least one of** `min_count` / `max_count` | bool |
 | classification | `name_shape` | `field`, `normalizer`, `min_tokens`, `max_tokens`, `suffix_list`, `forbid_digits{applies_to}`, `forbid_characters{applies_to}` | bool |
 | classification | `fields_all_empty` | `fields[]` (declared paths) | bool |
 | binding | `identifier_match` | `namespace`, `field`, `normalizer` | matching identity or none |
@@ -212,6 +245,32 @@ Rules:
   stored **separately** with the rule id, version and step that fired
   (`domain-model.md:41-44`). A kind correction is review plus bounded
   rebuild, never an entity merge.
+
+  **Where that goes** (operator, 2026-09-23): in the assertion's
+  `provenance` block, which is part of the hashed body
+  (`clean/evidence.py:80-104`), so a record explains what labelled it with no
+  lookup elsewhere. This adds no churn, which is what makes the hash the right
+  place: the recorded rule can change in only three ways, and none creates a
+  row something else was not already creating. A contract pointing at a
+  different rule version is a contract change, which already mints a new
+  `mapping_version` and so a new id. The same version carrying different steps
+  is refused at registration (§10 check 9). The step that fired is a function
+  of the rule and the record, so it cannot move while both are fixed.
+
+  Rejected: a table outside the hash. It leaves the id untouched but costs a
+  join to answer "what labelled this?", and breaks the self-describing
+  evidence the mapping-version work established.
+
+  Records written before this exists carry no rule identity and are immutable.
+  Absence therefore means "decided by the adapter's lookup table, before
+  governed rules existed", on the same convention as an absent
+  `mapping_version` meaning the first reading.
+
+- **`min_count` or `max_count` is required on `token_match`** (§5). Without
+  one, the primitive returns true whatever the name holds, which is a
+  fail-open in the test that decides an entity's kind. All three calls in the
+  accepted Person document supply a count, so requiring it changes no measured
+  result.
 - Declared lists must carry `AND`, not `&`: EDGAR conformed names
   normalize the ampersand (prototype finding 4). A registration validates
   declared lists against the named normalizer.
@@ -287,8 +346,30 @@ Consolidation with its own evidence.
 Clean MDM's existing `fields` block is the survivorship declaration and is
 kept as is: per kind, per field, an ordered `sources` list plus
 eligibility (`clear_sources`, `allow_unknown_effective`, `max_age_days`),
-implemented at `clean/survivorship.py:200-280` under the accepted five-step
-order (`merge-stage.md:123-130`). This document adds:
+under the accepted five-step order (`merge-stage.md:123-130`). **Implemented
+2026-09-23** at `clean/survivorship.py`, where it moved under `kinds.<kind>`;
+bodies registered under the old top-level `fields` block keep working and a
+body carrying both is refused.
+
+**What a field's recorded digest covers** (implemented; amends §13 item 1). A
+selected field records its **kind's** digest, not the whole body's, with the
+authored kind version beside it — so a Person-only edit leaves every Company
+value unchanged. That digest covers only the sections of the kind block that
+decide **which claim wins**, named in `survivorship.AUTHORITY_SECTIONS`, not
+the block whole: `rules`, `bars`, `lists`, `normalizers`, `identifiers` and
+`projection` land in the same block and none of them changes a field's winner,
+so digesting the block whole would reintroduce the churn one level down. An
+undeclared section is refused by name (§10 check 10).
+
+**A profile field records its role's digest**, not the enclosing kind's. A
+role attaches to several kinds — `adviser` to company and person, `fund` to
+company and fund structure — so its rules stay in one top-level
+`profile_fields` block rather than being written once per kind and left to
+drift, and its values record a digest computed from that role's own rules,
+with the role name carried alongside. Recording the kind's digest made an edit
+to a role's rules invisible: it moved no recorded digest anywhere.
+
+This document adds:
 
 - `primitive: "select_by_source_rank@1"` named explicitly per field, so
   the version is pinned like every other primitive.
@@ -414,6 +495,31 @@ document never becomes a digest.
    Identifier Contract.
 8. Every kind that any relationship in the body can reach is present in
    `kinds` (§4.1 — a missing kind projects zero fields).
+9. **A rule version names one exact set of steps.** A body whose rule reuses
+   a `(kind, rule_id, version)` that an already-registered body holds with
+   **different steps** is refused (operator, 2026-09-23). Without this, two
+   digests can each hold `C-J@2026-09-20` with different steps, and the same
+   record classifies differently with no trace: the per-kind digest cannot
+   catch it, because `rules` is deliberately non-authority (§8) and so is
+   guaranteed not to move when a rule changes.
+
+   **There is no testing exemption, and none is needed.** A new version is
+   already free: nothing is overwritten, a changed body is simply a new digest
+   beside the old, and an author may register as many as they like. The check
+   refuses one narrow case — two different sets of steps sharing one version
+   name — so working freely costs one edit to a version string. Records
+   written during a trial are real records in a real store, so a reused
+   version corrupts that trial's own evidence; and a check that can silently
+   not run makes a failure and a success look identical.
+
+   Draft lifecycle belongs in the **Rules Database**, which holds every
+   version with its state (draft, proven, active, retired) and hands Clean MDM
+   an *active* one. `CONTEXT.md` says explicitly to avoid editing rules in the
+   production MDM database.
+10. **A kind block declares every section it carries** as authority-bearing or
+    not (§8). An undeclared section is refused by name, so adding one is a
+    decision an author makes rather than a silent change to every field's
+    recorded authority.
 
 The prototype's `validate()` implements 1, 4, 5, 6 and refuses six abuse
 cases: a rule edited after its proof, a bar raised above the proof, a
@@ -454,11 +560,13 @@ This is a proposal against `mdm_v2.policy`, `clean/merge.py`,
 `clean/store.py` and `clean/adapters.py`, all Codex/Grok's. Items they must
 decide, in the order they bite:
 
-1. **Composite-digest provenance churn.** The whole-body digest is stamped
-   on every selected field (`survivorship.py:274`) and folded into
-   `business_hash` (`consumer.py:98`), so a Person-only edit changes
-   Company field provenance on the next Company batch. Churn, not a fault;
-   fixed if the kind section's own `version` (§4.2) is stamped alongside.
+1. ~~**Composite-digest provenance churn.**~~ **Resolved 2026-09-23** (PRs
+   #695, #696). The whole-body digest was stamped on every selected field and
+   folded into `business_hash`, so a Person-only edit changed Company field
+   provenance on the next Company batch. A field now records its kind's own
+   digest with the kind version beside it, narrowed to the authority-bearing
+   sections (§8); a profile field records its role's digest. Release gate 14.4
+   is met.
 2. **Q11's confidence coverage.** Accepted Q11 says one-sided **95%**;
    research 18 measured one-sided **97.5%** (n ≥ 268 vs ≥ 381 at a 99%
    bar; 2,703 vs 3,838 at 99.9%). Proofs at different coverage are not
@@ -484,18 +592,22 @@ decide, in the order they bite:
    research 18 to the row and research 07's binding run to the decision.
 3. Every automatic verdict live in production has a proof in the body
    whose sample files re-score in CI to the stated `n`/`correct`.
-4. A Person-only edit does not change Company field provenance (item 13.1
-   resolved one way or the other, recorded).
+4. ~~A Person-only edit does not change Company field provenance (item 13.1
+   resolved one way or the other, recorded).~~ **Met 2026-09-23**: item 13.1
+   resolved and recorded; asserted directly in
+   `tests/mdm/test_clean_survivorship.py`.
 5. The deterministic tolerance has tripped at least once on an injected
    fault in a non-production run, and never on the production cohort,
    before any deterministic rule runs alone.
-6. `CONTEXT.md` carries **Mastering Policy** and **Identifier Contract**.
+6. ~~`CONTEXT.md` carries **Mastering Policy** and **Identifier Contract**.~~
+   **Met**: `CONTEXT.md:65` and `:69`.
 
 ## 15. Open
 
 1. **Re-projection scope on re-registration** (§11).
-2. **Home of classification rule text** — kind document referenced from
-   the dataset contract, or the adapter block itself (§4.3). With it, the
+2. ~~**Home of classification rule text**~~ — **settled 2026-09-23** (§4.3):
+   the kind document's `rules` list, named from the dataset contract's adapter
+   block, resolved at read time. Still open with it, the
    **field-alias map** (document field path → source column) that the
    prototype had to hard-code: it is the dataset contract's adapter block
    and nothing has yet specified it.
