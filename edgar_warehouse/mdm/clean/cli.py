@@ -239,6 +239,7 @@ def execute_manifest(
             publication_verifier,
             observed=observed,
             limit=limit,
+            run_id=run_id,
         )
     if not preview:
         coordinator.start(
