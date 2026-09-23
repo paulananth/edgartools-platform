@@ -119,6 +119,15 @@ DO NOTHING` (`023_clean_mdm.sql:168`). Two amendments make decision 1 true.
    `consumer.py:30` hands back `a.body` as the reason behind a selected field,
    and that body should say which reading produced it.
 
+   **As implemented**, a first reading omits the key rather than stating 1:
+   absent and 1 describe the same reading, so version 1 has one canonical form.
+   That keeps this amendment's promise literally — no assertion id moves, for
+   rows already written *and* for first readings written from now on, which the
+   amendment did not contemplate. The pinned representative fixture passing
+   unchanged is the evidence. It gives up half of the self-describing reason
+   above: a version-1 body does not say so. The lifted column always states the
+   reading, and only a re-read carries the key in its body.
+
 8. **The revision guard's key widens to `(revision, mapping_version)`**
    (operator, `survivorship.py:43-44`). The guard exists to catch one real
    defect: a source that published two contradictory things under one native
@@ -175,9 +184,19 @@ Consequences these two carry, which the migration must also cover:
   because `apply`'s `ON CONFLICT(assertion_id) DO NOTHING` does not cover it.
 - A new `mdm_v2.dataset_mapping(source_code, mapping_version, body,
   registry_version, registered_at)`, with the body immutable per
-  `(source_code, mapping_version)`. `mdm_v2.dataset` keeps one row per
-  `source_code` and points at the current mapping version, so every existing
-  reader and the registry-authority checks keep working unchanged.
+  `(source_code, mapping_version)`. ~~`mdm_v2.dataset` keeps one row per
+  `source_code` and points at the current mapping version~~ — **struck when
+  implemented.** `mdm_v2.dataset` carries the append-only trigger installed by
+  migration 023 (`023_clean_mdm.sql:101-103`), so a mutable "current" column on
+  it could never be updated. The current reading is the **highest
+  `dataset_mapping` row**, derived, never stored.
+
+  The consequence, which the original wording hid: "every existing reader keeps
+  working unchanged" was true only because every existing reader would then have
+  read reading 1's body forever. A corrected mapping would have been written and
+  never used. Both adapter entry points now resolve the reading and its body
+  together through one accessor (`store.current_reading`), and thread the
+  reading into the assertion.
 - `register_dataset` gains one path: same `source_code`, changed body →
   compare the protected parts; refuse on any difference, otherwise insert the
   next `mapping_version` and move the pointer. An identical body is still the
