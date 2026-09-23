@@ -8,11 +8,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlalchemy import text
-
 from .gleif_source import VERSION, record_evidence
 from .source_publications import plan_continuity
-from .store import Conflict, canonical, digest
+from .store import Conflict, canonical, current_reading, digest
 
 
 def prepare_native(manifest, store, coordinator, verifier, *, observed, limit):
@@ -139,15 +137,16 @@ def prepare_native(manifest, store, coordinator, verifier, *, observed, limit):
         predecessor = current
     native = plan["publications"][0]["evidence"]["native_contract"]
     with store.engine.connect() as conn:
-        contracts = {
-            code: conn.scalar(
-                text("SELECT body FROM mdm_v2.dataset WHERE source_code=:code"),
-                {"code": code},
-            )
+        readings = {
+            code: current_reading(conn, code)
             for code in native["record_sources"].values()
         }
-    if any(c is None for c in contracts.values()):
+    if any(r is None for r in readings.values()):
         raise Conflict("Native record datasets must be registered before consumption")
+    # Each source is read under its own current mapping, and every record says
+    # which reading produced it (ticket 01, decision 4).
+    contracts = {code: r[1] for code, r in readings.items()}
+    mapping_versions = {code: r[0] for code, r in readings.items()}
     for member, code in native["record_sources"].items():
         contract = contracts[code]
         adapter = contract.get("adapter", {})
@@ -226,6 +225,7 @@ def prepare_native(manifest, store, coordinator, verifier, *, observed, limit):
                 source_code=code,
                 eligible_leis=eligible_leis,
                 ordinal=ordinal,
+                mapping_version=mapping_versions[code],
                 publication={
                     "publication_key": doc["publication"],
                     "revision": doc["sequence"],

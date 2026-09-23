@@ -203,7 +203,7 @@ def select_fields(
                 "profiles": [],
             }
             current.pop("fields", None)
-    recorded_digest = kind_digest(policy, kind, policy_digest)
+    recorded_digest, kind_version = _kind_authority(policy, kind, policy_digest)
     fields, field_reviews = _select_values(
         _rules_for(policy, kind),
         subjects,
@@ -211,6 +211,7 @@ def select_fields(
         overrides,
         as_of=as_of,
         policy_digest=recorded_digest,
+        kind_version=kind_version,
     )
     reviews.extend(field_reviews)
     for p in profiles.values():
@@ -230,6 +231,7 @@ def select_fields(
             # A profile role is not an identity kind and has no block of its
             # own, so its values record the enclosing kind's digest.
             policy_digest=recorded_digest,
+            kind_version=kind_version,
         )
         p["fields"] = values
         reviews.extend({**r, "profile_id": p["profile_id"]} for r in problems)
@@ -256,16 +258,24 @@ def _rules_for(policy: dict, kind: str) -> dict:
     return kinds.get(kind, {}).get("fields", {})
 
 
-def kind_digest(policy: dict, kind: str, policy_digest: str) -> str:
-    """The digest a selected field records.
+def _kind_authority(
+    policy: dict, kind: str, policy_digest: str
+) -> tuple[str, str | None]:
+    """The digest a selected field records, and the kind version behind it.
 
     Ticket 02 decision 3: a field records its *kind's* digest, so that a
     Person-only edit leaves every Company value's recorded digest unchanged.
     The whole-body digest stays on the batch. A body with no `kinds` block has
-    no per-kind digest to record, and keeps recording the body's.
+    no per-kind digest to record, and keeps recording the body's, with no kind
+    version to carry.
+
+    The version travels beside the digest because a digest alone tells a reader
+    only that something differs, never which authored document it came from.
     """
     block = (policy.get("kinds") or {}).get(kind)
-    return digest(block) if block else policy_digest
+    if not block:
+        return policy_digest, None
+    return digest(block), block.get("version")
 
 
 def _select_values(
@@ -276,6 +286,7 @@ def _select_values(
     *,
     as_of: str,
     policy_digest: str,
+    kind_version: str | None = None,
 ) -> tuple[dict, list[dict]]:
     """Clean MDM's five-step order over one set of field rules."""
     candidates = defaultdict(list)
@@ -362,6 +373,7 @@ def _select_values(
             "cleared": chosen["op"] == "clear",
             "winner": chosen,
             "policy_digest": policy_digest,
+            **({"kind_version": kind_version} if kind_version else {}),
             "conflicts": [
                 c
                 for c in eligible

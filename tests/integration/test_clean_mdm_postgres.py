@@ -18,9 +18,11 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.mdm.clean.store import (
     Conflict,
     Store,
+    canonical,
     migrate,
     register_dataset,
     register_policy,
+    rows,
 )
 from edgar_warehouse.mdm.migrations.runtime import _apply_source_registry_migration
 
@@ -2625,3 +2627,156 @@ def test_a_change_that_would_move_a_record_identity_needs_a_new_source_code(data
             register_dataset(
                 conn, "fixture.primary", database.registry, contract_body(**change)
             )
+
+
+def test_migration_031_applies_to_a_populated_store(postgres):
+    """CLAUDE.md: test every migration against a genuinely populated table.
+
+    The other tests here migrate an empty schema, so 031's backfill inserts no
+    rows and its uniqueness swap rewrites an empty index. This one commits real
+    evidence under migrations 023-030, then applies 031 over it.
+    """
+    from unittest import mock
+
+    import edgar_warehouse.mdm.clean.store as store_module
+
+    admin, app = postgres
+    through_030 = tuple(
+        name for name in store_module.CLEAN_MDM_MIGRATIONS if not name.startswith("031")
+    )
+    assert len(through_030) == len(store_module.CLEAN_MDM_MIGRATIONS) - 1
+
+    def register_pre_031(conn, code, registry_version, body):
+        """Register a dataset the way the store did before dataset_mapping."""
+        authority = rows(
+            conn,
+            """SELECT v.version_id::text,v.status,v.operator_authorization_reference,
+            c.source_family,c.coverage_action FROM public.source_registry_version v
+            JOIN public.source_registry_coverage c USING(version_id)
+            WHERE v.version_id=CAST(:v AS uuid) AND c.source_family=:family""",
+            v=registry_version,
+            family=body["family"],
+        )
+        conn.execute(
+            text(
+                "INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))"
+            ),
+            {
+                "code": code,
+                "registry": registry_version,
+                "body": canonical({**body, "registry_evidence": authority[0]}),
+            },
+        )
+
+    with (
+        mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_030),
+        mock.patch(f"{__name__}.register_dataset", side_effect=register_pre_031),
+    ):
+        database = initialize_database(admin, app)
+        a = source(key="populated-1", fields={"name": "Acme"})
+        identity, binding = identity_and_binding(a)
+        apply(database, 1, assertions=[a], identities=[identity], decisions=[binding])
+        with database.application.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+            assert (
+                conn.scalar(text("SELECT to_regclass('mdm_v2.dataset_mapping')"))
+                is None
+            )
+
+    # Now apply 031 over that populated store.
+    assert migrate(admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        # Existing evidence takes the default reading and keeps its id.
+        assert conn.execute(
+            text("SELECT assertion_id,mapping_version FROM mdm_v2.assertion")
+        ).all() == [(a["assertion_id"], 1)]
+        # Every contract registered before the migration is backfilled.
+        assert conn.execute(
+            text(
+                "SELECT source_code,mapping_version FROM mdm_v2.dataset_mapping ORDER BY source_code"
+            )
+        ).all() == [("fixture.primary", 1), ("fixture.secondary", 1)]
+        assert (
+            conn.scalar(
+                text("""SELECT count(*) FROM pg_constraint WHERE conrelid='mdm_v2.assertion'::regclass
+            AND contype='u' AND array_length(conkey,1)=4""")
+            )
+            == 1
+        )
+    # The store still works, and a re-read of the pre-migration record lands.
+    corrected = reread(a, mapping_version=2, fields={"name": "Acme Holdings"})
+    register_reading(database, "fixture.primary", contract_body(semantics="snapshot"))
+    apply(database, 2, assertions=[corrected])
+    with database.application.connect() as conn:
+        assert conn.execute(
+            text(
+                "SELECT mapping_version FROM mdm_v2.assertion ORDER BY mapping_version"
+            )
+        ).scalars().all() == [1, 2]
+    assert (
+        documents(database, "entity")[identity["entity_id"]]["fields"]["name"]["value"]
+        == "Acme Holdings"
+    )
+
+
+def test_a_corrected_mapping_reaches_the_adapter_that_reads_the_source(database):
+    """Registering a reading is worth nothing if no reader ever uses it.
+
+    The store writes every reading, but the adapters used to load the contract
+    from mdm_v2.dataset, which migration 023 froze at the first registration,
+    and to call normalize with no reading at all. Both readings then produced
+    byte-identical assertion ids: the collision the feature exists to prevent.
+    """
+    from edgar_warehouse.mdm.clean.cli import batch_assertions, read_manifest
+
+    fixture = Path(__file__).parents[1] / "fixtures" / "clean_mdm" / "v1"
+    contract = json.loads((fixture / "dataset.json").read_text())
+    manifest, _, root = read_manifest(str(fixture / "manifest.json"))
+    with database.admin.begin() as conn:
+        register_policy(conn, json.loads((fixture / "policy.json").read_text()))
+        register_dataset(conn, "fixture.representative", database.registry, contract)
+    store = Store(database.application)
+    batch = manifest["batches"][0]
+
+    first = batch_assertions(batch, root, store)
+    assert all("mapping_version" not in a for a in first)
+
+    with database.admin.begin() as conn:
+        register_dataset(
+            conn,
+            "fixture.representative",
+            database.registry,
+            {**contract, "semantics": "snapshot"},
+        )
+    corrected = batch_assertions(batch, root, store)
+    assert {a["mapping_version"] for a in corrected} == {2}
+    # Same records and publication, so the subjects stand and no Company moves;
+    # only the assertion ids differ, which is what lets both readings be stored.
+    assert [a["subject"] for a in corrected] == [a["subject"] for a in first]
+    assert not {a["assertion_id"] for a in corrected} & {
+        a["assertion_id"] for a in first
+    }
+
+
+def test_a_registry_version_bump_alone_is_not_a_new_reading(database):
+    """Nothing in the mapping changed, so no reading is minted and no id forks."""
+    with database.admin.begin() as conn:
+        register_dataset(conn, "fixture.primary", database.registry, contract_body())
+        conn.execute(text("DELETE FROM source_registry_coverage"))
+        conn.execute(text("DELETE FROM source_registry_version"))
+        later = str(uuid4())
+        conn.execute(
+            text("""INSERT INTO source_registry_version(version_id,status,operator_authorization_reference,activated_at)
+            VALUES(:v,'active','offline-fixture',now())"""),
+            {"v": later},
+        )
+        conn.execute(
+            text("""INSERT INTO source_registry_coverage(version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
+            VALUES(:v,'fixture','carry_forward','fixture','fixture','fixture','2026-01-01')"""),
+            {"v": later},
+        )
+    with (
+        pytest.raises(Conflict, match="registry version bump is not a new reading"),
+        database.admin.begin() as conn,
+    ):
+        register_dataset(conn, "fixture.primary", later, contract_body())
