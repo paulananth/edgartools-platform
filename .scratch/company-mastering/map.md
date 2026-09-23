@@ -64,8 +64,9 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   version is part of the assertion's identity**, so it goes in the hashed body
   and is lifted into a `bigint` column, and **the revision guard's key widens
   to `(revision, mapping_version)`** — without both, a re-read either crashes
-  the merge or is silently dropped. Migration 031 designed, not written. The
-  retention rule (two rows, current and one backup) is **reopened**.
+  the merge or is silently dropped — and **assertions are never pruned**, since
+  the store is append-only throughout and the prune bounded something the
+  explicit-re-read rule already bounds. Migration 031 designed, not written.
 
 - [Challenge tickets 01 and 02 against the code](research/01-02-challenge.md)
   — eight of the twelve decisions sound, four not: the two amended above, the

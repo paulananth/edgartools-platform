@@ -142,19 +142,33 @@ Consequences these two carry, which the migration must also cover:
 - Survivorship's ordering by `mapping_version` (in the migration design below)
   now reads it from the body rather than needing a column in the query.
 
-Still open, and **not** settled by these amendments: decisions 2 and 3, the
-retention rule. The challenge pass found no foreign key to the assertion table,
-but every retained batch's effects cite assertion ids and `consumer.py:36-37`
-raises on a missing one, so "pruned only once nothing cites it" almost never
-releases a row and "two rows, current and one backup" is unreachable. Those two
-decisions cannot both hold as written.
+9. **Assertions are never pruned** (operator, replacing decisions 2 and 3).
+   Nothing in Clean MDM is deleted: batches, assertions and decisions are all
+   append-only and generations only count upward (`023_clean_mdm.sql:25`,
+   `:138-150`). "Two rows, current and one backup" would have been the first
+   delete path this store has ever had, and it was unreachable anyway — there
+   is no foreign key to the assertion table, but every retained batch's effects
+   cite assertion ids and `consumer.py:36-37` raises on a missing one, so
+   "pruned only once nothing cites it" almost never releases a row. Decisions 2
+   and 3 could not both hold.
+
+   The prune was bounding something decision 4 already bounds: registering a
+   version re-reads nothing by itself, so a second row appears only when an
+   operator explicitly asks for a bounded re-read. Dropping the prune removes
+   the conflict rather than arbitrating it, and costs nothing today, because no
+   measurement says assertion storage is a problem.
+
+   If it ever becomes one, the honest fix is to bound how far back a generation
+   can be read and let assertions follow, decided then with numbers. Retention
+   is therefore **not specified** here, rather than specified as none forever.
 
 ### The migration design (031)
 
 - `ALTER TABLE mdm_v2.assertion ADD COLUMN mapping_version bigint NOT NULL
-  DEFAULT 1 CHECK (mapping_version >= 1)`, and a `superseded_at timestamptz`
-  for rows kept only because a decision cites them. Existing rows take the
-  default, so no id changes and no reference breaks.
+  DEFAULT 1 CHECK (mapping_version >= 1)`. Existing rows take the default, so
+  no id changes and no reference breaks. (The `superseded_at timestamptz` this
+  bullet first carried is struck by amendment 9: no row is ever kept *only*
+  because something cites it, because no row is ever dropped.)
 - Replace `UNIQUE(source_code, record_key, publication_key)` with
   `UNIQUE(source_code, record_key, publication_key, mapping_version)`. This is
   what lets a second reading exist at all; today it raises a unique violation,
@@ -169,20 +183,19 @@ decisions cannot both hold as written.
   next `mapping_version` and move the pointer. An identical body is still the
   no-op it is today.
 - `apply`'s schema check reads the mapping version's body rather than only the
-  current one, so a batch produced by the backup version is still accepted
-  while it exists.
+  current one, so a batch produced by any registered version is still accepted.
 - Survivorship orders by `mapping_version` after `revision` and
   `publication_key` (`survivorship.py:41`), so the newest reading of one
   record wins without changing how different revisions compete.
-- Pruning is a bounded, explicit operation, never a side effect of a write:
-  for each `(source_code, record_key, publication_key)` keep the two highest
-  mapping versions, and delete lower ones only where no decision and no
-  selected field cites the assertion id.
+- ~~Pruning is a bounded, explicit operation~~ — **struck by amendment 9.**
+  Migration 031 adds no delete path and no `superseded_at`: every reading is
+  kept, and the store stays append-only.
 
 ### What this does not do
 
 It does not re-project anything, activate any rule, or change how a Company is
-chosen. It is the lifecycle that lets a mapping be corrected at all. The
-limit it accepts: replay reaches the current and the previous mapping version
-only. An older reading can be rebuilt from the retained raw artifact, but it
-is not kept in the store.
+chosen. It is the lifecycle that lets a mapping be corrected at all.
+
+(The limit this section first accepted — replay reaches the current and the
+previous mapping version only — is struck by amendment 9. Replay reaches every
+reading, because every reading is kept.)
