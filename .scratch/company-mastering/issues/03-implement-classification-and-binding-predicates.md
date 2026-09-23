@@ -23,6 +23,49 @@ Proves: reordered and duplicate input, stale assessment rejection, lost
 acknowledgement, retained field conflicts, reversal of an incorrect merge, and
 a stable surviving ID.
 
+## Resolution decisions (operator, 2026-09-23)
+
+The ticket said "nothing to decide". Building it surfaced three, all taken one
+question at a time.
+
+1. **The Merge Stage is the system of record for mastering, and the lookup
+   happens inside its transaction.** A source record resolves by looking up
+   master data; it either gets back an existing entity id or a new one is
+   created. The lookup and the write are never separated, so two concurrent
+   runs reading the same new entity cannot both miss and both mint: one wins
+   and the other sees the first one's id. Rejected: resolving in a step that
+   commits before the merge, which makes duplicate ids a routine outcome to be
+   consolidated afterwards.
+
+2. **One source record describes one entity of one kind, and each entity a
+   filing touches resolves on its own.** A Form 4 produces two records — the
+   issuer as a Company, the reporting owner as a Person — plus the
+   relationship between them. Each is looked up separately, so every
+   combination is normal and must work: an existing Company with a new Person,
+   a new Company with a new Person, an existing Person with a new Company.
+   This is already what `adapters.normalize` and the assertion shape do; it is
+   recorded because it was not written down.
+
+3. **A new entity seen many times in one run gets one id, not one per
+   record.** Forty filings by the same unknown person mint one Person, not
+   forty to be consolidated later. The consequence, which is the hard part:
+   to give the same id the second time, the run must match the record against
+   *the pending entities of the same run*, not against master data, because
+   the master data does not hold them yet. That match is made on evidence not
+   yet committed, so the rule that makes it must be **the same rule** used
+   against master data, held to the same bar — not a looser within-batch
+   shortcut. Rejected: minting one id per record and collapsing them
+   afterwards, which manufactures exactly the published-id consolidation the
+   accepted policy treats as a separate, harder problem with its own gate
+   (Q10, Q11).
+
+**Terminology, for the avoidance of doubt.** *Kind* is the type — Company,
+Person, Fund Structure. *Entity* is the individual thing. One source file
+yields many entities, each of one kind; the kind is decided per record, never
+per source (`adapters.py:77-80`). The Merge Stage already produces one master
+record per entity, each listing the source records behind it; a batch is a
+transaction boundary, not a unit of meaning.
+
 ## Built, 2026-09-22 (`6cc6ee09`, `44903e41`)
 
 The versioning seam tickets 01 and 02 amended, which the predicates rest on:
