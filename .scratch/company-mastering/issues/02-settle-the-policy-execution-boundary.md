@@ -74,6 +74,26 @@ it changes, so ticket 03 implements rather than re-decides.
 
    The one genuinely arguable member is `projection`: it changes what the
    entity exposes, but not which claim won. It is currently non-authority.
+
+   **A profile field records its role's digest** (operator, 2026-09-23). A
+   profile role is not an identity kind: `adviser` attaches to a company and a
+   person, `fund` to a company and a fund structure
+   (`evidence.PROFILE_KINDS`). Its rules therefore stay in one top-level
+   `profile_fields` block rather than being written once per kind and left to
+   drift apart, and its values record a digest computed from that role's own
+   rules, with the role name carried alongside.
+
+   Recording the enclosing kind's digest, which is what the first
+   implementation did, made an edit to a role's rules invisible: it moved no
+   recorded digest anywhere. That is the mirror image of the churn this
+   decision exists to stop — over-coverage for a kind, no coverage at all for
+   a role. An old body with no `kinds` block keeps recording the body digest
+   here too, so the two halves of one policy never disagree about which era
+   they are in.
+
+   Considered and rejected: moving a role's rules under each kind
+   (`kinds.company.profiles.adviser`). It buys per-kind divergence nothing has
+   asked for and pays with the same rules written twice.
 4. **Each kind keeps its own accepted bar** (Q4a): Company 99.9% precision at
    a one-sided 95% lower bound (Q11); Person 99% at 97.5% (its own ticket). A
    rule whose family has no bar cannot be activated. The bar gates fuzzy
