@@ -48,7 +48,13 @@ a number the platform owns. It is **not** `schema_version`, which describes
 the source's own schema and is pinned by the dataset today
 (`023_clean_mdm.sql:160`).
 
-### The five decisions
+> **Amended 2026-09-22** after [the challenge pass](../research/01-02-challenge.md)
+> checked these decisions against the runtime. Decision 6 is **reversed** and a
+> seventh is added; see "Amendments" below. Decisions 1-5 stand, except that
+> decision 1 only becomes true once the amendment lands, and decisions 2 and 3
+> are still open. Read the amendments before the migration design.
+
+### The six decisions
 
 1. **A re-read keeps both rows** (Q1a). Registering a new mapping version
    never rewrites an assertion. The old row stays exactly as it was, and the
@@ -80,6 +86,68 @@ the source's own schema and is pinned by the dataset today
    inside the body would change every existing id and orphan every stored
    decision. Existing rows are stamped version 1, and the column is required,
    so no row has an unknown mapping version.
+
+### Amendments (operator, 2026-09-22)
+
+The challenge pass found that decision 1 — a re-read keeps both rows — is not
+something the runtime permits today, in either of the only two cases. A re-read
+whose reading **changed** raises `Conflict("Source native revision has
+contradictory publications")`, because survivorship groups by subject, which a
+re-read does not move, and then refuses two assertions that share a `revision`
+(`survivorship.py:43-44`). A re-read whose reading did **not** change produces
+the same `assertion_id` and is silently dropped by `ON CONFLICT(assertion_id)
+DO NOTHING` (`023_clean_mdm.sql:168`). Two amendments make decision 1 true.
+
+7. **The mapping version is part of the assertion's identity** (operator,
+   reversing decision 6). It goes in `body`, so the fingerprint covers it, and
+   is lifted into a `bigint` column beside `body` for indexing — the same
+   pattern `source_code`, `record_key`, `publication_key`, `revision` and
+   `effective_at` already follow (`023_clean_mdm.sql:41-51`). A plain counting
+   number, 1, 2, 3; never a hash.
+
+   Decision 6's reason was that putting the version in the body would change
+   every existing id. It would not: existing bodies are never rewritten and are
+   never re-validated, because `validate_assertion` runs on incoming assertions
+   only (`merge.py:238`). A stored body with no `mapping_version` key **means
+   version 1**, which is the same thing the column's `DEFAULT 1` says. No id
+   moves and no stored decision is orphaned.
+
+   The reason to reverse it: outside the fingerprint, two readings of one
+   publication produce the *same* `assertion_id`, so the second is thrown away
+   on insert and decision 1 cannot hold. Two rows a fingerprint cannot tell
+   apart are not two rows. It also keeps evidence self-describing —
+   `consumer.py:30` hands back `a.body` as the reason behind a selected field,
+   and that body should say which reading produced it.
+
+8. **The revision guard's key widens to `(revision, mapping_version)`**
+   (operator, `survivorship.py:43-44`). The guard exists to catch one real
+   defect: a source that published two contradictory things under one native
+   revision. A second reading of one publication is not that defect, and today
+   the guard cannot tell them apart. Widened, it still raises on two
+   contradictory bodies at the same revision *and* mapping version, and stops
+   mistaking a re-read for a lying source. No loader change is needed, because
+   `merge.py:50-53` selects `body` and the version is now in it.
+
+   The alternative considered and rejected: collapse to the newest reading
+   before survivorship walks. Equal cost, but it splits one check across two
+   places and leaves the guard's wording intact rather than its job.
+
+Consequences these two carry, which the migration must also cover:
+
+- `assertion()` gains `mapping_version` in the body it builds, and
+  `validate_assertion`'s closed key list gains it too (`evidence.py:60-113`).
+  Absent means 1, for stored rows only; an incoming assertion states it.
+- `apply` stops inserting the batch item verbatim: the lifted column is written
+  from the body's value (`023_clean_mdm.sql:166-167`).
+- Survivorship's ordering by `mapping_version` (in the migration design below)
+  now reads it from the body rather than needing a column in the query.
+
+Still open, and **not** settled by these amendments: decisions 2 and 3, the
+retention rule. The challenge pass found no foreign key to the assertion table,
+but every retained batch's effects cite assertion ids and `consumer.py:36-37`
+raises on a missing one, so "pruned only once nothing cites it" almost never
+releases a row and "two rows, current and one backup" is unreachable. Those two
+decisions cannot both hold as written.
 
 ### The migration design (031)
 
