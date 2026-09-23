@@ -25,8 +25,10 @@ a stable surviving ID.
 
 ## Resolution decisions (operator, 2026-09-23)
 
-The ticket said "nothing to decide". Building it surfaced three, all taken one
-question at a time.
+The ticket said "nothing to decide". Building it surfaced five, all taken one
+question at a time. Decisions 1 and 3 were then **challenged against the
+runtime** ([03-04 challenge](../research/03-04-challenge.md)) and both need
+amending before the code lands; see "What the challenge found" below.
 
 1. **The Merge Stage is the system of record for mastering, and the lookup
    happens inside its transaction.** A source record resolves by looking up
@@ -58,6 +60,98 @@ question at a time.
    afterwards, which manufactures exactly the published-id consolidation the
    accepted policy treats as a separate, harder problem with its own gate
    (Q10, Q11).
+
+4. **Classification runs at read time** (operator, Q of 2026-09-23). The
+   Mastering Policy is resolved beside the Dataset Contract when the source is
+   read, and the rule the contract names decides the kind. The decided kind is
+   hashed into `assertion_id` (`evidence.py:80-104`), so it is settled when the
+   record is read and never afterwards.
+
+   Rejected: deciding the kind in the Merge Stage, which the hash forbids; and
+   leaving the Dataset Contract's lookup table in charge (`adapters.py:77-84`),
+   under which the measured rules never run and an SEC reporting owner whose
+   only evidence is a name is never classified.
+
+   `manifest["policy_digest"]` is already at the manifest's top level
+   (`tests/fixtures/clean_mdm/v1/manifest.json:197`), so the read path can
+   reach the pinned policy without a new input.
+
+5. **A rule version names one exact set of steps, always, with no testing
+   switch** (operator, 2026-09-23). Registration refuses a policy whose rule
+   reuses a `(kind, rule_id, version)` that an already-registered policy holds
+   with **different steps**. The record also carries the rule id, version and
+   the step that fired, which `policy-language.md:210-213` already asks for and
+   nothing does.
+
+   Why this is not a constraint on testing: a new version is already free and
+   instant. Nothing is ever overwritten — a changed body is simply a new
+   digest that sits beside the old one, so a tester may register fifty. The
+   check refuses one narrow case only: two different sets of steps sharing one
+   version name. Working freely while testing costs one edit to a version
+   string.
+
+   Why not a switch for test environments: records written during a test are
+   real records in a real store, so a reused version corrupts the test's own
+   evidence. And this platform's own operating notes have the general rule —
+   a check that can silently not run makes a failure and a success look
+   identical.
+
+   Where the flexibility properly belongs: the **Rules Database**, which holds
+   every version with its lifecycle state (draft, proven, active, retired) and
+   hands Clean MDM an *active* version. `CONTEXT.md:84-86` says explicitly to
+   avoid "editing rules in the production MDM database". That database is not
+   built, and building it is Codex's Source Contract area, not this ticket. If
+   a draft state is ever wanted, it goes there rather than behind a flag here.
+
+   Still open, and deliberately separated: whether the recorded rule id and
+   version sit **inside** the assertion's hashed body or beside it. That
+   decides whether a rule change makes a new row or annotates the old one, and
+   it is the same shape of choice as `mapping_version`.
+
+## What the challenge found, 2026-09-23
+
+[03-04 challenge](../research/03-04-challenge.md): **7 sound, 4 unsound.**
+Three findings bear on what gets built next.
+
+- **Nothing pins a rule body to its `(rule_id, version)`, and the assertion
+  records no rule identity.** `register_policy` (`store.py:167-190`) runs two
+  checks and never walks a rule; none of `policy-language.md:400-412`'s eight
+  registration checks exist. `evidence.assertion` hashes only `kind`, where
+  `policy-language.md:210-213` requires the rule id, version and step that
+  fired. So two digests can hold `C-J@2026-09-20` with different steps and a
+  record classifies differently with no trace. Decision 5 above answers this.
+
+  **The per-kind digest cannot serve as the pin.** `rules` is in
+  `NON_AUTHORITY_SECTIONS` (`survivorship.py`) on purpose, so a classification
+  edit does not churn every field's recorded digest — which guarantees it will
+  *not* move when a rule changes. Both decisions are right alone and together
+  they leave the gap; the pin needs its own mechanism.
+
+- **Decision 1's concurrency guarantee is false for the case it describes.**
+  Two runs reading two *different* records of one new entity both mint: the
+  assessment scope is keyed on subjects (`merge.py:311-319`), so neither
+  snapshot moves, and `merge.py:353-355` only catches a duplicate `entity_id`,
+  which two fresh mints are not. The guarantee holds only for the same record.
+  Decision 1 and Q13 do compose; the phrasing described a protection that does
+  not exist. The fix is widening the assessment scope to the candidate key —
+  a change to `assessment_snapshot` (migration 028), not to where the lookup
+  sits.
+
+- **Entity ids are minted by the caller, not the Merge Stage.** There is no
+  `uuid4()` in the merge path; `merge.py:353-367` only validates ids passed in.
+  Decision 1 says the Merge Stage is the system of record, so either it starts
+  minting or the caller's mint becomes provably safe inside the transaction.
+
+Two more for the operator's eye: ticket 02's suspension key omits `namespace`
+while that same decision counts per `(kind, namespace)` — the collapse it
+warned against, inherited by ticket 04. And ticket 04's implementation surface
+is zero today: no `identifier_match@1` or `identifier_cardinality@1` exists.
+
+One correction to this ticket's own record: `otherwise: true` was described as
+a judgement call against the prototype. It is not — `policy-language.md:205-207`
+mandates it and §10 check 2 requires exactly one per rule. The committed
+`policy-person.json` is stale against its own spec. The `token_match` refusal
+is a real judgement call and it stands.
 
 **Terminology, for the avoidance of doubt.** *Kind* is the type — Company,
 Person, Fund Structure. *Entity* is the individual thing. One source file
