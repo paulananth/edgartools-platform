@@ -76,6 +76,8 @@ local ET; parts finished before the rule existed carry their date only.
 - [x] Decide how a set-aside record blocks — operator, 2026-09-24 08:14 ET:
   confidence bands (≥95% acts, 50-95% waits in the Stage unreviewed, <50%
   goes to a Steward), recorded in the Company policy
+- [ ] `company_stage` shows the latest row per company per source; a
+  separate history view keeps every version — operator (2026-09-24 08:28 ET)
 - [ ] Implement the bands: Company accepted bar 0.999 → 0.95 in
   `activation.ACCEPTED_BARS`; per-step measured probability on each rule
   step; 50-95% verdicts non-blocking in the Stage; <50% blocking for a Steward

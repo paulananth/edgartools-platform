@@ -57,6 +57,15 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Decisions so far
 
+- **The final authority is one dated Company table** (operator, 2026-09-24 08:28 ET):
+  `mdm_v2.company`, one row per company version with CIK, LEI, other
+  cross-references, name and every identifying field, and start and end
+  dates, written only by the Merge Stage. No reader goes to two places for
+  Company information. Built by
+  [Write the versioned MDM Company table](issues/09-write-the-versioned-mdm-company-table.md).
+- **The Stage shows the latest row per company per source** (operator,
+  2026-09-24 08:28 ET); every earlier version stays in a separate history view.
+
 - **Confidence bands** (operator, 2026-09-24): for "is this a Company?" and
   for SEC-to-GLEIF matching, a decision whose tested probability is **95% or
   more** acts automatically; **50% to 95%** waits in the Stage, unreviewed,
