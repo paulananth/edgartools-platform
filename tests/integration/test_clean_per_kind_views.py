@@ -1,13 +1,19 @@
-"""Per-kind read views over the one evidence table and the one master table.
+"""Per-kind Stage and Master views over the one evidence and master table.
 
 Clean MDM keeps every kind in one table with the kind as a value inside it.
 Migration 033 presents that as one pair of views per kind, so a reader can ask
-for Company evidence without repeating the filter and without a second copy of
-the data to keep in step.
+for the Company stage without repeating the filter and without a second copy of
+the data to keep in step; 034 gave the source-side pair the Stage name.
 
-These tests hold the two things that can rot: the kind list, which now lives in
-SQL and in Python and cannot be derived across that boundary, and the column
-lists, which a view freezes at creation.
+  <kind>_stage         one row per source record, the whole claim
+  <kind>_stage_field   one row per (source record, field)
+  <kind>_master        one row per entity
+  <kind>_master_field  one row per (entity, field), naming the winning source
+
+These tests hold the three things that can rot: the kind list, which now lives
+in SQL and in Python and cannot be derived across that boundary; the column
+lists, which a view freezes at creation; and the names themselves, since 033's
+generator still spells the Stage pair `_evidence` and cannot be corrected.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from tests.integration import test_clean_mdm_postgres as core
 postgres = core.postgres
 database = core.database
 
-SHAPES = ("evidence", "evidence_field", "master", "master_field")
+SHAPES = ("stage", "stage_field", "master", "master_field")
 
 
 def installed_views(database) -> set[str]:
@@ -101,6 +107,9 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     assert installed_views(database) == {
         f"{kind}_{shape}" for kind in schema_kinds for shape in SHAPES
     }
+    # Exact equality above already forbids it, but say it outright: 034 renamed
+    # 033's source-side pair, so not one view still carries the old name.
+    assert not [v for v in installed_views(database) if "_evidence" in v]
 
 
 # What a whole-record view deliberately does not show under the base table's own
@@ -116,7 +125,7 @@ RENAMED_OR_DROPPED = {
 
 @pytest.mark.parametrize(
     ("base", "view"),
-    [("assertion", "company_evidence"), ("projection", "company_master")],
+    [("assertion", "company_stage"), ("projection", "company_master")],
 )
 def test_a_whole_record_view_shows_every_column_of_its_base_table(database, base, view):
     """A view freezes its column list at creation.
@@ -146,7 +155,7 @@ def test_a_whole_record_view_shows_every_column_of_its_base_table(database, base
 def test_a_reader_may_select_from_a_view_but_never_write_through_it(database):
     """A single-table view with no set-returning function is auto-updatable.
 
-    company_evidence is exactly that shape, so an INSERT through it would reach
+    company_stage is exactly that shape, so an INSERT through it would reach
     mdm_v2.assertion and bypass commit_batch entirely. The immutable_row trigger
     does not help: it fires on UPDATE and DELETE, not INSERT. What refuses the
     write is the privilege, and this proves the privilege rather than trusting
@@ -155,15 +164,15 @@ def test_a_reader_may_select_from_a_view_but_never_write_through_it(database):
     a = core.source(key="write-probe", fields={"name": "Acme"})
     core.apply(database, 1, assertions=[a])
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_evidence")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_stage")) == 1
     for statement in (
         (
-            "INSERT INTO mdm_v2.company_evidence(assertion_id,source_code,record_key,"
+            "INSERT INTO mdm_v2.company_stage(assertion_id,source_code,record_key,"
             "publication_key,revision,effective_at,batch_id,body) "
             "VALUES('forged','fixture.primary','x','p1',1,now(),'work-1','{}'::jsonb)"
         ),
-        "UPDATE mdm_v2.company_evidence SET record_key='moved'",
-        "DELETE FROM mdm_v2.company_evidence",
+        "UPDATE mdm_v2.company_stage SET record_key='moved'",
+        "DELETE FROM mdm_v2.company_stage",
     ):
         with (
             pytest.raises(ProgrammingError, match="permission denied"),
@@ -179,27 +188,27 @@ def test_the_privilege_is_what_refuses_the_write_not_the_view_shape(database):
 
     If PostgreSQL considered the whole-record view read-only, the refusal above
     would prove nothing about privileges and would stop proving anything the day
-    the shape changed. It does not: PostgreSQL reports company_evidence as
+    the shape changed. It does not: PostgreSQL reports company_stage as
     insertable and updatable, and the application role holds SELECT alone.
     """
     with database.application.connect() as conn:
         assert conn.execute(
             text(
                 "SELECT is_insertable_into,is_updatable FROM information_schema.views "
-                "WHERE table_schema='mdm_v2' AND table_name='company_evidence'"
+                "WHERE table_schema='mdm_v2' AND table_name='company_stage'"
             )
         ).all() == [("YES", "YES")]
         # The exploded shape is inherently safe: jsonb_each makes it read-only.
         assert conn.execute(
             text(
                 "SELECT is_insertable_into,is_updatable FROM information_schema.views "
-                "WHERE table_schema='mdm_v2' AND table_name='company_evidence_field'"
+                "WHERE table_schema='mdm_v2' AND table_name='company_stage_field'"
             )
         ).all() == [("NO", "NO")]
         assert conn.execute(
             text(
                 "SELECT privilege_type FROM information_schema.table_privileges "
-                "WHERE table_schema='mdm_v2' AND table_name='company_evidence' "
+                "WHERE table_schema='mdm_v2' AND table_name='company_stage' "
                 "AND grantee='clean_application' ORDER BY privilege_type"
             )
         ).all() == [("SELECT",)]
@@ -246,16 +255,14 @@ def test_two_kinds_from_one_batch_separate_into_their_own_views(database):
     with database.application.connect() as conn:
         assert [
             r[0]
-            for r in conn.execute(
-                text("SELECT record_key FROM mdm_v2.company_evidence")
-            )
+            for r in conn.execute(text("SELECT record_key FROM mdm_v2.company_stage"))
         ] == ["issuer-1"]
         assert [
             r[0]
-            for r in conn.execute(text("SELECT record_key FROM mdm_v2.person_evidence"))
+            for r in conn.execute(text("SELECT record_key FROM mdm_v2.person_stage"))
         ] == ["owner-1"]
         # A kind nothing asserted is empty, not missing.
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.venue_evidence")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.venue_stage")) == 0
 
 
 def test_a_field_no_view_names_needs_no_migration(database):
@@ -275,7 +282,7 @@ def test_a_field_no_view_names_needs_no_migration(database):
             conn.execute(
                 text(
                     "SELECT field_name,field_value,operation "
-                    "FROM mdm_v2.company_evidence_field ORDER BY field_name"
+                    "FROM mdm_v2.company_stage_field ORDER BY field_name"
                 )
             ).all()
         ) == [
@@ -392,13 +399,14 @@ def test_the_master_field_view_carries_the_kind_version_beside_the_digest(databa
     assert re.fullmatch(r"[0-9a-f]{64}", field.policy_digest)
 
 
-def test_migration_033_applies_to_a_populated_store(postgres):
+def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
     """CLAUDE.md: test every migration against a genuinely populated table.
 
     Every other test here migrates an empty schema, so 033's two new indexes are
     built over nothing and the views are created against empty tables. This one
     commits real evidence and a real master record under 023-032 first, then
-    applies 033 over it, which is the only order production will ever see.
+    applies 033 and 034 over it, which is the only order production will ever
+    see: the live store is still at 026, so it has never run either.
     """
     from unittest import mock
 
@@ -427,34 +435,38 @@ def test_migration_033_applies_to_a_populated_store(postgres):
         with database.application.connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 2
             assert (
-                conn.scalar(text("SELECT to_regclass('mdm_v2.company_evidence')"))
-                is None
+                conn.scalar(text("SELECT to_regclass('mdm_v2.company_stage')")) is None
             )
 
     core.migrate(admin, application_role="clean_application")
     with database.application.connect() as conn:
         # migrate() returns a dict that is always truthy, so asserting on it
         # would prove nothing. Ask the store what it recorded instead.
-        assert (
-            conn.scalar(
+        assert [
+            r[0]
+            for r in conn.execute(
                 text(
-                    "SELECT count(*) FROM mdm_v2.migration "
-                    "WHERE name='033_clean_mdm_per_kind_views.sql'"
+                    "SELECT name FROM mdm_v2.migration "
+                    "WHERE name >= '033' ORDER BY name"
                 )
             )
-            == 1
+        ] == [
+            "033_clean_mdm_per_kind_views.sql",
+            "034_clean_mdm_stage_view_naming.sql",
+        ]
+        # 034 renamed rather than duplicated: the name 033 created is gone.
+        assert (
+            conn.scalar(text("SELECT to_regclass('mdm_v2.company_evidence')")) is None
         )
     # The views see evidence and master records written before they existed.
     with database.application.connect() as conn:
         assert [
             r[0]
-            for r in conn.execute(
-                text("SELECT record_key FROM mdm_v2.company_evidence")
-            )
+            for r in conn.execute(text("SELECT record_key FROM mdm_v2.company_stage"))
         ] == ["pop-1"]
         assert [
             r[0]
-            for r in conn.execute(text("SELECT record_key FROM mdm_v2.person_evidence"))
+            for r in conn.execute(text("SELECT record_key FROM mdm_v2.person_stage"))
         ] == ["pop-2"]
         assert conn.execute(
             text("SELECT entity_id FROM mdm_v2.company_master")
@@ -466,4 +478,4 @@ def test_migration_033_applies_to_a_populated_store(postgres):
     later = core.source(key="pop-3", fields={"name": "Beta"})
     core.apply(database, 2, assertions=[later])
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_evidence")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_stage")) == 2

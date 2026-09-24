@@ -50,6 +50,7 @@ CLEAN_MDM_MIGRATIONS = (
     "031_clean_mdm_mapping_version.sql",
     "032_clean_mdm_deferred_reading.sql",
     "033_clean_mdm_per_kind_views.sql",
+    "034_clean_mdm_stage_view_naming.sql",
 )
 
 

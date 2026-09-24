@@ -76,10 +76,26 @@ guarded array:
 
 | View | One row per |
 |---|---|
-| `<kind>_evidence` | source record, whole claim |
-| `<kind>_evidence_field` | (source record, field) — the stage shape |
+| `<kind>_stage` | source record, whole claim |
+| `<kind>_stage_field` | (source record, field) — the stage shape |
 | `<kind>_master` | entity |
 | `<kind>_master_field` | (entity, field), naming the source that won and counting the losers |
+
+The source-side pair was first named `<kind>_evidence` and renamed by migration
+034 (operator, 2026-09-23). **Stage is the better name**: it is the operator's
+own word, it is what the legacy design called the same shelf
+(`mdm_entity_attribute_stage`), and it is what the wider practice calls a
+staging table. The master pair keeps its own name.
+
+The rename is a second migration rather than an edit to 033 because an applied
+migration is checksummed and a changed file is refused outright
+(`store.py:114`); every migration in the directory has exactly one commit, so
+they are append-only by convention as well as by that check. The cost, stated
+plainly: 033's generator still spells the pair `_evidence` and cannot be
+corrected, so a reader who greps 033 for a live view name will not find one.
+034 carries that warning in its own header, and CONTEXT.md now separates
+**Source Stage** (the shelf) from **Merge Stage** (the step that reads it),
+because the operator's usage collided with the existing glossary entry.
 
 Plus the two expression indexes the views need — `assertion((body->>'kind'))`
 and a partial one on entity projections — without which every per-kind view is a
