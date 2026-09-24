@@ -153,7 +153,7 @@ class MergeStage:
                 {"digest": command["policy_digest"]},
             )
             if policy is None:
-                return binding.NOTHING
+                return binding.nothing()
             return binding.propose(
                 conn,
                 policy,
@@ -324,7 +324,7 @@ class MergeStage:
         # A rule's proposals join the working sets only after the caller's
         # command is hashed: they carry fresh ids, so hashing them would make
         # a redelivered batch look like a different command (ticket 04).
-        automatic = automatic or binding.NOTHING
+        automatic = automatic or binding.nothing()
         for d in automatic["decisions"]:
             if (
                 digest({k: v for k, v in d.items() if k != "decision_id"})
@@ -362,6 +362,10 @@ class MergeStage:
             # the store another way, or a build that no longer holds a named
             # primitive, is refused here the same way (`policy-language.md` §10).
             check_policy(policy)
+            # Only new Companies are re-checked here. A binding to an existing
+            # Company is covered by the assessment's snapshot, which moves when
+            # that Company's decisions change; a *different* Company acquiring
+            # the same value meanwhile is not re-checked (ticket 04 checklist).
             if (
                 not preview
                 and automatic["mints"]

@@ -131,11 +131,11 @@ def _check_activation(kinds: dict, entry: dict) -> None:
             f"Activation of {entry.get('rule_id')}: {how} activation is not a "
             "supported kind of activation"
         )
-    family, check = ACTIVATIONS[how]
-    if entry.get("family") != family:
+    families, check = ACTIVATIONS[how]
+    if entry.get("family") not in families:
         raise Conflict(
             f"Activation of {entry.get('rule_id')}: {how} activation applies to "
-            f"{family} rules, not {entry.get('family')}"
+            f"{' and '.join(sorted(families))} rules, not {entry.get('family')}"
         )
     block, rule = _resolve(kinds, entry)
     check(entry["kind"], block, rule, entry)
@@ -344,6 +344,15 @@ def _check_contract(namespace: str, contract: dict) -> None:
     where = f"Identifier Contract {namespace}"
     if not contract.get("authority"):
         raise Conflict(f"{where} names no issuing authority")
+    # The datasets through which a Company can hold this identifier: its
+    # issuer's own records, never another source that happens to carry it.
+    sources = contract.get("sources")
+    if (
+        not isinstance(sources, list)
+        or not sources
+        or not all(isinstance(s, str) and s for s in sources)
+    ):
+        raise Conflict(f"{where} names no issuing source datasets")
     if contract.get("normalizer") not in NORMALIZERS:
         raise Conflict(f"{where} names an unknown normalizer")
     forward = (contract.get("claim") or {}).get("forward")
@@ -377,7 +386,9 @@ RULE_CHECKS = {
     "classification": _check_classification_rule,
     "binding": check_binding_rule,
 }
+# Which rule families each kind of activation may prove. Sets, so ticket 08's
+# measured (fuzzy) binding is one more member, not a reshaped table.
 ACTIVATIONS = {
-    "measured": ("classification", _check_measured),
-    "deterministic": ("binding", _check_deterministic),
+    "measured": (frozenset({"classification"}), _check_measured),
+    "deterministic": (frozenset({"binding"}), _check_deterministic),
 }

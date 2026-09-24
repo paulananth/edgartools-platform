@@ -31,6 +31,11 @@ database = core.database
 
 APPLE_CIK = "0000320193"
 APPLE_LEI = "HWUPKR0MPOU8FGXBT394"
+# fixture.primary stands for SEC (it issues CIKs), fixture.secondary for GLEIF
+# (it issues LEIs). Only the issuer's record creates a Company; any record may
+# join one through an identifier the issuer's record established (Q14).
+CIK_MINT = {**CIK_RULE, "source": "fixture.primary"}
+CIK_JOIN = {**CIK_RULE, "rule_id": "company-cik-join", "on_no_match": "wait"}
 LEI_RULE = {
     **CIK_RULE,
     "rule_id": "company-lei",
@@ -40,11 +45,14 @@ LEI_RULE = {
         {"primitive": "identifier_cardinality@1", "args": {"namespace": "lei"}},
     ],
 }
+CIK_ISSUED = {**CIK_CONTRACT, "sources": ["fixture.primary"]}
 LEI_CONTRACT = {
     **CIK_CONTRACT,
     "authority": "GLEIF",
+    "sources": ["fixture.secondary"],
     "normalizer": "normalize_identifier@lei-v1",
 }
+RULES = (CIK_MINT, CIK_JOIN, LEI_RULE)
 
 
 def matching_policy(database, *, active=True):
@@ -59,8 +67,8 @@ def matching_policy(database, *, active=True):
                     "sources": ["fixture.primary", "fixture.secondary"],
                     "allow_unknown_effective": True,
                 },
-                "rules": [CIK_RULE, LEI_RULE],
-                "identifiers": {"cik": CIK_CONTRACT, "lei": LEI_CONTRACT},
+                "rules": list(RULES),
+                "identifiers": {"cik": CIK_ISSUED, "lei": LEI_CONTRACT},
             }
         },
     }
@@ -74,7 +82,7 @@ def matching_policy(database, *, active=True):
                 "verdict": "bind",
                 "activation": "deterministic",
             }
-            for rule in (CIK_RULE, LEI_RULE)
+            for rule in RULES
         ]
     with database.admin.begin() as conn:
         return register_policy(conn, copy.deepcopy(body))
@@ -141,14 +149,26 @@ def test_a_new_cik_creates_one_company_and_a_second_record_joins_it(database):
         actors = conn.execute(
             text("SELECT body->>'actor' FROM mdm_v2.decision WHERE operation='bind'")
         ).scalars()
-        assert sorted(actors) == ["rule:company-cik@2026-09-24"] * 2
+        # SEC's record created the Company; the other dataset's record joined.
+        assert sorted(actors) == [
+            "rule:company-cik-join@2026-09-24",
+            "rule:company-cik@2026-09-24",
+        ]
 
 
-def test_a_second_record_joins_whichever_order_they_arrive_in(database):
+def test_a_record_that_is_not_the_issuer_waits_until_the_issuer_arrives(database):
+    """Only SEC's own record creates a Company from a CIK (Q14)."""
     policy = matching_policy(database)
-    load(database, policy, "b1", record("b", "fixture.secondary", cik=APPLE_CIK))
+    other = record("b", "fixture.secondary", cik=APPLE_CIK)
+    load(database, policy, "b1", other)
+    assert companies(database) == {}
     load(database, policy, "b2", record("a", cik=APPLE_CIK), checkpoint=2)
-    assert len(companies(database)) == 1
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 1
+    # Its next delivery finds the Company the issuer's record created.
+    load(database, policy, "b3", other, checkpoint=3)
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 2
 
 
 def test_many_new_records_with_one_cik_create_one_company(database):
@@ -174,18 +194,44 @@ def test_an_unmatched_lei_waits_in_the_stage(database):
     assert assessments(database) == 0
 
 
-def test_an_lei_already_on_a_company_joins_it(database):
+def test_a_record_carrying_both_ids_does_not_attach_its_lei(database):
+    """Q14: an LEI does not become a CIK crosswalk because both values exist."""
     policy = matching_policy(database)
     load(database, policy, "b1", record("a", cik=APPLE_CIK, lei=APPLE_LEI))
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    load(database, policy, "b2", gleif, checkpoint=2)
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 1
+
+
+def test_an_lei_held_through_its_issuers_record_lets_another_record_join(database):
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    (company,) = companies(database)
+    # Stands in for ticket 08: the GLEIF record is linked to the Company.
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    _, link = core.identity_and_binding(gleif, company)
+    MergeStage(Store(database.application)).apply(
+        batch_id="link",
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer="link",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        assertions=[gleif],
+        decisions=[link],
+    )
     load(
         database,
         policy,
         "b2",
-        record("g", "fixture.secondary", lei=APPLE_LEI),
+        record("g2", "fixture.secondary", lei=APPLE_LEI),
         checkpoint=2,
     )
     (only,) = companies(database).values()
     assert only["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
+    assert len(only["subjects"]) == 3
 
 
 def test_a_redelivered_batch_returns_its_first_result(database):
@@ -211,7 +257,7 @@ def test_a_redelivered_batch_returns_its_first_result(database):
 def test_an_identifier_on_two_companies_never_binds(database):
     policy = matching_policy(database)
     stage = MergeStage(Store(database.application))
-    a, b = record("a", cik=APPLE_CIK), record("b", "fixture.secondary", cik=APPLE_CIK)
+    a, b = record("a", cik=APPLE_CIK), record("b2", cik=APPLE_CIK)
     left, bind_a = core.identity_and_binding(a)
     right, bind_b = core.identity_and_binding(b)
     stage.apply(
@@ -234,12 +280,23 @@ def test_an_identifier_on_two_companies_never_binds(database):
 def test_a_cik_and_an_lei_pointing_at_two_companies_never_bind(database):
     policy = matching_policy(database)
     load(database, policy, "b1", record("a", cik=APPLE_CIK))
-    load(
-        database,
-        policy,
-        "b2",
-        record("b", cik="0000789019", lei=APPLE_LEI),
-        checkpoint=2,
+    load(database, policy, "b2", record("m", cik="0000789019"), checkpoint=2)
+    _apple, microsoft = sorted(
+        companies(database).values(), key=lambda c: c["identifiers"]["cik"][0]
+    )
+    # Microsoft holds the LEI through its issuer's record.
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    _, link = core.identity_and_binding(gleif, microsoft["entity_id"])
+    MergeStage(Store(database.application)).apply(
+        batch_id="link",
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer="link",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        assertions=[gleif],
+        decisions=[link],
     )
     load(
         database,
@@ -264,7 +321,7 @@ def test_a_concurrent_run_cannot_create_a_second_company_for_one_cik(database):
         "expected_checkpoint": 0,
         "checkpoint": 1,
         "as_of": core.AS_OF,
-        "assertions": [record("b", "fixture.secondary", cik=APPLE_CIK)],
+        "assertions": [record("b", cik=APPLE_CIK)],
     }
     proposed = stage.propose(**late)
     assert len(proposed["identities"]) == 1

@@ -22,12 +22,15 @@ from __future__ import annotations
 from collections import defaultdict
 from uuid import uuid4
 
-from .activation import activated, binding_namespaces
+from .activation import NAMESPACES, activated, binding_namespaces
 from .evidence import decision
 from .primitives import normalizer
 from .store import rows
 
-NOTHING = {"identities": [], "decisions": [], "reviews": [], "mints": []}
+
+def nothing() -> dict:
+    """A fresh, empty set of proposals; never a shared one a caller could fill."""
+    return {"identities": [], "decisions": [], "reviews": [], "mints": []}
 
 
 def active_rules(policy: dict) -> list[tuple[str, dict]]:
@@ -40,7 +43,16 @@ def active_rules(policy: dict) -> list[tuple[str, dict]]:
 
 
 def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
-    """Which Companies hold each identifier value, in one query per namespace.
+    """Which Companies hold each identifier value: one bounded query per namespace.
+
+    A Company holds a value only through the **latest** version of a bound
+    record from that namespace's **issuing source** (the contract's
+    `sources`): an LEI is held through a GLEIF record, a CIK through an SEC
+    record. A record that merely carries both values establishes nothing
+    (Q14: "an LEI does not establish a CIK crosswalk merely because both
+    values exist"), and a value an old revision carried no longer counts.
+    A merged-away Company resolves to its survivor, so a consolidation that
+    fixed a duplicate does not leave its identifier looking ambiguous.
 
     Keyed by the contract's normalized value, so a stored and an incoming form
     of one identifier cannot miss each other.
@@ -49,21 +61,58 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
     for namespace, values in sorted(wanted.items()):
         if not values:
             continue
-        for row in rows(
+        # A literal from a fixed set, so the per-namespace index can be used.
+        if namespace not in NAMESPACES:
+            raise ValueError(f"Unsupported identifier namespace: {namespace}")
+        path = f"body->'identifiers'->>'{namespace}'"
+        found_rows = rows(
             conn,
-            """SELECT DISTINCT a.body->'identifiers'->>:ns AS value,
-                   d.body->>'entity_id' AS entity_id, i.kind
-            FROM mdm_v2.assertion a
+            f"""WITH latest AS (
+                SELECT DISTINCT ON (a.source_code, a.record_key)
+                       a.body->>'subject' AS subject, {path.replace("body", "a.body")} AS value
+                FROM mdm_v2.assertion a
+                WHERE (a.source_code, a.record_key) IN (
+                    SELECT source_code, record_key FROM mdm_v2.assertion
+                    WHERE {path} = ANY(:values) AND source_code = ANY(:sources))
+                ORDER BY a.source_code, a.record_key, a.revision DESC,
+                         a.mapping_version DESC)
+            SELECT l.value, d.body->>'entity_id' AS entity_id, i.kind
+            FROM latest l
             JOIN mdm_v2.decision d
-              ON d.operation='bind' AND d.body->>'subject'=a.body->>'subject'
-            JOIN mdm_v2.identity i ON i.entity_id::text=d.body->>'entity_id'
-            WHERE a.body->'identifiers'->>:ns = ANY(:values)""",
-            ns=namespace,
+              ON d.operation='bind' AND d.body->>'subject'=l.subject
+            JOIN mdm_v2.identity i ON i.entity_id=(d.body->>'entity_id')::uuid
+            WHERE l.value = ANY(:values)""",
             values=sorted(values),
-        ):
+            sources=_issuers(policy, namespace),
+        )
+        survivors = _survivors(conn, {r["entity_id"] for r in found_rows})
+        for row in found_rows:
             key = (namespace, _normal(policy, namespace, row["value"]))
-            found[key][row["entity_id"]] = row["kind"]
+            found[key][survivors.get(row["entity_id"], row["entity_id"])] = row["kind"]
     return found
+
+
+def _survivors(conn, entity_ids: set[str]) -> dict[str, str]:
+    if not entity_ids:
+        return {}
+    return {
+        r["object_id"]: r["canonical_id"]
+        for r in rows(
+            conn,
+            """SELECT object_id, body->>'canonical_id' AS canonical_id
+            FROM mdm_v2.projection WHERE object_type='entity' AND object_id=ANY(:ids)
+            AND body->>'canonical_id' IS NOT NULL""",
+            ids=sorted(entity_ids),
+        )
+    }
+
+
+def _issuers(policy: dict, namespace: str) -> list[str]:
+    for block in (policy.get("kinds") or {}).values():
+        contract = (block.get("identifiers") or {}).get(namespace)
+        if contract:
+            return list(contract["sources"])
+    return []
 
 
 def _normal(policy: dict, namespace: str, value: str) -> str:
@@ -86,7 +135,7 @@ def propose(
     """The bindings and new Companies the active identifier rules propose."""
     rules = active_rules(policy)
     if not rules or not assertions:
-        return NOTHING
+        return nothing()
     # The latest version per subject speaks for it within one batch.
     latest: dict[str, dict] = {}
     for a in sorted(
@@ -140,9 +189,19 @@ def propose(
     by_subject = defaultdict(list)
     for item in applicable:
         by_subject[item[0]].append(item)
-    result = {"identities": [], "decisions": [], "reviews": [], "mints": []}
+    result = nothing()
     minted: dict[tuple[str, str], str] = {}
-    for subject, items in sorted(by_subject.items()):
+
+    def may_mint(entry):
+        return any(i[1]["on_no_match"] == "mint" for i in entry[1])
+
+    # Records that may create a Company go first, so a record in the same
+    # batch that may only join finds the Company its issuer's record just
+    # created: one Company per identifier within a batch (ticket 03,
+    # decision 3), and still only through the issuer's own record (Q14).
+    for subject, items in sorted(
+        by_subject.items(), key=lambda entry: (not may_mint(entry), entry[0])
+    ):
         record = latest[subject]
         matches = {}
         problem = None
@@ -155,7 +214,10 @@ def propose(
             for entity, kind in held.items():
                 if kind != record["kind"]:
                     problem = ("incompatible_identifier_kind", namespace)
+                    break
                 matches[entity] = (rule, namespace)
+            if problem:
+                break
         if problem is None and len(matches) > 1:
             problem = (
                 "conflicting_identifiers",
@@ -193,6 +255,7 @@ def propose(
                 result["mints"].append(
                     {"entity_id": minted[key], "namespace": namespace, "raw": raw}
                 )
+                found[key][minted[key]] = record["kind"]
             entity = minted[key]
         result["decisions"].append(
             decision(

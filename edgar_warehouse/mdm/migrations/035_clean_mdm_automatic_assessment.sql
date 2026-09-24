@@ -9,7 +9,11 @@
 -- merge, so a load batch whose only identity work is a rule's was refused.
 -- This replaces it with one change: the proposals may come from the command,
 -- from `automatic`, or both. Every other check is 028's, unchanged.
--- CREATE OR REPLACE keeps the function's owner and privileges.
+-- CREATE OR REPLACE keeps the function's owner and privileges. The caller and
+-- automatic lists are each bounded at 1000, so up to 2000 together.
+--
+-- It also indexes the two identifiers a matching rule looks up, so the lookup
+-- the Merge Stage runs under its lock is not a scan of every Stage record.
 
 CREATE OR REPLACE FUNCTION mdm_v2.record_assessment(body_text text,root_run uuid) RETURNS text
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,mdm_v2 AS $$
@@ -47,3 +51,8 @@ BEGIN
     RETURN key;
 END;
 $$;
+
+CREATE INDEX clean_assertion_identifier_cik
+    ON mdm_v2.assertion ((body->'identifiers'->>'cik'));
+CREATE INDEX clean_assertion_identifier_lei
+    ON mdm_v2.assertion ((body->'identifiers'->>'lei'));

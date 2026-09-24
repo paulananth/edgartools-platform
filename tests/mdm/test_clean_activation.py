@@ -303,6 +303,7 @@ CIK_RULE = {
 }
 CIK_CONTRACT = {
     "authority": "SEC/EDGAR",
+    "sources": ["sec.submissions.company.v1"],
     "normalizer": "normalize_identifier@sec-cik-v1",
     "claim": {"forward": 1, "reverse": None},
     "compatibility": {"field": "kind", "predicate": "kind_equal@1"},
@@ -388,6 +389,7 @@ class TestAnIdentifierRule:
         ("changes", "reason"),
         [
             ({"authority": ""}, "authority"),
+            ({"sources": []}, "issuing source"),
             ({"normalizer": "invented"}, "normalizer"),
             ({"claim": {}}, "forward claim"),
             (

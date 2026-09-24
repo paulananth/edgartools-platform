@@ -497,7 +497,10 @@ def test_matching_rules_create_sec_companies_and_gleif_waits(
     sec_rule = {**CIK_RULE, "source": SOURCE_CODE}
     gleif_rule = {**LEI_RULE, "source": "gleif.level1.v1"}
     body["kinds"]["company"]["rules"] += [sec_rule, gleif_rule]
-    body["kinds"]["company"]["identifiers"] = {"cik": CIK_CONTRACT, "lei": LEI_CONTRACT}
+    body["kinds"]["company"]["identifiers"] = {
+        "cik": CIK_CONTRACT,
+        "lei": {**LEI_CONTRACT, "sources": ["gleif.level1.v1"]},
+    }
     body["automatic_rules"] += [
         {
             "kind": "company",
