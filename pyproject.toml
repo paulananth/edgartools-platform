@@ -86,6 +86,7 @@ include = [
   "edgar_warehouse/config/*.properties",
   "edgar_warehouse/config/*.yaml",
   "edgar_warehouse/mdm/migrations/*.sql",
+  "edgar_warehouse/mdm/policies/*.json",
 ]
 
 [tool.pytest.ini_options]

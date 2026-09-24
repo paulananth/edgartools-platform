@@ -1,0 +1,7 @@
+{
+  "version": "company-2026-09-24",
+  "defaults": {
+    "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
+    "allow_unknown_effective": true
+  }
+}

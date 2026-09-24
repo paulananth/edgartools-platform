@@ -632,3 +632,63 @@ class TestWhatAProfileFieldRecords:
             entity_id="entity-1",
         )
         assert profiles[0]["fields"]["aum"]["policy_digest"] == "body-digest"
+
+
+class TestAKindLevelDefault:
+    """Operator, 2026-09-24: every field from every source; priority where both."""
+
+    def claims(self):
+        sec = company(fields={"name": "MICROSOFT CORP", "sic": "7372"})
+        gleif = company(
+            source_code="gleif.level1",
+            record_key="INR2EJN1ERAN0W5ZP974",
+            fields={"name": "MICROSOFT CORPORATION", "legal_form": "NHYA"},
+        )
+        return [sec["subject"], gleif["subject"]], current_claims(
+            [sec, gleif], AS_OF, set()
+        )
+
+    def select(self, block):
+        subjects, claims = self.claims()
+        fields, _, _ = select_fields(
+            "company",
+            subjects,
+            claims,
+            {"kinds": {"company": block}},
+            [],
+            as_of=AS_OF,
+            policy_digest="d",
+        )
+        return fields
+
+    def test_every_field_any_source_supplies_is_selected(self):
+        fields = self.select({"defaults": {"sources": ["sec.company", "gleif.level1"]}})
+        assert {k: v["value"] for k, v in fields.items()} == {
+            "name": "MICROSOFT CORP",
+            "sic": "7372",
+            "legal_form": "NHYA",
+        }
+        assert [c["value"] for c in fields["name"]["conflicts"]] == [
+            "MICROSOFT CORPORATION"
+        ]
+
+    def test_a_field_may_state_its_own_order(self):
+        fields = self.select(
+            {
+                "defaults": {"sources": ["sec.company", "gleif.level1"]},
+                "fields": {"name": {"sources": ["gleif.level1", "sec.company"]}},
+            }
+        )
+        assert fields["name"]["value"] == "MICROSOFT CORPORATION"
+        assert fields["sic"]["value"] == "7372"
+
+    def test_without_a_default_only_declared_fields_are_selected(self):
+        fields = self.select(
+            {"fields": {"name": {"sources": ["sec.company", "gleif.level1"]}}}
+        )
+        assert set(fields) == {"name"}
+
+    def test_the_default_is_authority_so_it_moves_the_recorded_digest(self):
+        one = self.select({"defaults": {"sources": ["sec.company", "gleif.level1"]}})
+        two = self.select({"defaults": {"sources": ["gleif.level1", "sec.company"]}})
+        assert one["sic"]["policy_digest"] != two["sic"]["policy_digest"]

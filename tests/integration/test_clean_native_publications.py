@@ -419,7 +419,7 @@ def test_real_sec_and_gleif_fields_share_company_with_retained_provenance(
                             "allow_unknown_effective": True,
                         },
                         "gleif_registration_status": {"sources": ["gleif.level1.v1"]},
-                        "gleif_legal_jurisdiction": {"sources": ["gleif.level1.v1"]},
+                        "jurisdiction": {"sources": ["gleif.level1.v1"]},
                     }
                 },
             },
@@ -476,9 +476,7 @@ def test_real_sec_and_gleif_fields_share_company_with_retained_provenance(
     assert fields["name"]["value"] == "WEYERHAEUSER CO"
     assert fields["name"]["winner"]["source_code"] == SOURCE_CODE
     assert fields["gleif_registration_status"]["value"] == "LAPSED"
-    assert (
-        fields["gleif_legal_jurisdiction"]["winner"]["source_code"] == "gleif.level1.v1"
-    )
+    assert fields["jurisdiction"]["winner"]["source_code"] == "gleif.level1.v1"
     # A later source lifecycle correction updates its own fields. It cannot
     # delete the SEC Company or silently activate an identity merge/unlink rule.
     prior = coordinator.completed_source(full_run)["plan"]["publications"][-1][

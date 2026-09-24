@@ -167,7 +167,9 @@ def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():
         "record_locator": "line:1",
     }
     # The bundle writer renders source scalars before the adapter sees them.
-    row = source_row(320193, last_synced_at=datetime(2026, 1, 1, tzinfo=UTC).isoformat())
+    row = source_row(
+        320193, last_synced_at=datetime(2026, 1, 1, tzinfo=UTC).isoformat()
+    )
     first = normalize(
         row, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication
     )
@@ -183,3 +185,47 @@ def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():
     assert corrected["assertion_id"] != first["assertion_id"]
     assert corrected["subject"] == first["subject"]
     assert corrected["record_key"] == first["record_key"]
+
+
+class TestJurisdictionIsOneFormat:
+    """SEC writes "CA"; GLEIF writes "US-CA" (operator, 2026-09-24)."""
+
+    def read(self, state):
+        return normalize(
+            source_row(
+                320193,
+                state_of_incorporation=state,
+                last_synced_at="2026-01-01T00:00:00+00:00",
+            ),
+            source_code=SOURCE_CODE,
+            contract=CONTRACT,
+            publication={
+                "publication_key": "p",
+                "revision": 0,
+                "artifact_sha256": "a" * 64,
+                "member": "m",
+            },
+        )["fields"]["jurisdiction"]
+
+    def test_a_us_state_code_becomes_iso_3166_2(self):
+        assert self.read("CA") == {"op": "value", "value": "US-CA"}
+        assert self.read("dc") == {"op": "value", "value": "US-DC"}
+
+    def test_a_foreign_edgar_code_is_unknown_not_guessed(self):
+        assert self.read("E9") == {"op": "unknown"}
+
+    def test_an_empty_code_is_unknown(self):
+        assert self.read("") == {"op": "unknown"}
+
+    def test_the_company_rule_is_loaded_not_restated(self):
+        import json
+        from pathlib import Path
+
+        from edgar_warehouse.mdm.clean import company_source
+
+        file = Path(company_source.__file__).parents[1] / "policies" / "company.json"
+        assert company_source.POLICY["kinds"]["company"] == json.loads(file.read_text())
+        assert company_source.POLICY["kinds"]["company"]["defaults"]["sources"] == [
+            "sec.submissions.company.v1",
+            "gleif.level1.v1",
+        ]

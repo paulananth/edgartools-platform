@@ -55,8 +55,21 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   (`CA` and `US-CA` are the same). Every other field comes from whichever
   source has it. Supersedes the accepted GLEIF field semantics that kept these
   separate.
-- [ ] Write it as the Company rule in the Mastering Policy (per kind), not only
-  as a note
-- [ ] Build the kind-level default priority list that each field inherits
-  unless it states its own
+- [x] Write it as the Company rule, per kind: `edgar_warehouse/mdm/policies/company.json`
+  (one file per kind, loaded not restated), a kind-level `defaults` rule every
+  field inherits (SEC first, GLEIF next), SEC and GLEIF both mapping `name`
+  and `jurisdiction`, and a `field_formats` entry converting SEC state codes
+  to ISO 3166-2 — unit + PG16 on AAPL, MSFT, Shell, ASML (2026-09-24 10:17 ET)
+- [x] Build the kind-level default priority list — `defaults`, an authority
+  section, so changing it moves every value's recorded digest (2026-09-24 10:17 ET)
+- [ ] **Address** as one field: not built. The SEC Company source carries no
+  address (it lives in a separate SEC address table), and choosing street,
+  city and postcode from one source together needs group-aware selection
+  (ticket 03), so today only GLEIF could supply it, and it is not mapped yet
+- [ ] Foreign EDGAR location codes (E9, X0, P7, …) to ISO 3166: not converted;
+  such a value is recorded unknown for `jurisdiction`, never guessed
+- [ ] SEC empty text (`description: ""`) is taken as a value; decide whether
+  an empty string is unknown
+- [ ] Decide Shell's jurisdiction: SEC says `DC` (a US code) and wins under
+  SEC-first; GLEIF says `GB`, kept as a conflict
 - [ ] Migration, Merge Stage write, tests on a populated store (PG16)

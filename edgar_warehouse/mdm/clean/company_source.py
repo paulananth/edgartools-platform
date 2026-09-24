@@ -25,7 +25,7 @@ FIELDS = {
     "name": "entity_name",
     "sic": "sic",
     "sic_description": "sic_description",
-    "incorporation_jurisdiction": "state_of_incorporation",
+    "jurisdiction": "state_of_incorporation",
     "fiscal_year_end": "fiscal_year_end",
     "description": "description",
 }
@@ -50,6 +50,9 @@ CONTRACT = {
         "identifiers": {"cik": "cik"},
         "identifier_formats": {"cik": "sec_cik"},
         "fields": FIELDS,
+        # SEC writes a US state as "CA"; GLEIF writes "US-CA". One format before
+        # comparing, so the two are one jurisdiction (operator, 2026-09-24).
+        "field_formats": {"jurisdiction": "edgar_state_iso3166"},
         "provenance": {
             "landing_sha256": "_origin.sha256",
             "landing_manifest_sha256": "_origin.manifest_sha256",
@@ -59,23 +62,17 @@ CONTRACT = {
         },
     },
 }
+# The Company rule is data, one file per kind, and this module loads it rather
+# than restating it: source priority SEC first, GLEIF next, and every field any
+# source supplies (operator, 2026-09-24).
+COMPANY_RULES = json.loads(
+    (Path(__file__).parents[1] / "policies" / "company.json").read_text()
+)
 POLICY = {
     "version": "sec-company-local-v1",
     "automatic_rules": [],
     "required_consumers": ["journal", "export", "graph"],
-    # A kind's rules sit under its own name, so that the kind's version covers
-    # all of them and a Person-only edit leaves every Company value's recorded
-    # digest unchanged (company mastering ticket 02, decision 1). `version` is
-    # the authored kind document's own, not the body's.
-    "kinds": {
-        "company": {
-            "version": "company-2026-09-23",
-            "fields": {
-                name: {"sources": [SOURCE_CODE], "allow_unknown_effective": True}
-                for name in FIELDS
-            },
-        }
-    },
+    "kinds": {"company": COMPANY_RULES},
 }
 
 
