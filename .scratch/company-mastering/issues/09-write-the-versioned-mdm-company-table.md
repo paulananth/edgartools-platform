@@ -55,8 +55,46 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   (`CA` and `US-CA` are the same). Every other field comes from whichever
   source has it. Supersedes the accepted GLEIF field semantics that kept these
   separate.
-- [ ] Write it as the Company rule in the Mastering Policy (per kind), not only
-  as a note
-- [ ] Build the kind-level default priority list that each field inherits
-  unless it states its own
+- [x] Write it as the Company rule, per kind: `edgar_warehouse/mdm/policies/company.json`
+  (one file per kind, loaded not restated), a kind-level `defaults` rule every
+  field inherits (SEC first, GLEIF next), SEC and GLEIF both mapping `name`
+  and `jurisdiction`, and a `field_formats` entry converting SEC state codes
+  to ISO 3166-2 — unit + PG16 on AAPL, MSFT, Shell, ASML (2026-09-24 10:17 ET)
+- [x] Build the kind-level default priority list — `defaults`, an authority
+  section, so changing it moves every value's recorded digest (2026-09-24 10:17 ET)
+- [ ] **Address** as one field: not built. The SEC Company source carries no
+  address (it lives in a separate SEC address table), and choosing street,
+  city and postcode from one source together needs group-aware selection
+  (ticket 03), so today only GLEIF could supply it, and it is not mapped yet
+- [ ] ~~Foreign EDGAR location codes to ISO 3166~~ no longer needed: SEC's
+  code is not compared with anything (2026-09-24 11:10 ET)
+- [x] Three-axis `/code-review` — Standards: 1 hard (defaults read outside the
+  kind resolver); Spec: raw foreign code lost, Stage claim untested; GoF:
+  load kind files in their own loader. All fixed: `_defaults_for` beside
+  `_rules_for`, raw SEC code kept, `policies.load_kinds()`, error messages
+  name formats generally, Stage assertion added, `defaults` documented in
+  policy-language §8 (2026-09-24 10:19 ET)
+- [ ] A policy `sources` entry is a bare string: a typo silently drops a
+  source. Check each against registered datasets (registration order today
+  registers policies before some datasets, so this needs a per-batch check)
+- [ ] `gleif_source.dataset_contract` defaults `level1_source` to
+  `gleif.lei.v1` while the policy and the native spec use `gleif.level1.v1`;
+  settle one code
+- [ ] Priority changes are data, but the file ships in the package, so a
+  change still needs an image rebuild; the Rules Database is where a live
+  change belongs (Codex's Source Contract area)
+- [ ] A store holding readings under the old field names
+  (`incorporation_jurisdiction`, `gleif_legal_jurisdiction`) would show them
+  beside `jurisdiction` until re-read; no live store holds Clean MDM Company
+  evidence yet (migrations 027+ unapplied), so this is noted, not built
+- [x] Blank text is unknown, never a value — operator (2026-09-24 13:40 ET); applies to
+  every source's fields in `adapters.normalize`. ASML now has no SEC state of
+  incorporation instead of an empty one, and no Company shows SEC's blank
+  description — unit + PG16 (2026-09-24 13:40 ET)
+- [x] Decide Shell's jurisdiction — operator (2026-09-24 11:10 ET): **two fields, not one**.
+  SEC gives `state_of_incorporation`, as SEC writes it (`CA`, `DC`); GLEIF
+  gives `jurisdiction` (`US-CA`, `GB`). They never compete, so the
+  SEC-to-ISO conversion is removed. Supersedes "jurisdiction is one field"
+  above. Shell now reads `DC` from SEC and `GB` from GLEIF. **Name** is the
+  only field both sources supply today — PG16, four Companies (2026-09-24 11:10 ET)
 - [ ] Migration, Merge Stage write, tests on a populated store (PG16)

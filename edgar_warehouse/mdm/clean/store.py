@@ -239,12 +239,14 @@ def register_dataset(
         raise ValueError(
             "A Dataset Contract states a kind or names a classification rule, not both"
         )
+    from .adapters import FORMATS
+
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),
     ]
-    if any(f not in {None, "sec_cik", "lei"} for f in formats):
-        raise ValueError("Unknown identifier format in Dataset Contract")
+    if any(f is not None and f not in FORMATS for f in formats):
+        raise ValueError("Unknown format in Dataset Contract")
     registry_connection = (
         registry_connection if registry_connection is not None else conn
     )

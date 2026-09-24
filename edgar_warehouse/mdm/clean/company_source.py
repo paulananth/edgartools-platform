@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from ..policies import load_kinds
 from .evidence import instant
 from .store import Conflict, canonical, digest
 
@@ -25,7 +26,10 @@ FIELDS = {
     "name": "entity_name",
     "sic": "sic",
     "sic_description": "sic_description",
-    "incorporation_jurisdiction": "state_of_incorporation",
+    # SEC's own field, as SEC writes it ("CA", "DC", "E9"). Jurisdiction is
+    # GLEIF's, a separate field, so the two never compete (operator,
+    # 2026-09-24).
+    "state_of_incorporation": "state_of_incorporation",
     "fiscal_year_end": "fiscal_year_end",
     "description": "description",
 }
@@ -63,19 +67,9 @@ POLICY = {
     "version": "sec-company-local-v1",
     "automatic_rules": [],
     "required_consumers": ["journal", "export", "graph"],
-    # A kind's rules sit under its own name, so that the kind's version covers
-    # all of them and a Person-only edit leaves every Company value's recorded
-    # digest unchanged (company mastering ticket 02, decision 1). `version` is
-    # the authored kind document's own, not the body's.
-    "kinds": {
-        "company": {
-            "version": "company-2026-09-23",
-            "fields": {
-                name: {"sources": [SOURCE_CODE], "allow_unknown_effective": True}
-                for name in FIELDS
-            },
-        }
-    },
+    # Each kind's rules are data, one file per kind, loaded rather than
+    # restated here (operator, 2026-09-24).
+    "kinds": load_kinds(),
 }
 
 

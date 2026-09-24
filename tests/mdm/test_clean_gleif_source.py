@@ -125,9 +125,12 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     }
     kind, evidence = record_evidence(record, **kwargs)
     assert kind == "assertion"
-    assert evidence["fields"]["gleif_legal_jurisdiction"]["value"] == "US-CA"
+    assert evidence["fields"]["jurisdiction"]["value"] == "US-CA"
     assert evidence["fields"]["gleif_registration_status"]["value"] == "LAPSED"
-    assert "name" not in evidence["fields"]
+    # GLEIF's legal name now fills the shared `name` field, SEC first where both
+    # supply one (operator, 2026-09-24; supersedes keeping GLEIF names apart).
+    # This record carries none, so it is unknown rather than absent.
+    assert evidence["fields"]["name"] == {"op": "unknown"}
     record["Entity"]["EntityCategory"]["$"] = "BRANCH"
     kind, evidence = record_evidence(record, **kwargs)
     assert kind == "deferred"

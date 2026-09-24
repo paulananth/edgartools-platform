@@ -292,3 +292,187 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
         + [("gleif.level1.v1", r["LEI"]["$"]) for r in gleif]
     )
     assert masters == 0
+
+
+# The SEC and GLEIF record of each Company. The pairs are **test input**, picked
+# by the operator: no matching rule links them yet (tickets 04 and 08). They
+# stand in for that rule so the master row can be shown.
+PAIRS = {
+    APPLE: "HWUPKR0MPOU8FGXBT394",
+    MICROSOFT: "INR2EJN1ERAN0W5ZP974",
+    SHELL: "21380068P1DRHMJ8KU70",
+    ASML: "724500Y6DUVHQD6OXN27",
+}
+
+
+def test_one_master_per_company_takes_fields_from_both_sources(
+    database, source_db, command_databases, tmp_path, capsys
+):
+    """The Company rule: every field from every source, SEC first where both.
+
+    Operator, 2026-09-24: a field only one source has comes from that source;
+    where both supply one (name), SEC wins and GLEIF's value is kept as a
+    retained conflict. State of incorporation is SEC's field and jurisdiction
+    is GLEIF's, two fields that never compete.
+    """
+    from edgar_warehouse.mdm.clean.evidence import decision
+    from edgar_warehouse.mdm.clean.merge import MergeStage
+
+    policy = register(database, rule_contract(), rule_policy(active=True))
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    manifest = tmp_path / "sec-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "contract_version": 2,
+                "policy_digest": policy,
+                "as_of": core.AS_OF,
+                "batches": [sec_batch(tmp_path)],
+            }
+        )
+    )
+    execute_manifest(
+        store,
+        coordinator,
+        path=str(manifest),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=6,
+    )
+    gleif = FIXTURE["gleif"]
+    capture, path = native.native_fixture(
+        database,
+        source_db,
+        tmp_path,
+        level1=gleif[0],
+        additional_level1=gleif[1:],
+        company_leis=[r["LEI"]["$"] for r in gleif],
+        policy=policy,
+    )
+    execute_manifest(
+        store,
+        coordinator,
+        path=str(path),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=6,
+        publication_verifier=PublicationVerifier(source_db, capture.reader),
+    )
+    with database.application.connect() as conn:
+        stored = {
+            r[0]: r[1]
+            for r in conn.execute(
+                text("SELECT body->>'record_key', body FROM mdm_v2.assertion")
+            )
+        }
+    identities, decisions, entity_of = [], [], {}
+    for cik, lei in PAIRS.items():
+        entity_id = str(uuid4())
+        entity_of[cik] = entity_id
+        identities.append(
+            {"entity_id": entity_id, "kind": "company", "published_at": core.AT}
+        )
+        for key in (cik, lei):
+            decisions.append(
+                decision(
+                    "bind",
+                    actor="test",
+                    reason="operator-picked pair; stands in for tickets 04 and 08",
+                    at=core.AT,
+                    subject=stored[key]["subject"],
+                    entity_id=entity_id,
+                    evidence=[stored[key]["assertion_id"]],
+                )
+            )
+    MergeStage(store).apply(
+        batch_id="link-four-companies",
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer="link-test",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        identities=identities,
+        decisions=decisions,
+    )
+    masters = core.documents(database, "entity")
+    assert len(masters) == 4
+
+    def field(cik, name):
+        return masters[entity_of[cik]]["fields"].get(name)
+
+    def winner(cik, name):
+        return field(cik, name)["winner"]["source_code"]
+
+    for cik, lei in PAIRS.items():
+        assert masters[entity_of[cik]]["identifiers"] == {"cik": [cik], "lei": [lei]}
+        # Both sources supply a name: SEC wins.
+        assert winner(cik, "name") == SOURCE_CODE
+        # Only SEC has SIC; only GLEIF has legal form and registration status.
+        assert winner(cik, "sic") == SOURCE_CODE
+        assert winner(cik, "gleif_legal_form") == "gleif.level1.v1"
+        assert field(cik, "gleif_registration_status")["value"] == "ISSUED"
+    # GLEIF spells Apple exactly as SEC does, so there is nothing to keep;
+    # where the two spell it differently, GLEIF's spelling is kept as a
+    # conflict beside SEC's winning value.
+    assert field(APPLE, "name")["value"] == "Apple Inc."
+    assert field(APPLE, "name")["conflicts"] == []
+    assert field(MICROSOFT, "name")["value"] == "MICROSOFT CORP"
+    assert [c["value"] for c in field(MICROSOFT, "name")["conflicts"]] == [
+        "MICROSOFT CORPORATION"
+    ]
+    # One format: SEC "CA" and GLEIF "US-CA" agree, so no conflict is kept.
+    # Two fields, never competing: SEC's state of incorporation as SEC writes
+    # it, and GLEIF's legal jurisdiction (operator, 2026-09-24).
+    for cik, state, jurisdiction in (
+        (APPLE, "CA", "US-CA"),
+        (MICROSOFT, "WA", "US-WA"),
+        (SHELL, "DC", "GB"),
+    ):
+        assert field(cik, "state_of_incorporation")["value"] == state
+        assert winner(cik, "state_of_incorporation") == SOURCE_CODE
+        assert field(cik, "jurisdiction")["value"] == jurisdiction
+    # ASML: SEC sends a blank, which is unknown, so the master has no state of
+    # incorporation rather than an empty one; SEC's blank descriptions too.
+    assert field(ASML, "state_of_incorporation") is None
+    assert field(ASML, "jurisdiction")["value"] == "NL"
+    assert all(field(cik, "description") is None for cik in PAIRS)
+    for cik in PAIRS:
+        assert winner(cik, "jurisdiction") == "gleif.level1.v1"
+        assert field(cik, "jurisdiction")["conflicts"] == []
+    # Name is the one field both sources supply.
+    both = {
+        n
+        for n in masters[entity_of[APPLE]]["fields"]
+        if n in stored[APPLE]["fields"] and n in stored[PAIRS[APPLE]]["fields"]
+    }
+    assert both == {"name"}
+
+    # GLEIF's own spelling is still in the Stage, whole, as evidence.
+    with database.application.connect() as conn:
+        staged = conn.execute(
+            text(
+                "SELECT body->'fields'->'name'->>'value' FROM mdm_v2.company_stage "
+                "WHERE source_code='gleif.level1.v1' AND record_key=:lei"
+            ),
+            {"lei": PAIRS[MICROSOFT]},
+        ).scalar_one()
+    assert staged == "MICROSOFT CORPORATION"
+
+    with capsys.disabled():
+        print()
+        for cik in PAIRS:
+            row = masters[entity_of[cik]]
+            print(
+                f"--- {field(cik, 'name')['value']}  identifiers={row['identifiers']}"
+            )
+            for name in sorted(row["fields"]):
+                f = row["fields"][name]
+                others = [
+                    f"{c['source_code']}={c.get('value')!r}" for c in f["conflicts"]
+                ]
+                print(
+                    f"  {name:40} {f.get('value')!r:40} from {f['winner']['source_code']}"
+                    + (f"   kept: {', '.join(others)}" if others else "")
+                )

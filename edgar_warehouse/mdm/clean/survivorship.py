@@ -212,6 +212,7 @@ def select_fields(
         as_of=as_of,
         policy_digest=recorded_digest,
         kind_version=kind_version,
+        default=_defaults_for(policy, kind),
     )
     reviews.extend(field_reviews)
     for p in profiles.values():
@@ -257,12 +258,21 @@ def _rules_for(policy: dict, kind: str) -> dict:
     return kinds.get(kind, {}).get("fields", {})
 
 
+def _defaults_for(policy: dict, kind: str) -> dict | None:
+    """The rule every field of a kind inherits, beside `_rules_for`.
+
+    Only a `kinds` body can carry one; an old body with top-level `fields`
+    selects its declared fields only, as it always did.
+    """
+    return ((policy.get("kinds") or {}).get(kind) or {}).get("defaults")
+
+
 # Which sections of a kind's block decide the winner of a field, and which do
 # not. Written down rather than inferred from what the block happens to hold,
 # so that adding a section is a decision someone makes once, here, and not a
 # silent change to every field's recorded authority. A section in neither list
 # is refused by name.
-AUTHORITY_SECTIONS = ("fields", "field_group", "field_groups")
+AUTHORITY_SECTIONS = ("defaults", "fields", "field_group", "field_groups")
 NON_AUTHORITY_SECTIONS = (
     "version",  # travels beside the digest, not inside it
     "rules",  # classification and binding: they decide a kind or an identity
@@ -352,8 +362,16 @@ def _select_values(
     as_of: str,
     policy_digest: str,
     kind_version: str | None = None,
+    default: dict | None = None,
 ) -> tuple[dict, list[dict]]:
-    """Clean MDM's five-step order over one set of field rules."""
+    """Clean MDM's five-step order over one set of field rules.
+
+    With a kind-level `default`, the master takes **every** field any source
+    supplies, not only the declared ones (operator, 2026-09-24): a field only
+    one source has comes from it, and the priority list decides only where
+    several supply it. A declared field inherits the default and may override
+    any part of it, such as its own source order.
+    """
     candidates = defaultdict(list)
     for subject in subjects:
         record = claims.get(subject)
@@ -363,7 +381,11 @@ def _select_values(
             candidates[name].append(claim)
     fields = {}
     reviews = []
-    for name, rule in rules.items():
+    names = list(rules)
+    if default:
+        names += sorted(set(candidates) - set(rules))
+    for name in names:
+        rule = {**(default or {}), **rules.get(name, {})}
         eligible = []
         for c in candidates.get(name, []):
             if c["source_code"] not in rule["sources"]:

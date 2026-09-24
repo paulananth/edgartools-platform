@@ -167,7 +167,9 @@ def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():
         "record_locator": "line:1",
     }
     # The bundle writer renders source scalars before the adapter sees them.
-    row = source_row(320193, last_synced_at=datetime(2026, 1, 1, tzinfo=UTC).isoformat())
+    row = source_row(
+        320193, last_synced_at=datetime(2026, 1, 1, tzinfo=UTC).isoformat()
+    )
     first = normalize(
         row, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication
     )
@@ -183,3 +185,60 @@ def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():
     assert corrected["assertion_id"] != first["assertion_id"]
     assert corrected["subject"] == first["subject"]
     assert corrected["record_key"] == first["record_key"]
+
+
+class TestTheCompanyRule:
+    """SEC gives state of incorporation; GLEIF gives jurisdiction (2026-09-24)."""
+
+    def test_sec_state_of_incorporation_is_its_own_field_as_sec_writes_it(self):
+        fields = normalize(
+            source_row(
+                1306965,
+                state_of_incorporation="DC",
+                last_synced_at="2026-01-01T00:00:00+00:00",
+            ),
+            source_code=SOURCE_CODE,
+            contract=CONTRACT,
+            publication={
+                "publication_key": "p",
+                "revision": 0,
+                "artifact_sha256": "a" * 64,
+                "member": "m",
+            },
+        )["fields"]
+        assert fields["state_of_incorporation"] == {"op": "value", "value": "DC"}
+        assert "jurisdiction" not in fields
+
+    def test_blank_text_is_unknown_not_a_value(self):
+        fields = normalize(
+            source_row(
+                937966,
+                state_of_incorporation="",
+                description="   ",
+                last_synced_at="2026-01-01T00:00:00+00:00",
+            ),
+            source_code=SOURCE_CODE,
+            contract=CONTRACT,
+            publication={
+                "publication_key": "p",
+                "revision": 0,
+                "artifact_sha256": "a" * 64,
+                "member": "m",
+            },
+        )["fields"]
+        assert fields["state_of_incorporation"] == {"op": "unknown"}
+        assert fields["description"] == {"op": "unknown"}
+
+    def test_the_company_rule_is_loaded_not_restated(self):
+        import json
+        from pathlib import Path
+
+        from edgar_warehouse.mdm.clean import company_source
+
+        file = Path(company_source.__file__).parents[1] / "policies" / "company.json"
+        assert set(company_source.POLICY["kinds"]) == {"company"}
+        assert company_source.POLICY["kinds"]["company"] == json.loads(file.read_text())
+        assert company_source.POLICY["kinds"]["company"]["defaults"]["sources"] == [
+            "sec.submissions.company.v1",
+            "gleif.level1.v1",
+        ]

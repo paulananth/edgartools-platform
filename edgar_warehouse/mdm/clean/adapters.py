@@ -25,28 +25,42 @@ class UnsupportedRecord(ValueError):
         super().__init__(reason)
 
 
+def _sec_cik(item) -> str:
+    value = str(item).strip()
+    if not value.isascii() or not value.isdigit() or len(value) > 10 or int(value) == 0:
+        raise UnsupportedRecord("invalid_cik")
+    return value.zfill(10)
+
+
+def _lei(item) -> str:
+    value = str(item).strip()
+    if not re.fullmatch(r"[A-Z0-9]{18}[0-9]{2}", value):
+        raise UnsupportedRecord("invalid_lei")
+    digits = "".join(str(ord(c) - 55) if c.isalpha() else c for c in value)
+    if int(digits) % 97 != 1:
+        raise UnsupportedRecord("invalid_lei_checksum")
+    return value
+
+
+# One table of named formats, read by identifiers, record keys and
+# registration alike, so adding one is one entry here (GoF consult,
+# 2026-09-24: the names were listed in two places and a third was coming).
+FORMATS = {
+    "sec_cik": _sec_cik,
+    "lei": _lei,
+}
+
+
 def format_value(item, format_name=None):
     if format_name is None:
         return str(item).strip()
-    if format_name == "sec_cik":
-        value = str(item).strip()
-        if (
-            not value.isascii()
-            or not value.isdigit()
-            or len(value) > 10
-            or int(value) == 0
-        ):
-            raise UnsupportedRecord("invalid_cik")
-        return value.zfill(10)
-    if format_name == "lei":
-        value = str(item).strip()
-        if not re.fullmatch(r"[A-Z0-9]{18}[0-9]{2}", value):
-            raise UnsupportedRecord("invalid_lei")
-        digits = "".join(str(ord(c) - 55) if c.isalpha() else c for c in value)
-        if int(digits) % 97 != 1:
-            raise UnsupportedRecord("invalid_lei_checksum")
-        return value
-    raise ValueError("Unconfigured identifier format")
+    if format_name not in FORMATS:
+        raise ValueError(f"Unconfigured format: {format_name}")
+    return FORMATS[format_name](item)
+
+
+def _blank(item) -> bool:
+    return isinstance(item, str) and not item.strip()
 
 
 def value(row: dict, path: str):
@@ -152,8 +166,12 @@ def normalize(
             identifiers[namespace] = format_value(
                 item, mapping.get("identifier_formats", {}).get(namespace)
             )
+    # Blank text is unknown, never a value: a source that sends "" has said
+    # nothing, and a blank must not win a field or show in the master
+    # (operator, 2026-09-24).
     fields = {
-        name: value(row, path) for name, path in mapping.get("fields", {}).items()
+        name: None if _blank(value(row, path)) else value(row, path)
+        for name, path in mapping.get("fields", {}).items()
     }
     if mapping.get("field_shape") == "nullable_text" and any(
         v is not None and not isinstance(v, str) for v in fields.values()
