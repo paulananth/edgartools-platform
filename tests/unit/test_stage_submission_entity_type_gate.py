@@ -10,21 +10,49 @@ The company tables are landing-only (silver-merge-engine-migration Ticket
 
 from __future__ import annotations
 
-from edgar_warehouse.loaders.bronze_submission_extractors import (
-    is_reporting_company_entity_type,
-)
+import pytest
+
+from edgar_warehouse.loaders.bronze_submission_extractors import is_individual_filer
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 from edgar_warehouse.silver_landing_store import SilverLandingStore
 
 
-def test_is_reporting_company_entity_type_classifies_known_values():
-    assert is_reporting_company_entity_type("operating") is True
-    assert is_reporting_company_entity_type("investment") is True
-    assert is_reporting_company_entity_type("other") is False
-    # Missing/empty entityType fails open -- never observed live to
-    # correlate with 'other', so treat as company rather than guess.
-    assert is_reporting_company_entity_type(None) is True
-    assert is_reporting_company_entity_type("") is True
+def _payload(entity_type, forms, *, sic="", tickers=()):
+    return {
+        "entityType": entity_type,
+        "sic": sic,
+        "tickers": list(tickers),
+        "filings": {"recent": {"form": list(forms)}},
+    }
+
+
+@pytest.mark.parametrize(
+    ("payload", "individual"),
+    [
+        # Shaped on real bronze filers (2026-09-24 scan of all 76,230).
+        (_payload("other", ["4", "4", "3", "144"]), True),  # COOK TIMOTHY D
+        (_payload("other", ["SC 13G/A", "4"]), True),
+        (_payload("other", ["20-F", "6-K"], sic="1311", tickers=["SHEL"]), False),
+        (_payload("other", ["20-F", "6-K"], sic="3559", tickers=["ASML"]), False),
+        (_payload("other", ["10-K", "10-Q", "8-K"]), False),
+        (_payload("other", ["N-CSR", "485BPOS"]), False),  # a fund
+        (_payload("other", ["13F-HR"]), False),  # a 13F manager
+        (_payload("other", ["D", "D/A"]), False),  # a Form D issuer
+        # Ownership forms only, but an industry code or a ticker says entity.
+        (_payload("other", ["SC 13D"], sic="6799"), False),
+        (_payload("other", ["4"], tickers=["XYZ"]), False),
+        (_payload("operating", ["4"]), False),
+        (_payload("investment", ["4"]), False),
+        # Fail open, as before: never guess a CIK out of the universe.
+        (_payload(None, ["4"]), False),
+        (_payload("", ["4"]), False),
+        (_payload("other", []), False),
+    ],
+)
+def test_an_individual_is_decided_by_what_it_files_not_by_entity_type_alone(
+    payload, individual
+):
+    assert is_individual_filer(payload) is individual
 
 
 def _filing_entry(accession_number, form):
@@ -135,6 +163,42 @@ def test_stage_submission_still_writes_company_rows_for_real_company(tmp_path):
         recorded = landing.tables()
         assert [row["entity_type"] for row in recorded["sec_company"]] == ["operating"]
         assert len(recorded["sec_company_address"]) == 1
+        assert result["company_rows_written"] == 1
+    finally:
+        db.close()
+
+
+def test_stage_submission_writes_company_rows_for_a_foreign_issuer_sec_marks_other():
+    """Shell plc: SEC says 'other', files 20-F, carries SIC 1311 and a ticker.
+
+    The old gate dropped it from sec_company; it is an entity (2026-09-24).
+    """
+    landing = LandingExportBuffer()
+    db = SilverLandingStore(landing_export=landing)
+    try:
+        result = db.stage_submission(
+            cik=1306965,
+            main_payload={
+                "name": "Shell plc",
+                "entityType": "other",
+                "sic": "1311",
+                "tickers": ["SHEL"],
+                "addresses": {
+                    "business": {
+                        "street1": "Shell Centre",
+                        "city": "London",
+                        "zipCode": "SE1 7NA",
+                    },
+                },
+                "filings": {"recent": _columns([_filing_entry("acc-3", "20-F")])},
+            },
+            pagination_payloads=[],
+            sync_run_id="run-1",
+            raw_object_id="raw-1",
+            load_mode="daily_incremental",
+        )
+        recorded = landing.tables()
+        assert [row["cik"] for row in recorded["sec_company"]] == [1306965]
         assert result["company_rows_written"] == 1
     finally:
         db.close()

@@ -695,6 +695,70 @@ class SubmissionPhaseOrderTests(unittest.TestCase):
 
         self.assertEqual(result["company_sync_state_row"]["tracking_status"], "non_company")
 
+    def _entity_snapshot(self, form: str, **extra) -> dict:
+        return {
+            "cik": 1306965,
+            "include_pagination": False,
+            "main_payload": {
+                "entityType": "other",
+                **extra,
+                "filings": {
+                    "recent": {
+                        "accessionNumber": ["recent-1"],
+                        "form": [form],
+                        "filingDate": ["2026-04-25"],
+                        "reportDate": ["2026-04-24"],
+                        "acceptanceDateTime": ["20260425120000"],
+                        "primaryDocument": ["recent.htm"],
+                    }
+                },
+            },
+            "main_write_record": {
+                "sha256": "sha-main",
+                "source_name": "submissions_main",
+                "relative_path": "submissions/main.json",
+            },
+            "manifest_file_names": [],
+            "pagination_snapshots": [],
+        }
+
+    def _tracking_after(self, snapshot: dict, status: str) -> str:
+        db = _CachedSubmissionDb(tracking_status=status)
+        with patch.object(warehouse_orchestrator, "_sync_mdm_tracking_status"):
+            result = warehouse_orchestrator._apply_submission_snapshot_to_silver(
+                db=db,
+                bookkeeping=db,
+                sync_run_id="run-1",
+                snapshot=snapshot,
+                force=False,
+                load_mode="bootstrap_batch",
+                recent_limit=None,
+                now=date(2026, 4, 25),
+                existing_state=db.get_company_sync_state(1306965),
+                main_checkpoint=db.get_source_checkpoint("submissions_main", "cik:1306965"),
+            )
+        return result["company_sync_state_row"]["tracking_status"]
+
+    def test_a_foreign_issuer_sec_marks_other_stays_active(self) -> None:
+        """Shell plc: entityType 'other', files 20-F, has SIC and a ticker.
+
+        Corrected 2026-09-24: 'other' alone is not an individual. 1,516 bronze
+        filers marked 'other' file 20-F/40-F/6-K and 471 file 10-K/10-Q/8-K.
+        """
+        snapshot = self._entity_snapshot("20-F", sic="1311", tickers=["SHEL"])
+        self.assertEqual(self._tracking_after(snapshot, "active"), "active")
+
+    def test_a_company_the_old_rule_demoted_is_not_restored_automatically(
+        self,
+    ) -> None:
+        """Its prior status is unknown, so restoring is a deliberate repair."""
+        snapshot = self._entity_snapshot("20-F", sic="1311", tickers=["SHEL"])
+        self.assertEqual(self._tracking_after(snapshot, "non_company"), "non_company")
+
+    def test_an_individual_stays_non_company(self) -> None:
+        snapshot = self._entity_snapshot("4")
+        self.assertEqual(self._tracking_after(snapshot, "non_company"), "non_company")
+
     def test_configured_form_artifact_pipeline_filters_to_parser_forms(self) -> None:
         calls: list[tuple[str, str]] = []
 

@@ -187,7 +187,7 @@ class SilverLandingStore:
         tables for landing, merge the filing rows locally."""
         from edgar_warehouse.loaders.bronze_submission_extractors import (
             filter_rows_by_min_filing_date,
-            is_reporting_company_entity_type,
+            is_individual_filer,
             stage_address_loader,
             stage_company_loader,
             stage_former_name_loader,
@@ -196,13 +196,14 @@ class SilverLandingStore:
             stage_recent_filing_loader,
         )
 
-        # individual-filer-company-misclassification map, Ticket 03/04: SEC's
-        # own entityType is only knowable once main_payload is fetched (here),
-        # so this is the sole place to gate the sec_company/address/former_name
-        # writes -- an individual/insider filer (entityType='other') is not a
-        # reporting company and must not be written into the company universe.
-        is_reporting_company = is_reporting_company_entity_type(main_payload.get("entityType"))
-        if is_reporting_company:
+        # individual-filer-company-misclassification map, Ticket 03/04: whether
+        # a CIK is an individual is only knowable once main_payload is fetched
+        # (here), so this is the sole place to gate the sec_company/address/
+        # former_name writes. An individual is not written into the company
+        # universe; an entity SEC marks 'other' (a foreign issuer, a fund) is
+        # (corrected 2026-09-24, see is_individual_filer).
+        is_entity = not is_individual_filer(main_payload)
+        if is_entity:
             company_rows = stage_company_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
             address_rows = stage_address_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
             former_name_rows = stage_former_name_loader(main_payload, cik, sync_run_id, raw_object_id, load_mode)
