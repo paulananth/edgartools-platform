@@ -35,8 +35,11 @@ X to Y", and `company_master` is only a view over it. Downstream readers
 
 - [x] Decide a real, dated Company table with CIK, LEI, name and identifying
   fields as the single read surface — operator (2026-09-24 08:28 ET)
-- [ ] Decide what happens to the Company rows in `mdm_v2.projection` and the
-  `company_master` view, so there is only one place to read
+- [x] Decide what happens to the Company rows in `mdm_v2.projection` and the
+  `company_master` view — operator (2026-09-24 08:31 ET): the `company_master` view is
+  removed; Company rows in `projection` are the engine's working state only,
+  read by no reader or export; the Snowflake export and the API read
+  Companies from `mdm_v2.company` alone
 - [ ] Decide the exact identifying-field columns (SEC and GLEIF fields named in
   the Company policy's field semantics)
 - [ ] Decide what `valid_from` means: when the source changed, or when MDM
