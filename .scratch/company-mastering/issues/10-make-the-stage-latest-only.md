@@ -49,6 +49,13 @@ Each must be settled, one at a time, before the migration is written:
   new `mdm_v2.company` row (a name change alone never breaks a match, Q9);
   different identifiers, the match is not changed automatically and goes
   through the confidence bands (95% acts, below 50% to a Steward)
-- [ ] Settle how reversal and replay re-read bronze
+- [x] Settle how a wrong merge is corrected — operator (2026-09-24 09:29 ET): **fix the
+  rules**. A wrong merge is a rule defect: the rule gets a new, tested version
+  and the merge re-runs on the current Stage rows, which splits the wrong
+  company (the combined `mdm_v2.company` row closes, one row per company
+  opens, the merged-away ID returns from its alias, ADR 0013). **If the rules
+  cannot fix it, quarantine** the records involved. Bronze is read only to show
+  what the wrong decision saw; the correction never reloads old versions.
+- [ ] Settle what quarantine does to the records and to `mdm_v2.company`
 - [ ] Settle field provenance after a replacement
 - [ ] Migration on a populated store, Merge Stage change, PG16 tests
