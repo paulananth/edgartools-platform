@@ -125,6 +125,27 @@ must not share an uncoordinated edit surface.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by another runtime unless explicitly instructed.
 
+## Task checklists (MUST, every ticket, every runtime)
+
+**HARD RULE: every ticket keeps its parts as a Markdown checklist in the
+ticket file itself, and keeps it current until the ticket closes, including
+while completing it.** No exception for small tickets or "last step" work.
+Operator rule, 2026-09-24.
+
+- List every part before starting: `- [ ] <part>`. Add parts that surface
+  mid-work (a decision the user took, a finding, a follow-up) as they appear.
+- Tick a part only when it is done and verified: `- [x] <part>`, naming how it
+  was verified (test, PR, live check) on the same line.
+- A part that is skipped, deferred or moved to another ticket stays on the
+  list, marked `- [ ] ~~<part>~~ deferred to <ticket>: <why>`. Never delete it.
+- Before reporting a ticket complete, re-read its checklist. Any unchecked part
+  means the report says "incomplete" and names it.
+
+**Time matters.** Stamp each checked part with its completion time in local
+ET (`2026-09-24 14:05 ET`), never UTC. Say up front when a part will take long
+(a full scan, a large test suite, a deploy), and report the elapsed time of any
+step over ten minutes, so the operator can see where the time went.
+
 ## Git/GitHub commit and PR text with backticks
 
 **Never build a `git commit -m`/`gh pr create --body`/`gh pr edit --body` string via an
