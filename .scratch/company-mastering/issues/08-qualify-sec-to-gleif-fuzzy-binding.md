@@ -62,8 +62,9 @@ Build and qualify one fuzzy binding rule family for SEC → GLEIF Company:
 
 - the candidate predicate and its named, versioned primitives, run inside the
   same Merge Stage transaction ticket 03 builds, never as a separate matcher;
-- its statistical gate per the accepted policy — Company 99.9% precision at
-  95% confidence, measured per rule family on a held-out set **independent** of
+- its statistical gate per the accepted policy — **95% precision** at a
+  one-sided 95% lower bound (confidence bands, operator 2026-09-24; was
+  99.9%), with 50-95% waiting in the Stage and below 50% going to a Steward, measured per rule family on a held-out set **independent** of
   the rule's authoring; the 308 adjudicated seed links are comparison only, not
   qualification truth;
 - ambiguous candidates defer and contribute no GLEIF fields (Q2, Q6);

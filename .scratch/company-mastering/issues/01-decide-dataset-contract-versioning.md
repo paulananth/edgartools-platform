@@ -218,3 +218,9 @@ chosen. It is the lifecycle that lets a mapping be corrected at all.
 (The limit this section first accepted — replay reaches the current and the
 previous mapping version only — is struck by amendment 9. Replay reaches every
 reading, because every reading is kept.)
+
+## Superseded in part (2026-09-24 08:33 ET)
+
+Operator: the Stage holds only the latest row per company per source, and
+bronze is the only history. The amendment that **assertions are never pruned**
+no longer stands. See [Make the Stage latest-only](10-make-the-stage-latest-only.md).

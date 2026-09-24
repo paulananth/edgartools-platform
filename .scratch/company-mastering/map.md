@@ -57,6 +57,38 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Decisions so far
 
+- **Source priority is set per entity kind** (operator, 2026-09-24 09:45 ET): when sources
+  disagree on a value, the kind's priority list decides. **Company: SEC first,
+  GLEIF next.** Each kind (Person, Fund, ...) carries its own list in the
+  Mastering Policy, changed by a new policy version, never in code. The policy
+  already holds an ordered source list per field under `kinds.<kind>.fields`;
+  the kind-level list is the default a field inherits unless it states its own.
+- **The master takes fields from every source** (operator, 2026-09-24 09:59 ET): a field only
+  one source has comes from that source; **priority decides only when the
+  field exists in more than one**. Apple's master row therefore carries SEC's
+  fields and GLEIF's fields together, SEC winning where both supply one.
+
+- **The final authority is one dated Company table** (operator, 2026-09-24 08:28 ET):
+  `mdm_v2.company`, one row per company version with CIK, LEI, other
+  cross-references, name and every identifying field, and start and end
+  dates, written only by the Merge Stage. No reader goes to two places for
+  Company information. Built by
+  [Write the versioned MDM Company table](issues/09-write-the-versioned-mdm-company-table.md).
+- **The Stage is latest-only; bronze is the only history** (operator,
+  2026-09-24 08:33 ET): one row per company per source, upserted; each row names its bronze
+  object so an older version can be re-read from S3. Reverses ticket 01's
+  "assertions are never pruned". Built by
+  [Make the Stage latest-only](issues/10-make-the-stage-latest-only.md).
+
+- **Confidence bands** (operator, 2026-09-24): for "is this a Company?" and
+  for SEC-to-GLEIF matching, a decision whose tested probability is **95% or
+  more** acts automatically; **50% to 95%** waits in the Stage, unreviewed,
+  until the rule improves; **below 50%** goes to a Steward. The automatic bar
+  falls from 99.9% to 95% for these two decisions only; publishing-ID
+  consolidation keeps 99.9%. No Steward vets public data routinely: testing
+  catches a weak rule. Recorded in
+  [the Company policy](../../docs/specs/clean-mdm/company-policy.md).
+
 - **One Company, one master record, whatever the sources** (operator,
   2026-09-24). Mastering exists because no source carries everything: SEC
   supplies the CIK, GLEIF supplies the LEI. Both source records are kept, side
