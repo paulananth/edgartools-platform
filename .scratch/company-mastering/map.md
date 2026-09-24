@@ -57,6 +57,30 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Decisions so far
 
+- **One Company, one master record, whatever the sources** (operator,
+  2026-09-24). Mastering exists because no source carries everything: SEC
+  supplies the CIK, GLEIF supplies the LEI. Both source records are kept, side
+  by side, in the Stage (`company_stage`); the mastered record
+  (`company_master`) is **one** Company holding the CIK, the LEI and the
+  selected fields from both. Two master records for one real Company is the
+  failure this effort exists to prevent, not an intermediate state to
+  consolidate later. Consequences: the SEC-to-GLEIF join (ticket 08) is on the
+  critical path, not an enrichment; and "reuses its Company by LEI" (ticket 04)
+  means an LEI already attached to that one Company, not a separate GLEIF
+  Company.
+
+- **A source record waits in the Stage until a matching rule links it**
+  (operator, 2026-09-24). A GLEIF record the rules cannot yet tie to a Company
+  stays in the Stage, tagged with its source (GLEIF), and creates no master
+  record. It joins the one Company when a matching rule links it. The matching
+  rule compares **the fields each kind declares for matching**, such as company
+  name, ticker or CUSIP. **Matching and merging rules are written per entity
+  kind, from that kind's sources**: a Company's rules compare what SEC and
+  GLEIF carry, and a Person's or Fund's rules differ. This is the policy
+  language's existing shape (`policy-language.md` §4.1: binding and
+  survivorship sit at kind level). Open: which of those fields each source
+  actually carries (ticket 08).
+
 - [Decide how a Dataset Contract version changes without re-binding every record](issues/01-decide-dataset-contract-versioning.md)
   — **a re-read adds a row instead of rewriting one; registration re-reads
   nothing by itself; and the identity parts of a contract may never change
@@ -85,6 +109,16 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   rule_version)`, not a "rule digest", and **its line is scoped to §9.3
   deterministic rules per namespace** — applied to every automatic verdict it
   made a rule accepted at 99.9% suspend itself about nine times in ten.
+
+## Added tickets
+
+- [Qualify the first SEC-to-GLEIF Company binding rule](issues/08-qualify-sec-to-gleif-fuzzy-binding.md)
+  (added 2026-09-23, blocked by 04; now blocks 05). Tickets 03 and 04 only
+  make a Company recognisable within one source: SEC and GLEIF share no
+  identifier the adapters map (SEC's own `lei` key is unmapped and was null
+  for all four Companies checked), so the first link between them needs Q4's qualified fuzzy
+  matching, which no ticket built. Without it the Proving Run would report
+  every Company as "no GLEIF match" and the milestone would look complete.
 
 ## Not yet specified
 
