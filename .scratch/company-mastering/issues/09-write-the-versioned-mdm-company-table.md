@@ -48,9 +48,15 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   configurable per entity kind in the Mastering Policy — operator (2026-09-24 09:45 ET)
 - [x] Fill rule: the master takes every field from every source; priority
   applies only when a field exists in more than one — operator (2026-09-24 09:59 ET)
-- [ ] Decide which SEC and GLEIF fields count as **the same field** (name vs
-  legal name; state of incorporation vs legal jurisdiction), which the
-  accepted field semantics currently keep separate
+- [x] Decide which SEC and GLEIF fields count as **the same field** —
+  operator (2026-09-24 10:00 ET): **name**, **jurisdiction** and **address** are one field
+  each; SEC wins when both have a value; GLEIF's value stays in the Stage as
+  evidence; jurisdiction is normalized to one code format before comparing
+  (`CA` and `US-CA` are the same). Every other field comes from whichever
+  source has it. Supersedes the accepted GLEIF field semantics that kept these
+  separate.
+- [ ] Write it as the Company rule in the Mastering Policy (per kind), not only
+  as a note
 - [ ] Build the kind-level default priority list that each field inherits
   unless it states its own
 - [ ] Migration, Merge Stage write, tests on a populated store (PG16)
