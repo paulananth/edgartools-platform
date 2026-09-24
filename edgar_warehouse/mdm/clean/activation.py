@@ -333,6 +333,35 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
         )
     if not any(t["primitive"] == "identifier_match@1" for t in tests):
         raise Conflict(f"Binding rule {rule_id} does not match an identifier")
+    if rule["on_no_match"] == "mint":
+        _check_minting_source(kind, rule, namespaces[0], kinds)
+
+
+def _check_minting_source(kind: str, rule: dict, namespace: str, kinds: dict) -> None:
+    """Only the identifier's issuer creates a Company from it.
+
+    An unlinked GLEIF record waits in the Stage (operator, 2026-09-24); a rule
+    that may create a Company must therefore be scoped to a source that
+    issues its namespace, never left open to every source.
+    """
+    rule_id = rule.get("rule_id")
+    source = rule.get("source")
+    if not source:
+        raise Conflict(f"Binding rule {rule_id} creates Companies but names no source")
+    # Fail closed: without its own kind's contract naming the issuer, a rule
+    # that creates Companies is refused even while it is inactive.
+    contract = ((kinds.get(kind) or {}).get("identifiers") or {}).get(namespace)
+    issuers = (contract or {}).get("sources")
+    if not issuers:
+        raise Conflict(
+            f"Binding rule {rule_id} creates Companies, but kind {kind} has no "
+            f"Identifier Contract naming an issuing source for {namespace}"
+        )
+    if source not in issuers:
+        raise Conflict(
+            f"Binding rule {rule_id} creates Companies from {source}, which "
+            f"does not issue {namespace}: {issuers}"
+        )
 
 
 def _check_classification_rule(kind: str, rule: dict, kinds: dict) -> None:

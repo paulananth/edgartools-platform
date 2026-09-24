@@ -35,9 +35,11 @@ APPLE_LEI = "HWUPKR0MPOU8FGXBT394"
 # (it issues LEIs). Only the issuer's record creates a Company; any record may
 # join one through an identifier the issuer's record established (Q14).
 CIK_MINT = {**CIK_RULE, "source": "fixture.primary"}
-CIK_JOIN = {**CIK_RULE, "rule_id": "company-cik-join", "on_no_match": "wait"}
+# A rule that only joins may come from any source, so it names none.
+UNSCOPED_RULE = {k: v for k, v in CIK_RULE.items() if k != "source"}
+CIK_JOIN = {**UNSCOPED_RULE, "rule_id": "company-cik-join", "on_no_match": "wait"}
 LEI_RULE = {
-    **CIK_RULE,
+    **UNSCOPED_RULE,
     "rule_id": "company-lei",
     "on_no_match": "wait",
     "when": [
@@ -200,6 +202,32 @@ def test_a_record_carrying_both_ids_does_not_attach_its_lei(database):
     load(database, policy, "b1", record("a", cik=APPLE_CIK, lei=APPLE_LEI))
     gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
     load(database, policy, "b2", gleif, checkpoint=2)
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 1
+
+
+def test_a_hand_matched_record_does_not_attach_its_lei_within_the_batch(database):
+    """Ticket 11, gap 2: Q14 holds inside one batch too.
+
+    The caller binds an SEC record that also carries an LEI; a GLEIF record
+    with that LEI in the same batch must not join through it.
+    """
+    policy = matching_policy(database)
+    sec = record("a", cik=APPLE_CIK, lei=APPLE_LEI)
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    identity, bind = core.identity_and_binding(sec)
+    MergeStage(Store(database.application)).apply(
+        batch_id="b1",
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer="load",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        assertions=[sec, gleif],
+        identities=[identity],
+        decisions=[bind],
+    )
     (only,) = companies(database).values()
     assert len(only["subjects"]) == 1
 
