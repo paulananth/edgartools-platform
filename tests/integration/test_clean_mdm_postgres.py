@@ -429,7 +429,7 @@ def test_reviewed_binding_and_disabled_automatic_matching(database):
     assert all(not r["open"] for r in documents(database, "review").values())
     with (
         database.admin.begin() as conn,
-        pytest.raises(ValueError, match="No qualified"),
+        pytest.raises(ValueError, match="must be an object naming a rule"),
     ):
         register_policy(
             conn, {"required_consumers": ["export"], "automatic_rules": ["exact"]}

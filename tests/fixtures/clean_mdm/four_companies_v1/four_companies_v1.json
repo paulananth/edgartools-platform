@@ -1,0 +1,572 @@
+{
+ "gleif": [
+  {
+   "Entity": {
+    "EntityCategory": {
+     "$": "GENERAL"
+    },
+    "EntityCreationDate": {
+     "$": "2002-02-05T00:00:00Z"
+    },
+    "EntityStatus": {
+     "$": "ACTIVE"
+    },
+    "HeadquartersAddress": {
+     "@xml:lang": "en",
+     "City": {
+      "$": "LONDON"
+     },
+     "Country": {
+      "$": "GB"
+     },
+     "FirstAddressLine": {
+      "$": "SHELL CENTRE"
+     },
+     "PostalCode": {
+      "$": "SE1 7NA"
+     },
+     "Region": {
+      "$": "GB-LND"
+     }
+    },
+    "LegalAddress": {
+     "@xml:lang": "en",
+     "City": {
+      "$": "LONDON"
+     },
+     "Country": {
+      "$": "GB"
+     },
+     "FirstAddressLine": {
+      "$": "SHELL CENTRE"
+     },
+     "PostalCode": {
+      "$": "SE1 7NA"
+     },
+     "Region": {
+      "$": "GB-LND"
+     }
+    },
+    "LegalForm": {
+     "EntityLegalFormCode": {
+      "$": "B6ES"
+     }
+    },
+    "LegalJurisdiction": {
+     "$": "GB"
+    },
+    "LegalName": {
+     "$": "SHELL PLC",
+     "@xml:lang": "en"
+    },
+    "OtherEntityNames": {
+     "OtherEntityName": [
+      {
+       "$": "ROYAL DUTCH SHELL PLC",
+       "@type": "PREVIOUS_LEGAL_NAME",
+       "@xml:lang": "en"
+      }
+     ]
+    },
+    "RegistrationAuthority": {
+     "RegistrationAuthorityEntityID": {
+      "$": "04366849"
+     },
+     "RegistrationAuthorityID": {
+      "$": "RA000585"
+     }
+    }
+   },
+   "Extension": {
+    "gleif:conformity": {
+     "gleif:conformityflag": {
+      "$": "CONFORMING"
+     }
+    }
+   },
+   "LEI": {
+    "$": "21380068P1DRHMJ8KU70"
+   },
+   "Registration": {
+    "InitialRegistrationDate": {
+     "$": "2016-06-30T00:00:00Z"
+    },
+    "LastUpdateDate": {
+     "$": "2026-05-12T08:40:56.083Z"
+    },
+    "ManagingLOU": {
+     "$": "213800WAVVOPS85N2205"
+    },
+    "NextRenewalDate": {
+     "$": "2027-07-04T00:00:00Z"
+    },
+    "RegistrationStatus": {
+     "$": "ISSUED"
+    },
+    "ValidationAuthority": {
+     "ValidationAuthorityEntityID": {
+      "$": "04366849"
+     },
+     "ValidationAuthorityID": {
+      "$": "RA000585"
+     }
+    },
+    "ValidationSources": {
+     "$": "FULLY_CORROBORATED"
+    }
+   }
+  },
+  {
+   "Entity": {
+    "EntityCategory": {
+     "$": "GENERAL"
+    },
+    "EntityCreationDate": {
+     "$": "1994-10-03T00:00:00.000+01:00"
+    },
+    "EntityStatus": {
+     "$": "ACTIVE"
+    },
+    "HeadquartersAddress": {
+     "@xml:lang": "nl",
+     "City": {
+      "$": "Veldhoven"
+     },
+     "Country": {
+      "$": "NL"
+     },
+     "FirstAddressLine": {
+      "$": "De Run 6501"
+     },
+     "PostalCode": {
+      "$": "5504DR"
+     }
+    },
+    "LegalAddress": {
+     "@xml:lang": "nl",
+     "City": {
+      "$": "Veldhoven"
+     },
+     "Country": {
+      "$": "NL"
+     },
+     "FirstAddressLine": {
+      "$": "De Run 6501"
+     },
+     "PostalCode": {
+      "$": "5504DR"
+     }
+    },
+    "LegalForm": {
+     "EntityLegalFormCode": {
+      "$": "B5PM"
+     }
+    },
+    "LegalJurisdiction": {
+     "$": "NL"
+    },
+    "LegalName": {
+     "$": "ASML Holding N.V.",
+     "@xml:lang": "nl"
+    },
+    "RegistrationAuthority": {
+     "RegistrationAuthorityEntityID": {
+      "$": "17085815"
+     },
+     "RegistrationAuthorityID": {
+      "$": "RA000463"
+     }
+    }
+   },
+   "Extension": {
+    "gleif:conformity": {
+     "gleif:conformityflag": {
+      "$": "CONFORMING"
+     }
+    }
+   },
+   "LEI": {
+    "$": "724500Y6DUVHQD6OXN27"
+   },
+   "Registration": {
+    "InitialRegistrationDate": {
+     "$": "2014-02-10T00:00:00.000+01:00"
+    },
+    "LastUpdateDate": {
+     "$": "2026-02-10T07:10:40.916+01:00"
+    },
+    "ManagingLOU": {
+     "$": "724500A93Z8V1MJK5349"
+    },
+    "NextRenewalDate": {
+     "$": "2027-02-10T12:30:37.884+01:00"
+    },
+    "RegistrationStatus": {
+     "$": "ISSUED"
+    },
+    "ValidationAuthority": {
+     "ValidationAuthorityEntityID": {
+      "$": "17085815"
+     },
+     "ValidationAuthorityID": {
+      "$": "RA000463"
+     }
+    },
+    "ValidationSources": {
+     "$": "FULLY_CORROBORATED"
+    }
+   }
+  },
+  {
+   "Entity": {
+    "EntityCategory": {
+     "$": "GENERAL"
+    },
+    "EntityCreationDate": {
+     "$": "1977-01-03T00:00:00.000Z"
+    },
+    "EntityStatus": {
+     "$": "ACTIVE"
+    },
+    "HeadquartersAddress": {
+     "@xml:lang": "en",
+     "City": {
+      "$": "Cupertino"
+     },
+     "Country": {
+      "$": "US"
+     },
+     "FirstAddressLine": {
+      "$": "One Apple Park Way"
+     },
+     "PostalCode": {
+      "$": "95014"
+     },
+     "Region": {
+      "$": "US-CA"
+     }
+    },
+    "LegalAddress": {
+     "@xml:lang": "en",
+     "AdditionalAddressLine": [
+      {
+       "$": "330 N. Brand Blvd"
+      },
+      {
+       "$": "Suite 700"
+      }
+     ],
+     "City": {
+      "$": "Glendale"
+     },
+     "Country": {
+      "$": "US"
+     },
+     "FirstAddressLine": {
+      "$": "C/O C T Corporation System"
+     },
+     "PostalCode": {
+      "$": "91203"
+     },
+     "Region": {
+      "$": "US-CA"
+     }
+    },
+    "LegalForm": {
+     "EntityLegalFormCode": {
+      "$": "H1UM"
+     }
+    },
+    "LegalJurisdiction": {
+     "$": "US-CA"
+    },
+    "LegalName": {
+     "$": "Apple Inc.",
+     "@xml:lang": "en"
+    },
+    "OtherEntityNames": {
+     "OtherEntityName": [
+      {
+       "$": "Apple Computer, Inc.",
+       "@type": "PREVIOUS_LEGAL_NAME",
+       "@xml:lang": "en"
+      }
+     ]
+    },
+    "RegistrationAuthority": {
+     "RegistrationAuthorityEntityID": {
+      "$": "806592"
+     },
+     "RegistrationAuthorityID": {
+      "$": "RA000598"
+     }
+    }
+   },
+   "Extension": {
+    "gleif:conformity": {
+     "gleif:conformityflag": {
+      "$": "CONFORMING"
+     }
+    }
+   },
+   "LEI": {
+    "$": "HWUPKR0MPOU8FGXBT394"
+   },
+   "Registration": {
+    "InitialRegistrationDate": {
+     "$": "2012-06-06T15:53:00.000Z"
+    },
+    "LastUpdateDate": {
+     "$": "2026-03-03T16:34:33.150Z"
+    },
+    "ManagingLOU": {
+     "$": "5493001KJTIIGC8Y1R12"
+    },
+    "NextRenewalDate": {
+     "$": "2027-03-08T17:27:20.923Z"
+    },
+    "RegistrationStatus": {
+     "$": "ISSUED"
+    },
+    "ValidationAuthority": {
+     "ValidationAuthorityEntityID": {
+      "$": "806592"
+     },
+     "ValidationAuthorityID": {
+      "$": "RA000598"
+     }
+    },
+    "ValidationSources": {
+     "$": "FULLY_CORROBORATED"
+    }
+   }
+  },
+  {
+   "Entity": {
+    "EntityCategory": {
+     "$": "GENERAL"
+    },
+    "EntityCreationDate": {
+     "$": "1993-09-22T00:00:00Z"
+    },
+    "EntityStatus": {
+     "$": "ACTIVE"
+    },
+    "HeadquartersAddress": {
+     "@xml:lang": "en",
+     "City": {
+      "$": "REDMOND"
+     },
+     "Country": {
+      "$": "US"
+     },
+     "FirstAddressLine": {
+      "$": "ONE MICROSOFT WAY"
+     },
+     "PostalCode": {
+      "$": "98052-8300"
+     },
+     "Region": {
+      "$": "US-WA"
+     }
+    },
+    "LegalAddress": {
+     "@xml:lang": "en",
+     "City": {
+      "$": "TUMWATER"
+     },
+     "Country": {
+      "$": "US"
+     },
+     "FirstAddressLine": {
+      "$": "300 DESCHUTES WAY SW STE 208 MC-CSC1"
+     },
+     "PostalCode": {
+      "$": "98501"
+     },
+     "Region": {
+      "$": "US-WA"
+     }
+    },
+    "LegalForm": {
+     "EntityLegalFormCode": {
+      "$": "NHYA"
+     }
+    },
+    "LegalJurisdiction": {
+     "$": "US-WA"
+    },
+    "LegalName": {
+     "$": "MICROSOFT CORPORATION",
+     "@xml:lang": "en"
+    },
+    "RegistrationAuthority": {
+     "RegistrationAuthorityEntityID": {
+      "$": "600 413 485"
+     },
+     "RegistrationAuthorityID": {
+      "$": "RA000641"
+     }
+    }
+   },
+   "Extension": {
+    "gleif:conformity": {
+     "gleif:conformityflag": {
+      "$": "CONFORMING"
+     }
+    }
+   },
+   "LEI": {
+    "$": "INR2EJN1ERAN0W5ZP974"
+   },
+   "Registration": {
+    "InitialRegistrationDate": {
+     "$": "2012-06-06T15:55:00Z"
+    },
+    "LastUpdateDate": {
+     "$": "2026-04-07T09:26:31.880Z"
+    },
+    "ManagingLOU": {
+     "$": "213800WAVVOPS85N2205"
+    },
+    "NextRenewalDate": {
+     "$": "2027-05-04T00:00:00Z"
+    },
+    "RegistrationStatus": {
+     "$": "ISSUED"
+    },
+    "ValidationAuthority": {
+     "ValidationAuthorityEntityID": {
+      "$": "600 413 485"
+     },
+     "ValidationAuthorityID": {
+      "$": "RA000641"
+     }
+    },
+    "ValidationSources": {
+     "$": "FULLY_CORROBORATED"
+    }
+   }
+  }
+ ],
+ "purpose": "operator-picked Companies (AAPL, MSFT, Shell, ASML) plus two individual controls; test selection, not matching evidence",
+ "sec": [
+  {
+   "category": "Large accelerated filer",
+   "cik": 320193,
+   "description": "",
+   "ein": "942404110",
+   "entity_name": "Apple Inc.",
+   "entity_type": "operating",
+   "fiscal_year_end": "0926",
+   "last_sync_run_id": "bronze-fixture",
+   "load_mode": "fixture",
+   "raw_object_id": "ea2aa552e984a29e920cf80e0827cf32b632563935f029b6ec9de7f4fa3c026d",
+   "sic": "3571",
+   "sic_description": "Electronic Computers",
+   "state_of_incorporation": "CA",
+   "state_of_incorporation_desc": "CA",
+   "sync_run_id": "bronze-fixture"
+  },
+  {
+   "category": "Large accelerated filer",
+   "cik": 789019,
+   "description": "",
+   "ein": "911144442",
+   "entity_name": "MICROSOFT CORP",
+   "entity_type": "operating",
+   "fiscal_year_end": "0630",
+   "last_sync_run_id": "bronze-fixture",
+   "load_mode": "fixture",
+   "raw_object_id": "d160f4a66799b1eb9d8709bfb82e94230c01f28cce0bffd395ecc67d0a5914cd",
+   "sic": "7372",
+   "sic_description": "Services-Prepackaged Software",
+   "state_of_incorporation": "WA",
+   "state_of_incorporation_desc": "WA",
+   "sync_run_id": "bronze-fixture"
+  },
+  {
+   "category": "Large accelerated filer",
+   "cik": 1306965,
+   "description": "",
+   "ein": "000000000",
+   "entity_name": "Shell plc",
+   "entity_type": "other",
+   "fiscal_year_end": "1231",
+   "last_sync_run_id": "bronze-fixture",
+   "load_mode": "fixture",
+   "raw_object_id": "28c1d3889afb0b5ecb5f19744283d7a8ebaa5dfabb2df8975574f69a95f227d5",
+   "sic": "1311",
+   "sic_description": "Crude Petroleum & Natural Gas",
+   "state_of_incorporation": "DC",
+   "state_of_incorporation_desc": "DC",
+   "sync_run_id": "bronze-fixture"
+  },
+  {
+   "category": "Large accelerated filer",
+   "cik": 937966,
+   "description": "",
+   "ein": "000000000",
+   "entity_name": "ASML HOLDING NV",
+   "entity_type": "other",
+   "fiscal_year_end": "1231",
+   "last_sync_run_id": "bronze-fixture",
+   "load_mode": "fixture",
+   "raw_object_id": "356fe866aa5c44d09e93ed9089331070e01375d144db12dd7c0a10327f425d98",
+   "sic": "3559",
+   "sic_description": "Special Industry Machinery, NEC",
+   "state_of_incorporation": "",
+   "state_of_incorporation_desc": "",
+   "sync_run_id": "bronze-fixture"
+  },
+  {
+   "category": "",
+   "cik": 1214156,
+   "description": "",
+   "ein": null,
+   "entity_name": "COOK TIMOTHY D",
+   "entity_type": "other",
+   "fiscal_year_end": null,
+   "last_sync_run_id": "bronze-fixture",
+   "load_mode": "fixture",
+   "raw_object_id": "14ed1a610756418dd5e0ee35d7eef5ac196f4f91fa096c6ff1e98de6dacb60da",
+   "sic": "",
+   "sic_description": "",
+   "state_of_incorporation": "",
+   "state_of_incorporation_desc": "",
+   "sync_run_id": "bronze-fixture"
+  },
+  {
+   "category": "",
+   "cik": 1513142,
+   "description": "",
+   "ein": null,
+   "entity_name": "Nadella Satya",
+   "entity_type": "other",
+   "fiscal_year_end": null,
+   "last_sync_run_id": "bronze-fixture",
+   "load_mode": "fixture",
+   "raw_object_id": "ce3f4d6bbffccc02b62994a842a33fa823a035c5fa80fe8b23de9c53807c1739",
+   "sic": "",
+   "sic_description": "",
+   "state_of_incorporation": "",
+   "state_of_incorporation_desc": "",
+   "sync_run_id": "bronze-fixture"
+  }
+ ],
+ "sources": {
+  "gleif_golden_copy": {
+   "file": "01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip",
+   "publication_utc": "2026-09-11 16:00:00",
+   "selection": "LegalName equals one of four names exactly",
+   "sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
+  },
+  "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/submissions/sec/cik=1214156/main/2026/09/12/CIK0001214156.json": "14ed1a610756418dd5e0ee35d7eef5ac196f4f91fa096c6ff1e98de6dacb60da",
+  "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/submissions/sec/cik=1306965/main/2026/07/02/CIK0001306965.json": "28c1d3889afb0b5ecb5f19744283d7a8ebaa5dfabb2df8975574f69a95f227d5",
+  "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/submissions/sec/cik=1513142/main/2026/09/02/CIK0001513142.json": "ce3f4d6bbffccc02b62994a842a33fa823a035c5fa80fe8b23de9c53807c1739",
+  "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/submissions/sec/cik=320193/main/2026/07/02/CIK0000320193.json": "ea2aa552e984a29e920cf80e0827cf32b632563935f029b6ec9de7f4fa3c026d",
+  "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/submissions/sec/cik=789019/main/2026/07/02/CIK0000789019.json": "d160f4a66799b1eb9d8709bfb82e94230c01f28cce0bffd395ecc67d0a5914cd",
+  "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/submissions/sec/cik=937966/main/2026/06/27/CIK0000937966.json": "356fe866aa5c44d09e93ed9089331070e01375d144db12dd7c0a10327f425d98"
+ },
+ "version": 1
+}

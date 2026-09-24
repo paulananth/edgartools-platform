@@ -41,6 +41,8 @@ def native_fixture(
     publication="2026-09-11T16:00:00Z",
     previous=None,
     additional_level1=None,
+    policy=None,
+    company_leis=None,
 ):
     capture = sources.Capture(source_db, root)
     codes = {
@@ -53,7 +55,7 @@ def native_fixture(
         "native_contract": {
             "version": VERSION,
             "record_sources": codes,
-            "company_leis": [lei],
+            "company_leis": company_leis or [lei],
         },
         "publication_contract": {
             "version": 1,
@@ -164,7 +166,7 @@ def native_fixture(
     )
     run = {
         "contract_version": 2,
-        "policy_digest": database.policy,
+        "policy_digest": policy or database.policy,
         "as_of": "2026-09-20T00:00:00Z",
         "native_source": {
             "source_code": "gleif.publication.v1",

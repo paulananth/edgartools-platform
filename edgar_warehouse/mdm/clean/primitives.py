@@ -177,6 +177,13 @@ REGISTRY = MappingProxyType(
 )
 
 
+def primitive_family(name: Any) -> str:
+    """The family a named test belongs to. An unknown pair is refused by name."""
+    if name not in REGISTRY:
+        raise UnknownPrimitive(f"Policy names an unknown primitive: {name}")
+    return REGISTRY[name].family
+
+
 def call(name: str, args: dict, record: dict, doc: dict) -> Any:
     """Run one named test. An unknown pair is refused by name, fail closed."""
     if name not in REGISTRY:

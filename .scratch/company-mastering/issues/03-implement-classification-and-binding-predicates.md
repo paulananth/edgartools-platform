@@ -23,6 +23,52 @@ Proves: reordered and duplicate input, stale assessment rejection, lost
 acknowledgement, retained field conflicts, reversal of an incorrect merge, and
 a stable surviving ID.
 
+## Checklist
+
+Kept current per the task-checklist rule (CLAUDE.md, 2026-09-24). Times are
+local ET; parts finished before the rule existed carry their date only.
+
+- [x] Versioning seam: migration 031, revision guard re-keyed, per-kind field
+  rules — `6cc6ee09`, `44903e41`, PG16 (2026-09-22, time not recorded)
+- [x] Deferred record checks its reading (migration 032); kind digest narrowed
+  to authority sections; Company policy under `kinds.company` — PG16
+  (2026-09-23, time not recorded)
+- [x] Profile field records its role's digest — #696 (2026-09-23)
+- [x] Per-kind Stage and Master views — #699, #700 (2026-09-23)
+- [x] `classify` reports the step that fired; one well-formedness check shared
+  by registration and evaluation (`classification.check_rule`) — unit tests
+  (2026-09-24 07:05 ET)
+- [x] Registration checks §10 1, 2, 6 and 9 (`activation.check_policy`,
+  `rule_version_conflicts`) — unit + PG16 (2026-09-24 07:20 ET)
+- [x] Blanket `automatic_rules` refusal replaced by the §9.2 measured
+  activation check, at registration and again per batch; accepted bar floors
+  per kind (Company 99.9% at 95%, Person 99% at 97.5%) — unit + PG16
+  (2026-09-24 07:20 ET)
+- [x] Read path runs the rule a Dataset Contract names; rule id, version and
+  step recorded in the hashed provenance; an unactivated or non-kind verdict
+  is set aside with its rule — unit + PG16 (2026-09-24 07:15 ET)
+- [x] Four operator-picked Companies (AAPL, MSFT, Shell, ASML) from real SEC
+  bronze and the pinned GLEIF golden copy, plus two individual controls — PG16
+  `test_clean_four_companies.py` (2026-09-24 07:18 ET)
+- [ ] Three-axis `/code-review` of this branch
+- [ ] PR opened and CI green
+- [ ] Binding predicates replacing the binding refusal — needs ticket 04's
+  identifier primitives; binding rules and `deterministic` activation are
+  refused by name until then
+- [ ] Merge Stage mints entity ids inside its transaction (ADR 0013), shipped
+  together with widening `assessment_snapshot` to the candidate key
+- [ ] Suspension table keyed `(policy_digest, kind, family, rule_id,
+  rule_version)`, scoped to §9.3 deterministic verdicts
+- [ ] Group-aware field selection (`field_group`)
+- [ ] ~~Measured proof for the SEC Company classification rule~~ deferred to
+  the Proving Run (ticket 05) and activation approval (ticket 06): the rule in
+  the four-company test is a candidate carrying a fixture proof
+- [ ] ~~Fix the warehouse demoting every SEC `entityType: "other"` filer to
+  `non_company`~~ reported to the operator, not in this ticket: found by
+  reading `is_reporting_company_entity_type`, not by a live check
+- [ ] ~~Registration check 3 (declared lists valid under their normalizer)~~
+  not built; no registered policy carries a declared list yet
+
 ## Resolution decisions (operator, 2026-09-23)
 
 The ticket said "nothing to decide". Building it surfaced six, all taken one

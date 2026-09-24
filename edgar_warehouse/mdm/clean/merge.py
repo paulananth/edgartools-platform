@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from . import assessment, relationships
+from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
 from .store import Conflict, Store, canonical, digest, rows
@@ -300,8 +301,12 @@ class MergeStage:
                 text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
                 {"digest": policy_digest},
             )
-            if policy is None or policy.get("automatic_rules"):
+            if policy is None:
                 raise Conflict("Unknown or unqualified policy")
+            # Again per batch, not only at registration: a body that reached
+            # the store another way, or a build that no longer holds a named
+            # primitive, is refused here the same way (`policy-language.md` §10).
+            check_policy(policy)
             stored_a, stored_d, stored_ids = load_closure(
                 conn, assertions, decisions, limit=self.closure_limit
             )

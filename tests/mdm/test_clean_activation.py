@@ -1,0 +1,245 @@
+"""Which rules a Mastering Policy may hold, and which verdicts may act alone.
+
+A rule in a policy is **declared** until an `automatic_rules` entry makes one
+of its verdicts **active** (`policy-language.md` §9). This module is the check
+that replaces the blanket refusal: a body is refused, by name and with its
+reason, unless every rule is well formed (§10) and every activation carries a
+proof whose arithmetic holds against the kind's accepted bar (§9.2).
+
+What it verifies is arithmetic, not truth: a fabricated `n: 1000, correct:
+1000` passes. Attribution and an outside re-score are the defences (§9.2).
+"""
+
+from __future__ import annotations
+
+import copy
+
+import pytest
+
+from edgar_warehouse.mdm.clean.activation import (
+    activated,
+    check_policy,
+    rule_version_conflicts,
+    wilson_lower_bound,
+)
+from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
+from edgar_warehouse.mdm.clean.store import Conflict
+
+RULE = {
+    "rule_id": "sec-company",
+    "version": "2026-09-24",
+    "family": "classification",
+    "emits": ["company", "deferred"],
+    "steps": [
+        {
+            "step": "1",
+            "verdict": "company",
+            "when": [
+                {
+                    "primitive": "field_in_set@1",
+                    "args": {"field": "entity_type", "values": ["operating"]},
+                }
+            ],
+        },
+        {"step": "2", "verdict": "deferred", "otherwise": True},
+    ],
+}
+
+BAR = {
+    "min_precision": 0.999,
+    "method": "wilson_lower_bound",
+    "one_sided_confidence": 0.95,
+}
+
+
+def proof(n=3000, correct=3000, confidence=0.95, **changes):
+    if "lower_bound" not in changes and 0 <= correct <= n:
+        changes["lower_bound"] = round(wilson_lower_bound(correct, n, confidence), 6)
+    body = {
+        "method": "wilson_lower_bound",
+        "one_sided_confidence": confidence,
+        "n": n,
+        "correct": correct,
+        "lower_bound": None,
+        "adversarial": {"fixture_sha256": "a" * 64, "violations": 0},
+        "cohort": {"files": {"sample.jsonl": "b" * 64}},
+        "approved_by": "operator",
+        "approved_at": "2026-09-24T12:00:00Z",
+        "reason": "fixture proof: arithmetic only, not a measurement",
+    }
+    body.update(changes)
+    return body
+
+
+def entry(**changes):
+    body = {
+        "kind": "company",
+        "family": "classification",
+        "rule_id": "sec-company",
+        "rule_version": "2026-09-24",
+        "verdict": "company",
+        "activation": "measured",
+        "proof": proof(),
+    }
+    body.update(changes)
+    return body
+
+
+def policy(rules=None, automatic=None, bars=None):
+    return {
+        "version": "test",
+        "required_consumers": ["journal"],
+        "automatic_rules": automatic if automatic is not None else [],
+        "kinds": {
+            "company": {
+                "version": "company-test",
+                "rules": rules if rules is not None else [RULE],
+                "bars": bars if bars is not None else {"classification": BAR},
+            }
+        },
+    }
+
+
+class TestTheArithmetic:
+    def test_a_perfect_sample_reproduces_the_spec_example(self):
+        """`policy-language.md` §9.2: n 841, all correct, 97.5% -> 0.99545."""
+        assert round(wilson_lower_bound(841, 841, 0.975), 5) == 0.99545
+
+    def test_a_perfect_sample_of_3000_clears_the_company_bar(self):
+        assert wilson_lower_bound(3000, 3000, 0.95) >= 0.999
+
+    def test_a_perfect_sample_of_1000_does_not(self):
+        """Company's 99.9% bar needs a sample, not a clean streak of any size."""
+        assert wilson_lower_bound(1000, 1000, 0.95) < 0.999
+
+
+class TestADeclaredRuleIsWellFormed:
+    def test_a_policy_declaring_rules_without_activating_them_passes(self):
+        check_policy(policy())
+
+    def test_an_unknown_primitive_is_refused_at_registration(self):
+        """§10 check 1: refused when registered, not when a record reaches it."""
+        rule = copy.deepcopy(RULE)
+        rule["steps"][0]["when"][0]["primitive"] = "invented@1"
+        with pytest.raises(UnknownPrimitive, match="invented@1"):
+            check_policy(policy(rules=[rule]))
+
+    def test_a_rule_without_exactly_one_catch_all_is_refused(self):
+        """§10 check 2."""
+        rule = {**RULE, "steps": RULE["steps"][:1]}
+        with pytest.raises(Conflict, match="exactly one otherwise"):
+            check_policy(policy(rules=[rule]))
+        doubled = {**RULE, "steps": [*RULE["steps"], RULE["steps"][-1]]}
+        with pytest.raises(Conflict, match="exactly one otherwise"):
+            check_policy(policy(rules=[doubled]))
+
+    def test_a_step_naming_an_undeclared_verdict_is_refused(self):
+        rule = copy.deepcopy(RULE)
+        rule["steps"][0]["verdict"] = "person"
+        with pytest.raises(Conflict, match="person"):
+            check_policy(policy(rules=[rule]))
+
+    def test_a_catch_all_written_as_an_empty_when_is_refused(self):
+        rule = copy.deepcopy(RULE)
+        rule["steps"][0]["when"] = []
+        with pytest.raises(Conflict, match="otherwise"):
+            check_policy(policy(rules=[rule]))
+
+    def test_two_rules_sharing_an_id_and_version_in_one_body_are_refused(self):
+        with pytest.raises(Conflict, match="sec-company"):
+            check_policy(policy(rules=[RULE, RULE]))
+
+    def test_a_binding_rule_is_refused_by_name_until_ticket_04(self):
+        """Binding primitives do not exist yet; a declared one would do nothing."""
+        binding = {"rule_id": "cik", "version": "1", "family": "binding"}
+        with pytest.raises(Conflict, match="binding rules are not implemented"):
+            check_policy(policy(rules=[RULE, binding]))
+
+
+class TestARuleVersionNamesOneSetOfSteps:
+    """§10 check 9: the pin the per-kind digest cannot provide."""
+
+    def test_the_same_rule_registered_twice_is_not_a_conflict(self):
+        assert rule_version_conflicts(policy(), [policy()]) == []
+
+    def test_different_steps_under_one_version_are_refused(self):
+        edited = copy.deepcopy(RULE)
+        edited["steps"][0]["when"][0]["args"]["values"] = ["operating", "other"]
+        assert rule_version_conflicts(policy(rules=[edited]), [policy()]) == [
+            ("company", "sec-company", "2026-09-24")
+        ]
+
+    def test_a_new_version_is_free(self):
+        edited = copy.deepcopy(RULE)
+        edited["version"] = "2026-09-25"
+        edited["steps"][0]["when"][0]["args"]["values"] = ["operating", "other"]
+        assert rule_version_conflicts(policy(rules=[edited]), [policy()]) == []
+
+    def test_a_body_with_no_kinds_block_holds_no_rules(self):
+        assert rule_version_conflicts(policy(), [{"fields": {}}]) == []
+
+
+class TestAnActivationCarriesItsProof:
+    def test_a_measured_activation_that_clears_the_bar_passes(self):
+        body = policy(automatic=[entry()])
+        check_policy(body)
+        assert activated(body, "company", RULE, "company")
+        assert not activated(body, "company", RULE, "deferred")
+
+    def test_nothing_is_active_without_an_entry(self):
+        assert not activated(policy(), "company", RULE, "company")
+
+    def test_an_entry_for_another_rule_version_does_not_activate_this_one(self):
+        """A rule edited after its proof is orphaned (§9.2)."""
+        body = policy(automatic=[entry()])
+        assert not activated(body, "company", {**RULE, "version": "x"}, "company")
+
+    @pytest.mark.parametrize(
+        ("changes", "reason"),
+        [
+            ({"rule_id": "absent"}, "absent"),
+            ({"rule_version": "2026-09-23"}, "2026-09-23"),
+            ({"verdict": "person"}, "person"),
+            ({"verdict": "deferred"}, "deferred"),
+            ({"activation": "deterministic"}, "deterministic"),
+            ({"family": "binding"}, "binding"),
+            ({"kind": "fund"}, "fund"),
+            ({"proof": proof(n=1000, correct=1000)}, "below the company bar"),
+            ({"proof": proof(lower_bound=0.9995)}, "does not reproduce"),
+            ({"proof": proof(confidence=0.9)}, "confidence"),
+            ({"proof": proof(method="point_estimate")}, "method"),
+            (
+                {
+                    "proof": proof(
+                        adversarial={"fixture_sha256": "a" * 64, "violations": 1}
+                    )
+                },
+                "adversarial",
+            ),
+            ({"proof": proof(cohort={"files": {}})}, "cohort"),
+            ({"proof": proof(approved_by="")}, "approval"),
+            ({"proof": proof(correct=3001)}, "sample"),
+        ],
+    )
+    def test_an_activation_that_does_not_hold_is_refused(self, changes, reason):
+        with pytest.raises(Conflict, match=reason):
+            check_policy(policy(automatic=[entry(**changes)]))
+
+    def test_a_bar_the_document_lowers_below_the_accepted_one_is_refused(self):
+        """The document may raise its bar, never lower it (ticket 02, decision 4)."""
+        lowered = {**BAR, "min_precision": 0.99}
+        with pytest.raises(Conflict, match="accepted"):
+            check_policy(policy(bars={"classification": lowered}))
+
+    def test_a_kind_with_no_bar_for_the_family_cannot_activate(self):
+        with pytest.raises(Conflict, match="no bar"):
+            check_policy(policy(automatic=[entry()], bars={}))
+
+    def test_one_verdict_is_activated_once(self):
+        """§10 check 6: no duplicate (kind, family, rule_id, verdict)."""
+        with pytest.raises(Conflict, match="twice"):
+            check_policy(policy(automatic=[entry(), entry()]))
+
+    def test_a_legacy_string_entry_is_refused(self):
+        with pytest.raises(Conflict, match="entry"):
+            check_policy(policy(automatic=["exact"]))

@@ -5,15 +5,23 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .evidence import assertion, subject_key
-from .store import canonical
+from .activation import activated
+from .classification import fired, resolve_rule
+from .evidence import KINDS, assertion, subject_key
+from .store import Conflict, canonical
 
 
 class UnsupportedRecord(ValueError):
-    """A source defect or unsupported domain, not an adapter programming error."""
+    """A source defect or unsupported domain, not an adapter programming error.
 
-    def __init__(self, reason: str):
+    `detail` is what the deferred record keeps beside its reason, so a record
+    set aside by a classification rule still names the rule, version, step and
+    verdict that set it aside.
+    """
+
+    def __init__(self, reason: str, detail: dict | None = None):
         self.reason = reason
+        self.detail = detail or {}
         super().__init__(reason)
 
 
@@ -57,6 +65,40 @@ def record_key(row: dict, paths: list[str]) -> str:
     return str(parts[0]) if len(parts) == 1 else canonical(parts)
 
 
+def classify_record(row: dict, named: dict, policy: dict | None) -> tuple[str, dict]:
+    """Run the classification rule a Dataset Contract names, at read time.
+
+    The decided kind is hashed into the assertion id, so it is settled here and
+    never afterwards (company mastering ticket 03, decision 4). A verdict that
+    decides no kind, or one the policy has not activated, sets the record aside
+    for a Steward with the rule that decided it; it never becomes a kind by
+    default (`policy-language.md` §6, §9).
+    """
+    if policy is None:
+        raise Conflict(
+            "A Dataset Contract naming a classification rule requires its pinned "
+            "Mastering Policy"
+        )
+    rule = resolve_rule(policy, named)
+    verdict, step = fired(rule, row, policy["kinds"][named["kind"]])
+    labelled = {
+        "rule_id": rule["rule_id"],
+        "version": rule["version"],
+        "step": step,
+    }
+    if verdict not in KINDS:
+        raise UnsupportedRecord(
+            f"classification_{verdict}",
+            {"classification": {**labelled, "verdict": verdict}},
+        )
+    if not activated(policy, named["kind"], rule, verdict):
+        raise UnsupportedRecord(
+            "classification_not_activated",
+            {"classification": {**labelled, "verdict": verdict}},
+        )
+    return verdict, labelled
+
+
 def normalize(
     row: dict,
     *,
@@ -64,18 +106,26 @@ def normalize(
     contract: dict,
     publication: dict,
     mapping_version: int = 1,
+    policy: dict | None = None,
 ) -> dict:
     """Consume approved mapping metadata and a pinned source publication.
 
     No name-based kind inference, role creation from 13F manager status, or
     automatic attachment to an existing master. Conditional domains retain
     their source artifact until a registered adapter contract supports them.
+
+    The kind comes from the contract when every record of the source is one
+    kind, and from the Mastering Policy rule the contract names when a record
+    may be one of several. `policy` is needed only for the second.
     """
     mapping = contract["adapter"]
     if not isinstance(row, dict):
         raise UnsupportedRecord("invalid_record_shape")
+    labelled = None
     kind = mapping.get("kind")
-    if "kind_field" in mapping:
+    if mapping.get("classification"):
+        kind, labelled = classify_record(row, mapping["classification"], policy)
+    elif "kind_field" in mapping:
         source_kind = value(row, mapping["kind_field"])
         if source_kind is not None and not isinstance(source_kind, str):
             raise UnsupportedRecord("invalid_identity_kind")
@@ -163,6 +213,11 @@ def normalize(
         provenance["source"] = {
             name: value(row, path) for name, path in mapping["provenance"].items()
         }
+    if labelled is not None:
+        # Inside the hashed body, so the record explains what labelled it with
+        # no lookup elsewhere. Absent means the contract's own table decided,
+        # before governed rules existed (ticket 03, decision 6).
+        provenance["classification"] = labelled
     return assertion(
         source_code=source_code,
         record_key=key,

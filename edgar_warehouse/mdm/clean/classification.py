@@ -21,7 +21,7 @@ would make a pinned digest fail to reproduce its result
 from __future__ import annotations
 
 from .evidence import KINDS
-from .primitives import call
+from .primitives import call, primitive_family
 from .store import Conflict
 
 # Every kind a rule may decide, plus the two verdicts that decide no kind.
@@ -60,17 +60,27 @@ def resolve_rule(policy: dict, named: dict | None) -> dict | None:
     )
 
 
-def classify(rule: dict, record: dict, doc: dict) -> str:
-    """The verdict the first matching step supplies."""
+def check_rule(rule: dict) -> None:
+    """Refuse a classification rule that is not well formed (§10 checks 1-2).
+
+    Run at registration, so a malformed rule never becomes a digest, and again
+    before every evaluation, so a rule that reached a batch some other way is
+    refused the same way rather than half-run.
+    """
     if rule.get("family") != "classification":
         raise Conflict(
             f"Rule {rule.get('rule_id')} is not a classification rule: {rule.get('family')}"
         )
     emits = set(rule.get("emits") or ())
     steps = rule.get("steps") or []
-    if not any(step.get("otherwise") for step in steps):
+    catch_alls = sum(1 for step in steps if step.get("otherwise"))
+    if catch_alls != 1:
+        found = (
+            "no catch-all step" if not catch_alls else f"{catch_alls} catch-all steps"
+        )
         raise Conflict(
-            f"Classification rule {rule.get('rule_id')} has no catch-all step"
+            f"Classification rule {rule.get('rule_id')} has {found}: "
+            "exactly one otherwise step is required"
         )
     for step in steps:
         verdict = step.get("verdict")
@@ -79,17 +89,40 @@ def classify(rule: dict, record: dict, doc: dict) -> str:
                 f"Step {step.get('step')} emits an undeclared verdict: {verdict}"
             )
         if step.get("otherwise"):
-            return verdict
-        conditions = step.get("when")
-        if not conditions:
+            continue
+        if not step.get("when"):
             # An empty list reads as "always true" and is easy to mis-edit into
             # silence, so a catch-all must say so (prototype finding 3).
             raise Conflict(
                 f"Step {step.get('step')} has an empty when; write otherwise: true"
             )
-        if all(_holds(test, record, doc) for test in conditions):
-            return verdict
-    raise Conflict(f"Classification rule {rule.get('rule_id')} reached no verdict")
+        for test in step["when"]:
+            if primitive_family(test.get("primitive")) != "classification":
+                raise Conflict(
+                    f"Step {step.get('step')} calls {test.get('primitive')}, "
+                    "which is not a classification test"
+                )
+
+
+def fired(rule: dict, record: dict, doc: dict) -> tuple[str, str]:
+    """The verdict the first matching step supplies, and that step's name.
+
+    The step is returned because the record keeps it: an assertion's
+    provenance names the rule, version and step that labelled it
+    (`policy-language.md` §6), so it explains itself with no lookup elsewhere.
+    """
+    check_rule(rule)
+    for step in rule["steps"]:
+        if step.get("otherwise") or all(
+            _holds(test, record, doc) for test in step["when"]
+        ):
+            return step["verdict"], str(step["step"])
+    raise AssertionError("check_rule guarantees a catch-all step")
+
+
+def classify(rule: dict, record: dict, doc: dict) -> str:
+    """The verdict the first matching step supplies."""
+    return fired(rule, record, doc)[0]
 
 
 def _holds(test: dict, record: dict, doc: dict) -> bool:

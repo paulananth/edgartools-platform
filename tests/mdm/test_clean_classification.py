@@ -9,6 +9,8 @@ when the record is read and never afterwards.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from edgar_warehouse.mdm.clean.classification import classify, resolve_rule
@@ -230,3 +232,144 @@ class TestResolvingTheRuleADatasetContractNames:
 
     def test_a_contract_naming_no_rule_keeps_the_adapters_own_mapping(self):
         assert resolve_rule(self.policy(), None) is None
+
+
+class TestTheReadPathRunsTheNamedRule:
+    """A Dataset Contract names a rule; the record keeps the rule that labelled it."""
+
+    COMPANY_RULE: ClassVar[dict] = {
+        "rule_id": "sec-company-candidate",
+        "version": "2026-09-24",
+        "family": "classification",
+        "emits": ["company", "deferred"],
+        "steps": [
+            {
+                "step": "1",
+                "verdict": "company",
+                "when": [
+                    {
+                        "primitive": "field_in_set@1",
+                        "args": {
+                            "field": "entity_type",
+                            "values": ["operating", "investment"],
+                        },
+                    }
+                ],
+            },
+            {"step": "2", "verdict": "deferred", "otherwise": True},
+        ],
+    }
+
+    def policy(self, active=False):
+        from tests.mdm.test_clean_activation import BAR, proof
+
+        automatic = []
+        if active:
+            automatic = [
+                {
+                    "kind": "company",
+                    "family": "classification",
+                    "rule_id": "sec-company-candidate",
+                    "rule_version": "2026-09-24",
+                    "verdict": "company",
+                    "activation": "measured",
+                    "proof": proof(),
+                }
+            ]
+        return {
+            "required_consumers": ["journal"],
+            "automatic_rules": automatic,
+            "kinds": {
+                "company": {
+                    "version": "company-test",
+                    "rules": [self.COMPANY_RULE],
+                    "bars": {"classification": BAR},
+                }
+            },
+        }
+
+    def contract(self):
+        import copy
+
+        from edgar_warehouse.mdm.clean.company_source import CONTRACT
+
+        contract = copy.deepcopy(CONTRACT)
+        del contract["adapter"]["kind_field"], contract["adapter"]["kind_values"]
+        contract["adapter"]["classification"] = {
+            "kind": "company",
+            "rule_id": "sec-company-candidate",
+            "version": "2026-09-24",
+        }
+        return contract
+
+    def read(self, row, policy):
+        from edgar_warehouse.mdm.clean.adapters import normalize
+
+        return normalize(
+            row,
+            source_code="sec.submissions.company.v1",
+            contract=self.contract(),
+            publication={
+                "publication_key": "p",
+                "revision": 0,
+                "artifact_sha256": "c" * 64,
+                "member": "m",
+            },
+            policy=policy,
+        )
+
+    ROW: ClassVar[dict] = {
+        "cik": 320193,
+        "entity_type": "operating",
+        "entity_name": "Apple Inc.",
+    }
+
+    def test_an_activated_verdict_becomes_the_kind_and_names_its_rule(self):
+        body = self.read(self.ROW, self.policy(active=True))
+        assert body["kind"] == "company"
+        assert body["provenance"]["classification"] == {
+            "rule_id": "sec-company-candidate",
+            "version": "2026-09-24",
+            "step": "1",
+        }
+
+    def test_a_verdict_not_activated_is_set_aside_with_its_rule(self):
+        from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+        with pytest.raises(UnsupportedRecord) as caught:
+            self.read(self.ROW, self.policy())
+        assert caught.value.reason == "classification_not_activated"
+        assert caught.value.detail["classification"]["verdict"] == "company"
+
+    def test_a_verdict_that_decides_no_kind_is_set_aside_by_that_verdict(self):
+        from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+        with pytest.raises(UnsupportedRecord) as caught:
+            self.read({**self.ROW, "entity_type": "other"}, self.policy(active=True))
+        assert caught.value.reason == "classification_deferred"
+        assert caught.value.detail["classification"]["step"] == "2"
+
+    def test_a_named_rule_without_its_policy_fails_closed(self):
+        with pytest.raises(Conflict, match="pinned Mastering Policy"):
+            self.read(self.ROW, None)
+
+    def test_the_rule_is_part_of_the_record_identity(self):
+        """Same claim, labelled by a rule instead of a table: a different id."""
+        from edgar_warehouse.mdm.clean.adapters import normalize
+        from edgar_warehouse.mdm.clean.company_source import CONTRACT
+
+        by_rule = self.read(self.ROW, self.policy(active=True))
+        by_table = normalize(
+            self.ROW,
+            source_code="sec.submissions.company.v1",
+            contract=CONTRACT,
+            publication={
+                "publication_key": "p",
+                "revision": 0,
+                "artifact_sha256": "c" * 64,
+                "member": "m",
+            },
+        )
+        assert by_table["kind"] == by_rule["kind"] == "company"
+        assert "classification" not in by_table["provenance"]
+        assert by_table["assertion_id"] != by_rule["assertion_id"]
