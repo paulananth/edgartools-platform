@@ -69,6 +69,18 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   means an LEI already attached to that one Company, not a separate GLEIF
   Company.
 
+- **A source record waits in the Stage until a matching rule links it**
+  (operator, 2026-09-24). A GLEIF record the rules cannot yet tie to a Company
+  stays in the Stage, tagged with its source (GLEIF), and creates no master
+  record. It joins the one Company when a matching rule links it. The matching
+  rule compares **the fields each kind declares for matching**, such as company
+  name, ticker or CUSIP. **Matching and merging rules are written per entity
+  kind, from that kind's sources**: a Company's rules compare what SEC and
+  GLEIF carry, and a Person's or Fund's rules differ. This is the policy
+  language's existing shape (`policy-language.md` §4.1: binding and
+  survivorship sit at kind level). Open: which of those fields each source
+  actually carries (ticket 08).
+
 - [Decide how a Dataset Contract version changes without re-binding every record](issues/01-decide-dataset-contract-versioning.md)
   — **a re-read adds a row instead of rewriting one; registration re-reads
   nothing by itself; and the identity parts of a contract may never change

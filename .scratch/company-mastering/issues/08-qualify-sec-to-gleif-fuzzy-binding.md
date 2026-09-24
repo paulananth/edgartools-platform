@@ -29,6 +29,23 @@ between its SEC and GLEIF records can only come from the qualified fuzzy
 matching Company Q4 accepted: name, jurisdiction and address evidence,
 corroborated where identifiers allow.
 
+**Matching fields named by the operator** (2026-09-24): company name, ticker
+or CUSIP. What each side carries, checked on the four Companies' real records
+(GLEIF golden copy 2026-09-11, SEC bronze submissions):
+
+| Field | SEC | GLEIF Level 1 |
+| --- | --- | --- |
+| Company name | yes (`name`) | yes (`LegalName`, `OtherEntityNames`) |
+| Ticker | yes (`tickers`) | **no** |
+| CUSIP | not in submissions | **no** |
+| Country / address | yes | yes (legal and headquarters) |
+
+A CUSIP reaches GLEIF only through GLEIF's separate **ISIN-to-LEI mapping
+file** (a US ISIN embeds the CUSIP). GLEIF ticket 11 routed that file to a later
+Security consumer, and its coverage is partial (participating agencies and new
+ISINs). So today a ticker or CUSIP cannot be compared with a GLEIF record
+directly; name plus country and address can.
+
 Without this ticket the Proving Run (05) reports every SEC Company as "no
 GLEIF match", which Q2 counts as a *completed* outcome. The milestone would
 look finished with zero SEC Companies linked to GLEIF, failing the completion
