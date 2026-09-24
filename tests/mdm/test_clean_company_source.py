@@ -187,17 +187,14 @@ def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():
     assert corrected["record_key"] == first["record_key"]
 
 
-class TestJurisdictionIsOneFormat:
-    """SEC writes "CA"; GLEIF writes "US-CA" (operator, 2026-09-24)."""
+class TestTheCompanyRule:
+    """SEC gives state of incorporation; GLEIF gives jurisdiction (2026-09-24)."""
 
-    def read(self, state):
-        return self.fields(state)["jurisdiction"]
-
-    def fields(self, state):
-        return normalize(
+    def test_sec_state_of_incorporation_is_its_own_field_as_sec_writes_it(self):
+        fields = normalize(
             source_row(
-                320193,
-                state_of_incorporation=state,
+                1306965,
+                state_of_incorporation="DC",
                 last_synced_at="2026-01-01T00:00:00+00:00",
             ),
             source_code=SOURCE_CODE,
@@ -209,20 +206,8 @@ class TestJurisdictionIsOneFormat:
                 "member": "m",
             },
         )["fields"]
-
-    def test_a_us_state_code_becomes_iso_3166_2(self):
-        assert self.read("CA") == {"op": "value", "value": "US-CA"}
-        assert self.read("dc") == {"op": "value", "value": "US-DC"}
-
-    def test_a_foreign_edgar_code_is_unknown_not_guessed_and_kept_raw(self):
-        assert self.read("E9") == {"op": "unknown"}
-        assert self.fields("E9")["sec_state_of_incorporation"] == {
-            "op": "value",
-            "value": "E9",
-        }
-
-    def test_an_empty_code_is_unknown(self):
-        assert self.read("") == {"op": "unknown"}
+        assert fields["state_of_incorporation"] == {"op": "value", "value": "DC"}
+        assert "jurisdiction" not in fields
 
     def test_the_company_rule_is_loaded_not_restated(self):
         import json

@@ -26,10 +26,10 @@ FIELDS = {
     "name": "entity_name",
     "sic": "sic",
     "sic_description": "sic_description",
-    "jurisdiction": "state_of_incorporation",
-    # The raw EDGAR code, kept whatever `jurisdiction` makes of it: a foreign
-    # code such as E9 is not converted, and must not vanish with it.
-    "sec_state_of_incorporation": "state_of_incorporation",
+    # SEC's own field, as SEC writes it ("CA", "DC", "E9"). Jurisdiction is
+    # GLEIF's, a separate field, so the two never compete (operator,
+    # 2026-09-24).
+    "state_of_incorporation": "state_of_incorporation",
     "fiscal_year_end": "fiscal_year_end",
     "description": "description",
 }
@@ -54,9 +54,6 @@ CONTRACT = {
         "identifiers": {"cik": "cik"},
         "identifier_formats": {"cik": "sec_cik"},
         "fields": FIELDS,
-        # SEC writes a US state as "CA"; GLEIF writes "US-CA". One format before
-        # comparing, so the two are one jurisdiction (operator, 2026-09-24).
-        "field_formats": {"jurisdiction": "edgar_state_iso3166"},
         "provenance": {
             "landing_sha256": "_origin.sha256",
             "landing_manifest_sha256": "_origin.manifest_sha256",

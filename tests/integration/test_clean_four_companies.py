@@ -33,7 +33,6 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-import pytest
 from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
@@ -311,10 +310,10 @@ def test_one_master_per_company_takes_fields_from_both_sources(
 ):
     """The Company rule: every field from every source, SEC first where both.
 
-    Operator, 2026-09-24: name and jurisdiction are one field each; SEC wins
-    when both supply one and GLEIF's value is kept as a retained conflict;
-    jurisdiction is compared in one format (SEC "CA" is GLEIF "US-CA"); a
-    field only one source has comes from that source.
+    Operator, 2026-09-24: a field only one source has comes from that source;
+    where both supply one (name), SEC wins and GLEIF's value is kept as a
+    retained conflict. State of incorporation is SEC's field and jurisdiction
+    is GLEIF's, two fields that never compete.
     """
     from edgar_warehouse.mdm.clean.evidence import decision
     from edgar_warehouse.mdm.clean.merge import MergeStage
@@ -424,16 +423,26 @@ def test_one_master_per_company_takes_fields_from_both_sources(
         "MICROSOFT CORPORATION"
     ]
     # One format: SEC "CA" and GLEIF "US-CA" agree, so no conflict is kept.
-    assert field(APPLE, "jurisdiction")["value"] == "US-CA"
-    assert field(APPLE, "jurisdiction")["conflicts"] == []
-    assert field(MICROSOFT, "jurisdiction")["value"] == "US-WA"
-    # ASML: SEC states no jurisdiction, so GLEIF's fills the field.
-    assert field(ASML, "jurisdiction")["value"] == "NL"
-    assert winner(ASML, "jurisdiction") == "gleif.level1.v1"
-    # Shell: SEC says "DC" (a US code) and wins; GLEIF's "GB" is kept as a
-    # conflict. SEC-first is the rule as decided; this is where it bites.
-    assert field(SHELL, "jurisdiction")["value"] == "US-DC"
-    assert [c["value"] for c in field(SHELL, "jurisdiction")["conflicts"]] == ["GB"]
+    # Two fields, never competing: SEC's state of incorporation as SEC writes
+    # it, and GLEIF's legal jurisdiction (operator, 2026-09-24).
+    for cik, state, jurisdiction in (
+        (APPLE, "CA", "US-CA"),
+        (MICROSOFT, "WA", "US-WA"),
+        (SHELL, "DC", "GB"),
+        (ASML, "", "NL"),
+    ):
+        assert field(cik, "state_of_incorporation")["value"] == state
+        assert winner(cik, "state_of_incorporation") == SOURCE_CODE
+        assert field(cik, "jurisdiction")["value"] == jurisdiction
+        assert winner(cik, "jurisdiction") == "gleif.level1.v1"
+        assert field(cik, "jurisdiction")["conflicts"] == []
+    # Name is the one field both sources supply.
+    both = {
+        n
+        for n in masters[entity_of[APPLE]]["fields"]
+        if n in stored[APPLE]["fields"] and n in stored[PAIRS[APPLE]]["fields"]
+    }
+    assert both == {"name"}
 
     # GLEIF's own spelling is still in the Stage, whole, as evidence.
     with database.application.connect() as conn:
@@ -445,8 +454,6 @@ def test_one_master_per_company_takes_fields_from_both_sources(
             {"lei": PAIRS[MICROSOFT]},
         ).scalar_one()
     assert staged == "MICROSOFT CORPORATION"
-    # SEC's raw state code survives beside the converted jurisdiction.
-    assert field(SHELL, "sec_state_of_incorporation")["value"] == "DC"
 
     with capsys.disabled():
         print()
@@ -464,16 +471,3 @@ def test_one_master_per_company_takes_fields_from_both_sources(
                     f"  {name:40} {f.get('value')!r:40} from {f['winner']['source_code']}"
                     + (f"   kept: {', '.join(others)}" if others else "")
                 )
-
-
-def test_a_contract_naming_an_unknown_field_format_is_refused(database):
-    contract = copy.deepcopy({**CONTRACT, "family": "fixture"})
-    contract["adapter"]["field_formats"] = {"jurisdiction": "invented"}
-    with database.admin.begin() as conn, pytest.raises(ValueError, match="format"):
-        register_dataset(conn, SOURCE_CODE, database.registry, contract)
-    contract["adapter"]["field_formats"] = {"unmapped": "edgar_state_iso3166"}
-    with (
-        database.admin.begin() as conn,
-        pytest.raises(ValueError, match="does not map"),
-    ):
-        register_dataset(conn, SOURCE_CODE, database.registry, contract)

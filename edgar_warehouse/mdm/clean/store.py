@@ -244,12 +244,9 @@ def register_dataset(
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),
-        *adapter.get("field_formats", {}).values(),
     ]
     if any(f is not None and f not in FORMATS for f in formats):
         raise ValueError("Unknown format in Dataset Contract")
-    if set(adapter.get("field_formats", {})) - set(adapter.get("fields", {})):
-        raise ValueError("A field format names a field the contract does not map")
     registry_connection = (
         registry_connection if registry_connection is not None else conn
     )

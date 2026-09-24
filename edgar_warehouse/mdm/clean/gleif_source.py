@@ -376,8 +376,9 @@ def dataset_contract(member: str, *, level1_source: str = "gleif.lei.v1") -> dic
             identifier_formats={"lei": "lei"},
         )
         mapping["fields"] = {
-            # Shared with SEC: one field each, SEC first where both supply it
-            # (operator, 2026-09-24). GLEIF already writes ISO 3166 codes.
+            # `name` is shared with SEC, SEC first where both supply it.
+            # `jurisdiction` is GLEIF's alone; SEC gives state of incorporation
+            # as its own field (operator, 2026-09-24).
             "name": "Entity.LegalName.$",
             "jurisdiction": "Entity.LegalJurisdiction.$",
             "gleif_legal_form": "Entity.LegalForm.EntityLegalFormCode.$",

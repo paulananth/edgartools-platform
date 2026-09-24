@@ -42,87 +42,12 @@ def _lei(item) -> str:
     return value
 
 
-# EDGAR's two-letter codes for US states, DC and the inhabited territories are
-# their USPS codes, which ISO 3166-2:US reuses behind "US-". Every other EDGAR
-# code (Canadian provinces A0-B0, foreign countries such as E9 or X0) is not
-# converted: it raises, and a field then records the value as unknown rather
-# than guessing a country.
-US_CODES = frozenset(
-    [
-        "AL",
-        "AK",
-        "AZ",
-        "AR",
-        "CA",
-        "CO",
-        "CT",
-        "DE",
-        "FL",
-        "GA",
-        "HI",
-        "ID",
-        "IL",
-        "IN",
-        "IA",
-        "KS",
-        "KY",
-        "LA",
-        "ME",
-        "MD",
-        "MA",
-        "MI",
-        "MN",
-        "MS",
-        "MO",
-        "MT",
-        "NE",
-        "NV",
-        "NH",
-        "NJ",
-        "NM",
-        "NY",
-        "NC",
-        "ND",
-        "OH",
-        "OK",
-        "OR",
-        "PA",
-        "RI",
-        "SC",
-        "SD",
-        "TN",
-        "TX",
-        "UT",
-        "VT",
-        "VA",
-        "WA",
-        "WV",
-        "WI",
-        "WY",
-        "DC",
-        "PR",
-        "VI",
-        "GU",
-        "AS",
-        "MP",
-    ]
-)
-
-
-def _edgar_state_iso3166(item) -> str:
-    value = str(item).strip().upper()
-    if value not in US_CODES:
-        raise UnsupportedRecord("unconverted_jurisdiction")
-    return f"US-{value}"
-
-
-# One table of named formats, read by identifiers, record keys, fields and
+# One table of named formats, read by identifiers, record keys and
 # registration alike, so adding one is one entry here (GoF consult,
 # 2026-09-24: the names were listed in two places and a third was coming).
 FORMATS = {
     "sec_cik": _sec_cik,
     "lei": _lei,
-    "edgar_state_iso3166": _edgar_state_iso3166,
 }
 
 
@@ -132,26 +57,6 @@ def format_value(item, format_name=None):
     if format_name not in FORMATS:
         raise ValueError(f"Unconfigured format: {format_name}")
     return FORMATS[format_name](item)
-
-
-def field_value(row: dict, path: str, format_name: str | None):
-    """A field's value, converted by its declared format when it has one.
-
-    A value the format cannot convert becomes unknown for this field rather
-    than setting the whole record aside: the rest of the record is still good
-    evidence. A contract that must keep the raw value maps it to a second
-    field without a format, as the SEC Company contract does for its state
-    code.
-    """
-    item = value(row, path)
-    if format_name is None or item is None:
-        return item
-    if isinstance(item, str) and not item.strip():
-        return None
-    try:
-        return format_value(item, format_name)
-    except UnsupportedRecord:
-        return None
 
 
 def value(row: dict, path: str):
@@ -257,10 +162,8 @@ def normalize(
             identifiers[namespace] = format_value(
                 item, mapping.get("identifier_formats", {}).get(namespace)
             )
-    field_formats = mapping.get("field_formats", {})
     fields = {
-        name: field_value(row, path, field_formats.get(name))
-        for name, path in mapping.get("fields", {}).items()
+        name: value(row, path) for name, path in mapping.get("fields", {}).items()
     }
     if mapping.get("field_shape") == "nullable_text" and any(
         v is not None and not isinstance(v, str) for v in fields.values()

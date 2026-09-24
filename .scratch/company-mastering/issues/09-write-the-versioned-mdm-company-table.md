@@ -66,9 +66,8 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   address (it lives in a separate SEC address table), and choosing street,
   city and postcode from one source together needs group-aware selection
   (ticket 03), so today only GLEIF could supply it, and it is not mapped yet
-- [ ] Foreign EDGAR location codes (E9, X0, P7, …) to ISO 3166: not converted.
-  Such a value is unknown for `jurisdiction`, so GLEIF's value fills it (the
-  fill rule); SEC's raw code is kept in `sec_state_of_incorporation`
+- [ ] ~~Foreign EDGAR location codes to ISO 3166~~ no longer needed: SEC's
+  code is not compared with anything (2026-09-24 11:10 ET)
 - [x] Three-axis `/code-review` — Standards: 1 hard (defaults read outside the
   kind resolver); Spec: raw foreign code lost, Stage claim untested; GoF:
   load kind files in their own loader. All fixed: `_defaults_for` beside
@@ -90,6 +89,10 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   evidence yet (migrations 027+ unapplied), so this is noted, not built
 - [ ] SEC empty text (`description: ""`) is taken as a value; decide whether
   an empty string is unknown
-- [ ] Decide Shell's jurisdiction: SEC says `DC` (a US code) and wins under
-  SEC-first; GLEIF says `GB`, kept as a conflict
+- [x] Decide Shell's jurisdiction — operator (2026-09-24 11:10 ET): **two fields, not one**.
+  SEC gives `state_of_incorporation`, as SEC writes it (`CA`, `DC`); GLEIF
+  gives `jurisdiction` (`US-CA`, `GB`). They never compete, so the
+  SEC-to-ISO conversion is removed. Supersedes "jurisdiction is one field"
+  above. Shell now reads `DC` from SEC and `GB` from GLEIF. **Name** is the
+  only field both sources supply today — PG16, four Companies (2026-09-24 11:10 ET)
 - [ ] Migration, Merge Stage write, tests on a populated store (PG16)
