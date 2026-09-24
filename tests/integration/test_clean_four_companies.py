@@ -61,42 +61,15 @@ APPLE, MICROSOFT, SHELL, ASML = "0000320193", "0000789019", "0001306965", "00009
 COOK, NADELLA = "0001214156", "0001513142"
 COMPANIES = {APPLE, MICROSOFT, SHELL, ASML}
 
-# A candidate, not a measured rule. Step 2 is the one the lookup table lacks:
-# SEC says "other" for a foreign issuer and for an individual alike, and only
-# the issuer carries an industry code.
-RULE = {
-    "rule_id": "sec-company-candidate",
-    "version": "2026-09-24",
-    "family": "classification",
-    "emits": ["company", "deferred"],
-    "steps": [
-        {
-            "step": "1",
-            "verdict": "company",
-            "when": [
-                {
-                    "primitive": "field_in_set@1",
-                    "args": {
-                        "field": "entity_type",
-                        "values": ["operating", "investment"],
-                    },
-                }
-            ],
-        },
-        {
-            "step": "2",
-            "verdict": "company",
-            "when": [
-                {
-                    "primitive": "field_in_set@1",
-                    "args": {"field": "entity_type", "values": ["other"]},
-                },
-                {"primitive": "evidence_present@1", "args": {"document": "sic"}},
-            ],
-        },
-        {"step": "3", "verdict": "deferred", "otherwise": True},
-    ],
-}
+# A candidate, not a measured rule; it lives in the Company policy as data
+# (ticket 11) so the proving run can measure it. Step 2 is the one the lookup
+# table lacks: SEC says "other" for a foreign issuer and for an individual
+# alike, and only the issuer carries an industry code.
+(RULE,) = [
+    r
+    for r in POLICY["kinds"]["company"]["rules"]
+    if r["rule_id"] == "sec-company-candidate"
+]
 NAMED = {"kind": "company", "rule_id": RULE["rule_id"], "version": RULE["version"]}
 
 
@@ -110,7 +83,7 @@ def rule_contract():
 def rule_policy(*, active):
     body = copy.deepcopy(POLICY)
     body["version"] = "four-companies-test"
-    body["kinds"]["company"].update(rules=[RULE], bars={"classification": BAR})
+    body["kinds"]["company"]["bars"] = {"classification": BAR}
     if active:
         body["automatic_rules"] = [
             {
@@ -202,8 +175,8 @@ def test_the_rule_names_all_four_companies_but_acts_on_none_unactivated(
     for cik, step in ((APPLE, "1"), (MICROSOFT, "1"), (SHELL, "2"), (ASML, "2")):
         assert records[cik]["reason"] == "classification_not_activated"
         assert records[cik]["provenance"]["classification"] == {
-            "rule_id": "sec-company-candidate",
-            "version": "2026-09-24",
+            "rule_id": RULE["rule_id"],
+            "version": RULE["version"],
             "step": step,
             "verdict": "company",
         }

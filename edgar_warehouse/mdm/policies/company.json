@@ -1,7 +1,63 @@
 {
-  "version": "company-2026-09-24",
+  "version": "company-2026-09-24.2",
   "defaults": {
     "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
     "allow_unknown_effective": true
-  }
+  },
+  "rules": [
+    {
+      "rule_id": "sec-company-candidate",
+      "version": "2026-09-24.2",
+      "family": "classification",
+      "source": "sec.submissions.company.v1",
+      "emits": [
+        "company",
+        "deferred"
+      ],
+      "steps": [
+        {
+          "step": "1",
+          "verdict": "company",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating",
+                  "investment"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "step": "2",
+          "verdict": "company",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "other"
+                ]
+              }
+            },
+            {
+              "primitive": "evidence_present@1",
+              "args": {
+                "document": "sic"
+              }
+            }
+          ]
+        },
+        {
+          "step": "3",
+          "verdict": "deferred",
+          "otherwise": true
+        }
+      ]
+    }
+  ]
 }

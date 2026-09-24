@@ -107,20 +107,26 @@ def _survivors(conn, entity_ids: set[str]) -> dict[str, str]:
     }
 
 
-def _issuers(policy: dict, namespace: str) -> list[str]:
+def _contract(policy: dict, namespace: str) -> tuple[dict, dict] | None:
+    """The namespace's Identifier Contract and the kind block declaring it."""
     for block in (policy.get("kinds") or {}).values():
         contract = (block.get("identifiers") or {}).get(namespace)
         if contract:
-            return list(contract["sources"])
-    return []
+            return contract, block
+    return None
+
+
+def _issuers(policy: dict, namespace: str) -> list[str]:
+    declared = _contract(policy, namespace)
+    return list(declared[0]["sources"]) if declared else []
 
 
 def _normal(policy: dict, namespace: str, value: str) -> str:
-    for block in (policy.get("kinds") or {}).values():
-        contract = (block.get("identifiers") or {}).get(namespace)
-        if contract:
-            return normalizer(contract["normalizer"], block)(value)
-    return value
+    declared = _contract(policy, namespace)
+    if declared is None:
+        return value
+    contract, block = declared
+    return normalizer(contract["normalizer"], block)(value)
 
 
 def propose(
@@ -174,14 +180,19 @@ def propose(
                 (subject, rule, namespace, _normal(policy, namespace, raw), raw)
             )
     found = holders(conn, policy, wanted)
-    # A Company this batch's own caller binds counts as a holder too.
+    # A Company this batch's own caller binds counts as a holder too, but only
+    # of the identifiers the bound record's own source issues (Q14, as the
+    # stored lookup above: an SEC record carrying an LEI holds no LEI).
     caller = {
         d["subject"]: d["entity_id"] for d in decisions if d["operation"] == "bind"
     }
     kinds = {i["entity_id"]: i["kind"] for i in identities}
+    issuers = {namespace: _issuers(policy, namespace) for namespace in NAMESPACES}
     for a in assertions:
         if a["subject"] in caller:
             for namespace, raw in (a.get("identifiers") or {}).items():
+                if a["source_code"] not in issuers.get(namespace, ()):
+                    continue
                 entity = caller[a["subject"]]
                 key = (namespace, _normal(policy, namespace, raw))
                 found[key][entity] = kinds.get(entity, a["kind"])

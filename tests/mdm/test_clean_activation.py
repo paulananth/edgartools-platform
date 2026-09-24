@@ -23,6 +23,7 @@ from edgar_warehouse.mdm.clean.activation import (
     rule_version_conflicts,
     wilson_lower_bound,
 )
+from edgar_warehouse.mdm.clean.company_source import POLICY
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.clean.store import Conflict
 
@@ -296,6 +297,7 @@ CIK_RULE = {
     "applies_to_verdict": "company",
     "emits": ["bind"],
     "on_no_match": "mint",
+    "source": "sec.submissions.company.v1",
     "when": [
         {"primitive": "identifier_match@1", "args": {"namespace": "cik"}},
         {"primitive": "identifier_cardinality@1", "args": {"namespace": "cik"}},
@@ -381,6 +383,27 @@ class TestAnIdentifierRule:
         with pytest.raises(Conflict, match=reason):
             check_policy(binding_policy(rule={**CIK_RULE, **changes}, activate=False))
 
+    def test_a_rule_that_creates_companies_must_name_its_source(self):
+        rule = {k: v for k, v in CIK_RULE.items() if k != "source"}
+        with pytest.raises(Conflict, match="names no source"):
+            check_policy(binding_policy(rule=rule, activate=False))
+
+    def test_only_the_identifier_issuer_may_create_companies(self):
+        # Ticket 11, gap 1: a GLEIF rule set to create would have minted a
+        # Company from an unmatched LEI; an unlinked GLEIF record waits.
+        rule = {**CIK_RULE, "source": "gleif.level1.v1"}
+        with pytest.raises(Conflict, match="does not issue cik"):
+            check_policy(binding_policy(rule=rule, activate=False))
+
+    def test_a_rule_that_creates_companies_needs_its_kinds_contract(self):
+        rule = {**CIK_RULE, "source": "gleif.level1.v1"}
+        with pytest.raises(Conflict, match="no Identifier Contract"):
+            check_policy(binding_policy(rule=rule, contract=False, activate=False))
+
+    def test_a_rule_that_only_joins_may_come_from_any_source(self):
+        rule = {**CIK_RULE, "on_no_match": "wait", "source": "gleif.level1.v1"}
+        check_policy(binding_policy(rule=rule, activate=False))
+
     def test_no_contract_means_no_activation(self):
         with pytest.raises(Conflict, match="no Identifier Contract"):
             check_policy(binding_policy(contract=False))
@@ -426,3 +449,18 @@ class TestAnIdentifierRule:
         ]
         with pytest.raises(Conflict, match="applies to classification rules"):
             check_policy(body)
+
+
+class TestTheCompanyPolicy:
+    """Ticket 11, gap 3: the candidate rule is data, not yet switched on."""
+
+    def test_the_candidate_rule_is_checked_and_not_active(self):
+        check_policy(POLICY)
+        (rule,) = [
+            r
+            for r in POLICY["kinds"]["company"]["rules"]
+            if r["rule_id"] == "sec-company-candidate"
+        ]
+        # Nothing acts on it before the proving run (ticket 05) and the
+        # operator's approval of its digest (ticket 06).
+        assert not activated(POLICY, "company", rule, "company")
