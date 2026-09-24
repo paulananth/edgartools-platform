@@ -69,11 +69,16 @@ local ET; parts finished before the rule existed carry their date only.
 - [ ] ~~Reshape `_check_activation` into shared resolve plus a per-activation
   check~~ first commit of ticket 04 (GoF review): its `verdict not in KINDS`
   line would refuse every `bind` activation
-- [ ] Decide: `classification_*` deferred reasons open a **blocking** review
-  (not in `nonblocking_deferred_reasons`). Kept blocking on purpose — a
-  Steward must act before the record means anything — but it makes a run with
-  any unclassified record report incomplete; confirm with the operator
-- [ ] PR opened and CI green
+- [x] ~~Decide: `classification_*` deferred reasons block~~ superseded by
+  the confidence-bands decision above (2026-09-24 08:14 ET)
+- [x] PR opened and CI green — #704, merged 2026-09-24 07:37 ET (merge time
+  from GitHub; checklist ticked at 08:14 ET)
+- [x] Decide how a set-aside record blocks — operator, 2026-09-24 08:14 ET:
+  confidence bands (≥95% acts, 50-95% waits in the Stage unreviewed, <50%
+  goes to a Steward), recorded in the Company policy
+- [ ] Implement the bands: Company accepted bar 0.999 → 0.95 in
+  `activation.ACCEPTED_BARS`; per-step measured probability on each rule
+  step; 50-95% verdicts non-blocking in the Stage; <50% blocking for a Steward
 - [ ] Binding predicates replacing the binding refusal — needs ticket 04's
   identifier primitives; binding rules and `deterministic` activation are
   refused by name until then

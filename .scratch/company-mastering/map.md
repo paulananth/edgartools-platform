@@ -57,6 +57,15 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Decisions so far
 
+- **Confidence bands** (operator, 2026-09-24): for "is this a Company?" and
+  for SEC-to-GLEIF matching, a decision whose tested probability is **95% or
+  more** acts automatically; **50% to 95%** waits in the Stage, unreviewed,
+  until the rule improves; **below 50%** goes to a Steward. The automatic bar
+  falls from 99.9% to 95% for these two decisions only; publishing-ID
+  consolidation keeps 99.9%. No Steward vets public data routinely: testing
+  catches a weak rule. Recorded in
+  [the Company policy](../../docs/specs/clean-mdm/company-policy.md).
+
 - **One Company, one master record, whatever the sources** (operator,
   2026-09-24). Mastering exists because no source carries everything: SEC
   supplies the CIK, GLEIF supplies the LEI. Both source records are kept, side
