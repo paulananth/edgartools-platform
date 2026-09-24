@@ -20,21 +20,16 @@ would make a pinned digest fail to reproduce its result
 
 from __future__ import annotations
 
+from .evidence import KINDS
 from .primitives import call
 from .store import Conflict
 
-CLASSIFICATION_VERDICTS = {
-    "person",
-    "company",
-    "security",
-    "fund_structure",
-    "branch",
-    "government",
-    "international_organization",
-    "venue",
-    "entity_undetermined",
-    "deferred",
-}
+# Every kind a rule may decide, plus the two verdicts that decide no kind.
+# Derived rather than restated: this list was written out by hand and was the
+# third copy of the kind set, after evidence.KINDS and the CHECK constraint on
+# mdm_v2.identity. The SQL copy cannot be derived away and is held equal by
+# tests/integration/test_clean_per_kind_views.py instead.
+CLASSIFICATION_VERDICTS = KINDS | {"entity_undetermined", "deferred"}
 
 
 def resolve_rule(policy: dict, named: dict | None) -> dict | None:
