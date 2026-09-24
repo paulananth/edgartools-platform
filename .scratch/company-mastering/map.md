@@ -57,6 +57,18 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Decisions so far
 
+- **One Company, one master record, whatever the sources** (operator,
+  2026-09-24). Mastering exists because no source carries everything: SEC
+  supplies the CIK, GLEIF supplies the LEI. Both source records are kept, side
+  by side, in the Stage (`company_stage`); the mastered record
+  (`company_master`) is **one** Company holding the CIK, the LEI and the
+  selected fields from both. Two master records for one real Company is the
+  failure this effort exists to prevent, not an intermediate state to
+  consolidate later. Consequences: the SEC-to-GLEIF join (ticket 08) is on the
+  critical path, not an enrichment; and "reuses its Company by LEI" (ticket 04)
+  means an LEI already attached to that one Company, not a separate GLEIF
+  Company.
+
 - [Decide how a Dataset Contract version changes without re-binding every record](issues/01-decide-dataset-contract-versioning.md)
   — **a re-read adds a row instead of rewriting one; registration re-reads
   nothing by itself; and the identity parts of a contract may never change

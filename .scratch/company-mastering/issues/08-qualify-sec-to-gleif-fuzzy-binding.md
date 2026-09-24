@@ -6,8 +6,14 @@ Blocked by: 04
 
 ## Question
 
-Tickets 03 and 04 make a Company recognisable **within** each source: an SEC
-record reuses its Company by CIK, a GLEIF record reuses its Company by LEI.
+Operator, 2026-09-24: one real Company has **one** master record, holding the
+CIK from SEC and the LEI from GLEIF; both source records stay in the Stage.
+Two master records for one Company is the failure to prevent, not a state to
+consolidate later.
+
+Tickets 03 and 04 make a record recognisable again **by the identifier its own
+source carries**: an SEC record by CIK, a GLEIF record by an LEI already on
+the Company.
 Neither joins the two sources. The SEC adapter declares `cik` as its only
 identifier (`company_source.py:50`), GLEIF Level 1 carries no CIK, and Q14
 forbids treating an LEI as a CIK crosswalk merely because both values exist.
