@@ -63,8 +63,11 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   dates, written only by the Merge Stage. No reader goes to two places for
   Company information. Built by
   [Write the versioned MDM Company table](issues/09-write-the-versioned-mdm-company-table.md).
-- **The Stage shows the latest row per company per source** (operator,
-  2026-09-24 08:28 ET); every earlier version stays in a separate history view.
+- **The Stage is latest-only; bronze is the only history** (operator,
+  2026-09-24 08:33 ET): one row per company per source, upserted; each row names its bronze
+  object so an older version can be re-read from S3. Reverses ticket 01's
+  "assertions are never pruned". Built by
+  [Make the Stage latest-only](issues/10-make-the-stage-latest-only.md).
 
 - **Confidence bands** (operator, 2026-09-24): for "is this a Company?" and
   for SEC-to-GLEIF matching, a decision whose tested probability is **95% or
