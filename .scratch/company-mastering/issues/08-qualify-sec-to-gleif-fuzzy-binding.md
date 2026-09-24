@@ -8,13 +8,20 @@ Blocked by: 04
 
 Tickets 03 and 04 make a Company recognisable **within** each source: an SEC
 record reuses its Company by CIK, a GLEIF record reuses its Company by LEI.
-Neither joins the two sources. No SEC Company record carries an LEI (the SEC
-adapter declares `cik` as its only identifier, `company_source.py:50`), GLEIF
-Level 1 carries no CIK, and Q14 forbids treating an LEI as a CIK crosswalk
-merely because both values exist. So the **first** link between an SEC
-Company and its GLEIF record can only come from the qualified fuzzy matching
-Company Q4 accepted: name, jurisdiction and address evidence, corroborated
-where identifiers allow.
+Neither joins the two sources. The SEC adapter declares `cik` as its only
+identifier (`company_source.py:50`), GLEIF Level 1 carries no CIK, and Q14
+forbids treating an LEI as a CIK crosswalk merely because both values exist.
+
+SEC submissions **do** carry an `lei` key, but the adapter does not map it and
+it was null for all four Companies checked on 2026-09-23 (Apple, Microsoft,
+Shell, ASML; bronze `submissions/sec/cik=*/main/`). Where SEC populates it, the
+record states its own LEI, which is not the crosswalk Q14 forbids and could be
+an identifier path for part of the universe. **First step of this ticket:
+measure how often it is populated across bronze**, which sets how much of the
+join fuzzy matching must carry. For every Company without it, the first link
+between its SEC and GLEIF records can only come from the qualified fuzzy
+matching Company Q4 accepted: name, jurisdiction and address evidence,
+corroborated where identifiers allow.
 
 Without this ticket the Proving Run (05) reports every SEC Company as "no
 GLEIF match", which Q2 counts as a *completed* outcome. The milestone would
