@@ -40,7 +40,15 @@ Each must be settled, one at a time, before the migration is written:
 
 - [x] Decide: latest-only Stage, upsert, bronze as the only history, each row
   naming its bronze object — operator (2026-09-24 08:33 ET)
-- [ ] Settle what a decision cites once its assertion is replaced
+- [x] Settle what a decision cites once its assertion is replaced —
+  operator (2026-09-24 09:24 ET). The Merge Stage runs **at the end of each source load**, so
+  a decision is always made on the version just loaded. It cites **the record**
+  (source and key, e.g. `SEC / CIK 0000320193`, which never changes) and **the
+  bronze object** it was made on. On the next load the merge re-checks the
+  newer version: same identifiers, the match stands and the new fields open a
+  new `mdm_v2.company` row (a name change alone never breaks a match, Q9);
+  different identifiers, the match is not changed automatically and goes
+  through the confidence bands (95% acts, below 50% to a Steward)
 - [ ] Settle how reversal and replay re-read bronze
 - [ ] Settle field provenance after a replacement
 - [ ] Migration on a populated store, Merge Stage change, PG16 tests
