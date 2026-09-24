@@ -56,6 +56,10 @@ Each must be settled, one at a time, before the migration is written:
   opens, the merged-away ID returns from its alias, ADR 0013). **If the rules
   cannot fix it, quarantine** the records involved. Bronze is read only to show
   what the wrong decision saw; the correction never reloads old versions.
-- [ ] Settle what quarantine does to the records and to `mdm_v2.company`
+- [x] Settle what quarantine does — operator (2026-09-24 09:31 ET): quarantined records stay
+  in the Stage, marked, and are **left out of matching** (no rule joins them
+  automatically); each stays **its own company** in `mdm_v2.company` with a
+  `quarantined` flag readers can see; only an **operator-approved rule
+  change** lifts it
 - [ ] Settle field provenance after a replacement
 - [ ] Migration on a populated store, Merge Stage change, PG16 tests
