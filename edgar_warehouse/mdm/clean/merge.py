@@ -1,7 +1,8 @@
 """One bounded, atomic Merge Stage for all Clean MDM writers.
 
 The retained decision graph supplies identity; source policy supplies fields.
-Neither auto binding nor automatic consolidation is enabled in this release.
+Identifier-only automatic binding runs through the same assessment (ticket
+04); automatic consolidation and fuzzy binding are not enabled.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, relationships
+from . import assessment, binding, relationships
 from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
@@ -117,19 +118,24 @@ class MergeStage:
     def apply(self, **command) -> dict:
         """Persist identity assessment, then automatically apply eligible work.
 
-        A crash between the transactions leaves a resumable assessment. Preview
-        and ordinary field-only updates do not create an assessment queue.
+        Active identifier rules may propose bindings and new Companies for the
+        batch's records (ticket 04). Every proposal, the caller's or a rule's,
+        is assessed before it commits (Q13); a load batch with nothing to bind
+        keeps its direct path. A crash between the transactions leaves a
+        resumable assessment.
         """
-        if command.get("preview") or not any(
-            d["operation"] in {"bind", "merge"}
-            for d in (command.get("decisions") or [])
-        ):
-            return self._execute(**command)
+        if command.get("preview"):
+            return self._execute(**command, automatic=self.propose(**command))
         for attempt in range(3):
-            prepared = self.assess(**command)
+            # Re-proposed on every attempt: a stale assessment means master
+            # state moved, and the next proposal must see where it moved to.
+            automatic = self.propose(**command)
+            if not _identity_work(command.get("decisions"), automatic):
+                return self._execute(**command, automatic=automatic)
+            prepared = self.assess(**command, automatic=automatic)
             if not prepared.get("assessment_id"):
                 # Duplicate delivery or decisions retained in an earlier batch.
-                return self._execute(**command)
+                return self._execute(**command, automatic=automatic)
             try:
                 return self.apply_assessment(
                     prepared["assessment_id"], run_id=command["run_id"]
@@ -139,16 +145,32 @@ class MergeStage:
                     raise
         raise AssertionError("Unreachable assessment retry state")
 
-    def assess(self, **command) -> dict:
+    def propose(self, **command) -> dict:
+        """What the policy's active identifier rules would bind or create."""
+        with self.store.engine.connect() as conn:
+            policy = conn.scalar(
+                text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
+                {"digest": command["policy_digest"]},
+            )
+            if policy is None:
+                return binding.NOTHING
+            return binding.propose(
+                conn,
+                policy,
+                assertions=command.get("assertions") or [],
+                decisions=command.get("decisions") or [],
+                identities=command.get("identities") or [],
+                as_of=command["as_of"],
+            )
+
+    def assess(self, *, automatic: dict | None = None, **command) -> dict:
         """Retain a proposed binding/consolidation without committing masters.
 
         Invalid proposals retain their veto before the validation error is
-        raised. Automatic scoring and qualification remain separate contracts.
+        raised. A rule's proposals are kept beside the caller's command, never
+        inside it, so the command's hash stays the caller's own.
         """
-        if not any(
-            d["operation"] in {"bind", "merge"}
-            for d in (command.get("decisions") or [])
-        ):
+        if not _identity_work(command.get("decisions"), automatic):
             raise ValueError("Assessment requires an identity proposal")
         run_id = command["run_id"]
         proposal = {k: v for k, v in command.items() if k not in {"run_id", "preview"}}
@@ -159,12 +181,16 @@ class MergeStage:
         ):
             if proposal.get(key):
                 proposal[key] = sorted(proposal[key], key=lambda item: item[order])
-        proposal["decisions"] = sorted(
-            proposal["decisions"], key=lambda d: (d["at"], d["decision_id"])
-        )
+        if proposal.get("decisions"):
+            # A load batch whose only identity work is a rule's has none.
+            proposal["decisions"] = sorted(
+                proposal["decisions"], key=lambda d: (d["at"], d["decision_id"])
+            )
         context = {}
         try:
-            result = self._execute(**{**command, "preview": True}, _context=context)
+            result = self._execute(
+                **{**command, "preview": True}, automatic=automatic, _context=context
+            )
         except (Conflict, DBAPIError) as exc:
             # SQL driver exceptions can contain source values/connection details;
             # retain the SQLSTATE, never its full rendered query/parameters.
@@ -181,6 +207,11 @@ class MergeStage:
                     "outcome": "rejected",
                     "rule_version": "merge-validation-v1",
                     "vetoes": [veto],
+                    **(
+                        {"automatic": automatic}
+                        if _identity_work([], automatic)
+                        else {}
+                    ),
                     **context,
                 },
                 run_id,
@@ -189,14 +220,20 @@ class MergeStage:
         body = result.get("assessment")
         if body is None:
             return result
-        return assessment.record(self.store, {**body, "command": proposal}, run_id)
+        kept = {"automatic": automatic} if _identity_work([], automatic) else {}
+        return assessment.record(
+            self.store, {**body, "command": proposal, **kept}, run_id
+        )
 
     def apply_assessment(self, assessment_id: str, *, run_id: str) -> dict:
         with self.store.engine.connect() as conn:
             body = assessment.load(conn, assessment_id)
         try:
             return self._execute(
-                **body["command"], run_id=run_id, assessment_id=assessment_id
+                **body["command"],
+                run_id=run_id,
+                assessment_id=assessment_id,
+                automatic=body.get("automatic"),
             )
         except assessment.StaleAssessment:
             assessment.supersede(self.store, assessment_id, run_id)
@@ -222,6 +259,7 @@ class MergeStage:
         committed_publication: str | None = None,
         continuity_proof: dict | None = None,
         assessment_id: str | None = None,
+        automatic: dict | None = None,
         _context: dict | None = None,
     ) -> dict:
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
@@ -283,6 +321,23 @@ class MergeStage:
                 )
             command.update(family_metadata)
         input_hash = digest(command)
+        # A rule's proposals join the working sets only after the caller's
+        # command is hashed: they carry fresh ids, so hashing them would make
+        # a redelivered batch look like a different command (ticket 04).
+        automatic = automatic or binding.NOTHING
+        for d in automatic["decisions"]:
+            if (
+                digest({k: v for k, v in d.items() if k != "decision_id"})
+                != d["decision_id"]
+            ):
+                raise Conflict("Decision hash mismatch")
+        decisions = sorted(
+            [*decisions, *automatic["decisions"]],
+            key=lambda d: (d["at"], d["decision_id"]),
+        )
+        identities = sorted(
+            [*identities, *automatic["identities"]], key=lambda i: i["entity_id"]
+        )
         with self.store.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
             previous = conn.scalar(
@@ -307,6 +362,16 @@ class MergeStage:
             # the store another way, or a build that no longer holds a named
             # primitive, is refused here the same way (`policy-language.md` §10).
             check_policy(policy)
+            if (
+                not preview
+                and automatic["mints"]
+                and binding.mint_is_stale(conn, policy, automatic["mints"])
+            ):
+                # Under the lock: a concurrent run bound this identifier since
+                # the proposal was assessed. Re-assess rather than mint twice.
+                raise assessment.StaleAssessment(
+                    "An identifier proposed for a new Company is now held"
+                )
             stored_a, stored_d, stored_ids = load_closure(
                 conn, assertions, decisions, limit=self.closure_limit
             )
@@ -467,6 +532,7 @@ class MergeStage:
                             "decision_id": override["decision_id"],
                         }
                     )
+            reviews.extend(automatic["reviews"])
             edges, edge_reviews = relationships.project(claims, state, projected, as_of)
             reviews.extend(edge_reviews)
             projections = [
@@ -549,6 +615,7 @@ class MergeStage:
             )
             request = {
                 **command,
+                "identities": identities,
                 "input_hash": input_hash,
                 "expected_generation": generation,
                 "decisions": [
@@ -613,3 +680,10 @@ class MergeStage:
             if assessment_id is not None:
                 request["assessment_id"] = assessment_id
             return self.store.commit(conn, request, run_id)
+
+
+def _identity_work(decisions: list[dict] | None, automatic: dict | None) -> bool:
+    """Whether a batch proposes any binding or consolidation to assess."""
+    return any(d["operation"] in {"bind", "merge"} for d in decisions or []) or bool(
+        (automatic or {}).get("decisions")
+    )

@@ -61,5 +61,12 @@ Each must be settled, one at a time, before the migration is written:
   automatically); each stays **its own company** in `mdm_v2.company` with a
   `quarantined` flag readers can see; only an **operator-approved rule
   change** lifts it
+- [x] Settle the Stage key — operator (2026-09-24 17:19 ET): **key is (source, the
+  source's own record number)**, e.g. (SEC, CIK 0000320193) or (GLEIF, LEI);
+  every record has one from arrival. **The entity ID is a column on the same
+  row**, filled by the MDM lookup when a matching rule finds or creates the
+  Company, empty while the record waits. It is not in the key, because a
+  waiting record has none. One row per company per source follows from the
+  latest-only upsert.
 - [ ] Settle field provenance after a replacement
 - [ ] Migration on a populated store, Merge Stage change, PG16 tests

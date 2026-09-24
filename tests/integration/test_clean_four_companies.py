@@ -476,3 +476,103 @@ def test_one_master_per_company_takes_fields_from_both_sources(
                     f"  {name:40} {f.get('value')!r:40} from {f['winner']['source_code']}"
                     + (f"   kept: {', '.join(others)}" if others else "")
                 )
+
+
+def test_matching_rules_create_sec_companies_and_gleif_waits(
+    database, source_db, command_databases, tmp_path
+):
+    """Ticket 04 on real data: SEC records create Companies; GLEIF records wait.
+
+    With identifier matching rules active (fixture activation), each SEC
+    record creates one Company and each GLEIF record waits in the Stage,
+    because no Company carries its LEI yet. Joining them is ticket 08.
+    """
+    from tests.integration.test_clean_identifier_binding import (
+        LEI_CONTRACT,
+        LEI_RULE,
+    )
+    from tests.mdm.test_clean_activation import CIK_CONTRACT, CIK_RULE
+
+    body = rule_policy(active=True)
+    sec_rule = {**CIK_RULE, "source": SOURCE_CODE}
+    gleif_rule = {**LEI_RULE, "source": "gleif.level1.v1"}
+    body["kinds"]["company"]["rules"] += [sec_rule, gleif_rule]
+    body["kinds"]["company"]["identifiers"] = {"cik": CIK_CONTRACT, "lei": LEI_CONTRACT}
+    body["automatic_rules"] += [
+        {
+            "kind": "company",
+            "family": "binding",
+            "rule_id": r["rule_id"],
+            "rule_version": r["version"],
+            "verdict": "bind",
+            "activation": "deterministic",
+        }
+        for r in (sec_rule, gleif_rule)
+    ]
+    policy = register(database, rule_contract(), body)
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    manifest = tmp_path / "sec-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "contract_version": 2,
+                "policy_digest": policy,
+                "as_of": core.AS_OF,
+                "batches": [sec_batch(tmp_path)],
+            }
+        )
+    )
+    execute_manifest(
+        store,
+        coordinator,
+        path=str(manifest),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=6,
+    )
+    gleif = FIXTURE["gleif"]
+    capture, path = native.native_fixture(
+        database,
+        source_db,
+        tmp_path,
+        level1=gleif[0],
+        additional_level1=gleif[1:],
+        company_leis=[r["LEI"]["$"] for r in gleif],
+        policy=policy,
+    )
+    execute_manifest(
+        store,
+        coordinator,
+        path=str(path),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=6,
+        publication_verifier=PublicationVerifier(source_db, capture.reader),
+    )
+    masters = core.documents(database, "entity")
+    assert sorted(m["identifiers"]["cik"][0] for m in masters.values()) == sorted(
+        COMPANIES
+    )
+    assert all(set(m["identifiers"]) == {"cik"} for m in masters.values())
+    with database.application.connect() as conn:
+        bound = set(
+            conn.execute(
+                text(
+                    "SELECT body->>'subject' FROM mdm_v2.decision WHERE operation='bind'"
+                )
+            ).scalars()
+        )
+        waiting = conn.execute(
+            text(
+                "SELECT record_key FROM mdm_v2.company_stage "
+                "WHERE source_code='gleif.level1.v1'"
+            )
+        ).scalars()
+        waiting = sorted(waiting)
+    assert waiting == sorted(PAIRS.values())
+    from edgar_warehouse.mdm.clean.evidence import subject_key
+
+    # Every SEC Company record is bound; no GLEIF record is.
+    assert bound == {subject_key(SOURCE_CODE, cik) for cik in COMPANIES}
+    assert not bound & {subject_key("gleif.level1.v1", lei) for lei in PAIRS.values()}

@@ -16,9 +16,9 @@ passes. The defences are attribution — the proof travels inside the pinned
 body, next to the rule — and a re-score of the named files outside the Merge
 Stage (§9.2).
 
-Not yet here, and refused by name rather than ignored: binding rules and
-`deterministic` activation (company mastering ticket 04, which brings the
-identifier primitives they need).
+Binding rules are identifier-only (company mastering ticket 04) and activate
+`deterministic`ally on a verified Identifier Contract (§9.3); fuzzy binding
+has its own statistical gate (ticket 08).
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from statistics import NormalDist
 
 from .classification import check_rule
 from .evidence import KINDS
+from .primitives import NORMALIZERS, primitive_family
 from .store import Conflict, canonical
 
 # Each kind's accepted bar: the least a document may declare (company mastering
@@ -79,16 +80,11 @@ def check_policy(body: dict) -> None:
             )
         seen.add(key)
         family = rule.get("family")
-        if family == "binding":
-            raise Conflict(
-                f"Rule {rule.get('rule_id')}: binding rules are not implemented "
-                "(company mastering ticket 04)"
-            )
-        if family != "classification":
+        if family not in RULE_CHECKS:
             raise Conflict(
                 f"Rule {rule.get('rule_id')} has an unknown family: {family}"
             )
-        check_rule(rule)
+        RULE_CHECKS[family](kind, rule, kinds)
     active = set()
     for entry in body.get("automatic_rules") or []:
         if not isinstance(entry, dict):
@@ -122,18 +118,35 @@ def _check_bar(kind: str, family: str, bar: dict) -> None:
 
 
 def _check_activation(kinds: dict, entry: dict) -> None:
-    kind, family = entry.get("kind"), entry.get("family")
-    rule_id, verdict = entry.get("rule_id"), entry.get("verdict")
-    if entry.get("activation") != "measured":
+    """One shared resolution, then the check its activation kind names.
+
+    Resolution is what every activation needs: the kind, the rule, its exact
+    version and a verdict it emits. What proves an activation differs:
+    a measured proof against a bar (§9.2), or a verified Identifier Contract
+    (§9.3). Kept as one table so a third way is one entry, not a branch.
+    """
+    how = entry.get("activation")
+    if how not in ACTIVATIONS:
         raise Conflict(
-            f"Activation of {rule_id}: {entry.get('activation')} activation is not "
-            "implemented (company mastering ticket 04)"
+            f"Activation of {entry.get('rule_id')}: {how} activation is not a "
+            "supported kind of activation"
         )
-    if family != "classification":
+    family, check = ACTIVATIONS[how]
+    if entry.get("family") != family:
         raise Conflict(
-            f"Activation of {rule_id}: {family} activation is not implemented "
-            "(company mastering ticket 04)"
+            f"Activation of {entry.get('rule_id')}: {how} activation applies to "
+            f"{family} rules, not {entry.get('family')}"
         )
+    block, rule = _resolve(kinds, entry)
+    check(entry["kind"], block, rule, entry)
+
+
+def _resolve(kinds: dict, entry: dict) -> tuple[dict, dict]:
+    kind, rule_id, verdict = (
+        entry.get("kind"),
+        entry.get("rule_id"),
+        entry.get("verdict"),
+    )
     if kind not in kinds:
         raise Conflict(f"Activation names kind {kind}, which the policy does not hold")
     block = kinds[kind]
@@ -141,6 +154,11 @@ def _check_activation(kinds: dict, entry: dict) -> None:
     if not rules:
         raise Conflict(f"Activation names rule {rule_id}, which is absent from {kind}")
     rule = rules[0]
+    if rule.get("family") != entry.get("family"):
+        raise Conflict(
+            f"Activation names {rule_id} as {entry.get('family')}, but it is a "
+            f"{rule.get('family')} rule"
+        )
     if rule.get("version") != entry.get("rule_version"):
         # A rule edited after its proof is orphaned, never re-proved by default.
         raise Conflict(
@@ -151,6 +169,11 @@ def _check_activation(kinds: dict, entry: dict) -> None:
         raise Conflict(
             f"Activation names verdict {verdict}, which {rule_id} does not emit"
         )
+    return block, rule
+
+
+def _check_measured(kind: str, block: dict, rule: dict, entry: dict) -> None:
+    family, verdict = entry["family"], entry["verdict"]
     if verdict not in KINDS:
         raise Conflict(f"Activation names verdict {verdict}, which decides no kind")
     bar = (block.get("bars") or {}).get(family)
@@ -159,6 +182,22 @@ def _check_activation(kinds: dict, entry: dict) -> None:
             f"Kind {kind} has no bar for {family}, so nothing there activates"
         )
     _check_proof(kind, bar, entry.get("proof") or {})
+
+
+def _check_deterministic(kind: str, block: dict, rule: dict, entry: dict) -> None:
+    """§9.3: an identifier-only rule activates on its verified contracts.
+
+    It has no precision to measure; its failure mode is a wrong Identifier
+    Contract. So every namespace it names must have a complete one.
+    """
+    for namespace in binding_namespaces(rule):
+        contract = (block.get("identifiers") or {}).get(namespace)
+        if not contract:
+            raise Conflict(
+                f"Activation of {rule['rule_id']}: namespace {namespace} has no "
+                "Identifier Contract"
+            )
+        _check_contract(namespace, contract)
 
 
 def _check_proof(kind: str, bar: dict, proof: dict) -> None:
@@ -239,3 +278,106 @@ def rule_version_conflicts(body: dict, registered: Iterable[dict]) -> list[tuple
             - {canonical(rule)}
         }
     )
+
+
+# The namespaces an identifier rule may name: exactly the keys source evidence
+# stores (`cik`, `lei`), not the spec's `sec.cik`, so a rule can never name a
+# namespace no record carries and silently match nothing.
+NAMESPACES = frozenset({"cik", "lei"})
+ON_NO_MATCH = frozenset({"mint", "wait"})
+# Company compatibility is kind equality only: Q9 says a name change never
+# revokes a binding, and a name-similarity test is fuzzy matching (ticket 08).
+COMPATIBILITY = frozenset({"kind_equal@1"})
+
+
+def binding_namespaces(rule: dict) -> list[str]:
+    return sorted(
+        {(test.get("args") or {}).get("namespace") for test in rule.get("when") or []}
+    )
+
+
+def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
+    """A binding rule is identifier-only here, and says what a miss does.
+
+    `on_no_match` is data on the rule: `mint` creates a new Company (the SEC
+    universe is the base, Q1); `wait` leaves the record in the Stage (operator,
+    2026-09-24: an unlinked GLEIF record waits). Fuzzy binding is ticket 08.
+    """
+    rule_id = rule.get("rule_id")
+    if rule.get("applies_to_verdict") != kind:
+        raise Conflict(
+            f"Binding rule {rule_id} applies to {rule.get('applies_to_verdict')}, "
+            f"but sits in kind {kind}"
+        )
+    if rule.get("emits") != ["bind"]:
+        raise Conflict(f"Binding rule {rule_id} must emit exactly bind")
+    if rule.get("on_no_match") not in ON_NO_MATCH:
+        raise Conflict(
+            f"Binding rule {rule_id} must say what a miss does: on_no_match "
+            f"{sorted(ON_NO_MATCH)}"
+        )
+    tests = rule.get("when") or []
+    if not tests:
+        raise Conflict(f"Binding rule {rule_id} has no when")
+    for test in tests:
+        if primitive_family(test.get("primitive")) != "binding":
+            raise Conflict(
+                f"Binding rule {rule_id} calls {test.get('primitive')}, which is "
+                "not a binding test"
+            )
+    namespaces = binding_namespaces(rule)
+    if len(namespaces) != 1 or namespaces[0] not in NAMESPACES:
+        raise Conflict(
+            f"Binding rule {rule_id} must name exactly one namespace of "
+            f"{sorted(NAMESPACES)}: {namespaces}"
+        )
+    if not any(t["primitive"] == "identifier_match@1" for t in tests):
+        raise Conflict(f"Binding rule {rule_id} does not match an identifier")
+
+
+def _check_classification_rule(kind: str, rule: dict, kinds: dict) -> None:
+    check_rule(rule)
+
+
+def _check_contract(namespace: str, contract: dict) -> None:
+    """§7.2: everything the claim rests on, declared and verifiable."""
+    where = f"Identifier Contract {namespace}"
+    if not contract.get("authority"):
+        raise Conflict(f"{where} names no issuing authority")
+    if contract.get("normalizer") not in NORMALIZERS:
+        raise Conflict(f"{where} names an unknown normalizer")
+    forward = (contract.get("claim") or {}).get("forward")
+    if type(forward) is not int or forward < 1:
+        raise Conflict(f"{where} states no forward claim")
+    compatibility = contract.get("compatibility") or {}
+    if (
+        not compatibility.get("field")
+        # A binding test (§5 has no family of its own for it); kind equality
+        # is the only one this build holds.
+        or compatibility.get("predicate") not in COMPATIBILITY
+    ):
+        raise Conflict(f"{where} states no compatibility check")
+    verification = contract.get("verification") or {}
+    if not (
+        isinstance(verification.get("corpus_sha256"), str)
+        and len(verification["corpus_sha256"]) == 64
+        and all(verification.get(k) for k in ("approved_by", "approved_at", "reason"))
+    ):
+        raise Conflict(f"{where} is not verified: corpus hash and approval required")
+    tolerance = contract.get("tolerance") or {}
+    if not (
+        tolerance.get("unit")
+        and type(tolerance.get("warm_up_decisions")) is int
+        and isinstance(tolerance.get("max_per_10k"), (int, float))
+    ):
+        raise Conflict(f"{where} has an incomplete tolerance block")
+
+
+RULE_CHECKS = {
+    "classification": _check_classification_rule,
+    "binding": check_binding_rule,
+}
+ACTIVATIONS = {
+    "measured": ("classification", _check_measured),
+    "deterministic": ("binding", _check_deterministic),
+}
