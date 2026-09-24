@@ -46,6 +46,12 @@ Security consumer, and its coverage is partial (participating agencies and new
 ISINs). So today a ticker or CUSIP cannot be compared with a GLEIF record
 directly; name plus country and address can.
 
+**Decided** (operator, 2026-09-24): the first matching rule compares **name,
+country and address** only. GLEIF's ISIN-to-LEI file comes afterwards, as a
+second, stronger check where it has coverage — a CUSIP match confirms a name
+match rather than replacing it. It waits because it brings a new source into
+scope and needs a CUSIP on the SEC side, which the SEC Company data lacks.
+
 Without this ticket the Proving Run (05) reports every SEC Company as "no
 GLEIF match", which Q2 counts as a *completed* outcome. The milestone would
 look finished with zero SEC Companies linked to GLEIF, failing the completion
