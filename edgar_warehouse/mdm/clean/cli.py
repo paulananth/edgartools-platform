@@ -12,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy import create_engine, event, text
 
+from .activation import check_policy
 from .adapters import UnsupportedRecord, normalize
 from .bookkeeping import RunCoordinator
 from .evidence import deferred_record
@@ -135,6 +136,15 @@ def batch_evidence(
                 text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
                 {"digest": policy_digest},
             )
+        if policy is None:
+            # Fail before reading a record, not on the first one.
+            raise Conflict(
+                f"Contract {spec['source_code']} names a classification rule; "
+                f"its pinned policy {policy_digest!r} is not registered"
+            )
+        # Checked here too, not only per batch: an activation decides a
+        # record's kind at read time, before the Merge Stage sees the batch.
+        check_policy(policy)
     result: list[dict] = []
     deferred: list[dict] = []
     retains_deferred = contract["adapter"].get("retain_deferred", False)

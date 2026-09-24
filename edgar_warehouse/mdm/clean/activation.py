@@ -39,9 +39,11 @@ ACCEPTED_BARS = {
     "person": {"min_precision": 0.99, "one_sided_confidence": 0.975},
 }
 METHOD = "wilson_lower_bound"
-# A stated lower bound reproduces when it matches the recomputed one to this
-# many places; enough for any bound written to six decimals.
-TOLERANCE = 1e-6
+# A stated lower bound reproduces when it is no higher than the recomputed one
+# and within this of it: a bound written to five decimals, as the spec's own
+# example is (0.99545 for 0.9954530), passes; a bound rounded *up* never does,
+# because the bar is judged on the recomputed value, not the stated one.
+TOLERANCE = 1e-5
 
 
 def wilson_lower_bound(correct: int, n: int, confidence: float) -> float:
@@ -173,7 +175,11 @@ def _check_proof(kind: str, bar: dict, proof: dict) -> None:
         proof.get("correct"), proof.get("n"), proof["one_sided_confidence"]
     )
     stated = proof.get("lower_bound")
-    if not isinstance(stated, (int, float)) or abs(recomputed - stated) > TOLERANCE:
+    if (
+        not isinstance(stated, (int, float))
+        or stated > recomputed
+        or recomputed - stated > TOLERANCE
+    ):
         raise Conflict(
             f"Proof lower bound {stated} does not reproduce from its sample "
             f"({recomputed:.6f})"

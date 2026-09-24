@@ -253,9 +253,16 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
             ).all()
         )
         set_aside = conn.execute(
-            text("SELECT body->>'reason' FROM mdm_v2.deferred_record")
-        ).scalars()
-        assert sorted(set_aside) == ["classification_deferred"] * 2
+            text(
+                "SELECT body->'raw_record'->>'cik', body->>'reason', "
+                "body->'provenance'->'classification'->>'step' "
+                "FROM mdm_v2.deferred_record"
+            )
+        ).all()
+        assert sorted(set_aside) == [
+            ("1214156", "classification_deferred", "3"),
+            ("1513142", "classification_deferred", "3"),
+        ]
     assert labelled == {APPLE: "1", MICROSOFT: "1", SHELL: "2", ASML: "2"}
 
     gleif = FIXTURE["gleif"]

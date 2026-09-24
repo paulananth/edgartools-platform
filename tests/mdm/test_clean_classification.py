@@ -349,6 +349,14 @@ class TestTheReadPathRunsTheNamedRule:
         assert caught.value.reason == "classification_deferred"
         assert caught.value.detail["classification"]["step"] == "2"
 
+    def test_a_rule_written_for_another_source_is_refused(self):
+        self.COMPANY_RULE["source"] = "gleif.level1.v1"
+        try:
+            with pytest.raises(Conflict, match="written for gleif.level1.v1"):
+                self.read(self.ROW, self.policy(active=True))
+        finally:
+            del self.COMPANY_RULE["source"]
+
     def test_a_named_rule_without_its_policy_fails_closed(self):
         with pytest.raises(Conflict, match="pinned Mastering Policy"):
             self.read(self.ROW, None)

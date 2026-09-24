@@ -65,7 +65,9 @@ def record_key(row: dict, paths: list[str]) -> str:
     return str(parts[0]) if len(parts) == 1 else canonical(parts)
 
 
-def classify_record(row: dict, named: dict, policy: dict | None) -> tuple[str, dict]:
+def classify_record(
+    row: dict, named: dict, policy: dict | None, source_code: str
+) -> tuple[str, dict]:
     """Run the classification rule a Dataset Contract names, at read time.
 
     The decided kind is hashed into the assertion id, so it is settled here and
@@ -80,6 +82,13 @@ def classify_record(row: dict, named: dict, policy: dict | None) -> tuple[str, d
             "Mastering Policy"
         )
     rule = resolve_rule(policy, named)
+    if rule.get("source") not in (None, source_code):
+        # A rule reads the field paths of the source it was written for; run
+        # against another source it would test fields that are not there.
+        raise Conflict(
+            f"Classification rule {rule['rule_id']} is written for "
+            f"{rule['source']}, not {source_code}"
+        )
     verdict, step = fired(rule, row, policy["kinds"][named["kind"]])
     labelled = {
         "rule_id": rule["rule_id"],
@@ -124,7 +133,9 @@ def normalize(
     labelled = None
     kind = mapping.get("kind")
     if mapping.get("classification"):
-        kind, labelled = classify_record(row, mapping["classification"], policy)
+        kind, labelled = classify_record(
+            row, mapping["classification"], policy, source_code
+        )
     elif "kind_field" in mapping:
         source_kind = value(row, mapping["kind_field"])
         if source_kind is not None and not isinstance(source_kind, str):

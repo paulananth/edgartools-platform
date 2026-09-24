@@ -50,7 +50,29 @@ local ET; parts finished before the rule existed carry their date only.
 - [x] Four operator-picked Companies (AAPL, MSFT, Shell, ASML) from real SEC
   bronze and the pinned GLEIF golden copy, plus two individual controls — PG16
   `test_clean_four_companies.py` (2026-09-24 07:18 ET)
-- [ ] Three-axis `/code-review` of this branch
+- [x] Three-axis `/code-review` of this branch — Standards: no hard
+  violation; Spec: 5 gaps, 3 implementation issues; GoF: leave, one reshaping
+  for ticket 04 (2026-09-24 07:25 ET)
+- [x] Review fixes: read path checks the policy before trusting an activation
+  and fails before its first record; §9.2 tolerance accepts the spec's own
+  five-decimal example and refuses a bound rounded up; a rule written for
+  another `source` is refused; spec note corrected (check 9 is
+  registration-only, compares the whole rule, deliberately) — unit + PG16
+  (2026-09-24 07:25 ET)
+- [ ] ~~`evaluated_per` (one verdict per key, shared by every record carrying
+  it)~~ not built: each record is classified on its own row today; needed
+  before a Form 4 owner's many records can share one verdict
+- [ ] ~~`evidence_recorded` (source category, asserted legal form and inferred
+  kind stored separately)~~ not built; provenance carries rule, version, step
+- [ ] ~~Check 1 for primitive arguments~~ arguments are still checked when a
+  record reaches the primitive, not at registration
+- [ ] ~~Reshape `_check_activation` into shared resolve plus a per-activation
+  check~~ first commit of ticket 04 (GoF review): its `verdict not in KINDS`
+  line would refuse every `bind` activation
+- [ ] Decide: `classification_*` deferred reasons open a **blocking** review
+  (not in `nonblocking_deferred_reasons`). Kept blocking on purpose — a
+  Steward must act before the record means anything — but it makes a run with
+  any unclassified record report incomplete; confirm with the operator
 - [ ] PR opened and CI green
 - [ ] Binding predicates replacing the binding refusal — needs ticket 04's
   identifier primitives; binding rules and `deterministic` activation are

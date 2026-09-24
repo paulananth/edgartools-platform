@@ -13,6 +13,7 @@ What it verifies is arithmetic, not truth: a fabricated `n: 1000, correct:
 from __future__ import annotations
 
 import copy
+import math
 
 import pytest
 
@@ -54,7 +55,10 @@ BAR = {
 
 def proof(n=3000, correct=3000, confidence=0.95, **changes):
     if "lower_bound" not in changes and 0 <= correct <= n:
-        changes["lower_bound"] = round(wilson_lower_bound(correct, n, confidence), 6)
+        # Rounded down: a stated bound may never exceed its sample.
+        changes["lower_bound"] = (
+            math.floor(wilson_lower_bound(correct, n, confidence) * 1e6) / 1e6
+        )
     body = {
         "method": "wilson_lower_bound",
         "one_sided_confidence": confidence,
@@ -104,6 +108,47 @@ class TestTheArithmetic:
     def test_a_perfect_sample_reproduces_the_spec_example(self):
         """`policy-language.md` §9.2: n 841, all correct, 97.5% -> 0.99545."""
         assert round(wilson_lower_bound(841, 841, 0.975), 5) == 0.99545
+
+    def test_the_spec_example_passes_the_check_as_written(self):
+        """§9.2's own entry states 0.99545, five decimals of 0.9954530."""
+        body = {
+            "required_consumers": ["journal"],
+            "kinds": {
+                "person": {
+                    "rules": [
+                        {
+                            **RULE,
+                            "emits": ["person", "deferred"],
+                            "steps": [
+                                {**RULE["steps"][0], "verdict": "person"},
+                                RULE["steps"][1],
+                            ],
+                        }
+                    ],
+                    "bars": {
+                        "classification": {
+                            "min_precision": 0.99,
+                            "method": "wilson_lower_bound",
+                            "one_sided_confidence": 0.975,
+                        }
+                    },
+                }
+            },
+            "automatic_rules": [
+                entry(
+                    kind="person",
+                    verdict="person",
+                    proof=proof(
+                        n=841, correct=841, confidence=0.975, lower_bound=0.99545
+                    ),
+                )
+            ],
+        }
+        check_policy(body)
+
+    def test_a_bound_rounded_up_past_its_sample_is_refused(self):
+        with pytest.raises(Conflict, match="does not reproduce"):
+            check_policy(policy(automatic=[entry(proof=proof(lower_bound=0.99910))]))
 
     def test_a_perfect_sample_of_3000_clears_the_company_bar(self):
         assert wilson_lower_bound(3000, 3000, 0.95) >= 0.999
