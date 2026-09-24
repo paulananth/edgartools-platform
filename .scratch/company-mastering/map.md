@@ -86,6 +86,15 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   deterministic rules per namespace** — applied to every automatic verdict it
   made a rule accepted at 99.9% suspend itself about nine times in ten.
 
+## Added tickets
+
+- [Qualify the first SEC-to-GLEIF Company binding rule](issues/08-qualify-sec-to-gleif-fuzzy-binding.md)
+  (added 2026-09-23, blocked by 04; now blocks 05). Tickets 03 and 04 only
+  make a Company recognisable within one source: SEC and GLEIF share no
+  identifier, so the first link between them needs Q4's qualified fuzzy
+  matching, which no ticket built. Without it the Proving Run would report
+  every Company as "no GLEIF match" and the milestone would look complete.
+
 ## Not yet specified
 
 - **Which cohort the Proving Run uses.** The 1,000-row research cohort and its
