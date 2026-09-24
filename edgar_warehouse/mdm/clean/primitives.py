@@ -166,8 +166,17 @@ def _fields_all_empty(args: dict, record: dict, doc: dict) -> bool:
     )
 
 
+def _runs_in_the_merge_stage(args: dict, record: dict, doc: dict) -> Any:
+    # A binding test compares a record with master state, which one record
+    # cannot see; `binding.propose` evaluates it with the lookup in hand.
+    raise Conflict("Binding and compatibility tests run in the Merge Stage")
+
+
 REGISTRY = MappingProxyType(
     {
+        "identifier_match@1": Primitive(_runs_in_the_merge_stage, "binding"),
+        "identifier_cardinality@1": Primitive(_runs_in_the_merge_stage, "binding"),
+        "kind_equal@1": Primitive(_runs_in_the_merge_stage, "binding"),
         "evidence_present@1": Primitive(_evidence_present, "classification"),
         "field_in_set@1": Primitive(_field_in_set, "classification"),
         "token_match@1": Primitive(_token_match, "classification"),

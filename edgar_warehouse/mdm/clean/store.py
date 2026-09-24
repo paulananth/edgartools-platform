@@ -51,6 +51,7 @@ CLEAN_MDM_MIGRATIONS = (
     "032_clean_mdm_deferred_reading.sql",
     "033_clean_mdm_per_kind_views.sql",
     "034_clean_mdm_stage_view_naming.sql",
+    "035_clean_mdm_automatic_assessment.sql",
 )
 
 

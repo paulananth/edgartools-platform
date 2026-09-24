@@ -194,10 +194,9 @@ class TestADeclaredRuleIsWellFormed:
         with pytest.raises(Conflict, match="sec-company"):
             check_policy(policy(rules=[RULE, RULE]))
 
-    def test_a_binding_rule_is_refused_by_name_until_ticket_04(self):
-        """Binding primitives do not exist yet; a declared one would do nothing."""
+    def test_a_malformed_binding_rule_is_refused(self):
         binding = {"rule_id": "cik", "version": "1", "family": "binding"}
-        with pytest.raises(Conflict, match="binding rules are not implemented"):
+        with pytest.raises(Conflict, match="applies to"):
             check_policy(policy(rules=[RULE, binding]))
 
 
@@ -288,3 +287,142 @@ class TestAnActivationCarriesItsProof:
     def test_a_legacy_string_entry_is_refused(self):
         with pytest.raises(Conflict, match="entry"):
             check_policy(policy(automatic=["exact"]))
+
+
+CIK_RULE = {
+    "rule_id": "company-cik",
+    "version": "2026-09-24",
+    "family": "binding",
+    "applies_to_verdict": "company",
+    "emits": ["bind"],
+    "on_no_match": "mint",
+    "when": [
+        {"primitive": "identifier_match@1", "args": {"namespace": "cik"}},
+        {"primitive": "identifier_cardinality@1", "args": {"namespace": "cik"}},
+    ],
+}
+CIK_CONTRACT = {
+    "authority": "SEC/EDGAR",
+    "sources": ["sec.submissions.company.v1"],
+    "normalizer": "normalize_identifier@sec-cik-v1",
+    "claim": {"forward": 1, "reverse": None},
+    "compatibility": {"field": "kind", "predicate": "kind_equal@1"},
+    "verification": {
+        "corpus_sha256": "c" * 64,
+        "approved_by": "operator",
+        "approved_at": "2026-09-24T12:00:00Z",
+        "reason": "fixture verification: shape only, not a measurement",
+    },
+    "tolerance": {"unit": "items", "warm_up_decisions": 10000, "max_per_10k": 5},
+}
+
+
+def binding_policy(rule=None, contract=None, activate=True):
+    body = policy(rules=[RULE, rule or CIK_RULE])
+    if contract is not False:
+        body["kinds"]["company"]["identifiers"] = {"cik": contract or CIK_CONTRACT}
+    if activate:
+        body["automatic_rules"] = [
+            {
+                "kind": "company",
+                "family": "binding",
+                "rule_id": "company-cik",
+                "rule_version": "2026-09-24",
+                "verdict": "bind",
+                "activation": "deterministic",
+            }
+        ]
+    return body
+
+
+class TestAnIdentifierRule:
+    """Ticket 04: identifier-only binding activates on a verified contract."""
+
+    def test_a_verified_contract_activates_the_rule(self):
+        body = binding_policy()
+        check_policy(body)
+        assert activated(body, "company", CIK_RULE, "bind")
+
+    @pytest.mark.parametrize(
+        ("changes", "reason"),
+        [
+            ({"on_no_match": "guess"}, "on_no_match"),
+            ({"emits": ["bind", "consolidate"]}, "exactly bind"),
+            ({"applies_to_verdict": "person"}, "sits in kind company"),
+            (
+                {"when": [{"primitive": "token_match@1", "args": {}}]},
+                "not a binding test",
+            ),
+            (
+                {
+                    "when": [
+                        {
+                            "primitive": "identifier_match@1",
+                            "args": {"namespace": "sec.cik"},
+                        }
+                    ]
+                },
+                "exactly one namespace",
+            ),
+            (
+                {
+                    "when": [
+                        {
+                            "primitive": "identifier_cardinality@1",
+                            "args": {"namespace": "cik"},
+                        }
+                    ]
+                },
+                "does not match an identifier",
+            ),
+        ],
+    )
+    def test_a_malformed_rule_is_refused(self, changes, reason):
+        with pytest.raises(Conflict, match=reason):
+            check_policy(binding_policy(rule={**CIK_RULE, **changes}, activate=False))
+
+    def test_no_contract_means_no_activation(self):
+        with pytest.raises(Conflict, match="no Identifier Contract"):
+            check_policy(binding_policy(contract=False))
+
+    @pytest.mark.parametrize(
+        ("changes", "reason"),
+        [
+            ({"authority": ""}, "authority"),
+            ({"sources": []}, "issuing source"),
+            ({"normalizer": "invented"}, "normalizer"),
+            ({"claim": {}}, "forward claim"),
+            (
+                {"compatibility": {"field": "kind", "predicate": "token_match@1"}},
+                "compatibility",
+            ),
+            ({"verification": {"corpus_sha256": "short"}}, "not verified"),
+            ({"tolerance": {"unit": "items"}}, "tolerance"),
+        ],
+    )
+    def test_an_incomplete_contract_is_refused(self, changes, reason):
+        with pytest.raises(Conflict, match=reason):
+            check_policy(binding_policy(contract={**CIK_CONTRACT, **changes}))
+
+    def test_a_deterministic_activation_of_a_classification_rule_is_refused(self):
+        body = policy(
+            automatic=[entry(activation="deterministic", family="classification")]
+        )
+        with pytest.raises(Conflict, match="applies to binding rules"):
+            check_policy(body)
+
+    def test_a_binding_rule_cannot_be_measured_into_activity_here(self):
+        body = binding_policy(activate=False)
+        body["automatic_rules"] = [
+            {
+                "kind": "company",
+                "family": "binding",
+                "rule_id": "company-cik",
+                "rule_version": "2026-09-24",
+                "verdict": "bind",
+                "activation": "measured",
+                "proof": proof(),
+            }
+        ]
+        with pytest.raises(Conflict, match="applies to classification rules"):
+            check_policy(body)

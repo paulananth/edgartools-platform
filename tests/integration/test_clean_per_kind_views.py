@@ -453,6 +453,7 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
         ] == [
             "033_clean_mdm_per_kind_views.sql",
             "034_clean_mdm_stage_view_naming.sql",
+            "035_clean_mdm_automatic_assessment.sql",
         ]
         # 034 renamed rather than duplicated: the name 033 created is gone.
         assert (

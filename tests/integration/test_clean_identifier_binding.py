@@ -1,0 +1,383 @@
+"""Real PG16: identifier-only matching rules (company mastering ticket 04).
+
+A record whose CIK is already on exactly one Company joins it; a new CIK
+creates one Company; an LEI rule that says `wait` leaves the record in the
+Stage; an identifier on two Companies, or two identifiers pointing at two
+Companies, never binds. Every automatic proposal is assessed first (Q13), a
+redelivered batch returns its first result, and a run that proposed a new
+Company re-checks under the Merge Stage lock before minting it.
+
+The activations below are **fixture** activations: the contracts' verification
+blocks are shape only. Nothing in the production policy activates a matching
+rule before the operator approves its digest (ticket 06).
+"""
+
+from __future__ import annotations
+
+import copy
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import text
+
+from edgar_warehouse.mdm.clean import assessment
+from edgar_warehouse.mdm.clean.merge import MergeStage
+from edgar_warehouse.mdm.clean.store import Store, register_policy
+from tests.integration import test_clean_mdm_postgres as core
+from tests.mdm.test_clean_activation import CIK_CONTRACT, CIK_RULE
+
+postgres = core.postgres
+database = core.database
+
+APPLE_CIK = "0000320193"
+APPLE_LEI = "HWUPKR0MPOU8FGXBT394"
+# fixture.primary stands for SEC (it issues CIKs), fixture.secondary for GLEIF
+# (it issues LEIs). Only the issuer's record creates a Company; any record may
+# join one through an identifier the issuer's record established (Q14).
+CIK_MINT = {**CIK_RULE, "source": "fixture.primary"}
+CIK_JOIN = {**CIK_RULE, "rule_id": "company-cik-join", "on_no_match": "wait"}
+LEI_RULE = {
+    **CIK_RULE,
+    "rule_id": "company-lei",
+    "on_no_match": "wait",
+    "when": [
+        {"primitive": "identifier_match@1", "args": {"namespace": "lei"}},
+        {"primitive": "identifier_cardinality@1", "args": {"namespace": "lei"}},
+    ],
+}
+CIK_ISSUED = {**CIK_CONTRACT, "sources": ["fixture.primary"]}
+LEI_CONTRACT = {
+    **CIK_CONTRACT,
+    "authority": "GLEIF",
+    "sources": ["fixture.secondary"],
+    "normalizer": "normalize_identifier@lei-v1",
+}
+RULES = (CIK_MINT, CIK_JOIN, LEI_RULE)
+
+
+def matching_policy(database, *, active=True):
+    body = {
+        "version": "identifier-binding-test",
+        "required_consumers": ["export", "graph"],
+        "automatic_rules": [],
+        "kinds": {
+            "company": {
+                "version": "company-test",
+                "defaults": {
+                    "sources": ["fixture.primary", "fixture.secondary"],
+                    "allow_unknown_effective": True,
+                },
+                "rules": list(RULES),
+                "identifiers": {"cik": CIK_ISSUED, "lei": LEI_CONTRACT},
+            }
+        },
+    }
+    if active:
+        body["automatic_rules"] = [
+            {
+                "kind": "company",
+                "family": "binding",
+                "rule_id": rule["rule_id"],
+                "rule_version": rule["version"],
+                "verdict": "bind",
+                "activation": "deterministic",
+            }
+            for rule in RULES
+        ]
+    with database.admin.begin() as conn:
+        return register_policy(conn, copy.deepcopy(body))
+
+
+def record(key, source_code="fixture.primary", **identifiers):
+    return core.source(
+        key=key,
+        source_code=source_code,
+        fields={"name": f"Company {key}"},
+        identifiers=identifiers,
+    )
+
+
+def load(database, policy, batch, *assertions, consumer="load", checkpoint=1):
+    return MergeStage(Store(database.application)).apply(
+        batch_id=batch,
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer=consumer,
+        expected_checkpoint=checkpoint - 1,
+        checkpoint=checkpoint,
+        as_of=core.AS_OF,
+        assertions=list(assertions),
+    )
+
+
+def companies(database):
+    return {
+        k: v
+        for k, v in core.documents(database, "entity").items()
+        if v["kind"] == "company"
+    }
+
+
+def open_reviews(database):
+    return [v for v in core.documents(database, "review").values() if v.get("open")]
+
+
+def assessments(database):
+    with database.application.connect() as conn:
+        return conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment"))
+
+
+def test_a_new_cik_creates_one_company_and_a_second_record_joins_it(database):
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    (only,) = companies(database).values()
+    assert only["identifiers"] == {"cik": [APPLE_CIK]}
+    # A second record from another dataset carrying the same CIK joins it.
+    load(
+        database,
+        policy,
+        "b2",
+        record("b", "fixture.secondary", cik=APPLE_CIK),
+        checkpoint=2,
+    )
+    after = companies(database)
+    assert list(after) == [only["entity_id"]]
+    assert len(after[only["entity_id"]]["subjects"]) == 2
+    # Q13: both automatic proposals were assessed before they committed.
+    assert assessments(database) == 2
+    with database.application.connect() as conn:
+        actors = conn.execute(
+            text("SELECT body->>'actor' FROM mdm_v2.decision WHERE operation='bind'")
+        ).scalars()
+        # SEC's record created the Company; the other dataset's record joined.
+        assert sorted(actors) == [
+            "rule:company-cik-join@2026-09-24",
+            "rule:company-cik@2026-09-24",
+        ]
+
+
+def test_a_record_that_is_not_the_issuer_waits_until_the_issuer_arrives(database):
+    """Only SEC's own record creates a Company from a CIK (Q14)."""
+    policy = matching_policy(database)
+    other = record("b", "fixture.secondary", cik=APPLE_CIK)
+    load(database, policy, "b1", other)
+    assert companies(database) == {}
+    load(database, policy, "b2", record("a", cik=APPLE_CIK), checkpoint=2)
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 1
+    # Its next delivery finds the Company the issuer's record created.
+    load(database, policy, "b3", other, checkpoint=3)
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 2
+
+
+def test_many_new_records_with_one_cik_create_one_company(database):
+    """Ticket 03 decision 3: forty filings, one Company, not forty."""
+    policy = matching_policy(database)
+    load(
+        database,
+        policy,
+        "b1",
+        record("a", cik=APPLE_CIK),
+        record("b", "fixture.secondary", cik=APPLE_CIK),
+    )
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 2
+
+
+def test_an_unmatched_lei_waits_in_the_stage(database):
+    """Operator, 2026-09-24: an unlinked GLEIF record creates no Company."""
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("g", "fixture.secondary", lei=APPLE_LEI))
+    assert companies(database) == {}
+    assert [r["reason"] for r in open_reviews(database)] == ["binding_required"]
+    assert assessments(database) == 0
+
+
+def test_a_record_carrying_both_ids_does_not_attach_its_lei(database):
+    """Q14: an LEI does not become a CIK crosswalk because both values exist."""
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK, lei=APPLE_LEI))
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    load(database, policy, "b2", gleif, checkpoint=2)
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 1
+
+
+def test_an_lei_held_through_its_issuers_record_lets_another_record_join(database):
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    (company,) = companies(database)
+    # Stands in for ticket 08: the GLEIF record is linked to the Company.
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    _, link = core.identity_and_binding(gleif, company)
+    MergeStage(Store(database.application)).apply(
+        batch_id="link",
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer="link",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        assertions=[gleif],
+        decisions=[link],
+    )
+    load(
+        database,
+        policy,
+        "b2",
+        record("g2", "fixture.secondary", lei=APPLE_LEI),
+        checkpoint=2,
+    )
+    (only,) = companies(database).values()
+    assert only["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
+    assert len(only["subjects"]) == 3
+
+
+def test_a_redelivered_batch_returns_its_first_result(database):
+    """Lost acknowledgement: the rule's fresh ids must not break redelivery."""
+    policy = matching_policy(database)
+    command = {
+        "batch_id": "b1",
+        "run_id": str(uuid4()),
+        "policy_digest": policy,
+        "consumer": "load",
+        "expected_checkpoint": 0,
+        "checkpoint": 1,
+        "as_of": core.AS_OF,
+        "assertions": [record("a", cik=APPLE_CIK)],
+    }
+    stage = MergeStage(Store(database.application))
+    first = stage.apply(**command)
+    again = stage.apply(**{**command, "run_id": str(uuid4())})
+    assert again["duplicate"] and again["generation"] == first["generation"]
+    assert len(companies(database)) == 1
+
+
+def test_an_identifier_on_two_companies_never_binds(database):
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    a, b = record("a", cik=APPLE_CIK), record("b2", cik=APPLE_CIK)
+    left, bind_a = core.identity_and_binding(a)
+    right, bind_b = core.identity_and_binding(b)
+    stage.apply(
+        batch_id="seed",
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer="seed",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        assertions=[a, b],
+        identities=[left, right],
+        decisions=[bind_a, bind_b],
+    )
+    load(database, policy, "b1", record("c", cik=APPLE_CIK))
+    assert len(companies(database)) == 2
+    assert "ambiguous_identifier" in {r["reason"] for r in open_reviews(database)}
+
+
+def test_a_cik_and_an_lei_pointing_at_two_companies_never_bind(database):
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    load(database, policy, "b2", record("m", cik="0000789019"), checkpoint=2)
+    _apple, microsoft = sorted(
+        companies(database).values(), key=lambda c: c["identifiers"]["cik"][0]
+    )
+    # Microsoft holds the LEI through its issuer's record.
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    _, link = core.identity_and_binding(gleif, microsoft["entity_id"])
+    MergeStage(Store(database.application)).apply(
+        batch_id="link",
+        run_id=str(uuid4()),
+        policy_digest=policy,
+        consumer="link",
+        expected_checkpoint=0,
+        checkpoint=1,
+        as_of=core.AS_OF,
+        assertions=[gleif],
+        decisions=[link],
+    )
+    load(
+        database,
+        policy,
+        "b3",
+        record("c", "fixture.secondary", cik=APPLE_CIK, lei=APPLE_LEI),
+        checkpoint=3,
+    )
+    assert len(companies(database)) == 2
+    assert "conflicting_identifiers" in {r["reason"] for r in open_reviews(database)}
+
+
+def test_a_concurrent_run_cannot_create_a_second_company_for_one_cik(database):
+    """B is assessed to create a Company; A creates it first; B must not."""
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    late = {
+        "batch_id": "late",
+        "run_id": str(uuid4()),
+        "policy_digest": policy,
+        "consumer": "late",
+        "expected_checkpoint": 0,
+        "checkpoint": 1,
+        "as_of": core.AS_OF,
+        "assertions": [record("b", cik=APPLE_CIK)],
+    }
+    proposed = stage.propose(**late)
+    assert len(proposed["identities"]) == 1
+    prepared = stage.assess(**late, automatic=proposed)
+    load(database, policy, "early", record("a", cik=APPLE_CIK), consumer="early")
+    with pytest.raises(assessment.StaleAssessment):
+        stage.apply_assessment(prepared["assessment_id"], run_id=late["run_id"])
+    # The retry re-proposes against the Company that now exists.
+    stage.apply(**{**late, "run_id": str(uuid4())})
+    (only,) = companies(database).values()
+    assert len(only["subjects"]) == 2
+
+
+def test_without_an_activation_nothing_matches_automatically(database):
+    policy = matching_policy(database, active=False)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    assert companies(database) == {}
+    assert assessments(database) == 0
+
+
+def test_migration_035_applies_to_a_populated_store(postgres):
+    """CLAUDE.md: a migration is tested over real rows, in production's order.
+
+    A store at 034 already holds an assessment of a caller's binding. 035
+    replaces the function that records assessments; the old one must survive,
+    and a rule's proposal, kept beside the command, must then be accepted.
+    """
+    from unittest import mock
+
+    import edgar_warehouse.mdm.clean.store as store_module
+
+    admin, app = postgres
+    names = list(store_module.CLEAN_MDM_MIGRATIONS)
+    through_034 = tuple(n for n in names if n < "035")
+    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_034):
+        database = core.initialize_database(admin, app)
+        company = core.source(key="pop-1", fields={"name": "Acme"})
+        identity, binding = core.identity_and_binding(company)
+        core.apply(
+            database,
+            1,
+            assertions=[company],
+            identities=[identity],
+            decisions=[binding],
+        )
+        assert assessments(database) == 1
+    core.migrate(admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text("SELECT count(*) FROM mdm_v2.migration WHERE name LIKE '035%'")
+            )
+            == 1
+        )
+    assert assessments(database) == 1
+    policy = matching_policy(database)
+    load(database, policy, "after-035", record("new", cik=APPLE_CIK), consumer="after")
+    assert assessments(database) == 2
+    assert len(companies(database)) == 2
