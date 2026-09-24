@@ -23,23 +23,43 @@ def filter_rows_by_min_filing_date(
     ]
 
 
-REPORTING_COMPANY_ENTITY_TYPES = frozenset({"operating", "investment"})
+# The forms an individual files about their holdings or trades. A filer whose
+# whole recent history is these, with no industry code and no ticker, is a
+# person (or a holder acting only as one), not an entity.
+OWNERSHIP_FORMS = frozenset(
+    {
+        "3", "3/A", "4", "4/A", "5", "5/A", "144", "144/A",
+        "SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A",
+        "SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A",
+    }
+)
 
 
-def is_reporting_company_entity_type(entity_type: Any) -> bool:
-    """True when SEC's submissions.json ``entityType`` marks this CIK as an
-    actual reporting company. ``'other'`` means an individual/insider filer
-    (Form 3/4/5/144/13D/13G-only filer) -- these were previously written
-    into ``sec_company`` unconditionally, contaminating the company
-    universe with ~33K individuals (see
-    individual-filer-company-misclassification map, Ticket 03). A missing
-    ``entityType`` is treated as a reporting company (fail open) rather than
-    guessed at -- only ``'operating'``/``'investment'``/``'other'`` have
-    been observed in live SEC data, and a missing value has never been
-    shown to correlate with ``'other'``."""
-    if not entity_type:
-        return True
-    return str(entity_type) in REPORTING_COMPANY_ENTITY_TYPES
+def is_individual_filer(payload: dict[str, Any]) -> bool:
+    """True when a submissions.json describes an individual, not an entity.
+
+    SEC's ``entityType`` alone cannot say: ``'other'`` covers individuals
+    **and** foreign private issuers (Shell, ASML, UBS, BCE), funds, 13F
+    managers and Form D issuers. Measured on all 76,230 bronze filers
+    (2026-09-24): of 67,421 marked ``'other'``, 32,989 file only ownership
+    forms, while 1,516 file 20-F/40-F/6-K and 471 file 10-K/10-Q/8-K. The old
+    rule treated every ``'other'`` as a person and dropped those companies
+    from the universe (individual-filer-company-misclassification map,
+    Ticket 03, corrected).
+
+    So a filer is an individual only when SEC says ``'other'`` **and** every
+    recent filing (``filings.recent``, not the paginated history) is an
+    ownership form **and** it carries no industry code
+    and no ticker. ``'operating'`` and ``'investment'`` are always entities,
+    and a missing ``entityType`` or an empty filing history fails open, as
+    before: it stays in the universe rather than being guessed away.
+    """
+    if payload.get("entityType") != "other":
+        return False
+    forms = set(((payload.get("filings") or {}).get("recent") or {}).get("form") or [])
+    if not forms or not forms <= OWNERSHIP_FORMS:
+        return False
+    return not payload.get("sic") and not payload.get("tickers")
 
 
 def stage_company_loader(

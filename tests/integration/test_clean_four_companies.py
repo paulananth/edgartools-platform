@@ -19,10 +19,10 @@ What it does **not** prove, stated so no reader mistakes it:
 - **That the candidate rule is accurate.** Its activation below carries a
   fixture proof whose arithmetic holds; it measured nothing. A real activation
   needs the Proving Run (ticket 05) and the operator's approval (ticket 06).
-- **Production reach.** The warehouse marks every SEC `entityType: "other"`
-  filer `non_company` and skips its Company row
-  (`is_reporting_company_entity_type`), so production never hands Shell or
-  ASML to this adapter. This test builds their rows directly from bronze.
+- **Production reach.** Until 2026-09-24 the warehouse treated every SEC
+  `entityType: "other"` filer as an individual and skipped its Company row;
+  `is_individual_filer` now keeps foreign issuers such as Shell and ASML. This
+  test builds their rows directly from bronze either way.
 """
 
 from __future__ import annotations

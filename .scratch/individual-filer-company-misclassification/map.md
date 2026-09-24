@@ -64,3 +64,12 @@ of "the company universe."
 ## Out of scope
 
 (none yet)
+
+## Corrected (2026-09-24)
+
+- [Correct: SEC entityType "other" is not an individual](issues/05-correct-other-is-not-an-individual.md)
+  — measured on all 76,230 bronze filers: only 49% of "other" are
+  individuals; 1,516 foreign issuers and 471 domestic issuers were being
+  dropped. The rule is now `is_individual_filer`: "other" **and** only
+  ownership forms **and** no SIC **and** no ticker. Supersedes ticket 04's
+  `is_reporting_company_entity_type`.
