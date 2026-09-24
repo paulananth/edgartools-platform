@@ -283,3 +283,44 @@ def test_without_an_activation_nothing_matches_automatically(database):
     load(database, policy, "b1", record("a", cik=APPLE_CIK))
     assert companies(database) == {}
     assert assessments(database) == 0
+
+
+def test_migration_035_applies_to_a_populated_store(postgres):
+    """CLAUDE.md: a migration is tested over real rows, in production's order.
+
+    A store at 034 already holds an assessment of a caller's binding. 035
+    replaces the function that records assessments; the old one must survive,
+    and a rule's proposal, kept beside the command, must then be accepted.
+    """
+    from unittest import mock
+
+    import edgar_warehouse.mdm.clean.store as store_module
+
+    admin, app = postgres
+    names = list(store_module.CLEAN_MDM_MIGRATIONS)
+    through_034 = tuple(n for n in names if n < "035")
+    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_034):
+        database = core.initialize_database(admin, app)
+        company = core.source(key="pop-1", fields={"name": "Acme"})
+        identity, binding = core.identity_and_binding(company)
+        core.apply(
+            database,
+            1,
+            assertions=[company],
+            identities=[identity],
+            decisions=[binding],
+        )
+        assert assessments(database) == 1
+    core.migrate(admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text("SELECT count(*) FROM mdm_v2.migration WHERE name LIKE '035%'")
+            )
+            == 1
+        )
+    assert assessments(database) == 1
+    policy = matching_policy(database)
+    load(database, policy, "after-035", record("new", cik=APPLE_CIK), consumer="after")
+    assert assessments(database) == 2
+    assert len(companies(database)) == 2
