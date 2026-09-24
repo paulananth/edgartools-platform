@@ -167,9 +167,29 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
 
 
 def register_policy(conn: Connection, body: dict) -> str:
-    """Migration/governance owner only; runtime has no INSERT privilege."""
-    if body.get("automatic_rules"):
-        raise ValueError("No qualified automatic matching rules are installed")
+    """Migration/governance owner only; runtime has no INSERT privilege.
+
+    A body is refused, by name and with its reason, unless every rule in it is
+    well formed and every activation carries a proof that holds against its
+    kind's accepted bar (`activation.check_policy`). That replaces the blanket
+    refusal of any `automatic_rules`; an unimplemented family is still refused.
+    """
+    from .activation import check_policy, rule_version_conflicts
+
+    check_policy(body)
+    registered = [
+        r["body"]
+        for r in rows(conn, "SELECT body FROM mdm_v2.policy WHERE body ? 'kinds'")
+    ]
+    reused = rule_version_conflicts(body, registered)
+    if reused:
+        # A rule version names one exact set of steps (§10 check 9). A new
+        # version is free; reusing one for different steps would let one record
+        # classify two ways with no trace.
+        raise Conflict(
+            "Rule version already registered with different steps: "
+            + ", ".join(f"{k}/{r}@{v}" for k, r, v in reused)
+        )
     # A kind's field rules live in one place. Refuse the ambiguity at
     # registration rather than mid-merge, so a body that would silently prefer
     # one block never reaches a batch (company mastering ticket 02, decision 1).
@@ -213,6 +233,12 @@ def register_dataset(
     ):
         raise ValueError("nonblocking_deferred_reasons requires distinct reason names")
     adapter = body.get("adapter", {})
+    if adapter.get("classification") and ("kind" in adapter or "kind_field" in adapter):
+        # One writer of the kind: the contract states it when every record is
+        # that kind, or names the rule that decides it, never both (ADR 0015).
+        raise ValueError(
+            "A Dataset Contract states a kind or names a classification rule, not both"
+        )
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),

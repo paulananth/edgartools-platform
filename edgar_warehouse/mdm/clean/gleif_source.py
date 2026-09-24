@@ -451,6 +451,10 @@ def record_evidence(
         or contract["adapter"]["version"] != VERSION
     ):
         raise Conflict("Unregistered native GLEIF interpretation")
+    if contract["adapter"].get("classification"):
+        # Every Level 1 record the contract admits is one kind, so the contract
+        # states it; a rule would need the pinned policy this path never reads.
+        raise Conflict("Native GLEIF records do not support classification rules")
     raw = row
     try:
         if member == "relationships":

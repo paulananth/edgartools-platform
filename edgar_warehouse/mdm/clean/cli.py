@@ -12,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy import create_engine, event, text
 
+from .activation import check_policy
 from .adapters import UnsupportedRecord, normalize
 from .bookkeeping import RunCoordinator
 from .evidence import deferred_record
@@ -90,15 +91,19 @@ def artifact_reader(root: str):
     return read_local
 
 
-def batch_assertions(batch: dict, root: Path, store: Store) -> list[dict]:
-    assertions, deferred = batch_evidence(batch, root, store)
+def batch_assertions(
+    batch: dict, root: Path, store: Store, *, policy_digest: str | None = None
+) -> list[dict]:
+    assertions, deferred = batch_evidence(
+        batch, root, store, policy_digest=policy_digest
+    )
     if deferred:
         raise Conflict("Deferred records require the full batch_evidence contract")
     return assertions
 
 
 def batch_evidence(
-    batch: dict, root: Path, store: Store
+    batch: dict, root: Path, store: Store, *, policy_digest: str | None = None
 ) -> tuple[list[dict], list[dict]]:
     if "input" not in batch:
         return batch.get("assertions", []), batch.get("deferred", [])
@@ -122,6 +127,24 @@ def batch_evidence(
     # A corrected mapping applies to publications read from here on, and every
     # record says which reading produced it (ticket 01, decision 4).
     mapping_version, contract = reading
+    # The pinned policy is read only when the contract names a classification
+    # rule: every other contract states its kind and needs no policy to read.
+    policy = None
+    if contract["adapter"].get("classification"):
+        with store.engine.connect() as conn:
+            policy = conn.scalar(
+                text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
+                {"digest": policy_digest},
+            )
+        if policy is None:
+            # Fail before reading a record, not on the first one.
+            raise Conflict(
+                f"Contract {spec['source_code']} names a classification rule; "
+                f"its pinned policy {policy_digest!r} is not registered"
+            )
+        # Checked here too, not only per batch: an activation decides a
+        # record's kind at read time, before the Merge Stage sees the batch.
+        check_policy(policy)
     result: list[dict] = []
     deferred: list[dict] = []
     retains_deferred = contract["adapter"].get("retain_deferred", False)
@@ -166,6 +189,7 @@ def batch_evidence(
                     contract=contract,
                     publication=publication,
                     mapping_version=mapping_version,
+                    policy=policy,
                 )
             )
         except UnsupportedRecord as exc:
@@ -183,6 +207,7 @@ def batch_evidence(
                         "artifact_sha256": spec["sha256"],
                         "member": spec["path"],
                         "adapter_version": contract["adapter"]["version"],
+                        **exc.detail,
                     },
                 )
             )
@@ -264,7 +289,9 @@ def execute_manifest(
             native = native_batches[batch["batch_id"]]
             assertions, deferred = native["assertions"], native["deferred"]
         else:
-            assertions, deferred = batch_evidence(batch, root, store)
+            assertions, deferred = batch_evidence(
+                batch, root, store, policy_digest=manifest["policy_digest"]
+            )
         cost = (
             0
             if batch["batch_id"] in retained

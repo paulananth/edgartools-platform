@@ -521,6 +521,18 @@ document never becomes a digest.
     decision an author makes rather than a silent change to every field's
     recorded authority.
 
+**Implemented 2026-09-24** in `clean/activation.py`: checks 1, 2 and 6 and
+the §9.2 predicate, at registration, again per batch and again when a read
+path runs a named rule; check 9 at registration only, since it compares
+against the bodies already registered. Each kind's accepted bar is a floor the
+document may raise but not lower. Check 9 compares the **whole rule**, not only
+its steps: an `emits` or `source` change under one version reclassifies records
+as surely as a step change. Check 1 verifies each primitive is registered and
+of the rule's family; its arguments are still checked when a record reaches
+it. Binding rules and
+`deterministic` activation are refused by name until company mastering ticket
+04 brings the identifier primitives. Check 3 is not built.
+
 The prototype's `validate()` implements 1, 4, 5, 6 and refuses six abuse
 cases: a rule edited after its proof, a bar raised above the proof, a
 proof at a different confidence coverage, a fabricated lower bound,
