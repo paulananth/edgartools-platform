@@ -57,6 +57,13 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Decisions so far
 
+- **Source priority is set per entity kind** (operator, 2026-09-24 09:45 ET): when sources
+  disagree on a value, the kind's priority list decides. **Company: SEC first,
+  GLEIF next.** Each kind (Person, Fund, ...) carries its own list in the
+  Mastering Policy, changed by a new policy version, never in code. The policy
+  already holds an ordered source list per field under `kinds.<kind>.fields`;
+  the kind-level list is the default a field inherits unless it states its own.
+
 - **The final authority is one dated Company table** (operator, 2026-09-24 08:28 ET):
   `mdm_v2.company`, one row per company version with CIK, LEI, other
   cross-references, name and every identifying field, and start and end

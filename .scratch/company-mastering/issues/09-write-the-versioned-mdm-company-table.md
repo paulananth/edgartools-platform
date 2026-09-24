@@ -44,4 +44,8 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   the Company policy's field semantics)
 - [ ] Decide what `valid_from` means: when the source changed, or when MDM
   recorded it
+- [x] Source priority for Company values: **SEC first, GLEIF next**,
+  configurable per entity kind in the Mastering Policy — operator (2026-09-24 09:45 ET)
+- [ ] Build the kind-level default priority list that each field inherits
+  unless it states its own
 - [ ] Migration, Merge Stage write, tests on a populated store (PG16)
