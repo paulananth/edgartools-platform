@@ -63,6 +63,10 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   Mastering Policy, changed by a new policy version, never in code. The policy
   already holds an ordered source list per field under `kinds.<kind>.fields`;
   the kind-level list is the default a field inherits unless it states its own.
+- **The master takes fields from every source** (operator, 2026-09-24 09:59 ET): a field only
+  one source has comes from that source; **priority decides only when the
+  field exists in more than one**. Apple's master row therefore carries SEC's
+  fields and GLEIF's fields together, SEC winning where both supply one.
 
 - **The final authority is one dated Company table** (operator, 2026-09-24 08:28 ET):
   `mdm_v2.company`, one row per company version with CIK, LEI, other
