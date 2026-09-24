@@ -369,6 +369,14 @@ drift, and its values record a digest computed from that role's own rules,
 with the role name carried alongside. Recording the kind's digest made an edit
 to a role's rules invisible: it moved no recorded digest anywhere.
 
+**A kind-level default** (implemented 2026-09-24, operator): `kinds.<kind>.defaults`
+is a field rule every field of the kind inherits, so the master takes **every
+field any source supplies** and the ordered `sources` list decides only where
+several supply one. A field declared under `fields` inherits the default and
+may override any part of it, such as its own source order. `defaults` is an
+authority section. The kind documents live one file per kind in
+`edgar_warehouse/mdm/policies/`.
+
 This document adds:
 
 - `primitive: "select_by_source_rank@1"` named explicitly per field, so

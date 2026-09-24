@@ -191,6 +191,9 @@ class TestJurisdictionIsOneFormat:
     """SEC writes "CA"; GLEIF writes "US-CA" (operator, 2026-09-24)."""
 
     def read(self, state):
+        return self.fields(state)["jurisdiction"]
+
+    def fields(self, state):
         return normalize(
             source_row(
                 320193,
@@ -205,14 +208,18 @@ class TestJurisdictionIsOneFormat:
                 "artifact_sha256": "a" * 64,
                 "member": "m",
             },
-        )["fields"]["jurisdiction"]
+        )["fields"]
 
     def test_a_us_state_code_becomes_iso_3166_2(self):
         assert self.read("CA") == {"op": "value", "value": "US-CA"}
         assert self.read("dc") == {"op": "value", "value": "US-DC"}
 
-    def test_a_foreign_edgar_code_is_unknown_not_guessed(self):
+    def test_a_foreign_edgar_code_is_unknown_not_guessed_and_kept_raw(self):
         assert self.read("E9") == {"op": "unknown"}
+        assert self.fields("E9")["sec_state_of_incorporation"] == {
+            "op": "value",
+            "value": "E9",
+        }
 
     def test_an_empty_code_is_unknown(self):
         assert self.read("") == {"op": "unknown"}
@@ -224,6 +231,7 @@ class TestJurisdictionIsOneFormat:
         from edgar_warehouse.mdm.clean import company_source
 
         file = Path(company_source.__file__).parents[1] / "policies" / "company.json"
+        assert set(company_source.POLICY["kinds"]) == {"company"}
         assert company_source.POLICY["kinds"]["company"] == json.loads(file.read_text())
         assert company_source.POLICY["kinds"]["company"]["defaults"]["sources"] == [
             "sec.submissions.company.v1",

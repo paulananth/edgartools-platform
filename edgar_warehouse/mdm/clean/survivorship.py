@@ -212,7 +212,7 @@ def select_fields(
         as_of=as_of,
         policy_digest=recorded_digest,
         kind_version=kind_version,
-        default=((policy.get("kinds") or {}).get(kind) or {}).get("defaults"),
+        default=_defaults_for(policy, kind),
     )
     reviews.extend(field_reviews)
     for p in profiles.values():
@@ -256,6 +256,15 @@ def _rules_for(policy: dict, kind: str) -> dict:
     if policy.get("fields"):
         raise Conflict("A kind's field rules belong in one place, not two")
     return kinds.get(kind, {}).get("fields", {})
+
+
+def _defaults_for(policy: dict, kind: str) -> dict | None:
+    """The rule every field of a kind inherits, beside `_rules_for`.
+
+    Only a `kinds` body can carry one; an old body with top-level `fields`
+    selects its declared fields only, as it always did.
+    """
+    return ((policy.get("kinds") or {}).get(kind) or {}).get("defaults")
 
 
 # Which sections of a kind's block decide the winner of a field, and which do

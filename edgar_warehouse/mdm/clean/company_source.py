@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from ..policies import load_kinds
 from .evidence import instant
 from .store import Conflict, canonical, digest
 
@@ -26,6 +27,9 @@ FIELDS = {
     "sic": "sic",
     "sic_description": "sic_description",
     "jurisdiction": "state_of_incorporation",
+    # The raw EDGAR code, kept whatever `jurisdiction` makes of it: a foreign
+    # code such as E9 is not converted, and must not vanish with it.
+    "sec_state_of_incorporation": "state_of_incorporation",
     "fiscal_year_end": "fiscal_year_end",
     "description": "description",
 }
@@ -62,17 +66,13 @@ CONTRACT = {
         },
     },
 }
-# The Company rule is data, one file per kind, and this module loads it rather
-# than restating it: source priority SEC first, GLEIF next, and every field any
-# source supplies (operator, 2026-09-24).
-COMPANY_RULES = json.loads(
-    (Path(__file__).parents[1] / "policies" / "company.json").read_text()
-)
 POLICY = {
     "version": "sec-company-local-v1",
     "automatic_rules": [],
     "required_consumers": ["journal", "export", "graph"],
-    "kinds": {"company": COMPANY_RULES},
+    # Each kind's rules are data, one file per kind, loaded rather than
+    # restated here (operator, 2026-09-24).
+    "kinds": load_kinds(),
 }
 
 

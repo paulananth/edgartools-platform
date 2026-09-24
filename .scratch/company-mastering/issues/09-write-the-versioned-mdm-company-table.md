@@ -66,8 +66,28 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   address (it lives in a separate SEC address table), and choosing street,
   city and postcode from one source together needs group-aware selection
   (ticket 03), so today only GLEIF could supply it, and it is not mapped yet
-- [ ] Foreign EDGAR location codes (E9, X0, P7, …) to ISO 3166: not converted;
-  such a value is recorded unknown for `jurisdiction`, never guessed
+- [ ] Foreign EDGAR location codes (E9, X0, P7, …) to ISO 3166: not converted.
+  Such a value is unknown for `jurisdiction`, so GLEIF's value fills it (the
+  fill rule); SEC's raw code is kept in `sec_state_of_incorporation`
+- [x] Three-axis `/code-review` — Standards: 1 hard (defaults read outside the
+  kind resolver); Spec: raw foreign code lost, Stage claim untested; GoF:
+  load kind files in their own loader. All fixed: `_defaults_for` beside
+  `_rules_for`, raw SEC code kept, `policies.load_kinds()`, error messages
+  name formats generally, Stage assertion added, `defaults` documented in
+  policy-language §8 (2026-09-24 10:19 ET)
+- [ ] A policy `sources` entry is a bare string: a typo silently drops a
+  source. Check each against registered datasets (registration order today
+  registers policies before some datasets, so this needs a per-batch check)
+- [ ] `gleif_source.dataset_contract` defaults `level1_source` to
+  `gleif.lei.v1` while the policy and the native spec use `gleif.level1.v1`;
+  settle one code
+- [ ] Priority changes are data, but the file ships in the package, so a
+  change still needs an image rebuild; the Rules Database is where a live
+  change belongs (Codex's Source Contract area)
+- [ ] A store holding readings under the old field names
+  (`incorporation_jurisdiction`, `gleif_legal_jurisdiction`) would show them
+  beside `jurisdiction` until re-read; no live store holds Clean MDM Company
+  evidence yet (migrations 027+ unapplied), so this is noted, not built
 - [ ] SEC empty text (`description: ""`) is taken as a value; decide whether
   an empty string is unknown
 - [ ] Decide Shell's jurisdiction: SEC says `DC` (a US code) and wins under

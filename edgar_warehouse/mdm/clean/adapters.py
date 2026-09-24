@@ -48,7 +48,64 @@ def _lei(item) -> str:
 # converted: it raises, and a field then records the value as unknown rather
 # than guessing a country.
 US_CODES = frozenset(
-    ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC", "PR", "VI", "GU", "AS", "MP"]
+    [
+        "AL",
+        "AK",
+        "AZ",
+        "AR",
+        "CA",
+        "CO",
+        "CT",
+        "DE",
+        "FL",
+        "GA",
+        "HI",
+        "ID",
+        "IL",
+        "IN",
+        "IA",
+        "KS",
+        "KY",
+        "LA",
+        "ME",
+        "MD",
+        "MA",
+        "MI",
+        "MN",
+        "MS",
+        "MO",
+        "MT",
+        "NE",
+        "NV",
+        "NH",
+        "NJ",
+        "NM",
+        "NY",
+        "NC",
+        "ND",
+        "OH",
+        "OK",
+        "OR",
+        "PA",
+        "RI",
+        "SC",
+        "SD",
+        "TN",
+        "TX",
+        "UT",
+        "VT",
+        "VA",
+        "WA",
+        "WV",
+        "WI",
+        "WY",
+        "DC",
+        "PR",
+        "VI",
+        "GU",
+        "AS",
+        "MP",
+    ]
 )
 
 
@@ -73,7 +130,7 @@ def format_value(item, format_name=None):
     if format_name is None:
         return str(item).strip()
     if format_name not in FORMATS:
-        raise ValueError("Unconfigured identifier format")
+        raise ValueError(f"Unconfigured format: {format_name}")
     return FORMATS[format_name](item)
 
 
@@ -82,7 +139,9 @@ def field_value(row: dict, path: str, format_name: str | None):
 
     A value the format cannot convert becomes unknown for this field rather
     than setting the whole record aside: the rest of the record is still good
-    evidence, and the raw value stays under whatever other field maps it.
+    evidence. A contract that must keep the raw value maps it to a second
+    field without a format, as the SEC Company contract does for its state
+    code.
     """
     item = value(row, path)
     if format_name is None or item is None:

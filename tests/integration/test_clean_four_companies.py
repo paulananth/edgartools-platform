@@ -435,6 +435,19 @@ def test_one_master_per_company_takes_fields_from_both_sources(
     assert field(SHELL, "jurisdiction")["value"] == "US-DC"
     assert [c["value"] for c in field(SHELL, "jurisdiction")["conflicts"]] == ["GB"]
 
+    # GLEIF's own spelling is still in the Stage, whole, as evidence.
+    with database.application.connect() as conn:
+        staged = conn.execute(
+            text(
+                "SELECT body->'fields'->'name'->>'value' FROM mdm_v2.company_stage "
+                "WHERE source_code='gleif.level1.v1' AND record_key=:lei"
+            ),
+            {"lei": PAIRS[MICROSOFT]},
+        ).scalar_one()
+    assert staged == "MICROSOFT CORPORATION"
+    # SEC's raw state code survives beside the converted jurisdiction.
+    assert field(SHELL, "sec_state_of_incorporation")["value"] == "DC"
+
     with capsys.disabled():
         print()
         for cik in PAIRS:
