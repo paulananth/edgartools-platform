@@ -209,6 +209,26 @@ class TestTheCompanyRule:
         assert fields["state_of_incorporation"] == {"op": "value", "value": "DC"}
         assert "jurisdiction" not in fields
 
+    def test_blank_text_is_unknown_not_a_value(self):
+        fields = normalize(
+            source_row(
+                937966,
+                state_of_incorporation="",
+                description="   ",
+                last_synced_at="2026-01-01T00:00:00+00:00",
+            ),
+            source_code=SOURCE_CODE,
+            contract=CONTRACT,
+            publication={
+                "publication_key": "p",
+                "revision": 0,
+                "artifact_sha256": "a" * 64,
+                "member": "m",
+            },
+        )["fields"]
+        assert fields["state_of_incorporation"] == {"op": "unknown"}
+        assert fields["description"] == {"op": "unknown"}
+
     def test_the_company_rule_is_loaded_not_restated(self):
         import json
         from pathlib import Path

@@ -429,11 +429,16 @@ def test_one_master_per_company_takes_fields_from_both_sources(
         (APPLE, "CA", "US-CA"),
         (MICROSOFT, "WA", "US-WA"),
         (SHELL, "DC", "GB"),
-        (ASML, "", "NL"),
     ):
         assert field(cik, "state_of_incorporation")["value"] == state
         assert winner(cik, "state_of_incorporation") == SOURCE_CODE
         assert field(cik, "jurisdiction")["value"] == jurisdiction
+    # ASML: SEC sends a blank, which is unknown, so the master has no state of
+    # incorporation rather than an empty one; SEC's blank descriptions too.
+    assert field(ASML, "state_of_incorporation") is None
+    assert field(ASML, "jurisdiction")["value"] == "NL"
+    assert all(field(cik, "description") is None for cik in PAIRS)
+    for cik in PAIRS:
         assert winner(cik, "jurisdiction") == "gleif.level1.v1"
         assert field(cik, "jurisdiction")["conflicts"] == []
     # Name is the one field both sources supply.

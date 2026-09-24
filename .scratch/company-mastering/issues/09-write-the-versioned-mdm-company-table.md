@@ -87,8 +87,10 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   (`incorporation_jurisdiction`, `gleif_legal_jurisdiction`) would show them
   beside `jurisdiction` until re-read; no live store holds Clean MDM Company
   evidence yet (migrations 027+ unapplied), so this is noted, not built
-- [ ] SEC empty text (`description: ""`) is taken as a value; decide whether
-  an empty string is unknown
+- [x] Blank text is unknown, never a value — operator (2026-09-24 13:40 ET); applies to
+  every source's fields in `adapters.normalize`. ASML now has no SEC state of
+  incorporation instead of an empty one, and no Company shows SEC's blank
+  description — unit + PG16 (2026-09-24 13:40 ET)
 - [x] Decide Shell's jurisdiction — operator (2026-09-24 11:10 ET): **two fields, not one**.
   SEC gives `state_of_incorporation`, as SEC writes it (`CA`, `DC`); GLEIF
   gives `jurisdiction` (`US-CA`, `GB`). They never compete, so the

@@ -59,6 +59,10 @@ def format_value(item, format_name=None):
     return FORMATS[format_name](item)
 
 
+def _blank(item) -> bool:
+    return isinstance(item, str) and not item.strip()
+
+
 def value(row: dict, path: str):
     result: Any = row
     for part in path.split("."):
@@ -162,8 +166,12 @@ def normalize(
             identifiers[namespace] = format_value(
                 item, mapping.get("identifier_formats", {}).get(namespace)
             )
+    # Blank text is unknown, never a value: a source that sends "" has said
+    # nothing, and a blank must not win a field or show in the master
+    # (operator, 2026-09-24).
     fields = {
-        name: value(row, path) for name, path in mapping.get("fields", {}).items()
+        name: None if _blank(value(row, path)) else value(row, path)
+        for name, path in mapping.get("fields", {}).items()
     }
     if mapping.get("field_shape") == "nullable_text" and any(
         v is not None and not isinstance(v, str) for v in fields.values()
