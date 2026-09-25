@@ -1,0 +1,65 @@
+{
+  ".9 (& fixed)": {
+    "companies": 6884,
+    "stage": 69346,
+    "stage_pct": 90.97,
+    "stage_pct_by_type": {
+      "investment": 100.0,
+      "operating": 18.6,
+      "other": 98.3
+    },
+    "verdicts": {
+      "company/5": 5710,
+      "company/7": 1174,
+      "deferred/1": 1243,
+      "deferred/2": 85,
+      "deferred/3": 41,
+      "deferred/4": 144,
+      "deferred/6": 658,
+      "deferred/8": 67175
+    }
+  },
+  "option 1": {
+    "companies": 6663,
+    "moved_to_stage_vs_.9": 221,
+    "stage": 69567,
+    "stage_pct": 91.26,
+    "stage_pct_by_type": {
+      "investment": 100.0,
+      "operating": 21.1,
+      "other": 98.3
+    },
+    "verdicts": {
+      "company/5": 5534,
+      "company/7": 1129,
+      "deferred/1": 1243,
+      "deferred/1b": 376,
+      "deferred/2": 33,
+      "deferred/3": 27,
+      "deferred/4": 73,
+      "deferred/6": 658,
+      "deferred/8": 67157
+    }
+  },
+  "option 2": {
+    "companies": 6226,
+    "moved_to_stage_vs_.9": 658,
+    "stage": 70004,
+    "stage_pct": 91.83,
+    "stage_pct_by_type": {
+      "investment": 100.0,
+      "operating": 27.2,
+      "other": 98.3
+    },
+    "verdicts": {
+      "company/5": 5109,
+      "company/7": 1117,
+      "deferred/1": 1243,
+      "deferred/1b": 67843,
+      "deferred/2": 13,
+      "deferred/3": 27,
+      "deferred/4": 50,
+      "deferred/8": 828
+    }
+  }
+}
