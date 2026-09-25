@@ -1,0 +1,53 @@
+{
+  "rule": {
+    "rule_id": "sec-company-candidate",
+    "version": "2026-09-24.6"
+  },
+  "n": 300,
+  "correct": 297,
+  "lower_bound": 0.9752442459680568,
+  "one_sided_confidence": 0.95,
+  "by_step": {
+    "2": {
+      "n": 229,
+      "correct": 227,
+      "lower_bound": 0.9739544364782592
+    },
+    "4": {
+      "n": 71,
+      "correct": 70,
+      "lower_bound": 0.9393059778320143
+    }
+  },
+  "errors": [
+    {
+      "cik": "0001886822",
+      "name": "VELOCE CAP FUND 1 LP",
+      "final": "fund",
+      "note": "lending fund raised under Reg A; a Fund"
+    },
+    {
+      "cik": "0001930054",
+      "name": "Blackstone Private Equity Strategies Fund L.P.",
+      "final": "fund",
+      "note": "private equity fund registered under 10-12G, no BDC election; a Fund"
+    },
+    {
+      "cik": "0001957845",
+      "name": "KKR Private Equity Conglomerate LLC",
+      "final": "fund",
+      "note": "uncertain: holds operating businesses but is a private equity vehicle; counted as an error to be conservative"
+    }
+  ],
+  "adversarial": {
+    "n": 294,
+    "violations": 0,
+    "violating_ciks": []
+  },
+  "files": {
+    "12-sample.jsonl": "1ac01d67931c2a9c81f1be77130794b8ced127830adcdea653e36014c8b5c03d",
+    "12-adversarial.jsonl": "b6ab71a23a776e03e319339a1a0dd85e09a767c8977f40387f2dd1f7aacf406f",
+    "12-population.json": "8e29f98a9706855f75deb50f16ca0d7f7e4ea5c026a551a45d35d92fba101cc2",
+    "12-classify.py": "514d3c4fc100f28fce4072aa24752b7a95ca8153d06295545cc74037380ee50a"
+  }
+}

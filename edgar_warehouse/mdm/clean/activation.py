@@ -32,12 +32,21 @@ from .evidence import KINDS
 from .primitives import NORMALIZERS, primitive_family
 from .store import Conflict, canonical
 
-# Each kind's accepted bar: the least a document may declare (company mastering
-# ticket 02, decision 4; Company Q11). A document may raise its own bar, never
-# lower it, and a kind with no accepted bar cannot activate anything.
+# The accepted bar per (kind, family): the least a document may declare
+# (company mastering ticket 02, decision 4). A document may raise its own bar,
+# never lower it, and a pair with no accepted bar cannot declare one. Keyed by
+# family so lowering one decision never lowers another: Company classification
+# acts at 95% (confidence bands, company-policy.md, 2026-09-24), while merging
+# two published Company IDs keeps Q10/Q11's 99.9% by having no entry here.
 ACCEPTED_BARS = {
-    "company": {"min_precision": 0.999, "one_sided_confidence": 0.95},
-    "person": {"min_precision": 0.99, "one_sided_confidence": 0.975},
+    ("company", "classification"): {
+        "min_precision": 0.95,
+        "one_sided_confidence": 0.95,
+    },
+    ("person", "classification"): {
+        "min_precision": 0.99,
+        "one_sided_confidence": 0.975,
+    },
 }
 METHOD = "wilson_lower_bound"
 # A stated lower bound reproduces when it is no higher than the recomputed one
@@ -104,9 +113,11 @@ def check_policy(body: dict) -> None:
 
 
 def _check_bar(kind: str, family: str, bar: dict) -> None:
-    accepted = ACCEPTED_BARS.get(kind)
+    accepted = ACCEPTED_BARS.get((kind, family))
     if accepted is None:
-        raise Conflict(f"Kind {kind} has no accepted bar, so it may declare none")
+        raise Conflict(
+            f"{kind}/{family} has no accepted bar, so a document may declare none"
+        )
     if bar.get("method") != METHOD:
         raise Conflict(f"Bar for {kind}/{family} names an unsupported method")
     for name in ("min_precision", "one_sided_confidence"):

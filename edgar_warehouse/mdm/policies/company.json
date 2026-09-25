@@ -1,5 +1,5 @@
 {
-  "version": "company-2026-09-24.2",
+  "version": "company-2026-09-24.6",
   "defaults": {
     "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
     "allow_unknown_effective": true
@@ -7,7 +7,7 @@
   "rules": [
     {
       "rule_id": "sec-company-candidate",
-      "version": "2026-09-24.2",
+      "version": "2026-09-24.6",
       "family": "classification",
       "source": "sec.submissions.company.v1",
       "emits": [
@@ -17,15 +17,16 @@
       "steps": [
         {
           "step": "1",
-          "verdict": "company",
+          "verdict": "deferred",
           "when": [
             {
               "primitive": "field_in_set@1",
               "args": {
-                "field": "entity_type",
+                "field": "sic",
                 "values": [
-                  "operating",
-                  "investment"
+                  "6189",
+                  "6221",
+                  "8888"
                 ]
               }
             }
@@ -33,6 +34,45 @@
         },
         {
           "step": "2",
+          "verdict": "company",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "step": "3",
+          "verdict": "deferred",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "other"
+                ]
+              }
+            },
+            {
+              "primitive": "token_match@1",
+              "args": {
+                "field": "entity_name",
+                "normalizer": "conformed",
+                "token_list": "person_suffix",
+                "min_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "step": "4",
           "verdict": "company",
           "when": [
             {
@@ -49,15 +89,166 @@
               "args": {
                 "document": "sic"
               }
+            },
+            {
+              "primitive": "token_match@1",
+              "args": {
+                "field": "entity_name",
+                "normalizer": "conformed",
+                "token_list": "entity_legal_form",
+                "min_count": 1
+              }
             }
           ]
         },
         {
-          "step": "3",
+          "step": "5",
           "verdict": "deferred",
           "otherwise": true
         }
       ]
     }
-  ]
+  ],
+  "normalizers": {
+    "conformed": "normalize_text@edgar-conformed-v1"
+  },
+  "lists": {
+    "entity_legal_form": [
+      "A S",
+      "AB",
+      "ACQUISITION",
+      "ACQUISITIONS",
+      "ADVISERS",
+      "ADVISORS",
+      "ADVISORY",
+      "AG",
+      "AS",
+      "ASSET",
+      "ASSETS",
+      "ASSOCIATES",
+      "ASSOCIATION",
+      "B V",
+      "BANK",
+      "BHD",
+      "BV",
+      "CAPITAL",
+      "CAYMAN",
+      "CHURCH",
+      "CO",
+      "COMPANY",
+      "CORP",
+      "CORPORATION",
+      "COUNCIL",
+      "CREDIT",
+      "DELAWARE",
+      "ENERGY",
+      "ENTERPRISES",
+      "EQUITIES",
+      "EQUITY",
+      "ESOP",
+      "ESTATE",
+      "FAMILY",
+      "FBO",
+      "FEEDER",
+      "FIDUCIARY",
+      "FINANCE",
+      "FINANCIAL",
+      "FOUNDATION",
+      "FUND",
+      "FUNDS",
+      "GLOBAL",
+      "GMBH",
+      "GP",
+      "GROUP",
+      "HOLDING",
+      "HOLDINGS",
+      "INC",
+      "INCORPORATED",
+      "INDUSTRIES",
+      "INSURANCE",
+      "INTERNATIONAL",
+      "INVESTMENT",
+      "INVESTMENTS",
+      "INVESTOR",
+      "INVESTORS",
+      "IRREVOCABLE",
+      "KABUSHIKI",
+      "KG",
+      "KK",
+      "L L C",
+      "L P",
+      "LIFE",
+      "LIMITADA",
+      "LIMITED",
+      "LIVING",
+      "LLC",
+      "LLLP",
+      "LLP",
+      "LP",
+      "LTD",
+      "LTDA",
+      "MANAGEMENT",
+      "MASTER",
+      "MGMT",
+      "N V",
+      "NOMINEE",
+      "NOMINEES",
+      "NV",
+      "OPPORTUNITIES",
+      "OPPORTUNITY",
+      "OY",
+      "PARTNERS",
+      "PARTNERS LP",
+      "PARTNERSHIP",
+      "PENSION",
+      "PLAN",
+      "PLC",
+      "PORTFOLIO",
+      "PTE",
+      "PTY",
+      "REAL ESTATE",
+      "REIT",
+      "RESOURCES",
+      "RETIREMENT",
+      "REVOCABLE",
+      "S A",
+      "S A R L",
+      "S P A",
+      "SA",
+      "SARL",
+      "SAS",
+      "SDN",
+      "SE",
+      "SECURITIES",
+      "SERVICES",
+      "SOCIETY",
+      "SPA",
+      "SPONSOR",
+      "SPONSORS",
+      "SPV",
+      "STRATEGIES",
+      "SYSTEM",
+      "SYSTEMS",
+      "TECHNOLOGIES",
+      "TR",
+      "TRUST",
+      "TRUST CO",
+      "TRUSTEE",
+      "TRUSTEES",
+      "TRUSTS",
+      "UNIVERSITY",
+      "VENTURE",
+      "VENTURES"
+    ],
+    "person_suffix": [
+      "CFA",
+      "CPA",
+      "DDS",
+      "ESQ",
+      "JR",
+      "MRS",
+      "PHD",
+      "SR"
+    ]
+  }
 }

@@ -61,10 +61,10 @@ APPLE, MICROSOFT, SHELL, ASML = "0000320193", "0000789019", "0001306965", "00009
 COOK, NADELLA = "0001214156", "0001513142"
 COMPANIES = {APPLE, MICROSOFT, SHELL, ASML}
 
-# A candidate, not a measured rule; it lives in the Company policy as data
-# (ticket 11) so the proving run can measure it. Step 2 is the one the lookup
-# table lacks: SEC says "other" for a foreign issuer and for an individual
-# alike, and only the issuer carries an industry code.
+# The Company classification rule, from the Company policy (measured in
+# ticket 12). Step 4 is the one the lookup table lacks: SEC says "other" for a
+# foreign issuer and for an individual alike; the issuer carries an industry
+# code and a legal-form word in its name.
 (RULE,) = [
     r
     for r in POLICY["kinds"]["company"]["rules"]
@@ -172,7 +172,7 @@ def test_the_rule_names_all_four_companies_but_acts_on_none_unactivated(
     )
     assert evidence == []
     records = by_record(evidence, deferred)
-    for cik, step in ((APPLE, "1"), (MICROSOFT, "1"), (SHELL, "2"), (ASML, "2")):
+    for cik, step in ((APPLE, "2"), (MICROSOFT, "2"), (SHELL, "4"), (ASML, "4")):
         assert records[cik]["reason"] == "classification_not_activated"
         assert records[cik]["provenance"]["classification"] == {
             "rule_id": RULE["rule_id"],
@@ -182,7 +182,7 @@ def test_the_rule_names_all_four_companies_but_acts_on_none_unactivated(
         }
     for cik in (COOK, NADELLA):
         assert records[cik]["reason"] == "classification_deferred"
-        assert records[cik]["provenance"]["classification"]["step"] == "3"
+        assert records[cik]["provenance"]["classification"]["step"] == "5"
 
 
 def test_both_sources_wait_in_the_stage_and_no_master_is_created(
@@ -233,10 +233,10 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
             )
         ).all()
         assert sorted(set_aside) == [
-            ("1214156", "classification_deferred", "3"),
-            ("1513142", "classification_deferred", "3"),
+            ("1214156", "classification_deferred", "5"),
+            ("1513142", "classification_deferred", "5"),
         ]
-    assert labelled == {APPLE: "1", MICROSOFT: "1", SHELL: "2", ASML: "2"}
+    assert labelled == {APPLE: "2", MICROSOFT: "2", SHELL: "4", ASML: "4"}
 
     gleif = FIXTURE["gleif"]
     capture, path = native.native_fixture(

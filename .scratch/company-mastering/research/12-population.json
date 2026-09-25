@@ -1,0 +1,18 @@
+{
+  "company_verdicts": 8254,
+  "records": 76230,
+  "rule": {
+    "rule_id": "sec-company-candidate",
+    "version": "2026-09-24.6"
+  },
+  "sample_size": 300,
+  "seed": "20260924.6",
+  "summary_sha256": "395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600",
+  "verdicts": {
+    "company/2": 5980,
+    "company/4": 2274,
+    "deferred/1": 1243,
+    "deferred/3": 1785,
+    "deferred/5": 64948
+  }
+}

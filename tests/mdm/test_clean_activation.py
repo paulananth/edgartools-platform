@@ -272,9 +272,34 @@ class TestAnActivationCarriesItsProof:
 
     def test_a_bar_the_document_lowers_below_the_accepted_one_is_refused(self):
         """The document may raise its bar, never lower it (ticket 02, decision 4)."""
-        lowered = {**BAR, "min_precision": 0.99}
+        lowered = {**BAR, "min_precision": 0.9}
         with pytest.raises(Conflict, match="accepted"):
             check_policy(policy(bars={"classification": lowered}))
+
+    def test_company_classification_acts_at_95_percent(self):
+        """Confidence bands (company-policy.md): 95% acts, at 95% confidence."""
+        bar = {**BAR, "min_precision": 0.95}
+        body = policy(
+            automatic=[entry(proof=proof(n=60, correct=60))],
+            bars={"classification": bar},
+        )
+        check_policy(body)
+        assert activated(body, "company", RULE, "company")
+
+    def test_a_company_proof_below_95_percent_is_refused(self):
+        bar = {**BAR, "min_precision": 0.95}
+        body = policy(
+            automatic=[entry(proof=proof(n=60, correct=58))],
+            bars={"classification": bar},
+        )
+        with pytest.raises(Conflict, match="below the company bar"):
+            check_policy(body)
+
+    def test_lowering_classification_never_lowers_consolidation(self):
+        """Merging two published Company IDs keeps 99.9% (Q10/Q11): it has no
+        accepted bar here, so a document may not declare one at all."""
+        with pytest.raises(Conflict, match="no accepted bar"):
+            check_policy(policy(bars={"classification": BAR, "consolidation": BAR}))
 
     def test_a_kind_with_no_bar_for_the_family_cannot_activate(self):
         with pytest.raises(Conflict, match="no bar"):
