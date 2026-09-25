@@ -183,4 +183,9 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   private REITs (VineBrook Homes Trust, Invesco Real Estate Income Trust).
   The landing row carries no ticker (it is in `sec_company_ticker`), so either
   needs a new SEC contract version.
-- [ ] Operator: which way forward.
+- [x] Operator (2026-09-25 06:34 ET): **option 1** (no ticker and an Emerging growth company
+  category -> the record waits), done **after** a kind field is added to the
+  Stage, so each waiting record says which kind it probably is.
+- [ ] Kind field on waiting Stage records (design with the operator).
+- [ ] Option 1: the SEC contract reads tickers (`sec_company_ticker`), the
+  ampersand defect is fixed, rule `.10`, fresh draws, hand-read, then approval.
