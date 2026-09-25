@@ -5,10 +5,13 @@ The draft rule (tuned on the 883 development pairs, `08-dev-levers.py`):
 1. the SEC name and the GLEIF legal name are equal with the legal form kept
    (`form_key`: WAYFAIR INC and WAYFAIR LLC differ);
 2. that name key belongs to exactly one GLEIF legal entity in the whole
-   pinned publication, not counting branches (a branch carries its head
-   office's name and is not a separate legal entity);
-3. that one record is category GENERAL, and not DUPLICATE or ANNULLED;
-4. the name key belongs to exactly one SEC filer among all 76,230;
+   pinned publication, counting its legal and other names but not branches
+   (a branch carries its head office's name and is not a separate legal
+   entity);
+3. that one record is category GENERAL and ACTIVE, and not DUPLICATE or
+   ANNULLED;
+4. the name key belongs to exactly one SEC filer among all 76,230, counting
+   current and former names;
 5. the jurisdiction agrees (SEC state of incorporation mapped to ISO, as GLEIF
    writes it), or the headquarters postal code agrees within the same country.
 
@@ -81,11 +84,20 @@ def postal_agrees(sec_addresses: dict | None, hq: dict | None) -> bool:
     s_postal, g_postal = postal(business.get("zipCode")), postal(hq.get("postal"))
     if not s_postal or not g_postal:
         return False
-    # SEC keeps only the digits of a Dutch code ("5504" for "5504 DR"): a
-    # shorter SEC code agrees when GLEIF's starts with it, from four characters.
-    if s_postal != g_postal and not (len(s_postal) >= 4 and g_postal.startswith(s_postal)):
+    country = (hq.get("country") or "").upper()
+    if sec_country(business) != country:
         return False
-    return sec_country(business) == (hq.get("country") or "").upper()
+    if s_postal == g_postal:
+        return True
+    # SEC keeps only the four digits of a Dutch code ("5504" for "5504 DR").
+    # Only that shape agrees on a prefix: four digits against four digits and
+    # two letters, in the Netherlands.
+    return (
+        country == "NL"
+        and re.fullmatch(r"\d{4}", s_postal) is not None
+        and re.fullmatch(r"\d{4}[A-Z]{2}", g_postal) is not None
+        and g_postal.startswith(s_postal)
+    )
 
 
 def main(companies: str, scan: str, gleif: str, out: str) -> None:
@@ -93,17 +105,29 @@ def main(companies: str, scan: str, gleif: str, out: str) -> None:
     for r in rows:
         r["key"] = form_key(r["name"], sec=True)
     wanted = {r["key"] for r in rows}
-    sec_count: Counter = Counter()
+    # The veto counts every name either side has carried; the match reads
+    # only the current SEC name against the GLEIF legal name.
+    sec_holders: dict[str, set] = defaultdict(set)
     for line in open(scan):
         s = json.loads(line)
-        if s.get("cik") is not None and s.get("name"):
-            sec_count[form_key(s["name"], sec=True)] += 1
+        if s.get("cik") is None:
+            continue
+        for name in [s.get("name")] + [n.get("name") for n in s.get("formerNames") or []]:
+            if name:
+                sec_holders[form_key(name, sec=True)].add(s["cik"])
+    sec_count = Counter({k: len(v) for k, v in sec_holders.items() if k in wanted})
     by_key: dict[str, list[dict]] = defaultdict(list)
+    vetoers: dict[str, dict] = defaultdict(dict)
     for line in open(gleif):
         g = json.loads(line)
         k = form_key(g["legal_name"])
         if k in wanted:
             by_key[k].append(g)
+        if g["category"] == "BRANCH":
+            continue
+        for key in {k} | {form_key(n) for _, n in g["other_names"]}:
+            if key in wanted:
+                vetoers[key][g["lei"]] = g
     outcomes: Counter = Counter()
     with open(out, "w") as f:
         for r in rows:
@@ -113,6 +137,8 @@ def main(companies: str, scan: str, gleif: str, out: str) -> None:
                 outcome = "no GLEIF record with this name"
             elif len(entities) > 1:
                 outcome = "defer: name names several GLEIF entities"
+            elif set(vetoers[r["key"]]) - {e["lei"] for e in entities}:
+                outcome = "defer: another GLEIF entity carries this name as another name"
             elif not entities:
                 outcome = "no GLEIF record with this name (branches only)"
             else:
@@ -136,6 +162,10 @@ def main(companies: str, scan: str, gleif: str, out: str) -> None:
                                                 "entity_status", "legal_form")}
                 r["gleif"]["hq"] = g["hq"]
                 r["agree"] = {"jurisdiction": agree_j, "postal": agree_p}
+            # An INACTIVE entity has ceased (merged, dissolved) while its SEC
+            # filer still files: the labelling standard reads it unresolved.
+            if outcome.startswith("BIND") and r["gleif"]["entity_status"] != "ACTIVE":
+                outcome = f"defer: GLEIF entity {r['gleif']['entity_status']}"
             r["outcome"] = outcome
             r["gleif_same_name"] = len(cands)
             r["sec_same_name"] = sec_count[r["key"]]

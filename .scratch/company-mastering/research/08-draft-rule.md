@@ -50,29 +50,38 @@ different entity.
 ## The draft rule over the whole population
 
 The draft rule (`08-coverage.py`), in order:
-1. The SEC name and the GLEIF legal name are equal with the legal form kept.
-2. That name names exactly one GLEIF legal entity in the **whole pinned
-   publication** (3,428,477 records). Branches are not counted: a branch
-   carries its head office's name and isn't a legal entity.
-3. That one GLEIF entity is GENERAL, and is not DUPLICATE or ANNULLED.
-4. The name names exactly one filer among **all 76,230** SEC filers.
+1. The current SEC name and the GLEIF legal name are equal with the legal
+   form kept.
+2. Across the **whole pinned GLEIF publication** (3,428,477 records), exactly
+   one legal entity carries that name, counting its legal **and other**
+   names. Branches are not counted: a branch carries its head office's name
+   and isn't a legal entity.
+3. That entity is GENERAL and ACTIVE, and not DUPLICATE or ANNULLED. An
+   INACTIVE entity has ceased while its SEC filer still files, which the
+   labelling standard reads as unresolved.
+4. Among **all 76,230** SEC filers, exactly one has carried that name,
+   counting current **and former** names.
 5. It binds on **jurisdiction** when SEC's state or country of incorporation
    (mapped to ISO, `08-edgar-codes.json`) agrees with GLEIF's legal
    jurisdiction.
-6. Otherwise it binds on **postal code** when SEC's business postal code
-   agrees with GLEIF's headquarters postal code, in the same country.
+6. Otherwise it binds on **postal code** when SEC's business postal code and
+   GLEIF's headquarters postal code agree, in the same country.
 
 | Outcome over the 6,414 Companies | Count |
 | --- | ---: |
-| binds on jurisdiction | 2,913 |
-| binds on postal code | 278 |
+| binds on jurisdiction | 2,855 |
+| binds on postal code | 264 |
 | no GLEIF record with this name | 2,849 |
-| waits: neither jurisdiction nor postal agrees | 251 |
+| waits: neither jurisdiction nor postal agrees | 248 |
 | waits: the name names several GLEIF entities | 103 |
-| waits: the name names several SEC filers | 13 |
-| waits: GLEIF category FUND (4) or government (2), or DUPLICATE (1) | 7 |
+| waits: another GLEIF entity has the name as another name | 55 |
+| waits: the name names several SEC filers | 27 |
+| waits: GLEIF entity INACTIVE | 7 |
+| waits: GLEIF category FUND (4) or government (2) | 6 |
 
-**3,191 Companies (49.8%) bind.** Apple and Microsoft bind on jurisdiction.
+**3,119 Companies (48.6%) bind.** Counting every name for uniqueness held
+back 65 that the current-name-only count had let bind, and INACTIVE held back
+7 more. Apple and Microsoft bind on jurisdiction.
 Shell and ASML bind on postal code, because SEC holds no usable state of
 incorporation for them:
 - Shell's is "DC";
@@ -85,8 +94,10 @@ Two SEC formatting details the postal comparison allows for:
 - A foreign address carries its country in `countryCode` (Shell: `X0`), not
   in `stateOrCountry`.
 - SEC keeps only the digits of a Dutch postal code ("5504" for GLEIF's
-  "5504DR"). A shorter SEC code of four or more characters agrees when
-  GLEIF's code starts with it.
+  "5504DR"). Only that shape agrees on a prefix: four digits against four
+  digits and two letters, in the Netherlands. This allowance was written
+  after reading ASML, so ASML, the other three test Companies and all 1,000
+  development CIKs are left out of the qualification draw.
 
 ## What the Stage needs for this rule
 
@@ -105,6 +116,6 @@ Two SEC formatting details the postal comparison allows for:
 | Output | sha256 |
 | --- | --- |
 | `cm08-companies.jsonl` (6,414) | `2a57faa7…d3731` |
-| `cm08-coverage.jsonl` (6,414) | `929e024a…9de97` |
+| `cm08-coverage.jsonl` (6,414) | `3b51d0ac…5e1f698` |
 | `cm08-gleif-all.jsonl` (3,428,477) | `e4e6fe8a…1d9f` |
 | `cm08-sec-scan.jsonl` (76,230) | `bdf379bf…c0d1` |
