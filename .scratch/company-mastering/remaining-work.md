@@ -14,12 +14,15 @@ priority SEC then GLEIF, every field from every source).
 - [x] Bar per decision type; Company classification acts at 95%
 - [x] Rule `.8` measured: step 2 299/300 (98.5%), step 4 300/300 (99.1%),
   0 wrong in 483 trick records (2026-09-24 21:50 ET)
-- [x] Full test suite green (2026-09-24 22:12 ET): MDM 889 passed, architecture
+- [x] Full test suite green (2026-09-24 22:07 ET): MDM 889 passed, architecture
   570 passed; PG16 integration 130 passed, 2 fixed (tests that read SEC
   records without the policy the contract now names; rerun 2 passed), 1 known
   `fastapi` baseline
 - [x] Commit the lint fixes to the test files (2026-09-24 21:57 ET; ruff clean on
   every changed test file; the two research scripts stay as hashed in the proof)
+- [x] Three-axis review; the proof check now holds each step to the bar (2026-09-24 22:21 ET)
+- [ ] **Step 2 fails a fresh trick set: 18 of 200 are Funds** (2026-09-24 22:21 ET); tighten
+  it, then re-measure on fresh draws
 - [ ] Show the operator the exact rule document, explain its fingerprint, ask
   for approval
 - [ ] On approval: switch the rule on, pin the approved fingerprint in the

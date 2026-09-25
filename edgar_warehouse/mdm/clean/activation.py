@@ -192,7 +192,11 @@ def _check_measured(kind: str, block: dict, rule: dict, entry: dict) -> None:
         raise Conflict(
             f"Kind {kind} has no bar for {family}, so nothing there activates"
         )
-    _check_proof(kind, bar, entry.get("proof") or {})
+    # The bar holds for each rule step that emits the verdict, not only for
+    # their pooled sample: a failing step must not hide behind a passing one
+    # (`company-policy.md`, Confidence bands).
+    steps = [s["step"] for s in rule.get("steps") or [] if s.get("verdict") == verdict]
+    _check_proof(kind, bar, entry.get("proof") or {}, steps)
 
 
 def _check_deterministic(kind: str, block: dict, rule: dict, entry: dict) -> None:
@@ -211,7 +215,29 @@ def _check_deterministic(kind: str, block: dict, rule: dict, entry: dict) -> Non
         _check_contract(namespace, contract)
 
 
-def _check_proof(kind: str, bar: dict, proof: dict) -> None:
+def _check_sample(kind: str, what: str, sample: dict, bar: dict) -> None:
+    """A stated lower bound reproduces from its own sample and clears the bar."""
+    recomputed = wilson_lower_bound(
+        sample.get("correct"), sample.get("n"), bar["one_sided_confidence"]
+    )
+    stated = sample.get("lower_bound")
+    if (
+        not isinstance(stated, (int, float))
+        or stated > recomputed
+        or recomputed - stated > TOLERANCE
+    ):
+        raise Conflict(
+            f"{what} lower bound {stated} does not reproduce from its sample "
+            f"({recomputed:.6f})"
+        )
+    if recomputed < bar["min_precision"]:
+        raise Conflict(
+            f"{what} lower bound {recomputed:.6f} is below the {kind} bar "
+            f"{bar['min_precision']}"
+        )
+
+
+def _check_proof(kind: str, bar: dict, proof: dict, steps: list[str]) -> None:
     if proof.get("method") != bar["method"]:
         raise Conflict(
             f"Proof method {proof.get('method')} is not the bar's {bar['method']}"
@@ -221,24 +247,12 @@ def _check_proof(kind: str, bar: dict, proof: dict) -> None:
             f"Proof confidence {proof.get('one_sided_confidence')} is not the bar's "
             f"{bar['one_sided_confidence']}"
         )
-    recomputed = wilson_lower_bound(
-        proof.get("correct"), proof.get("n"), proof["one_sided_confidence"]
-    )
-    stated = proof.get("lower_bound")
-    if (
-        not isinstance(stated, (int, float))
-        or stated > recomputed
-        or recomputed - stated > TOLERANCE
-    ):
-        raise Conflict(
-            f"Proof lower bound {stated} does not reproduce from its sample "
-            f"({recomputed:.6f})"
-        )
-    if recomputed < bar["min_precision"]:
-        raise Conflict(
-            f"Proof lower bound {recomputed:.6f} is below the {kind} bar "
-            f"{bar['min_precision']}"
-        )
+    _check_sample(kind, "Proof", proof, bar)
+    by_step = (proof.get("cohort") or {}).get("by_step") or {}
+    for step in steps:
+        if step not in by_step:
+            raise Conflict(f"Proof has no sample of its own for step {step}")
+        _check_sample(kind, f"Proof step {step}", by_step[step], bar)
     adversarial = proof.get("adversarial") or {}
     if adversarial.get("violations") != 0 or not adversarial.get("fixture_sha256"):
         raise Conflict(

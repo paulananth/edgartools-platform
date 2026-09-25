@@ -1,3 +1,8 @@
+> **Superseded (2026-09-24 22:21 ET).** A fresh adversarial arm drawn after version `.8`
+> found 18 Funds among 200 records step 2 calls Companies (see the ticket 12
+> checklist). Nothing below may be approved; a tightened version will get a
+> new brief.
+
 # Ticket 12: SEC Company rule for operator review
 
 **Current decision state:** The tightened rule has passed its local accuracy

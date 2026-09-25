@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.mdm.clean.activation import (
+    _check_proof,
     activated,
     check_policy,
     rule_version_conflicts,
@@ -70,7 +71,18 @@ def proof(n=3000, correct=3000, confidence=0.95, **changes):
         "correct": correct,
         "lower_bound": None,
         "adversarial": {"fixture_sha256": "a" * 64, "violations": 0},
-        "cohort": {"files": {"sample.jsonl": "b" * 64}},
+        "cohort": {
+            "files": {"sample.jsonl": "b" * 64},
+            # One sample per rule step, for every step id the test rules use.
+            "by_step": {
+                str(step): {
+                    "n": n,
+                    "correct": correct,
+                    "lower_bound": changes.get("lower_bound"),
+                }
+                for step in range(6)
+            },
+        },
         "approved_by": "operator",
         "approved_at": "2026-09-24T12:00:00Z",
         "reason": "fixture proof: arithmetic only, not a measurement",
@@ -264,7 +276,7 @@ class TestAnActivationCarriesItsProof:
                 },
                 "adversarial",
             ),
-            ({"proof": proof(cohort={"files": {}})}, "cohort"),
+            ({"proof": proof(cohort={**proof()["cohort"], "files": {}})}, "cohort"),
             ({"proof": proof(approved_by="")}, "approval"),
             ({"proof": proof(correct=3001)}, "sample"),
         ],
@@ -518,3 +530,31 @@ class TestTheCompanyPolicy:
         assert (
             summary["adversarial"]["violations"] == PROOF["adversarial"]["violations"]
         )
+
+
+COMPANY_BAR = {**BAR, "min_precision": 0.95}
+
+
+class TestEachStepClearsTheBar:
+    """The bar is per rule step, not per pooled sample (`company-policy.md`)."""
+
+    def test_a_failing_step_cannot_hide_behind_a_passing_one(self):
+        body = proof(n=600, correct=582)
+        # Pooled 582/600 clears 0.95; step 4 alone (282/300) does not.
+        body["cohort"]["by_step"]["4"] = {
+            "n": 300,
+            "correct": 282,
+            "lower_bound": math.floor(wilson_lower_bound(282, 300, 0.95) * 1e6) / 1e6,
+        }
+        with pytest.raises(Conflict, match="Proof step 4 lower bound .* below"):
+            _check_proof("company", COMPANY_BAR, body, ["2", "4"])
+
+    def test_a_step_with_no_sample_of_its_own_is_refused(self):
+        body = proof()
+        del body["cohort"]["by_step"]["4"]
+        with pytest.raises(Conflict, match="no sample of its own for step 4"):
+            _check_proof("company", COMPANY_BAR, body, ["2", "4"])
+
+    def test_the_measured_sec_rule_clears_the_bar_at_every_company_step(self):
+        approved = {**PROOF, "approved_by": "x", "approved_at": "y"}
+        _check_proof("company", COMPANY_BAR, approved, ["2", "4"])

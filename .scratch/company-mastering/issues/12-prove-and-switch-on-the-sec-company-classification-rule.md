@@ -98,7 +98,10 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
 - [x] Rewrite the operator brief, pin pending policy digest and all five proof
   file hashes; re-hash verification passes, approval pending
   (2026-09-24 21:44 ET).
-- [ ] Run MDM and architecture tests and retry PostgreSQL 16 with Colima.
+- [x] Run MDM and architecture tests and retry PostgreSQL 16 with Colima
+  (2026-09-24 22:07 ET: MDM 889, architecture 570, PG16 130 passed; two PG16
+  tests fixed for the policy the SEC contract now needs; 1 `fastapi` baseline;
+  CI green on 72b76362).
 - [x] Codex stopped at the operator's word (21:47 ET) before committing its
   second pass; the operator handed the work back to Claude (21:48 ET), which
   took it onto `claude/company-mastering-12-prove-sec-classification`.
@@ -106,6 +109,26 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   four Companies~~ deferred to ticket 06: exact-digest operator approval and
   true `approved_at` are pending. `PENDING_ACTIVATION` records the measured
   proposal; the standard policy remains inactive.
-- [ ] Three-axis `/code-review`
+- [x] Three-axis `/code-review` of 72b76362 (2026-09-24, finished before 22:21 ET). GoF: leave
+  it (also taken as the pre-code consult on `activation.py` for the next
+  item). Standards: no hard violations. Spec: four findings, below.
+- [x] Spec finding: `_check_proof` judged only the pooled sample. It now needs
+  a sample of its own for every step that emits the verdict, each clearing
+  the bar; tests for a failing step and a missing step (2026-09-24 22:21 ET).
+- [x] Spec finding: the first adversarial fixture was fixed before `.8` and
+  `.8` removed exactly its 33 violations, so its 0 is in-sample. Drew a fresh
+  arm after `.8` (`12-adversarial-2.py`, seed `20260924.8-adversarial-2`),
+  chosen by evidence the deciding step does not read, 339 records, every one
+  hand-read (2026-09-24 22:21 ET).
+- [ ] **Step 2 fails the fresh arm: 18 of 200 are Funds; step 4: 0 of 139.**
+  Seven rest on decisions already made (3 exchange-traded crypto trusts, 4
+  registered investment companies); eleven are private vehicles registered by
+  Form 10 with no BDC election, on which the operator has not ruled. The
+  current proof's "0 adversarial violations" is superseded. **No approval is
+  asked; PR 710 must not merge** (merging it makes Apple and Microsoft wait
+  too, because the SEC contract now names the rule and the rule is off).
+- [ ] Operator: are Form-10 private funds with no BDC election Funds?
+- [ ] Tighten step 2 (version `.9`), then a fresh 300-per-step draw and a fresh
+  adversarial draw after it is frozen, all hand-read.
 - [ ] ~~Full suite, PR and CI green~~ deferred to ticket 06: the operator
   asked for a local proof and commit only, with no push or PR.
