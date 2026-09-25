@@ -227,6 +227,10 @@ def prepare_native(
         if len(raw_rows[key]) != req["count"]:
             raise Conflict("Native batch records were not authenticated")
         evidence: dict = {"assertion": [], "deferred": []}
+        occurrences = []
+        # The archive the record was read from, and its place in it: delivery
+        # details, kept beside the reading for the Stage (ticket 10).
+        bronze_object = verifier.bronze_reference(member["revision_id"])
         code = expected[key]["source_code"]
         for ordinal, row in raw_rows[key]:
             kind, body = record_evidence(
@@ -245,9 +249,19 @@ def prepare_native(
                 },
             )
             evidence[kind].append(body)
+            if kind == "assertion":
+                occurrences.append(
+                    {
+                        "assertion_id": body["assertion_id"],
+                        "object": bronze_object,
+                        "sha256": member["raw_evidence_hash"],
+                        "locator": f"{req['member']}:record:{ordinal}",
+                    }
+                )
         prepared[key] = {
             "assertions": evidence["assertion"],
             "deferred": evidence["deferred"],
+            "occurrences": occurrences,
             "source_family": doc["source_family"],
             "publication_family": doc["publication_family"],
             "committed_publication": doc["publication"],

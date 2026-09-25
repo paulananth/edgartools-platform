@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -269,6 +270,40 @@ def _business_addresses(landing: dict, parquet: pq.ParquetFile) -> dict[int, dic
     return found
 
 
+_SHA256 = re.compile("[0-9a-f]{64}")
+
+
+def _bronze_objects(root: Path, landing: dict) -> tuple[bytes | None, dict[str, dict]]:
+    """The bronze object each raw object id names, from the capture's own landing.
+
+    A capture lands `sec_raw_object` beside its Company rows: the object's
+    storage path and sha256. A Company record names its raw object id, so the
+    batch can name the bronze object it was read from (ticket 10). A capture
+    that landed no `sec_raw_object` member names none.
+    """
+    if not any(t["table_name"] == "sec_raw_object" for t in landing["tables"]):
+        return None, {}
+    _, raw, parquet = _read_member(
+        root, landing, "sec_raw_object", {"raw_object_id", "storage_path", "sha256"}
+    )
+    found: dict[str, dict] = {}
+    for batch in parquet.iter_batches(batch_size=10_000):
+        for row in batch.to_pylist():
+            if not row["raw_object_id"] or not row["storage_path"]:
+                raise Conflict("A raw object names no id or storage path")
+            if not isinstance(row["sha256"], str) or not _SHA256.fullmatch(
+                row["sha256"]
+            ):
+                raise Conflict("A raw object's sha256 is not a lowercase digest")
+            found[row["raw_object_id"]] = {
+                "object": row["storage_path"],
+                "sha256": row["sha256"],
+                # The submissions document is the record, whole.
+                "locator": "$",
+            }
+    return raw, found
+
+
 @dataclass(frozen=True)
 class _Pinned:
     """One landing member the Company rule reads, pinned beside the Company one."""
@@ -363,6 +398,7 @@ def prepare_company_bundle(
         raise Conflict("The Name Census did not count this Company capture")
     census_hash = digest(census)
     catalog, catalog_manifest_bytes = _read_manifest(root, ticker_manifest)
+    bronze_raw, bronze = _bronze_objects(root, landing)
     pinned = (
         _pin_evidence(
             root,
@@ -426,6 +462,11 @@ def prepare_company_bundle(
                         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
                         **{e.field: e.origin for e in pinned},
                         "name_census_sha256": census_hash,
+                        **(
+                            {"bronze": bronze[row["raw_object_id"]]}
+                            if row["raw_object_id"] in bronze
+                            else {}
+                        ),
                     },
                 }
             )
@@ -463,6 +504,8 @@ def prepare_company_bundle(
         "capture_run_id": landing["run_id"],
         "ticker_run_id": catalog["run_id"],
         "ciks": [r["cik"] for r in records],
+        # How many records name the bronze object they were read from.
+        "bronze_named": sum("bronze" in r["_origin"] for r in records),
     }
     manifest = {
         "contract_version": 2,
@@ -498,6 +541,7 @@ def prepare_company_bundle(
         **{e.file: e.raw for e in pinned},
         "ticker-manifest.json": catalog_manifest_bytes,
         "name-census.json": census_raw,
+        **({"raw-objects.parquet": bronze_raw} if bronze_raw is not None else {}),
         "dataset.json": (canonical(CONTRACT) + "\n").encode(),
         "policy.json": (canonical(POLICY) + "\n").encode(),
         "manifest.json": (canonical(manifest) + "\n").encode(),

@@ -160,8 +160,26 @@ def write_run(root, run_id, tables):
     return manifest
 
 
+def raw_object_row(cik, **changes):
+    return {
+        "raw_object_id": f"raw-{cik}",
+        "source_type": "submissions",
+        "cik": cik,
+        "storage_path": f"bronze/submissions/cik={cik}/CIK{cik:010d}.json",
+        "sha256": hashlib.sha256(str(cik).encode()).hexdigest(),
+        **changes,
+    }
+
+
 def landing(
-    tmp_path, rows, tickers=None, filings=None, addresses=None, former=None, gleif=()
+    tmp_path,
+    rows,
+    tickers=None,
+    filings=None,
+    addresses=None,
+    former=None,
+    gleif=(),
+    raw_objects=None,
 ):
     root = tmp_path / "landing"
     root.mkdir(parents=True)
@@ -175,6 +193,7 @@ def landing(
             "sec_company_filing": filings or [filing_row(999, "10-K")],
             "sec_company_address": addresses or [address_row(999)],
             "sec_company_former_name": former or [former_row(999, "OLD NAME INC")],
+            **({"sec_raw_object": raw_objects} if raw_objects is not None else {}),
         },
     )
     ticker_manifest = write_run(
@@ -642,3 +661,66 @@ class TestMatchingEvidenceIsPinned:
             "op": "value",
             "value": {"postcode": "95014", "country": "US"},
         }
+
+
+class TestEachRecordNamesItsBronzeObject:
+    """Ticket 10: a record names the bronze object it was read from."""
+
+    def records(self, args):
+        prepare_company_bundle(**args)
+        folder = Path(args["output"])
+        return [
+            json.loads(line)
+            for line in (folder / "records.jsonl").read_text().splitlines()
+        ]
+
+    def test_a_record_names_its_raw_objects_storage_path_and_hash(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123), source_row(456)],
+            raw_objects=[raw_object_row(123)],
+        )
+        found = self.records({**args, "limit": 2})
+        assert found[0]["_origin"]["bronze"] == {
+            "object": "bronze/submissions/cik=123/CIK0000000123.json",
+            "sha256": hashlib.sha256(b"123").hexdigest(),
+            "locator": "$",
+        }
+        # Its raw object was not landed by this capture: it names none.
+        assert "bronze" not in found[1]["_origin"]
+        report = prepare_company_bundle(**{**args, "limit": 2})
+        assert report["scope"]["bronze_named"] == 1
+        assert "raw-objects.parquet" in report["files"]
+
+    def test_the_record_itself_is_unchanged(self, tmp_path):
+        with_bronze = self.records(
+            landing(tmp_path, [source_row(123)], raw_objects=[raw_object_row(123)])
+        )[0]
+        without = copy.deepcopy(with_bronze)
+        del without["_origin"]["bronze"]
+        publication = {
+            "publication_key": "p",
+            "revision": 0,
+            "effective_at": None,
+            "artifact_sha256": "a" * 64,
+            "member": "m",
+        }
+        read = [
+            normalize(
+                row, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication
+            )
+            for row in (with_bronze, without)
+        ]
+        assert read[0] == read[1]
+
+    def test_a_capture_without_raw_objects_names_none(self, tmp_path):
+        report = prepare_company_bundle(**landing(tmp_path, [source_row(123)]))
+        assert report["scope"]["bronze_named"] == 0
+        assert "raw-objects.parquet" not in report["files"]
+
+    def test_a_raw_object_without_a_digest_is_refused(self, tmp_path):
+        args = landing(
+            tmp_path, [source_row(123)], raw_objects=[raw_object_row(123, sha256="ABC")]
+        )
+        with pytest.raises(Conflict, match="lowercase digest"):
+            prepare_company_bundle(**args)

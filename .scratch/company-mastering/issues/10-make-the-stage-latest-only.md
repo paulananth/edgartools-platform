@@ -111,7 +111,8 @@ Found while planning (facts, not rulings):
   assessment (028/035); `consumer.py` also reads historic objects from
   `batch.effects`, and the journal publication carries the full request.
 
-1. [ ] **The latest-only Stage, written beside the history.** Migration 038:
+1. [x] **The latest-only Stage, written beside the history** (PR #715, merged
+   `cadb99d3`, 2026-09-25 19:50 ET). Migration 038:
    `mdm_v2.stage_record`, key `(source_code, record_key)`, the winning
    reading, the resolved snapshot and its bronze reference. The evidence
    wrapper keeps it once the core has stored the batch, in the same
@@ -127,10 +128,18 @@ Found while planning (facts, not rulings):
    where an older reading arrives later the two differ on purpose (15 tests).
    Limits recorded: a clash with an older reading the row already replaced
    goes unseen; a profile's identifying values must be text.
-1b. [ ] **The sources name their bronze objects.** The SEC bundle pins
-   `sec_raw_object` and names each CIK's submissions object and hash; the
-   GLEIF bundle names the Golden Copy archive and the record's ordinal; the
-   apply command passes them as `occurrences`.
+1b. [ ] **The sources name their bronze objects.** The SEC Company bundle
+   pins the capture's `sec_raw_object` member when it lands one, and each row
+   names its raw object's storage path and sha256 (`_origin.bronze`, locator
+   `$`: the submissions document is the record). The record itself is
+   unchanged, so no Dataset Contract changes. A row whose raw object the
+   capture did not land names none; the bundle scope counts `bronze_named`
+   (a capture may reuse bronze fetched by an earlier run; slice 4 decides
+   whether that is refused). Native GLEIF batches name the verified member's
+   `bronze_artifact_reference`, its raw evidence hash and
+   `level1:record:<ordinal>`. The manifest command passes them as
+   `occurrences`. PG16: the four-company test's eight Stage rows each name
+   their bronze object.
 2. [ ] **Readers move to the Stage and compact decision receipts**, each with
    an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
    the binding decisions.
