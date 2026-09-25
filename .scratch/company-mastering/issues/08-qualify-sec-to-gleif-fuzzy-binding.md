@@ -95,13 +95,16 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
 
 - [x] Step 1: SEC's own LEI and GLEIF authority `RA000665` join almost no
   Companies (2026-09-24 22:24 ET, `research/08-sec-lei-and-gleif-sec-authority.md`).
-- [ ] Re-base step 1's counts on the Account hold-back's 6,414 Companies
-  (the 7,130 came from the withdrawn Legal-form rule).
+- [x] Re-base step 1's counts on the Account hold-back's 6,414 Companies:
+  SEC's own LEI 10, `RA000665` 10 (2026-09-25 14:20 ET, `research/08-draft-rule.md`).
 - [ ] Check what the Stage can compare: the SEC adapter maps no address today
   (`company_source.py` FIELDS). Decide how the business address reaches the
   matching rule, and how the rule finds GLEIF candidates (a blocking key the
   Stage can index).
-- [ ] Development analysis on the 883 reviewed pairs (tuning data only):
+- [x] Development analysis on the 883 reviewed pairs (tuning data only):
+  keeping the legal form in the name comparison is the lever; the draft rule
+  binds 3,191 of 6,414 Companies, the four included
+  (2026-09-25 14:20 ET, `research/08-draft-rule.md`):
   - fix the SEC state-in-country field (`country: "MI"`) before any country
     comparison;
   - registered-agent addresses (for example 1209 Orange St, Wilmington) are no
@@ -111,7 +114,7 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
   - uniqueness both ways, against the whole pinned GLEIF publication and the
     whole SEC Company population, never against load order;
   - pick the rule steps whose development precision clears 0.95 with room.
-- [ ] Written labelling standard for "same legal entity" (holding company vs
+- [x] Written labelling standard (`research/08-labelling-standard.md`) for "same legal entity" (holding company vs
   operating subsidiary, US registrant vs foreign parent, lapsed and retired
   LEIs, successors), frozen before any label.
 - [ ] `/gof-refactor-reviewer` consult, then named, versioned primitives
