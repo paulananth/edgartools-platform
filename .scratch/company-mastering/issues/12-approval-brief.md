@@ -1,60 +1,58 @@
-> **Superseded (2026-09-24 22:21 ET).** A fresh adversarial arm drawn after version `.8`
-> found 18 Funds among 200 records step 2 calls Companies (see the ticket 12
-> checklist). Nothing below may be approved; a tightened version will get a
-> new brief.
+# Account hold-back: SEC Company rule for operator review
 
-# Ticket 12: SEC Company rule for operator review
+**Decision state:** The Account hold-back is proved on the pinned local cohort,
+but the standard rule is off. No approval for this version has been recorded.
+The pending policy fingerprint is
+`31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f`.
+It identifies the exact *inactive* policy and its rule version
+`sec-company-candidate` `2026-09-25.13`. The activated policy will get a
+different fingerprint because it must carry the approval and its real time.
 
-**Current decision state:** The tightened rule has passed its local accuracy
-checks. It is still off. No operator approval has been asked for or recorded.
+If approved, the rule will let a qualifying SEC filer enter the Company Stage.
+It calls SEC `operating` filers Companies only after holding back fund names,
+fund-report filers, private Form 10 plus Form D filers without a BDC election,
+and several code, ticker, and category combinations. It also calls an SEC
+`other` filer a Company when the filer has an industry code, a nonempty filer
+category, and a company legal-form word. Apple and Microsoft take the first
+path; Shell and ASML take the second. Tim Cook and Satya Nadella wait.
 
-A **policy digest** is a fingerprint of the exact rule document, including
-which rules are switched on and their proof. Editing that document changes
-the fingerprint, so approval for one digest cannot carry over to an edited
-rule. The current inactive policy digest is
-`9a9ee48be44454986f02703d966c0b1dce53ac2d5baebd51289316424e047bad`.
-It is a review anchor, **not** an approval request for activation. A final
-active policy will have a different digest because it must include the true
-operator approval details. That exact final document and digest must be
-reviewed before registration. The withdrawn approval for an earlier version
-does not apply.
+The frozen bronze population has 76,230 SEC filers. This rule calls 6,414
+Companies (5,278 at step 8 and 1,136 at step 10). The other 69,816, or
+91.58%, wait in the Stage. Classification alone does not join SEC and GLEIF
+or publish a master Company; the separate matching and publication gates
+remain open.
 
-If approved and registered, the rule lets its `company` verdict act when a
-new SEC filer reaches the Company Stage. In the retained 76,230-filer bronze
-population, it would call **7,130** filers Companies: 5,980 because SEC calls
-them `operating`, and 1,150 `other` filers because they have an industry code,
-a company name word and a nonempty SEC filer category. Apple and Microsoft
-take the first path; Shell and ASML take the second. Tim Cook and Satya
-Nadella are deferred. Classification lets a record proceed; it does not by
-itself join SEC and GLEIF records or publish a Company master. Separate
-binding and publication controls still govern those actions.
-
-| Rule path | Confirmed Companies in fresh hand-read sample | One-sided 95% lower bound | Required bound |
+| Company path | Labeled Company calls | One-sided 95% lower bound | Required bound |
 | --- | ---: | ---: | ---: |
-| Step 2: SEC `operating` | 299 / 300 | 98.52% | 95%, passes |
-| Step 4: SEC `other` with industry code, category and company name word | 300 / 300 | 99.11% | 95%, passes |
+| Step 8, eligible `operating` filer | 300 of 300 | 99.11% | 95% |
+| Step 10, eligible `other` filer | 300 of 300 | 99.11% | 95% |
 
-There was **one error in 600**: "Stonepeak-Plus Infrastructure Fund LP", a
-private infrastructure fund that SEC types `operating` (step 2). It is counted
-as a Fund, not a Company, on the same standard as the earlier Blackstone
-private-equity fund. There were **zero false Company calls in 483
-hand-labeled adversarial records**. The fresh draw used seed
-`20260924.8`; the previous sample could not measure the change it prompted.
-The earlier version called only 258 of 300 step-4 cases correctly and had 33
-adversarial violations. Its failure is preserved separately. The samples
-measure precision of Company calls, not how many true Companies the rule
-misses, and the labels are based on retained bronze summaries and hand
-reading rather than an outside registry.
+Together the sampled calls are 600 of 600 (lower bound 99.55%). A separate
+328-record adversarial draw contains zero labeled non-Companies called Company.
+The 34 records held back by the fund-name step contain 16 labeled Funds and
+18 labeled Companies, including 13 BDCs. Their Probable Kind remains Fund
+Structure; it is a sorting estimate and creates no identity.
 
-The tighter rule makes some genuine filers wait. The bronze summary has **96**
-SEC `other` filers with an industry code, an empty category and a 10-K, 20-F
-or 40-F annual filing. Of those, 88 would have matched the old step 4;
-ROYAL BANK OF CANADA is an example. They are deferred for review rather than
-called Companies on incomplete evidence or treated as failed records. In all,
-1,119 old step-4 Company calls now wait because category is empty.
+The borderline readings follow the operator's settled kinds: the TIAA Real
+Estate Account and exchange-traded crypto trusts are Funds; BDCs and listed
+royalty trusts are Companies. S-11 publicly offered real-estate partnerships
+and government-owned corporations such as the Tennessee Valley Authority
+were read as Companies. The pinned label file names the 16 Funds explicitly;
+the remaining records receive Company labels with a note derived from their
+bronze name, industry code, ticker, category, and filing forms. CI re-scores
+those frozen labels and checks that the current rule still makes the same
+step decisions. The labels are bronze-based readings, not independent registry
+adjudications of all 928 sampled and adversarial records.
 
-**How to reverse a later activation:** Remove its automatic rule entry in a
-new policy document, register the new digest, and new SEC records will wait
-in the Stage. Already journaled decisions are not erased by changing policy;
-review and correct them through the normal recovery and replay process.
-There is nothing to reverse now because the standard rule is still off.
+The rule uses SEC's newest retained ticker catalog, dated 2026-09-02, and
+the recent filing lists from each filer's captured submissions page. Its
+precision samples do not measure how many true Companies wait. Re-reading a
+committed deferred publication after Probable Kind changes still collides;
+that limitation was accepted on 2026-09-23 and requires a separate repair.
+
+**Approval gate:** The operator must approve the exact frozen proposal above.
+The approval name and actual approval time then enter the policy body, the
+rule is activated, and its final digest must be checked before registration.
+Activation can be reversed for future records by registering a new policy
+without the automatic entry. Previously journaled decisions require review
+and evidence replay; changing the policy does not erase them.

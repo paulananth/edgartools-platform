@@ -152,7 +152,8 @@ that member's digest (`filings.parquet`), also part of the key. The Company
 rule reads both (ticket 12).
 An existing different bundle is rejected; identical preparation is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
-`operating` companies and nullable text fields are currently supported.
+SEC `operating` filers and qualifying `other` filers can become Companies;
+nullable text fields are supported.
 Malformed/unsupported rows are retained with blocking reviews during ingestion.
 No deferred-resolution capability exists yet. Source record counts include
 duplicate occurrences; identical assertions have one business effect.

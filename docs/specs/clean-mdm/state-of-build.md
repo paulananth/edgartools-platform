@@ -147,7 +147,7 @@ one root run UUID across stores; do not claim cross-database atomicity.
 | Shared merge | Reviewed bindings, kind/identifier conflicts, deterministic fields and role fields, aliases, replay reversal and exclusions | Automatic rules disabled; closure capped at 10,000 records |
 | Relationships | Typed endpoints, dated roles/edges, cycle/parent/interval checks and reprojection | Full native pipeline integration pending |
 | Recovery | Restricted PostgreSQL capability, atomic batch/evidence/checkpoint/outbox, attempt journal, fenced ordered retries, three-database reconciliation | Large-component staged reversal not implemented |
-| Source preparation | `mdm prepare-clean-company`, bounded immutable Parquet/JSONL bundle with dataset/policy/manifest inventory | Only SEC `operating` Company records; one landing file; explicit sample, no retirement by absence |
+| Source preparation | `mdm prepare-clean-company`, bounded immutable Parquet/JSONL bundle with dataset/policy/manifest inventory | SEC `operating` and qualifying `other` filers; pinned Company, filings, and ticker members; explicit sample, no retirement by absence |
 | Source defects | Migration 027 retains unsupported/malformed records and requires exact accounting plus an open blocking review in every observing batch | Reviewed deferred-resolution lifecycle remains unimplemented |
 | Consumer reads | Opt-in authenticated v2 shared identities, aliases, field/profile provenance and historical pagination | Legacy API remains the default |
 | Publication | Real journal mirror; idempotent verified local export/graph contract files | Local files are not hosted export/graph materialization |

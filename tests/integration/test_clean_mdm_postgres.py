@@ -1629,7 +1629,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
             "kind": "company",
             "family": "classification",
             "rule_id": "sec-company-candidate",
-            "rule_version": "2026-09-24.8",
+            "rule_version": "2026-09-25.13",
             "verdict": "company",
             "activation": "measured",
             "proof": proof(),
@@ -1652,6 +1652,9 @@ def test_native_company_batch_retains_unsupported_records_atomically(
                         "cik": 123,
                         "entity_type": "operating",
                         "entity_name": "Synthetic Company",
+                        "sic": "1234",
+                        "tickers": ["SYN"],
+                        "forms": ["10-K"],
                     }
                 ).encode(),
                 json.dumps(
@@ -1662,12 +1665,12 @@ def test_native_company_batch_retains_unsupported_records_atomically(
                     }
                 ).encode(),
                 json.dumps(
-                    {"entity_type": "operating", "entity_name": "Missing CIK"}
+                    {"entity_type": "operating", "entity_name": "Missing CIK", "sic": "1234"}
                 ).encode(),
                 b"{broken json",
-                b'{"cik":789,"entity_type":"operating","entity_name":[1,2]}',
-                b'{"cik":790,"entity_type":"operating","entity_name":{"op":"bogus"}}',
-                b'{"cik":791,"entity_type":"operating","entity_name":1e999}',
+                b'{"cik":789,"entity_type":"operating","sic":"1234","entity_name":[1,2]}',
+                b'{"cik":790,"entity_type":"operating","sic":"1234","entity_name":{"op":"bogus"}}',
+                b'{"cik":791,"entity_type":"operating","sic":"1234","entity_name":1e999}',
             ]
         )
         + b"\n"
@@ -1839,7 +1842,14 @@ def test_native_company_batch_retains_unsupported_records_atomically(
     from edgar_warehouse.mdm.clean.adapters import normalize
 
     duplicate = normalize(
-        {"cik": 123, "entity_type": "operating", "entity_name": "Synthetic Company"},
+        {
+            "cik": 123,
+            "entity_type": "operating",
+            "entity_name": "Synthetic Company",
+            "sic": "1234",
+            "tickers": ["SYN"],
+            "forms": ["10-K"],
+        },
         source_code=SOURCE_CODE,
         contract=CONTRACT,
         policy=fixture_policy,

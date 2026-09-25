@@ -27,6 +27,7 @@ from edgar_warehouse.mdm.clean.activation import (
     rule_version_conflicts,
     wilson_lower_bound,
 )
+from edgar_warehouse.mdm.clean.classification import fired
 from edgar_warehouse.mdm.clean.company_source import PENDING_ACTIVATION, POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.clean.store import Conflict, digest
@@ -74,14 +75,14 @@ def proof(n=3000, correct=3000, confidence=0.95, **changes):
         "cohort": {
             "files": {"sample.jsonl": "b" * 64},
             # One sample per rule step, for every step id a test rule or the
-            # Company policy uses ("0" to "9").
+            # Company policy uses ("0" to "10").
             "by_step": {
                 str(step): {
                     "n": n,
                     "correct": correct,
                     "lower_bound": changes.get("lower_bound"),
                 }
-                for step in range(10)
+                for step in range(11)
             },
         },
         "approved_by": "operator",
@@ -518,18 +519,75 @@ class TestTheCompanyPolicy:
 
     def test_the_policy_is_the_pending_digest(self):
         assert digest(POLICY) == (
-            "9a9ee48be44454986f02703d966c0b1dce53ac2d5baebd51289316424e047bad"
+            "31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f"
         )
 
     def test_the_proof_files_match_the_pinned_hashes(self):
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
         for name, expected in PROOF["cohort"]["files"].items():
             assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
-        summary = json.loads((root / "12-summary.json").read_text())
+        summary = json.loads((root / "12-13-summary.json").read_text())
         assert summary["files"] == PROOF["cohort"]["files"]
         assert summary["by_step"] == PROOF["cohort"]["by_step"]
         assert (
             summary["adversarial"]["violations"] == PROOF["adversarial"]["violations"]
+        )
+
+    def test_the_account_hold_back_re_scores_from_frozen_labels(self):
+        root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
+        block = POLICY["kinds"]["company"]
+        (rule,) = [
+            r for r in block["rules"] if r["rule_id"] == "sec-company-candidate"
+        ]
+
+        def rows(name):
+            return [
+                json.loads(line)
+                for line in (root / name).read_text().splitlines()
+            ]
+
+        sample = rows("12-13-sample.jsonl")
+        adversarial = rows("12-13-adversarial.jsonl")
+        held = rows("12-13-held.jsonl")
+        for record in sample + adversarial + held:
+            verdict, step = fired(
+                rule,
+                {
+                    "entity_type": record["entity_type"],
+                    "sic": record["sic"],
+                    "category": record["category"],
+                    "entity_name": record["name"],
+                    "tickers": record["catalog_tickers"],
+                    "forms": record["forms"],
+                },
+                block,
+            )
+            assert (verdict, step) == (
+                "deferred" if record in held else "company",
+                record["step"],
+            )
+            assert record["final"] in {"company", "fund"}
+
+        assert len(sample) == PROOF["n"] == 600
+        correct = sum(record["final"] == "company" for record in sample)
+        assert correct == PROOF["correct"]
+        assert math.isclose(
+            wilson_lower_bound(correct, len(sample), 0.95),
+            PROOF["lower_bound"],
+            abs_tol=1e-6,
+        )
+        for step, measured in PROOF["cohort"]["by_step"].items():
+            group = [record for record in sample if record["step"] == step]
+            step_correct = sum(record["final"] == "company" for record in group)
+            assert (len(group), step_correct) == (measured["n"], measured["correct"])
+            assert math.isclose(
+                wilson_lower_bound(step_correct, len(group), 0.95),
+                measured["lower_bound"],
+                abs_tol=1e-6,
+            )
+        assert len(adversarial) == PROOF["adversarial"]["n"]
+        assert sum(record["final"] != "company" for record in adversarial) == (
+            PROOF["adversarial"]["violations"]
         )
 
 
@@ -558,4 +616,4 @@ class TestEachStepClearsTheBar:
 
     def test_the_measured_sec_rule_clears_the_bar_at_every_company_step(self):
         approved = {**PROOF, "approved_by": "x", "approved_at": "y"}
-        _check_proof("company", COMPANY_BAR, approved, ["2", "4"])
+        _check_proof("company", COMPANY_BAR, approved, ["8", "10"])

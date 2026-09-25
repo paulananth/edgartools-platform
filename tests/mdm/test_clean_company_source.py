@@ -29,7 +29,7 @@ TEST_POLICY["automatic_rules"] = [
         "kind": "company",
         "family": "classification",
         "rule_id": "sec-company-candidate",
-        "rule_version": "2026-09-24.8",
+        "rule_version": "2026-09-25.13",
         "verdict": "company",
         "activation": "measured",
         "proof": proof(),
@@ -46,6 +46,9 @@ def source_row(cik, **changes):
         "cik": cik,
         "entity_name": f"Synthetic Company {cik}",
         "entity_type": "operating",
+        "sic": "1234",
+        "tickers": ["SYN"],
+        "forms": ["10-K"],
         "last_sync_run_id": "capture-1",
         "last_synced_at": datetime(2026, 1, 1, tzinfo=UTC),
         "raw_object_id": f"raw-{cik}",
@@ -165,7 +168,7 @@ def test_native_company_kind_identifiers_and_unknown_effective_time():
         )
 
 
-def test_step_four_requires_the_landing_filer_category():
+def test_step_ten_requires_the_landing_filer_category():
     publication = {
         "publication_key": "capture-1/company",
         "revision": 0,
@@ -191,14 +194,14 @@ def test_step_four_requires_the_landing_filer_category():
                 contract=CONTRACT,
                 publication=publication,
             )
-        assert caught.value.detail["classification"]["step"] == "5"
+        assert caught.value.detail["classification"]["step"] == "11"
     body = normalize(
         {**row, "category": "Large accelerated filer"},
         source_code=SOURCE_CODE,
         contract=CONTRACT,
         publication=publication,
     )
-    assert body["provenance"]["classification"]["step"] == "4"
+    assert body["provenance"]["classification"]["step"] == "10"
 
 
 def test_prepared_bundle_is_bounded_pinned_and_idempotent(tmp_path):

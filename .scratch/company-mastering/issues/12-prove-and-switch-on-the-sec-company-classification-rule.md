@@ -305,13 +305,17 @@ code as the digest's key.
   holders on S-1, files 10-K, not a legal person) a Fund? It is the only
   such filer among the 6,415 Companies. If a Fund, add ACCOUNT to the
   fund-name words (moves exactly it) and draw fresh.
-- [ ] If it passes: PROOF with `by_step` and file hashes, `PENDING_ACTIVATION`
-  on `.12`, update the tests that pin `.8`, full unit + PG16 suites, CI.
-- [ ] Three-axis `/code-review` of the branch; fix findings.
-- [ ] Plain-English approval brief; **operator approves the exact digest**.
-- [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
-- [ ] If it fails: record it, design the next fix, continue; ask only if the
-  fix needs a new kind ruling.
+- [ ] ~~If it passes: PROOF with `by_step` and file hashes, `PENDING_ACTIVATION`
+  on `.12`, update the tests that pin `.8`, full unit + PG16 suites, CI~~ deferred
+  to the Account hold-back: the Forms hold-back failed on TIAA Real Estate Account.
+- [ ] ~~Three-axis `/code-review` of the `.12` branch; fix findings~~ deferred
+  to the Account hold-back: version `.12` was superseded before activation.
+- [ ] ~~Plain-English `.12` approval brief and exact-digest approval~~ deferred
+  to the Account hold-back: the operator classified the separate account as a Fund.
+- [ ] ~~Activate `.12`, run four-company PG16, CI, and merge~~ deferred to the
+  Account hold-back: the failed version cannot activate.
+- [x] `.12` failed on the insurance separate account; the operator ruled it a
+  Fund and `.13` was frozen and measured (2026-09-25 08:13 ET).
 
 ### Account hold-back checklist (`2026-09-25.13`)
 
@@ -327,4 +331,14 @@ code as the digest's key.
 - [ ] Three-axis `/code-review`; fix findings.
 - [ ] Plain-English brief; **operator approves the exact digest**.
 - [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
-- [ ] 2026-09-25 08:14 ET: handed to Codex (`12-handover-to-codex-2.md`); PROOF and PENDING_ACTIVATION written; 6 tests pinning `.8` still to update.
+- [x] Handed to Codex with the PROOF and PENDING_ACTIVATION written; old `.8`
+  tests still to update (`12-handover-to-codex-2.md`, 2026-09-25 08:14 ET).
+
+### Codex completion checklist (Account hold-back)
+
+- [x] Update the activation, source, and four-company tests to the frozen Account hold-back rule and its exact pending digest; keep the standard policy inactive (86 focused unit tests and three affected PG16 tests passed, 2026-09-25 08:33 ET).
+- [ ] Verify the pinned research hashes and run MDM, architecture, and real PostgreSQL 16 Clean MDM tests without prerequisite skips.
+- [ ] Push the reviewable branch, obtain green CI, and run Standards, Spec, and GoF reviews; repair any findings.
+- [x] Write the Account hold-back brief with the pending digest, measured results, borderline readings, and limits (`12-approval-brief.md`, 2026-09-25 08:33 ET).
+- [ ] Present the brief and obtain explicit approval of the exact rule fingerprint.
+- [ ] Record the real approval time, activate only that approved digest, rerun the four-company PostgreSQL 16 test and CI, then merge on the operator's word.
