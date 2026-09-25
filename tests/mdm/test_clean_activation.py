@@ -25,7 +25,7 @@ from edgar_warehouse.mdm.clean.activation import (
 )
 from edgar_warehouse.mdm.clean.company_source import POLICY
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm.clean.store import Conflict, digest
 
 RULE = {
     "rule_id": "sec-company",
@@ -477,15 +477,21 @@ class TestAnIdentifierRule:
 
 
 class TestTheCompanyPolicy:
-    """Ticket 11, gap 3: the candidate rule is data, not yet switched on."""
+    """Ticket 12: the measured rule acts, on the proof the operator approved."""
 
-    def test_the_candidate_rule_is_checked_and_not_active(self):
+    def test_the_rule_is_active_on_its_proof(self):
         check_policy(POLICY)
         (rule,) = [
             r
             for r in POLICY["kinds"]["company"]["rules"]
             if r["rule_id"] == "sec-company-candidate"
         ]
-        # Nothing acts on it before the proving run (ticket 05) and the
-        # operator's approval of its digest (ticket 06).
-        assert not activated(POLICY, "company", rule, "company")
+        assert activated(POLICY, "company", rule, "company")
+        assert not activated(POLICY, "company", rule, "deferred")
+
+    def test_the_policy_is_the_approved_digest(self):
+        # Operator approval, ticket 12 (2026-09-24 21:05 ET). A change to the
+        # policy needs a new approval, not an edit to this line.
+        assert digest(POLICY) == (
+            "b26ab87c208e1efc5507c583e426c28472c7d07bef0871c093e13985cc6112d1"
+        )

@@ -75,8 +75,7 @@ NAMED = {"kind": "company", "rule_id": RULE["rule_id"], "version": RULE["version
 
 def rule_contract():
     contract = copy.deepcopy({**CONTRACT, "family": "fixture"})
-    del contract["adapter"]["kind_field"], contract["adapter"]["kind_values"]
-    contract["adapter"]["classification"] = NAMED
+    assert contract["adapter"]["classification"] == NAMED
     return contract
 
 
@@ -84,6 +83,7 @@ def rule_policy(*, active):
     body = copy.deepcopy(POLICY)
     body["version"] = "four-companies-test"
     body["kinds"]["company"]["bars"] = {"classification": BAR}
+    body["automatic_rules"] = []
     if active:
         body["automatic_rules"] = [
             {
@@ -147,19 +147,26 @@ def stage_and_master(database):
     return sorted(stage), masters
 
 
-def test_todays_lookup_table_turns_shell_and_asml_away(database, tmp_path):
-    """The baseline: SEC's `entityType` alone decides, so foreign issuers fail."""
+# The policy digest the operator approved (ticket 12, 2026-09-24 21:05 ET).
+# If this moves, the standard policy is no longer the approved one.
+APPROVED_POLICY = "b26ab87c208e1efc5507c583e426c28472c7d07bef0871c093e13985cc6112d1"
+
+
+def test_the_approved_rule_makes_all_four_companies(database, tmp_path):
+    """The standard SEC setup, as approved: Shell and ASML are Companies now.
+
+    SEC types them `other`, as it does Tim Cook and Satya Nadella; the
+    measured rule tells them apart, and acts on its own.
+    """
     policy = register(database, {**CONTRACT, "family": "fixture"}, POLICY)
+    assert policy == APPROVED_POLICY
     evidence, deferred = batch_evidence(
         sec_batch(tmp_path), tmp_path, Store(database.application), policy_digest=policy
     )
     records = by_record(evidence, deferred)
-    assert {k for k, r in records.items() if r.get("kind") == "company"} == {
-        APPLE,
-        MICROSOFT,
-    }
-    for cik in (SHELL, ASML, COOK, NADELLA):
-        assert records[cik]["reason"] == "unsupported_identity_kind"
+    assert {k for k, r in records.items() if r.get("kind") == "company"} == COMPANIES
+    for cik in (COOK, NADELLA):
+        assert records[cik]["reason"] == "classification_deferred"
 
 
 def test_the_rule_names_all_four_companies_but_acts_on_none_unactivated(

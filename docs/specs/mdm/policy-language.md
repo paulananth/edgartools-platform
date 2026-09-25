@@ -429,8 +429,13 @@ Evidence: [research 02](../../../.scratch/mastering-policy-language/research/02-
 
 Declared per `(kind, family)` under `kinds.<kind>.bars`:
 `{ "min_precision": 0.99, "method": "wilson_lower_bound", "one_sided_confidence": 0.975 }`.
-Person is 0.99 (operator amendment, proposed to Codex); Company is 0.999
-(accepted Q11). A rule with no bar for its family cannot be activated.
+Person classification is 0.99 (operator amendment, proposed to Codex).
+Company classification is 0.95 at 95% one-sided confidence (confidence bands,
+`docs/specs/clean-mdm/company-policy.md`, 2026-09-24); merging two published
+Company IDs keeps 0.999 (Q11). The accepted floor is kept per **(kind,
+family)** (`activation.ACCEPTED_BARS`), so lowering one decision never lowers
+another; a pair with no accepted floor cannot declare a bar. A rule with no
+bar for its family cannot be activated.
 
 ### 9.2 `measured` activation
 

@@ -1,5 +1,5 @@
 {
-  "version": "company-2026-09-24.6",
+  "version": "company-2026-09-24.8",
   "defaults": {
     "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
     "allow_unknown_effective": true
@@ -7,7 +7,7 @@
   "rules": [
     {
       "rule_id": "sec-company-candidate",
-      "version": "2026-09-24.6",
+      "version": "2026-09-24.7",
       "family": "classification",
       "source": "sec.submissions.company.v1",
       "emits": [
@@ -95,7 +95,7 @@
               "args": {
                 "field": "entity_name",
                 "normalizer": "conformed",
-                "token_list": "entity_legal_form",
+                "token_list": "company_legal_form",
                 "min_count": 1
               }
             }
@@ -113,7 +113,17 @@
     "conformed": "normalize_text@edgar-conformed-v1"
   },
   "lists": {
-    "entity_legal_form": [
+    "person_suffix": [
+      "CFA",
+      "CPA",
+      "DDS",
+      "ESQ",
+      "JR",
+      "MRS",
+      "PHD",
+      "SR"
+    ],
+    "company_legal_form": [
       "A S",
       "AB",
       "ACQUISITION",
@@ -126,36 +136,24 @@
       "ASSET",
       "ASSETS",
       "ASSOCIATES",
-      "ASSOCIATION",
       "B V",
       "BANK",
       "BHD",
       "BV",
       "CAPITAL",
       "CAYMAN",
-      "CHURCH",
       "CO",
       "COMPANY",
       "CORP",
       "CORPORATION",
-      "COUNCIL",
       "CREDIT",
       "DELAWARE",
       "ENERGY",
       "ENTERPRISES",
       "EQUITIES",
       "EQUITY",
-      "ESOP",
-      "ESTATE",
-      "FAMILY",
-      "FBO",
-      "FEEDER",
-      "FIDUCIARY",
       "FINANCE",
       "FINANCIAL",
-      "FOUNDATION",
-      "FUND",
-      "FUNDS",
       "GLOBAL",
       "GMBH",
       "GP",
@@ -171,7 +169,6 @@
       "INVESTMENTS",
       "INVESTOR",
       "INVESTORS",
-      "IRREVOCABLE",
       "KABUSHIKI",
       "KG",
       "KK",
@@ -180,7 +177,6 @@
       "LIFE",
       "LIMITADA",
       "LIMITED",
-      "LIVING",
       "LLC",
       "LLLP",
       "LLP",
@@ -188,11 +184,8 @@
       "LTD",
       "LTDA",
       "MANAGEMENT",
-      "MASTER",
       "MGMT",
       "N V",
-      "NOMINEE",
-      "NOMINEES",
       "NV",
       "OPPORTUNITIES",
       "OPPORTUNITY",
@@ -200,17 +193,12 @@
       "PARTNERS",
       "PARTNERS LP",
       "PARTNERSHIP",
-      "PENSION",
-      "PLAN",
       "PLC",
-      "PORTFOLIO",
       "PTE",
       "PTY",
       "REAL ESTATE",
       "REIT",
       "RESOURCES",
-      "RETIREMENT",
-      "REVOCABLE",
       "S A",
       "S A R L",
       "S P A",
@@ -221,7 +209,6 @@
       "SE",
       "SECURITIES",
       "SERVICES",
-      "SOCIETY",
       "SPA",
       "SPONSOR",
       "SPONSORS",
@@ -230,25 +217,15 @@
       "SYSTEM",
       "SYSTEMS",
       "TECHNOLOGIES",
-      "TR",
-      "TRUST",
-      "TRUST CO",
-      "TRUSTEE",
-      "TRUSTEES",
-      "TRUSTS",
-      "UNIVERSITY",
       "VENTURE",
       "VENTURES"
-    ],
-    "person_suffix": [
-      "CFA",
-      "CPA",
-      "DDS",
-      "ESQ",
-      "JR",
-      "MRS",
-      "PHD",
-      "SR"
     ]
+  },
+  "bars": {
+    "classification": {
+      "min_precision": 0.95,
+      "method": "wilson_lower_bound",
+      "one_sided_confidence": 0.95
+    }
   }
 }

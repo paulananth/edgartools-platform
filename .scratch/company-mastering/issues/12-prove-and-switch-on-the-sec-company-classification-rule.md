@@ -51,7 +51,12 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   committed — `research/12-*` (2026-09-24 20:22 ET)
 - [x] Wilson lower bound: 297 of 300, **0.97524**; step 2 0.97395, step 4
   0.93931; adversarial 294, 0 violations (2026-09-24 20:22 ET)
-- [ ] Operator approves the exact policy digest (ticket 06), or not
+- [x] Operator approves the exact policy digest (ticket 06):
+  `b26ab87c208e1efc5507c583e426c28472c7d07bef0871c093e13985cc6112d1`
+  (2026-09-24 21:05 ET). A first "yes" at 20:27 ET was withdrawn: the
+  question named the digest without saying what one is. The body's
+  `approved_at` (00:26:27Z, 20:26 ET) is when it was prepared; changing it
+  would change the digest approved, so the true time is kept here.
 - [ ] One change: SEC contract names the rule, plus its `automatic_rules`
   entry; four-company test shows Apple, Microsoft, Shell, ASML acting and
   Cook, Nadella deferred — PG16

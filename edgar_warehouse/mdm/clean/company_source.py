@@ -43,14 +43,19 @@ CONTRACT = {
     "semantics": "patch",
     "completeness": "explicit bounded Company sample; no retirement by absence",
     "adapter": {
-        "version": "sec-company-landing-v1",
+        "version": "sec-company-landing-v2",
         "retain_deferred": True,
         "source_record_provenance": True,
         "field_shape": "nullable_text",
         "record_key": ["cik"],
         "record_key_format": "sec_cik",
-        "kind_field": "entity_type",
-        "kind_values": {"operating": "company"},
+        # The measured Company classification rule, not a lookup table: SEC
+        # types a foreign issuer "other", as it does an individual (ticket 12).
+        "classification": {
+            "kind": "company",
+            "rule_id": "sec-company-candidate",
+            "version": "2026-09-24.7",
+        },
         "identifiers": {"cik": "cik"},
         "identifier_formats": {"cik": "sec_cik"},
         "fields": FIELDS,
@@ -63,8 +68,12 @@ CONTRACT = {
         },
     },
 }
+# No activation yet (ticket 12). The operator's 21:05 ET approval of digest
+# b26ab87c... was withdrawn by the spec review: rule step 4 measured 0.939,
+# below the per-step 95% bar, and its legal-form list caught non-companies.
+# Rule 2026-09-24.7 needs a fresh per-step measurement and a new approval.
 POLICY = {
-    "version": "sec-company-local-v1",
+    "version": "sec-company-local-v2",
     "automatic_rules": [],
     "required_consumers": ["journal", "export", "graph"],
     # Each kind's rules are data, one file per kind, loaded rather than
