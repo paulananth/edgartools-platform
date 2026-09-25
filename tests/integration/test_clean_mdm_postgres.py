@@ -1624,11 +1624,17 @@ def test_native_company_batch_retains_unsupported_records_atomically(
     # Synthetic activation is local to this atomic-accounting fixture. The
     # Standard policy stays inactive pending exact-digest operator approval.
     fixture_policy = copy.deepcopy(POLICY)
-    fixture_policy["automatic_rules"] = [{
-        "kind": "company", "family": "classification",
-        "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.8",
-        "verdict": "company", "activation": "measured", "proof": proof(),
-    }]
+    fixture_policy["automatic_rules"] = [
+        {
+            "kind": "company",
+            "family": "classification",
+            "rule_id": "sec-company-candidate",
+            "rule_version": "2026-09-24.8",
+            "verdict": "company",
+            "activation": "measured",
+            "proof": proof(),
+        }
+    ]
 
     with database.admin.begin() as conn:
         conn.execute(

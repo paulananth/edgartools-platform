@@ -1,15 +1,16 @@
 """Native Company evidence and bounded immutable input preparation."""
 
+import copy
 import hashlib
 import json
-import copy
 from datetime import UTC, datetime
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize as _normalize
+from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+from edgar_warehouse.mdm.clean.adapters import normalize as _normalize
 from edgar_warehouse.mdm.clean.company_source import (
     CONTRACT,
     POLICY,
@@ -19,15 +20,20 @@ from edgar_warehouse.mdm.clean.company_source import (
 from edgar_warehouse.mdm.clean.store import Conflict
 from tests.mdm.test_clean_activation import proof
 
-
 # Field and identity tests need an active rule; this synthetic proof belongs
 # only to the fixture. The standard POLICY deliberately stays inactive.
 TEST_POLICY = copy.deepcopy(POLICY)
-TEST_POLICY["automatic_rules"] = [{
-    "kind": "company", "family": "classification",
-    "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.8",
-    "verdict": "company", "activation": "measured", "proof": proof(),
-}]
+TEST_POLICY["automatic_rules"] = [
+    {
+        "kind": "company",
+        "family": "classification",
+        "rule_id": "sec-company-candidate",
+        "rule_version": "2026-09-24.8",
+        "verdict": "company",
+        "activation": "measured",
+        "proof": proof(),
+    }
+]
 
 
 def normalize(row, **kwargs):
@@ -120,20 +126,29 @@ def test_step_four_requires_the_landing_filer_category():
         "member": "records.jsonl",
     }
     row = source_row(
-        1306965, entity_name="Shell plc", entity_type="other", sic="1311",
+        1306965,
+        entity_name="Shell plc",
+        entity_type="other",
+        sic="1311",
         category="",
     )
     row["last_synced_at"] = row["last_synced_at"].isoformat()
     for missing in ("", None):
-        with pytest.raises(UnsupportedRecord, match="classification_deferred") as caught:
+        with pytest.raises(
+            UnsupportedRecord, match="classification_deferred"
+        ) as caught:
             normalize(
-                {**row, "category": missing}, source_code=SOURCE_CODE,
-                contract=CONTRACT, publication=publication,
+                {**row, "category": missing},
+                source_code=SOURCE_CODE,
+                contract=CONTRACT,
+                publication=publication,
             )
         assert caught.value.detail["classification"]["step"] == "5"
     body = normalize(
         {**row, "category": "Large accelerated filer"},
-        source_code=SOURCE_CODE, contract=CONTRACT, publication=publication,
+        source_code=SOURCE_CODE,
+        contract=CONTRACT,
+        publication=publication,
     )
     assert body["provenance"]["classification"]["step"] == "4"
 

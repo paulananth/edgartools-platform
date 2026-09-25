@@ -151,7 +151,9 @@ def stage_and_master(database):
 PENDING_POLICY = "9a9ee48be44454986f02703d966c0b1dce53ac2d5baebd51289316424e047bad"
 
 
-def test_the_standard_policy_keeps_all_four_company_candidates_waiting(database, tmp_path):
+def test_the_standard_policy_keeps_all_four_company_candidates_waiting(
+    database, tmp_path
+):
     """The measured rule is declared, but no verdict acts before approval."""
     policy = register(database, {**CONTRACT, "family": "fixture"}, POLICY)
     assert policy == PENDING_POLICY

@@ -26,7 +26,7 @@ from edgar_warehouse.mdm.clean.activation import (
     rule_version_conflicts,
     wilson_lower_bound,
 )
-from edgar_warehouse.mdm.clean.company_source import POLICY, PROOF, PENDING_ACTIVATION
+from edgar_warehouse.mdm.clean.company_source import PENDING_ACTIVATION, POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.clean.store import Conflict, digest
 
@@ -492,8 +492,7 @@ class TestTheCompanyPolicy:
         assert not activated(POLICY, "company", rule, "company")
         assert not activated(POLICY, "company", rule, "deferred")
         assert all(
-            step["lower_bound"] >= 0.95
-            for step in PROOF["cohort"]["by_step"].values()
+            step["lower_bound"] >= 0.95 for step in PROOF["cohort"]["by_step"].values()
         )
         assert PROOF["adversarial"]["violations"] == 0
         assert PROOF["approved_at"] is None
@@ -516,4 +515,6 @@ class TestTheCompanyPolicy:
         summary = json.loads((root / "12-summary.json").read_text())
         assert summary["files"] == PROOF["cohort"]["files"]
         assert summary["by_step"] == PROOF["cohort"]["by_step"]
-        assert summary["adversarial"]["violations"] == PROOF["adversarial"]["violations"]
+        assert (
+            summary["adversarial"]["violations"] == PROOF["adversarial"]["violations"]
+        )
