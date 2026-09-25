@@ -370,6 +370,15 @@ def dataset_contract(member: str, *, level1_source: str = "gleif.lei.v1") -> dic
         mapping.update(
             kind_field="Entity.EntityCategory.$",
             kind_values={"GENERAL": "company"},
+            # What a record in each other GLEIF category probably is, so the
+            # Stage can sort it; none of these creates an identity. A sole
+            # proprietor is left unnamed: it is not settled as Person.
+            probable_kind_values={
+                "FUND": "fund_structure",
+                "BRANCH": "branch",
+                "RESIDENT_GOVERNMENT_ENTITY": "government",
+                "INTERNATIONAL_ORGANIZATION": "international_organization",
+            },
             record_key=["LEI.$"],
             record_key_format="lei",
             identifiers={"lei": "LEI.$"},
@@ -516,6 +525,10 @@ def record_evidence(
                     "FUND",
                     "SOLE_PROPRIETOR",
                     "INTERNATIONAL_ORGANIZATION",
+                    # A GLEIF category (6,955 records in the 2026-09-11 Golden
+                    # Copy), once missing here, so every government record was
+                    # set aside as invalid rather than as not a Company.
+                    "RESIDENT_GOVERNMENT_ENTITY",
                 }:
                     raise UnsupportedRecord("invalid_identity_kind")
             if member == "reporting_exceptions":
@@ -560,4 +573,5 @@ def record_evidence(
                 "adapter_version": VERSION,
                 "artifact_sha256": publication["artifact_sha256"],
             },
+            probable_kind=getattr(exc, "probable_kind", None),
         )

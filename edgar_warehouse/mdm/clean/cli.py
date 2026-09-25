@@ -203,6 +203,7 @@ def batch_evidence(
                     schema_version=contract["schema_version"],
                     reason=exc.reason,
                     raw_record=row,
+                    probable_kind=exc.probable_kind,
                     provenance={
                         "artifact_sha256": spec["sha256"],
                         "member": spec["path"],

@@ -88,6 +88,21 @@ def check_rule(rule: dict) -> None:
             raise Conflict(
                 f"Step {step.get('step')} emits an undeclared verdict: {verdict}"
             )
+        probable = step.get("probable_kind")
+        if probable is not None:
+            # A Probable Kind names what a held-back record probably is. A step
+            # that decides a kind already says so, and a second, weaker answer
+            # beside it could only disagree.
+            if verdict in KINDS:
+                raise Conflict(
+                    f"Step {step.get('step')} decides {verdict}; a Probable Kind "
+                    "belongs only to a step that holds a record back"
+                )
+            if probable not in KINDS:
+                raise Conflict(
+                    f"Step {step.get('step')} names Probable Kind {probable}, "
+                    "which is not a kind"
+                )
         if step.get("otherwise"):
             continue
         if not step.get("when"):
@@ -118,6 +133,17 @@ def fired(rule: dict, record: dict, doc: dict) -> tuple[str, str]:
         ):
             return step["verdict"], str(step["step"])
     raise AssertionError("check_rule guarantees a catch-all step")
+
+
+def probable_kind(rule: dict, step: str, verdict: str) -> str | None:
+    """The kind a held-back record probably is: the verdict when it names a
+    kind the policy has not switched on, else what the step declares."""
+    if verdict in KINDS:
+        return verdict
+    for candidate in rule["steps"]:
+        if str(candidate["step"]) == step:
+            return candidate.get("probable_kind")
+    return None
 
 
 def classify(rule: dict, record: dict, doc: dict) -> str:

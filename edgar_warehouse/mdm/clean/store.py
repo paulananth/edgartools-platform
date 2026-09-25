@@ -52,6 +52,7 @@ CLEAN_MDM_MIGRATIONS = (
     "033_clean_mdm_per_kind_views.sql",
     "034_clean_mdm_stage_view_naming.sql",
     "035_clean_mdm_automatic_assessment.sql",
+    "036_clean_mdm_stage_waiting.sql",
 )
 
 
@@ -240,6 +241,11 @@ def register_dataset(
         raise ValueError(
             "A Dataset Contract states a kind or names a classification rule, not both"
         )
+    from .evidence import KINDS
+
+    probable = adapter.get("probable_kind_values", {})
+    if not isinstance(probable, dict) or any(v not in KINDS for v in probable.values()):
+        raise ValueError("probable_kind_values must map source values to kinds")
     from .adapters import FORMATS
 
     formats = [
