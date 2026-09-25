@@ -1,5 +1,5 @@
 {
-  "version": "company-2026-09-25.10",
+  "version": "company-2026-09-25.11",
   "defaults": {
     "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
     "allow_unknown_effective": true
@@ -7,7 +7,7 @@
   "rules": [
     {
       "rule_id": "sec-company-candidate",
-      "version": "2026-09-25.10",
+      "version": "2026-09-25.11",
       "family": "classification",
       "source": "sec.submissions.company.v1",
       "emits": [
@@ -65,6 +65,7 @@
         {
           "step": "4",
           "verdict": "deferred",
+          "probable_kind": "company",
           "when": [
             {
               "primitive": "fields_all_empty@1",
@@ -130,7 +131,8 @@
                   "6199",
                   "6211",
                   "6282",
-                  "6799"
+                  "6799",
+                  "6798"
                 ]
               }
             },
@@ -141,6 +143,37 @@
                 "values": [
                   "<br>Emerging growth company"
                 ]
+              }
+            }
+          ]
+        },
+        {
+          "step": "6b",
+          "verdict": "deferred",
+          "probable_kind": "company",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating"
+                ]
+              }
+            },
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "sic",
+                "values": [
+                  "6798"
+                ]
+              }
+            },
+            {
+              "primitive": "fields_all_empty@1",
+              "args": {
+                "fields": "ticker"
               }
             }
           ]

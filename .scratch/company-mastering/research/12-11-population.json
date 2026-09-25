@@ -1,0 +1,66 @@
+{
+  "adversarial_arms": {
+    "step 10 with a Form D offering": {
+      "drawn": 43,
+      "population": 43
+    },
+    "step 8 with a Form 10 registration": {
+      "drawn": 100,
+      "population": 233
+    },
+    "step 8 with a Form D offering": {
+      "drawn": 100,
+      "population": 1502
+    },
+    "step 8 with a REIT code and a catalog ticker": {
+      "drawn": 100,
+      "population": 116
+    },
+    "step 8 with an investment or real-estate industry code": {
+      "drawn": 100,
+      "population": 201
+    },
+    "step 8 with no annual report": {
+      "drawn": 28,
+      "population": 28
+    },
+    "step 8 with no catalog ticker": {
+      "drawn": 100,
+      "population": 259
+    }
+  },
+  "excluded_earlier_draws": 2898,
+  "held_back": {
+    "6": {
+      "drawn": 39,
+      "population": 39
+    },
+    "6b": {
+      "drawn": 51,
+      "population": 51
+    }
+  },
+  "records": 76230,
+  "rule": {
+    "rule_id": "sec-company-candidate",
+    "version": "2026-09-25.11"
+  },
+  "sample_size_per_step": 300,
+  "seed": "20260925.11",
+  "summary_sha256": "395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600",
+  "ticker_catalog_sha256": "836140c5ca9817b673e76f4c4cf25dda6650215683c1705e9fbe00b2e8f16fbf",
+  "verdicts": {
+    "company/10": 1136,
+    "company/8": 5450,
+    "deferred/1": 1062,
+    "deferred/11": 67166,
+    "deferred/2": 149,
+    "deferred/3": 32,
+    "deferred/4": 381,
+    "deferred/5": 33,
+    "deferred/6": 39,
+    "deferred/6b": 51,
+    "deferred/7": 73,
+    "deferred/9": 658
+  }
+}
