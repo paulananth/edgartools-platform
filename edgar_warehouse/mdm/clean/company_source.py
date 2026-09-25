@@ -612,9 +612,10 @@ def write_name_census(
 
 
 # Ticket 08, the SEC-to-GLEIF matching rules, measured on bronze and the
-# pinned GLEIF Golden Copy (2026-09-11 16:00 UTC) and passing. Proposed, not
-# live: the operator approves the fingerprint of `name_matching_policy()`
-# first, then the rules move into `policies/company.json`.
+# pinned GLEIF Golden Copy (2026-09-11 16:00 UTC) and passing. The operator
+# approved them as declared rules (policy fingerprint `983352e8...`,
+# 2026-09-25 15:21 ET); they sit in `policies/company.json`, inactive. The
+# proofs carry no approval: switching a rule on is a separate decision.
 _RESEARCH_FILES_08 = {
     "08-labelling-standard.md": "9b6b734ee50c7c6b85cdb5d8d6792a880313a35b3108b8fc7c294310baa84dfa",
     "08-rules.json": "0422274b9db81ee027c3af7f2a294563265fe5a8e7fc6096a0e5b9e203139e5e",
@@ -685,18 +686,13 @@ NAME_PROOFS = {
 
 
 def name_matching_policy(*, active: bool) -> dict:
-    """The live Company policy plus the proposed SEC-to-GLEIF matching rules.
+    """The live Company policy, with its matching rules' activations if `active`.
 
-    With `active`, it also names their measured activations; those pass the
+    The rules are declared in `policies/company.json` and inactive. With
+    `active`, it also names their measured activations; those pass the
     activation check only once the operator's approval fills each proof.
     """
-    from ..policies import load_proposal
-
-    proposal = load_proposal("company-name-matching")
     body = json.loads(canonical(POLICY))
-    block = body["kinds"]["company"]
-    block["rules"] = [*block["rules"], *proposal["rules"]]
-    block["bars"] = {**block["bars"], **proposal["bars"]}
     if active:
         body["automatic_rules"] = [
             *body["automatic_rules"],
@@ -710,7 +706,8 @@ def name_matching_policy(*, active: bool) -> dict:
                     "activation": "measured",
                     "proof": NAME_PROOFS[rule["rule_id"]],
                 }
-                for rule in proposal["rules"]
+                for rule in body["kinds"]["company"]["rules"]
+                if rule["family"] == "name_binding"
             ),
         ]
     return body

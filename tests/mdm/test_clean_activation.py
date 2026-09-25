@@ -519,12 +519,14 @@ class TestTheCompanyPolicy:
         pending = copy.deepcopy(POLICY)
         pending["automatic_rules"] = []
         assert digest(pending) == (
-            "31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f"
+            "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
         )
 
     def test_the_policy_is_the_active_digest(self):
+        # The operator's approval of ticket 08's declared matching rules
+        # (2026-09-25 15:21 ET); ticket 12's approval was `35250dad...`.
         assert digest(POLICY) == (
-            "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
+            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
         )
 
     def test_the_proof_files_match_the_pinned_hashes(self):
@@ -717,32 +719,25 @@ class TestANameBindingRule:
             check_policy(body)
 
 
-class TestTheNameMatchingProposal:
-    """Ticket 08: the matching rules are proposed beside the live policy, not in it."""
+class TestTheNameMatchingRules:
+    """Ticket 08: the matching rules are declared in the live policy, not active."""
 
     ROOT = Path(__file__).parents[2] / ".scratch/company-mastering/research"
 
-    def test_the_live_policy_is_unchanged(self):
-        assert digest(POLICY) == (
-            "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
-        )
+    def test_the_declared_rules_are_the_measured_rules_unchanged(self):
+        declared = [
+            r
+            for r in POLICY["kinds"]["company"]["rules"]
+            if r["family"] == "name_binding"
+        ]
+        assert declared == [NAME_STATE, NAME_POSTCODE]
+        assert POLICY["kinds"]["company"]["bars"]["name_binding"] == COMPANY_BAR
 
-    def test_the_proposal_is_well_formed_and_pinned(self):
+    def test_no_matching_rule_is_active(self):
         from edgar_warehouse.mdm.clean.company_source import name_matching_policy
 
-        body = name_matching_policy(active=False)
-        check_policy(body)
-        assert digest(body) == (
-            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
-        )
-
-    def test_the_proposed_rules_are_the_measured_rules_unchanged(self):
-        from edgar_warehouse.mdm.policies import load_proposal
-
-        assert load_proposal("company-name-matching")["rules"] == [
-            NAME_STATE,
-            NAME_POSTCODE,
-        ]
+        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
+        assert digest(name_matching_policy(active=False)) == digest(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):
         from edgar_warehouse.mdm.clean.company_source import name_matching_policy

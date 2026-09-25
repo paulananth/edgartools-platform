@@ -4,7 +4,7 @@ Builds the Name Census with the production builder (`clean/name_census.py`)
 over every SEC filer in the bronze scan (current and former names) and the
 full pinned GLEIF Golden Copy, then runs the production rule tests
 (`clean/matching.py`, through `_passes`) over the 6,414 Account hold-back
-Companies with the proposed rules (`policies/proposals/company-name-matching.json`).
+Companies with the declared rules (`policies/company.json`, `name_binding`).
 It compares the Companies that bind with the research coverage
 (`08-coverage.py`, sha256 97e5d118...).
 
@@ -28,7 +28,7 @@ from edgar_warehouse.mdm.clean.matching import _passes
 from edgar_warehouse.mdm.clean.name_census import build, entry
 from edgar_warehouse.mdm.clean.names import edgar_jurisdiction
 from edgar_warehouse.mdm.clean.store import digest
-from edgar_warehouse.mdm.policies import load_proposal
+from edgar_warehouse.mdm.policies import load_kinds
 
 SHA = "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
 META = {
@@ -73,7 +73,7 @@ def main(scan, companies, coverage, gleif_all, archive, out):
         if line[8:28] in wanted:
             g = json.loads(line)
             wanted[g["lei"]] = g
-    rules = load_proposal("company-name-matching")["rules"]
+    rules = [r for r in load_kinds()["company"]["rules"] if r["family"] == "name_binding"]
     result = {}
     for reading in ("bronze", "silver"):
         bound = set()

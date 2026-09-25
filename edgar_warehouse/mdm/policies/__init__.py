@@ -20,14 +20,3 @@ def load_kinds() -> dict[str, dict]:
         path.stem: json.loads(path.read_text(encoding="utf-8"))
         for path in sorted(FOLDER.glob("*.json"))
     }
-
-
-def load_proposal(name: str) -> dict:
-    """A proposed addition to a kind, kept out of the live policy.
-
-    `proposals/` is not globbed by `load_kinds`, so a proposal changes no
-    live policy digest until an approval moves its rules into the kind file.
-    """
-    return json.loads(
-        (FOLDER / "proposals" / f"{name}.json").read_text(encoding="utf-8")
-    )

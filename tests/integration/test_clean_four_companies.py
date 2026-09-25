@@ -148,8 +148,9 @@ def stage_and_master(database):
     return sorted(stage), masters
 
 
-# Approved standard policy for the Account hold-back.
-ACTIVE_POLICY = "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
+# The approved standard policy: the Account hold-back active, and ticket 08's
+# matching rules declared, not active.
+ACTIVE_POLICY = "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
 
 
 def test_the_standard_policy_classifies_all_four_companies(database, tmp_path):

@@ -42,15 +42,23 @@ priority SEC then GLEIF, every field from every source).
   `RA000665` (IDs that are CIKs) is SEC's authority for registered funds, 57
   of 7,130 Companies. Neither source joins Companies (ticket 08 branch,
   `research/08-sec-lei-and-gleif-sec-authority.md`)
-- [ ] The name/country/address shape measured 85.6–93.1% before (below 95%):
-  find a stricter rule (uniqueness both ways, GLEIF GENERAL only, legal form,
-  postal code and street number), tuned on the 883 reviewed pairs
-- [ ] Matching rule for the rest: name, country and address (operator's first
-  choice); ticker/CUSIP/ISIN later as corroboration
-- [ ] Measure it per rule step at the 95% bar; 50–95% waits in the Stage,
-  below 50% goes to a Steward
-- [ ] Operator approves the matching rule's fingerprint
-- [ ] Apple, Microsoft, Shell, ASML each end as **one** master with CIK and LEI
+- [x] A stricter rule: the name with the legal form kept, unique in both whole
+  sources (the Name Census), GLEIF GENERAL only, plus a place test
+  (2026-09-25, ticket 08)
+- [x] Two matching rules, name plus place: the Name-and-state rule and the
+  Postcode rule with state veto. Ticker/CUSIP/ISIN later as corroboration
+- [x] Each measured at the 95% bar: 300/300, lower bound 0.9911, 0 adversarial
+  pairs wrong; 3,050 of 6,414 Companies match. Routing below the bar to a
+  Steward is not built; a pair that fails waits in the Stage
+- [x] Operator approved the rules' fingerprint `983352e8…4049` as declared,
+  not active (2026-09-25 15:21 ET, PR #713)
+- [ ] Apple, Microsoft, Shell, ASML each end as **one** master with CIK and LEI:
+  Apple, Microsoft and ASML do in the PG16 test; Shell waits for silver to
+  land SEC's `countryCode`
+- [ ] Undo a wrong link and stop it recurring (identity correction): a new
+  ticket, and it must land before either matching rule is switched on
+- [ ] Switch the matching rules on: the operator's separate approval of their
+  proofs, after identity correction and ticket 04's identifier rules
 
 ## 3. The dated Company table, the final authority (ticket 09)
 

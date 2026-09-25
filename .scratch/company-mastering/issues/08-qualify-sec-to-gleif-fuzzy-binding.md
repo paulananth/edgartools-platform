@@ -136,12 +136,21 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
   `company.json` declared and inactive, their PROOFs pinned with a CI
   re-score.
 - [ ] A wrong link is reversible by evidence-bound reversal, and a Match
-  Exclusion stops it recurring: tests.
+  Exclusion stops it recurring: tests. **Moved out of this ticket:** the
+  Stage has no identity correction yet (see "Decisions made while building").
+  It is a new ticket and blocks switching either rule on.
 - [ ] Apple, Microsoft, Shell and ASML each end as one master with CIK and
-  LEI on real PostgreSQL 16.
-- [ ] Unit, architecture and PG16 suites; three-axis `/code-review`; CI green.
-- [ ] Plain-English brief; operator approves the matching rule's fingerprint;
-  merge on the operator's word.
+  LEI on real PostgreSQL 16. Apple, Microsoft and ASML do; Shell waits until
+  silver lands SEC's `countryCode` (a warehouse change, not this ticket).
+- [x] Unit, architecture and PG16 suites; three-axis `/code-review`; CI green
+  on PR #713.
+- [x] Plain-English brief; operator approved the matching rules' fingerprint
+  `983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049` and
+  asked for the merge (2026-09-25 15:21 ET). It approves the two rules as
+  **declared, not active**: they moved into `policies/company.json`, which is
+  now the live policy at that fingerprint; `automatic_rules` still names only
+  the Account hold-back. The proofs keep no approval: switching a rule on is
+  a separate decision, after the identity-correction ticket.
 
 ## Design (Claude, 2026-09-25 14:45 ET)
 
@@ -237,7 +246,8 @@ Recorded from the three-axis review (Standards, Spec, GoF).
   `load_kinds`, so the live fingerprint stays `35250dad…`, the operator's
   approval of ticket 12. The operator approves the fingerprint of
   `name_matching_policy()`: `983352e8…` with the rules declared. On approval,
-  the rules move into `company.json`.
+  the rules move into `company.json`. (Done 2026-09-25 15:21 ET: the
+  proposal file and `load_proposal` are gone; the live policy is `983352e8…`.)
 - **A rule's arguments decide.** Every name-binding test reads its declared
   fields, paths, normalizers and code table, and refuses one it cannot honour.
   A unit test holds the registry equal to what `matching.py` implements.
