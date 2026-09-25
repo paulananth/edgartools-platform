@@ -360,6 +360,7 @@ def handle(command: str, args) -> int:
         report = prepare_company_bundle(
             landing_root=args.landing_root,
             landing_manifest=args.landing_manifest,
+            ticker_manifest=args.ticker_manifest,
             output=args.output,
             limit=args.limit,
             as_of=args.as_of,

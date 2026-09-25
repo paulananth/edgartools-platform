@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -52,21 +53,33 @@ def source_row(cik, **changes):
     }
 
 
-def landing(tmp_path, rows):
-    root = tmp_path / "landing"
-    root.mkdir()
-    pq.write_table(pa.Table.from_pylist(rows), root / "company.parquet")
-    manifest = root / "run_manifest.json"
+def ticker_row(cik, ticker, **changes):
+    return {
+        "cik": cik,
+        "ticker": ticker,
+        "exchange": "Nasdaq",
+        "source_name": "company_tickers_exchange",
+        "source_rank": 1,
+        "last_sync_run_id": "catalog-1",
+        "last_synced_at": datetime(2026, 1, 2, tzinfo=UTC),
+        **changes,
+    }
+
+
+def write_member(root, run_id, table_name, rows):
+    """One landing run: its parquet member and the manifest that names it."""
+    pq.write_table(pa.Table.from_pylist(rows), root / f"{table_name}.parquet")
+    manifest = root / f"{run_id}.json"
     manifest.write_text(
         json.dumps(
             {
                 "schema_version": 1,
                 "target": "silver_landing",
-                "run_id": "capture-1",
+                "run_id": run_id,
                 "tables": [
                     {
-                        "table_name": "sec_company",
-                        "relative_path": "company.parquet",
+                        "table_name": table_name,
+                        "relative_path": f"{table_name}.parquet",
                         "file_count": 1,
                         "row_count": len(rows),
                     }
@@ -74,9 +87,21 @@ def landing(tmp_path, rows):
             }
         )
     )
+    return manifest
+
+
+def landing(tmp_path, rows, tickers=None):
+    root = tmp_path / "landing"
+    root.mkdir(parents=True)
+    manifest = write_member(root, "capture-1", "sec_company", rows)
+    # By default the catalog lists only a filer outside the sample.
+    ticker_manifest = write_member(
+        root, "catalog-1", "sec_company_ticker", tickers or [ticker_row(999, "ZZZ")]
+    )
     return {
         "landing_root": str(root),
         "landing_manifest": str(manifest),
+        "ticker_manifest": str(ticker_manifest),
         "output": str(tmp_path / "pinned"),
         "limit": 1,
         "revision": 0,
@@ -301,3 +326,76 @@ class TestTheCompanyRule:
             "sec.submissions.company.v1",
             "gleif.level1.v1",
         ]
+
+
+class TestTickersComeFromTheCatalog:
+    """SEC's ticker catalog is its own landing run, pinned beside the Company one.
+
+    The landing Company row carries no ticker, and the rule needs one to hold
+    back a filer with no listing (ticket 12, option 1).
+    """
+
+    def records(self, args):
+        prepare_company_bundle(**args)
+        text = (Path(args["output"]) / "records.jsonl").read_text()
+        return [json.loads(line) for line in text.splitlines()]
+
+    def test_each_filer_gets_its_catalog_tickers_in_rank_order(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123), source_row(456)],
+            [
+                ticker_row(123, "BRKB", source_rank=2),
+                ticker_row(123, "BRKA", source_rank=1),
+            ],
+        )
+        rows = self.records({**args, "limit": 2})
+        assert [r["tickers"] for r in rows] == [["BRKA", "BRKB"], []]
+
+    def test_the_catalog_member_is_pinned_in_every_record_and_the_key(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)], [ticker_row(123, "AAPL")])
+        prepare_company_bundle(**args)
+        out = Path(args["output"])
+        pinned = hashlib.sha256((out / "tickers.parquet").read_bytes()).hexdigest()
+        origin = json.loads((out / "records.jsonl").read_text())["_origin"]
+        assert origin["tickers"]["sha256"] == pinned
+        assert origin["tickers"]["run_id"] == "catalog-1"
+        key = json.loads((out / "manifest.json").read_text())["batches"][0]["input"][
+            "publication"
+        ]["publication_key"]
+        assert key.endswith(f":sec_company_ticker:{pinned}")
+
+    def test_a_different_catalog_is_a_different_publication(self, tmp_path):
+        first = landing(tmp_path / "a", [source_row(123)], [ticker_row(123, "AAPL")])
+        second = landing(tmp_path / "b", [source_row(123)], [ticker_row(123, "AAPX")])
+
+        def key(args):
+            prepare_company_bundle(**args)
+            body = json.loads((Path(args["output"]) / "manifest.json").read_text())
+            return body["batches"][0]["input"]["publication"]["publication_key"]
+
+        assert key(first) != key(second)
+
+    def test_a_catalog_row_from_another_run_is_refused(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123)],
+            [ticker_row(123, "AAPL", last_sync_run_id="catalog-0")],
+        )
+        with pytest.raises(Conflict, match="different catalog run"):
+            prepare_company_bundle(**args)
+
+    def test_a_ticker_manifest_without_the_catalog_member_is_refused(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        body = json.loads(Path(args["ticker_manifest"]).read_text())
+        body["tables"][0]["table_name"] = "sec_company_address"
+        Path(args["ticker_manifest"]).write_text(json.dumps(body))
+        with pytest.raises(ValueError, match="sec_company_ticker"):
+            prepare_company_bundle(**args)
+
+    def test_a_ticker_manifest_outside_the_root_is_refused(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        outside = tmp_path / "elsewhere.json"
+        outside.write_text(Path(args["ticker_manifest"]).read_text())
+        with pytest.raises(ValueError, match="inside its root"):
+            prepare_company_bundle(**{**args, "ticker_manifest": str(outside)})

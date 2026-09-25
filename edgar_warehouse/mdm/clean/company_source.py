@@ -38,12 +38,13 @@ CONTRACT = {
     "family": "submissions",
     "schema_version": "silver-company-v1",
     "record_key": "zero-padded 10-digit CIK",
-    "publication_key": "capture run plus exact company landing member digest",
+    "publication_key": "capture run plus exact company landing member digest, "
+    "plus the exact ticker catalog member digest",
     "effective_time": "unknown; last_synced_at is observation time only",
     "semantics": "patch",
     "completeness": "explicit bounded Company sample; no retirement by absence",
     "adapter": {
-        "version": "sec-company-landing-v2",
+        "version": "sec-company-landing-v3",
         "retain_deferred": True,
         "source_record_provenance": True,
         "field_shape": "nullable_text",
@@ -65,6 +66,8 @@ CONTRACT = {
             "raw_object_id": "raw_object_id",
             "capture_run_id": "last_sync_run_id",
             "observed_at": "last_synced_at",
+            "ticker_landing_sha256": "_origin.tickers.sha256",
+            "ticker_run_id": "_origin.tickers.run_id",
         },
     },
 }
@@ -137,56 +140,116 @@ def _json_value(value):
     raise TypeError(f"Unsupported source scalar: {type(value).__name__}")
 
 
-def prepare_company_bundle(
-    *,
-    landing_root: str,
-    landing_manifest: str,
-    output: str,
-    limit: int,
-    as_of: str,
-    revision: int,
-) -> dict:
-    if not 1 <= limit <= 1000 or type(revision) is not int or revision < 0:
-        raise ValueError(
-            "Require --limit 1..1000 and a nonnegative explicit publication revision"
-        )
-    instant(as_of)
-    root = Path(landing_root).resolve()
-    manifest_path = Path(landing_manifest).resolve()
-    if not manifest_path.is_relative_to(root):
+def _read_manifest(root: Path, manifest: str) -> tuple[dict, bytes]:
+    path = Path(manifest).resolve()
+    if not path.is_relative_to(root):
         raise ValueError("Landing manifest must be inside its root")
-    manifest_bytes = _read_bounded(manifest_path, 1024 * 1024)
-    landing = json.loads(manifest_bytes)
+    raw = _read_bounded(path, 1024 * 1024)
+    landing = json.loads(raw)
     if (
         landing.get("schema_version") != 1
         or landing.get("target") != "silver_landing"
         or not landing.get("run_id")
     ):
         raise ValueError("Unsupported landing manifest contract")
-    members = [t for t in landing["tables"] if t["table_name"] == "sec_company"]
+    return landing, raw
+
+
+def _read_member(
+    root: Path, landing: dict, table_name: str, required: set[str]
+) -> tuple[dict, bytes, pq.ParquetFile]:
+    """The one pinned file a landing run wrote for `table_name`, checked."""
+    members = [t for t in landing["tables"] if t["table_name"] == table_name]
     if len(members) != 1 or members[0].get("file_count") != 1:
         raise ValueError(
-            "Require one explicit Company member; multi-file landing needs a partition contract"
+            f"Require one explicit {table_name} member; multi-file landing needs "
+            "a partition contract"
         )
     member = members[0]
     path = (root / member["relative_path"]).resolve()
     if not path.is_relative_to(root):
         raise ValueError("Landing member escapes its root")
     raw = _read_bounded(path, 64 * 1024 * 1024)
-    raw_hash = hashlib.sha256(raw).hexdigest()
     parquet = pq.ParquetFile(io.BytesIO(raw))
     if parquet.metadata.num_rows != member["row_count"]:
         raise Conflict("Landing member row count disagrees with its manifest")
-    required = {
-        "cik",
-        "entity_name",
-        "entity_type",
-        "raw_object_id",
-        "last_sync_run_id",
-        "last_synced_at",
-    }
     if not required <= set(parquet.schema_arrow.names):
-        raise ValueError("Company landing schema is missing required evidence columns")
+        raise ValueError(
+            f"{table_name} landing schema is missing required evidence columns"
+        )
+    return member, raw, parquet
+
+
+def _catalog_tickers(landing: dict, parquet: pq.ParquetFile) -> dict[int, list[str]]:
+    """Each CIK's tickers in SEC's catalog, in the catalog's rank order.
+
+    The catalog lists listed securities only, so a CIK it omits has none.
+    """
+    listed: dict[int, list[tuple]] = {}
+    for batch in parquet.iter_batches(batch_size=10_000):
+        for row in batch.to_pylist():
+            if row["last_sync_run_id"] != landing["run_id"]:
+                raise Conflict("Ticker row belongs to a different catalog run")
+            if row["cik"] is None or not row["ticker"]:
+                continue
+            listed.setdefault(int(row["cik"]), []).append(
+                (row["source_rank"], row["ticker"])
+            )
+    return {cik: [t for _, t in sorted(pairs)] for cik, pairs in listed.items()}
+
+
+def prepare_company_bundle(
+    *,
+    landing_root: str,
+    landing_manifest: str,
+    ticker_manifest: str,
+    output: str,
+    limit: int,
+    as_of: str,
+    revision: int,
+) -> dict:
+    """Pin a bounded Company sample with the ticker catalog it was read with.
+
+    SEC publishes tickers in a catalog of its own, landed by a separate run
+    (`sec_company_ticker`), not in the Company row. The Company rule reads
+    them (ticket 12), so the catalog member is pinned beside the Company one.
+    """
+    if not 1 <= limit <= 1000 or type(revision) is not int or revision < 0:
+        raise ValueError(
+            "Require --limit 1..1000 and a nonnegative explicit publication revision"
+        )
+    instant(as_of)
+    root = Path(landing_root).resolve()
+    landing, manifest_bytes = _read_manifest(root, landing_manifest)
+    member, raw, parquet = _read_member(
+        root,
+        landing,
+        "sec_company",
+        {
+            "cik",
+            "entity_name",
+            "entity_type",
+            "raw_object_id",
+            "last_sync_run_id",
+            "last_synced_at",
+        },
+    )
+    raw_hash = hashlib.sha256(raw).hexdigest()
+    catalog, catalog_manifest_bytes = _read_manifest(root, ticker_manifest)
+    ticker_member, ticker_raw, ticker_parquet = _read_member(
+        root,
+        catalog,
+        "sec_company_ticker",
+        {"cik", "ticker", "source_rank", "last_sync_run_id"},
+    )
+    ticker_hash = hashlib.sha256(ticker_raw).hexdigest()
+    tickers = _catalog_tickers(catalog, ticker_parquet)
+    ticker_origin = {
+        "member": ticker_member["relative_path"],
+        "sha256": ticker_hash,
+        "manifest_sha256": hashlib.sha256(catalog_manifest_bytes).hexdigest(),
+        "run_id": catalog["run_id"],
+    }
     records = []
     for batch in parquet.iter_batches(batch_size=min(limit, 1000)):
         for row in batch.to_pylist():
@@ -197,11 +260,13 @@ def prepare_company_bundle(
             records.append(
                 {
                     **row,
+                    "tickers": tickers.get(int(row["cik"]), []),
                     "_origin": {
                         "member": member["relative_path"],
                         "sha256": raw_hash,
                         "row_ordinal": len(records) + 1,
                         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+                        "tickers": ticker_origin,
                     },
                 }
             )
@@ -224,13 +289,17 @@ def prepare_company_bundle(
         + "\n"
     ).encode()
     payload_hash = hashlib.sha256(payload).hexdigest()
-    publication_key = f"{landing['run_id']}:sec_company:{raw_hash}"
+    publication_key = (
+        f"{landing['run_id']}:sec_company:{raw_hash}"
+        f":{catalog['run_id']}:sec_company_ticker:{ticker_hash}"
+    )
     scope = {
         "mode": "bounded_sample",
         "selected_records": len(records),
         "available_company_records": parquet.metadata.num_rows,
         "whole_source_complete": False,
         "capture_run_id": landing["run_id"],
+        "ticker_run_id": catalog["run_id"],
         "ciks": [r["cik"] for r in records],
     }
     manifest = {
@@ -264,6 +333,8 @@ def prepare_company_bundle(
         "records.jsonl": payload,
         "source.parquet": raw,
         "landing-manifest.json": manifest_bytes,
+        "tickers.parquet": ticker_raw,
+        "ticker-manifest.json": catalog_manifest_bytes,
         "dataset.json": (canonical(CONTRACT) + "\n").encode(),
         "policy.json": (canonical(POLICY) + "\n").encode(),
         "manifest.json": (canonical(manifest) + "\n").encode(),

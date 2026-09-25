@@ -210,5 +210,21 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
     on 2026-09-23).
   GoF: leave it. CI green on `41ccddda`.
 - [ ] Merge #711 on the operator's word; then rebase #710 and drop `cf95adbd`.
-- [ ] Option 1: the SEC contract reads tickers (`sec_company_ticker`), the
-  ampersand defect is fixed, rule `.10`, fresh draws, hand-read, then approval.
+- [x] #711 merged (`a8bfe004`, operator's word); #710 rebased onto main and
+  `cf95adbd` dropped (2026-09-25 07:37 ET).
+- [x] Ticker sources compared (2026-09-25 07:37 ET, `research/12-ticker-sources.py`). Bronze
+  catalog `reference/sec/company_tickers_exchange/2026/09/02/` (sha256
+  `836140c5…`, the newest in bronze) against each filer's own
+  `submissions.json` tickers: 7,265 filers each, 7,077 in both (97.4%),
+  188 in only one (mostly blank-check companies listing or delisting between
+  the two dates). Option 1 with catalog tickers: 6,650 Companies (6,663
+  with the filer's own), 91.28% of filers in the Stage (91.26%). The .10
+  proof is measured with the catalog, the evidence the rule reads.
+- [x] The SEC contract reads tickers (2026-09-25 07:37 ET): `prepare-clean-company` takes
+  `--ticker-manifest`, the `sec_company_ticker` landing run, pinned beside the
+  Company member (`tickers.parquet`); each record carries its CIK's tickers in
+  rank order and the member's digest; the digest is in the publication key.
+  Adapter `sec-company-landing-v3`. Unit: 1,477 pass, the 8 known `.8` pins
+  fail.
+- [ ] Rule `.10`: the ampersand fix, Probable Kinds on the hold-back steps,
+  the no-ticker + Emerging growth step; fresh draws, hand-read, then approval.

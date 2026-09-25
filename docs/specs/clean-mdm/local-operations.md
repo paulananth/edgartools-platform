@@ -134,12 +134,19 @@ This command needs local files and no database credentials:
 edgar-warehouse mdm prepare-clean-company \
   --landing-root "$COMPANY_LANDING_ROOT" \
   --landing-manifest "$COMPANY_LANDING_MANIFEST" \
+  --ticker-manifest "$TICKER_LANDING_MANIFEST" \
   --output "$CLEAN_MDM_INPUT_DIRECTORY" \
   --as-of 2026-09-19T00:00:00Z --revision 0 --limit 3
 ```
 
 It copies and hashes the original Company Parquet and landing manifest, emits
 bounded JSONL, and writes reviewable dataset/policy/manifest/inventory files.
+SEC publishes tickers in a catalog of its own, landed by a separate run as
+`sec_company_ticker`, so `--ticker-manifest` names that run's landing manifest
+under the same root. Its member is copied and hashed too
+(`tickers.parquet`), each record carries its CIK's catalog tickers and the
+member's digest, and the digest is part of the publication key. The Company
+rule reads the tickers (ticket 12).
 An existing different bundle is rejected; identical preparation is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
 `operating` companies and nullable text fields are currently supported.
