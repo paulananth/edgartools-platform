@@ -92,11 +92,23 @@ def normalizer(name: str, doc: dict) -> Callable[[Any], str]:
     return NORMALIZERS[resolved]
 
 
-def _tokens_found(raw: Any, listed: list, normalize: Callable[[Any], str]) -> list[str]:
+def _tokens_found(
+    raw: Any,
+    listed: list,
+    normalize: Callable[[Any], str],
+    *,
+    ampersand_needs_and: bool,
+) -> list[str]:
     """Which declared entries appear in a name as whole tokens, not substrings.
 
     Whole-token matching is the point: INC must not match INCORPORATED, and
     a surname containing a legal form is not a legal form.
+
+    `&` counts as one synthetic token. Version 1 counts it for every list;
+    version 2 only for a list that carries AND, the one asking whether a name
+    joins two parties (ticket 12: version 1 held back McCormick & Co at a
+    fund-name step). A primitive is never edited once written, so the
+    correction is a new version.
     """
     text = normalize(raw)
     found = set()
@@ -106,10 +118,8 @@ def _tokens_found(raw: Any, listed: list, normalize: Callable[[Any], str]) -> li
         token = re.sub(r"\s+", " ", entry)
         if re.search(rf"(?<![A-Z0-9]){re.escape(token)}(?![A-Z0-9])", text):
             found.add(entry)
-    # `&` is its own signal, one synthetic token, but only for a list that
-    # carries AND: the list is asking whether a name joins two parties.
     if (
-        "AND" in listed
+        (not ampersand_needs_and or "AND" in listed)
         and "&" in str("" if raw is None else raw)
         and " AND " in f" {text} "
     ):
@@ -125,23 +135,51 @@ def _field_in_set(args: dict, record: dict, doc: dict) -> bool:
     return value(record, args["field"]) in args["values"]
 
 
-def _token_match(args: dict, record: dict, doc: dict) -> bool:
-    # Both counts absent would make every call true whatever the name holds —
-    # a fail-open in a test that decides an entity's kind. All three calls in
-    # the proven documents supply a count, so refusing the meaningless call
-    # costs nothing and cannot silently pass.
+def _within_counts(name: str, args: dict, found: list) -> bool:
+    """Whether a count of matches lies in the call's bounds.
+
+    Both bounds absent would make every call true whatever the record holds,
+    a fail-open in a test that decides an entity's kind, so the call is
+    refused instead. Every call in the proven documents supplies a count.
+    """
     if args.get("min_count") is None and args.get("max_count") is None:
-        raise Conflict("token_match requires min_count or max_count")
-    listed = declared(doc, args["token_list"], "token list")
-    found = _tokens_found(
-        value(record, args["field"]), listed, normalizer(args["normalizer"], doc)
-    )
-    if args.get("exclude_list"):
-        excluded = set(declared(doc, args["exclude_list"], "exclude list"))
-        found = [t for t in found if t not in excluded]
+        raise Conflict(f"{name} requires min_count or max_count")
     if args.get("min_count") is not None and len(found) < args["min_count"]:
         return False
     return not (args.get("max_count") is not None and len(found) > args["max_count"])
+
+
+def _token_match(ampersand_needs_and: bool) -> Callable[[dict, dict, dict], bool]:
+    def evaluate(args: dict, record: dict, doc: dict) -> bool:
+        listed = declared(doc, args["token_list"], "token list")
+        found = _tokens_found(
+            value(record, args["field"]),
+            listed,
+            normalizer(args["normalizer"], doc),
+            ampersand_needs_and=ampersand_needs_and,
+        )
+        if args.get("exclude_list"):
+            excluded = set(declared(doc, args["exclude_list"], "exclude list"))
+            found = [t for t in found if t not in excluded]
+        return _within_counts("token_match", args, found)
+
+    return evaluate
+
+
+def _values_overlap(args: dict, record: dict, doc: dict) -> bool:
+    """How many of a list field's values fall in a declared set.
+
+    Exact values, no normalizer: the forms a filer files (`10-12G`, `D`,
+    `N-54A`) are SEC codes, not names. A field that is not a list is refused
+    rather than read as empty, so a changed source shape cannot pass quietly.
+    """
+    held = value(record, args["field"])
+    if held is None:
+        held = []
+    if not isinstance(held, list):
+        raise Conflict(f"values_overlap reads a list field; {args['field']} is not")
+    wanted = set(declared(doc, args["values"], "value list"))
+    return _within_counts("values_overlap", args, sorted(set(held) & wanted))
 
 
 def _name_shape(args: dict, record: dict, doc: dict) -> bool:
@@ -185,7 +223,9 @@ REGISTRY = MappingProxyType(
         "kind_equal@1": Primitive(_runs_in_the_merge_stage, "binding"),
         "evidence_present@1": Primitive(_evidence_present, "classification"),
         "field_in_set@1": Primitive(_field_in_set, "classification"),
-        "token_match@1": Primitive(_token_match, "classification"),
+        "token_match@1": Primitive(_token_match(False), "classification"),
+        "token_match@2": Primitive(_token_match(True), "classification"),
+        "values_overlap@1": Primitive(_values_overlap, "classification"),
         "name_shape@1": Primitive(_name_shape, "classification"),
         "fields_all_empty@1": Primitive(_fields_all_empty, "classification"),
     }

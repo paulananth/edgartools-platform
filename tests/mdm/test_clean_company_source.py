@@ -66,9 +66,21 @@ def ticker_row(cik, ticker, **changes):
     }
 
 
-def write_member(root, run_id, table_name, rows):
-    """One landing run: its parquet member and the manifest that names it."""
-    pq.write_table(pa.Table.from_pylist(rows), root / f"{table_name}.parquet")
+def filing_row(cik, form, **changes):
+    return {
+        "accession_number": f"{cik}-{form}",
+        "cik": cik,
+        "form": form,
+        "last_sync_run_id": "capture-1",
+        "last_synced_at": datetime(2026, 1, 1, tzinfo=UTC),
+        **changes,
+    }
+
+
+def write_run(root, run_id, tables):
+    """One landing run: a parquet member per table and the manifest naming them."""
+    for table_name, rows in tables.items():
+        pq.write_table(pa.Table.from_pylist(rows), root / f"{table_name}.parquet")
     manifest = root / f"{run_id}.json"
     manifest.write_text(
         json.dumps(
@@ -83,6 +95,7 @@ def write_member(root, run_id, table_name, rows):
                         "file_count": 1,
                         "row_count": len(rows),
                     }
+                    for table_name, rows in tables.items()
                 ],
             }
         )
@@ -90,13 +103,23 @@ def write_member(root, run_id, table_name, rows):
     return manifest
 
 
-def landing(tmp_path, rows, tickers=None):
+def landing(tmp_path, rows, tickers=None, filings=None):
     root = tmp_path / "landing"
     root.mkdir(parents=True)
-    manifest = write_member(root, "capture-1", "sec_company", rows)
-    # By default the catalog lists only a filer outside the sample.
-    ticker_manifest = write_member(
-        root, "catalog-1", "sec_company_ticker", tickers or [ticker_row(999, "ZZZ")]
+    # By default the filing list and the catalog name only a filer outside
+    # the sample.
+    manifest = write_run(
+        root,
+        "capture-1",
+        {
+            "sec_company": rows,
+            "sec_company_filing": filings or [filing_row(999, "10-K")],
+        },
+    )
+    ticker_manifest = write_run(
+        root,
+        "catalog-1",
+        {"sec_company_ticker": tickers or [ticker_row(999, "ZZZ")]},
     )
     return {
         "landing_root": str(root),
@@ -399,3 +422,59 @@ class TestTickersComeFromTheCatalog:
         outside.write_text(Path(args["ticker_manifest"]).read_text())
         with pytest.raises(ValueError, match="inside its root"):
             prepare_company_bundle(**{**args, "ticker_manifest": str(outside)})
+
+
+class TestFormsComeFromTheFilingList:
+    """The forms a filer files, from the same capture as its Company row.
+
+    The Forms hold-back reads them: a Form 10 with a Form D and no BDC
+    election, or a registered fund's reports, holds a record back (ticket 12).
+    """
+
+    def records(self, args):
+        prepare_company_bundle(**args)
+        text = (Path(args["output"]) / "records.jsonl").read_text()
+        return [json.loads(line) for line in text.splitlines()]
+
+    def test_each_filer_gets_its_distinct_forms(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123), source_row(456)],
+            filings=[
+                filing_row(123, "10-K"),
+                filing_row(123, "D", accession_number="a2"),
+                filing_row(123, "10-K", accession_number="a3"),
+            ],
+        )
+        rows = self.records({**args, "limit": 2})
+        assert [r["forms"] for r in rows] == [["10-K", "D"], []]
+
+    def test_the_filing_member_is_pinned_in_every_record_and_the_key(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)], filings=[filing_row(123, "D")])
+        prepare_company_bundle(**args)
+        out = Path(args["output"])
+        pinned = hashlib.sha256((out / "filings.parquet").read_bytes()).hexdigest()
+        origin = json.loads((out / "records.jsonl").read_text())["_origin"]
+        assert origin["forms"]["sha256"] == pinned
+        assert origin["forms"]["run_id"] == "capture-1"
+        key = json.loads((out / "manifest.json").read_text())["batches"][0]["input"][
+            "publication"
+        ]["publication_key"]
+        assert f":capture-1:sec_company_filing:{pinned}:" in key
+
+    def test_a_filing_row_from_another_run_is_refused(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123)],
+            filings=[filing_row(123, "D", last_sync_run_id="capture-0")],
+        )
+        with pytest.raises(Conflict, match="different capture run"):
+            prepare_company_bundle(**args)
+
+    def test_a_capture_without_the_filing_member_is_refused(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        body = json.loads(Path(args["landing_manifest"]).read_text())
+        body["tables"] = [t for t in body["tables"] if t["table_name"] == "sec_company"]
+        Path(args["landing_manifest"]).write_text(json.dumps(body))
+        with pytest.raises(ValueError, match="sec_company_filing"):
+            prepare_company_bundle(**args)

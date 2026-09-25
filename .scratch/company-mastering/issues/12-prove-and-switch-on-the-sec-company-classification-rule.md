@@ -260,4 +260,44 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   filing N-CSR/N-CEN/NPORT-P, stops all five Funds found in .10 and .11 and
   moves 171 more Companies to the Stage (91.58% of filers). The forms come
   from `sec_company_filing` (cik, form), landed by the same capture as
-  `sec_company`. **Operator to choose.**
+  `sec_company`. Operator (2026-09-25 07:57 ET): **yes, and work the checklist without asking at each step.**
+
+### Rule version names (operator, 2026-09-25)
+
+Each rule version has a descriptive name; the dated string stays in the
+code as the digest's key.
+
+| Name | Version | Adds |
+|---|---|---|
+| Legal-form rule | `2026-09-24.7`, `.8` | `other` filers need a code, a category and a legal-form word |
+| Fund-name hold-back | `2026-09-25.9` | fund words, finance codes, no code |
+| No-ticker hold-back | `2026-09-25.10` | no ticker + Emerging growth waits; `&` fix |
+| REIT hold-back | `2026-09-25.11` | REIT with no ticker, or only Emerging growth, waits |
+| Forms hold-back | `2026-09-25.12` | Form 10 + Form D without BDC, or fund reports, waits |
+
+### Forms hold-back checklist (`2026-09-25.12`)
+
+- [x] GoF consult (2026-09-25 08:06 ET): extract `_pin_evidence` so each pinned member is
+  one entry; share the count guard (`_within_counts`).
+- [x] Primitive `values_overlap@1` (2026-09-25 08:06 ET), with tests and spec. Also: the
+  ampersand fix had edited `token_match@1` in place, against the rule that a
+  primitive is never edited; restored, and the fix is `token_match@2`, which
+  the Company rule now uses.
+- [x] The SEC contract reads `sec_company_filing` (2026-09-25 08:06 ET): `forms` per record,
+  digest in `_origin` and the key; adapter `sec-company-landing-v4`; tests;
+  local-operations doc.
+- [x] Forms hold-back written (2026-09-25 08:06 ET): `7a` fund reports waits (Fund
+  Structure); `7b` Form 10 + Form D + no N-54A waits (Company, from the
+  full-population list; checked below).
+- [x] Frozen and drawn (2026-09-25 08:06 ET), seed `20260925.12`: 600 sample, 320 fresh
+  adversarial (3,722 earlier filers left out; the step 10 arms are spent:
+  every member was read before, none a Fund), 104 held (all 4 at 7a, 100
+  of 167 at 7b). 6,415 Companies, 91.58% of filers in the Stage.
+- [ ] Hand-read, write labels, score.
+- [ ] If it passes: PROOF with `by_step` and file hashes, `PENDING_ACTIVATION`
+  on `.12`, update the tests that pin `.8`, full unit + PG16 suites, CI.
+- [ ] Three-axis `/code-review` of the branch; fix findings.
+- [ ] Plain-English approval brief; **operator approves the exact digest**.
+- [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
+- [ ] If it fails: record it, design the next fix, continue; ask only if the
+  fix needs a new kind ruling.

@@ -1,5 +1,5 @@
 {
-  "version": "company-2026-09-25.11",
+  "version": "company-2026-09-25.12",
   "defaults": {
     "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
     "allow_unknown_effective": true
@@ -7,7 +7,7 @@
   "rules": [
     {
       "rule_id": "sec-company-candidate",
-      "version": "2026-09-25.11",
+      "version": "2026-09-25.12",
       "family": "classification",
       "source": "sec.submissions.company.v1",
       "emits": [
@@ -74,7 +74,7 @@
               }
             },
             {
-              "primitive": "token_match@1",
+              "primitive": "token_match@2",
               "args": {
                 "field": "category",
                 "normalizer": "conformed",
@@ -99,7 +99,7 @@
               }
             },
             {
-              "primitive": "token_match@1",
+              "primitive": "token_match@2",
               "args": {
                 "field": "entity_name",
                 "normalizer": "conformed",
@@ -200,6 +200,70 @@
           ]
         },
         {
+          "step": "7a",
+          "verdict": "deferred",
+          "probable_kind": "fund_structure",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating"
+                ]
+              }
+            },
+            {
+              "primitive": "values_overlap@1",
+              "args": {
+                "field": "forms",
+                "values": "fund_report",
+                "min_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "step": "7b",
+          "verdict": "deferred",
+          "probable_kind": "company",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating"
+                ]
+              }
+            },
+            {
+              "primitive": "values_overlap@1",
+              "args": {
+                "field": "forms",
+                "values": "form_10",
+                "min_count": 1
+              }
+            },
+            {
+              "primitive": "values_overlap@1",
+              "args": {
+                "field": "forms",
+                "values": "private_offering",
+                "min_count": 1
+              }
+            },
+            {
+              "primitive": "values_overlap@1",
+              "args": {
+                "field": "forms",
+                "values": "bdc_election",
+                "max_count": 0
+              }
+            }
+          ]
+        },
+        {
           "step": "8",
           "verdict": "company",
           "when": [
@@ -229,7 +293,7 @@
               }
             },
             {
-              "primitive": "token_match@1",
+              "primitive": "token_match@2",
               "args": {
                 "field": "entity_name",
                 "normalizer": "conformed",
@@ -265,7 +329,7 @@
               }
             },
             {
-              "primitive": "token_match@1",
+              "primitive": "token_match@2",
               "args": {
                 "field": "entity_name",
                 "normalizer": "conformed",
@@ -408,6 +472,23 @@
     ],
     "emerging_growth": [
       "EMERGING GROWTH COMPANY"
+    ],
+    "fund_report": [
+      "N-CEN",
+      "N-CSR",
+      "N-CSRS",
+      "NPORT-P"
+    ],
+    "form_10": [
+      "10-12G",
+      "10-12G/A"
+    ],
+    "private_offering": [
+      "D",
+      "D/A"
+    ],
+    "bdc_election": [
+      "N-54A"
     ]
   },
   "bars": {

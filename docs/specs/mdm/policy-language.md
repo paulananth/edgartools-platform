@@ -176,6 +176,7 @@ Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-
 | classification | `token_match` | `field`, `normalizer`, `token_list`, `exclude_list?`, **at least one of** `min_count` / `max_count` | bool |
 | classification | `name_shape` | `field`, `normalizer`, `min_tokens`, `max_tokens`, `suffix_list`, `forbid_digits{applies_to}`, `forbid_characters{applies_to}` | bool |
 | classification | `fields_all_empty` | `fields[]` (declared paths) | bool |
+| classification | `values_overlap` | `field` (a list), `values[]` or a declared list, **at least one of** `min_count` / `max_count` | bool |
 | binding | `identifier_match` | `namespace`, `field`, `normalizer` | matching identity or none |
 | binding | `identifier_cardinality` | `namespace` (contract in §7.2) | veto or pass |
 | binding | `compound_key_equal` | `components[] {field, normalizer, comparison ∈ exact|consistent}` | bool |
@@ -292,9 +293,17 @@ Rules:
 - Declared lists must carry `AND`, not `&`: EDGAR conformed names
   normalize the ampersand (prototype finding 4). A registration validates
   declared lists against the named normalizer. `token_match` also counts a
-  raw `&` as one token of its own, but only for a list that carries `AND`:
-  such a list asks whether a name joins two parties (ticket 12; counting it
-  for every list held back McCormick & Co at a fund-name step).
+  raw `&` as one token of its own: version 1 for every list, version 2 only
+  for a list that carries `AND`, the one asking whether a name joins two
+  parties (ticket 12: version 1 held back McCormick & Co at a fund-name
+  step). A primitive is never edited once written; a correction is a new
+  version, so a proved rule keeps the meaning it was proved with.
+- **`values_overlap@1`** counts how many of a list field's values fall in a
+  declared set, exactly, with no normalizer: it reads the forms a filer
+  files (`10-12G`, `D`, `N-54A`), which are SEC codes, not names. It needs
+  `min_count` or `max_count`, as `token_match` does; `max_count: 0` asks that
+  none is shared. A field that is not a list is refused, not read as empty
+  (ticket 12, the Forms hold-back).
 - A verdict may be `automatic` only for `(rule_id, version, verdict)`
   entries in `automatic_rules` (§9). Every other verdict is Steward review.
 

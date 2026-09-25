@@ -146,7 +146,10 @@ SEC publishes tickers in a catalog of its own, landed by a separate run as
 under the same root. Its member is copied and hashed too
 (`tickers.parquet`), each record carries its CIK's catalog tickers and the
 member's digest, and the digest is part of the publication key. The Company
-rule reads the tickers (ticket 12).
+landing manifest must also name `sec_company_filing`, the forms the same
+capture landed: each record carries its CIK's distinct forms (`forms`) and
+that member's digest (`filings.parquet`), also part of the key. The Company
+rule reads both (ticket 12).
 An existing different bundle is rejected; identical preparation is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
 `operating` companies and nullable text fields are currently supported.

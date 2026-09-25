@@ -12,6 +12,8 @@ import json
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
@@ -39,12 +41,12 @@ CONTRACT = {
     "schema_version": "silver-company-v1",
     "record_key": "zero-padded 10-digit CIK",
     "publication_key": "capture run plus exact company landing member digest, "
-    "plus the exact ticker catalog member digest",
+    "plus the exact filing-list and ticker catalog member digests",
     "effective_time": "unknown; last_synced_at is observation time only",
     "semantics": "patch",
     "completeness": "explicit bounded Company sample; no retirement by absence",
     "adapter": {
-        "version": "sec-company-landing-v3",
+        "version": "sec-company-landing-v4",
         "retain_deferred": True,
         "source_record_provenance": True,
         "field_shape": "nullable_text",
@@ -55,7 +57,7 @@ CONTRACT = {
         "classification": {
             "kind": "company",
             "rule_id": "sec-company-candidate",
-            "version": "2026-09-25.11",
+            "version": "2026-09-25.12",
         },
         "identifiers": {"cik": "cik"},
         "identifier_formats": {"cik": "sec_cik"},
@@ -66,6 +68,7 @@ CONTRACT = {
             "raw_object_id": "raw_object_id",
             "capture_run_id": "last_sync_run_id",
             "observed_at": "last_synced_at",
+            "filing_landing_sha256": "_origin.forms.sha256",
             "ticker_landing_sha256": "_origin.tickers.sha256",
             "ticker_run_id": "_origin.tickers.run_id",
         },
@@ -198,6 +201,58 @@ def _catalog_tickers(landing: dict, parquet: pq.ParquetFile) -> dict[int, list[s
     return {cik: [t for _, t in sorted(pairs)] for cik, pairs in listed.items()}
 
 
+def _filed_forms(landing: dict, parquet: pq.ParquetFile) -> dict[int, list[str]]:
+    """Each CIK's distinct forms, from the capture that landed its Company row."""
+    filed: dict[int, set[str]] = {}
+    for batch in parquet.iter_batches(batch_size=10_000):
+        for row in batch.to_pylist():
+            if row["last_sync_run_id"] != landing["run_id"]:
+                raise Conflict("Filing row belongs to a different capture run")
+            if row["cik"] is None or not row["form"]:
+                continue
+            filed.setdefault(int(row["cik"]), set()).add(row["form"])
+    return {cik: sorted(forms) for cik, forms in filed.items()}
+
+
+@dataclass(frozen=True)
+class _Pinned:
+    """One landing member the Company rule reads, pinned beside the Company one."""
+
+    field: str
+    table: str
+    file: str
+    raw: bytes
+    origin: dict
+    by_cik: dict[int, list[str]]
+
+
+def _pin_evidence(
+    root: Path,
+    landing: dict,
+    manifest_bytes: bytes,
+    *,
+    table: str,
+    required: set[str],
+    collect: Callable[[dict, pq.ParquetFile], dict[int, list[str]]],
+    field: str,
+    file: str,
+) -> _Pinned:
+    member, raw, parquet = _read_member(root, landing, table, required)
+    return _Pinned(
+        field=field,
+        table=table,
+        file=file,
+        raw=raw,
+        origin={
+            "member": member["relative_path"],
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+            "run_id": landing["run_id"],
+        },
+        by_cik=collect(landing, parquet),
+    )
+
+
 def prepare_company_bundle(
     *,
     landing_root: str,
@@ -208,11 +263,13 @@ def prepare_company_bundle(
     as_of: str,
     revision: int,
 ) -> dict:
-    """Pin a bounded Company sample with the ticker catalog it was read with.
+    """Pin a bounded Company sample with the evidence its rule reads.
 
-    SEC publishes tickers in a catalog of its own, landed by a separate run
-    (`sec_company_ticker`), not in the Company row. The Company rule reads
-    them (ticket 12), so the catalog member is pinned beside the Company one.
+    The Company rule reads two things the Company row does not carry
+    (ticket 12): the forms a filer files, landed by the same capture
+    (`sec_company_filing`), and its tickers, which SEC publishes in a catalog
+    of its own landed by a separate run (`sec_company_ticker`). Each member
+    is pinned beside the Company one, and its digest is part of the key.
     """
     if not 1 <= limit <= 1000 or type(revision) is not int or revision < 0:
         raise ValueError(
@@ -236,20 +293,28 @@ def prepare_company_bundle(
     )
     raw_hash = hashlib.sha256(raw).hexdigest()
     catalog, catalog_manifest_bytes = _read_manifest(root, ticker_manifest)
-    ticker_member, ticker_raw, ticker_parquet = _read_member(
-        root,
-        catalog,
-        "sec_company_ticker",
-        {"cik", "ticker", "source_rank", "last_sync_run_id"},
+    pinned = (
+        _pin_evidence(
+            root,
+            landing,
+            manifest_bytes,
+            table="sec_company_filing",
+            required={"cik", "form", "last_sync_run_id"},
+            collect=_filed_forms,
+            field="forms",
+            file="filings.parquet",
+        ),
+        _pin_evidence(
+            root,
+            catalog,
+            catalog_manifest_bytes,
+            table="sec_company_ticker",
+            required={"cik", "ticker", "source_rank", "last_sync_run_id"},
+            collect=_catalog_tickers,
+            field="tickers",
+            file="tickers.parquet",
+        ),
     )
-    ticker_hash = hashlib.sha256(ticker_raw).hexdigest()
-    tickers = _catalog_tickers(catalog, ticker_parquet)
-    ticker_origin = {
-        "member": ticker_member["relative_path"],
-        "sha256": ticker_hash,
-        "manifest_sha256": hashlib.sha256(catalog_manifest_bytes).hexdigest(),
-        "run_id": catalog["run_id"],
-    }
     records = []
     for batch in parquet.iter_batches(batch_size=min(limit, 1000)):
         for row in batch.to_pylist():
@@ -260,13 +325,13 @@ def prepare_company_bundle(
             records.append(
                 {
                     **row,
-                    "tickers": tickers.get(int(row["cik"]), []),
+                    **{e.field: e.by_cik.get(int(row["cik"]), []) for e in pinned},
                     "_origin": {
                         "member": member["relative_path"],
                         "sha256": raw_hash,
                         "row_ordinal": len(records) + 1,
                         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-                        "tickers": ticker_origin,
+                        **{e.field: e.origin for e in pinned},
                     },
                 }
             )
@@ -289,9 +354,8 @@ def prepare_company_bundle(
         + "\n"
     ).encode()
     payload_hash = hashlib.sha256(payload).hexdigest()
-    publication_key = (
-        f"{landing['run_id']}:sec_company:{raw_hash}"
-        f":{catalog['run_id']}:sec_company_ticker:{ticker_hash}"
+    publication_key = f"{landing['run_id']}:sec_company:{raw_hash}" + "".join(
+        f":{e.origin['run_id']}:{e.table}:{e.origin['sha256']}" for e in pinned
     )
     scope = {
         "mode": "bounded_sample",
@@ -333,7 +397,7 @@ def prepare_company_bundle(
         "records.jsonl": payload,
         "source.parquet": raw,
         "landing-manifest.json": manifest_bytes,
-        "tickers.parquet": ticker_raw,
+        **{e.file: e.raw for e in pinned},
         "ticker-manifest.json": catalog_manifest_bytes,
         "dataset.json": (canonical(CONTRACT) + "\n").encode(),
         "policy.json": (canonical(POLICY) + "\n").encode(),
