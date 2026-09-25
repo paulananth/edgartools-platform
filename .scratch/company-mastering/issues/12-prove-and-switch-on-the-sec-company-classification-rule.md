@@ -226,5 +226,20 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   rank order and the member's digest; the digest is in the publication key.
   Adapter `sec-company-landing-v3`. Unit: 1,477 pass, the 8 known `.8` pins
   fail.
-- [ ] Rule `.10`: the ampersand fix, Probable Kinds on the hold-back steps,
-  the no-ticker + Emerging growth step; fresh draws, hand-read, then approval.
+- [x] Rule `.10` frozen and drawn (`8c450f25`): the ampersand fix, the SIC
+  hold-back split in three with Probable Kinds, step 4 (no catalog ticker +
+  Emerging growth), Company steps renumbered 8 and 10. Seed `20260925.10`.
+- [ ] **Rule `.10` measured (2026-09-25 07:46 ET): cannot be approved.** Hand-read 1,261
+  records (`12-10-label.py`). Sample 600 of 600; steps 8 and 10 each 300 of
+  300, lower bound 0.991. **Adversarial: 2 of 561 violations, both step 8:**
+  Sterling Real Estate Trust (private REIT, Form 10 in 2011, Form D; no
+  ticker but not Emerging growth) and Terra Property Trust (non-traded REIT,
+  Form 10, Form D; its catalog ticker is its listed notes). Step 4 holds
+  back 381; of 100 read, 91 Companies (blank-check companies, start-ups,
+  BDCs), 9 Funds: its Probable Kind is Company.
+- [ ] Next rule: options measured (2026-09-25 07:46 ET, `12-options-11.py`). A: an
+  `operating` REIT code with no ticker waits, and 6798 joins step 6; holds
+  both, moves 64 Companies (mostly REIT operating partnerships) to the Stage.
+  B: Form 10 + Form D + no N-54A + no ticker waits; needs forms evidence;
+  holds Sterling only, moves 18. **Operator to choose.** Either needs fresh
+  draws: the .10 draws designed both.

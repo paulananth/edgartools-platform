@@ -1,0 +1,51 @@
+{
+  "adversarial": {
+    "by_step": {
+      "8": 2
+    },
+    "n": 561,
+    "violating": [
+      [
+        "0001412502",
+        "Sterling Real Estate Trust",
+        "fund"
+      ],
+      [
+        "0001674356",
+        "Terra Property Trust, Inc.",
+        "fund"
+      ]
+    ],
+    "violations": 2
+  },
+  "by_step": {
+    "10": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+    },
+    "8": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+    }
+  },
+  "correct": 600,
+  "files": {
+    "12-10-adversarial.jsonl": "b4272ecc2977c210d3e06ecef87ded79a1ac7139d0a0cb479bdfc8c75471acc3",
+    "12-10-held.jsonl": "7b3173a0a12b26f607aec4986cb288a760277b49b7459db2c64fb51a83e40404",
+    "12-10-label.py": "c5d2ec6ca2d7c09affa0c7b9b85fd292c1fe0777c01e959f9b2a80e082d335aa",
+    "12-10-population.json": "5a2f29f29056d04e1bf44cb43705f0ed2c60b108eef3ef1493b455194b37f34f",
+    "12-10-sample.jsonl": "6547348d5cbe59d575a3f62fe9328fee0185fa1b96c6c373d1e4a780fb00f32f",
+    "12-classify.py": "0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a",
+    "12-measure-10.py": "7def80af73a0a1789b49f7a802d65e01421b1491be535247dce43c43d0043ff4"
+  },
+  "held_back_at_step_4": {
+    "company": 91,
+    "fund": 9
+  },
+  "lower_bound": 0.9955110028711697,
+  "n": 600,
+  "rule_version": "2026-09-25.10",
+  "wrong_in_sample": []
+}
