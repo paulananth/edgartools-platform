@@ -1622,11 +1622,11 @@ def test_native_company_batch_retains_unsupported_records_atomically(
     from tests.mdm.test_clean_activation import proof
 
     # Synthetic activation is local to this atomic-accounting fixture. The
-    # standard policy stays inactive after ticket 12's failed proof.
+    # Standard policy stays inactive pending exact-digest operator approval.
     fixture_policy = copy.deepcopy(POLICY)
     fixture_policy["automatic_rules"] = [{
         "kind": "company", "family": "classification",
-        "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.7",
+        "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.8",
         "verdict": "company", "activation": "measured", "proof": proof(),
     }]
 

@@ -1,21 +1,21 @@
 # Prove and switch on the SEC Company classification rule
 
 Type: task
-Status: in progress
-Blocked by: none (ticket 11 merged); activation now blocked by ticket 12 proof
+Status: proof complete; activation pending operator approval
+Blocked by: ticket 06 exact-digest approval for activation
 
 ## Question
 
-Shell and ASML wait in the Stage because the standard SEC contract maps only
-`entity_type = operating` to Company (ticket 11, gap 3). SEC calls a foreign
-issuer `other`, as it does an individual; only the issuer carries an industry
-code. The candidate rule `sec-company-candidate` says so, but a rule acts
+Shell and ASML wait in the Stage because the standard SEC Company rule is
+declared but inactive. SEC calls a foreign issuer `other`, as it does an
+individual; the issuer also carries an industry code and filer category. The
+candidate rule `sec-company-candidate` distinguishes them, but a rule acts
 alone only on a measured proof (§9.2) and the operator's approval of one exact
 digest.
 
 This is the **classification** part of ticket 05's Proving Run, carved out:
 ticket 05 as written measures SEC-to-GLEIF matching and waits on ticket 08.
-Ticket 06's approval is asked here for this one digest.
+Ticket 06's approval remains pending and is not asked or recorded here.
 
 ## Decisions (operator, 2026-09-24)
 
@@ -81,14 +81,31 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
 - [x] Run MDM and architecture tests and attempt local PG16 integration —
   888 MDM and 570 architecture tests passed; PG16 setup blocked by Colima
   socket permission, not a test assertion (2026-09-24 21:29 ET).
-- [ ] Commit the proved failed gate and pending approval brief only on the
-  Codex branch; do not push. Attempted at 2026-09-24 21:30 ET; `git add`
-  could not create the worktree index lock under the shared repository's
-  `.git/worktrees/codex-cm-12/` because this sandbox has read-only access
-  there. All intended changes remain unstaged in this worktree.
-- [ ] One change: SEC contract names the rule, plus its `automatic_rules`
-  entry; four-company test shows Apple, Microsoft, Shell, ASML acting and
-  Cook, Nadella deferred — blocked: step 4 is below 0.95 and the adversarial
-  fixture has 33 violations. No activation entry may be added.
+- [x] Commit the proved failed gate and pending approval brief on the Codex
+  branch as `476003cd` (`git diff --cached --check`, 2026-09-24 21:32 ET).
+- [x] Version .8 requires SEC filer category for step 4; verified
+  `stage_company_loader` supplies it and `adapters.normalize` passes the row
+  to `fired`; missing-category unit test passes (2026-09-24 21:43 ET).
+- [x] Draw and hand-read seed-20260924.8 samples of 300 per Company step;
+  draft labels use forms, tickers and exchanges, with notes on every
+  fund-, trust- and partnership-looking name; frozen JSONL and scorer checks
+  verify the draw (2026-09-24 21:43 ET).
+- [x] Score steps independently: step 2 299/300 (0.98520), step 4 300/300
+  (0.99106); adversarial 0 violations in 483. Codex scored 300/300 at step 2;
+  Claude's recheck of every fund-like name (21:50 ET) counts Stonepeak-Plus
+  Infrastructure Fund LP as a Fund. Stage the activation proposal,
+  with approval fields unset and `automatic_rules` empty (2026-09-24 21:43 ET).
+- [x] Rewrite the operator brief, pin pending policy digest and all five proof
+  file hashes; re-hash verification passes, approval pending
+  (2026-09-24 21:44 ET).
+- [ ] Run MDM and architecture tests and retry PostgreSQL 16 with Colima.
+- [x] Codex stopped at the operator's word (21:47 ET) before committing its
+  second pass; the operator handed the work back to Claude (21:48 ET), which
+  took it onto `claude/company-mastering-12-prove-sec-classification`.
+- [ ] ~~Register an activated rule in the standard policy and verify it on
+  four Companies~~ deferred to ticket 06: exact-digest operator approval and
+  true `approved_at` are pending. `PENDING_ACTIVATION` records the measured
+  proposal; the standard policy remains inactive.
 - [ ] Three-axis `/code-review`
-- [ ] Full suite, PR and CI green
+- [ ] ~~Full suite, PR and CI green~~ deferred to ticket 06: the operator
+  asked for a local proof and commit only, with no push or PR.

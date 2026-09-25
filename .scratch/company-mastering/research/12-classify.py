@@ -9,9 +9,9 @@ The rule is run by the engine itself (`classification.fired`), from the
 Company policy in the repo, so the number measures the code that will run.
 
 Labels come from evidence the rule does **not** read. The rule reads
-`entityType`, `sic` and a legal-form word in the name; the draft label reads
-the forms filed, tickers, exchanges and filer category first, and the name
-only when none of those decides. Every
+`entityType`, `sic`, `category` and a legal-form word in the name; the draft label reads
+the forms filed, tickers and exchanges, then leaves unresolved records for
+hand reading. Every
 draft that is not a plain "company" is then read by hand (`12-sample.jsonl`,
 `final` and `note`), as research 18 did.
 
@@ -48,7 +48,7 @@ socket.socket = _no_network  # type: ignore[assignment,misc]
 # .5 held back exchange-traded trusts; 20260924.5 -> .6 held back an `other`
 # name with a person's suffix, found by the adversarial arm, not the sample),
 # so none of them may measure it.
-SEED = "20260924.7"
+SEED = "20260924.8"
 SAMPLE_SIZE = 300
 CONFIDENCE = 0.95
 ADVERSARIAL_PER_ARM = 100
@@ -150,13 +150,6 @@ OWNERSHIP_FORMS = {
     "SCHEDULE 13G",
     "SCHEDULE 13G/A",
 }
-LEGAL_FORM = re.compile(
-    r"\b(INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|LLC|"
-    r"L\.?L\.?C|LP|L\.?P|LLP|SE|NV|N\.V|AG|SA|S\.A|SPA|S\.P\.A|AB|ASA|OYJ|KK|"
-    r"BV|B\.V|GMBH|HOLDINGS?|GROUP|TRUST|BANK|BANCORP|FUND|PARTNERS|CAPITAL|"
-    r"TECHNOLOGIES|PHARMACEUTICALS|THERAPEUTICS|ENERGY|RESOURCES|MINING)\b",
-    re.IGNORECASE,
-)
 NONCOMPANY_NAME = re.compile(
     r"\b(FUND|FUNDS|TRUST|TRUSTEE|PARTNERSHIP|PENSION|PLAN|FOUNDATION|"
     r"UNIVERSITY|CHURCH|SCHOOL|GOVERNMENT|MUNICIPAL|COUNTY|CITY|STATE|"
@@ -167,10 +160,11 @@ NONCOMPANY_NAME = re.compile(
 
 
 def row(record: dict) -> dict:
-    """The three fields the rule reads, as the SEC landing row holds them."""
+    """The classification fields as the SEC Company landing row holds them."""
     return {
         "entity_type": record.get("entityType"),
         "sic": record.get("sic") or None,
+        "category": record.get("category") or None,
         "entity_name": record.get("name"),
     }
 
@@ -186,7 +180,6 @@ def rule() -> tuple[dict, dict]:
 def draft_label(record: dict) -> tuple[str, str]:
     """A label from evidence the rule never reads; never `entityType`/`sic`."""
     forms = set(record.get("forms") or {})
-    name = record.get("name") or ""
     if forms & FUND_FORMS and not forms & PERIODIC:
         return "fund", "files fund forms and no periodic report"
     if forms & {"18-K", "18-K/A"}:
@@ -201,12 +194,8 @@ def draft_label(record: dict) -> tuple[str, str]:
         )
     if record.get("tickers") or record.get("exchanges"):
         return "company", "has a ticker or exchange"
-    if record.get("category"):
-        return "company", f"filer category {record['category']}"
-    if LEGAL_FORM.search(name):
-        return "company", "legal-form word in the name"
     if forms and forms <= OWNERSHIP_FORMS:
-        return "individual", "ownership forms only and no legal-form word"
+        return "unsure", "ownership forms only; hand reading required"
     return "unsure", "no decisive evidence"
 
 
@@ -249,8 +238,11 @@ def sample(summary: Path, out: Path) -> None:
                         "cik": r["cik"],
                         "name": r["name"],
                         "step": r["step"],
+                        "entity_type": r.get("entityType"),
+                        "sic": r.get("sic") or None,
                         "forms": sorted(r["forms"]),
                         "tickers": r.get("tickers"),
+                        "exchanges": r.get("exchanges"),
                         "category": r.get("category"),
                         "draft": label,
                         "draft_reason": reason,
@@ -312,6 +304,7 @@ def sample(summary: Path, out: Path) -> None:
                         "arms": sorted(arms[r["cik"]]),
                         "forms": sorted(r.get("forms") or {}),
                         "tickers": r.get("tickers"),
+                        "exchanges": r.get("exchanges"),
                         "category": r.get("category"),
                         "draft": label,
                         "draft_reason": reason,
@@ -355,6 +348,17 @@ def score(out: Path) -> None:
     unreviewed = [r["cik"] for r in lines if re.search(r"\b(FUNDS?|TRUST|PARTNERSHIP|PARTNERS|L\.?P\.?)\b", r["name"], re.I) and not r["note"]]
     if unreviewed:
         raise SystemExit(f"{len(unreviewed)} fund/trust/partnership sample lines have no hand-read note")
+    if Counter(r["step"] for r in lines) != {"2": SAMPLE_SIZE, "4": SAMPLE_SIZE}:
+        raise SystemExit("sample must have 300 records from each Company step")
+    for r in lines:
+        actual = fired(candidate, {
+            "entity_type": r["entity_type"], "sic": r["sic"],
+            "category": r.get("category") or None, "entity_name": r["name"],
+        }, block)
+        if actual != ("company", r["step"]):
+            raise SystemExit(f"sample {r['cik']} no longer belongs to step {r['step']}: {actual}")
+        if "category" in r["draft_reason"].lower() or "filer" in r["draft_reason"].lower():
+            raise SystemExit(f"sample {r['cik']} draft label uses filer category")
     by_step: dict[str, Counter] = {}
     for r in lines:
         by_step.setdefault(r["step"], Counter())[r["final"] == "company"] += 1
@@ -372,6 +376,7 @@ def score(out: Path) -> None:
             {
                 "entity_type": a["entity_type"],
                 "sic": a["sic"],
+                "category": a.get("category") or None,
                 "entity_name": a["name"],
             },
             block,

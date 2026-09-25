@@ -26,7 +26,7 @@ from edgar_warehouse.mdm.clean.activation import (
     rule_version_conflicts,
     wilson_lower_bound,
 )
-from edgar_warehouse.mdm.clean.company_source import POLICY, PROOF
+from edgar_warehouse.mdm.clean.company_source import POLICY, PROOF, PENDING_ACTIVATION
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.clean.store import Conflict, digest
 
@@ -480,9 +480,9 @@ class TestAnIdentifierRule:
 
 
 class TestTheCompanyPolicy:
-    """Ticket 12: failed step-4 proof leaves the standard rule inactive."""
+    """Ticket 12: measured proof awaits exact-digest operator approval."""
 
-    def test_the_rule_remains_inactive_on_the_failed_proof(self):
+    def test_the_rule_remains_inactive_without_operator_approval(self):
         check_policy(POLICY)
         (rule,) = [
             r
@@ -491,13 +491,22 @@ class TestTheCompanyPolicy:
         ]
         assert not activated(POLICY, "company", rule, "company")
         assert not activated(POLICY, "company", rule, "deferred")
-        assert PROOF["cohort"]["by_step"]["4"]["lower_bound"] < 0.95
-        assert PROOF["adversarial"]["violations"] > 0
-        assert "approved_at" not in PROOF
+        assert all(
+            step["lower_bound"] >= 0.95
+            for step in PROOF["cohort"]["by_step"].values()
+        )
+        assert PROOF["adversarial"]["violations"] == 0
+        assert PROOF["approved_at"] is None
+        assert PROOF["approved_by"] is None
+        assert PENDING_ACTIVATION["proof"] is PROOF
+        proposed = copy.deepcopy(POLICY)
+        proposed["automatic_rules"] = [PENDING_ACTIVATION]
+        with pytest.raises(Conflict, match="lacks its approval"):
+            check_policy(proposed)
 
     def test_the_policy_is_the_pending_digest(self):
         assert digest(POLICY) == (
-            "5f3a5f571f73612e789f6f4d5a1e32eae7d29486a113cc51c106101fa044fdcf"
+            "9a9ee48be44454986f02703d966c0b1dce53ac2d5baebd51289316424e047bad"
         )
 
     def test_the_proof_files_match_the_pinned_hashes(self):

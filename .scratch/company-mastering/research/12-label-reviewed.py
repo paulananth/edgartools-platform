@@ -12,25 +12,30 @@ ROOT = Path(__file__).parent
 LOOKS_LIKE_FUND = re.compile(r"\b(FUND|FUNDS|TRUST|PARTNERSHIP|PARTNERS|L\.?P\.?)\b", re.I)
 ABS_FORMS = {"10-D", "ABS-EE", "ABS-15G", "SF-3"}
 
-# Judgments from the hand reading of the frozen 300-per-step sample. Unknown
-# serial investment issuers count against proof; their summary has no business
-# description sufficient to certify Company rather than investment vehicle.
+# Judgments from reading the new seed-20260924.8 300-per-step draw. The
+# previous draw's CIK exceptions are deliberately absent: they cannot be used
+# as evidence for this version. A BDC is a Company under the operator's
+# 2026-09-24 domain decision, despite N-2 or 40-APP filings.
 SAMPLE_OTHER = {
-    "0000804123": ("fund", "N-2, N-CEN and N-CSR identify a registered investment fund."),
-    "0000858706": ("fund", "N-2, N-CEN and N-CSR identify a registered investment fund."),
-    "0000882300": ("fund", "N-2, N-CEN and N-CSR identify a registered investment fund."),
-    "0001185198": ("fund", "Income and Growth Fund 25 LLC files 10-K/10-Q as a pooled investment issuer; no operating business is shown."),
-    "0001462371": ("fund", "Mortgage Fund LLC files 1-A and 1-K as an investment issuer."),
-    "0001785494": ("trust", "A liquidation trust, despite its 10-K and 10-Q; no ongoing Company business is shown."),
-    "0001867706": ("fund", "Properties Fund III LLC files 1-A and 1-K as an investment issuer."),
-    "0002039458": ("fund", "HBAR ETF is an exchange-traded fund even though SEC types it operating."),
-    "0002065598": ("fund", "Seattle Fund LLC files 1-A and 1-K as an investment issuer."),
-    "0002069560": ("fund", "Diversification Fund LLC files 1-A and 1-K as an investment issuer."),
+    # Claude's recheck, 2026-09-24 ~21:50 ET, on the standard of the seed-.6
+    # reading (a private fund with no BDC election is a Fund, as Blackstone
+    # Private Equity Strategies Fund was): 10-12G, 10-K, Form D, tender offers,
+    # no N-54A, no ticker.
+    "0002045458": (
+        "fund",
+        "Stonepeak-Plus Infrastructure Fund LP: private infrastructure fund "
+        "registered under 10-12G, no BDC election; a Fund, not a Company",
+    ),
 }
 SAMPLE_COMPANY = {
-    "0001086363": "BlackRock Financial Management is the INC asset manager; 13F-NT and N-PX alone do not make it a fund.",
-    "0001541356": "Marriott Ownership Resorts Inc files S-4; ABS-15G exposure alone does not make the issuer a loan trust.",
-    "0001603794": "AerCap aviation issuer files 10-Q and F-3ASR; this trust is a financing Company issuer, not an ABS loan pool in the supplied forms.",
+    "0001125727": "First Interstate Bank files 8-K and NT 10-K; N-PX does not make the bank a fund.",
+    "0001253986": "Real estate investment trust issuer with 10-K and 10-Q, not an asset-backed loan pool.",
+    "0001297996": "Real estate investment trust issuer with 10-K and 10-Q, not an asset-backed loan pool.",
+    "0001360604": "Real estate investment trust issuer with 10-K and 10-Q, not an asset-backed loan pool.",
+    "0001547546": "Real estate investment trust issuer with 10-K, 10-Q and S-11, not an asset-backed loan pool.",
+    "0001903382": "Real estate investment trust issuer with 10-K, 10-Q and S-11, not an asset-backed loan pool.",
+    "0001944366": "Real estate investment trust issuer with 10-K and 10-Q, not an asset-backed loan pool.",
+    "0001976927": "Real estate finance trust issuer with 10-K and 10-Q, not an asset-backed loan pool.",
 }
 
 ADVERSARIAL_COMPANIES = {
@@ -60,6 +65,15 @@ ADVERSARIAL_COMPANIES = {
     "0002046656": "Happy City Holdings Ltd files 20-F and 6-K; City is part of its corporate name.",
     "0002078250": "Compound Real Estate Bonds II Inc. is a corporate bond issuer filing 1-A.",
     "0002100161": "Blackstone Digital Infrastructure Trust Inc. files S-11 and S-8 as a REIT Company.",
+    "0001420106": "Gilde Healthcare Holding B.V. is a legal holding company; ownership filings do not make it a person.",
+    "0001743984": "GCM Investments GP, LLC is a legal entity in the ownership-only arm.",
+    "0001826374": "BTO DE GP - NQ L.L.C. is a legal entity in the ownership-only arm.",
+    "0002008590": "SPFM Holdings, LLC is a legal entity in the ownership-only arm.",
+    "0002088704": "AAC II Holdings II LP is a legal partnership in the ownership-only arm.",
+    "0002096490": "GreenWood Investors LLC is a legal entity in the ownership-only arm.",
+    "0002146115": "Submarine Buyer Holdco LLC is a legal entity in the ownership-only arm.",
+    "0002148329": "WSLS EMP OFFSHORE INVESTMENTS, L.P. is a legal partnership in the ownership-only arm.",
+    "0002151486": "Serra Verde Rare Earths Ltd. is a legal entity in the ownership-only arm.",
 }
 ADVERSARIAL_NONCOMPANIES = {
     "0000913115": ("trust", "Telephone & Data Systems voting trust, not the operating INC named within it; ownership-only forms."),
@@ -92,13 +106,12 @@ for r in sample:
     cik, name, forms = r["cik"], r["name"], set(r["forms"])
     if cik in SAMPLE_OTHER:
         r["final"], r["note"] = SAMPLE_OTHER[cik]
-    elif name.startswith("Masterworks ") and forms & {"1-A", "1-K"}:
-        r["final"] = "unsure"
-        r["note"] = "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
     else:
         r["final"] = "company"
         if cik in SAMPLE_COMPANY:
             r["note"] = SAMPLE_COMPANY[cik]
+        elif forms & {"N-2", "40-APP", "40-17G"} and "FUND" in name.upper():
+            r["note"] = "BDC issuer with 10-K and 10-Q plus Investment Company Act filings; the operator treats a BDC as Company."
         elif LOOKS_LIKE_FUND.search(name):
             evidence = ", ".join(sorted(forms & {"10-K", "10-Q", "20-F", "40-F", "S-1", "S-11", "N-54A", "1-A", "1-K"}))
             r["note"] = f"Read name and forms ({evidence or 'issuer filings'}): legal operating or financing issuer, not a registered fund or ABS pool."
@@ -112,9 +125,10 @@ for r in adversarial:
     elif cik in ADVERSARIAL_COMPANIES:
         r["final"] = "company"
         r["note"] = ADVERSARIAL_COMPANIES[cik]
-    elif r["entity_type"] == "investment":
+    elif "investment fund" in r["arms"]:
+        assert forms & {"N-1A", "N-4", "N-6", "N-CEN", "N-CSR", "NPORT-P", "485BPOS", "497"}, cik
         r["final"] = "fund"
-        r["note"] = "SEC investment filer; fund forms or separate-account filings, as in the operator's bronze review."
+        r["note"] = "Fund prospectus or portfolio filings (" + ", ".join(sorted(forms & {"N-1A", "N-4", "N-6", "N-CEN", "N-CSR", "NPORT-P", "485BPOS", "497"})[:4]) + ")."
     elif forms & ABS_FORMS and ("TRUST" in name.upper() or "SECURITIZATION" in name.upper()):
         r["final"] = "loan trust"
         r["note"] = "Asset-backed pool: " + ", ".join(sorted(forms & ABS_FORMS)) + "."

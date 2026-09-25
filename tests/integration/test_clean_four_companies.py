@@ -147,8 +147,8 @@ def stage_and_master(database):
     return sorted(stage), masters
 
 
-# Pending standard policy, measured below the ticket 12 step-4 bar.
-PENDING_POLICY = "5f3a5f571f73612e789f6f4d5a1e32eae7d29486a113cc51c106101fa044fdcf"
+# Pending standard policy: the .8 proof passes, but operator approval is absent.
+PENDING_POLICY = "9a9ee48be44454986f02703d966c0b1dce53ac2d5baebd51289316424e047bad"
 
 
 def test_the_standard_policy_keeps_all_four_company_candidates_waiting(database, tmp_path):

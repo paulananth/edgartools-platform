@@ -25,7 +25,7 @@ from tests.mdm.test_clean_activation import proof
 TEST_POLICY = copy.deepcopy(POLICY)
 TEST_POLICY["automatic_rules"] = [{
     "kind": "company", "family": "classification",
-    "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.7",
+    "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.8",
     "verdict": "company", "activation": "measured", "proof": proof(),
 }]
 
@@ -109,6 +109,33 @@ def test_native_company_kind_identifiers_and_unknown_effective_time():
             contract=CONTRACT,
             publication=publication,
         )
+
+
+def test_step_four_requires_the_landing_filer_category():
+    publication = {
+        "publication_key": "capture-1/company",
+        "revision": 0,
+        "effective_at": None,
+        "artifact_sha256": "a" * 64,
+        "member": "records.jsonl",
+    }
+    row = source_row(
+        1306965, entity_name="Shell plc", entity_type="other", sic="1311",
+        category="",
+    )
+    row["last_synced_at"] = row["last_synced_at"].isoformat()
+    for missing in ("", None):
+        with pytest.raises(UnsupportedRecord, match="classification_deferred") as caught:
+            normalize(
+                {**row, "category": missing}, source_code=SOURCE_CODE,
+                contract=CONTRACT, publication=publication,
+            )
+        assert caught.value.detail["classification"]["step"] == "5"
+    body = normalize(
+        {**row, "category": "Large accelerated filer"},
+        source_code=SOURCE_CODE, contract=CONTRACT, publication=publication,
+    )
+    assert body["provenance"]["classification"]["step"] == "4"
 
 
 def test_prepared_bundle_is_bounded_pinned_and_idempotent(tmp_path):

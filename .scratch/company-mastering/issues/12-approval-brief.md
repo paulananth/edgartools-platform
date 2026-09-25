@@ -1,47 +1,55 @@
-# Ticket 12: approval brief — no approval requested yet
+# Ticket 12: SEC Company rule for operator review
 
-**Decision for the operator:** Keep the SEC Company matching rule off. The
-September 24 revision did not meet the agreed accuracy bar, and the test
-designed to find false Companies found 33. Please do not approve this revision.
+**Current decision state:** The tightened rule has passed its local accuracy
+checks. It is still off. No operator approval has been asked for or recorded.
 
-The current policy digest is
-`5f3a5f571f73612e789f6f4d5a1e32eae7d29486a113cc51c106101fa044fdcf`.
-A digest is a fingerprint calculated from the exact policy document. If the
-rule or any policy setting changes, the fingerprint changes. Approval of one
-digest therefore cannot silently carry over to an edited policy. The earlier
-approval for `b26ab87c…` was withdrawn; it does not apply here.
+A **policy digest** is a fingerprint of the exact rule document, including
+which rules are switched on and their proof. Editing that document changes
+the fingerprint, so approval for one digest cannot carry over to an edited
+rule. The current inactive policy digest is
+`9a9ee48be44454986f02703d966c0b1dce53ac2d5baebd51289316424e047bad`.
+It is a review anchor, **not** an approval request for activation. A final
+active policy will have a different digest because it must include the true
+operator approval details. That exact final document and digest must be
+reviewed before registration. The withdrawn approval for an earlier version
+does not apply.
 
-If a future revision earns approval, its Company verdict would be allowed to
-act on its own when a new SEC record reaches the Stage. The proposed rule
-would call `operating` filers Companies and would also call some `other`
-filers Companies when they have an industry code and a Company name word.
-That second path is how Shell and ASML could be called Companies; Apple and
-Microsoft use the first path. A classification alone does not join SEC and
-GLEIF records or create a master record. Those still require the separate
-binding and publication decisions.
+If approved and registered, the rule lets its `company` verdict act when a
+new SEC filer reaches the Company Stage. In the retained 76,230-filer bronze
+population, it would call **7,130** filers Companies: 5,980 because SEC calls
+them `operating`, and 1,150 `other` filers because they have an industry code,
+a company name word and a nonempty SEC filer category. Apple and Microsoft
+take the first path; Shell and ASML take the second. Tim Cook and Satya
+Nadella are deferred. Classification lets a record proceed; it does not by
+itself join SEC and GLEIF records or publish a Company master. Separate
+binding and publication controls still govern those actions.
 
-| Path in this revision | Confirmed Companies / 300 hand-read | 95% lower confidence bound | Agreed minimum |
+| Rule path | Confirmed Companies in fresh hand-read sample | One-sided 95% lower bound | Required bound |
 | --- | ---: | ---: | ---: |
-| Step 2: SEC says `operating` | 297 / 300 | 97.52% | 95% — passes |
-| Step 4: SEC says `other`, with an industry code and Company word | 258 / 300 | **82.38%** | 95% — **fails** |
+| Step 2: SEC `operating` | 299 / 300 | 98.52% | 95%, passes |
+| Step 4: SEC `other` with industry code, category and company name word | 300 / 300 | 99.11% | 95%, passes |
 
-Step 4 includes seven identified Funds and 35 serial investment issuers whose
-Company status cannot be established from the retained bronze summary. Those
-35 are counted against the proof, not asserted to be Funds. Separately, among
-483 hand-labeled adversarial records, the rule called **33 Funds or Trusts**
-Companies. This is a direct safety failure even if the 35 uncertain cases
-are later resolved in the rule's favor. The sample and every label note are
-in `../research/12-sample.jsonl` and `../research/12-adversarial.jsonl`.
+There was **one error in 600**: "Stonepeak-Plus Infrastructure Fund LP", a
+private infrastructure fund that SEC types `operating` (step 2). It is counted
+as a Fund, not a Company, on the same standard as the earlier Blackstone
+private-equity fund. There were **zero false Company calls in 483
+hand-labeled adversarial records**. The fresh draw used seed
+`20260924.8`; the previous sample could not measure the change it prompted.
+The earlier version called only 258 of 300 step-4 cases correctly and had 33
+adversarial violations. Its failure is preserved separately. The samples
+measure precision of Company calls, not how many true Companies the rule
+misses, and the labels are based on retained bronze summaries and hand
+reading rather than an outside registry.
 
-**Current switch state:** Off. The standard policy has no automatic rule
-entry; there is no recorded approval time. Shell and ASML, and Apple and
-Microsoft, remain waiting in the Stage on this branch. A future corrected
-rule needs another frozen draw for each step, zero adversarial violations,
-and the operator's approval of that new policy fingerprint before activation.
+The tighter rule makes some genuine filers wait. The bronze summary has **96**
+SEC `other` filers with an industry code, an empty category and a 10-K, 20-F
+or 40-F annual filing. Of those, 88 would have matched the old step 4;
+ROYAL BANK OF CANADA is an example. They are deferred for review rather than
+called Companies on incomplete evidence or treated as failed records. In all,
+1,119 old step-4 Company calls now wait because category is empty.
 
-**Reversal if a later version is activated:** Remove that version's automatic
-rule entry and register a new policy digest. New SEC records then wait in the
-Stage. Already published decisions are not erased by changing a policy; they
-must be reviewed and corrected through the normal journaled recovery path.
-For this revision, no reversal action is needed because it was never switched
-on.
+**How to reverse a later activation:** Remove its automatic rule entry in a
+new policy document, register the new digest, and new SEC records will wait
+in the Stage. Already journaled decisions are not erased by changing policy;
+review and correct them through the normal recovery and replay process.
+There is nothing to reverse now because the standard rule is still off.
