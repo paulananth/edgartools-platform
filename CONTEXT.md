@@ -66,6 +66,10 @@ _Avoid_: Source Record Binding, corporate acquisition, merging fields because th
 The rules that select a master field value from eligible source claims after identity has been resolved, while retaining the claims that were not selected.
 _Avoid_: Proof of identity, source rank as permission to merge identities
 
+**Name Census**:
+The pinned count, over one whole SEC capture and one full GLEIF Golden Copy, of which SEC filers and which GLEIF legal entities carry each name with its legal form kept; a name matching rule binds only a name that exactly one of each carries.
+_Avoid_: A matcher, a list of approved pairs, a count over the records a Stage happens to hold
+
 **Match Exclusion**:
 An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.
 _Avoid_: Low match score, deleting source evidence, a permanent ban without reviewable grounds
