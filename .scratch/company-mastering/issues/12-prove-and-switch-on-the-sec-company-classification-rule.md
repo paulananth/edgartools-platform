@@ -186,6 +186,22 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
 - [x] Operator (2026-09-25 06:34 ET): **option 1** (no ticker and an Emerging growth company
   category -> the record waits), done **after** a kind field is added to the
   Stage, so each waiting record says which kind it probably is.
-- [ ] Kind field on waiting Stage records (design with the operator).
+- [x] **Probable Kind** on waiting Stage records (2026-09-25 06:54 ET). Operator: named
+  Probable Kind, an estimate that sorts the Stage and never creates an
+  identity (glossary). A deferred rule step may name one; a kind verdict not
+  switched on is its own; GLEIF maps its categories (`probable_kind_values`);
+  the waiting record keeps it (older ids unchanged); view
+  `mdm_v2.stage_waiting` (migration 036, tested on a populated store). Also
+  fixed: GLEIF's `RESIDENT_GOVERNMENT_ENTITY` (6,955 records) was refused as an
+  invalid category. Unit: all new tests pass; the 8 known failures pin rule
+  `.8`. PG16 clean suite: 133 passed; 4 known failures pin `.8`, 1 `fastapi`
+  baseline. GoF pre-code consult: decide it in `normalize`, pass it at both
+  writers.
+- [x] Probable Kind split into its own PR, #711
+  (`claude/company-mastering-12-probable-kind`, off `origin/main`), so it can
+  land before rule `.10` (2026-09-25 07:10 ET). On main: 896 unit and 134 PG16
+  clean tests pass. Its spec bullet was moved below the provenance paragraph
+  it had split. When #710 is rebased after #711 merges, drop `cf95adbd`.
+- [ ] Three-axis `/code-review` of #711; CI green; merge on the operator's word.
 - [ ] Option 1: the SEC contract reads tickers (`sec_company_ticker`), the
   ampersand defect is fixed, rule `.10`, fresh draws, hand-read, then approval.
