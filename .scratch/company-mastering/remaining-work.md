@@ -32,8 +32,14 @@ priority SEC then GLEIF, every field from every source).
 
 ## 2. Match SEC and GLEIF records into one Company (ticket 08) — critical path
 
-- [ ] Measure how often SEC's own record states its LEI (bronze
-  `submissions.json` `lei` key); where it does, it is an identifier match
+- [x] Measure how often SEC's own record states its LEI (2026-09-24 22:24 ET): 392 of 76,230
+  filers (356 valid), 4 `operating`; not an identifier path. GLEIF authority
+  `RA000665` (IDs that are CIKs) is SEC's authority for registered funds, 57
+  of 7,130 Companies. Neither source joins Companies (ticket 08 branch,
+  `research/08-sec-lei-and-gleif-sec-authority.md`)
+- [ ] The name/country/address shape measured 85.6–93.1% before (below 95%):
+  find a stricter rule (uniqueness both ways, GLEIF GENERAL only, legal form,
+  postal code and street number), tuned on the 883 reviewed pairs
 - [ ] Matching rule for the rest: name, country and address (operator's first
   choice); ticker/CUSIP/ISIN later as corroboration
 - [ ] Measure it per rule step at the 95% bar; 50–95% waits in the Stage,
