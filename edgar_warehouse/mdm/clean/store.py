@@ -53,6 +53,17 @@ CLEAN_MDM_MIGRATIONS = (
     "034_clean_mdm_stage_view_naming.sql",
     "035_clean_mdm_automatic_assessment.sql",
     "036_clean_mdm_stage_waiting.sql",
+    "037_clean_mdm_company_versions.sql",
+)
+
+COMPANY_NAMED_FIELDS = (
+    "name", "sic", "sic_description", "state_of_incorporation",
+    "fiscal_year_end", "description", "jurisdiction", "address",
+    "gleif_legal_form", "gleif_entity_status", "gleif_registration_status",
+    "gleif_initial_registration", "gleif_last_update", "gleif_next_renewal",
+    "gleif_managing_lou", "gleif_validation_source",
+    "gleif_registration_authority", "gleif_registration_authority_entity_id",
+    "gleif_entity_creation_date",
 )
 
 
@@ -416,6 +427,59 @@ class Store:
             {"request": canonical(request), "run": str(UUID(run_id))},
         )
 
+    def _company_output_from_table(self, payload: dict) -> dict:
+        """Build Company delivery bodies from dated rows without changing intent."""
+        generation = payload["generation"]
+        objects = []
+        with self.engine.connect() as conn:
+            for item in payload.get("objects", []):
+                body = item.get("body", {})
+                if item.get("object_type") != "entity" or body.get("kind") != "company":
+                    objects.append(item)
+                    continue
+                entity_id = item["object_id"]
+                if body.get("status") == "alias":
+                    canonical_id = conn.scalar(
+                        text("""SELECT canonical_id::text FROM mdm_v2.company_alias
+                        WHERE alias_id=CAST(:id AS uuid) AND from_generation<=:g
+                          AND (to_generation IS NULL OR to_generation>:g)"""),
+                        {"id": entity_id, "g": generation},
+                    )
+                    authoritative = (
+                        {"entity_id": entity_id, "kind": "company",
+                         "canonical_id": canonical_id, "status": "alias"}
+                        if canonical_id else None
+                    )
+                else:
+                    row = conn.execute(
+                        text("""SELECT * FROM mdm_v2.company
+                        WHERE entity_id=CAST(:id AS uuid) AND from_generation<=:g
+                          AND (to_generation IS NULL OR to_generation>:g)"""),
+                        {"id": entity_id, "g": generation},
+                    ).mappings().first()
+                    authoritative = row["body"] if row else None
+                    if row:
+                        fields = row["fields"]
+                        identifiers = row["identifiers"]
+                        for name in COMPANY_NAMED_FIELDS:
+                            if row[name] != (fields.get(name) or {}).get("value"):
+                                raise Conflict("Dated Company column differs from selected field")
+                        for name in ("cik", "lei"):
+                            values = identifiers.get(name, [])
+                            if row[name] != (values[0] if len(values) == 1 else None):
+                                raise Conflict("Dated Company identifier column differs from evidence")
+                        if (authoritative.get("fields") != fields
+                            or authoritative.get("identifiers") != identifiers
+                            or authoritative.get("status") != row["status"]):
+                            raise Conflict("Dated Company body differs from named columns")
+                if authoritative != body:
+                    raise Conflict("Company publication differs from dated Company authority")
+                objects.append({**item, "body": authoritative})
+        resolved = {**payload, "objects": objects}
+        if resolved != payload:
+            raise Conflict("Company publication intent differs from dated Company authority")
+        return resolved
+
     def deliver_one(
         self,
         consumer: str,
@@ -433,8 +497,9 @@ class Store:
             return False
         key = f"{consumer}/{claim['batch_id']}"
         try:
-            publisher.publish(key, claim["payload"], claim["payload_hash"])
-            receipt = publisher.verify(key, claim["payload"], claim["payload_hash"])
+            outgoing = self._company_output_from_table(claim["payload"])
+            publisher.publish(key, outgoing, claim["payload_hash"])
+            receipt = publisher.verify(key, outgoing, claim["payload_hash"])
         except Exception as exc:
             with self.engine.begin() as conn:
                 conn.execute(

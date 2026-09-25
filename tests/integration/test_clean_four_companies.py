@@ -144,7 +144,7 @@ def stage_and_master(database):
         stage = conn.execute(
             text("SELECT source_code, record_key FROM mdm_v2.company_stage")
         ).all()
-        masters = conn.scalar(text("SELECT count(*) FROM mdm_v2.company_master"))
+        masters = conn.scalar(text("SELECT count(*) FROM mdm_v2.company WHERE valid_to IS NULL"))
     return sorted(stage), masters
 
 
@@ -421,13 +421,21 @@ def test_one_master_per_company_takes_fields_from_both_sources(
     for cik in PAIRS:
         assert winner(cik, "jurisdiction") == "gleif.level1.v1"
         assert field(cik, "jurisdiction")["conflicts"] == []
-    # Name is the one field both sources supply.
+    # Both sources declare name and one coherent address. This fixture has
+    # no SEC business-address row, so GLEIF supplies the whole address.
     both = {
         n
         for n in masters[entity_of[APPLE]]["fields"]
         if n in stored[APPLE]["fields"] and n in stored[PAIRS[APPLE]]["fields"]
     }
-    assert both == {"name"}
+    assert both == {"name", "address"}
+    assert winner(APPLE, "address") == "gleif.level1.v1"
+    assert field(APPLE, "address")["value"]["street2"] == "330 N. Brand Blvd\nSuite 700"
+    with database.application.connect() as conn:
+        assert conn.scalar(
+            text("SELECT address FROM mdm_v2.company WHERE entity_id=CAST(:id AS uuid) AND valid_to IS NULL"),
+            {"id": entity_of[APPLE]},
+        ) == field(APPLE, "address")["value"]
 
     # GLEIF's own spelling is still in the Stage, whole, as evidence.
     with database.application.connect() as conn:

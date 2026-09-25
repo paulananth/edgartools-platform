@@ -12,6 +12,15 @@ the accepted assessment-coverage gate and implementation order.
 
 ## Local milestone
 
+The in-progress dated Company read authority is `mdm_v2.company`: one row per
+committed Company version, with a half-open interval recording when MDM made
+the decision. Source effective time remains in field evidence. It carries
+named CIK/LEI and identifying columns, all other selected fields and
+identifiers, and whole structured addresses selected by Company source
+priority. Alias routing lives in `mdm_v2.company_alias`; engine projections
+remain working state. This local table does not activate the declared SEC-to-
+GLEIF name rules or complete the milestone below.
+
 A governed Company can retain SEC and GLEIF records under one immutable
 internal ID, select or display fields according to explicit source semantics,
 explain disagreement, preserve dated accounting relationships, and replay or

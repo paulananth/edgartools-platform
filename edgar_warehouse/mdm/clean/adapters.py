@@ -71,6 +71,51 @@ def _blank(item) -> bool:
     return isinstance(item, str) and not item.strip()
 
 
+ADDRESS_COMPONENTS = frozenset(
+    {"street", "street2", "city", "region", "postcode", "country"}
+)
+
+
+def mapped_field(row: dict, name: str, spec: str | dict):
+    """Read one coherent field, including a source's complete address group."""
+    if isinstance(spec, str):
+        item = value(row, spec)
+        return None if _blank(item) else item
+    components = spec.get("components") if isinstance(spec, dict) else None
+    if name != "address" or not isinstance(components, dict) or not components:
+        raise UnsupportedRecord("invalid_field_mapping")
+    if set(components) - ADDRESS_COMPONENTS:
+        raise UnsupportedRecord("invalid_field_mapping")
+    address = {}
+    for part, path in components.items():
+        if isinstance(path, str) and path:
+            item = value(row, path)
+        elif (
+            part == "street2"
+            and isinstance(path, dict)
+            and set(path) == {"lines"}
+            and isinstance(path["lines"], str)
+            and path["lines"]
+        ):
+            lines = value(row, path["lines"])
+            if lines is not None and not isinstance(lines, list):
+                raise UnsupportedRecord("invalid_field_shape")
+            if lines is not None and any(
+                not isinstance(line, dict) or not isinstance(line.get("$"), str)
+                for line in lines
+            ):
+                raise UnsupportedRecord("invalid_field_shape")
+            item = "\n".join(line["$"].strip() for line in lines if line["$"].strip()) if lines else None
+        else:
+            raise UnsupportedRecord("invalid_field_mapping")
+        if item is None or _blank(item):
+            continue
+        if not isinstance(item, str):
+            raise UnsupportedRecord("invalid_field_shape")
+        address[part] = item.strip()
+    return address or None
+
+
 def value(row: dict, path: str):
     result: Any = row
     for part in path.split("."):
@@ -201,11 +246,14 @@ def normalize(
     # nothing, and a blank must not win a field or show in the master
     # (operator, 2026-09-24).
     fields = {
-        name: None if _blank(value(row, path)) else value(row, path)
-        for name, path in mapping.get("fields", {}).items()
+        name: mapped_field(row, name, spec)
+        for name, spec in mapping.get("fields", {}).items()
     }
     if mapping.get("field_shape") == "nullable_text" and any(
-        v is not None and not isinstance(v, str) for v in fields.values()
+        v is not None
+        and not isinstance(v, str)
+        and not (name == "address" and isinstance(v, dict))
+        for name, v in fields.items()
     ):
         raise UnsupportedRecord("invalid_field_shape")
     profiles = []

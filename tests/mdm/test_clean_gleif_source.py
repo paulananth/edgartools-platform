@@ -104,6 +104,14 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
         "Entity": {
             "EntityCategory": {"$": "GENERAL"},
             "LegalJurisdiction": {"$": "US-CA"},
+            "LegalAddress": {
+                "FirstAddressLine": {"$": "One Main Street"},
+                "AdditionalAddressLine": [{"$": "Building A"}, {"$": "Suite 700"}],
+                "City": {"$": "Cupertino"},
+                "Region": {"$": "US-CA"},
+                "PostalCode": {"$": "95014"},
+                "Country": {"$": "US"},
+            },
         },
         "Registration": {
             "LastUpdateDate": {"$": "2026-09-10T00:00:00Z"},
@@ -113,7 +121,7 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     kwargs = {
         "member": "level1",
         "contract": dataset_contract("level1"),
-        "source_code": "gleif.lei.v1",
+        "source_code": "gleif.level1.v1",
         "eligible_leis": {"HWUPKR0MPOU8FGXBT394"},
         "publication": {
             "publication_key": "p1",
@@ -126,6 +134,14 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     kind, evidence = record_evidence(record, **kwargs)
     assert kind == "assertion"
     assert evidence["fields"]["jurisdiction"]["value"] == "US-CA"
+    assert evidence["fields"]["address"]["value"] == {
+        "street": "One Main Street",
+        "street2": "Building A\nSuite 700",
+        "city": "Cupertino",
+        "region": "US-CA",
+        "postcode": "95014",
+        "country": "US",
+    }
     assert evidence["fields"]["gleif_registration_status"]["value"] == "LAPSED"
     # GLEIF's legal name now fills the shared `name` field, SEC first where both
     # supply one (operator, 2026-09-24; supersedes keeping GLEIF names apart).

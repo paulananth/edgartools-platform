@@ -37,6 +37,16 @@ FIELDS = {
     "state_of_incorporation": "state_of_incorporation",
     "fiscal_year_end": "fiscal_year_end",
     "description": "description",
+    "address": {
+        "components": {
+            "street": "business_address.street",
+            "street2": "business_address.street2",
+            "city": "business_address.city",
+            "region": "business_address.region",
+            "postcode": "business_address.postal_code",
+            "country": "business_address.country",
+        }
+    },
 }
 CONTRACT = {
     "provider": "SEC",
@@ -50,7 +60,7 @@ CONTRACT = {
     "semantics": "patch",
     "completeness": "explicit bounded Company sample; no retirement by absence",
     "adapter": {
-        "version": "sec-company-landing-v5",
+        "version": "sec-company-landing-v6",
         "retain_deferred": True,
         "source_record_provenance": True,
         "field_shape": "nullable_text",
@@ -249,6 +259,10 @@ def _business_addresses(landing: dict, parquet: pq.ParquetFile) -> dict[int, dic
                 continue
             place = edgar_jurisdiction(row["state_or_country"])
             found[int(row["cik"])] = {
+                "street": row["street1"] or None,
+                "street2": row["street2"] or None,
+                "city": row["city"] or None,
+                "region": row["state_or_country"] or None,
                 "postal_code": row["zip_code"] or None,
                 "country": place.split("-")[0] if place else None,
             }
@@ -368,6 +382,9 @@ def prepare_company_bundle(
             required={
                 "cik",
                 "address_type",
+                "street1",
+                "street2",
+                "city",
                 "zip_code",
                 "state_or_country",
                 "last_sync_run_id",

@@ -144,6 +144,15 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Added tickets
 
+- [Ticket 09 handoff to Claude](issues/09-handover-to-claude.md) records PR #714,
+  local proof, the unchanged policy fingerprint, and the next Company gates.
+
+- [Correct an incorrect Company link](issues/13-correct-an-incorrect-company-link.md),
+  [carry SEC countryCode into silver](issues/14-carry-sec-country-code-into-silver.md),
+  and [approve the CIK binding rules](issues/15-approve-and-activate-cik-binding-rules.md)
+  were opened at the operator's direction on 2026-09-25. They remain open;
+  opening them activates no rule.
+
 - [Qualify the first SEC-to-GLEIF Company binding rule](issues/08-qualify-sec-to-gleif-fuzzy-binding.md)
   (added 2026-09-23, blocked by 04; now blocks 05). Tickets 03 and 04 only
   make a Company recognisable within one source: SEC and GLEIF share no
