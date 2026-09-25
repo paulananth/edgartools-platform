@@ -73,14 +73,15 @@ def proof(n=3000, correct=3000, confidence=0.95, **changes):
         "adversarial": {"fixture_sha256": "a" * 64, "violations": 0},
         "cohort": {
             "files": {"sample.jsonl": "b" * 64},
-            # One sample per rule step, for every step id the test rules use.
+            # One sample per rule step, for every step id a test rule or the
+            # Company policy uses ("0" to "9").
             "by_step": {
                 str(step): {
                     "n": n,
                     "correct": correct,
                     "lower_bound": changes.get("lower_bound"),
                 }
-                for step in range(6)
+                for step in range(10)
             },
         },
         "approved_by": "operator",

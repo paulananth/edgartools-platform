@@ -133,7 +133,7 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
 - [x] Operator (2026-09-25 05:58 ET): a private fund that registers with SEC by Form 10 and
   is not a BDC is a **Fund**, including holding-company-style vehicles such as
   KKR Private Equity Conglomerate.
-- [x] Version `2026-09-25.9` frozen: three hold-back steps before `operating`
+- [x] Version `2026-09-25.9` (recorded at the commit time below): three hold-back steps before `operating`
   becomes Company: a fund word in the name (2), a finance-office code with
   filer category exactly `<br>Emerging growth company` (3), no industry code
   (4). Holds back 419 of 5,980 `operating` filers (7.0%), mostly BDCs and new
@@ -152,5 +152,12 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
 - [ ] Operator: are private REITs that register by Form 10 Funds or Companies?
   Noted for the operator as read as Companies: listed royalty trusts (North
   European Oil Royalty Trust, MV Oil Trust), CNL Strategic Capital.
+- [ ] Defect found (2026-09-25): `token_match@1` counts an ampersand for every
+  word list, although the design (`policy-language.md`; the Person list
+  carries `AND`) counts it only for a list that carries `AND`. No Company
+  list does. Effect: step 2 holds back about 157 companies with `&` in the
+  name (McCormick & Co, Marsh & McLennan), and step 6 holds back every
+  `other` name with `&` before step 7. No wrong Company call results; fixing
+  it changes steps 5 and 7's populations, so it needs re-measurement.
 - [ ] ~~Full suite, PR and CI green~~ deferred to ticket 06: the operator
   asked for a local proof and commit only, with no push or PR.
