@@ -241,5 +241,23 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   `operating` REIT code with no ticker waits, and 6798 joins step 6; holds
   both, moves 64 Companies (mostly REIT operating partnerships) to the Stage.
   B: Form 10 + Form D + no N-54A + no ticker waits; needs forms evidence;
-  holds Sterling only, moves 18. **Operator to choose.** Either needs fresh
+  holds Sterling only, moves 18. Operator chose **A**. Either needs fresh
   draws: the .10 draws designed both.
+- [x] Rule `.11` (option A) frozen and drawn (`bcf3ffaf`): 6798 joins step 6;
+  new step `6b` (operating REIT, no ticker); Probable Kind Company on 4 and
+  6b; step ids kept stable (Company steps 8 and 10). Seed `20260925.11`; the
+  2,898 filers of earlier draws left out of the adversarial arms.
+- [ ] **Rule `.11` cannot be approved (2026-09-25 07:54 ET).** Reading the step 8
+  adversarial arms found three Funds; reading stopped there, labels not
+  written: Ellington Credit Co (now a registered closed-end fund: N-CSR
+  2026-05-29, N-CEN, N-PORT; SEC still types it `operating`, REIT code,
+  NYSE tickers); GPB Automotive Portfolio (private vehicle, Form 10 2021,
+  Form D, no ticker, auto-dealer code; as GPB Holdings II); InPoint
+  Commercial Real Estate Income (Form 10 + Form D, non-traded, listed
+  preferred only; as Terra).
+- [ ] Forms evidence measured (2026-09-25 07:54 ET, `12-options-12.py`): with .11, a step
+  holding an `operating` filer with Form 10 + Form D and no N-54A, or one
+  filing N-CSR/N-CEN/NPORT-P, stops all five Funds found in .10 and .11 and
+  moves 171 more Companies to the Stage (91.58% of filers). The forms come
+  from `sec_company_filing` (cik, form), landed by the same capture as
+  `sec_company`. **Operator to choose.**
