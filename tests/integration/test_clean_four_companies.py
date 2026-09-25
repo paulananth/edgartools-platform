@@ -152,9 +152,7 @@ def stage_and_master(database):
 ACTIVE_POLICY = "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
 
 
-def test_the_standard_policy_classifies_all_four_companies(
-    database, tmp_path
-):
+def test_the_standard_policy_classifies_all_four_companies(database, tmp_path):
     """The approved standard rule acts for four issuers, but not two people."""
     policy = register(database, {**CONTRACT, "family": "fixture"}, POLICY)
     assert policy == ACTIVE_POLICY
@@ -560,3 +558,168 @@ def test_matching_rules_create_sec_companies_and_gleif_waits(
     # Every SEC Company record is bound; no GLEIF record is.
     assert bound == {subject_key(SOURCE_CODE, cik) for cik in COMPANIES}
     assert not bound & {subject_key("gleif.level1.v1", lei) for lei in PAIRS.values()}
+
+
+# Ticket 08: the business address each SEC record carries, as silver lands it
+# from bronze (`stateOrCountry` and `zipCode`; bronze read 2026-09-25). Silver
+# keeps no `countryCode`, so Shell, which SEC files under `countryCode` X0
+# alone, has no business country.
+BUSINESS = {
+    320193: {"postal_code": "95014", "country": "US"},
+    789019: {"postal_code": "98052-6399", "country": "US"},
+    937966: {"postal_code": "5504", "country": "NL"},
+    1306965: {"postal_code": "SE1 7NA", "country": None},
+}
+
+
+def matching_census(tmp_path):
+    """A Name Census of the fixture's own records, through the production builder.
+
+    Full-population uniqueness is proved in research (`08-draft-rule.md`);
+    here the census shows the production path end to end.
+    """
+    import io
+    import zipfile
+
+    from edgar_warehouse.mdm.clean.name_census import build
+
+    raw = io.BytesIO()
+    with zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("golden.json", json.dumps({"records": FIXTURE["gleif"]}))
+    data = raw.getvalue()
+    filers = [(f"{int(r['cik']):010d}", r["entity_name"], []) for r in FIXTURE["sec"]]
+    return build(
+        filers=filers,
+        sec_population={"capture_run_id": "bronze-fixture", "filers": len(filers)},
+        gleif_archive=io.BytesIO(data),
+        gleif_metadata={
+            "format": "json.zip",
+            "cdf_version": "LEI_3.1",
+            "content_date": "2026-09-11T16:00:00+00:00",
+            "file_content": "GLEIF_FULL_PUBLISHED",
+            "delta_start": None,
+            "record_count": len(FIXTURE["gleif"]),
+        },
+        gleif_sha256=hashlib.sha256(data).hexdigest(),
+    )
+
+
+def matching_policy():
+    """The proposed matching policy, with fixture approvals and identifier rules.
+
+    The live policy activates no identifier rule yet (ticket 04's contracts
+    await their own approval), so these fixture activations stand in for it.
+    """
+    from edgar_warehouse.mdm.clean.company_source import name_matching_policy
+    from tests.integration.test_clean_name_matching import LEI_CONTRACT, LEI_WAIT
+    from tests.mdm.test_clean_activation import CIK_CONTRACT, CIK_RULE
+
+    body = name_matching_policy(active=True)
+    body["version"] = "four-companies-matching-test"
+    block = body["kinds"]["company"]
+    lei_wait = {**LEI_WAIT}
+    block["rules"] = [CIK_RULE, lei_wait, *block["rules"]]
+    block["identifiers"] = {
+        "cik": CIK_CONTRACT,
+        "lei": {**LEI_CONTRACT, "sources": ["gleif.level1.v1"]},
+    }
+    for entry in body["automatic_rules"]:
+        if entry["family"] == "name_binding":
+            entry["proof"] = {
+                **entry["proof"],
+                "approved_by": "fixture",
+                "approved_at": "2026-09-25T20:00:00Z",
+            }
+    body["automatic_rules"] += [
+        {
+            "kind": "company",
+            "family": "binding",
+            "rule_id": r["rule_id"],
+            "rule_version": r["version"],
+            "verdict": "bind",
+            "activation": "deterministic",
+        }
+        for r in (CIK_RULE, lei_wait)
+    ]
+    return body
+
+
+def test_the_matching_rules_join_each_company_s_sec_and_gleif_records(
+    database, source_db, command_databases, tmp_path
+):
+    """Apple, Microsoft and ASML end as one master each, with CIK and LEI.
+
+    Shell waits: its SEC state of incorporation reads DC, and silver keeps no
+    business country for it, so the state veto cannot set the DC aside.
+    """
+    census = matching_census(tmp_path)
+    from edgar_warehouse.mdm.clean.name_census import entry
+    from edgar_warehouse.mdm.clean.store import digest
+
+    census_hash = digest(census)
+    rows = []
+    for row in FIXTURE["sec"]:
+        rows.append(
+            {
+                **row,
+                "business_address": BUSINESS.get(int(row["cik"])),
+                "name_census": entry(
+                    census, row["entity_name"], census_digest=census_hash
+                ),
+            }
+        )
+    batch = sec_batch(tmp_path)  # writes the plain rows; replaced below
+    raw = ("\n".join(json.dumps(r, sort_keys=True) for r in rows) + "\n").encode()
+    (tmp_path / "sec.jsonl").write_bytes(raw)
+    batch["input"]["sha256"] = hashlib.sha256(raw).hexdigest()
+    policy = register(database, rule_contract(), matching_policy())
+    store = Store(database.application)
+    coordinator = RunCoordinator(command_databases[0], store)
+    manifest = tmp_path / "sec-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "contract_version": 2,
+                "policy_digest": policy,
+                "as_of": core.AS_OF,
+                "batches": [batch],
+            }
+        )
+    )
+    execute_manifest(
+        store,
+        coordinator,
+        path=str(manifest),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=6,
+    )
+    gleif = FIXTURE["gleif"]
+    capture, path = native.native_fixture(
+        database,
+        source_db,
+        tmp_path,
+        level1=gleif[0],
+        additional_level1=gleif[1:],
+        company_leis=[r["LEI"]["$"] for r in gleif],
+        policy=policy,
+    )
+    execute_manifest(
+        store,
+        coordinator,
+        path=str(path),
+        run_id=str(uuid4()),
+        stage="mastering",
+        limit=6,
+        publication_verifier=PublicationVerifier(source_db, capture.reader),
+    )
+    masters = [
+        v for v in core.documents(database, "entity").values() if v["kind"] == "company"
+    ]
+    by_cik = {m["identifiers"]["cik"][0]: m for m in masters}
+    for cik, lei in PAIRS.items():
+        if cik == SHELL:
+            assert by_cik[cik]["identifiers"] == {"cik": [cik]}
+        else:
+            assert by_cik[cik]["identifiers"] == {"cik": [cik], "lei": [lei]}
+    assert len(masters) == 4
