@@ -164,6 +164,21 @@ class TestClassificationPrimitives:
         }
         assert self.evaluate("token_match@1", args, {"name": "Smith & Wesson"})
 
+    def test_an_ampersand_counts_only_for_a_list_that_carries_and(self):
+        """A list without AND is not asking whether a name joins two parties.
+
+        Counting `&` for every list held back McCormick & Co at the Company
+        rule's fund-name step, whose list is ETF and FUND (ticket 12).
+        """
+        args = {
+            "field": "name",
+            "normalizer": CONFORMED,
+            "token_list": ["FUND"],
+            "min_count": 1,
+        }
+        assert not self.evaluate("token_match@1", args, {"name": "McCormick & Co"})
+        assert self.evaluate("token_match@1", args, {"name": "Smith & Jones Fund"})
+
     def test_name_shape_accepts_a_two_token_person_name(self):
         args = {
             "field": "name",

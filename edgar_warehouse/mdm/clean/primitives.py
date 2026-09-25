@@ -106,7 +106,13 @@ def _tokens_found(raw: Any, listed: list, normalize: Callable[[Any], str]) -> li
         token = re.sub(r"\s+", " ", entry)
         if re.search(rf"(?<![A-Z0-9]){re.escape(token)}(?![A-Z0-9])", text):
             found.add(entry)
-    if "&" in str("" if raw is None else raw) and " AND " in f" {text} ":
+    # `&` is its own signal, one synthetic token, but only for a list that
+    # carries AND: the list is asking whether a name joins two parties.
+    if (
+        "AND" in listed
+        and "&" in str("" if raw is None else raw)
+        and " AND " in f" {text} "
+    ):
         found.add("&")
     return sorted(found)
 

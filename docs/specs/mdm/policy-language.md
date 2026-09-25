@@ -291,7 +291,10 @@ Rules:
   result.
 - Declared lists must carry `AND`, not `&`: EDGAR conformed names
   normalize the ampersand (prototype finding 4). A registration validates
-  declared lists against the named normalizer.
+  declared lists against the named normalizer. `token_match` also counts a
+  raw `&` as one token of its own, but only for a list that carries `AND`:
+  such a list asks whether a name joins two parties (ticket 12; counting it
+  for every list held back McCormick & Co at a fund-name step).
 - A verdict may be `automatic` only for `(rule_id, version, verdict)`
   entries in `automatic_rules` (§9). Every other verdict is Steward review.
 
