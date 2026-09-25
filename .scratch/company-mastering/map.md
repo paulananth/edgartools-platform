@@ -144,6 +144,9 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Added tickets
 
+- [Ticket 09 handoff to Claude](issues/09-handover-to-claude.md) records PR #714,
+  local proof, the unchanged policy fingerprint, and the next Company gates.
+
 - [Correct an incorrect Company link](issues/13-correct-an-incorrect-company-link.md),
   [carry SEC countryCode into silver](issues/14-carry-sec-country-code-into-silver.md),
   and [approve the CIK binding rules](issues/15-approve-and-activate-cik-binding-rules.md)
