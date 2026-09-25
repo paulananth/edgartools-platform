@@ -180,3 +180,43 @@ ruling. Evidence: `research/08-draft-rule.md`.
 6. **Activation.** It is statistical, at the operator's 95% bar for this
    family. It must not lower any other decision's bar: identifier binding
    stays deterministic, and merging two published Companies keeps its 99.9%.
+
+## Progress note (Claude, 2026-09-25 evening) — resume here
+
+Branch `claude/company-mastering-08-sec-gleif-matching`, worktree
+`edgartools-platform-worktrees/claude-cm-08`. Done and pushed: research, both
+rules measured and passing (`research/08-1-*`, `08-2-*`), `clean/names.py`,
+`clean/name_census.py`, `mdm name-census`, SEC adapter v5 and GLEIF
+`provenance.matching`.
+
+Known production gap: silver `sec_company_address` keeps `stateOrCountry`
+only, not SEC's `countryCode`, so 10 postcode matches that rely on
+`countryCode` (Shell among them) wait in production. Fix is a separate warehouse
+change (add `country_code` to silver); raise it in the operator brief.
+
+Next, in order:
+1. `primitives.py`: register `name_census_match@1`, `gleif_entity_eligible@1`,
+   `holds_no_other_lei@1`, `jurisdiction_agrees@1`,
+   `jurisdictions_do_not_conflict@1`, `postal_agrees@1` (family
+   `name_binding`, `_runs_in_the_merge_stage`).
+2. `activation.py`: `RULE_CHECKS["name_binding"]` (emits bind, on_no_match
+   wait only, holder_source set, must call `name_census_match@1` and one of
+   jurisdiction/postal); `ACTIVATIONS["measured"]` accepts `name_binding`;
+   `_check_measured` allows verdict `bind` for that family (it checks
+   `verdict in KINDS` today); `ACCEPTED_BARS[("company","name_binding")]`
+   0.95/0.95; `company.json` `bars.name_binding`.
+3. `clean/matching.py` `propose()`, same shape as `binding.nothing()`; both
+   directions (GLEIF record meets a bound SEC record; SEC record meets a
+   waiting GLEIF record); the census entry must name exactly this CIK and this
+   LEI with the GLEIF record's `gleif_last_update`; re-derive both keys; veto
+   a Company already holding another LEI. `MergeStage.propose` combines it
+   with `binding.propose`, identifier proposals first.
+4. The two rules into `company.json` (declared, inactive) from
+   `research/08-rules.json` (jurisdiction .1, postal .2); PROOFs + pending
+   activations; update the digest pins (the active fingerprint `35250dad…`
+   changes); CI re-score test over `08-1`/`08-2` files.
+5. PG16: a matching integration test; four-company test uses the rule instead
+   of the operator-picked PAIRS (Shell waits unless countryCode lands).
+6. Parity: production census and rule over one whole capture vs research
+   coverage `97e5d118…` (expect 3,040 plus explained differences).
+7. Unit/architecture/PG16 suites, three-axis review, CI, plain-English brief.
