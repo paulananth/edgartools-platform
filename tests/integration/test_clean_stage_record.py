@@ -203,6 +203,14 @@ def test_a_profile_identifying_value_must_be_text(database):
         )
 
 
+def test_a_profile_identifying_value_that_is_not_text_is_refused_first(database):
+    a = reading(
+        "num", 1, {"name": "Acme"}, profiles=[{"role": "issuer", "valid_from": 2026}]
+    )
+    with pytest.raises(Conflict, match="Profile identifying values must be text"):
+        core.apply(database, 1, assertions=[a])
+
+
 def test_two_readings_at_one_revision_are_refused(database):
     first = reading("twice", 1, {"name": "One"})
     core.apply(database, 1, assertions=[first])
@@ -280,6 +288,8 @@ def test_the_winning_reading_keeps_its_bronze_object(database):
         {"assertion_id": "not-in-this-batch"},
         {"object": ""},
         {"extra": "field"},
+        {"object": 5},
+        {"assertion_id": ["a"]},
     ],
 )
 def test_an_invalid_bronze_occurrence_is_refused(database, change):

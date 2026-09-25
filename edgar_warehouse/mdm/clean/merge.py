@@ -19,7 +19,7 @@ from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
 from .store import Conflict, Store, canonical, digest, rows
-from .survivorship import current_claims, select_fields
+from .survivorship import PROFILE_IDENTITY, current_claims, select_fields
 
 
 def anchors(decision: dict) -> set[str]:
@@ -309,6 +309,13 @@ class MergeStage:
             raise ValueError("Unbounded batch")
         for a in assertions:
             validate_assertion(a)
+            # The Stage hashes a profile's identifying values as text (038).
+            if any(
+                not isinstance(p.get(k), (str, type(None)))
+                for p in a["profiles"]
+                for k in PROFILE_IDENTITY
+            ):
+                raise Conflict("Profile identifying values must be text")
         for record in deferred:
             validate_deferred(record)
         for d in decisions:
@@ -736,6 +743,7 @@ def _occurrences(occurrences: list[dict], assertions: list[dict]) -> list[dict]:
         if (
             not isinstance(o, dict)
             or set(o) != {"assertion_id", "object", "sha256", "locator"}
+            or not isinstance(o["assertion_id"], str)
             or o["assertion_id"] not in ids
             or o["assertion_id"] in seen
             or not all(isinstance(o[k], str) and o[k] for k in ("object", "locator"))

@@ -218,6 +218,8 @@ BEGIN
             WHERE jsonb_typeof(o) IS DISTINCT FROM 'object'
                OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(o) k)
                   IS DISTINCT FROM ARRAY['assertion_id','locator','object','sha256']
+               OR EXISTS (SELECT 1 FROM unnest(ARRAY['assertion_id','locator','object','sha256']) k
+                          WHERE jsonb_typeof(o->k) IS DISTINCT FROM 'string')
                OR nullif(o->>'object','') IS NULL OR nullif(o->>'locator','') IS NULL
                OR coalesce(o->>'sha256','') !~ '^[0-9a-f]{64}$')
            OR EXISTS (

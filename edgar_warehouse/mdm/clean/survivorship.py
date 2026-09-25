@@ -8,14 +8,12 @@ from datetime import timedelta
 from .evidence import PROFILE_KINDS, instant
 from .store import Conflict, canonical, digest
 
+# A profile's identifying values; the Stage hashes them as text (038).
+PROFILE_IDENTITY = ("role", "authority", "registration", "jurisdiction", "valid_from")
+
 
 def profile_key(profile):
-    return digest(
-        [
-            profile.get(k)
-            for k in ("role", "authority", "registration", "jurisdiction", "valid_from")
-        ]
-    )
+    return digest([profile.get(k) for k in PROFILE_IDENTITY])
 
 
 def current_claims(
