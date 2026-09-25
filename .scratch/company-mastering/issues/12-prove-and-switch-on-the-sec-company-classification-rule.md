@@ -319,8 +319,11 @@ code as the digest's key.
   TIAA Real Estate Account. Seed `20260925.13`: 600 sample, 328 fresh
   adversarial (4,309 earlier filers left out; four new name-blind arms: no
   proxy, S-11, asset-backed reports, 13F), all 34 held at step 5.
-- [ ] Hand-read, label, score.
-- [ ] If it passes: PROOF, `PENDING_ACTIVATION`, tests pinning `.8`, suites, CI.
+- [x] **Passes** (2026-09-25 08:13 ET, `12-13-label.py`): sample 600 of 600 (lower bound
+  0.9955); steps 8 and 10 each 300 of 300 (0.9911); **adversarial 0 of 328**.
+  Held at step 5: 16 Funds, 18 Companies (13 BDCs); Probable Kind Fund
+  Structure kept, noted as an even split.
+- [ ] PROOF, `PENDING_ACTIVATION`, tests pinning `.8`, suites, CI.
 - [ ] Three-axis `/code-review`; fix findings.
 - [ ] Plain-English brief; **operator approves the exact digest**.
 - [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
