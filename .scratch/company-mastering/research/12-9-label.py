@@ -9,10 +9,8 @@ Funds; BDCs (an N-54A election) are Companies; exchange-traded commodity and
 crypto trusts are Funds; a private fund that registers by Form 10 and is not a
 BDC is a Fund, holding-company-style vehicles included (2026-09-25 05:58 ET).
 
-PENDING_OPERATOR records are private REITs that register by Form 10 with a
-Form D offering. The operator has not ruled on them; they are labelled Fund
-here, the reading that counts against the rule, and the summary reports the
-result both ways.
+PRIVATE_REITS are private REITs that register by Form 10 with a Form D
+offering: Funds (operator, 2026-09-25 06:09 ET).
 
     uv run python .scratch/company-mastering/research/12-9-label.py
 """
@@ -29,7 +27,7 @@ FUNDS = {
     "registered by Form 10, no BDC election; Fund under the operator's "
     "2026-09-25 decision.",
 }
-PENDING_OPERATOR = {
+PRIVATE_REITS = {
     "0002027537": "Goldman Sachs Real Estate Finance Trust: private REIT "
     "registered by Form 10 (10-12G, Form D).",
     "0001914496": "Sculptor Diversified Real Estate Income Trust: private REIT "
@@ -69,9 +67,9 @@ def label(name: str) -> list[dict]:
     for r in rows:
         if r["cik"] in FUNDS:
             r["final"], r["note"] = "fund", FUNDS[r["cik"]]
-        elif r["cik"] in PENDING_OPERATOR:
+        elif r["cik"] in PRIVATE_REITS:
             r["final"] = "fund"
-            r["note"] = PENDING_OPERATOR[r["cik"]] + " Pending the operator."
+            r["note"] = PRIVATE_REITS[r["cik"]] + " Fund (operator, 2026-09-25)."
         else:
             r["final"], r["note"] = "company", company_note(r)
     path.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows))

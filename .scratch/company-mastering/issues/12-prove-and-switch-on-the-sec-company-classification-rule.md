@@ -34,6 +34,10 @@ Ticket 06's approval remains pending and is not asked or recorded here.
 - **A private fund that registers with SEC by Form 10 and is not a BDC is a
   Fund**, including holding-company-style vehicles (KKR Private Equity
   Conglomerate, EQT Private Equity Co); it waits (2026-09-25 05:58 ET).
+- **A private REIT that registers with SEC by Form 10 and raises money
+  privately (Form D) is a Fund** (Goldman Sachs Real Estate Finance Trust,
+  Sculptor Diversified Real Estate Income Trust, HPS Net Lease Income REIT);
+  listed and publicly offered REITs stay Companies (2026-09-25 06:09 ET).
 - The Company classification bar is **95%** at 95% one-sided confidence
   (confidence bands, `company-policy.md`); merging two published Company IDs
   keeps 99.9%.
@@ -149,7 +153,7 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   Lending). Either way the zero-violation proof fails at step 5: Form-10
   private vehicles also sit under ordinary industry codes (6500, 8742), and
   the rule cannot see the forms a filer files.
-- [ ] Operator: are private REITs that register by Form 10 Funds or Companies?
+- [x] Operator (2026-09-25 06:09 ET): private REITs that register by Form 10 are **Funds**.
   Noted for the operator as read as Companies: listed royalty trusts (North
   European Oil Royalty Trust, MV Oil Trust), CNL Strategic Capital.
 - [ ] Defect found (2026-09-25): `token_match@1` counts an ampersand for every
@@ -161,3 +165,15 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   it changes steps 5 and 7's populations, so it needs re-measurement.
 - [ ] ~~Full suite, PR and CI green~~ deferred to ticket 06: the operator
   asked for a local proof and commit only, with no push or PR.
+- [x] With the REIT ruling: adversarial 3 of 432 (step 5: 2, step 7: 1, HPS
+  Net Lease Income REIT) (2026-09-25 06:10 ET).
+- [x] Measured the missing evidence (2026-09-25 06:10 ET): every remaining violator (GPB
+  Holdings II, Goldman Sachs REFT, Sculptor DREIT, HPS Real Assets Lending,
+  HPS Net Lease Income REIT) has **no ticker**. "No ticker" alone would hold
+  back 572 step-5 (10%) and 54 step-7 (5%) filers (utility subsidiaries,
+  FHLBs, captive finance, pre-listing SPACs); "no ticker and an Emerging
+  growth company category" holds back 171 and 44, and also catches unsampled
+  private REITs (VineBrook Homes Trust, Invesco Real Estate Income Trust).
+  The landing row carries no ticker (it is in `sec_company_ticker`), so either
+  needs a new SEC contract version.
+- [ ] Operator: which way forward.

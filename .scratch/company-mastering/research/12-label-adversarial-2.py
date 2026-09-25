@@ -39,6 +39,7 @@ FUNDS = {
     "0002074450": "Private fund (10-12G, Form D), no BDC election.",
     "0002082826": "Private equity fund (10-12G, Form D), no BDC election.",
     "0002096330": "Private equity fund (10-12G, Form D), no BDC election.",
+    "0002107762": "Private REIT registered by Form 10; Fund (operator, 2026-09-25 06:09 ET).",
 }
 
 
