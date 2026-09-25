@@ -1,5 +1,5 @@
 {
-  "version": "company-2026-09-24.8",
+  "version": "company-2026-09-25.9",
   "defaults": {
     "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
     "allow_unknown_effective": true
@@ -7,7 +7,7 @@
   "rules": [
     {
       "rule_id": "sec-company-candidate",
-      "version": "2026-09-24.8",
+      "version": "2026-09-25.9",
       "family": "classification",
       "source": "sec.submissions.company.v1",
       "emits": [
@@ -34,6 +34,87 @@
         },
         {
           "step": "2",
+          "verdict": "deferred",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating"
+                ]
+              }
+            },
+            {
+              "primitive": "token_match@1",
+              "args": {
+                "field": "entity_name",
+                "normalizer": "conformed",
+                "token_list": "fund_name",
+                "min_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "step": "3",
+          "verdict": "deferred",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating"
+                ]
+              }
+            },
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "sic",
+                "values": [
+                  "6199",
+                  "6211",
+                  "6282",
+                  "6799"
+                ]
+              }
+            },
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "category",
+                "values": [
+                  "<br>Emerging growth company"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "step": "4",
+          "verdict": "deferred",
+          "when": [
+            {
+              "primitive": "field_in_set@1",
+              "args": {
+                "field": "entity_type",
+                "values": [
+                  "operating"
+                ]
+              }
+            },
+            {
+              "primitive": "fields_all_empty@1",
+              "args": {
+                "fields": "industry_code"
+              }
+            }
+          ]
+        },
+        {
+          "step": "5",
           "verdict": "company",
           "when": [
             {
@@ -48,7 +129,7 @@
           ]
         },
         {
-          "step": "3",
+          "step": "6",
           "verdict": "deferred",
           "when": [
             {
@@ -72,7 +153,7 @@
           ]
         },
         {
-          "step": "4",
+          "step": "7",
           "verdict": "company",
           "when": [
             {
@@ -108,7 +189,7 @@
           ]
         },
         {
-          "step": "5",
+          "step": "8",
           "verdict": "deferred",
           "otherwise": true
         }
@@ -119,6 +200,15 @@
     "conformed": "normalize_text@edgar-conformed-v1"
   },
   "lists": {
+    "fund_name": [
+      "ETF",
+      "ETFS",
+      "FUND",
+      "FUNDS"
+    ],
+    "industry_code": [
+      "sic"
+    ],
     "person_suffix": [
       "CFA",
       "CPA",

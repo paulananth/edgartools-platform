@@ -1,0 +1,42 @@
+{
+  "adversarial_arms": {
+    "step 5 with a finance-office industry code": {
+      "drawn": 100,
+      "population": 166
+    },
+    "step 5 with no accelerated or non-accelerated status": {
+      "drawn": 100,
+      "population": 969
+    },
+    "step 5 with no annual report": {
+      "drawn": 100,
+      "population": 141
+    },
+    "step 7 with a finance-office industry code": {
+      "drawn": 55,
+      "population": 55
+    },
+    "step 7 with no annual report": {
+      "drawn": 86,
+      "population": 86
+    }
+  },
+  "records": 76230,
+  "rule": {
+    "rule_id": "sec-company-candidate",
+    "version": "2026-09-25.9"
+  },
+  "sample_size_per_step": 300,
+  "seed": "20260925.9",
+  "summary_sha256": "395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600",
+  "verdicts": {
+    "company/5": 5561,
+    "company/7": 1150,
+    "deferred/1": 1243,
+    "deferred/2": 236,
+    "deferred/3": 40,
+    "deferred/4": 143,
+    "deferred/6": 1785,
+    "deferred/8": 66072
+  }
+}

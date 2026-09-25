@@ -31,6 +31,9 @@ Ticket 06's approval remains pending and is not asked or recorded here.
   wait (about 20:00 ET).
 - **An exchange-traded commodity or crypto trust, or a futures pool, is a
   Fund** (about 150; SIC 6221); they wait (about 20:10 ET).
+- **A private fund that registers with SEC by Form 10 and is not a BDC is a
+  Fund**, including holding-company-style vehicles (KKR Private Equity
+  Conglomerate, EQT Private Equity Co); it waits (2026-09-25 05:58 ET).
 - The Company classification bar is **95%** at 95% one-sided confidence
   (confidence bands, `company-policy.md`); merging two published Company IDs
   keeps 99.9%.
@@ -127,8 +130,27 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   current proof's "0 adversarial violations" is superseded. **No approval is
   asked; PR 710 must not merge** (merging it makes Apple and Microsoft wait
   too, because the SEC contract now names the rule and the rule is off).
-- [ ] Operator: are Form-10 private funds with no BDC election Funds?
-- [ ] Tighten step 2 (version `.9`), then a fresh 300-per-step draw and a fresh
-  adversarial draw after it is frozen, all hand-read.
+- [x] Operator (2026-09-25 05:58 ET): a private fund that registers with SEC by Form 10 and
+  is not a BDC is a **Fund**, including holding-company-style vehicles such as
+  KKR Private Equity Conglomerate.
+- [x] Version `2026-09-25.9` frozen: three hold-back steps before `operating`
+  becomes Company: a fund word in the name (2), a finance-office code with
+  filer category exactly `<br>Emerging growth company` (3), no industry code
+  (4). Holds back 419 of 5,980 `operating` filers (7.0%), mostly BDCs and new
+  crypto-treasury companies; Apple and Microsoft unaffected (2026-09-25 06:04 ET).
+- [x] Fresh draws after the freeze (seed `20260925.9`, `12-measure-9.py`),
+  all 1,032 records hand-read (`12-9-label.py`) (2026-09-25 06:04 ET):
+  step 5 **298/300** (lower bound 0.9801), step 7 **300/300** (0.9911); both
+  clear 0.95. Wrong: GPB Holdings II (Form-10 private vehicle, SIC 8742) and
+  Goldman Sachs Real Estate Finance Trust (private REIT, pending).
+- [ ] **Adversarial: 3 of 432 violations** (step 5: Sculptor Diversified Real
+  Estate Income Trust, HPS Real Assets Lending Co LP; step 7: HPS Net Lease
+  Income REIT). If private Form-10 REITs are Companies, 1 (HPS Real Assets
+  Lending). Either way the zero-violation proof fails at step 5: Form-10
+  private vehicles also sit under ordinary industry codes (6500, 8742), and
+  the rule cannot see the forms a filer files.
+- [ ] Operator: are private REITs that register by Form 10 Funds or Companies?
+  Noted for the operator as read as Companies: listed royalty trusts (North
+  European Oil Royalty Trust, MV Oil Trust), CNL Strategic Capital.
 - [ ] ~~Full suite, PR and CI green~~ deferred to ticket 06: the operator
   asked for a local proof and commit only, with no push or PR.
