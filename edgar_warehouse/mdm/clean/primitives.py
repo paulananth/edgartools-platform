@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
+from .names import legal_form_key, sec_legal_form_key
 from .store import Conflict
 
 
@@ -81,6 +82,10 @@ NORMALIZERS: dict[str, Callable[[Any], str]] = {
     "normalize_identifier@lei-v1": lambda s: re.sub(
         r"[^A-Z0-9]", "", str("" if s is None else s).upper()
     ),
+    # Ticket 08: a name with its legal form kept, for the SEC-to-GLEIF
+    # matching rule. SEC's variant drops the state tag of a conformed name.
+    "normalize_text@legal-form-kept-v1": legal_form_key,
+    "normalize_text@sec-legal-form-kept-v1": sec_legal_form_key,
 }
 
 

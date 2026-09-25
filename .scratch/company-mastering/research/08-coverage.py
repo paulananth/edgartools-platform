@@ -3,7 +3,7 @@
 The draft rule (tuned on the 883 development pairs, `08-dev-levers.py`):
 
 1. the SEC name and the GLEIF legal name are equal with the legal form kept
-   (`form_key`: WAYFAIR INC and WAYFAIR LLC differ);
+   (`legal_form_key`, `edgar_warehouse/mdm/clean/names.py`: WAYFAIR INC and WAYFAIR LLC differ);
 2. that name key belongs to exactly one GLEIF legal entity in the whole
    pinned publication, counting its legal and other names but not branches
    (a branch carries its head office's name and is not a separate legal
@@ -24,86 +24,42 @@ never over what a Stage happens to hold, so load order cannot change it.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-_spec = importlib.util.spec_from_file_location("levers", HERE / "08-dev-levers.py")
-levers = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(levers)
-form_key = levers.form_key
-CODES = json.loads((HERE / "08-edgar-codes.json").read_text())
+from edgar_warehouse.mdm.clean.names import (  # noqa: E402  the production code
+    edgar_jurisdiction,
+    jurisdictions_agree,
+    legal_form_key,
+    postal_codes_agree,
+    sec_legal_form_key,
+)
+
 FOUR = {"0000320193": "Apple", "0000789019": "Microsoft",
         "0001306965": "Shell", "0000937966": "ASML"}
 
 
-def sec_jurisdiction(code: str | None) -> str | None:
-    if not code:
-        return None
-    code = code.strip().upper()
-    if code in CODES["us_states"]:
-        return f"US-{code}"
-    return CODES["codes"].get(code)
-
-
-def jurisdiction_agrees(sec: str | None, gleif: str | None) -> bool:
-    if not sec or not gleif:
-        return False
-    gleif = gleif.upper()
-    if sec == gleif:
-        return True
-    # A territory SEC codes as a state, GLEIF as a country (PR, GU, VI).
-    if sec.startswith("US-") and sec[3:] in CODES["us_territory_countries"]:
-        return gleif == CODES["us_territory_countries"][sec[3:]]
-    # Outside the US a country-only side agrees with a subdivision of it.
-    s_country, g_country = sec.split("-")[0], gleif.split("-")[0]
-    if s_country == "US" or s_country != g_country:
-        return False
-    return "-" not in sec or "-" not in gleif
-
-
-def postal(value: str | None) -> str:
-    text = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
-    return text[:5] if re.fullmatch(r"\d{5}(\d{4})?", text) else text
-
-
-def sec_country(address: dict) -> str | None:
-    """A foreign address may carry its code in countryCode, not stateOrCountry."""
-    j = sec_jurisdiction(address.get("stateOrCountry") or address.get("countryCode"))
-    return j.split("-")[0] if j else None
-
-
 def postal_agrees(sec_addresses: dict | None, hq: dict | None) -> bool:
-    if not hq or not sec_addresses:
-        return False
     business = (sec_addresses or {}).get("business") or {}
-    s_postal, g_postal = postal(business.get("zipCode")), postal(hq.get("postal"))
-    if not s_postal or not g_postal:
+    if not hq or not business:
         return False
-    country = (hq.get("country") or "").upper()
-    if sec_country(business) != country:
-        return False
-    if s_postal == g_postal:
-        return True
-    # SEC keeps only the four digits of a Dutch code ("5504" for "5504 DR").
-    # Only that shape agrees on a prefix: four digits against four digits and
-    # two letters, in the Netherlands.
-    return (
-        country == "NL"
-        and re.fullmatch(r"\d{4}", s_postal) is not None
-        and re.fullmatch(r"\d{4}[A-Z]{2}", g_postal) is not None
-        and g_postal.startswith(s_postal)
+    # A foreign address may carry its code in countryCode, not stateOrCountry.
+    place = edgar_jurisdiction(business.get("stateOrCountry") or business.get("countryCode"))
+    return postal_codes_agree(
+        business.get("zipCode"),
+        place.split("-")[0] if place else None,
+        hq.get("postal"),
+        (hq.get("country") or "").upper() or None,
     )
 
 
 def main(companies: str, scan: str, gleif: str, out: str) -> None:
     rows = [json.loads(line) for line in open(companies)]
     for r in rows:
-        r["key"] = form_key(r["name"], sec=True)
+        r["key"] = sec_legal_form_key(r["name"])
     wanted = {r["key"] for r in rows}
     # The veto counts every name either side has carried; the match reads
     # only the current SEC name against the GLEIF legal name.
@@ -114,18 +70,18 @@ def main(companies: str, scan: str, gleif: str, out: str) -> None:
             continue
         for name in [s.get("name")] + [n.get("name") for n in s.get("formerNames") or []]:
             if name:
-                sec_holders[form_key(name, sec=True)].add(s["cik"])
+                sec_holders[sec_legal_form_key(name)].add(s["cik"])
     sec_count = Counter({k: len(v) for k, v in sec_holders.items() if k in wanted})
     by_key: dict[str, list[dict]] = defaultdict(list)
     vetoers: dict[str, dict] = defaultdict(dict)
     for line in open(gleif):
         g = json.loads(line)
-        k = form_key(g["legal_name"])
+        k = legal_form_key(g["legal_name"])
         if k in wanted:
             by_key[k].append(g)
         if g["category"] == "BRANCH":
             continue
-        for key in {k} | {form_key(n) for _, n in g["other_names"]}:
+        for key in {k} | {legal_form_key(n) for _, n in g["other_names"]}:
             if key in wanted:
                 vetoers[key][g["lei"]] = g
     outcomes: Counter = Counter()
@@ -143,8 +99,8 @@ def main(companies: str, scan: str, gleif: str, out: str) -> None:
                 outcome = "no GLEIF record with this name (branches only)"
             else:
                 g = entities[0]
-                agree_j = jurisdiction_agrees(
-                    sec_jurisdiction(r["state_of_incorporation"]), g["jurisdiction"]
+                agree_j = jurisdictions_agree(
+                    edgar_jurisdiction(r["state_of_incorporation"]), g["jurisdiction"]
                 )
                 agree_p = postal_agrees(r["addresses"], g["hq"])
                 if g["category"] != "GENERAL":

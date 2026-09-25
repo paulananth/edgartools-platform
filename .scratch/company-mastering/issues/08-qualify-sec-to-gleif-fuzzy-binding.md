@@ -135,3 +135,41 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
 - [ ] Unit, architecture and PG16 suites; three-axis `/code-review`; CI green.
 - [ ] Plain-English brief; operator approves the matching rule's fingerprint;
   merge on the operator's word.
+
+## Design (Claude, 2026-09-25 14:45 ET)
+
+Technical choices made under the checklist rule; none needs a new operator
+ruling. Evidence: `research/08-draft-rule.md`.
+
+1. **Who binds to whom.** A GLEIF record waits in the Stage (operator,
+   2026-09-24). The matching rule binds a waiting GLEIF record to the
+   Company its SEC record already holds by CIK. It never creates a Company.
+2. **The Name Census is pinned evidence, not a matcher.** A Stage holds a
+   bounded scope, so it cannot count how many GLEIF entities or SEC filers
+   carry a name. A census is built once, from the whole pinned GLEIF Level 1
+   publication and the whole SEC capture (current and former names). For
+   each SEC filer's name key it records which CIKs and which GLEIF legal
+   entities carry that name. It is bound to its inputs: the GLEIF archive
+   sha256, the SEC capture run and member hashes, and the name normalizer
+   version. The SEC bundle pins its digest, as ticket 12 pinned the ticker
+   catalog. The census only **proposes** a pair; the Merge Stage decides.
+   It re-derives both name keys from the Stage rows and checks the
+   jurisdiction or postal code itself. It defers when the census names
+   another GLEIF publication, has no entry for the key, or names anything
+   but exactly this CIK and this LEI.
+3. **Matching evidence lives with the record, not in its fields.** The SEC
+   business postal code and country, and the GLEIF headquarters postal code
+   and country, go in each record's `provenance.matching`. So does the SEC
+   record's census entry. Address as a Company field stays ticket 09's
+   decision.
+4. **Two rules, one per step.** A binding rule's tests all have to hold, and
+   the policy language allows no "or". So the jurisdiction step and the
+   postal step are two rules, each with its own proof and its own activation
+   (`sec-gleif-name-jurisdiction`, `sec-gleif-name-postal`).
+5. **Vetoes.**
+   - The Company already holds a different LEI: a legal entity has one LEI.
+   - The GLEIF entity is not GENERAL, not ACTIVE, or is DUPLICATE or
+     ANNULLED.
+6. **Activation.** It is statistical, at the operator's 95% bar for this
+   family. It must not lower any other decision's bar: identifier binding
+   stays deterministic, and merging two published Companies keeps its 99.9%.
