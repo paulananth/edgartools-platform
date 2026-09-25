@@ -97,37 +97,44 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
   Companies (2026-09-24 22:24 ET, `research/08-sec-lei-and-gleif-sec-authority.md`).
 - [x] Re-base step 1's counts on the Account hold-back's 6,414 Companies:
   SEC's own LEI 10, `RA000665` 10 (2026-09-25 14:20 ET, `research/08-draft-rule.md`).
-- [ ] Check what the Stage can compare: the SEC adapter maps no address today
-  (`company_source.py` FIELDS). Decide how the business address reaches the
-  matching rule, and how the rule finds GLEIF candidates (a blocking key the
-  Stage can index).
-- [x] Development analysis on the 883 reviewed pairs (tuning data only):
-  keeping the legal form in the name comparison is the lever; the draft rule
-  binds 3,191 of 6,414 Companies, the four included
-  (2026-09-25 14:20 ET, `research/08-draft-rule.md`):
-  - fix the SEC state-in-country field (`country: "MI"`) before any country
-    comparison;
-  - registered-agent addresses (for example 1209 Orange St, Wilmington) are no
-    evidence; compare the headquarters address;
-  - GLEIF category GENERAL only; registration status values checked in the
-    Golden Copy (DUPLICATE and ANNULLED never link);
-  - uniqueness both ways, against the whole pinned GLEIF publication and the
-    whole SEC Company population, never against load order;
-  - pick the rule steps whose development precision clears 0.95 with room.
-- [x] Written labelling standard (`research/08-labelling-standard.md`) for "same legal entity" (holding company vs
-  operating subsidiary, US registrant vs foreign parent, lapsed and retired
-  LEIs, successors), frozen before any label.
-- [ ] `/gof-refactor-reviewer` consult, then named, versioned primitives
-  (name normalizer, address comparison, uniqueness) and the rule as data.
-  Settle first whether adding the rule changes the Account hold-back's
-  approved fingerprint (activation is per rule, verdict and version).
-- [ ] Freeze and commit the rule, then draw a fresh sample from the 6,414
-  Companies excluding the 1,000 development CIKs, plus adversarial arms
-  (same-name parent and subsidiary, shared agent addresses, former-name
-  collisions, GLEIF BRANCH and FUND records). About 300 hand-read links per
-  step; measure through the real primitives.
-- [ ] Each step clears 0.95 (one-sided 95% Wilson); 50–95% waits in the Stage,
-  below 50% goes to a Steward; ambiguous candidates defer with no GLEIF fields.
+- [x] What the Stage can compare, and how candidates are found: the design
+  below (Name Census as pinned evidence; matching evidence in
+  `provenance.matching`; SEC business address pinned like the tickers).
+- [x] Development analysis (2026-09-25 14:20 ET, `research/08-draft-rule.md`):
+  keeping the legal form in the name is the lever (0.941 to 0.976 on the
+  development pairs); the SEC state-in-country and agent-address faults are
+  fixed; uniqueness counts every name over the whole GLEIF publication and
+  every SEC filer.
+- [x] Written labelling standard (`research/08-labelling-standard.md`), frozen
+  before any label.
+- [x] `/gof-refactor-reviewer`: no refactor first; a `name_binding` family
+  beside identifier binding, a sibling `matching.py`, the census pinned like
+  the ticker catalog.
+- [x] Name, jurisdiction and postal tests are production code
+  (`clean/names.py`); coverage through them reproduces the research byte for
+  byte.
+- [x] **Name-and-state rule** (`sec-gleif-name-jurisdiction` 2026-09-25.1):
+  300/300, lower bound 0.9911, 0 of 257 adversarial. Passes
+  (2026-09-25, `research/08-1-summary.json`).
+- [x] **Name-and-postcode rule** (`sec-gleif-name-postal` 2026-09-25.1):
+  294/300 but 19 of 162 adversarial pairs wrong, every one a pair whose two
+  sources name different places of incorporation (AAON, Inc.'s Oklahoma
+  subsidiary). Fails.
+- [x] **Postcode rule with state veto** (`sec-gleif-name-postal`
+  2026-09-25.2) on a fresh draw that left out every earlier CIK: 300/300,
+  0.9911, 0 of 315 adversarial. Passes (`research/08-2-summary.json`).
+- [x] Coverage with both passing rules: 3,050 of 6,414 Companies bind
+  (2,855 by state, 195 by postcode); Apple, Microsoft, Shell and ASML
+  included.
+- [ ] Production: the Name Census builder and its pin in the SEC bundle; SEC
+  adapter v5 (business address, census entry) and GLEIF adapter v2
+  (headquarters postcode and country) into `provenance.matching`.
+- [ ] Production: the `name_binding` family (rule check, 95% bar, measured
+  activation), its primitives, `clean/matching.py` proposing in the Merge
+  Stage in both directions (a GLEIF record meeting a bound SEC record, and an
+  SEC record meeting a waiting GLEIF record), the two rules in
+  `company.json` declared and inactive, their PROOFs pinned with a CI
+  re-score.
 - [ ] A wrong link is reversible by evidence-bound reversal, and a Match
   Exclusion stops it recurring: tests.
 - [ ] Apple, Microsoft, Shell and ASML each end as one master with CIK and
