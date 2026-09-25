@@ -715,3 +715,73 @@ class TestANameBindingRule:
         body["automatic_rules"][0]["proof"] = proof()
         with pytest.raises(Conflict, match="applies to"):
             check_policy(body)
+
+
+class TestTheNameMatchingProposal:
+    """Ticket 08: the matching rules are proposed beside the live policy, not in it."""
+
+    ROOT = Path(__file__).parents[2] / ".scratch/company-mastering/research"
+
+    def test_the_live_policy_is_unchanged(self):
+        assert digest(POLICY) == (
+            "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
+        )
+
+    def test_the_proposal_is_well_formed_and_pinned(self):
+        from edgar_warehouse.mdm.clean.company_source import name_matching_policy
+
+        body = name_matching_policy(active=False)
+        check_policy(body)
+        assert digest(body) == (
+            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
+        )
+
+    def test_the_proposed_rules_are_the_measured_rules_unchanged(self):
+        from edgar_warehouse.mdm.policies import load_proposal
+
+        assert load_proposal("company-name-matching")["rules"] == [
+            NAME_STATE,
+            NAME_POSTCODE,
+        ]
+
+    def test_an_activation_needs_the_operators_approval(self):
+        from edgar_warehouse.mdm.clean.company_source import name_matching_policy
+
+        with pytest.raises(Conflict, match="lacks its approval"):
+            check_policy(name_matching_policy(active=True))
+        approved = name_matching_policy(active=True)
+        for entry in approved["automatic_rules"][1:]:
+            entry["proof"] = {
+                **entry["proof"],
+                "approved_by": "operator",
+                "approved_at": "2026-09-25T20:00:00Z",
+            }
+        check_policy(approved)
+
+    @pytest.mark.parametrize(
+        "rule_id", ["sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
+    )
+    def test_the_proof_files_match_and_re_score(self, rule_id):
+        from edgar_warehouse.mdm.clean.company_source import NAME_PROOFS
+
+        proof_body = NAME_PROOFS[rule_id]
+        for name, expected in proof_body["cohort"]["files"].items():
+            assert (
+                hashlib.sha256((self.ROOT / name).read_bytes()).hexdigest() == expected
+            )
+        draw = "08-1" if rule_id == "sec-gleif-name-jurisdiction" else "08-2"
+        rule = NAME_STATE if draw == "08-1" else NAME_POSTCODE
+        tag = rule_id if draw == "08-1" else f"{rule_id}@{rule['version']}"
+
+        def rows(name):
+            return [
+                json.loads(line) for line in (self.ROOT / name).read_text().splitlines()
+            ]
+
+        sample = [r for r in rows(f"{draw}-sample.jsonl") if tag in r["drawn_for"]]
+        arms = [r for r in rows(f"{draw}-adversarial.jsonl") if tag in r["rules"]]
+        assert len(sample) == proof_body["n"]
+        assert sum(r["final"] == "same" for r in sample) == proof_body["correct"]
+        assert len(arms) == proof_body["adversarial"]["n"]
+        assert sum(r["final"] != "same" for r in arms) == 0
+        assert wilson_lower_bound(proof_body["correct"], proof_body["n"], 0.95) >= 0.95

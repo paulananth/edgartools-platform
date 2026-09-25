@@ -609,3 +609,108 @@ def write_name_census(
         "gleif": census["gleif"],
         "entries": len(census["entries"]),
     }
+
+
+# Ticket 08, the SEC-to-GLEIF matching rules, measured on bronze and the
+# pinned GLEIF Golden Copy (2026-09-11 16:00 UTC) and passing. Proposed, not
+# live: the operator approves the fingerprint of `name_matching_policy()`
+# first, then the rules move into `policies/company.json`.
+_RESEARCH_FILES_08 = {
+    "08-labelling-standard.md": "9b6b734ee50c7c6b85cdb5d8d6792a880313a35b3108b8fc7c294310baa84dfa",
+    "08-rules.json": "0422274b9db81ee027c3af7f2a294563265fe5a8e7fc6096a0e5b9e203139e5e",
+}
+NAME_PROOFS = {
+    # The Name-and-state rule.
+    "sec-gleif-name-jurisdiction": {
+        "method": "wilson_lower_bound",
+        "one_sided_confidence": 0.95,
+        "n": 300,
+        "correct": 300,
+        "lower_bound": 0.991062,
+        "adversarial": {
+            "fixture_sha256": "18b948b361ec72c1938004961f58e90461d1db4a273acdbc0c1d92629636cb8a",
+            "n": 257,
+            "violations": 0,
+        },
+        "cohort": {
+            "coverage_sha256": "3b51d0ac8b0b531768466c4a246bbb2e94b3856d1a0658525a7245b4e5e1f698",
+            "gleif_golden_copy_sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a",
+            "sec_filers": 76230,
+            "files": {
+                **_RESEARCH_FILES_08,
+                "08-1-adversarial.jsonl": "18b948b361ec72c1938004961f58e90461d1db4a273acdbc0c1d92629636cb8a",
+                "08-1-label.py": "df7bc5cd449ec7e87dadba3d8cdb28ae7ec640799bce9fba64ab02896b25a055",
+                "08-1-population.json": "c978d0f0ae5f9f0ad431a1533760fa230539ad5e96a007f9cc86d7cda01705b5",
+                "08-1-sample.jsonl": "1e535c09d0b0e42d5ebea725eb36111b9978008bb5ef576098d9253de5ad38ee",
+                "08-measure-1.py": "ffec26f741692f2ca03764d534857ecf9f42dad6352addc93bb1a6601e504622",
+            },
+        },
+        "approved_by": None,
+        "approved_at": None,
+        "reason": "ticket 08 Proving Run, the Name-and-state rule: hand-read "
+        "bronze and GLEIF pairs, 300/300, 0 adversarial violations",
+    },
+    # The Postcode rule with state veto.
+    "sec-gleif-name-postal": {
+        "method": "wilson_lower_bound",
+        "one_sided_confidence": 0.95,
+        "n": 300,
+        "correct": 300,
+        "lower_bound": 0.991062,
+        "adversarial": {
+            "fixture_sha256": "fb25320ce2f8201130cbc94c651ece8bd8539bb9adef34b3e7eed475b72168fa",
+            "n": 315,
+            "violations": 0,
+        },
+        "cohort": {
+            "coverage_sha256": "97e5d11824dc146f5446d3482c2a5214137a98bb18ec85c9674ca27e6a966509",
+            "gleif_golden_copy_sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a",
+            "sec_filers": 76230,
+            "files": {
+                **_RESEARCH_FILES_08,
+                "08-2-adversarial.jsonl": "fb25320ce2f8201130cbc94c651ece8bd8539bb9adef34b3e7eed475b72168fa",
+                "08-2-label.py": "a6e799362c3f333329cb93037a6c01e21277b6e93d526034cc88d7736f015fbe",
+                "08-2-population.json": "3c44839448092dea6d2f1cdff7707cfd56e29efc6e102fdf42536f9620e63028",
+                "08-2-sample.jsonl": "c7aabc53fdd6a5e881c73945970ef59259758943b188c4b5cc9ee927669b6a70",
+                "08-measure-2.py": "fe5988c90b5e0726c8be364eeb2e8ab8670acfb9cad5e40f11db96b523430cbf",
+            },
+        },
+        "approved_by": None,
+        "approved_at": None,
+        "reason": "ticket 08 Proving Run, the Postcode rule with state veto: "
+        "fresh draw excluding every earlier CIK, 300/300, 0 adversarial "
+        "violations",
+    },
+}
+
+
+def name_matching_policy(*, active: bool) -> dict:
+    """The live Company policy plus the proposed SEC-to-GLEIF matching rules.
+
+    With `active`, it also names their measured activations; those pass the
+    activation check only once the operator's approval fills each proof.
+    """
+    from ..policies import load_proposal
+
+    proposal = load_proposal("company-name-matching")
+    body = json.loads(canonical(POLICY))
+    block = body["kinds"]["company"]
+    block["rules"] = [*block["rules"], *proposal["rules"]]
+    block["bars"] = {**block["bars"], **proposal["bars"]}
+    if active:
+        body["automatic_rules"] = [
+            *body["automatic_rules"],
+            *(
+                {
+                    "kind": "company",
+                    "family": "name_binding",
+                    "rule_id": rule["rule_id"],
+                    "rule_version": rule["version"],
+                    "verdict": "bind",
+                    "activation": "measured",
+                    "proof": NAME_PROOFS[rule["rule_id"]],
+                }
+                for rule in proposal["rules"]
+            ),
+        ]
+    return body
