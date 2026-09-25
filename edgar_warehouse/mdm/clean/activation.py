@@ -43,6 +43,13 @@ ACCEPTED_BARS = {
         "min_precision": 0.95,
         "one_sided_confidence": 0.95,
     },
+    # SEC-to-GLEIF matching (ticket 08): the operator's 95% band applies to
+    # this family. Merging two published Companies keeps its 99.9% by having
+    # no entry, and identifier binding activates deterministically, not here.
+    ("company", "name_binding"): {
+        "min_precision": 0.95,
+        "one_sided_confidence": 0.95,
+    },
     ("person", "classification"): {
         "min_precision": 0.99,
         "one_sided_confidence": 0.975,
@@ -183,10 +190,18 @@ def _resolve(kinds: dict, entry: dict) -> tuple[dict, dict]:
     return block, rule
 
 
+# What a measured verdict may be, per family: a classification decides a
+# kind; a name binding joins a record to a Company (ticket 08).
+MEASURED_VERDICTS = {"classification": KINDS, "name_binding": frozenset({"bind"})}
+
+
 def _check_measured(kind: str, block: dict, rule: dict, entry: dict) -> None:
     family, verdict = entry["family"], entry["verdict"]
-    if verdict not in KINDS:
-        raise Conflict(f"Activation names verdict {verdict}, which decides no kind")
+    if verdict not in MEASURED_VERDICTS[family]:
+        raise Conflict(
+            f"Activation names verdict {verdict}, which a {family} rule cannot "
+            "prove by measurement"
+        )
     bar = (block.get("bars") or {}).get(family)
     if bar is None:
         raise Conflict(
@@ -436,13 +451,54 @@ def _check_contract(namespace: str, contract: dict) -> None:
         raise Conflict(f"{where} has an incomplete tolerance block")
 
 
+# The tests a name-binding rule must call: never the name alone (§10 check 5,
+# as for `name_similarity`), always the pinned census and one place test.
+NAME_BINDING_PLACE_TESTS = frozenset({"jurisdiction_agrees@1", "postal_agrees@1"})
+
+
+def check_name_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
+    """A measured SEC-to-GLEIF matching rule (ticket 08).
+
+    It only joins: a waiting GLEIF record to the Company its SEC record holds.
+    It never creates a Company, so its `on_no_match` is `wait`.
+    """
+    rule_id = rule.get("rule_id")
+    if rule.get("applies_to_verdict") != kind:
+        raise Conflict(
+            f"Binding rule {rule_id} applies to {rule.get('applies_to_verdict')}, "
+            f"but sits in kind {kind}"
+        )
+    if rule.get("emits") != ["bind"]:
+        raise Conflict(f"Binding rule {rule_id} must emit exactly bind")
+    if rule.get("on_no_match") != "wait":
+        raise Conflict(f"Name binding rule {rule_id} never creates a Company: wait")
+    if not rule.get("source") or not rule.get("holder_source"):
+        raise Conflict(
+            f"Name binding rule {rule_id} must name the source it joins and the "
+            "source whose record holds the Company"
+        )
+    tests = [t.get("primitive") for t in rule.get("when") or []]
+    for test in tests:
+        if primitive_family(test) != "name_binding":
+            raise Conflict(
+                f"Name binding rule {rule_id} calls {test}, which is not a name "
+                "binding test"
+            )
+    if "name_census_match@1" not in tests or not NAME_BINDING_PLACE_TESTS & set(tests):
+        raise Conflict(
+            f"Name binding rule {rule_id} must rest on the Name Census and a place "
+            "test, never the name alone"
+        )
+
+
 RULE_CHECKS = {
     "classification": _check_classification_rule,
     "binding": check_binding_rule,
+    "name_binding": check_name_binding_rule,
 }
 # Which rule families each kind of activation may prove. Sets, so ticket 08's
 # measured (fuzzy) binding is one more member, not a reshaped table.
 ACTIVATIONS = {
-    "measured": (frozenset({"classification"}), _check_measured),
+    "measured": (frozenset({"classification", "name_binding"}), _check_measured),
     "deterministic": (frozenset({"binding"}), _check_deterministic),
 }

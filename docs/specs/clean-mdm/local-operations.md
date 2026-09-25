@@ -126,6 +126,29 @@ Snapshot generation and each object's projection as-of are distinct: an object
 may have been last projected before the selected global generation. Future or
 missing generations return 404. An unconfigured v2 API has no v2 routes.
 
+## Count the Name Census
+
+The SEC-to-GLEIF matching rules (ticket 08) bind only a name no other SEC
+filer or GLEIF legal entity carries. The census counts that once, over the
+whole SEC capture (`sec_company` current names and `sec_company_former_name`)
+and a full GLEIF Level 1 Golden Copy (legal and other names, branches
+excluded). It refuses a delta. It needs local files only:
+
+```bash
+edgar-warehouse mdm name-census \
+  --landing-root "$COMPANY_LANDING_ROOT" \
+  --landing-manifest "$COMPANY_LANDING_MANIFEST" \
+  --gleif-archive "$GLEIF_LEVEL1_JSON_ZIP" \
+  --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \
+  --gleif-sha256 "$GLEIF_LEVEL1_SHA256" \
+  --output "$NAME_CENSUS_JSON"
+```
+
+The metadata file holds the archive's verified publication metadata
+(`format`, `cdf_version`, `content_date`, `file_content`, `record_count`).
+Rebuild the census for each full Golden Copy: a census counted before a new
+GLEIF entity took a name cannot see it.
+
 ## Prepare a native Company sample
 
 This command needs local files and no database credentials:
@@ -135,6 +158,7 @@ edgar-warehouse mdm prepare-clean-company \
   --landing-root "$COMPANY_LANDING_ROOT" \
   --landing-manifest "$COMPANY_LANDING_MANIFEST" \
   --ticker-manifest "$TICKER_LANDING_MANIFEST" \
+  --name-census "$NAME_CENSUS_JSON" \
   --output "$CLEAN_MDM_INPUT_DIRECTORY" \
   --as-of 2026-09-19T00:00:00Z --revision 0 --limit 3
 ```
@@ -149,7 +173,11 @@ member's digest, and the digest is part of the publication key. The Company
 landing manifest must also name `sec_company_filing`, the forms the same
 capture landed: each record carries its CIK's distinct forms (`forms`) and
 that member's digest (`filings.parquet`), also part of the key. The Company
-rule reads both (ticket 12).
+rule reads both (ticket 12). The matching rules read the business address
+(`sec_company_address`, pinned as `addresses.parquet`) and the Name Census
+(`--name-census`, pinned as `name-census.json`), which must have counted this
+same capture; both digests are part of the key, and each record carries its
+postcode, country and census entry in `provenance.matching` (ticket 08).
 An existing different bundle is rejected; identical preparation is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
 SEC `operating` filers and qualifying `other` filers can become Companies;

@@ -1,0 +1,26 @@
+{
+ "adversarial": {
+  "by_arm": {
+   "SEC US state set aside": 2,
+   "foreign filer": 52,
+   "headquarters city differs": 55,
+   "one-word name": 100,
+   "postcode agrees, jurisdiction does not": 78,
+   "registered agent legal address": 100
+  },
+  "n": 315,
+  "violations": 0
+ },
+ "files": {
+  "08-2-adversarial.jsonl": "fb25320ce2f8201130cbc94c651ece8bd8539bb9adef34b3e7eed475b72168fa",
+  "08-2-population.json": "3c44839448092dea6d2f1cdff7707cfd56e29efc6e102fdf42536f9620e63028",
+  "08-2-sample.jsonl": "c7aabc53fdd6a5e881c73945970ef59259758943b188c4b5cc9ee927669b6a70"
+ },
+ "rule": "sec-gleif-name-postal@2026-09-25.2",
+ "sample": {
+  "correct": 300,
+  "lower_bound": 0.991062,
+  "n": 300
+ },
+ "wrong": []
+}

@@ -17,6 +17,7 @@ from edgar_warehouse.mdm.clean.company_source import (
     POLICY,
     SOURCE_CODE,
     prepare_company_bundle,
+    write_name_census,
 )
 from edgar_warehouse.mdm.clean.store import Conflict
 from tests.mdm.test_clean_activation import proof
@@ -80,6 +81,59 @@ def filing_row(cik, form, **changes):
     }
 
 
+def address_row(cik, **changes):
+    return {
+        "cik": cik,
+        "address_type": "business",
+        "street1": "1 Main Street",
+        "street2": None,
+        "city": "Cupertino",
+        "state_or_country": "CA",
+        "zip_code": "95014",
+        "country": "CA",
+        "last_sync_run_id": "capture-1",
+        "last_synced_at": datetime(2026, 1, 1, tzinfo=UTC),
+        **changes,
+    }
+
+
+def former_row(cik, name, **changes):
+    return {
+        "cik": cik,
+        "former_name": name,
+        "date_changed": None,
+        "ordinal": 1,
+        "last_sync_run_id": "capture-1",
+        **changes,
+    }
+
+
+def gleif_archive(tmp_path, records=()):
+    """A full GLEIF Golden Copy archive and its verified metadata, for the census."""
+    import io
+    import zipfile
+
+    raw = io.BytesIO()
+    with zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("golden.json", json.dumps({"records": list(records)}))
+    archive = tmp_path / "gleif-level1.json.zip"
+    archive.write_bytes(raw.getvalue())
+    metadata = tmp_path / "gleif-level1.metadata.json"
+    metadata.write_text(
+        json.dumps(
+            {
+                "format": "json.zip",
+                "cdf_version": "LEI_3.1",
+                "content_date": "2026-09-11T16:00:00+00:00",
+                "file_content": "GLEIF_FULL_PUBLISHED",
+                "delta_start": None,
+                "record_count": len(records),
+            }
+        )
+    )
+    return archive, metadata, hashlib.sha256(raw.getvalue()).hexdigest()
+
+
 def write_run(root, run_id, tables):
     """One landing run: a parquet member per table and the manifest naming them."""
     for table_name, rows in tables.items():
@@ -106,17 +160,21 @@ def write_run(root, run_id, tables):
     return manifest
 
 
-def landing(tmp_path, rows, tickers=None, filings=None):
+def landing(
+    tmp_path, rows, tickers=None, filings=None, addresses=None, former=None, gleif=()
+):
     root = tmp_path / "landing"
     root.mkdir(parents=True)
-    # By default the filing list and the catalog name only a filer outside
-    # the sample.
+    # By default the filing list, the addresses, the former names and the
+    # catalog name only a filer outside the sample.
     manifest = write_run(
         root,
         "capture-1",
         {
             "sec_company": rows,
             "sec_company_filing": filings or [filing_row(999, "10-K")],
+            "sec_company_address": addresses or [address_row(999)],
+            "sec_company_former_name": former or [former_row(999, "OLD NAME INC")],
         },
     )
     ticker_manifest = write_run(
@@ -124,10 +182,21 @@ def landing(tmp_path, rows, tickers=None, filings=None):
         "catalog-1",
         {"sec_company_ticker": tickers or [ticker_row(999, "ZZZ")]},
     )
+    archive, metadata, sha = gleif_archive(tmp_path, gleif)
+    census = tmp_path / "name-census.json"
+    write_name_census(
+        landing_root=str(root),
+        landing_manifest=str(manifest),
+        gleif_archive=str(archive),
+        gleif_metadata=str(metadata),
+        gleif_sha256=sha,
+        output=str(census),
+    )
     return {
         "landing_root": str(root),
         "landing_manifest": str(manifest),
         "ticker_manifest": str(ticker_manifest),
+        "name_census": str(census),
         "output": str(tmp_path / "pinned"),
         "limit": 1,
         "revision": 0,
@@ -248,11 +317,10 @@ def test_prepared_bundle_is_bounded_pinned_and_idempotent(tmp_path):
 
 
 def test_preparation_rejects_capture_mismatch_and_false_manifest_count(tmp_path):
-    args = landing(tmp_path, [source_row(123, last_sync_run_id="other-run")])
+    # The Name Census reads the whole capture first and refuses it already.
     with pytest.raises(Conflict, match="different capture run"):
-        prepare_company_bundle(**args)
-    from pathlib import Path
-
+        landing(tmp_path / "a", [source_row(123, last_sync_run_id="other-run")])
+    args = landing(tmp_path, [source_row(123)])
     path = Path(args["landing_manifest"])
     body = json.loads(path.read_text())
     body["tables"][0]["row_count"] = 2
@@ -389,7 +457,7 @@ class TestTickersComeFromTheCatalog:
         key = json.loads((out / "manifest.json").read_text())["batches"][0]["input"][
             "publication"
         ]["publication_key"]
-        assert key.endswith(f":sec_company_ticker:{pinned}")
+        assert f":sec_company_ticker:{pinned}:name_census:" in key
 
     def test_a_different_catalog_is_a_different_publication(self, tmp_path):
         first = landing(tmp_path / "a", [source_row(123)], [ticker_row(123, "AAPL")])
@@ -481,3 +549,85 @@ class TestFormsComeFromTheFilingList:
         Path(args["landing_manifest"]).write_text(json.dumps(body))
         with pytest.raises(ValueError, match="sec_company_filing"):
             prepare_company_bundle(**args)
+
+
+class TestMatchingEvidenceIsPinned:
+    """Ticket 08: the business address and the Name Census beside every record."""
+
+    def test_the_business_address_and_census_entry_travel_with_the_record(
+        self, tmp_path
+    ):
+        args = landing(
+            tmp_path,
+            [source_row(320193, entity_name="APPLE INC")],
+            addresses=[
+                address_row(320193),
+                address_row(320193, address_type="mailing", zip_code="00000"),
+            ],
+            gleif=[
+                {
+                    "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+                    "Entity": {
+                        "LegalName": {"$": "Apple Inc."},
+                        "EntityCategory": {"$": "GENERAL"},
+                    },
+                    "Registration": {"LastUpdateDate": {"$": "2026-09-01T00:00:00Z"}},
+                }
+            ],
+        )
+        prepare_company_bundle(**args)
+        out = Path(args["output"])
+        record = json.loads((out / "records.jsonl").read_text())
+        # A state code in SEC's country slot means the United States.
+        assert record["business_address"] == {"postal_code": "95014", "country": "US"}
+        census = json.loads((out / "name-census.json").read_text())
+        assert (
+            record["name_census"]["census"] == record["_origin"]["name_census_sha256"]
+        )
+        assert record["name_census"]["ciks"] == ["0000320193"]
+        assert record["name_census"]["leis"] == [
+            ["HWUPKR0MPOU8FGXBT394", "2026-09-01T00:00:00Z"]
+        ]
+        assert census["sec"]["filers"] == 1
+        key = json.loads((out / "manifest.json").read_text())["batches"][0]["input"][
+            "publication"
+        ]["publication_key"]
+        assert key.endswith(f":name_census:{record['name_census']['census']}")
+        assert ":sec_company_address:" in key
+
+    def test_a_filer_without_a_business_address_carries_none(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        prepare_company_bundle(**args)
+        record = json.loads((Path(args["output"]) / "records.jsonl").read_text())
+        assert record["business_address"] is None
+
+    def test_a_census_of_another_capture_is_refused(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        other = landing(tmp_path / "other", [source_row(123), source_row(456)])
+        with pytest.raises(Conflict, match="did not count this Company capture"):
+            prepare_company_bundle(**{**args, "name_census": other["name_census"]})
+
+    def test_the_record_carries_its_matching_evidence_in_provenance(self):
+        row = source_row(320193, entity_name="APPLE INC")
+        row["last_synced_at"] = row["last_synced_at"].isoformat()
+        row["business_address"] = {"postal_code": "95014", "country": "US"}
+        row["name_census"] = {"census": "c" * 64, "key": "APPLE INC"}
+        body = normalize(
+            row,
+            source_code=SOURCE_CODE,
+            contract=CONTRACT,
+            publication={
+                "publication_key": "capture-1/company",
+                "revision": 0,
+                "effective_at": None,
+                "artifact_sha256": "a" * 64,
+                "member": "records.jsonl",
+            },
+        )
+        assert body["provenance"]["matching"] == {
+            "business_postal_code": "95014",
+            "business_country": "US",
+            "name_census": {"census": "c" * 64, "key": "APPLE INC"},
+        }
+        # Matching evidence grants no field a value.
+        assert "business_postal_code" not in body["fields"]

@@ -361,10 +361,24 @@ def handle(command: str, args) -> int:
             landing_root=args.landing_root,
             landing_manifest=args.landing_manifest,
             ticker_manifest=args.ticker_manifest,
+            name_census=args.name_census,
             output=args.output,
             limit=args.limit,
             as_of=args.as_of,
             revision=args.revision,
+        )
+        print(json.dumps(report, sort_keys=True))
+        return 0
+    if command == "name-census":
+        from .company_source import write_name_census
+
+        report = write_name_census(
+            landing_root=args.landing_root,
+            landing_manifest=args.landing_manifest,
+            gleif_archive=args.gleif_archive,
+            gleif_metadata=args.gleif_metadata,
+            gleif_sha256=args.gleif_sha256,
+            output=args.output,
         )
         print(json.dumps(report, sort_keys=True))
         return 0

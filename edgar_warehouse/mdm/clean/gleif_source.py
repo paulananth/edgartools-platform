@@ -408,6 +408,12 @@ def dataset_contract(member: str, *, level1_source: str = "gleif.lei.v1") -> dic
             "gleif_registration_authority_entity_id": "Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$",
             "gleif_entity_creation_date": "Entity.EntityCreationDate.$",
         }
+        # What the SEC-to-GLEIF matching rules compare; not Company fields
+        # (ticket 08). The headquarters address, never a registered agent's.
+        mapping["matching"] = {
+            "headquarters_postal_code": "Entity.HeadquartersAddress.PostalCode.$",
+            "headquarters_country": "Entity.HeadquartersAddress.Country.$",
+        }
     elif member == "relationships":
         mapping.update(
             kind="company",

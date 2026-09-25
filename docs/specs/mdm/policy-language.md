@@ -181,6 +181,12 @@ Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-
 | binding | `identifier_cardinality` | `namespace` (contract in §7.2) | veto or pass |
 | binding | `compound_key_equal` | `components[] {field, normalizer, comparison ∈ exact|consistent}` | bool |
 | binding | `name_similarity` | `left`, `right`, `normalizer`, `method@version`, `min_score` | bool |
+| name_binding | `name_census_match` | `sec_normalizer`, `gleif_normalizer` | bool: the SEC record's Name Census entry names exactly its own CIK and this LEI at the GLEIF record's last update, and both keys (legal form kept) agree |
+| name_binding | `gleif_entity_eligible` | `categories`, `entity_statuses`, `refused_registration_statuses` | bool |
+| name_binding | `holds_no_other_lei` | — | veto: the Company already holds another LEI |
+| name_binding | `jurisdiction_agrees` | `sec_field`, `sec_codes`, `gleif_field` | bool |
+| name_binding | `jurisdictions_do_not_conflict` | `sec_field`, `sec_codes`, `gleif_field`, `sec_business_country` | bool |
+| name_binding | `postal_agrees` | `sec_code`, `sec_country`, `gleif_code`, `gleif_country` | bool |
 | survivorship | `select_by_source_rank` | `sources[]` (ordered), `clear_sources[]`, `allow_unknown_effective`, `max_age_days` | winner + retained conflicts |
 
 Why the line sits here: the same words (`TRUST`, `FUND`, `CO`, `HOLDINGS`)
@@ -336,6 +342,11 @@ Its decision and measurement:
   Consolidation) or `review`. Tier C (fuzzy) emits `review` and is
   refused if it tries to emit `bind` on `name_similarity` alone (§10).
 - A binding rule may not call `select_by_source_rank` (§3).
+- A `name_binding` rule (company mastering ticket 08) is measured, not
+  deterministic: it only joins a waiting record to the Company another
+  source's record holds (`source`, `holder_source`, `on_no_match: wait`),
+  must call `name_census_match` and a place test, and activates with a proof
+  at its kind's `name_binding` bar.
 - Person Tiers A–D as written:
   [ticket 02](../../../.scratch/person-consumer-contract/issues/02-decide-what-binds-a-person.md).
   Company/GLEIF binding as written:

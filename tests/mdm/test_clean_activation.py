@@ -489,7 +489,10 @@ class TestAnIdentifierRule:
                 "proof": proof(),
             }
         ]
-        with pytest.raises(Conflict, match="applies to classification rules"):
+        with pytest.raises(
+            Conflict,
+            match="applies to classification and name_binding rules, not binding",
+        ):
             check_policy(body)
 
 
@@ -516,12 +519,14 @@ class TestTheCompanyPolicy:
         pending = copy.deepcopy(POLICY)
         pending["automatic_rules"] = []
         assert digest(pending) == (
-            "31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f"
+            "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
         )
 
     def test_the_policy_is_the_active_digest(self):
+        # The operator's approval of ticket 08's declared matching rules
+        # (2026-09-25 15:21 ET); ticket 12's approval was `35250dad...`.
         assert digest(POLICY) == (
-            "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
+            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
         )
 
     def test_the_proof_files_match_the_pinned_hashes(self):
@@ -538,15 +543,10 @@ class TestTheCompanyPolicy:
     def test_the_account_hold_back_re_scores_from_frozen_labels(self):
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
         block = POLICY["kinds"]["company"]
-        (rule,) = [
-            r for r in block["rules"] if r["rule_id"] == "sec-company-candidate"
-        ]
+        (rule,) = [r for r in block["rules"] if r["rule_id"] == "sec-company-candidate"]
 
         def rows(name):
-            return [
-                json.loads(line)
-                for line in (root / name).read_text().splitlines()
-            ]
+            return [json.loads(line) for line in (root / name).read_text().splitlines()]
 
         sample = rows("12-13-sample.jsonl")
         adversarial = rows("12-13-adversarial.jsonl")
@@ -588,8 +588,9 @@ class TestTheCompanyPolicy:
                 abs_tol=1e-6,
             )
         assert len(adversarial) == PROOF["adversarial"]["n"]
-        assert sum(record["final"] != "company" for record in adversarial) == (
-            PROOF["adversarial"]["violations"]
+        assert (
+            sum(record["final"] != "company" for record in adversarial)
+            == (PROOF["adversarial"]["violations"])
         )
 
 
@@ -619,3 +620,163 @@ class TestEachStepClearsTheBar:
     def test_the_measured_sec_rule_clears_the_bar_at_every_company_step(self):
         approved = {**PROOF, "approved_by": "x", "approved_at": "y"}
         _check_proof("company", COMPANY_BAR, approved, ["8", "10"])
+
+
+def _name_rules():
+    import json as _json
+    from pathlib import Path as _Path
+
+    frozen = _json.loads(
+        (
+            _Path(__file__).resolve().parents[2]
+            / ".scratch/company-mastering/research/08-rules.json"
+        ).read_text()
+    )["rules"]
+    return {(r["rule_id"], r["version"]): r for r in frozen}
+
+
+NAME_RULES = _name_rules()
+NAME_STATE = NAME_RULES[("sec-gleif-name-jurisdiction", "2026-09-25.1")]
+NAME_POSTCODE = NAME_RULES[("sec-gleif-name-postal", "2026-09-25.2")]
+
+
+def name_policy(rule=None, activate=True, bar=True):
+    rule = rule or NAME_STATE
+    body = policy(
+        rules=[RULE, rule],
+        bars={"classification": BAR, **({"name_binding": COMPANY_BAR} if bar else {})},
+    )
+    if activate:
+        body["automatic_rules"] = [
+            {
+                "kind": "company",
+                "family": "name_binding",
+                "rule_id": rule["rule_id"],
+                "rule_version": rule["version"],
+                "verdict": "bind",
+                "activation": "measured",
+                "proof": proof(n=300, correct=300),
+            }
+        ]
+    return body
+
+
+class TestANameBindingRule:
+    """Ticket 08: the SEC-to-GLEIF matching rules activate by measurement."""
+
+    @pytest.mark.parametrize("rule", [NAME_STATE, NAME_POSTCODE])
+    def test_the_frozen_rules_are_well_formed_and_activate_at_95(self, rule):
+        body = name_policy(rule)
+        check_policy(body)
+        assert activated(body, "company", rule, "bind")
+
+    def test_a_bar_below_95_is_refused(self):
+        body = name_policy()
+        body["kinds"]["company"]["bars"]["name_binding"] = {
+            **COMPANY_BAR,
+            "min_precision": 0.9,
+        }
+        with pytest.raises(Conflict, match="below the accepted"):
+            check_policy(body)
+
+    def test_a_proof_below_the_bar_is_refused(self):
+        body = name_policy()
+        body["automatic_rules"][0]["proof"] = proof(n=100, correct=94)
+        with pytest.raises(Conflict, match="below the company bar"):
+            check_policy(body)
+
+    @pytest.mark.parametrize(
+        ("changes", "reason"),
+        [
+            ({"on_no_match": "mint"}, "never creates a Company"),
+            ({"emits": ["bind", "review"]}, "exactly bind"),
+            ({"holder_source": None}, "holds the Company"),
+            (
+                {"when": [{"primitive": "name_census_match@1", "args": {}}]},
+                "never the name alone",
+            ),
+            (
+                {"when": [{"primitive": "identifier_match@1", "args": {}}]},
+                "not a name binding test",
+            ),
+        ],
+    )
+    def test_a_malformed_rule_is_refused(self, changes, reason):
+        with pytest.raises(Conflict, match=reason):
+            check_policy(name_policy({**NAME_STATE, **changes}, activate=False))
+
+    def test_a_kind_verdict_cannot_be_measured_for_a_name_binding(self):
+        body = name_policy()
+        body["automatic_rules"][0]["verdict"] = "company"
+        with pytest.raises(Conflict, match="does not emit|cannot prove"):
+            check_policy(body)
+
+    def test_identifier_binding_still_activates_only_deterministically(self):
+        body = binding_policy()
+        body["automatic_rules"][0]["activation"] = "measured"
+        body["automatic_rules"][0]["proof"] = proof()
+        with pytest.raises(Conflict, match="applies to"):
+            check_policy(body)
+
+
+class TestTheNameMatchingRules:
+    """Ticket 08: the matching rules are declared in the live policy, not active."""
+
+    ROOT = Path(__file__).parents[2] / ".scratch/company-mastering/research"
+
+    def test_the_declared_rules_are_the_measured_rules_unchanged(self):
+        declared = [
+            r
+            for r in POLICY["kinds"]["company"]["rules"]
+            if r["family"] == "name_binding"
+        ]
+        assert declared == [NAME_STATE, NAME_POSTCODE]
+        assert POLICY["kinds"]["company"]["bars"]["name_binding"] == COMPANY_BAR
+
+    def test_no_matching_rule_is_active(self):
+        from edgar_warehouse.mdm.clean.company_source import name_matching_policy
+
+        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
+        assert digest(name_matching_policy(active=False)) == digest(POLICY)
+
+    def test_an_activation_needs_the_operators_approval(self):
+        from edgar_warehouse.mdm.clean.company_source import name_matching_policy
+
+        with pytest.raises(Conflict, match="lacks its approval"):
+            check_policy(name_matching_policy(active=True))
+        approved = name_matching_policy(active=True)
+        for entry in approved["automatic_rules"][1:]:
+            entry["proof"] = {
+                **entry["proof"],
+                "approved_by": "operator",
+                "approved_at": "2026-09-25T20:00:00Z",
+            }
+        check_policy(approved)
+
+    @pytest.mark.parametrize(
+        "rule_id", ["sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
+    )
+    def test_the_proof_files_match_and_re_score(self, rule_id):
+        from edgar_warehouse.mdm.clean.company_source import NAME_PROOFS
+
+        proof_body = NAME_PROOFS[rule_id]
+        for name, expected in proof_body["cohort"]["files"].items():
+            assert (
+                hashlib.sha256((self.ROOT / name).read_bytes()).hexdigest() == expected
+            )
+        draw = "08-1" if rule_id == "sec-gleif-name-jurisdiction" else "08-2"
+        rule = NAME_STATE if draw == "08-1" else NAME_POSTCODE
+        tag = rule_id if draw == "08-1" else f"{rule_id}@{rule['version']}"
+
+        def rows(name):
+            return [
+                json.loads(line) for line in (self.ROOT / name).read_text().splitlines()
+            ]
+
+        sample = [r for r in rows(f"{draw}-sample.jsonl") if tag in r["drawn_for"]]
+        arms = [r for r in rows(f"{draw}-adversarial.jsonl") if tag in r["rules"]]
+        assert len(sample) == proof_body["n"]
+        assert sum(r["final"] == "same" for r in sample) == proof_body["correct"]
+        assert len(arms) == proof_body["adversarial"]["n"]
+        assert sum(r["final"] != "same" for r in arms) == 0
+        assert wilson_lower_bound(proof_body["correct"], proof_body["n"], 0.95) >= 0.95

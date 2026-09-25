@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, binding, relationships
+from . import assessment, binding, matching, relationships
 from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
@@ -146,7 +146,7 @@ class MergeStage:
         raise AssertionError("Unreachable assessment retry state")
 
     def propose(self, **command) -> dict:
-        """What the policy's active identifier rules would bind or create."""
+        """What the policy's active identifier and name rules would bind or create."""
         with self.store.engine.connect() as conn:
             policy = conn.scalar(
                 text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
@@ -154,7 +154,7 @@ class MergeStage:
             )
             if policy is None:
                 return binding.nothing()
-            return binding.propose(
+            proposed = binding.propose(
                 conn,
                 policy,
                 assertions=command.get("assertions") or [],
@@ -162,6 +162,19 @@ class MergeStage:
                 identities=command.get("identities") or [],
                 as_of=command["as_of"],
             )
+            # Identifier proposals first: a record they bind is not name-matched,
+            # and an SEC record they bind in this batch holds its Company for
+            # the name rules (ticket 08).
+            named = matching.propose(
+                conn,
+                policy,
+                assertions=command.get("assertions") or [],
+                decisions=(command.get("decisions") or []) + proposed["decisions"],
+                as_of=command["as_of"],
+            )
+            for part in ("decisions", "reviews"):
+                proposed[part] += named[part]
+            return proposed
 
     def assess(self, *, automatic: dict | None = None, **command) -> dict:
         """Retain a proposed binding/consolidation without committing masters.

@@ -52,7 +52,13 @@ class TestTheRegistry:
 
     def test_every_primitive_declares_the_family_it_belongs_to(self):
         families = {p.family for p in REGISTRY.values()}
-        assert families <= {"shared", "classification", "binding", "survivorship"}
+        assert families <= {
+            "shared",
+            "classification",
+            "binding",
+            "name_binding",
+            "survivorship",
+        }
 
     def test_the_registry_is_not_mutable_by_a_caller(self):
         with pytest.raises((TypeError, AttributeError)):

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
+from .names import legal_form_key, sec_legal_form_key
 from .store import Conflict
 
 
@@ -81,6 +82,10 @@ NORMALIZERS: dict[str, Callable[[Any], str]] = {
     "normalize_identifier@lei-v1": lambda s: re.sub(
         r"[^A-Z0-9]", "", str("" if s is None else s).upper()
     ),
+    # Ticket 08: a name with its legal form kept, for the SEC-to-GLEIF
+    # matching rule. SEC's variant drops the state tag of a conformed name.
+    "normalize_text@legal-form-kept-v1": legal_form_key,
+    "normalize_text@sec-legal-form-kept-v1": sec_legal_form_key,
 }
 
 
@@ -221,6 +226,20 @@ REGISTRY = MappingProxyType(
         "identifier_match@1": Primitive(_runs_in_the_merge_stage, "binding"),
         "identifier_cardinality@1": Primitive(_runs_in_the_merge_stage, "binding"),
         "kind_equal@1": Primitive(_runs_in_the_merge_stage, "binding"),
+        # Ticket 08: the SEC-to-GLEIF matching rules. They compare two records
+        # and a pinned census, so they too run where both are in hand
+        # (`matching.propose`).
+        **{
+            name: Primitive(_runs_in_the_merge_stage, "name_binding")
+            for name in (
+                "name_census_match@1",
+                "gleif_entity_eligible@1",
+                "holds_no_other_lei@1",
+                "jurisdiction_agrees@1",
+                "jurisdictions_do_not_conflict@1",
+                "postal_agrees@1",
+            )
+        },
         "evidence_present@1": Primitive(_evidence_present, "classification"),
         "field_in_set@1": Primitive(_field_in_set, "classification"),
         "token_match@1": Primitive(_token_match(False), "classification"),

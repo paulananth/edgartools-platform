@@ -345,6 +345,112 @@
           "otherwise": true
         }
       ]
+    },
+    {
+      "rule_id": "sec-gleif-name-jurisdiction",
+      "version": "2026-09-25.1",
+      "family": "name_binding",
+      "source": "gleif.level1.v1",
+      "holder_source": "sec.submissions.company.v1",
+      "applies_to_verdict": "company",
+      "emits": [
+        "bind"
+      ],
+      "on_no_match": "wait",
+      "when": [
+        {
+          "primitive": "name_census_match@1",
+          "args": {
+            "sec_normalizer": "normalize_text@sec-legal-form-kept-v1",
+            "gleif_normalizer": "normalize_text@legal-form-kept-v1"
+          }
+        },
+        {
+          "primitive": "gleif_entity_eligible@1",
+          "args": {
+            "categories": [
+              "GENERAL"
+            ],
+            "entity_statuses": [
+              "ACTIVE"
+            ],
+            "refused_registration_statuses": [
+              "ANNULLED",
+              "DUPLICATE"
+            ]
+          }
+        },
+        {
+          "primitive": "holds_no_other_lei@1",
+          "args": {}
+        },
+        {
+          "primitive": "jurisdiction_agrees@1",
+          "args": {
+            "sec_field": "state_of_incorporation",
+            "sec_codes": "edgar-iso-v1",
+            "gleif_field": "jurisdiction"
+          }
+        }
+      ]
+    },
+    {
+      "rule_id": "sec-gleif-name-postal",
+      "version": "2026-09-25.2",
+      "family": "name_binding",
+      "source": "gleif.level1.v1",
+      "holder_source": "sec.submissions.company.v1",
+      "applies_to_verdict": "company",
+      "emits": [
+        "bind"
+      ],
+      "on_no_match": "wait",
+      "when": [
+        {
+          "primitive": "name_census_match@1",
+          "args": {
+            "sec_normalizer": "normalize_text@sec-legal-form-kept-v1",
+            "gleif_normalizer": "normalize_text@legal-form-kept-v1"
+          }
+        },
+        {
+          "primitive": "gleif_entity_eligible@1",
+          "args": {
+            "categories": [
+              "GENERAL"
+            ],
+            "entity_statuses": [
+              "ACTIVE"
+            ],
+            "refused_registration_statuses": [
+              "ANNULLED",
+              "DUPLICATE"
+            ]
+          }
+        },
+        {
+          "primitive": "holds_no_other_lei@1",
+          "args": {}
+        },
+        {
+          "primitive": "jurisdictions_do_not_conflict@1",
+          "args": {
+            "sec_field": "state_of_incorporation",
+            "sec_codes": "edgar-iso-v1",
+            "gleif_field": "jurisdiction",
+            "sec_business_country": "matching.business_country"
+          }
+        },
+        {
+          "primitive": "postal_agrees@1",
+          "args": {
+            "sec_code": "matching.business_postal_code",
+            "sec_country": "matching.business_country",
+            "gleif_code": "matching.headquarters_postal_code",
+            "gleif_country": "matching.headquarters_country"
+          }
+        }
+      ]
     }
   ],
   "normalizers": {
@@ -497,6 +603,11 @@
       "min_precision": 0.95,
       "method": "wilson_lower_bound",
       "one_sided_confidence": 0.95
+    },
+    "name_binding": {
+      "min_precision": 0.95,
+      "one_sided_confidence": 0.95,
+      "method": "wilson_lower_bound"
     }
   }
 }

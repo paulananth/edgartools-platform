@@ -1,0 +1,40 @@
+{
+ "adversarial_arms": {
+  "SEC US state set aside": {
+   "drawn": 2,
+   "population": 2
+  },
+  "foreign filer": {
+   "drawn": 52,
+   "population": 52
+  },
+  "headquarters city differs": {
+   "drawn": 55,
+   "population": 55
+  },
+  "one-word name": {
+   "drawn": 100,
+   "population": 242
+  },
+  "postcode agrees, jurisdiction does not": {
+   "drawn": 78,
+   "population": 78
+  },
+  "registered agent legal address": {
+   "drawn": 100,
+   "population": 480
+  }
+ },
+ "adversarial_pairs": 315,
+ "coverage_sha256": "97e5d11824dc146f5446d3482c2a5214137a98bb18ec85c9674ca27e6a966509",
+ "excluded": {
+  "development_and_earlier_draws_and_acceptance": 1903
+ },
+ "population": 1081,
+ "rule": "sec-gleif-name-postal@2026-09-25.2",
+ "sample": {
+  "drawn": 300,
+  "population": 1081
+ },
+ "seed": "20260925.08-2"
+}

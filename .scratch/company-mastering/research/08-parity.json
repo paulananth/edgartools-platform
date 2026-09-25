@@ -1,0 +1,27 @@
+{
+ "bronze": {
+  "binds": 3050,
+  "only_production": [],
+  "only_research": []
+ },
+ "census_entries": 76117,
+ "census_sha256": "107c0e04d6dbeb6e2a5bbc02e8d71fd7f62ebb5527f2176f0bc88aa0f33678dc",
+ "coverage_sha256": "97e5d11824dc146f5446d3482c2a5214137a98bb18ec85c9674ca27e6a966509",
+ "research_binds": 3050,
+ "silver": {
+  "binds": 3040,
+  "only_production": [],
+  "only_research": [
+   "0000845982",
+   "0001094324",
+   "0001123799",
+   "0001214816",
+   "0001306965",
+   "0001520504",
+   "0001526125",
+   "0001590560",
+   "0001713923",
+   "0001792267"
+  ]
+ }
+}

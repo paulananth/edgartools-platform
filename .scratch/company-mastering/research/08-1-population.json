@@ -1,0 +1,54 @@
+{
+ "adversarial_arms": {
+  "GLEIF lapsed or retired": {
+   "drawn": 50,
+   "population": 871
+  },
+  "foreign filer": {
+   "drawn": 50,
+   "population": 314
+  },
+  "headquarters country differs": {
+   "drawn": 50,
+   "population": 128
+  },
+  "one-word name": {
+   "drawn": 50,
+   "population": 799
+  },
+  "postal step, no jurisdiction agreement": {
+   "drawn": 50,
+   "population": 210
+  },
+  "registered agent legal address": {
+   "drawn": 50,
+   "population": 1390
+  },
+  "renamed SEC filer": {
+   "drawn": 50,
+   "population": 1315
+  }
+ },
+ "adversarial_pairs": 326,
+ "bound_outside_excluded": 2861,
+ "coverage_sha256": "3b51d0ac8b0b531768466c4a246bbb2e94b3856d1a0658525a7245b4e5e1f698",
+ "excluded_acceptance_ciks": [
+  "0000320193",
+  "0000789019",
+  "0000937966",
+  "0001306965"
+ ],
+ "excluded_development_ciks": 1000,
+ "sample_pairs": 573,
+ "samples": {
+  "sec-gleif-name-jurisdiction": {
+   "drawn": 300,
+   "population": 2616
+  },
+  "sec-gleif-name-postal": {
+   "drawn": 300,
+   "population": 1728
+  }
+ },
+ "seed": "20260925.08-1"
+}
