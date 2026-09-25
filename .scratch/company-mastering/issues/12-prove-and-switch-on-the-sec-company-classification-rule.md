@@ -327,3 +327,4 @@ code as the digest's key.
 - [ ] Three-axis `/code-review`; fix findings.
 - [ ] Plain-English brief; **operator approves the exact digest**.
 - [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
+- [ ] 2026-09-25 08:14 ET: handed to Codex (`12-handover-to-codex-2.md`); PROOF and PENDING_ACTIVATION written; 6 tests pinning `.8` still to update.

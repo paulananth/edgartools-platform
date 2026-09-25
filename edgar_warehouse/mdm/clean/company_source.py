@@ -74,44 +74,49 @@ CONTRACT = {
         },
     },
 }
-# Ticket 12: version .8 cleared both measured Company steps and the
-# adversarial check. The proposal below is not an activation until the operator
-# approves this exact policy digest and supplies the true approval time.
+# Ticket 12, the Account hold-back (rule 2026-09-25.13): both Company steps
+# clear the 95% bar and the fresh adversarial fixture has no violation. The
+# proposal below is not an activation until the operator approves this exact
+# policy digest and supplies the true approval time.
 PROOF = {
     "method": "wilson_lower_bound",
     "one_sided_confidence": 0.95,
     "n": 600,
-    "correct": 599,
-    "lower_bound": 0.992564,
+    "correct": 600,
+    "lower_bound": 0.995511,
     "adversarial": {
-        "fixture_sha256": "30e21122647a9085a48ac597b5b661018644de8bd52cad7755ec5c50ea424f01",
-        "n": 483,
+        "fixture_sha256": "ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1",
+        "n": 328,
         "violations": 0,
     },
     "cohort": {
         "population_sha256": "395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600",
+        "ticker_catalog_sha256": "836140c5ca9817b673e76f4c4cf25dda6650215683c1705e9fbe00b2e8f16fbf",
         "by_step": {
-            "2": {"n": 300, "correct": 299, "lower_bound": 0.9851990393158567},
-            "4": {"n": 300, "correct": 300, "lower_bound": 0.9910621278248719},
+            "8": {"n": 300, "correct": 300, "lower_bound": 0.9910621278248719},
+            "10": {"n": 300, "correct": 300, "lower_bound": 0.9910621278248719},
         },
         "files": {
-            "12-sample.jsonl": "921e89d72cdce724cad3a9e594addd27ea92546f312e0458e1d6c1373b4d0beb",
-            "12-adversarial.jsonl": "30e21122647a9085a48ac597b5b661018644de8bd52cad7755ec5c50ea424f01",
-            "12-population.json": "cd005bca0296a8b671f5e637bb145cea6ea392e4398ad01e7e766b5377a4c941",
+            "12-13-adversarial.jsonl": "ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1",
+            "12-13-held.jsonl": "989057c5f33177c1a53c182a757d00b6909df61a852bf9e2b6b0bd746d345fcc",
+            "12-13-label.py": "3858117cf62df1de0d6adfac6cd348da5a36e4d9587bcf82b69f358a90ed9e12",
+            "12-13-population.json": "b6023c5ef814ff496137ddd51c395582d07d316038ad23eb40a96bf64a741a49",
+            "12-13-sample.jsonl": "d276df62557c30106d8f49c52f23c0ea72c4795c664e96983c7569f91dd6ad97",
             "12-classify.py": "0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a",
-            "12-label-reviewed.py": "7e98a8059ead4279ce28e600c9d97c03a5539384bd362598921b5b973b725b4a",
+            "12-measure-13.py": "6fc1e10772f89f369513d74d80927670dce71e7b937e149951a50311aaf66ceb",
         },
     },
     "approved_by": None,
     "approved_at": None,
-    "reason": "ticket 12 Proving Run, SEC Company classification, rule .8: "
-    "bronze-only hand review, each step clears 0.95, 0 adversarial violations",
+    "reason": "ticket 12 Proving Run, SEC Company classification, the Account "
+    "hold-back: bronze-only hand review, each Company step clears 0.95, "
+    "0 adversarial violations",
 }
 PENDING_ACTIVATION = {
     "kind": "company",
     "family": "classification",
     "rule_id": "sec-company-candidate",
-    "rule_version": "2026-09-24.8",
+    "rule_version": "2026-09-25.13",
     "verdict": "company",
     "activation": "measured",
     "proof": PROOF,
