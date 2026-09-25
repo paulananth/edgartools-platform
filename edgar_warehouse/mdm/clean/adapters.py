@@ -273,6 +273,12 @@ def normalize(
         provenance["source"] = {
             name: value(row, path) for name, path in mapping["provenance"].items()
         }
+    if mapping.get("matching"):
+        # What a matching rule compares, kept with the record and out of its
+        # fields, so reading it grants no field a value (ticket 08).
+        provenance["matching"] = {
+            name: value(row, path) for name, path in mapping["matching"].items()
+        }
     if labelled is not None:
         # Inside the hashed body, so the record explains what labelled it with
         # no lookup elsewhere. Absent means the contract's own table decided,

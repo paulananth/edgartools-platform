@@ -21,6 +21,8 @@ import pyarrow.parquet as pq
 
 from ..policies import load_kinds
 from .evidence import instant
+from .name_census import entry as census_entry
+from .names import edgar_jurisdiction
 from .store import Conflict, canonical, digest
 
 SOURCE_CODE = "sec.submissions.company.v1"
@@ -41,12 +43,13 @@ CONTRACT = {
     "schema_version": "silver-company-v1",
     "record_key": "zero-padded 10-digit CIK",
     "publication_key": "capture run plus exact company landing member digest, "
-    "plus the exact filing-list and ticker catalog member digests",
+    "plus the exact filing-list, business-address and ticker catalog member "
+    "digests, plus the Name Census digest",
     "effective_time": "unknown; last_synced_at is observation time only",
     "semantics": "patch",
     "completeness": "explicit bounded Company sample; no retirement by absence",
     "adapter": {
-        "version": "sec-company-landing-v4",
+        "version": "sec-company-landing-v5",
         "retain_deferred": True,
         "source_record_provenance": True,
         "field_shape": "nullable_text",
@@ -71,6 +74,15 @@ CONTRACT = {
             "filing_landing_sha256": "_origin.forms.sha256",
             "ticker_landing_sha256": "_origin.tickers.sha256",
             "ticker_run_id": "_origin.tickers.run_id",
+            "address_landing_sha256": "_origin.business_address.sha256",
+        },
+        # What the SEC-to-GLEIF matching rules compare, kept with the record
+        # and out of its fields: address as a Company field is ticket 09's
+        # decision (company mastering ticket 08).
+        "matching": {
+            "business_postal_code": "business_address.postal_code",
+            "business_country": "business_address.country",
+            "name_census": "name_census",
         },
     },
 }
@@ -219,6 +231,29 @@ def _filed_forms(landing: dict, parquet: pq.ParquetFile) -> dict[int, list[str]]
     return {cik: sorted(forms) for cik, forms in filed.items()}
 
 
+def _business_addresses(landing: dict, parquet: pq.ParquetFile) -> dict[int, dict]:
+    """Each CIK's business address postcode and country, from its own capture.
+
+    SEC writes a state code where a country belongs; a state means the United
+    States (`names.edgar_jurisdiction`). Silver keeps `stateOrCountry` only,
+    not SEC's separate `countryCode`, so a foreign filer that SEC files under
+    `countryCode` alone (Shell) has no country here (ticket 08).
+    """
+    found: dict[int, dict] = {}
+    for batch in parquet.iter_batches(batch_size=10_000):
+        for row in batch.to_pylist():
+            if row["last_sync_run_id"] != landing["run_id"]:
+                raise Conflict("Address row belongs to a different capture run")
+            if row["cik"] is None or row["address_type"] != "business":
+                continue
+            place = edgar_jurisdiction(row["state_or_country"])
+            found[int(row["cik"])] = {
+                "postal_code": row["zip_code"] or None,
+                "country": place.split("-")[0] if place else None,
+            }
+    return found
+
+
 @dataclass(frozen=True)
 class _Pinned:
     """One landing member the Company rule reads, pinned beside the Company one."""
@@ -228,7 +263,9 @@ class _Pinned:
     file: str
     raw: bytes
     origin: dict
-    by_cik: dict[int, list[str]]
+    by_cik: dict[int, object]
+    # What a record carries when the member holds nothing for its CIK.
+    empty: object
 
 
 def _pin_evidence(
@@ -238,9 +275,10 @@ def _pin_evidence(
     *,
     table: str,
     required: set[str],
-    collect: Callable[[dict, pq.ParquetFile], dict[int, list[str]]],
+    collect: Callable[[dict, pq.ParquetFile], dict[int, object]],
     field: str,
     file: str,
+    empty: object = (),
 ) -> _Pinned:
     member, raw, parquet = _read_member(root, landing, table, required)
     return _Pinned(
@@ -255,6 +293,7 @@ def _pin_evidence(
             "run_id": landing["run_id"],
         },
         by_cik=collect(landing, parquet),
+        empty=list(empty) if isinstance(empty, tuple) else empty,
     )
 
 
@@ -263,18 +302,22 @@ def prepare_company_bundle(
     landing_root: str,
     landing_manifest: str,
     ticker_manifest: str,
+    name_census: str,
     output: str,
     limit: int,
     as_of: str,
     revision: int,
 ) -> dict:
-    """Pin a bounded Company sample with the evidence its rule reads.
+    """Pin a bounded Company sample with the evidence its rules read.
 
     The Company rule reads two things the Company row does not carry
     (ticket 12): the forms a filer files, landed by the same capture
     (`sec_company_filing`), and its tickers, which SEC publishes in a catalog
-    of its own landed by a separate run (`sec_company_ticker`). Each member
-    is pinned beside the Company one, and its digest is part of the key.
+    of its own landed by a separate run (`sec_company_ticker`). The
+    SEC-to-GLEIF matching rules (ticket 08) read the business address
+    (`sec_company_address`) and the Name Census, which must have counted this
+    same capture. Each is pinned beside the Company member, and its digest is
+    part of the key.
     """
     if not 1 <= limit <= 1000 or type(revision) is not int or revision < 0:
         raise ValueError(
@@ -297,6 +340,13 @@ def prepare_company_bundle(
         },
     )
     raw_hash = hashlib.sha256(raw).hexdigest()
+    census_raw = _read_bounded(Path(name_census).resolve(), 256 * 1024 * 1024)
+    census = json.loads(census_raw)
+    if (census.get("sec") or {}).get("capture_run_id") != landing["run_id"] or (
+        census["sec"].get("company_member_sha256") != raw_hash
+    ):
+        raise Conflict("The Name Census did not count this Company capture")
+    census_hash = digest(census)
     catalog, catalog_manifest_bytes = _read_manifest(root, ticker_manifest)
     pinned = (
         _pin_evidence(
@@ -308,6 +358,23 @@ def prepare_company_bundle(
             collect=_filed_forms,
             field="forms",
             file="filings.parquet",
+        ),
+        _pin_evidence(
+            root,
+            landing,
+            manifest_bytes,
+            table="sec_company_address",
+            required={
+                "cik",
+                "address_type",
+                "zip_code",
+                "state_or_country",
+                "last_sync_run_id",
+            },
+            collect=_business_addresses,
+            field="business_address",
+            file="addresses.parquet",
+            empty=None,
         ),
         _pin_evidence(
             root,
@@ -330,13 +397,17 @@ def prepare_company_bundle(
             records.append(
                 {
                     **row,
-                    **{e.field: e.by_cik.get(int(row["cik"]), []) for e in pinned},
+                    **{e.field: e.by_cik.get(int(row["cik"]), e.empty) for e in pinned},
+                    "name_census": census_entry(
+                        census, row["entity_name"], census_digest=census_hash
+                    ),
                     "_origin": {
                         "member": member["relative_path"],
                         "sha256": raw_hash,
                         "row_ordinal": len(records) + 1,
                         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
                         **{e.field: e.origin for e in pinned},
+                        "name_census_sha256": census_hash,
                     },
                 }
             )
@@ -359,8 +430,12 @@ def prepare_company_bundle(
         + "\n"
     ).encode()
     payload_hash = hashlib.sha256(payload).hexdigest()
-    publication_key = f"{landing['run_id']}:sec_company:{raw_hash}" + "".join(
-        f":{e.origin['run_id']}:{e.table}:{e.origin['sha256']}" for e in pinned
+    publication_key = (
+        f"{landing['run_id']}:sec_company:{raw_hash}"
+        + "".join(
+            f":{e.origin['run_id']}:{e.table}:{e.origin['sha256']}" for e in pinned
+        )
+        + f":name_census:{census_hash}"
     )
     scope = {
         "mode": "bounded_sample",
@@ -404,6 +479,7 @@ def prepare_company_bundle(
         "landing-manifest.json": manifest_bytes,
         **{e.file: e.raw for e in pinned},
         "ticker-manifest.json": catalog_manifest_bytes,
+        "name-census.json": census_raw,
         "dataset.json": (canonical(CONTRACT) + "\n").encode(),
         "policy.json": (canonical(POLICY) + "\n").encode(),
         "manifest.json": (canonical(manifest) + "\n").encode(),
@@ -442,3 +518,94 @@ def prepare_company_bundle(
         if stage.exists():
             shutil.rmtree(stage)
     return report
+
+
+def census_filers(
+    *, landing_root: str, landing_manifest: str
+) -> tuple[list[tuple[str, str | None, list[str]]], dict]:
+    """Every SEC filer in one capture with its former names, for the Name Census.
+
+    The census counts the whole capture, never a sample: a name that looks
+    unique in a sample may not be (ticket 08). The population it returns names
+    the exact members it read, so a bundle can refuse a census of another
+    capture.
+    """
+    root = Path(landing_root).resolve()
+    landing, _ = _read_manifest(root, landing_manifest)
+    _, company_raw, company = _read_member(
+        root, landing, "sec_company", {"cik", "entity_name", "last_sync_run_id"}
+    )
+    _, former_raw, former = _read_member(
+        root,
+        landing,
+        "sec_company_former_name",
+        {"cik", "former_name", "last_sync_run_id"},
+    )
+    earlier: dict[int, list[str]] = {}
+    for batch in former.iter_batches(batch_size=10_000):
+        for row in batch.to_pylist():
+            if row["last_sync_run_id"] != landing["run_id"]:
+                raise Conflict("Former-name row belongs to a different capture run")
+            if row["cik"] is not None and row["former_name"]:
+                earlier.setdefault(int(row["cik"]), []).append(row["former_name"])
+    filers = []
+    for batch in company.iter_batches(batch_size=10_000):
+        for row in batch.to_pylist():
+            if row["last_sync_run_id"] != landing["run_id"]:
+                raise Conflict("Company row belongs to a different capture run")
+            cik = f"{int(row['cik']):010d}"
+            filers.append((cik, row["entity_name"], earlier.get(int(row["cik"]), [])))
+    population = {
+        "capture_run_id": landing["run_id"],
+        "company_member_sha256": hashlib.sha256(company_raw).hexdigest(),
+        "former_name_member_sha256": hashlib.sha256(former_raw).hexdigest(),
+        "filers": len(filers),
+    }
+    return filers, population
+
+
+def write_name_census(
+    *,
+    landing_root: str,
+    landing_manifest: str,
+    gleif_archive: str,
+    gleif_metadata: str,
+    gleif_sha256: str,
+    output: str,
+) -> dict:
+    """Count one SEC capture and one full GLEIF Golden Copy into a census file.
+
+    An existing census is never overwritten with different content.
+    """
+    from .name_census import build
+
+    filers, population = census_filers(
+        landing_root=landing_root, landing_manifest=landing_manifest
+    )
+    metadata = json.loads(Path(gleif_metadata).read_text())
+    with Path(gleif_archive).open("rb") as archive:
+        census = build(
+            filers=filers,
+            sec_population=population,
+            gleif_archive=archive,
+            gleif_metadata=metadata,
+            gleif_sha256=gleif_sha256,
+        )
+    data = (canonical(census) + "\n").encode()
+    target = Path(output).resolve()
+    if target.exists():
+        if target.read_bytes() != data:
+            raise Conflict("Existing Name Census has different content")
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+    return {
+        "version": census["version"],
+        "sha256": digest(census),
+        "sec": census["sec"],
+        "gleif": census["gleif"],
+        "entries": len(census["entries"]),
+    }
