@@ -1,9 +1,12 @@
 """Real PG16: the latest-only Stage, written beside the history (ticket 10).
 
 `mdm_v2.stage_record` keeps one row per source record: the winning reading,
-the snapshot every reading up to it resolves to, and the bronze object it was
-delivered in. Nothing reads it yet, so each test holds it equal to what
-`survivorship.current_claims` reads from the full retained history.
+the snapshot the readings it accepted resolve to, and the bronze object the
+winner was delivered in. Nothing reads it yet. When each record's readings
+arrive in revision order, the tests hold it equal to what
+`survivorship.current_claims` reads from the full retained history. An older
+reading delivered in a later batch keeps the row (the ticket's contract), and
+there the two differ on purpose.
 """
 
 from __future__ import annotations
@@ -121,6 +124,9 @@ def test_a_late_older_delivery_or_a_duplicate_keeps_the_row(database):
     core.apply(database, 3, assertions=[newer])
     after = stage(database)[("fixture.primary", "late")]
     assert after == before
+    # The full history would take `sic` from the late older reading; the
+    # latest-only Stage does not (ticket 10's implementation contract).
+    assert "sic" in history(database)[newer["subject"]]["fields"]
     assert after["snapshot"]["fields"] == {
         "name": {
             "op": "value",
@@ -131,6 +137,70 @@ def test_a_late_older_delivery_or_a_duplicate_keeps_the_row(database):
             "effective_at": newer["effective_at"],
         }
     }
+
+
+def test_two_revisions_in_one_batch_fold_in_revision_order(database):
+    # Whichever id sorts first, the older revision folds first: its `sic`
+    # survives the newer revision that leaves it unknown.
+    for n in range(8):
+        older = reading(f"pair{n}", 1, {"name": "Old", "sic": str(n)})
+        newer = reading(f"pair{n}", 2, {"name": "New"})
+        core.apply(database, n + 1, assertions=[newer, older])
+        row = stage(database)[("fixture.primary", f"pair{n}")]
+        assert (row["revision"], row["snapshot"]["fields"]["sic"]["value"]) == (
+            2,
+            str(n),
+        )
+    assert_parity(database)
+
+
+def call_stage(database, a, occurrence=None):
+    with database.admin.begin() as conn:
+        batch = conn.scalar(text("SELECT batch_id FROM mdm_v2.batch LIMIT 1"))
+        conn.execute(
+            text(
+                "SELECT mdm_v2.record_stage(CAST(:a AS jsonb), :b, CAST(:o AS jsonb))"
+            ),
+            {
+                "a": json.dumps(a),
+                "b": batch,
+                "o": occurrence and json.dumps(occurrence),
+            },
+        )
+
+
+def test_the_sql_refuses_two_readings_at_one_revision(database):
+    first = reading("sql", 1, {"name": "One"})
+    core.apply(database, 1, assertions=[first])
+    clash = {**first, "assertion_id": "b" * 64, "publication_key": "another"}
+    with pytest.raises(DBAPIError, match="contradictory publications"):
+        call_stage(database, clash)
+    call_stage(database, first)  # its own reading again changes nothing
+    assert (
+        stage(database)[("fixture.primary", "sql")]["assertion_id"]
+        == first["assertion_id"]
+    )
+
+
+def test_a_profile_identifying_value_must_be_text(database):
+    a = assertion(
+        source_code="fixture.primary",
+        record_key="nested",
+        publication_key="p",
+        revision=1,
+        effective_at=None,
+        kind="company",
+        fields={"name": "Acme"},
+        profiles=[{"role": {"nested": "value"}, "fields": {}}],
+    )
+    with (
+        database.admin.connect() as conn,
+        pytest.raises(DBAPIError, match="Profile identifying values must be text"),
+    ):
+        conn.scalar(
+            text("SELECT mdm_v2.stage_fold(NULL, CAST(:a AS jsonb))"),
+            {"a": json.dumps(a)},
+        )
 
 
 def test_two_readings_at_one_revision_are_refused(database):
@@ -293,10 +363,13 @@ def test_a_populated_store_backfills_the_stage_in_arrival_order(postgres):
             assertions=[
                 reading("old", 1, {"name": "One", "sic": "1"}),
                 reading("kept", 2, {"name": "Kept"}),
+                # Two revisions in one batch fold in revision order.
+                reading("pair", 2, {"name": "P2"}),
+                reading("pair", 1, {"name": "P1", "sic": "7"}),
             ],
         )
         core.apply(db, 2, assertions=[reading("old", 2, {"name": "Two"})])
-        # Delivered after revision 2: it keeps the row, as the trigger would.
+        # Delivered after revision 2: it keeps the row, as a live batch would.
         core.apply(db, 3, assertions=[reading("kept", 1, {"name": "Late"})])
         with app.connect() as conn:
             assert (
@@ -311,9 +384,17 @@ def test_a_populated_store_backfills_the_stage_in_arrival_order(postgres):
     } == {
         "old": (2, "Two"),
         "kept": (2, "Kept"),
+        "pair": (2, "P2"),
     }
     assert rows[("fixture.primary", "old")]["snapshot"]["fields"]["sic"]["value"] == "1"
+    assert (
+        rows[("fixture.primary", "pair")]["snapshot"]["fields"]["sic"]["value"] == "7"
+    )
+    claims = history(db)
+    for key in ("old", "pair"):
+        row = rows[("fixture.primary", key)]
+        assert row["snapshot"] == claims[row["subject"]]
     assert all(r["bronze"] is None for r in rows.values())
-    # The next live commit uses the installed trigger.
+    # The next live commit keeps the Stage through the evidence wrapper.
     core.apply(db, 4, assertions=[reading("old", 3, {"name": "Three"})])
     assert stage(db)[("fixture.primary", "old")]["revision"] == 3

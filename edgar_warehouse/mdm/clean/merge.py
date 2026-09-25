@@ -7,6 +7,7 @@ Identifier-only automatic binding runs through the same assessment (ticket
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from uuid import UUID
 
@@ -739,8 +740,7 @@ def _occurrences(occurrences: list[dict], assertions: list[dict]) -> list[dict]:
             or o["assertion_id"] in seen
             or not all(isinstance(o[k], str) and o[k] for k in ("object", "locator"))
             or not isinstance(o["sha256"], str)
-            or len(o["sha256"]) != 64
-            or o["sha256"].strip("0123456789abcdef")
+            or not re.fullmatch("[0-9a-f]{64}", o["sha256"])
         ):
             raise Conflict("Invalid bronze occurrence")
         seen.add(o["assertion_id"])

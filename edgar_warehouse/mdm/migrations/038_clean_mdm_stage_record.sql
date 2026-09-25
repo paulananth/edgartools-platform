@@ -2,20 +2,25 @@
 -- mastering ticket 10, slice 1).
 --
 -- One row per source record, keyed by the source and the source's own record
--- number. It holds the winning reading, the snapshot every reading up to it
--- resolves to, and the bronze object that reading was delivered in. Nothing
--- reads it yet and nothing stops being written: mdm_v2.assertion stays
--- append-only until the readers move (slices 2-4).
+-- number. It holds the winning reading, the snapshot the readings it has
+-- accepted resolve to, and the bronze object the winner was delivered in.
+-- Nothing reads it yet and nothing stops being written: mdm_v2.assertion
+-- stays append-only until the readers move (slices 2-4).
 --
 -- A reading wins when its (revision, mapping version) is higher than the
--- row's. A duplicate or a late older delivery keeps the row. Two different
--- readings at one (revision, mapping version) are a source defect, refused as
--- survivorship.current_claims refuses them.
+-- row's, and folds over the row's snapshot: an unknown field keeps its value,
+-- a retract removes it, so a sparse patch erases nothing it does not name.
+-- A duplicate, or an older reading delivered in a later batch, keeps the row
+-- (the ticket's contract). Within one batch the readings are taken in
+-- (revision, mapping version) order, never the batch's hash order. So when
+-- each record's readings arrive in revision order, the snapshot equals what
+-- survivorship.current_claims reads from the full history, in its shape; a
+-- PostgreSQL 16 test holds the two equal.
 --
--- The snapshot has exactly the shape current_claims returns for the record,
--- so a PostgreSQL 16 test holds the two equal. A patch folds over the previous
--- snapshot: an unknown field keeps its value, a retract removes it, so a
--- sparse patch erases nothing it does not name.
+-- Two different readings at one (revision, mapping version) are a source
+-- defect, refused as current_claims refuses them. Only the row's own winner
+-- can be compared: a clash with an older reading it replaced goes unseen,
+-- which is what keeping only the latest row means.
 CREATE TABLE mdm_v2.stage_record (
     source_code text NOT NULL REFERENCES mdm_v2.dataset(source_code),
     record_key text NOT NULL,
@@ -51,15 +56,21 @@ $$;
 
 -- survivorship.profile_key: sha256 of the canonical JSON array of a profile's
 -- five identifying values. Canonical means no spaces, which jsonb's own text
--- form does not give, so the array is written element by element.
+-- form does not give, so the array is written element by element. A string
+-- prints as Python prints it; anything but a string or null is refused
+-- rather than hashed differently.
 CREATE FUNCTION mdm_v2.stage_profile_key(profile jsonb) RETURNS text
-LANGUAGE sql IMMUTABLE SET search_path=pg_catalog,mdm_v2 AS $$
-    SELECT encode(sha256(convert_to('[' || string_agg(
-        CASE WHEN profile->part IS NULL OR jsonb_typeof(profile->part) = 'null'
-             THEN 'null' ELSE (profile->part)::text END, ',' ORDER BY n) || ']',
-        'UTF8')), 'hex')
-    FROM unnest(ARRAY['role','authority','registration','jurisdiction','valid_from'])
-        WITH ORDINALITY AS parts(part, n)
+LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog,mdm_v2 AS $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM unnest(ARRAY['role','authority','registration','jurisdiction','valid_from']) part
+               WHERE coalesce(jsonb_typeof(profile->part), 'null') NOT IN ('string', 'null')) THEN
+        RAISE EXCEPTION 'Profile identifying values must be text';
+    END IF;
+    RETURN (SELECT encode(sha256(convert_to('[' || string_agg(
+        coalesce((profile->part)::text, 'null'), ',' ORDER BY n) || ']', 'UTF8')), 'hex')
+        FROM unnest(ARRAY['role','authority','registration','jurisdiction','valid_from'])
+            WITH ORDINALITY AS parts(part, n));
+END;
 $$;
 
 -- One reading folded over the record's previous snapshot, as current_claims
@@ -124,13 +135,17 @@ BEGIN
 END;
 $$;
 
--- Keep the Stage row for one newly stored reading.
-CREATE FUNCTION mdm_v2.record_stage(a jsonb, source_batch text) RETURNS void
-LANGUAGE plpgsql SET search_path=pg_catalog,mdm_v2 AS $$
+-- Keep the Stage row for one newly stored reading. `occurrence` is the bronze
+-- object the batch names for it, or null.
+CREATE FUNCTION mdm_v2.record_stage(a jsonb, source_batch text, occurrence jsonb)
+RETURNS void LANGUAGE plpgsql SET search_path=pg_catalog,mdm_v2 AS $$
 DECLARE
     current_row mdm_v2.stage_record%ROWTYPE;
     reading bigint[] := ARRAY[(a->>'revision')::bigint,
                               coalesce((a->>'mapping_version')::bigint, 1)];
+    bronze_of jsonb := CASE WHEN occurrence IS NULL THEN NULL ELSE jsonb_build_object(
+        'object', occurrence->>'object', 'sha256', occurrence->>'sha256',
+        'locator', occurrence->>'locator') END;
 BEGIN
     SELECT * INTO current_row FROM mdm_v2.stage_record
       WHERE source_code = a->>'source_code' AND record_key = a->>'record_key'
@@ -139,7 +154,7 @@ BEGIN
         INSERT INTO mdm_v2.stage_record VALUES (
             a->>'source_code', a->>'record_key', a->>'subject', a->>'kind',
             reading[1], reading[2], a->>'publication_key', a->>'assertion_id',
-            (a->>'effective_at')::timestamptz, mdm_v2.stage_fold(NULL, a), NULL,
+            (a->>'effective_at')::timestamptz, mdm_v2.stage_fold(NULL, a), bronze_of,
             source_batch);
         RETURN;
     END IF;
@@ -150,7 +165,7 @@ BEGIN
         RETURN;
     END IF;
     IF reading < ARRAY[current_row.revision, current_row.mapping_version] THEN
-        RETURN;  -- a late older delivery keeps the current row
+        RETURN;  -- an older reading delivered later keeps the current row
     END IF;
     UPDATE mdm_v2.stage_record SET
         subject = a->>'subject', kind = a->>'kind',
@@ -158,34 +173,23 @@ BEGIN
         publication_key = a->>'publication_key', assertion_id = a->>'assertion_id',
         effective_at = (a->>'effective_at')::timestamptz,
         snapshot = mdm_v2.stage_fold(current_row.snapshot, a),
-        bronze = NULL, batch_id = source_batch
+        bronze = bronze_of, batch_id = source_batch
       WHERE source_code = current_row.source_code AND record_key = current_row.record_key;
 END;
 $$;
 
-CREATE FUNCTION mdm_v2.stage_assertion() RETURNS trigger
-LANGUAGE plpgsql SET search_path=pg_catalog,mdm_v2 AS $$
-BEGIN
-    PERFORM mdm_v2.record_stage(NEW.body, NEW.batch_id);
-    RETURN NEW;
-END;
-$$;
-
--- Backfill in arrival order: each batch by generation, each reading in the
--- order its batch carried it, exactly as the trigger below would have kept it.
+-- Backfill: each batch by generation, and within it in (revision, mapping
+-- version) order, exactly as the evidence wrapper below keeps a live batch.
 DO $$
 DECLARE a record;
 BEGIN
     FOR a IN
         SELECT s.body, s.batch_id
-        FROM mdm_v2.batch b
-        CROSS JOIN LATERAL jsonb_array_elements(coalesce(b.effects->'assertions', '[]'::jsonb))
-            WITH ORDINALITY AS item(value, n)
-        JOIN mdm_v2.assertion s
-          ON s.assertion_id = item.value->>'assertion_id' AND s.batch_id = b.batch_id
-        ORDER BY b.generation, item.n
+        FROM mdm_v2.assertion s JOIN mdm_v2.batch b USING (batch_id)
+        ORDER BY b.generation, s.source_code, s.record_key, s.revision,
+                 s.mapping_version, s.publication_key, s.assertion_id
     LOOP
-        PERFORM mdm_v2.record_stage(a.body, a.batch_id);
+        PERFORM mdm_v2.record_stage(a.body, a.batch_id, NULL);
     END LOOP;
     IF (SELECT count(*) FROM mdm_v2.stage_record)
        IS DISTINCT FROM (SELECT count(DISTINCT (source_code, record_key)) FROM mdm_v2.assertion) THEN
@@ -194,12 +198,11 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER stage_assertion AFTER INSERT ON mdm_v2.assertion
-    FOR EACH ROW EXECUTE FUNCTION mdm_v2.stage_assertion();
-
--- The batch names each reading's bronze object beside it. Set it on the
--- Stage row only while that reading is the row's winner, after the core has
--- stored the batch's readings. Exact-fragment guard, as 029 and 031 use.
+-- The evidence wrapper keeps the Stage once the core has stored the batch:
+-- the readings this batch newly stored, in (revision, mapping version) order,
+-- each with the bronze object the batch names for it. A redelivered batch
+-- stores nothing and changes nothing. Exact-fragment guard, as 029, 031 and
+-- 032 use; the next edit at this point must match this longer text.
 DO $$
 DECLARE definition text; old_fragment text; new_fragment text;
 BEGIN
@@ -210,18 +213,38 @@ BEGIN
     new_fragment := $new$        RAISE EXCEPTION 'Deferred evidence requires its registered open review disposition';
     END IF;
     IF coalesce((result->>'duplicate')::boolean, false) IS FALSE THEN
-        FOR item IN SELECT value FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) LOOP
-            IF jsonb_typeof(item) IS DISTINCT FROM 'object'
-               OR NOT (item ?& ARRAY['assertion_id','object','sha256','locator'])
-               OR nullif(item->>'object','') IS NULL OR nullif(item->>'locator','') IS NULL
-               OR coalesce(item->>'sha256','') !~ '^[0-9a-f]{64}$'
-               OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(r->'assertions','[]')) x
-                              WHERE x->>'assertion_id' = item->>'assertion_id') THEN
-                RAISE EXCEPTION 'Invalid bronze occurrence';
-            END IF;
-            UPDATE mdm_v2.stage_record SET bronze = jsonb_build_object(
-                    'object', item->>'object', 'sha256', item->>'sha256', 'locator', item->>'locator')
-              WHERE assertion_id = item->>'assertion_id' AND bronze IS NULL;
+        IF EXISTS (
+            SELECT 1 FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o
+            WHERE jsonb_typeof(o) IS DISTINCT FROM 'object'
+               OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(o) k)
+                  IS DISTINCT FROM ARRAY['assertion_id','locator','object','sha256']
+               OR nullif(o->>'object','') IS NULL OR nullif(o->>'locator','') IS NULL
+               OR coalesce(o->>'sha256','') !~ '^[0-9a-f]{64}$')
+           OR EXISTS (
+            SELECT o->>'assertion_id' FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o
+            EXCEPT
+            SELECT x->>'assertion_id' FROM jsonb_array_elements(coalesce(r->'assertions','[]')) x)
+           OR (SELECT count(*) FROM jsonb_array_elements(coalesce(r->'occurrences','[]')))
+              IS DISTINCT FROM (SELECT count(DISTINCT o->>'assertion_id')
+                                FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o) THEN
+            RAISE EXCEPTION 'Invalid bronze occurrence';
+        END IF;
+        -- item is [the stored reading, its occurrence or null]. Readings are
+        -- found by id from the batch, never by scanning the assertion table.
+        FOR item IN
+            WITH named AS (
+                SELECT coalesce(jsonb_object_agg(o->>'assertion_id', o), '{}'::jsonb) AS by_id
+                FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o)
+            SELECT jsonb_build_array(s.body, named.by_id->s.assertion_id)
+            FROM jsonb_array_elements(coalesce(r->'assertions','[]')) x
+            JOIN mdm_v2.assertion s
+              ON s.assertion_id = x->>'assertion_id' AND s.batch_id = r->>'batch_id'
+            CROSS JOIN named
+            ORDER BY s.source_code, s.record_key, s.revision, s.mapping_version,
+                     s.publication_key, s.assertion_id
+        LOOP
+            PERFORM mdm_v2.record_stage(item->0, r->>'batch_id',
+                CASE WHEN jsonb_typeof(item->1) = 'object' THEN item->1 END);
         END LOOP;
     END IF;
     RETURN result;$new$;

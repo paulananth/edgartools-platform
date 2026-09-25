@@ -113,15 +113,20 @@ Found while planning (facts, not rulings):
 
 1. [ ] **The latest-only Stage, written beside the history.** Migration 038:
    `mdm_v2.stage_record`, key `(source_code, record_key)`, the winning
-   reading, the resolved snapshot and its bronze reference; kept by a trigger
-   on the assertion write in the same transaction (037's pattern) and
-   backfilled in arrival order on a populated store. A reading wins on a
-   higher (revision, mapping version); a duplicate or a late older delivery
-   keeps the row; two readings at one (revision, mapping version) are
-   refused. Each winner folds over the previous snapshot, so a sparse patch
-   erases nothing it does not name. A batch may name each reading's bronze
-   object (`occurrences`). PG16: every Stage row equals what
-   `current_claims` reads from the full history (12 tests).
+   reading, the resolved snapshot and its bronze reference. The evidence
+   wrapper keeps it once the core has stored the batch, in the same
+   transaction: the readings the batch newly stored, taken in (revision,
+   mapping version) order, never the batch's hash order. A reading wins on a
+   higher (revision, mapping version) and folds over the snapshot, so a
+   sparse patch erases nothing it does not name; a duplicate, or an older
+   reading delivered in a later batch, keeps the row; two readings at one
+   (revision, mapping version) are refused. A batch may name each reading's
+   bronze object (`occurrences`), set in the same step. Backfilled the same
+   way on a populated store. PG16: when readings arrive in revision order,
+   every Stage row equals what `current_claims` reads from the full history;
+   where an older reading arrives later the two differ on purpose (15 tests).
+   Limits recorded: a clash with an older reading the row already replaced
+   goes unseen; a profile's identifying values must be text.
 1b. [ ] **The sources name their bronze objects.** The SEC bundle pins
    `sec_raw_object` and names each CIK's submissions object and hash; the
    GLEIF bundle names the Golden Copy archive and the record's ordinal; the
