@@ -48,12 +48,7 @@ socket.socket = _no_network  # type: ignore[assignment,misc]
 # .5 held back exchange-traded trusts; 20260924.5 -> .6 held back an `other`
 # name with a person's suffix, found by the adversarial arm, not the sample),
 # so none of them may measure it.
-SEED = "20260924.6"
-# Individuals SEC gave an industry code whose name carries a legal-form word
-# the draft's own pattern would take for an entity: read by hand.
-HAND_PEOPLE = {"0001065416"}  # HOLDING FRANK B JR: surname Holding
-# ...and the reverse: an entity the draft's pattern misses (a spaced "L P").
-HAND_ENTITIES = {"0000779335"}  # GOULD INVESTORS L P: a limited partnership
+SEED = "20260924.7"
 SAMPLE_SIZE = 300
 CONFIDENCE = 0.95
 ADVERSARIAL_PER_ARM = 100
@@ -162,6 +157,13 @@ LEGAL_FORM = re.compile(
     r"TECHNOLOGIES|PHARMACEUTICALS|THERAPEUTICS|ENERGY|RESOURCES|MINING)\b",
     re.IGNORECASE,
 )
+NONCOMPANY_NAME = re.compile(
+    r"\b(FUND|FUNDS|TRUST|TRUSTEE|PARTNERSHIP|PENSION|PLAN|FOUNDATION|"
+    r"UNIVERSITY|CHURCH|SCHOOL|GOVERNMENT|MUNICIPAL|COUNTY|CITY|STATE|"
+    r"IRA|ESTATE|ETF|ETFS|REPUBLIC|COOPERATIVE|ASSOCIATION|ENDOWMENT|"
+    r"AUTHORITY|DISTRICT|COLLEGE|HOSPITAL|CHARITY|FUTURES|POOL)\b",
+    re.IGNORECASE,
+)
 
 
 def row(record: dict) -> dict:
@@ -225,14 +227,18 @@ def sample(summary: Path, out: Path) -> None:
     candidate, block = rule()
     everyone = population(summary)
     verdicts = Counter()
-    fired_company = []
+    fired_company: dict[str, list[dict]] = {}
     for r in everyone:
         verdict, step = fired(candidate, row(r), block)
         verdicts[(verdict, step)] += 1
         if verdict == "company":
-            fired_company.append({**r, "step": step})
-    fired_company.sort(key=lambda r: r["cik"])
-    drawn = random.Random(SEED).sample(fired_company, SAMPLE_SIZE)
+            fired_company.setdefault(step, []).append({**r, "step": step})
+    drawn = []
+    for step in ("2", "4"):
+        population_for_step = sorted(fired_company[step], key=lambda r: r["cik"])
+        drawn += random.Random(SEED + "-step-" + step).sample(
+            population_for_step, SAMPLE_SIZE
+        )
     out.mkdir(parents=True, exist_ok=True)
     with (out / "12-sample.jsonl").open("w") as f:
         for r in sorted(drawn, key=lambda r: r["cik"]):
@@ -243,50 +249,59 @@ def sample(summary: Path, out: Path) -> None:
                         "cik": r["cik"],
                         "name": r["name"],
                         "step": r["step"],
-                        "forms": sorted(r["forms"])[:12],
+                        "forms": sorted(r["forms"]),
                         "tickers": r.get("tickers"),
                         "category": r.get("category"),
                         "draft": label,
                         "draft_reason": reason,
-                        "final": label if label == "company" else None,
+                        "final": None,
                         "note": None,
                     },
                     sort_keys=True,
                 )
                 + "\n"
             )
-    # Adversarial fixture: records the rule must never call a Company.
-    # Individuals (ownership forms only, no legal-form word) and funds
-    # (SEC `investment`), drawn by the same seed.
+    # Candidate adversarial arms are selected from forms and type, not the
+    # rule's company-word test. Each record receives a separate true label;
+    # a legal entity in an ownership-only arm is not counted as a violation.
     individuals = sorted(
-        (r for r in everyone if draft_label(r)[0] == "individual" and not r.get("sic")),
+        (r for r in everyone if not r.get("sic") and r.get("forms")
+         and set(r["forms"]) <= OWNERSHIP_FORMS and r.get("entityType") == "other"),
         key=lambda r: r["cik"],
     )
     funds = sorted(
         (r for r in everyone if r.get("entityType") == "investment"),
         key=lambda r: r["cik"],
     )
-    # The hard arm, in full: individuals SEC gave an industry code, which step
-    # 1's lookup and a bare "has a SIC" test both take for companies.
-    coded_people = [
+    # The hard arm in full: all ownership-only `other` filers with a code,
+    # including legal entities such as GOULD INVESTORS L P and a voting trust.
+    ownership_only = [
         r
         for r in everyone
         if r.get("entityType") == "other"
         and r.get("sic")
         and set(r.get("forms") or {})
         and set(r["forms"]) <= OWNERSHIP_FORMS
-        and (not LEGAL_FORM.search(r.get("name") or "") or r["cik"] in HAND_PEOPLE)
-        and r["cik"] not in HAND_ENTITIES
+    ]
+    noncompany_names = [
+        r for r in everyone
+        if r.get("entityType") == "other" and r.get("sic")
+        and NONCOMPANY_NAME.search(r.get("name") or "")
     ]
     rng = random.Random(SEED + "-adversarial")
-    adversarial = (
-        rng.sample(individuals, ADVERSARIAL_PER_ARM)
-        + rng.sample(funds, ADVERSARIAL_PER_ARM)
-        + coded_people
-    )
-    arms = {r["cik"]: "individual with industry code" for r in coded_people}
+    arms = {}
+    for arm, records in (
+        ("ownership only with industry code", ownership_only),
+        ("non-company kind in name", noncompany_names),
+        ("ownership only without industry code", rng.sample(individuals, ADVERSARIAL_PER_ARM)),
+        ("investment fund", rng.sample(funds, ADVERSARIAL_PER_ARM)),
+    ):
+        for r in records:
+            arms.setdefault(r["cik"], set()).add(arm)
+    by_cik = {r["cik"]: r for r in everyone if r["cik"] in arms}
     with (out / "12-adversarial.jsonl").open("w") as f:
-        for r in sorted(adversarial, key=lambda r: r["cik"]):
+        for r in sorted(by_cik.values(), key=lambda r: r["cik"]):
+            label, reason = draft_label(r)
             f.write(
                 json.dumps(
                     {
@@ -294,12 +309,14 @@ def sample(summary: Path, out: Path) -> None:
                         "name": r["name"],
                         "entity_type": r.get("entityType"),
                         "sic": r.get("sic") or None,
-                        "arm": arms.get(
-                            r["cik"],
-                            "fund"
-                            if r.get("entityType") == "investment"
-                            else "individual",
-                        ),
+                        "arms": sorted(arms[r["cik"]]),
+                        "forms": sorted(r.get("forms") or {}),
+                        "tickers": r.get("tickers"),
+                        "category": r.get("category"),
+                        "draft": label,
+                        "draft_reason": reason,
+                        "final": None,
+                        "note": None,
                     },
                     sort_keys=True,
                 )
@@ -311,9 +328,12 @@ def sample(summary: Path, out: Path) -> None:
                 "summary_sha256": sha256(summary),
                 "records": len(everyone),
                 "verdicts": {f"{v}/{s}": n for (v, s), n in sorted(verdicts.items())},
-                "company_verdicts": len(fired_company),
+                "company_verdicts": sum(map(len, fired_company.values())),
                 "seed": SEED,
-                "sample_size": SAMPLE_SIZE,
+                "sample_size_per_step": SAMPLE_SIZE,
+                "adversarial_arms": {arm: sum(arm in a for a in arms.values()) for arm in (
+                    "ownership only with industry code", "non-company kind in name",
+                    "ownership only without industry code", "investment fund")},
                 "rule": {
                     "rule_id": candidate["rule_id"],
                     "version": candidate["version"],
@@ -332,14 +352,21 @@ def score(out: Path) -> None:
     open_labels = [r["cik"] for r in lines if r["final"] is None]
     if open_labels:
         raise SystemExit(f"{len(open_labels)} sample lines have no final label")
+    unreviewed = [r["cik"] for r in lines if re.search(r"\b(FUNDS?|TRUST|PARTNERSHIP|PARTNERS|L\.?P\.?)\b", r["name"], re.I) and not r["note"]]
+    if unreviewed:
+        raise SystemExit(f"{len(unreviewed)} fund/trust/partnership sample lines have no hand-read note")
     by_step: dict[str, Counter] = {}
     for r in lines:
         by_step.setdefault(r["step"], Counter())[r["final"] == "company"] += 1
     n = len(lines)
     correct = sum(r["final"] == "company" for r in lines)
     violations = []
+    adversarial_rows = []
     for line in (out / "12-adversarial.jsonl").open():
         a = json.loads(line)
+        adversarial_rows.append(a)
+        if not a.get("final") or not a.get("note"):
+            raise SystemExit(f"adversarial {a['cik']} lacks a hand-read final label and note")
         verdict, _ = fired(
             candidate,
             {
@@ -349,13 +376,14 @@ def score(out: Path) -> None:
             },
             block,
         )
-        if verdict == "company":
+        if verdict == "company" and a["final"] != "company":
             violations.append(a["cik"])
     files = {
         name: sha256(out / name)
         for name in ("12-sample.jsonl", "12-adversarial.jsonl", "12-population.json")
     }
     files["12-classify.py"] = sha256(Path(__file__))
+    files["12-label-reviewed.py"] = sha256(out / "12-label-reviewed.py")
     summary = {
         "rule": {"rule_id": candidate["rule_id"], "version": candidate["version"]},
         "n": n,
@@ -376,7 +404,7 @@ def score(out: Path) -> None:
             if r["final"] != "company"
         ],
         "adversarial": {
-            "n": sum(1 for _ in (out / "12-adversarial.jsonl").open()),
+            "n": len(adversarial_rows),
             "violations": len(violations),
             "violating_ciks": violations,
         },

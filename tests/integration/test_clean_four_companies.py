@@ -147,24 +147,21 @@ def stage_and_master(database):
     return sorted(stage), masters
 
 
-# The policy digest the operator approved (ticket 12, 2026-09-24 21:05 ET).
-# If this moves, the standard policy is no longer the approved one.
-APPROVED_POLICY = "b26ab87c208e1efc5507c583e426c28472c7d07bef0871c093e13985cc6112d1"
+# Pending standard policy, measured below the ticket 12 step-4 bar.
+PENDING_POLICY = "5f3a5f571f73612e789f6f4d5a1e32eae7d29486a113cc51c106101fa044fdcf"
 
 
-def test_the_approved_rule_makes_all_four_companies(database, tmp_path):
-    """The standard SEC setup, as approved: Shell and ASML are Companies now.
-
-    SEC types them `other`, as it does Tim Cook and Satya Nadella; the
-    measured rule tells them apart, and acts on its own.
-    """
+def test_the_standard_policy_keeps_all_four_company_candidates_waiting(database, tmp_path):
+    """The measured rule is declared, but no verdict acts before approval."""
     policy = register(database, {**CONTRACT, "family": "fixture"}, POLICY)
-    assert policy == APPROVED_POLICY
+    assert policy == PENDING_POLICY
     evidence, deferred = batch_evidence(
         sec_batch(tmp_path), tmp_path, Store(database.application), policy_digest=policy
     )
     records = by_record(evidence, deferred)
-    assert {k for k, r in records.items() if r.get("kind") == "company"} == COMPANIES
+    assert evidence == []
+    for cik in COMPANIES:
+        assert records[cik]["reason"] == "classification_not_activated"
     for cik in (COOK, NADELLA):
         assert records[cik]["reason"] == "classification_deferred"
 

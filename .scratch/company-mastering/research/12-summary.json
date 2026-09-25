@@ -1,53 +1,340 @@
 {
   "rule": {
     "rule_id": "sec-company-candidate",
-    "version": "2026-09-24.6"
+    "version": "2026-09-24.7"
   },
-  "n": 300,
-  "correct": 297,
-  "lower_bound": 0.9752442459680568,
+  "n": 600,
+  "correct": 555,
+  "lower_bound": 0.9053421348854453,
   "one_sided_confidence": 0.95,
   "by_step": {
     "2": {
-      "n": 229,
-      "correct": 227,
-      "lower_bound": 0.9739544364782592
+      "n": 300,
+      "correct": 297,
+      "lower_bound": 0.9752442459680568
     },
     "4": {
-      "n": 71,
-      "correct": 70,
-      "lower_bound": 0.9393059778320143
+      "n": 300,
+      "correct": 258,
+      "lower_bound": 0.8238206764617402
     }
   },
   "errors": [
     {
-      "cik": "0001886822",
-      "name": "VELOCE CAP FUND 1 LP",
+      "cik": "0000804123",
+      "name": "TAIWAN FUND INC",
       "final": "fund",
-      "note": "lending fund raised under Reg A; a Fund"
+      "note": "N-2, N-CEN and N-CSR identify a registered investment fund."
     },
     {
-      "cik": "0001930054",
-      "name": "Blackstone Private Equity Strategies Fund L.P.",
+      "cik": "0000858706",
+      "name": "NEW GERMANY FUND INC",
       "final": "fund",
-      "note": "private equity fund registered under 10-12G, no BDC election; a Fund"
+      "note": "N-2, N-CEN and N-CSR identify a registered investment fund."
     },
     {
-      "cik": "0001957845",
-      "name": "KKR Private Equity Conglomerate LLC",
+      "cik": "0000882300",
+      "name": "WESTERN ASSET INTERMEDIATE MUNI FUND INC.",
       "final": "fund",
-      "note": "uncertain: holds operating businesses but is a private equity vehicle; counted as an error to be conservative"
+      "note": "N-2, N-CEN and N-CSR identify a registered investment fund."
+    },
+    {
+      "cik": "0001185198",
+      "name": "AEI INCOME & GROWTH FUND 25 LLC",
+      "final": "fund",
+      "note": "Income and Growth Fund 25 LLC files 10-K/10-Q as a pooled investment issuer; no operating business is shown."
+    },
+    {
+      "cik": "0001462371",
+      "name": "Iron Bridge Mortgage Fund, LLC",
+      "final": "fund",
+      "note": "Mortgage Fund LLC files 1-A and 1-K as an investment issuer."
+    },
+    {
+      "cik": "0001785494",
+      "name": "Woodbridge Liquidation Trust",
+      "final": "trust",
+      "note": "A liquidation trust, despite its 10-K and 10-Q; no ongoing Company business is shown."
+    },
+    {
+      "cik": "0001819377",
+      "name": "Masterworks 023, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001829030",
+      "name": "Masterworks 036, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001842552",
+      "name": "Masterworks 045, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001845484",
+      "name": "Masterworks 049, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001860455",
+      "name": "Masterworks 059, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001867706",
+      "name": "Gratus Capital Properties Fund III LLC",
+      "final": "fund",
+      "note": "Properties Fund III LLC files 1-A and 1-K as an investment issuer."
+    },
+    {
+      "cik": "0001876367",
+      "name": "Masterworks 075, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001882371",
+      "name": "Masterworks 079, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001887471",
+      "name": "Masterworks 067,LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001916043",
+      "name": "Masterworks 122, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001917638",
+      "name": "Masterworks 128, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001917639",
+      "name": "Masterworks 127, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001919129",
+      "name": "Masterworks 135, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001921139",
+      "name": "Masterworks 138, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001922411",
+      "name": "Masterworks 142, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001939028",
+      "name": "Masterworks 157, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001942203",
+      "name": "Masterworks 165, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001942204",
+      "name": "Masterworks 159, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001942222",
+      "name": "Masterworks 164, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001944113",
+      "name": "Masterworks 171, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001944218",
+      "name": "Masterworks 178, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001944248",
+      "name": "Masterworks 175, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001952368",
+      "name": "Masterworks 189, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001953828",
+      "name": "Masterworks 198, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001953836",
+      "name": "Masterworks 196, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001953963",
+      "name": "Masterworks 195, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001958306",
+      "name": "Masterworks 218, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001964212",
+      "name": "Masterworks 234, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001966624",
+      "name": "Masterworks 237, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001967903",
+      "name": "Masterworks 242, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001968439",
+      "name": "Masterworks 246, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001969295",
+      "name": "Masterworks 255, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001974393",
+      "name": "Masterworks 270, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001976512",
+      "name": "Masterworks 284, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001976544",
+      "name": "Masterworks 283, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0001977673",
+      "name": "Masterworks 288, LLC",
+      "final": "unsure",
+      "note": "Serial Masterworks LLC with 1-A/1-K investment offering filings; summary alone does not establish Company rather than Fund. Counted against proof."
+    },
+    {
+      "cik": "0002039458",
+      "name": "Canary HBAR ETF",
+      "final": "fund",
+      "note": "HBAR ETF is an exchange-traded fund even though SEC types it operating."
+    },
+    {
+      "cik": "0002065598",
+      "name": "Arrived Seattle Fund, LLC",
+      "final": "fund",
+      "note": "Seattle Fund LLC files 1-A and 1-K as an investment issuer."
+    },
+    {
+      "cik": "0002069560",
+      "name": "PIC Diversification Fund, LLC",
+      "final": "fund",
+      "note": "Diversification Fund LLC files 1-A and 1-K as an investment issuer."
     }
   ],
   "adversarial": {
-    "n": 294,
-    "violations": 0,
-    "violating_ciks": []
+    "n": 483,
+    "violations": 33,
+    "violating_ciks": [
+      "0000825202",
+      "0000918923",
+      "0001059213",
+      "0001074922",
+      "0001462371",
+      "0001781324",
+      "0001817069",
+      "0001817413",
+      "0001867706",
+      "0001886822",
+      "0001915521",
+      "0001915673",
+      "0001953520",
+      "0001954416",
+      "0001957571",
+      "0001982615",
+      "0002000719",
+      "0002007995",
+      "0002023066",
+      "0002046788",
+      "0002056463",
+      "0002060312",
+      "0002062936",
+      "0002065598",
+      "0002069560",
+      "0002071540",
+      "0002092195",
+      "0002094263",
+      "0002096363",
+      "0002097887",
+      "0002102705",
+      "0002117580",
+      "0002119505"
+    ]
   },
   "files": {
-    "12-sample.jsonl": "1ac01d67931c2a9c81f1be77130794b8ced127830adcdea653e36014c8b5c03d",
-    "12-adversarial.jsonl": "b6ab71a23a776e03e319339a1a0dd85e09a767c8977f40387f2dd1f7aacf406f",
-    "12-population.json": "8e29f98a9706855f75deb50f16ca0d7f7e4ea5c026a551a45d35d92fba101cc2",
-    "12-classify.py": "514d3c4fc100f28fce4072aa24752b7a95ca8153d06295545cc74037380ee50a"
+    "12-sample.jsonl": "d71095104dae0922eb07f97a816e1377f83045e25edffbfec7e41a4dee019d74",
+    "12-adversarial.jsonl": "730d36347cc6cea6b3fc7a0fcdbb290a17739dcab9c44b91196b1f73d7932a75",
+    "12-population.json": "6997692dec424397ae0eb0b94aff4e58476c82298d799563fd175bd6ab443e0f",
+    "12-classify.py": "183891370bdfe4fe04d74b05e4a599acd473a5b3e2354eb1ef55b99cd07b18fd",
+    "12-label-reviewed.py": "fb3bdfdbde4eb7dd2ea99916e9b94eaed1acde6c704504188089228bf08921e1"
   }
 }

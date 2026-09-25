@@ -2,19 +2,36 @@
 
 import hashlib
 import json
+import copy
 from datetime import UTC, datetime
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
+from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize as _normalize
 from edgar_warehouse.mdm.clean.company_source import (
     CONTRACT,
+    POLICY,
     SOURCE_CODE,
     prepare_company_bundle,
 )
 from edgar_warehouse.mdm.clean.store import Conflict
+from tests.mdm.test_clean_activation import proof
+
+
+# Field and identity tests need an active rule; this synthetic proof belongs
+# only to the fixture. The standard POLICY deliberately stays inactive.
+TEST_POLICY = copy.deepcopy(POLICY)
+TEST_POLICY["automatic_rules"] = [{
+    "kind": "company", "family": "classification",
+    "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.7",
+    "verdict": "company", "activation": "measured", "proof": proof(),
+}]
+
+
+def normalize(row, **kwargs):
+    return _normalize(row, policy=TEST_POLICY, **kwargs)
 
 
 def source_row(cik, **changes):
@@ -85,7 +102,7 @@ def test_native_company_kind_identifiers_and_unknown_effective_time():
     assert a["effective_at"] is None
     assert a["profiles"] == []
     assert a["provenance"]["source"]["observed_at"] == row["last_synced_at"]
-    with pytest.raises(UnsupportedRecord, match="unsupported_identity_kind"):
+    with pytest.raises(UnsupportedRecord, match="classification_deferred"):
         normalize(
             {**row, "entity_type": "other"},
             source_code=SOURCE_CODE,

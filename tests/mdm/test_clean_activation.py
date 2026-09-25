@@ -13,7 +13,10 @@ What it verifies is arithmetic, not truth: a fabricated `n: 1000, correct:
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import math
+from pathlib import Path
 
 import pytest
 
@@ -23,7 +26,7 @@ from edgar_warehouse.mdm.clean.activation import (
     rule_version_conflicts,
     wilson_lower_bound,
 )
-from edgar_warehouse.mdm.clean.company_source import POLICY
+from edgar_warehouse.mdm.clean.company_source import POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.clean.store import Conflict, digest
 
@@ -477,21 +480,31 @@ class TestAnIdentifierRule:
 
 
 class TestTheCompanyPolicy:
-    """Ticket 12: the measured rule acts, on the proof the operator approved."""
+    """Ticket 12: failed step-4 proof leaves the standard rule inactive."""
 
-    def test_the_rule_is_active_on_its_proof(self):
+    def test_the_rule_remains_inactive_on_the_failed_proof(self):
         check_policy(POLICY)
         (rule,) = [
             r
             for r in POLICY["kinds"]["company"]["rules"]
             if r["rule_id"] == "sec-company-candidate"
         ]
-        assert activated(POLICY, "company", rule, "company")
+        assert not activated(POLICY, "company", rule, "company")
         assert not activated(POLICY, "company", rule, "deferred")
+        assert PROOF["cohort"]["by_step"]["4"]["lower_bound"] < 0.95
+        assert PROOF["adversarial"]["violations"] > 0
+        assert "approved_at" not in PROOF
 
-    def test_the_policy_is_the_approved_digest(self):
-        # Operator approval, ticket 12 (2026-09-24 21:05 ET). A change to the
-        # policy needs a new approval, not an edit to this line.
+    def test_the_policy_is_the_pending_digest(self):
         assert digest(POLICY) == (
-            "b26ab87c208e1efc5507c583e426c28472c7d07bef0871c093e13985cc6112d1"
+            "5f3a5f571f73612e789f6f4d5a1e32eae7d29486a113cc51c106101fa044fdcf"
         )
+
+    def test_the_proof_files_match_the_pinned_hashes(self):
+        root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
+        for name, expected in PROOF["cohort"]["files"].items():
+            assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
+        summary = json.loads((root / "12-summary.json").read_text())
+        assert summary["files"] == PROOF["cohort"]["files"]
+        assert summary["by_step"] == PROOF["cohort"]["by_step"]
+        assert summary["adversarial"]["violations"] == PROOF["adversarial"]["violations"]

@@ -1613,10 +1613,22 @@ def test_version_two_api_auth_history_pagination_and_profile_provenance(
 def test_native_company_batch_retains_unsupported_records_atomically(
     database, command_databases, tmp_path
 ):
+    import copy
+
     from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
     from edgar_warehouse.mdm.clean.cli import batch_evidence, execute_manifest
     from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
     from edgar_warehouse.mdm.clean.evidence import deferred_record
+    from tests.mdm.test_clean_activation import proof
+
+    # Synthetic activation is local to this atomic-accounting fixture. The
+    # standard policy stays inactive after ticket 12's failed proof.
+    fixture_policy = copy.deepcopy(POLICY)
+    fixture_policy["automatic_rules"] = [{
+        "kind": "company", "family": "classification",
+        "rule_id": "sec-company-candidate", "rule_version": "2026-09-24.7",
+        "verdict": "company", "activation": "measured", "proof": proof(),
+    }]
 
     with database.admin.begin() as conn:
         conn.execute(
@@ -1625,7 +1637,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
             {"v": database.registry},
         )
         register_dataset(conn, SOURCE_CODE, database.registry, CONTRACT)
-        policy = register_policy(conn, POLICY)
+        policy = register_policy(conn, fixture_policy)
     raw = (
         b"\n".join(
             [
@@ -1695,7 +1707,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
     evidence, deferred = batch_evidence(batch, tmp_path, store)
     assert len(evidence) == 1 and len(deferred) == 6
     assert {r["reason"] for r in deferred} == {
-        "unsupported_identity_kind",
+        "classification_deferred",
         "missing_record_identity",
         "invalid_json_record",
         "invalid_field_shape",
@@ -1824,6 +1836,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
         {"cik": 123, "entity_type": "operating", "entity_name": "Synthetic Company"},
         source_code=SOURCE_CODE,
         contract=CONTRACT,
+        policy=fixture_policy,
         publication={
             "publication_key": "capture-1",
             "revision": 0,

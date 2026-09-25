@@ -71,7 +71,35 @@ CONTRACT = {
 # No activation yet (ticket 12). The operator's 21:05 ET approval of digest
 # b26ab87c... was withdrawn by the spec review: rule step 4 measured 0.939,
 # below the per-step 95% bar, and its legal-form list caught non-companies.
-# Rule 2026-09-24.7 needs a fresh per-step measurement and a new approval.
+# Rule 2026-09-24.7 was measured below the step-4 bar; this proof remains
+# reviewable but cannot be entered into automatic_rules. Approval is pending.
+PROOF = {
+    "method": "wilson_lower_bound",
+    "one_sided_confidence": 0.95,
+    "n": 600,
+    "correct": 555,
+    "lower_bound": 0.9053421348854453,
+    "adversarial": {
+        "fixture_sha256": "730d36347cc6cea6b3fc7a0fcdbb290a17739dcab9c44b91196b1f73d7932a75",
+        "n": 483,
+        "violations": 33,
+    },
+    "cohort": {
+        "population_sha256": "395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600",
+        "by_step": {
+            "2": {"n": 300, "correct": 297, "lower_bound": 0.9752442459680568},
+            "4": {"n": 300, "correct": 258, "lower_bound": 0.8238206764617402},
+        },
+        "files": {
+            "12-sample.jsonl": "d71095104dae0922eb07f97a816e1377f83045e25edffbfec7e41a4dee019d74",
+            "12-adversarial.jsonl": "730d36347cc6cea6b3fc7a0fcdbb290a17739dcab9c44b91196b1f73d7932a75",
+            "12-population.json": "6997692dec424397ae0eb0b94aff4e58476c82298d799563fd175bd6ab443e0f",
+            "12-classify.py": "183891370bdfe4fe04d74b05e4a599acd473a5b3e2354eb1ef55b99cd07b18fd",
+            "12-label-reviewed.py": "fb3bdfdbde4eb7dd2ea99916e9b94eaed1acde6c704504188089228bf08921e1",
+        },
+    },
+    "reason": "Bronze-only hand review; step 4 and adversarial checks fail the activation gate",
+}
 POLICY = {
     "version": "sec-company-local-v2",
     "automatic_rules": [],

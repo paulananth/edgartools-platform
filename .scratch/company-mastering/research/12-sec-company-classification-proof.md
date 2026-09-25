@@ -1,84 +1,64 @@
-# Which SEC filers the Company classification rule may call a Company, measured
+# SEC Company classification proof, frozen rule 2026-09-24.7
 
-Ticket: 12. Run 2026-09-24, 19:40–20:22 ET. Bronze only; zero SEC requests.
+Ticket 12. Run 2026-09-24, 21:11–21:20 ET. Local bronze summary only; no
+SEC, S3, or other network request. The input held 76,230 CIKs and has SHA-256
+`395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600`.
 
-## Result
+## Decision
 
-`sec-company-candidate` version **2026-09-24.6**, verdict `company`:
+**Do not activate `sec-company-candidate`.** Each Company step must clear the
+accepted 0.95 precision bar at 95% one-sided confidence. Step 4 does not.
+The independent adversarial fixture also contains 33 non-Companies that the
+rule calls Company. The earlier 2026-09-24.6 pooled result and digest
+`b26ab87c…` were withdrawn. There is no current operator approval.
 
-| | n | correct | one-sided 95% Wilson lower bound |
-|---|---|---|---|
-| All `company` verdicts | 300 | 297 | **0.97524** |
-| step 2 (`operating`) | 229 | 227 | 0.97395 |
-| step 4 (`other`, industry code, legal-form word) | 71 | 70 | 0.93931 |
+| Company step | Confirmed Company | Drawn | One-sided 95% Wilson lower bound | Bar |
+| --- | ---: | ---: | ---: | ---: |
+| 2: `operating` | 297 | 300 | 0.97524 | clears 0.95 |
+| 4: `other` plus industry code and company word | 258 | 300 | **0.82382** | **fails 0.95** |
 
-The Company classification bar is 0.95 at 95% one-sided confidence (confidence
-bands, `docs/specs/clean-mdm/company-policy.md`). The verdict clears it.
-Activation is per verdict, not per step (§9); step 4 alone does not clear
-0.95 on 71 records, and is reported so the operator sees it.
+Step 4's 42 unconfirmed cases are seven clearly named Funds and 35 serial
+Masterworks LLC issuers with 1-A/1-K investment offering filings. The summary
+does not establish that those 35 are Companies rather than investment vehicles;
+they are recorded as `unsure` and counted against a proof of Company precision.
+Even treating all 35 as Companies would leave the 33 adversarial violations.
+Step 2's three exceptions are two Funds and a liquidation trust.
 
-Adversarial fixture: **294 records, 0 violations** — 100 individuals with no
-industry code, 100 SEC `investment` funds, and every individual SEC gave an
-industry code (94; the case a bare "has a SIC" test fails on).
+## Method and hand labels
 
-The three errors, all private funds typed `operating` or `other`:
-`VELOCE CAP FUND 1 LP`, `Blackstone Private Equity Strategies Fund L.P.`, and
-`KKR Private Equity Conglomerate LLC` (uncertain; counted as an error).
+The local `12-classify.py` runs the actual rule with seed `20260924.7`, then
+draws 300 separately from each Company step. It also selects four adversarial
+arms without using the rule's legal-form name test: all 97 ownership-only
+`other` filers with an industry code, all 187 `other` plus industry-code names
+that mention another kind, 100 ownership-only filers without an industry code,
+and 100 SEC `investment` filers. Overlap gives 483 distinct records.
 
-## The rule
+I read the drawn names and form sets. `12-label-reviewed.py` records the
+adjudications, including GOULD INVESTORS L P (Company partnership), LOWENSTEIN
+SANDLER LLP (Company partnership), Telephone & Data Systems voting trust
+(Trust), and HOLDING FRANK B JR (person). Every adversarial record has a
+`final` label and `note`. Every fund-, trust-, and partnership-looking sampled
+name has a hand-read note. Draft labels rely on forms, tickers and categories
+before names; the final labels and uncertain calls are in `12-sample.jsonl`.
+The labels are local judgments based on the summary, not an external registry.
 
-1. industry code 6189 (asset-backed trusts), 6221 (exchange-traded commodity
-   and crypto trusts, futures pools) or 8888 (foreign governments) → wait
-2. `entity_type = operating` → Company
-3. `other` and a person's suffix in the name (JR, SR, ESQ, …) → wait
-4. `other`, an industry code, and a legal-form word in the name → Company
-5. otherwise → wait
+The adversarial fixture has **33 violations among 483**: 33 records labeled
+Fund or Trust are called Company. The named non-Company arm deliberately
+includes some real Companies; those are labeled Company and do not count as
+violations. This avoids assuming the arm's premise is its true label.
 
-On all 76,230 bronze filers: 8,254 Company (5,980 by step 2, 2,274 by step 4),
-67,976 wait. Apple, Microsoft (step 2), Shell, ASML (step 4) are Companies;
-Tim Cook and Satya Nadella wait.
+Across the population, version .7 calls 8,249 Company (5,980 at step 2,
+2,269 at step 4) and defers 67,981. Shell and ASML still reach step 4, but
+the standard policy holds their records in the Stage. Apple and Microsoft
+also wait because the whole rule remains inactive. Tim Cook and Satya Nadella
+remain deferred.
 
-## Operator decisions this rests on (2026-09-24)
+`12-summary.json` records exact per-step counts and SHA-256s of the sampled
+labels, adversarial labels, population metadata, classifier script, and label
+review script. `company_source.PROOF.cohort.files` pins those hashes. The
+test re-hashes all five files. `approved_at` is absent and `automatic_rules`
+is empty.
 
-- An SEC `investment` filer is a **Fund** (all 1,793 file fund forms).
-- A business development company (BDC) is a **Company**.
-- An asset-backed loan trust is **not a Company** (1,040; SIC 6189).
-- An exchange-traded commodity or crypto trust, or a futures pool, is a
-  **Fund** (about 150; SIC 6221).
-- A foreign government is a Government Body, not a Company (`CONTEXT.md`).
-
-## Method
-
-- **Population**: the newest bronze `submissions.json` per CIK, summarised by
-  `.scratch/individual-filer-company-misclassification/research/05-scan-bronze-entity-types.py`
-  (SHA-256 of the summary in `12-population.json`; the 28 MB file itself is
-  not committed).
-- **The rule is run by the engine** (`classification.fired`) from
-  `edgar_warehouse/mdm/policies/company.json`, so the number measures the code
-  that runs.
-- **Sample**: simple random, 300 of the 8,254 `company` verdicts, seed
-  `20260924.6`. Three earlier draws (seeds `20260924`, `20260924.4`,
-  `20260924.5`) each shaped the next rule version — they found the people,
-  loan trusts, governments and exchange-traded trusts — so none of them
-  measures this version.
-- **Labels** come from evidence the rule does not read first: forms filed,
-  tickers, exchanges, filer category; the name only when none decides. Every
-  draft that was not a plain Company, and every fund-, trust- or
-  partnership-looking name, was then read by hand against its forms
-  (`final`, `note` in `12-sample.jsonl`). Labels are my reading, not an
-  external authority, as in research 18.
-- **Rule changes found by the adversarial arm, not the sample**: step 3 exists
-  for `HOLDING FRANK B JR`, a person whose surname is a legal-form word.
-
-## Files
-
-`12-classify.py` (`sample`, `score`; sockets blocked), `12-sample.jsonl`,
-`12-adversarial.jsonl`, `12-population.json`, `12-summary.json` (every count
-above and each file's SHA-256).
-
-## What this does not establish
-
-It is not activation: that is the operator's approval of one exact policy
-digest (ticket 06). It says nothing about SEC-to-GLEIF matching (ticket 08),
-nor about records that wait: a waiting record is not an error, it is held for
-a later rule (Fund kind, Government Body kind).
+This proves neither SEC-to-GLEIF matching nor publication into a master
+record. A rule revision and a fresh independent draw are needed before
+requesting approval of a new exact policy digest.
