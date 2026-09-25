@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .activation import activated
-from .classification import fired, resolve_rule
+from .classification import fired, probable_kind, resolve_rule
 from .evidence import KINDS, assertion, subject_key
 from .store import Conflict, canonical
 
@@ -19,9 +19,17 @@ class UnsupportedRecord(ValueError):
     verdict that set it aside.
     """
 
-    def __init__(self, reason: str, detail: dict | None = None):
+    def __init__(
+        self,
+        reason: str,
+        detail: dict | None = None,
+        probable_kind: str | None = None,
+    ):
         self.reason = reason
         self.detail = detail or {}
+        # The kind the record probably is, when a rule step or the contract
+        # says (CONTEXT.md, Probable Kind); the deferred record keeps it.
+        self.probable_kind = probable_kind
         super().__init__(reason)
 
 
@@ -72,6 +80,20 @@ def value(row: dict, path: str):
     return result
 
 
+def category_kind(row: dict, mapping: dict) -> str | None:
+    """The kind a `kind_field` contract names for a record's category.
+
+    The kind it accepts, else the category's Probable Kind (CONTEXT.md), else
+    None: a category the contract does not name says nothing.
+    """
+    source_kind = value(row, mapping["kind_field"])
+    if not isinstance(source_kind, str):
+        return None
+    return mapping["kind_values"].get(source_kind) or mapping.get(
+        "probable_kind_values", {}
+    ).get(source_kind)
+
+
 def record_key(row: dict, paths: list[str]) -> str:
     parts = [value(row, p) for p in paths]
     if not parts or any(v is None or v == "" for v in parts):
@@ -109,15 +131,18 @@ def classify_record(
         "version": rule["version"],
         "step": step,
     }
+    probable = probable_kind(rule, step, verdict)
     if verdict not in KINDS:
         raise UnsupportedRecord(
             f"classification_{verdict}",
             {"classification": {**labelled, "verdict": verdict}},
+            probable,
         )
     if not activated(policy, named["kind"], rule, verdict):
         raise UnsupportedRecord(
             "classification_not_activated",
             {"classification": {**labelled, "verdict": verdict}},
+            probable,
         )
     return verdict, labelled
 
@@ -155,6 +180,12 @@ def normalize(
         if source_kind is not None and not isinstance(source_kind, str):
             raise UnsupportedRecord("invalid_identity_kind")
         kind = mapping["kind_values"].get(source_kind)
+        if not kind:
+            # A category the contract does not accept may still say what the
+            # record probably is (GLEIF FUND, BRANCH), so the Stage can sort it.
+            raise UnsupportedRecord(
+                "unsupported_identity_kind", probable_kind=category_kind(row, mapping)
+            )
     if not kind:
         raise UnsupportedRecord("unsupported_identity_kind")
     key = record_key(row, mapping["record_key"])

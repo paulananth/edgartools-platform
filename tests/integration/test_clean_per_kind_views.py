@@ -104,9 +104,11 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     # classification.CLASSIFICATION_VERDICTS is derived from KINDS rather than
     # restated, so it needs no copy of its own -- only its two extra verdicts.
     assert CLASSIFICATION_VERDICTS - KINDS == {"entity_undetermined", "deferred"}
+    # Plus one view across every kind: the records still waiting, each with
+    # its Probable Kind (036).
     assert installed_views(database) == {
         f"{kind}_{shape}" for kind in schema_kinds for shape in SHAPES
-    }
+    } | {"stage_waiting"}
     # Exact equality above already forbids it, but say it outright: 034 renamed
     # 033's source-side pair, so not one view still carries the old name.
     assert not [v for v in installed_views(database) if "_evidence" in v]
@@ -454,6 +456,7 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
             "033_clean_mdm_per_kind_views.sql",
             "034_clean_mdm_stage_view_naming.sql",
             "035_clean_mdm_automatic_assessment.sql",
+            "036_clean_mdm_stage_waiting.sql",
         ]
         # 034 renamed rather than duplicated: the name 033 created is gone.
         assert (
@@ -480,3 +483,70 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
     core.apply(database, 2, assertions=[later])
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_stage")) == 2
+
+
+def test_migration_036_shows_records_already_waiting_with_their_probable_kind(
+    postgres,
+):
+    """CLAUDE.md: test every migration against a genuinely populated table.
+
+    Waiting records are committed under 025-035 first, one with a Probable Kind
+    and one without, and one assertion beside them; 036 is then applied over
+    them, the only order production will see.
+    """
+    from unittest import mock
+
+    import edgar_warehouse.mdm.clean.store as store_module
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    admin, app = postgres
+    names = list(store_module.CLEAN_MDM_MIGRATIONS)
+    cut = names.index("036_clean_mdm_stage_waiting.sql")
+    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", tuple(names[:cut])):
+        database = core.initialize_database(admin, app)
+
+        def waiting(line, **probable):
+            return deferred_record(
+                source_code="fixture.primary",
+                publication_key="p1",
+                record_locator=f"line:{line}",
+                schema_version="1",
+                reason="classification_deferred",
+                raw_record={"key": f"wait-{line}"},
+                provenance={
+                    "adapter_version": "v1",
+                    "classification": {
+                        "rule_id": "r",
+                        "version": "1",
+                        "step": "6",
+                        "verdict": "deferred",
+                    },
+                },
+                **probable,
+            )
+
+        core.apply(
+            database,
+            1,
+            assertions=[core.source(key="accepted", fields={"name": "Acme"})],
+            deferred=[waiting(1, probable_kind="person"), waiting(2)],
+        )
+        with database.application.connect() as conn:
+            assert (
+                conn.scalar(text("SELECT to_regclass('mdm_v2.stage_waiting')")) is None
+            )
+
+    core.migrate(admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT record_locator, probable_kind, reason, rule_id, rule_step "
+                "FROM mdm_v2.stage_waiting ORDER BY record_locator"
+            )
+        ).all()
+    # Every waiting record, whether or not a step named its kind; the accepted
+    # record is not waiting and is not here.
+    assert [tuple(r) for r in rows] == [
+        ("line:1", "person", "classification_deferred", "r", "6"),
+        ("line:2", None, "classification_deferred", "r", "6"),
+    ]

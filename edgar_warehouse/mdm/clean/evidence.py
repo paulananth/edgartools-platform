@@ -142,11 +142,24 @@ def deferred_record(
     reason: str,
     raw_record: Any,
     provenance: dict,
+    probable_kind: str | None = None,
 ) -> dict:
+    """A record held in the Stage, with the reason it waits.
+
+    `probable_kind` is the kind the rule step or contract that held it back
+    names for it: it sorts the Stage and never creates an identity (CONTEXT.md,
+    Probable Kind). It is written only when known, so a record given none keeps
+    the id it had. A record given one has a new body, so re-reading a
+    publication already committed collides: the limit the operator accepted
+    for any record that waits differently when re-read (2026-09-23,
+    `test_a_deferred_reread_that_changes_its_body_still_collides`).
+    """
     if not all((source_code, publication_key, record_locator, schema_version, reason)):
         raise ValueError(
             "Deferred evidence requires dataset/publication/record location and reason"
         )
+    if probable_kind is not None and probable_kind not in KINDS:
+        raise ValueError(f"Probable Kind {probable_kind} is not a kind")
     body = {
         "source_code": source_code,
         "publication_key": publication_key,
@@ -156,6 +169,8 @@ def deferred_record(
         "raw_record": raw_record,
         "provenance": provenance,
     }
+    if probable_kind is not None:
+        body["probable_kind"] = probable_kind
     return {**body, "deferred_id": digest(body)}
 
 

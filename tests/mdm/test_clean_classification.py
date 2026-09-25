@@ -9,6 +9,7 @@ when the record is read and never afterwards.
 
 from __future__ import annotations
 
+import copy
 from typing import ClassVar
 
 import pytest
@@ -381,3 +382,107 @@ class TestTheReadPathRunsTheNamedRule:
         assert by_table["kind"] == by_rule["kind"] == "company"
         assert "classification" not in by_table["provenance"]
         assert by_table["assertion_id"] != by_rule["assertion_id"]
+
+
+class TestProbableKind:
+    """A held-back record says what it probably is (CONTEXT.md, Probable Kind).
+
+    It sorts the Stage and never creates an identity: the kind's own rule
+    decides, with its own bar.
+    """
+
+    RULE: ClassVar[dict] = {
+        **TestTheReadPathRunsTheNamedRule.COMPANY_RULE,
+        "steps": [
+            {
+                "step": "0",
+                "verdict": "deferred",
+                "probable_kind": "fund_structure",
+                "when": [
+                    {
+                        "primitive": "field_in_set@1",
+                        "args": {"field": "entity_type", "values": ["investment"]},
+                    }
+                ],
+            },
+            *TestTheReadPathRunsTheNamedRule.COMPANY_RULE["steps"],
+        ],
+    }
+
+    def read(self, row, *, active=False):
+        reader = TestTheReadPathRunsTheNamedRule()
+        policy = reader.policy(active=active)
+        policy["kinds"]["company"]["rules"] = [self.RULE]
+        return reader.read(row, policy)
+
+    def test_a_step_that_holds_a_record_back_names_its_probable_kind(self):
+        from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+        with pytest.raises(UnsupportedRecord) as caught:
+            self.read({"cik": 1, "entity_type": "investment", "entity_name": "X"})
+        assert caught.value.reason == "classification_deferred"
+        assert caught.value.probable_kind == "fund_structure"
+
+    def test_a_kind_the_policy_has_not_switched_on_is_the_probable_kind(self):
+        from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+        with pytest.raises(UnsupportedRecord) as caught:
+            self.read({"cik": 1, "entity_type": "operating", "entity_name": "X"})
+        assert caught.value.reason == "classification_not_activated"
+        assert caught.value.probable_kind == "company"
+
+    def test_a_step_with_no_probable_kind_leaves_it_unknown(self):
+        from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+        with pytest.raises(UnsupportedRecord) as caught:
+            self.read({"cik": 1, "entity_type": "other", "entity_name": "X"})
+        assert caught.value.probable_kind is None
+
+    def test_a_step_that_decides_a_kind_may_not_also_name_one(self):
+        steps = copy.deepcopy(RULE["steps"])
+        steps[1]["probable_kind"] = "person"
+        with pytest.raises(Conflict, match="belongs only to a step"):
+            classify({**RULE, "steps": steps}, record(), DOC)
+
+    def test_a_probable_kind_that_is_not_a_kind_is_refused(self):
+        steps = copy.deepcopy(RULE["steps"])
+        steps[0]["probable_kind"] = "fund"
+        with pytest.raises(Conflict, match="not a kind"):
+            classify({**RULE, "steps": steps}, record(), DOC)
+
+
+class TestAWaitingRecordKeepsItsProbableKind:
+    ARGS: ClassVar[dict] = {
+        "source_code": "s",
+        "publication_key": "p",
+        "record_locator": "r",
+        "schema_version": "v",
+        "reason": "classification_deferred",
+        "raw_record": {"cik": 1},
+        "provenance": {},
+    }
+
+    def test_a_record_with_none_keeps_the_id_it_had_before(self):
+        from edgar_warehouse.mdm.clean.evidence import deferred_record
+        from edgar_warehouse.mdm.clean.store import digest
+
+        body = deferred_record(**self.ARGS)
+        assert "probable_kind" not in body
+        assert body["deferred_id"] == digest(dict(self.ARGS))
+
+    def test_it_is_part_of_the_record(self):
+        from edgar_warehouse.mdm.clean.evidence import (
+            deferred_record,
+            validate_deferred,
+        )
+
+        body = deferred_record(**self.ARGS, probable_kind="person")
+        assert body["probable_kind"] == "person"
+        assert body["deferred_id"] != deferred_record(**self.ARGS)["deferred_id"]
+        validate_deferred(body)
+
+    def test_a_value_that_is_not_a_kind_is_refused(self):
+        from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+        with pytest.raises(ValueError, match="not a kind"):
+            deferred_record(**self.ARGS, probable_kind="fund")

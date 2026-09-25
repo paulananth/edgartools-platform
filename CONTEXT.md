@@ -34,6 +34,10 @@ _Avoid_: Field overwrite only, source-specific direct master writes, identity co
 What one source says about one entity, per field, before any survivorship is applied — read per kind. It is derived from the retained evidence on demand rather than stored and updated in place, so a later reading adds to what a source has said rather than replacing it.
 _Avoid_: Confusing it with the Merge Stage, which is the step that reads it; a stored per-source table updated in place; the surviving value, which is the master record's
 
+**Probable Kind**:
+The kind that a rule step gives to a record it holds in the Stage. It sorts the Stage and never creates an identity; the rule of that kind decides.
+_Avoid_: hint, candidate kind, a decided kind
+
 **Fund Structure**:
 A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
 _Avoid_: treating every fund as a Company, treating a fund share as the fund itself

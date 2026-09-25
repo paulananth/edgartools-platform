@@ -136,6 +136,8 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     assert kind == "deferred"
     assert evidence["raw_record"] == record
     assert evidence["reason"] == "unsupported_identity_kind"
+    # It waits in the Stage as what it probably is (CONTEXT.md, Probable Kind).
+    assert evidence["probable_kind"] == "branch"
 
 
 @pytest.mark.parametrize("bound", ["max_compressed", "max_expanded", "max_record"])
@@ -336,3 +338,79 @@ def test_a_corrected_reading_of_one_gleif_publication_is_a_second_assertion():
     assert corrected["mapping_version"] == 2
     assert corrected["assertion_id"] != first["assertion_id"]
     assert corrected["subject"] == first["subject"]
+
+
+@pytest.mark.parametrize(
+    ("category", "probable"),
+    [
+        ("FUND", "fund_structure"),
+        ("BRANCH", "branch"),
+        ("RESIDENT_GOVERNMENT_ENTITY", "government"),
+        ("INTERNATIONAL_ORGANIZATION", "international_organization"),
+        ("SOLE_PROPRIETOR", None),
+    ],
+)
+def test_a_waiting_gleif_record_carries_the_kind_its_category_names(category, probable):
+    """GLEIF's own category sorts the Stage; a sole proprietor is not settled."""
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
+
+    record = {
+        "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+        "Entity": {"EntityCategory": {"$": category}},
+        "Registration": {"LastUpdateDate": {"$": "2026-09-10T00:00:00Z"}},
+    }
+    kind, evidence = record_evidence(
+        record,
+        member="level1",
+        contract=dataset_contract("level1"),
+        source_code="gleif.lei.v1",
+        eligible_leis={"HWUPKR0MPOU8FGXBT394"},
+        publication={
+            "publication_key": "p1",
+            "revision": 1,
+            "artifact_sha256": "a" * 64,
+            "member": "level1",
+        },
+        ordinal=0,
+    )
+    assert kind == "deferred"
+    assert evidence.get("probable_kind") == probable
+
+
+@pytest.mark.parametrize(
+    ("category", "probable"),
+    [
+        ("GENERAL", "company"),
+        ("FUND", "fund_structure"),
+        ("SOLE_PROPRIETOR", None),
+        (None, None),
+    ],
+)
+def test_a_gleif_record_outside_the_company_scope_still_carries_its_kind(
+    category, probable
+):
+    """Scope decides whether it waits, not what it probably is."""
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
+
+    record = {
+        "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+        "Entity": {"EntityCategory": {"$": category}} if category else {},
+        "Registration": {"LastUpdateDate": {"$": "2026-09-10T00:00:00Z"}},
+    }
+    kind, evidence = record_evidence(
+        record,
+        member="level1",
+        contract=dataset_contract("level1"),
+        source_code="gleif.lei.v1",
+        eligible_leis=set(),
+        publication={
+            "publication_key": "p1",
+            "revision": 1,
+            "artifact_sha256": "a" * 64,
+            "member": "level1",
+        },
+        ordinal=0,
+    )
+    assert kind == "deferred"
+    assert evidence["reason"] == "outside_approved_company_scope"
+    assert evidence.get("probable_kind") == probable
