@@ -42,6 +42,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare = mdm_sub.add_parser("prepare-clean-company", help="Pin a bounded local Company landing snapshot without writing master state")
     prepare.add_argument("--landing-root", required=True)
     prepare.add_argument("--landing-manifest", required=True)
+    prepare.add_argument("--ticker-manifest", required=True, help="Landing manifest of the SEC ticker catalog run (sec_company_ticker)")
     prepare.add_argument("--output", required=True)
     prepare.add_argument("--as-of", required=True)
     prepare.add_argument("--revision", type=int, required=True)

@@ -425,6 +425,10 @@ def test_real_sec_and_gleif_fields_share_company_with_retained_provenance(
             },
         )
     sec = fixture["sec"]
+    adapter = {
+        **{k: v for k, v in CONTRACT["adapter"].items() if k != "classification"},
+        "kind": "company",
+    }
     assertion = normalize(
         {
             "cik": sec["cik"],
@@ -432,7 +436,10 @@ def test_real_sec_and_gleif_fields_share_company_with_retained_provenance(
             "entity_name": sec["sec_entity_name"],
         },
         source_code=SOURCE_CODE,
-        contract=CONTRACT,
+        # This test proves field provenance, not classification: the kind is
+        # stated here, as SEC `operating` decides it. The classification rule
+        # is proven in test_clean_four_companies.
+        contract={**CONTRACT, "adapter": adapter},
         publication={
             "publication_key": "retained-sec-cohort",
             "revision": 1,

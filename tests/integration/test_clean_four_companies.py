@@ -16,9 +16,10 @@ What it does **not** prove, stated so no reader mistakes it:
   record waits in the Stage and **no master record is created**; SEC Apple and
   GLEIF Apple are two Stage rows, not one Company. Joining them is tickets 04
   and 08 (operator, 2026-09-24: an unlinked record waits in the Stage).
-- **That the candidate rule is accurate.** Its activation below carries a
-  fixture proof whose arithmetic holds; it measured nothing. A real activation
-  needs the Proving Run (ticket 05) and the operator's approval (ticket 06).
+- **That the Company classification rule is accurate in the whole population.**
+  The approved standard policy below carries the frozen Account hold-back
+  proof; this four-company fixture only checks execution and publication.
+  Other tests that use a synthetic proof measure nothing.
 - **Production reach.** Until 2026-09-24 the warehouse treated every SEC
   `entityType: "other"` filer as an individual and skipped its Company row;
   `is_individual_filer` now keeps foreign issuers such as Shell and ASML. This
@@ -61,10 +62,10 @@ APPLE, MICROSOFT, SHELL, ASML = "0000320193", "0000789019", "0001306965", "00009
 COOK, NADELLA = "0001214156", "0001513142"
 COMPANIES = {APPLE, MICROSOFT, SHELL, ASML}
 
-# A candidate, not a measured rule; it lives in the Company policy as data
-# (ticket 11) so the proving run can measure it. Step 2 is the one the lookup
-# table lacks: SEC says "other" for a foreign issuer and for an individual
-# alike, and only the issuer carries an industry code.
+# The Company classification rule, from the Company policy (measured in
+# ticket 12). Step 10 is the one the lookup table lacks: SEC says "other" for a
+# foreign issuer and for an individual alike; the issuer carries an industry
+# code and a legal-form word in its name.
 (RULE,) = [
     r
     for r in POLICY["kinds"]["company"]["rules"]
@@ -75,8 +76,7 @@ NAMED = {"kind": "company", "rule_id": RULE["rule_id"], "version": RULE["version
 
 def rule_contract():
     contract = copy.deepcopy({**CONTRACT, "family": "fixture"})
-    del contract["adapter"]["kind_field"], contract["adapter"]["kind_values"]
-    contract["adapter"]["classification"] = NAMED
+    assert contract["adapter"]["classification"] == NAMED
     return contract
 
 
@@ -84,6 +84,7 @@ def rule_policy(*, active):
     body = copy.deepcopy(POLICY)
     body["version"] = "four-companies-test"
     body["kinds"]["company"]["bars"] = {"classification": BAR}
+    body["automatic_rules"] = []
     if active:
         body["automatic_rules"] = [
             {
@@ -147,19 +148,25 @@ def stage_and_master(database):
     return sorted(stage), masters
 
 
-def test_todays_lookup_table_turns_shell_and_asml_away(database, tmp_path):
-    """The baseline: SEC's `entityType` alone decides, so foreign issuers fail."""
+# Approved standard policy for the Account hold-back.
+ACTIVE_POLICY = "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
+
+
+def test_the_standard_policy_classifies_all_four_companies(
+    database, tmp_path
+):
+    """The approved standard rule acts for four issuers, but not two people."""
     policy = register(database, {**CONTRACT, "family": "fixture"}, POLICY)
+    assert policy == ACTIVE_POLICY
     evidence, deferred = batch_evidence(
         sec_batch(tmp_path), tmp_path, Store(database.application), policy_digest=policy
     )
     records = by_record(evidence, deferred)
-    assert {k for k, r in records.items() if r.get("kind") == "company"} == {
-        APPLE,
-        MICROSOFT,
-    }
-    for cik in (SHELL, ASML, COOK, NADELLA):
-        assert records[cik]["reason"] == "unsupported_identity_kind"
+    assert len(evidence) == 4
+    for cik in COMPANIES:
+        assert records[cik]["kind"] == "company"
+    for cik in (COOK, NADELLA):
+        assert records[cik]["reason"] == "classification_deferred"
 
 
 def test_the_rule_names_all_four_companies_but_acts_on_none_unactivated(
@@ -172,7 +179,7 @@ def test_the_rule_names_all_four_companies_but_acts_on_none_unactivated(
     )
     assert evidence == []
     records = by_record(evidence, deferred)
-    for cik, step in ((APPLE, "1"), (MICROSOFT, "1"), (SHELL, "2"), (ASML, "2")):
+    for cik, step in ((APPLE, "8"), (MICROSOFT, "8"), (SHELL, "10"), (ASML, "10")):
         assert records[cik]["reason"] == "classification_not_activated"
         assert records[cik]["provenance"]["classification"] == {
             "rule_id": RULE["rule_id"],
@@ -182,7 +189,7 @@ def test_the_rule_names_all_four_companies_but_acts_on_none_unactivated(
         }
     for cik in (COOK, NADELLA):
         assert records[cik]["reason"] == "classification_deferred"
-        assert records[cik]["provenance"]["classification"]["step"] == "3"
+        assert records[cik]["provenance"]["classification"]["step"] == "11"
 
 
 def test_both_sources_wait_in_the_stage_and_no_master_is_created(
@@ -193,7 +200,8 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
     No binding rule exists, so nothing reaches `company_master`: this is the
     operator's rule that an unlinked record waits in the Stage, not a failure.
     """
-    policy = register(database, rule_contract(), rule_policy(active=True))
+    policy = register(database, rule_contract(), POLICY)
+    assert policy == ACTIVE_POLICY
     store = Store(database.application)
     coordinator = RunCoordinator(command_databases[0], store)
     manifest = tmp_path / "sec-manifest.json"
@@ -233,10 +241,10 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
             )
         ).all()
         assert sorted(set_aside) == [
-            ("1214156", "classification_deferred", "3"),
-            ("1513142", "classification_deferred", "3"),
+            ("1214156", "classification_deferred", "11"),
+            ("1513142", "classification_deferred", "11"),
         ]
-    assert labelled == {APPLE: "1", MICROSOFT: "1", SHELL: "2", ASML: "2"}
+    assert labelled == {APPLE: "8", MICROSOFT: "8", SHELL: "10", ASML: "10"}
 
     gleif = FIXTURE["gleif"]
     capture, path = native.native_fixture(

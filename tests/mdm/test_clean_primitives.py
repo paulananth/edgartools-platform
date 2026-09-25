@@ -164,6 +164,63 @@ class TestClassificationPrimitives:
         }
         assert self.evaluate("token_match@1", args, {"name": "Smith & Wesson"})
 
+    def test_version_one_counts_an_ampersand_for_every_list(self):
+        """Kept as written: a primitive is never edited, only superseded."""
+        args = {
+            "field": "name",
+            "normalizer": CONFORMED,
+            "token_list": ["FUND"],
+            "min_count": 1,
+        }
+        assert self.evaluate("token_match@1", args, {"name": "McCormick & Co"})
+
+    def test_version_two_counts_an_ampersand_only_for_a_list_carrying_and(self):
+        """A list without AND is not asking whether a name joins two parties.
+
+        Version 1 held back McCormick & Co at the Company rule's fund-name
+        step, whose list is ETF and FUND (ticket 12).
+        """
+        args = {
+            "field": "name",
+            "normalizer": CONFORMED,
+            "token_list": ["FUND"],
+            "min_count": 1,
+        }
+        assert not self.evaluate("token_match@2", args, {"name": "McCormick & Co"})
+        assert self.evaluate("token_match@2", args, {"name": "Smith & Jones Fund"})
+        with_and = {**args, "token_list": "legal_forms"}
+        assert self.evaluate("token_match@2", with_and, {"name": "Smith & Wesson"})
+
+    def test_values_overlap_counts_exact_values_a_list_field_shares(self):
+        args = {"field": "forms", "values": ["10-12G", "10-12G/A"], "min_count": 1}
+        assert self.evaluate("values_overlap@1", args, {"forms": ["10-K", "10-12G/A"]})
+        assert not self.evaluate("values_overlap@1", args, {"forms": ["10-K"]})
+        assert not self.evaluate("values_overlap@1", args, {"forms": ["10-12g"]})
+
+    def test_values_overlap_can_require_that_none_is_shared(self):
+        no_election = {"field": "forms", "values": ["N-54A"], "max_count": 0}
+        assert self.evaluate("values_overlap@1", no_election, {"forms": ["D"]})
+        assert not self.evaluate("values_overlap@1", no_election, {"forms": ["N-54A"]})
+
+    def test_values_overlap_reads_a_missing_field_as_holding_nothing(self):
+        args = {"field": "forms", "values": ["D"], "max_count": 0}
+        assert self.evaluate("values_overlap@1", args, {})
+
+    def test_values_overlap_refuses_a_field_that_is_not_a_list(self):
+        args = {"field": "forms", "values": ["D"], "min_count": 1}
+        with pytest.raises(Conflict, match="list field"):
+            self.evaluate("values_overlap@1", args, {"forms": "D"})
+
+    def test_values_overlap_requires_a_count(self):
+        """Without one, every call is true: the same fail-open as token_match."""
+        with pytest.raises(Conflict, match="values_overlap requires"):
+            self.evaluate("values_overlap@1", {"field": "forms", "values": ["D"]}, {})
+
+    def test_values_overlap_reads_a_declared_list(self):
+        doc = {**DOC, "lists": {**DOC["lists"], "offering": ["D", "D/A"]}}
+        args = {"field": "forms", "values": "offering", "min_count": 1}
+        assert call("values_overlap@1", args, {"forms": ["D/A"]}, doc)
+
     def test_name_shape_accepts_a_two_token_person_name(self):
         args = {
             "field": "name",

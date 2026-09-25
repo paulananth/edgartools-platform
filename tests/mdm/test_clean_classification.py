@@ -295,7 +295,6 @@ class TestTheReadPathRunsTheNamedRule:
         from edgar_warehouse.mdm.clean.company_source import CONTRACT
 
         contract = copy.deepcopy(CONTRACT)
-        del contract["adapter"]["kind_field"], contract["adapter"]["kind_values"]
         contract["adapter"]["classification"] = {
             "kind": "company",
             "rule_id": "sec-company-candidate",
@@ -368,10 +367,14 @@ class TestTheReadPathRunsTheNamedRule:
         from edgar_warehouse.mdm.clean.company_source import CONTRACT
 
         by_rule = self.read(self.ROW, self.policy(active=True))
+        legacy_contract = copy.deepcopy(CONTRACT)
+        legacy_contract["adapter"].pop("classification")
+        legacy_contract["adapter"]["kind_field"] = "entity_type"
+        legacy_contract["adapter"]["kind_values"] = {"operating": "company"}
         by_table = normalize(
             self.ROW,
             source_code="sec.submissions.company.v1",
-            contract=CONTRACT,
+            contract=legacy_contract,
             publication={
                 "publication_key": "p",
                 "revision": 0,

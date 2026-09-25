@@ -13,19 +13,24 @@ What it verifies is arithmetic, not truth: a fabricated `n: 1000, correct:
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import math
+from pathlib import Path
 
 import pytest
 
 from edgar_warehouse.mdm.clean.activation import (
+    _check_proof,
     activated,
     check_policy,
     rule_version_conflicts,
     wilson_lower_bound,
 )
-from edgar_warehouse.mdm.clean.company_source import POLICY
+from edgar_warehouse.mdm.clean.classification import fired
+from edgar_warehouse.mdm.clean.company_source import APPROVED_ACTIVATION, POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm.clean.store import Conflict, digest
 
 RULE = {
     "rule_id": "sec-company",
@@ -67,7 +72,19 @@ def proof(n=3000, correct=3000, confidence=0.95, **changes):
         "correct": correct,
         "lower_bound": None,
         "adversarial": {"fixture_sha256": "a" * 64, "violations": 0},
-        "cohort": {"files": {"sample.jsonl": "b" * 64}},
+        "cohort": {
+            "files": {"sample.jsonl": "b" * 64},
+            # One sample per rule step, for every step id a test rule or the
+            # Company policy uses ("0" to "10").
+            "by_step": {
+                str(step): {
+                    "n": n,
+                    "correct": correct,
+                    "lower_bound": changes.get("lower_bound"),
+                }
+                for step in range(11)
+            },
+        },
         "approved_by": "operator",
         "approved_at": "2026-09-24T12:00:00Z",
         "reason": "fixture proof: arithmetic only, not a measurement",
@@ -261,7 +278,7 @@ class TestAnActivationCarriesItsProof:
                 },
                 "adversarial",
             ),
-            ({"proof": proof(cohort={"files": {}})}, "cohort"),
+            ({"proof": proof(cohort={**proof()["cohort"], "files": {}})}, "cohort"),
             ({"proof": proof(approved_by="")}, "approval"),
             ({"proof": proof(correct=3001)}, "sample"),
         ],
@@ -272,9 +289,34 @@ class TestAnActivationCarriesItsProof:
 
     def test_a_bar_the_document_lowers_below_the_accepted_one_is_refused(self):
         """The document may raise its bar, never lower it (ticket 02, decision 4)."""
-        lowered = {**BAR, "min_precision": 0.99}
+        lowered = {**BAR, "min_precision": 0.9}
         with pytest.raises(Conflict, match="accepted"):
             check_policy(policy(bars={"classification": lowered}))
+
+    def test_company_classification_acts_at_95_percent(self):
+        """Confidence bands (company-policy.md): 95% acts, at 95% confidence."""
+        bar = {**BAR, "min_precision": 0.95}
+        body = policy(
+            automatic=[entry(proof=proof(n=60, correct=60))],
+            bars={"classification": bar},
+        )
+        check_policy(body)
+        assert activated(body, "company", RULE, "company")
+
+    def test_a_company_proof_below_95_percent_is_refused(self):
+        bar = {**BAR, "min_precision": 0.95}
+        body = policy(
+            automatic=[entry(proof=proof(n=60, correct=58))],
+            bars={"classification": bar},
+        )
+        with pytest.raises(Conflict, match="below the company bar"):
+            check_policy(body)
+
+    def test_lowering_classification_never_lowers_consolidation(self):
+        """Merging two published Company IDs keeps 99.9% (Q10/Q11): it has no
+        accepted bar here, so a document may not declare one at all."""
+        with pytest.raises(Conflict, match="no accepted bar"):
+            check_policy(policy(bars={"classification": BAR, "consolidation": BAR}))
 
     def test_a_kind_with_no_bar_for_the_family_cannot_activate(self):
         with pytest.raises(Conflict, match="no bar"):
@@ -452,15 +494,128 @@ class TestAnIdentifierRule:
 
 
 class TestTheCompanyPolicy:
-    """Ticket 11, gap 3: the candidate rule is data, not yet switched on."""
+    """Ticket 12: the approved Account hold-back acts alone."""
 
-    def test_the_candidate_rule_is_checked_and_not_active(self):
+    def test_the_approved_rule_activates_only_its_company_verdict(self):
         check_policy(POLICY)
         (rule,) = [
             r
             for r in POLICY["kinds"]["company"]["rules"]
             if r["rule_id"] == "sec-company-candidate"
         ]
-        # Nothing acts on it before the proving run (ticket 05) and the
-        # operator's approval of its digest (ticket 06).
-        assert not activated(POLICY, "company", rule, "company")
+        assert activated(POLICY, "company", rule, "company")
+        assert not activated(POLICY, "company", rule, "deferred")
+        assert all(
+            step["lower_bound"] >= 0.95 for step in PROOF["cohort"]["by_step"].values()
+        )
+        assert PROOF["adversarial"]["violations"] == 0
+        assert PROOF["approved_at"] == "2026-09-25T17:09:33Z"
+        assert PROOF["approved_by"] == "operator"
+        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
+        assert APPROVED_ACTIVATION["proof"] is PROOF
+        pending = copy.deepcopy(POLICY)
+        pending["automatic_rules"] = []
+        assert digest(pending) == (
+            "31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f"
+        )
+
+    def test_the_policy_is_the_active_digest(self):
+        assert digest(POLICY) == (
+            "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
+        )
+
+    def test_the_proof_files_match_the_pinned_hashes(self):
+        root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
+        for name, expected in PROOF["cohort"]["files"].items():
+            assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
+        summary = json.loads((root / "12-13-summary.json").read_text())
+        assert summary["files"] == PROOF["cohort"]["files"]
+        assert summary["by_step"] == PROOF["cohort"]["by_step"]
+        assert (
+            summary["adversarial"]["violations"] == PROOF["adversarial"]["violations"]
+        )
+
+    def test_the_account_hold_back_re_scores_from_frozen_labels(self):
+        root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
+        block = POLICY["kinds"]["company"]
+        (rule,) = [
+            r for r in block["rules"] if r["rule_id"] == "sec-company-candidate"
+        ]
+
+        def rows(name):
+            return [
+                json.loads(line)
+                for line in (root / name).read_text().splitlines()
+            ]
+
+        sample = rows("12-13-sample.jsonl")
+        adversarial = rows("12-13-adversarial.jsonl")
+        held = rows("12-13-held.jsonl")
+        for record in sample + adversarial + held:
+            verdict, step = fired(
+                rule,
+                {
+                    "entity_type": record["entity_type"],
+                    "sic": record["sic"],
+                    "category": record["category"],
+                    "entity_name": record["name"],
+                    "tickers": record["catalog_tickers"],
+                    "forms": record["forms"],
+                },
+                block,
+            )
+            assert (verdict, step) == (
+                "deferred" if record in held else "company",
+                record["step"],
+            )
+            assert record["final"] in {"company", "fund"}
+
+        assert len(sample) == PROOF["n"] == 600
+        correct = sum(record["final"] == "company" for record in sample)
+        assert correct == PROOF["correct"]
+        assert math.isclose(
+            wilson_lower_bound(correct, len(sample), 0.95),
+            PROOF["lower_bound"],
+            abs_tol=1e-6,
+        )
+        for step, measured in PROOF["cohort"]["by_step"].items():
+            group = [record for record in sample if record["step"] == step]
+            step_correct = sum(record["final"] == "company" for record in group)
+            assert (len(group), step_correct) == (measured["n"], measured["correct"])
+            assert math.isclose(
+                wilson_lower_bound(step_correct, len(group), 0.95),
+                measured["lower_bound"],
+                abs_tol=1e-6,
+            )
+        assert len(adversarial) == PROOF["adversarial"]["n"]
+        assert sum(record["final"] != "company" for record in adversarial) == (
+            PROOF["adversarial"]["violations"]
+        )
+
+
+COMPANY_BAR = {**BAR, "min_precision": 0.95}
+
+
+class TestEachStepClearsTheBar:
+    """The bar is per rule step, not per pooled sample (`company-policy.md`)."""
+
+    def test_a_failing_step_cannot_hide_behind_a_passing_one(self):
+        body = proof(n=600, correct=582)
+        # Pooled 582/600 clears 0.95; step 4 alone (282/300) does not.
+        body["cohort"]["by_step"]["4"] = {
+            "n": 300,
+            "correct": 282,
+            "lower_bound": math.floor(wilson_lower_bound(282, 300, 0.95) * 1e6) / 1e6,
+        }
+        with pytest.raises(Conflict, match="Proof step 4 lower bound .* below"):
+            _check_proof("company", COMPANY_BAR, body, ["2", "4"])
+
+    def test_a_step_with_no_sample_of_its_own_is_refused(self):
+        body = proof()
+        del body["cohort"]["by_step"]["4"]
+        with pytest.raises(Conflict, match="no sample of its own for step 4"):
+            _check_proof("company", COMPANY_BAR, body, ["2", "4"])
+
+    def test_the_measured_sec_rule_clears_the_bar_at_every_company_step(self):
+        approved = {**PROOF, "approved_by": "x", "approved_at": "y"}
+        _check_proof("company", COMPANY_BAR, approved, ["8", "10"])

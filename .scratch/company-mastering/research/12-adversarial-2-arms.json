@@ -1,0 +1,21 @@
+{
+  "arms": {
+    "operating with a finance-office industry code": {
+      "drawn": 100,
+      "population": 226
+    },
+    "operating with no industry code": {
+      "drawn": 100,
+      "population": 200
+    },
+    "step 4 with a finance-office industry code": {
+      "drawn": 55,
+      "population": 55
+    },
+    "step 4 with no annual report": {
+      "drawn": 86,
+      "population": 86
+    }
+  },
+  "seed": "20260924.8-adversarial-2"
+}

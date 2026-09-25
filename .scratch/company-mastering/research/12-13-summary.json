@@ -1,0 +1,40 @@
+{
+  "adversarial": {
+    "by_step": {},
+    "n": 328,
+    "violating": [],
+    "violations": 0
+  },
+  "by_step": {
+    "10": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+    },
+    "8": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+    }
+  },
+  "correct": 600,
+  "files": {
+    "12-13-adversarial.jsonl": "ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1",
+    "12-13-held.jsonl": "989057c5f33177c1a53c182a757d00b6909df61a852bf9e2b6b0bd746d345fcc",
+    "12-13-label.py": "3858117cf62df1de0d6adfac6cd348da5a36e4d9587bcf82b69f358a90ed9e12",
+    "12-13-population.json": "b6023c5ef814ff496137ddd51c395582d07d316038ad23eb40a96bf64a741a49",
+    "12-13-sample.jsonl": "d276df62557c30106d8f49c52f23c0ea72c4795c664e96983c7569f91dd6ad97",
+    "12-classify.py": "0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a",
+    "12-measure-13.py": "6fc1e10772f89f369513d74d80927670dce71e7b937e149951a50311aaf66ceb"
+  },
+  "held_back": {
+    "5": {
+      "company": 18,
+      "fund": 16
+    }
+  },
+  "lower_bound": 0.9955110028711697,
+  "n": 600,
+  "rule_version": "2026-09-25.13",
+  "wrong_in_sample": []
+}

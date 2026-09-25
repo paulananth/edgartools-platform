@@ -1613,10 +1613,28 @@ def test_version_two_api_auth_history_pagination_and_profile_provenance(
 def test_native_company_batch_retains_unsupported_records_atomically(
     database, command_databases, tmp_path
 ):
+    import copy
+
     from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
     from edgar_warehouse.mdm.clean.cli import batch_evidence, execute_manifest
     from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
     from edgar_warehouse.mdm.clean.evidence import deferred_record
+    from tests.mdm.test_clean_activation import proof
+
+    # Synthetic activation is local to this atomic-accounting fixture. The
+    # Standard policy stays inactive pending exact-digest operator approval.
+    fixture_policy = copy.deepcopy(POLICY)
+    fixture_policy["automatic_rules"] = [
+        {
+            "kind": "company",
+            "family": "classification",
+            "rule_id": "sec-company-candidate",
+            "rule_version": "2026-09-25.13",
+            "verdict": "company",
+            "activation": "measured",
+            "proof": proof(),
+        }
+    ]
 
     with database.admin.begin() as conn:
         conn.execute(
@@ -1625,7 +1643,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
             {"v": database.registry},
         )
         register_dataset(conn, SOURCE_CODE, database.registry, CONTRACT)
-        policy = register_policy(conn, POLICY)
+        policy = register_policy(conn, fixture_policy)
     raw = (
         b"\n".join(
             [
@@ -1634,6 +1652,9 @@ def test_native_company_batch_retains_unsupported_records_atomically(
                         "cik": 123,
                         "entity_type": "operating",
                         "entity_name": "Synthetic Company",
+                        "sic": "1234",
+                        "tickers": ["SYN"],
+                        "forms": ["10-K"],
                     }
                 ).encode(),
                 json.dumps(
@@ -1644,12 +1665,12 @@ def test_native_company_batch_retains_unsupported_records_atomically(
                     }
                 ).encode(),
                 json.dumps(
-                    {"entity_type": "operating", "entity_name": "Missing CIK"}
+                    {"entity_type": "operating", "entity_name": "Missing CIK", "sic": "1234"}
                 ).encode(),
                 b"{broken json",
-                b'{"cik":789,"entity_type":"operating","entity_name":[1,2]}',
-                b'{"cik":790,"entity_type":"operating","entity_name":{"op":"bogus"}}',
-                b'{"cik":791,"entity_type":"operating","entity_name":1e999}',
+                b'{"cik":789,"entity_type":"operating","sic":"1234","entity_name":[1,2]}',
+                b'{"cik":790,"entity_type":"operating","sic":"1234","entity_name":{"op":"bogus"}}',
+                b'{"cik":791,"entity_type":"operating","sic":"1234","entity_name":1e999}',
             ]
         )
         + b"\n"
@@ -1692,10 +1713,10 @@ def test_native_company_batch_retains_unsupported_records_atomically(
     assert report["records_processed"] == 7 and report["unresolved_reviews"] == 7
     assert not report["end_to_end_complete"]
     assert execute_manifest(store, coordinator, **args)["records_processed"] == 0
-    evidence, deferred = batch_evidence(batch, tmp_path, store)
+    evidence, deferred = batch_evidence(batch, tmp_path, store, policy_digest=policy)
     assert len(evidence) == 1 and len(deferred) == 6
     assert {r["reason"] for r in deferred} == {
-        "unsupported_identity_kind",
+        "classification_deferred",
         "missing_record_identity",
         "invalid_json_record",
         "invalid_field_shape",
@@ -1821,9 +1842,17 @@ def test_native_company_batch_retains_unsupported_records_atomically(
     from edgar_warehouse.mdm.clean.adapters import normalize
 
     duplicate = normalize(
-        {"cik": 123, "entity_type": "operating", "entity_name": "Synthetic Company"},
+        {
+            "cik": 123,
+            "entity_type": "operating",
+            "entity_name": "Synthetic Company",
+            "sic": "1234",
+            "tickers": ["SYN"],
+            "forms": ["10-K"],
+        },
         source_code=SOURCE_CODE,
         contract=CONTRACT,
+        policy=fixture_policy,
         publication={
             "publication_key": "capture-1",
             "revision": 0,

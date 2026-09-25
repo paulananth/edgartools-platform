@@ -1,0 +1,65 @@
+{
+  "adversarial": {
+    "by_step": {
+      "5": 2,
+      "7": 1
+    },
+    "n": 432,
+    "violating": [
+      [
+        "0001914496",
+        "Sculptor Diversified Real Estate Income Trust, Inc.",
+        "fund"
+      ],
+      [
+        "0002089975",
+        "HPS Real Assets Lending Co LP",
+        "fund"
+      ],
+      [
+        "0002107762",
+        "HPS Net Lease Income REIT",
+        "fund"
+      ]
+    ],
+    "violations": 3
+  },
+  "by_step": {
+    "5": {
+      "correct": 298,
+      "lower_bound": 0.9800565738801275,
+      "n": 300
+    },
+    "7": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+    }
+  },
+  "correct": 598,
+  "files": {
+    "12-9-adversarial.jsonl": "32e7e564f66c60847506acd7ef7479859d14e7f6bec48d3e2adbac2a3b18a8e5",
+    "12-9-label.py": "c2156202f86279e17e372398163d4e66dcd20e161326d54039414251bd43fc32",
+    "12-9-population.json": "ece0a0bc829a00d60ecd8337d1b1a0a40961c92aac3f90fc0d248751b3d5f215",
+    "12-9-sample.jsonl": "5362e3f6737bbe6dcceef5b43064572fd7836ba8c0a6e81394c84ec272165dfe",
+    "12-classify.py": "0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a",
+    "12-measure-9.py": "a08d185c2c83c740ae6adff8a2ef8f0f47048d9989037386a89b25e19b7f24cf"
+  },
+  "lower_bound": 0.9899779528686787,
+  "n": 600,
+  "rule_version": "2026-09-25.9",
+  "wrong_in_sample": [
+    [
+      "0001640265",
+      "GPB Holdings II, LP",
+      "5",
+      "fund"
+    ],
+    [
+      "0002027537",
+      "Goldman Sachs Real Estate Finance Trust Inc",
+      "5",
+      "fund"
+    ]
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "adversarial_arms": {
+    "investment fund": 100,
+    "non-company kind in name": 187,
+    "ownership only with industry code": 97,
+    "ownership only without industry code": 100
+  },
+  "company_verdicts": 7130,
+  "records": 76230,
+  "rule": {
+    "rule_id": "sec-company-candidate",
+    "version": "2026-09-24.8"
+  },
+  "sample_size_per_step": 300,
+  "seed": "20260924.8",
+  "summary_sha256": "395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600",
+  "verdicts": {
+    "company/2": 5980,
+    "company/4": 1150,
+    "deferred/1": 1243,
+    "deferred/3": 1785,
+    "deferred/5": 66072
+  }
+}

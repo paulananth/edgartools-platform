@@ -1,20 +1,44 @@
 """Native Company evidence and bounded immutable input preparation."""
 
+import copy
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
+from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+from edgar_warehouse.mdm.clean.adapters import normalize as _normalize
 from edgar_warehouse.mdm.clean.company_source import (
     CONTRACT,
+    POLICY,
     SOURCE_CODE,
     prepare_company_bundle,
 )
 from edgar_warehouse.mdm.clean.store import Conflict
+from tests.mdm.test_clean_activation import proof
+
+# Field and identity tests need an active rule; this synthetic proof belongs
+# only to the fixture. The standard POLICY deliberately stays inactive.
+TEST_POLICY = copy.deepcopy(POLICY)
+TEST_POLICY["automatic_rules"] = [
+    {
+        "kind": "company",
+        "family": "classification",
+        "rule_id": "sec-company-candidate",
+        "rule_version": "2026-09-25.13",
+        "verdict": "company",
+        "activation": "measured",
+        "proof": proof(),
+    }
+]
+
+
+def normalize(row, **kwargs):
+    return _normalize(row, policy=TEST_POLICY, **kwargs)
 
 
 def source_row(cik, **changes):
@@ -22,6 +46,9 @@ def source_row(cik, **changes):
         "cik": cik,
         "entity_name": f"Synthetic Company {cik}",
         "entity_type": "operating",
+        "sic": "1234",
+        "tickers": ["SYN"],
+        "forms": ["10-K"],
         "last_sync_run_id": "capture-1",
         "last_synced_at": datetime(2026, 1, 1, tzinfo=UTC),
         "raw_object_id": f"raw-{cik}",
@@ -29,31 +56,78 @@ def source_row(cik, **changes):
     }
 
 
-def landing(tmp_path, rows):
-    root = tmp_path / "landing"
-    root.mkdir()
-    pq.write_table(pa.Table.from_pylist(rows), root / "company.parquet")
-    manifest = root / "run_manifest.json"
+def ticker_row(cik, ticker, **changes):
+    return {
+        "cik": cik,
+        "ticker": ticker,
+        "exchange": "Nasdaq",
+        "source_name": "company_tickers_exchange",
+        "source_rank": 1,
+        "last_sync_run_id": "catalog-1",
+        "last_synced_at": datetime(2026, 1, 2, tzinfo=UTC),
+        **changes,
+    }
+
+
+def filing_row(cik, form, **changes):
+    return {
+        "accession_number": f"{cik}-{form}",
+        "cik": cik,
+        "form": form,
+        "last_sync_run_id": "capture-1",
+        "last_synced_at": datetime(2026, 1, 1, tzinfo=UTC),
+        **changes,
+    }
+
+
+def write_run(root, run_id, tables):
+    """One landing run: a parquet member per table and the manifest naming them."""
+    for table_name, rows in tables.items():
+        pq.write_table(pa.Table.from_pylist(rows), root / f"{table_name}.parquet")
+    manifest = root / f"{run_id}.json"
     manifest.write_text(
         json.dumps(
             {
                 "schema_version": 1,
                 "target": "silver_landing",
-                "run_id": "capture-1",
+                "run_id": run_id,
                 "tables": [
                     {
-                        "table_name": "sec_company",
-                        "relative_path": "company.parquet",
+                        "table_name": table_name,
+                        "relative_path": f"{table_name}.parquet",
                         "file_count": 1,
                         "row_count": len(rows),
                     }
+                    for table_name, rows in tables.items()
                 ],
             }
         )
     )
+    return manifest
+
+
+def landing(tmp_path, rows, tickers=None, filings=None):
+    root = tmp_path / "landing"
+    root.mkdir(parents=True)
+    # By default the filing list and the catalog name only a filer outside
+    # the sample.
+    manifest = write_run(
+        root,
+        "capture-1",
+        {
+            "sec_company": rows,
+            "sec_company_filing": filings or [filing_row(999, "10-K")],
+        },
+    )
+    ticker_manifest = write_run(
+        root,
+        "catalog-1",
+        {"sec_company_ticker": tickers or [ticker_row(999, "ZZZ")]},
+    )
     return {
         "landing_root": str(root),
         "landing_manifest": str(manifest),
+        "ticker_manifest": str(ticker_manifest),
         "output": str(tmp_path / "pinned"),
         "limit": 1,
         "revision": 0,
@@ -85,13 +159,49 @@ def test_native_company_kind_identifiers_and_unknown_effective_time():
     assert a["effective_at"] is None
     assert a["profiles"] == []
     assert a["provenance"]["source"]["observed_at"] == row["last_synced_at"]
-    with pytest.raises(UnsupportedRecord, match="unsupported_identity_kind"):
+    with pytest.raises(UnsupportedRecord, match="classification_deferred"):
         normalize(
             {**row, "entity_type": "other"},
             source_code=SOURCE_CODE,
             contract=CONTRACT,
             publication=publication,
         )
+
+
+def test_step_ten_requires_the_landing_filer_category():
+    publication = {
+        "publication_key": "capture-1/company",
+        "revision": 0,
+        "effective_at": None,
+        "artifact_sha256": "a" * 64,
+        "member": "records.jsonl",
+    }
+    row = source_row(
+        1306965,
+        entity_name="Shell plc",
+        entity_type="other",
+        sic="1311",
+        category="",
+    )
+    row["last_synced_at"] = row["last_synced_at"].isoformat()
+    for missing in ("", None):
+        with pytest.raises(
+            UnsupportedRecord, match="classification_deferred"
+        ) as caught:
+            normalize(
+                {**row, "category": missing},
+                source_code=SOURCE_CODE,
+                contract=CONTRACT,
+                publication=publication,
+            )
+        assert caught.value.detail["classification"]["step"] == "11"
+    body = normalize(
+        {**row, "category": "Large accelerated filer"},
+        source_code=SOURCE_CODE,
+        contract=CONTRACT,
+        publication=publication,
+    )
+    assert body["provenance"]["classification"]["step"] == "10"
 
 
 def test_prepared_bundle_is_bounded_pinned_and_idempotent(tmp_path):
@@ -242,3 +352,132 @@ class TestTheCompanyRule:
             "sec.submissions.company.v1",
             "gleif.level1.v1",
         ]
+
+
+class TestTickersComeFromTheCatalog:
+    """SEC's ticker catalog is its own landing run, pinned beside the Company one.
+
+    The landing Company row carries no ticker, and the rule needs one to hold
+    back a filer with no listing (ticket 12, option 1).
+    """
+
+    def records(self, args):
+        prepare_company_bundle(**args)
+        text = (Path(args["output"]) / "records.jsonl").read_text()
+        return [json.loads(line) for line in text.splitlines()]
+
+    def test_each_filer_gets_its_catalog_tickers_in_rank_order(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123), source_row(456)],
+            [
+                ticker_row(123, "BRKB", source_rank=2),
+                ticker_row(123, "BRKA", source_rank=1),
+            ],
+        )
+        rows = self.records({**args, "limit": 2})
+        assert [r["tickers"] for r in rows] == [["BRKA", "BRKB"], []]
+
+    def test_the_catalog_member_is_pinned_in_every_record_and_the_key(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)], [ticker_row(123, "AAPL")])
+        prepare_company_bundle(**args)
+        out = Path(args["output"])
+        pinned = hashlib.sha256((out / "tickers.parquet").read_bytes()).hexdigest()
+        origin = json.loads((out / "records.jsonl").read_text())["_origin"]
+        assert origin["tickers"]["sha256"] == pinned
+        assert origin["tickers"]["run_id"] == "catalog-1"
+        key = json.loads((out / "manifest.json").read_text())["batches"][0]["input"][
+            "publication"
+        ]["publication_key"]
+        assert key.endswith(f":sec_company_ticker:{pinned}")
+
+    def test_a_different_catalog_is_a_different_publication(self, tmp_path):
+        first = landing(tmp_path / "a", [source_row(123)], [ticker_row(123, "AAPL")])
+        second = landing(tmp_path / "b", [source_row(123)], [ticker_row(123, "AAPX")])
+
+        def key(args):
+            prepare_company_bundle(**args)
+            body = json.loads((Path(args["output"]) / "manifest.json").read_text())
+            return body["batches"][0]["input"]["publication"]["publication_key"]
+
+        assert key(first) != key(second)
+
+    def test_a_catalog_row_from_another_run_is_refused(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123)],
+            [ticker_row(123, "AAPL", last_sync_run_id="catalog-0")],
+        )
+        with pytest.raises(Conflict, match="different catalog run"):
+            prepare_company_bundle(**args)
+
+    def test_a_ticker_manifest_without_the_catalog_member_is_refused(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        body = json.loads(Path(args["ticker_manifest"]).read_text())
+        body["tables"][0]["table_name"] = "sec_company_address"
+        Path(args["ticker_manifest"]).write_text(json.dumps(body))
+        with pytest.raises(ValueError, match="sec_company_ticker"):
+            prepare_company_bundle(**args)
+
+    def test_a_ticker_manifest_outside_the_root_is_refused(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        outside = tmp_path / "elsewhere.json"
+        outside.write_text(Path(args["ticker_manifest"]).read_text())
+        with pytest.raises(ValueError, match="inside its root"):
+            prepare_company_bundle(**{**args, "ticker_manifest": str(outside)})
+
+
+class TestFormsComeFromTheFilingList:
+    """The forms a filer files, from the same capture as its Company row.
+
+    The Forms hold-back reads them: a Form 10 with a Form D and no BDC
+    election, or a registered fund's reports, holds a record back (ticket 12).
+    """
+
+    def records(self, args):
+        prepare_company_bundle(**args)
+        text = (Path(args["output"]) / "records.jsonl").read_text()
+        return [json.loads(line) for line in text.splitlines()]
+
+    def test_each_filer_gets_its_distinct_forms(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123), source_row(456)],
+            filings=[
+                filing_row(123, "10-K"),
+                filing_row(123, "D", accession_number="a2"),
+                filing_row(123, "10-K", accession_number="a3"),
+            ],
+        )
+        rows = self.records({**args, "limit": 2})
+        assert [r["forms"] for r in rows] == [["10-K", "D"], []]
+
+    def test_the_filing_member_is_pinned_in_every_record_and_the_key(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)], filings=[filing_row(123, "D")])
+        prepare_company_bundle(**args)
+        out = Path(args["output"])
+        pinned = hashlib.sha256((out / "filings.parquet").read_bytes()).hexdigest()
+        origin = json.loads((out / "records.jsonl").read_text())["_origin"]
+        assert origin["forms"]["sha256"] == pinned
+        assert origin["forms"]["run_id"] == "capture-1"
+        key = json.loads((out / "manifest.json").read_text())["batches"][0]["input"][
+            "publication"
+        ]["publication_key"]
+        assert f":capture-1:sec_company_filing:{pinned}:" in key
+
+    def test_a_filing_row_from_another_run_is_refused(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123)],
+            filings=[filing_row(123, "D", last_sync_run_id="capture-0")],
+        )
+        with pytest.raises(Conflict, match="different capture run"):
+            prepare_company_bundle(**args)
+
+    def test_a_capture_without_the_filing_member_is_refused(self, tmp_path):
+        args = landing(tmp_path, [source_row(123)])
+        body = json.loads(Path(args["landing_manifest"]).read_text())
+        body["tables"] = [t for t in body["tables"] if t["table_name"] == "sec_company"]
+        Path(args["landing_manifest"]).write_text(json.dumps(body))
+        with pytest.raises(ValueError, match="sec_company_filing"):
+            prepare_company_bundle(**args)
