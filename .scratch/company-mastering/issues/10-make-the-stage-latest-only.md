@@ -1,7 +1,7 @@
 # Make the Stage latest-only, with bronze as the only history
 
 Type: task
-Status: open
+Status: claimed (Claude, branch `claude/company-mastering-10-latest-only-stage`, 2026-09-25 18:48 ET)
 Blocked by: none
 
 Build before the daily run feeds Clean MDM.
@@ -78,7 +78,47 @@ Each must be settled, one at a time, before the migration is written:
   source key, exact bronze object/hash and locator, mapping and rule versions,
   decisive predicate values, and decision outcome. An old full raw record is
   re-read from verified bronze when investigation needs it.
-- [ ] Migration on a populated store, Merge Stage change, PG16 tests
+- [ ] Migration on a populated store, Merge Stage change, PG16 tests: in the
+  four slices below, each its own PR. Nothing stops being written, and nothing
+  is deleted, until its replacement is proven on populated PostgreSQL 16.
+
+## Slices (Claude, 2026-09-25 18:48 ET)
+
+Found while planning (facts, not rulings):
+- SEC Company records cite the silver landing member by hash, not bronze.
+  The same capture lands `sec_raw_object` (CIK, `storage_path`, `sha256`), so
+  the SEC adapter can carry each record's bronze object and hash. GLEIF
+  records already carry the Golden Copy archive hash and the record ordinal.
+- No current source sends a record effective after its load: SEC records
+  carry no effective time; a GLEIF record's is its `LastUpdateDate`, which
+  precedes its publication. **Technical decision (Claude):** a latest-only
+  Stage refuses a record effective after its batch's as-of, rather than hold
+  a value not yet in force. Reversible if a future source needs it.
+- Readers of the full history today: `merge.load_closure`,
+  `binding.holders`, `matching._stored`/`_held_leis`,
+  `survivorship.current_claims`, `consumer._provenance`, the per-kind Stage
+  views (033/034), `stage_waiting` (036), the dated Company trigger (037),
+  assessment (028/035); `consumer.py` also reads historic objects from
+  `batch.effects`, and the journal publication carries the full request.
+
+1. [ ] **The latest-only Stage, written beside the history.** Migration 038:
+   `mdm_v2.stage_record`, key `(source_code, record_key)`, nullable
+   `entity_id`, the latest assertion, the resolved snapshot and its bronze
+   reference; kept by the one assertion writer in the same transaction and
+   backfilled on a populated store. A field's value comes from the highest
+   (revision, mapping version) reading that states it, whatever order they
+   arrive in, so a sparse patch erases nothing and a late older delivery
+   changes nothing it should not. PG16 parity: every Stage row equals what
+   `current_claims` reads from the full history. The SEC adapter carries its
+   bronze object (a new adapter version).
+2. [ ] **Readers move to the Stage and compact decision receipts**, each with
+   an old-versus-new parity test.
+3. [ ] **Compact `batch.effects`**: a request hash, compact receipts and a
+   fenced duplicate-observation capability; existing batches migrated
+   additively, never rewritten or truncated.
+4. [ ] **Stop the growth**: stop appending full assertions; lift the
+   append-only guard on the Stage only; merge at the end of each source load;
+   a missing or mismatched bronze object on reread is a blocking error.
 
 ## Implementation contract for the next change
 
