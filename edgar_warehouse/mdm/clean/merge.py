@@ -208,6 +208,7 @@ class MergeStage:
             ("assertions", "assertion_id"),
             ("identities", "entity_id"),
             ("deferred", "deferred_id"),
+            ("occurrences", "assertion_id"),
         ):
             if proposal.get(key):
                 proposal[key] = sorted(proposal[key], key=lambda item: item[order])
@@ -284,6 +285,7 @@ class MergeStage:
         identities: list[dict] | None = None,
         preview: bool = False,
         deferred: list[dict] | None = None,
+        occurrences: list[dict] | None = None,
         source_family: str | None = None,
         publication_family: str | None = None,
         committed_publication: str | None = None,
@@ -296,6 +298,7 @@ class MergeStage:
         decisions = sorted(decisions or [], key=lambda d: (d["at"], d["decision_id"]))
         identities = sorted(identities or [], key=lambda i: i["entity_id"])
         deferred = sorted(deferred or [], key=lambda d: d["deferred_id"])
+        occurrences = _occurrences(occurrences or [], assertions)
         instant(as_of)
         if (
             len(assertions) + len(deferred) > 1000
@@ -327,6 +330,9 @@ class MergeStage:
         # Preserve hashes of commands committed before deferred support existed.
         if deferred:
             command["deferred"] = deferred
+        # And before bronze occurrences existed (ticket 10).
+        if occurrences:
+            command["occurrences"] = occurrences
         family_metadata = {
             "source_family": source_family,
             "publication_family": publication_family,
@@ -715,6 +721,30 @@ class MergeStage:
             if assessment_id is not None:
                 request["assessment_id"] = assessment_id
             return self.store.commit(conn, request, run_id)
+
+
+def _occurrences(occurrences: list[dict], assertions: list[dict]) -> list[dict]:
+    """The bronze object each reading of this batch was delivered in.
+
+    Delivery details are not part of a source assertion, so a batch names them
+    beside its readings; the Stage keeps the winning reading's (ticket 10).
+    """
+    ids = {a["assertion_id"] for a in assertions}
+    seen = set()
+    for o in occurrences:
+        if (
+            not isinstance(o, dict)
+            or set(o) != {"assertion_id", "object", "sha256", "locator"}
+            or o["assertion_id"] not in ids
+            or o["assertion_id"] in seen
+            or not all(isinstance(o[k], str) and o[k] for k in ("object", "locator"))
+            or not isinstance(o["sha256"], str)
+            or len(o["sha256"]) != 64
+            or o["sha256"].strip("0123456789abcdef")
+        ):
+            raise Conflict("Invalid bronze occurrence")
+        seen.add(o["assertion_id"])
+    return sorted(occurrences, key=lambda o: o["assertion_id"])
 
 
 def _identity_work(decisions: list[dict] | None, automatic: dict | None) -> bool:

@@ -54,6 +54,7 @@ CLEAN_MDM_MIGRATIONS = (
     "035_clean_mdm_automatic_assessment.sql",
     "036_clean_mdm_stage_waiting.sql",
     "037_clean_mdm_company_versions.sql",
+    "038_clean_mdm_stage_record.sql",
 )
 
 COMPANY_NAMED_FIELDS = (

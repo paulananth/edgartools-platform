@@ -91,9 +91,19 @@ Found while planning (facts, not rulings):
   records already carry the Golden Copy archive hash and the record ordinal.
 - No current source sends a record effective after its load: SEC records
   carry no effective time; a GLEIF record's is its `LastUpdateDate`, which
-  precedes its publication. **Technical decision (Claude):** a latest-only
-  Stage refuses a record effective after its batch's as-of, rather than hold
-  a value not yet in force. Reversible if a future source needs it.
+  precedes its publication. **Technical decision (Claude):** once the Stage
+  is the authority (slice 4), it refuses a record effective after its
+  batch's as-of, rather than hold a value not yet in force. Until then it
+  keeps the winning reading whatever its effective time, since unit tests of
+  field selection still use future-effective readings. Reversible if a
+  future source needs it.
+- GLEIF records deliberately leave delivery details (archive hash, record
+  position) out of the assertion, so one record read from two deliveries is
+  one assertion (`adapters.py`). So the bronze reference cannot live in the
+  assertion: a batch names each reading's bronze object beside it
+  (`occurrences`), and the Stage keeps the winning reading's.
+- Undoing a binding replays decisions (`identity.py`: reverse, revoke), so
+  the Stage's `entity_id` belongs with the binding readers in slice 2.
 - Readers of the full history today: `merge.load_closure`,
   `binding.holders`, `matching._stored`/`_held_leis`,
   `survivorship.current_claims`, `consumer._provenance`, the per-kind Stage
@@ -102,17 +112,23 @@ Found while planning (facts, not rulings):
   `batch.effects`, and the journal publication carries the full request.
 
 1. [ ] **The latest-only Stage, written beside the history.** Migration 038:
-   `mdm_v2.stage_record`, key `(source_code, record_key)`, nullable
-   `entity_id`, the latest assertion, the resolved snapshot and its bronze
-   reference; kept by the one assertion writer in the same transaction and
-   backfilled on a populated store. A field's value comes from the highest
-   (revision, mapping version) reading that states it, whatever order they
-   arrive in, so a sparse patch erases nothing and a late older delivery
-   changes nothing it should not. PG16 parity: every Stage row equals what
-   `current_claims` reads from the full history. The SEC adapter carries its
-   bronze object (a new adapter version).
+   `mdm_v2.stage_record`, key `(source_code, record_key)`, the winning
+   reading, the resolved snapshot and its bronze reference; kept by a trigger
+   on the assertion write in the same transaction (037's pattern) and
+   backfilled in arrival order on a populated store. A reading wins on a
+   higher (revision, mapping version); a duplicate or a late older delivery
+   keeps the row; two readings at one (revision, mapping version) are
+   refused. Each winner folds over the previous snapshot, so a sparse patch
+   erases nothing it does not name. A batch may name each reading's bronze
+   object (`occurrences`). PG16: every Stage row equals what
+   `current_claims` reads from the full history (12 tests).
+1b. [ ] **The sources name their bronze objects.** The SEC bundle pins
+   `sec_raw_object` and names each CIK's submissions object and hash; the
+   GLEIF bundle names the Golden Copy archive and the record's ordinal; the
+   apply command passes them as `occurrences`.
 2. [ ] **Readers move to the Stage and compact decision receipts**, each with
-   an old-versus-new parity test.
+   an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
+   the binding decisions.
 3. [ ] **Compact `batch.effects`**: a request hash, compact receipts and a
    fenced duplicate-observation capability; existing batches migrated
    additively, never rewritten or truncated.
