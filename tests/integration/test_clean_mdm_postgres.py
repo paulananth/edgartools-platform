@@ -1710,7 +1710,7 @@ def test_native_company_batch_retains_unsupported_records_atomically(
     assert report["records_processed"] == 7 and report["unresolved_reviews"] == 7
     assert not report["end_to_end_complete"]
     assert execute_manifest(store, coordinator, **args)["records_processed"] == 0
-    evidence, deferred = batch_evidence(batch, tmp_path, store)
+    evidence, deferred = batch_evidence(batch, tmp_path, store, policy_digest=policy)
     assert len(evidence) == 1 and len(deferred) == 6
     assert {r["reason"] for r in deferred} == {
         "classification_deferred",
