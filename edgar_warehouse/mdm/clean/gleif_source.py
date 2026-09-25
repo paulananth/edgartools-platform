@@ -12,7 +12,13 @@ from typing import IO, BinaryIO
 import ijson
 from lxml import etree
 
-from .adapters import UnsupportedRecord, format_value, normalize, value
+from .adapters import (
+    UnsupportedRecord,
+    category_kind,
+    format_value,
+    normalize,
+    value,
+)
 from .evidence import deferred_record, instant
 from .store import Conflict, canonical
 
@@ -515,7 +521,13 @@ def record_evidence(
         else:
             lei = format_value(value(row, "LEI.$"), "lei")
             if lei not in eligible_leis:
-                raise UnsupportedRecord("outside_approved_company_scope")
+                # Scope decides whether it waits, not what it probably is.
+                raise UnsupportedRecord(
+                    "outside_approved_company_scope",
+                    probable_kind=category_kind(row, contract["adapter"])
+                    if "kind_field" in contract["adapter"]
+                    else None,
+                )
             effective = value(row, "Registration.LastUpdateDate.$")
             if member == "level1":
                 category = value(row, "Entity.EntityCategory.$")
@@ -526,8 +538,9 @@ def record_evidence(
                     "SOLE_PROPRIETOR",
                     "INTERNATIONAL_ORGANIZATION",
                     # A GLEIF category (6,955 records in the 2026-09-11 Golden
-                    # Copy), once missing here, so every government record was
-                    # set aside as invalid rather than as not a Company.
+                    # Copy), once missing here, so every government record in
+                    # scope was set aside as invalid, and blocking, rather than
+                    # as not a Company.
                     "RESIDENT_GOVERNMENT_ENTITY",
                 }:
                     raise UnsupportedRecord("invalid_identity_kind")

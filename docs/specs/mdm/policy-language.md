@@ -273,13 +273,16 @@ Rules:
   it carries no proof and no activation. A step that decides a kind may not
   name one, and the value must be a kind. A kind verdict the policy has not
   switched on is its own Probable Kind. The waiting record keeps it as
-  `probable_kind`, written only when known so older records keep their ids,
-  and `mdm_v2.stage_waiting` lists the waiting records with it (migration
-  036). A contract that states kinds by a lookup table may name the Probable
+  `probable_kind`, written only when known, so a record given none keeps its
+  id; a record given one waits differently when its publication is re-read,
+  and so collides, the limit accepted on 2026-09-23. `mdm_v2.stage_waiting`
+  lists the waiting records with it (migration 036). A contract that states kinds by a lookup table may name the Probable
   Kind of the values it does not accept in `probable_kind_values` (GLEIF:
   `FUND` → `fund_structure`, `BRANCH` → `branch`,
   `RESIDENT_GOVERNMENT_ENTITY` → `government`, `INTERNATIONAL_ORGANIZATION` →
-  `international_organization`; `SOLE_PROPRIETOR` is left unnamed).
+  `international_organization`; `SOLE_PROPRIETOR` is left unnamed). A
+  record outside the approved Company scope still carries the kind its
+  category names.
 
 - **`min_count` or `max_count` is required on `token_match`** (§5). Without
   one, the primitive returns true whatever the name holds, which is a

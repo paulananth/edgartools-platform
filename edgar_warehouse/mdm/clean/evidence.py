@@ -148,8 +148,11 @@ def deferred_record(
 
     `probable_kind` is the kind the rule step or contract that held it back
     names for it: it sorts the Stage and never creates an identity (CONTEXT.md,
-    Probable Kind). It is written only when known, so a record read before it
-    existed keeps its id.
+    Probable Kind). It is written only when known, so a record given none keeps
+    the id it had. A record given one has a new body, so re-reading a
+    publication already committed collides: the limit the operator accepted
+    for any record that waits differently when re-read (2026-09-23,
+    `test_a_deferred_reread_that_changes_its_body_still_collides`).
     """
     if not all((source_code, publication_key, record_locator, schema_version, reason)):
         raise ValueError(

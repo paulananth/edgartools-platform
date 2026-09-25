@@ -30,7 +30,7 @@ JOIN mdm_v2.projection r
 WHERE r.body->'open' = 'true'::jsonb
   AND coalesce(r.body->'retired', 'false'::jsonb) = 'false'::jsonb;
 
--- Counting the Stage by Probable Kind reads this key on every waiting record.
+-- Listing the records waiting as one Probable Kind reads this key.
 CREATE INDEX clean_deferred_probable_kind
     ON mdm_v2.deferred_record ((body->>'probable_kind'));
 

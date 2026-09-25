@@ -375,3 +375,42 @@ def test_a_waiting_gleif_record_carries_the_kind_its_category_names(category, pr
     )
     assert kind == "deferred"
     assert evidence.get("probable_kind") == probable
+
+
+@pytest.mark.parametrize(
+    ("category", "probable"),
+    [
+        ("GENERAL", "company"),
+        ("FUND", "fund_structure"),
+        ("SOLE_PROPRIETOR", None),
+        (None, None),
+    ],
+)
+def test_a_gleif_record_outside_the_company_scope_still_carries_its_kind(
+    category, probable
+):
+    """Scope decides whether it waits, not what it probably is."""
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
+
+    record = {
+        "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+        "Entity": {"EntityCategory": {"$": category}} if category else {},
+        "Registration": {"LastUpdateDate": {"$": "2026-09-10T00:00:00Z"}},
+    }
+    kind, evidence = record_evidence(
+        record,
+        member="level1",
+        contract=dataset_contract("level1"),
+        source_code="gleif.lei.v1",
+        eligible_leis=set(),
+        publication={
+            "publication_key": "p1",
+            "revision": 1,
+            "artifact_sha256": "a" * 64,
+            "member": "level1",
+        },
+        ordinal=0,
+    )
+    assert kind == "deferred"
+    assert evidence["reason"] == "outside_approved_company_scope"
+    assert evidence.get("probable_kind") == probable

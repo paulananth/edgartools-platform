@@ -80,6 +80,20 @@ def value(row: dict, path: str):
     return result
 
 
+def category_kind(row: dict, mapping: dict) -> str | None:
+    """The kind a `kind_field` contract names for a record's category.
+
+    The kind it accepts, else the category's Probable Kind (CONTEXT.md), else
+    None: a category the contract does not name says nothing.
+    """
+    source_kind = value(row, mapping["kind_field"])
+    if not isinstance(source_kind, str):
+        return None
+    return mapping["kind_values"].get(source_kind) or mapping.get(
+        "probable_kind_values", {}
+    ).get(source_kind)
+
+
 def record_key(row: dict, paths: list[str]) -> str:
     parts = [value(row, p) for p in paths]
     if not parts or any(v is None or v == "" for v in parts):
@@ -170,10 +184,7 @@ def normalize(
             # A category the contract does not accept may still say what the
             # record probably is (GLEIF FUND, BRANCH), so the Stage can sort it.
             raise UnsupportedRecord(
-                "unsupported_identity_kind",
-                probable_kind=(mapping.get("probable_kind_values") or {}).get(
-                    source_kind
-                ),
+                "unsupported_identity_kind", probable_kind=category_kind(row, mapping)
             )
     if not kind:
         raise UnsupportedRecord("unsupported_identity_kind")
