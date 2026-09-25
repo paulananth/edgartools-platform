@@ -66,10 +66,11 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   to ISO 3166-2 — unit + PG16 on AAPL, MSFT, Shell, ASML (2026-09-24 10:17 ET)
 - [x] Build the kind-level default priority list — `defaults`, an authority
   section, so changing it moves every value's recorded digest (2026-09-24 10:17 ET)
-- [ ] **Address** is one structured field. SEC business address and GLEIF legal
+- [x] Select one whole structured address — PG16 154 tests passed (2026-09-25 18:31 ET).
+  SEC business address and GLEIF legal
   address map to the same field; the winner supplies all components, and a
   different whole address remains conflicting evidence. The SEC country-code
-  gap remains ticket 14. Final PG16 validation of all GLEIF address lines is pending.
+  gap remains ticket 14. GLEIF additional legal-address lines are retained.
 - [ ] ~~Foreign EDGAR location codes to ISO 3166~~ no longer needed: SEC's
   code is not compared with anything (2026-09-24 11:10 ET)
 - [x] Three-axis `/code-review` — Standards: 1 hard (defaults read outside the
@@ -103,9 +104,11 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   SEC-to-ISO conversion is removed. Supersedes "jurisdiction is one field"
   above. Shell now reads `DC` from SEC and `GB` from GLEIF. **Name** is the
   only field both sources supply today — PG16, four Companies (2026-09-24 11:10 ET)
-- [ ] Migration 037 creates and backfills the dated table, routes aliases in
+- [x] Install migration 037 and date Company rows — PG16 154 tests passed (2026-09-25 18:31 ET).
+  Migration 037 creates and backfills the dated table, routes aliases in
   a separate metadata table, writes new versions through the Merge Stage's
   projection trigger in the same transaction, removes `company_master`, and
   moves `company_master_field` onto the dated table. PostgreSQL 16 tests cover
   a populated upgrade, later writes, historical reads, alias reversal and
-  restricted writes; final PG16 suite is pending.
+  restricted writes. The populated-store test delivers pending pre-migration
+  exports from the dated authority.
