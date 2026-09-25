@@ -75,9 +75,10 @@ CONTRACT = {
     },
 }
 # Ticket 12, the Account hold-back (rule 2026-09-25.13): both Company steps
-# clear the 95% bar and the fresh adversarial fixture has no violation. The
-# proposal below is not an activation until the operator approves this exact
-# policy digest and supplies the true approval time.
+# clear the 95% bar and the fresh adversarial fixture has no violation.
+# The operator approved the frozen inactive-policy digest
+# 31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f
+# on 2026-09-25. The approval timestamp below is when that reply was processed.
 PROOF = {
     "method": "wilson_lower_bound",
     "one_sided_confidence": 0.95,
@@ -106,13 +107,13 @@ PROOF = {
             "12-measure-13.py": "6fc1e10772f89f369513d74d80927670dce71e7b937e149951a50311aaf66ceb",
         },
     },
-    "approved_by": None,
-    "approved_at": None,
+    "approved_by": "operator",
+    "approved_at": "2026-09-25T17:09:33Z",
     "reason": "ticket 12 Proving Run, SEC Company classification, the Account "
     "hold-back: bronze-only hand review, each Company step clears 0.95, "
     "0 adversarial violations",
 }
-PENDING_ACTIVATION = {
+APPROVED_ACTIVATION = {
     "kind": "company",
     "family": "classification",
     "rule_id": "sec-company-candidate",
@@ -123,8 +124,7 @@ PENDING_ACTIVATION = {
 }
 POLICY = {
     "version": "sec-company-local-v2",
-    # The operator has not approved this digest, so no verdict acts alone.
-    "automatic_rules": [],
+    "automatic_rules": [APPROVED_ACTIVATION],
     "required_consumers": ["journal", "export", "graph"],
     # Each kind's rules are data, one file per kind, loaded rather than
     # restated here (operator, 2026-09-24).

@@ -1,14 +1,16 @@
 # Account hold-back: SEC Company rule for operator review
 
-**Decision state:** The Account hold-back is proved on the pinned local cohort,
-but the standard rule is off. No approval for this version has been recorded.
-The pending policy fingerprint is
+**Decision state:** The operator approved the frozen Account hold-back proposal
+on 2026-09-25. The reply was processed at 2026-09-25 13:09:33 ET
+(2026-09-25T17:09:33Z). The rule is active on the Codex branch only; it has
+not been registered in a shared database or merged. The approved proposal's
+inactive-policy fingerprint is
 `31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f`.
-It identifies the exact *inactive* policy and its rule version
-`sec-company-candidate` `2026-09-25.13`. The activated policy will get a
-different fingerprint because it must carry the approval and its real time.
+It identifies rule `sec-company-candidate` `2026-09-25.13` before activation.
+The active policy fingerprint, including approval details, is
+`35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321`.
 
-If approved, the rule will let a qualifying SEC filer enter the Company Stage.
+The rule lets a qualifying SEC filer enter the Company Stage.
 It calls SEC `operating` filers Companies only after holding back fund names,
 fund-report filers, private Form 10 plus Form D filers without a BDC election,
 and several code, ticker, and category combinations. It also calls an SEC
@@ -50,9 +52,10 @@ precision samples do not measure how many true Companies wait. Re-reading a
 committed deferred publication after Probable Kind changes still collides;
 that limitation was accepted on 2026-09-23 and requires a separate repair.
 
-**Approval gate:** The operator must approve the exact frozen proposal above.
-The approval name and actual approval time then enter the policy body, the
-rule is activated, and its final digest must be checked before registration.
+**Remaining gate:** The operator approved the frozen proposal above. The
+approval name and recorded approval time now live in the policy body, and the
+rule is active on this branch. The exact active fingerprint must be checked
+before registration; PR #712 remains unmerged until the operator says to merge.
 Activation can be reversed for future records by registering a new policy
 without the automatic entry. Previously journaled decisions require review
 and evidence replay; changing the policy does not erase them.

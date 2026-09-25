@@ -24,10 +24,14 @@ priority SEC then GLEIF, every field from every source).
 - [x] Full PostgreSQL 16 Clean suite: 134 passed without skips in 6m42s;
   all seven PR #712 CI checks green; Standards/Spec findings repaired and GoF
   review recommends no refactor (2026-09-25 08:37 ET).
-- [ ] Present the current Account hold-back brief and receive explicit approval
-  of its exact rule fingerprint.
-- [ ] On approval: switch on that rule, pin the final active fingerprint,
-  rerun the four-company PG16 test, then merge on the operator's word.
+- [x] Operator approved the frozen Account hold-back proposal fingerprint;
+  the reply was processed at 2026-09-25 13:09:33 ET.
+- [x] The approved rule is active on the Codex branch. The active policy
+  fingerprint is pinned; all five four-company PG16 tests pass (2026-09-25 13:12 ET).
+- [x] Full local suites on the active rule: 1,573 MDM/architecture and 134
+  PG16 Clean tests passed without skips (2026-09-25 13:21 ET).
+- [ ] PR #712 CI on the active rule; check its final fingerprint before
+  registration, then merge only on the operator's word.
 
 ## 2. Match SEC and GLEIF records into one Company (ticket 08) — critical path
 

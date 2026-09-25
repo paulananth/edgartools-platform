@@ -1,21 +1,21 @@
 # Prove and switch on the SEC Company classification rule
 
 Type: task
-Status: proof complete; activation pending operator approval
-Blocked by: ticket 06 exact-digest approval for activation
+Status: activated on Codex branch; final digest review and merge pending
+Blocked by: operator review of the active digest and merge decision
 
 ## Question
 
-Shell and ASML wait in the Stage because the standard SEC Company rule is
+Shell and ASML waited in the Stage while the standard SEC Company rule was
 declared but inactive. SEC calls a foreign issuer `other`, as it does an
 individual; the issuer also carries an industry code and filer category. The
-candidate rule `sec-company-candidate` distinguishes them, but a rule acts
-alone only on a measured proof (§9.2) and the operator's approval of one exact
-digest.
+candidate rule `sec-company-candidate` distinguishes them. The operator
+approved the frozen Account hold-back proposal on 2026-09-25, and the active
+policy now carries that proof (§9.2) and the recorded approval time.
 
 This is the **classification** part of ticket 05's Proving Run, carved out:
 ticket 05 as written measures SEC-to-GLEIF matching and waits on ticket 08.
-Ticket 06's approval remains pending and is not asked or recorded here.
+Ticket 06's approval for the wider binding policy remains open separately.
 
 ## Decisions (operator, 2026-09-24)
 
@@ -333,8 +333,16 @@ code as the digest's key.
 - [x] Three-axis review: fixed stale documentation and `.12` checklist items,
   added CI re-scoring of frozen labels, and replaced the old brief; GoF review
   recommends no runtime refactor (2026-09-25 08:37 ET).
-- [ ] Plain-English brief written; operator approval of the exact digest pending.
-- [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
+- [x] Operator approved the frozen proposal fingerprint
+  `31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f`;
+  reply processed at 2026-09-25 13:09:33 ET.
+- [x] Activate the Account hold-back on the Codex branch. Active digest
+  `35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321`;
+  87 focused unit and five PG16 four-company tests passed (2026-09-25 13:12 ET).
+- [x] Full local suites after activation: 1,573 MDM/architecture and 134 PG16
+  Clean tests passed without skips; the PG16 run took 8m05s
+  (2026-09-25 13:21 ET).
+- [ ] PR #712 CI green on the activated policy; merge only on the operator's word.
 - [x] Handed to Codex with the PROOF and PENDING_ACTIVATION written; old `.8`
   tests still to update (`12-handover-to-codex-2.md`, 2026-09-25 08:14 ET).
 
@@ -344,5 +352,12 @@ code as the digest's key.
 - [x] Verify pinned research hashes and run MDM, architecture, and real PG16 Clean MDM tests: 1,572 unit/architecture plus 134 PG16, no skips; CI re-score also passed (2026-09-25 08:37 ET).
 - [x] Push branch and run Standards, Spec, and GoF reviews: PR #712 has seven green checks; documentation and CI re-score findings repaired, no GoF refactor justified (2026-09-25 08:37 ET).
 - [x] Write the Account hold-back brief with the pending digest, measured results, borderline readings, and limits (`12-approval-brief.md`, 2026-09-25 08:33 ET).
-- [ ] Present the brief and obtain explicit approval of the exact rule fingerprint.
-- [ ] Record the real approval time, activate only that approved digest, rerun the four-company PostgreSQL 16 test and CI, then merge on the operator's word.
+- [x] Present the brief and obtain explicit approval of the frozen proposal
+  fingerprint (operator reply, processed 2026-09-25 13:09:33 ET).
+- [x] Record the approval time and activate the approved Account hold-back on
+  this branch; four-company PG16 test passed, with active digest pinned in unit
+  and integration tests (2026-09-25 13:12 ET).
+- [x] Full local suites against the active rule: 1,573 MDM/architecture and
+  134 PG16 Clean passed without skips (2026-09-25 13:21 ET).
+- [ ] PR #712 CI green, active digest reviewed before shared registration,
+  and merge only on the operator's word.

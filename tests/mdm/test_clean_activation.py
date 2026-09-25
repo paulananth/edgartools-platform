@@ -28,7 +28,7 @@ from edgar_warehouse.mdm.clean.activation import (
     wilson_lower_bound,
 )
 from edgar_warehouse.mdm.clean.classification import fired
-from edgar_warehouse.mdm.clean.company_source import PENDING_ACTIVATION, POLICY, PROOF
+from edgar_warehouse.mdm.clean.company_source import APPROVED_ACTIVATION, POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.clean.store import Conflict, digest
 
@@ -494,32 +494,34 @@ class TestAnIdentifierRule:
 
 
 class TestTheCompanyPolicy:
-    """Ticket 12: measured proof awaits exact-digest operator approval."""
+    """Ticket 12: the approved Account hold-back acts alone."""
 
-    def test_the_rule_remains_inactive_without_operator_approval(self):
+    def test_the_approved_rule_activates_only_its_company_verdict(self):
         check_policy(POLICY)
         (rule,) = [
             r
             for r in POLICY["kinds"]["company"]["rules"]
             if r["rule_id"] == "sec-company-candidate"
         ]
-        assert not activated(POLICY, "company", rule, "company")
+        assert activated(POLICY, "company", rule, "company")
         assert not activated(POLICY, "company", rule, "deferred")
         assert all(
             step["lower_bound"] >= 0.95 for step in PROOF["cohort"]["by_step"].values()
         )
         assert PROOF["adversarial"]["violations"] == 0
-        assert PROOF["approved_at"] is None
-        assert PROOF["approved_by"] is None
-        assert PENDING_ACTIVATION["proof"] is PROOF
-        proposed = copy.deepcopy(POLICY)
-        proposed["automatic_rules"] = [PENDING_ACTIVATION]
-        with pytest.raises(Conflict, match="lacks its approval"):
-            check_policy(proposed)
-
-    def test_the_policy_is_the_pending_digest(self):
-        assert digest(POLICY) == (
+        assert PROOF["approved_at"] == "2026-09-25T17:09:33Z"
+        assert PROOF["approved_by"] == "operator"
+        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
+        assert APPROVED_ACTIVATION["proof"] is PROOF
+        pending = copy.deepcopy(POLICY)
+        pending["automatic_rules"] = []
+        assert digest(pending) == (
             "31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f"
+        )
+
+    def test_the_policy_is_the_active_digest(self):
+        assert digest(POLICY) == (
+            "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
         )
 
     def test_the_proof_files_match_the_pinned_hashes(self):

@@ -16,9 +16,10 @@ What it does **not** prove, stated so no reader mistakes it:
   record waits in the Stage and **no master record is created**; SEC Apple and
   GLEIF Apple are two Stage rows, not one Company. Joining them is tickets 04
   and 08 (operator, 2026-09-24: an unlinked record waits in the Stage).
-- **That the candidate rule is accurate.** Its activation below carries a
-  fixture proof whose arithmetic holds; it measured nothing. A real activation
-  needs the Proving Run (ticket 05) and the operator's approval (ticket 06).
+- **That the Company classification rule is accurate in the whole population.**
+  The approved standard policy below carries the frozen Account hold-back
+  proof; this four-company fixture only checks execution and publication.
+  Other tests that use a synthetic proof measure nothing.
 - **Production reach.** Until 2026-09-24 the warehouse treated every SEC
   `entityType: "other"` filer as an individual and skipped its Company row;
   `is_individual_filer` now keeps foreign issuers such as Shell and ASML. This
@@ -147,23 +148,23 @@ def stage_and_master(database):
     return sorted(stage), masters
 
 
-# Pending standard policy: the Account hold-back proof passes, but approval is absent.
-PENDING_POLICY = "31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f"
+# Approved standard policy for the Account hold-back.
+ACTIVE_POLICY = "35250dad7c22fe9404abda7af8b6be91fb5cfba43859aa531fcc18e2e0111321"
 
 
-def test_the_standard_policy_keeps_all_four_company_candidates_waiting(
+def test_the_standard_policy_classifies_all_four_companies(
     database, tmp_path
 ):
-    """The measured rule is declared, but no verdict acts before approval."""
+    """The approved standard rule acts for four issuers, but not two people."""
     policy = register(database, {**CONTRACT, "family": "fixture"}, POLICY)
-    assert policy == PENDING_POLICY
+    assert policy == ACTIVE_POLICY
     evidence, deferred = batch_evidence(
         sec_batch(tmp_path), tmp_path, Store(database.application), policy_digest=policy
     )
     records = by_record(evidence, deferred)
-    assert evidence == []
+    assert len(evidence) == 4
     for cik in COMPANIES:
-        assert records[cik]["reason"] == "classification_not_activated"
+        assert records[cik]["kind"] == "company"
     for cik in (COOK, NADELLA):
         assert records[cik]["reason"] == "classification_deferred"
 
@@ -199,7 +200,8 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
     No binding rule exists, so nothing reaches `company_master`: this is the
     operator's rule that an unlinked record waits in the Stage, not a failure.
     """
-    policy = register(database, rule_contract(), rule_policy(active=True))
+    policy = register(database, rule_contract(), POLICY)
+    assert policy == ACTIVE_POLICY
     store = Store(database.application)
     coordinator = RunCoordinator(command_databases[0], store)
     manifest = tmp_path / "sec-manifest.json"
