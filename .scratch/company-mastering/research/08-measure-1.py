@@ -235,8 +235,11 @@ def score(out: Path) -> None:
     for rule in RULES:
         drawn = [r for r in sample if rule in r["drawn_for"]]
         correct = sum(r["final"] == "same" for r in drawn)
+        arms = [r for r in adversarial if rule in r["rules"]]
         by_rule[rule] = {"n": len(drawn), "correct": correct,
-                         "lower_bound": round(wilson(correct, len(drawn)), 6)}
+                         "lower_bound": round(wilson(correct, len(drawn)), 6),
+                         "adversarial": {"n": len(arms),
+                                         "violations": sum(r["final"] != "same" for r in arms)}}
     violations = [r for r in adversarial if r["final"] != "same"]
     summary = {
         "by_rule": by_rule,

@@ -1,0 +1,242 @@
+{
+ "adversarial": {
+  "by_arm": {
+   "GLEIF lapsed or retired": 50,
+   "foreign filer": 50,
+   "headquarters country differs": 50,
+   "one-word name": 50,
+   "postal step, no jurisdiction agreement": 50,
+   "registered agent legal address": 50,
+   "renamed SEC filer": 50
+  },
+  "n": 326,
+  "violations": 19
+ },
+ "by_rule": {
+  "sec-gleif-name-jurisdiction": {
+   "adversarial": {
+    "n": 257,
+    "violations": 0
+   },
+   "correct": 300,
+   "lower_bound": 0.991062,
+   "n": 300
+  },
+  "sec-gleif-name-postal": {
+   "adversarial": {
+    "n": 162,
+    "violations": 19
+   },
+   "correct": 294,
+   "lower_bound": 0.961796,
+   "n": 300
+  }
+ },
+ "files": {
+  "08-1-adversarial.jsonl": "18b948b361ec72c1938004961f58e90461d1db4a273acdbc0c1d92629636cb8a",
+  "08-1-population.json": "c978d0f0ae5f9f0ad431a1533760fa230539ad5e96a007f9cc86d7cda01705b5",
+  "08-1-sample.jsonl": "1e535c09d0b0e42d5ebea725eb36111b9978008bb5ef576098d9253de5ad38ee"
+ },
+ "wrong": [
+  {
+   "cik": "0000927971",
+   "final": "unresolved",
+   "note": "Bank of Montreal: SEC Ontario, GLEIF Quebec; the rows do not decide.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001468174",
+   "final": "unresolved",
+   "note": "Hyatt Hotels: SEC Illinois, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001561550",
+   "final": "unresolved",
+   "note": "Datadog: SEC Nevada, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001665918",
+   "final": "unresolved",
+   "note": "US Foods Holding: SEC Illinois, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001680062",
+   "final": "unresolved",
+   "note": "ACM Research: SEC California, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001795250",
+   "final": "unresolved",
+   "note": "Sphere Entertainment: SEC Nevada, GLEIF Delaware (a conversion the rows do not show).",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0000028917",
+   "final": "unresolved",
+   "note": "Dillard's: SEC Texas, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0000029905",
+   "final": "unresolved",
+   "note": "Dover: SEC New York, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0000081362",
+   "final": "unresolved",
+   "note": "Quaker Chemical: SEC Pennsylvania, GLEIF Delaware with a Delaware registered-agent address.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0000098677",
+   "final": "unresolved",
+   "note": "Tootsie Roll Industries: SEC Virginia, GLEIF Illinois.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0000824142",
+   "final": "different",
+   "note": "AAON, Inc.: SEC Nevada, GLEIF Oklahoma. The Nevada parent has an Oklahoma operating subsidiary of the same name; GLEIF's is that subsidiary.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0000918251",
+   "final": "unresolved",
+   "note": "Motorcar Parts of America: SEC New York, GLEIF California.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001002047",
+   "final": "unresolved",
+   "note": "NetApp: SEC California, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001057060",
+   "final": "unresolved",
+   "note": "MarineMax: SEC Delaware, GLEIF Florida.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001104506",
+   "final": "unresolved",
+   "note": "Insmed: SEC Virginia, GLEIF New Jersey.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001137091",
+   "final": "unresolved",
+   "note": "Power Solutions International: SEC Illinois, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001211583",
+   "final": "unresolved",
+   "note": "Fennec Pharmaceuticals: SEC British Columbia, GLEIF Ontario.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001509261",
+   "final": "unresolved",
+   "note": "Rezolute: SEC Nevada, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001547903",
+   "final": "unresolved",
+   "note": "NMI Holdings: SEC California, GLEIF Delaware.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001616000",
+   "final": "unresolved",
+   "note": "Xenia Hotels & Resorts: SEC Florida, GLEIF Maryland.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001717307",
+   "final": "unresolved",
+   "note": "Industrial Logistics Properties Trust: SEC Maryland, GLEIF Massachusetts.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001852973",
+   "final": "unresolved",
+   "note": "Borealis Foods: SEC Cayman Islands, GLEIF Ontario.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001876183",
+   "final": "unresolved",
+   "note": "IHS Holding: SEC Mauritius, GLEIF Cayman Islands.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0001945415",
+   "final": "unresolved",
+   "note": "HUHUTECH International: SEC China, GLEIF Cayman Islands.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  },
+  {
+   "cik": "0002075320",
+   "final": "unresolved",
+   "note": "Polaryx Therapeutics: SEC Wyoming, GLEIF Nevada.",
+   "rules": [
+    "sec-gleif-name-postal"
+   ]
+  }
+ ]
+}
