@@ -53,6 +53,7 @@ CLEAN_MDM_MIGRATIONS = (
     "034_clean_mdm_stage_view_naming.sql",
     "035_clean_mdm_automatic_assessment.sql",
     "036_clean_mdm_stage_waiting.sql",
+    "037_clean_mdm_company_versions.sql",
 )
 
 
@@ -416,6 +417,37 @@ class Store:
             {"request": canonical(request), "run": str(UUID(run_id))},
         )
 
+    def _validate_company_output(self, payload: dict) -> None:
+        """Require export/graph Company objects to equal the dated authority."""
+        generation = payload["generation"]
+        with self.engine.connect() as conn:
+            for item in payload.get("objects", []):
+                body = item.get("body", {})
+                if item.get("object_type") != "entity" or body.get("kind") != "company":
+                    continue
+                entity_id = item["object_id"]
+                if body.get("status") == "alias":
+                    canonical_id = conn.scalar(
+                        text("""SELECT canonical_id::text FROM mdm_v2.company_alias
+                        WHERE alias_id=CAST(:id AS uuid) AND from_generation<=:g
+                          AND (to_generation IS NULL OR to_generation>:g)"""),
+                        {"id": entity_id, "g": generation},
+                    )
+                    authoritative = (
+                        {"entity_id": entity_id, "kind": "company",
+                         "canonical_id": canonical_id, "status": "alias"}
+                        if canonical_id else None
+                    )
+                else:
+                    authoritative = conn.scalar(
+                        text("""SELECT body FROM mdm_v2.company
+                        WHERE entity_id=CAST(:id AS uuid) AND from_generation<=:g
+                          AND (to_generation IS NULL OR to_generation>:g)"""),
+                        {"id": entity_id, "g": generation},
+                    )
+                if authoritative != body:
+                    raise Conflict("Company publication differs from dated Company authority")
+
     def deliver_one(
         self,
         consumer: str,
@@ -433,6 +465,7 @@ class Store:
             return False
         key = f"{consumer}/{claim['batch_id']}"
         try:
+            self._validate_company_output(claim["payload"])
             publisher.publish(key, claim["payload"], claim["payload_hash"])
             receipt = publisher.verify(key, claim["payload"], claim["payload_hash"])
         except Exception as exc:

@@ -579,7 +579,14 @@ class TestMatchingEvidenceIsPinned:
         out = Path(args["output"])
         record = json.loads((out / "records.jsonl").read_text())
         # A state code in SEC's country slot means the United States.
-        assert record["business_address"] == {"postal_code": "95014", "country": "US"}
+        assert record["business_address"] == {
+            "street": "1 Main Street",
+            "street2": None,
+            "city": "Cupertino",
+            "region": "CA",
+            "postal_code": "95014",
+            "country": "US",
+        }
         census = json.loads((out / "name-census.json").read_text())
         assert (
             record["name_census"]["census"] == record["_origin"]["name_census_sha256"]
@@ -631,3 +638,7 @@ class TestMatchingEvidenceIsPinned:
         }
         # Matching evidence grants no field a value.
         assert "business_postal_code" not in body["fields"]
+        assert body["fields"]["address"] == {
+            "op": "value",
+            "value": {"postcode": "95014", "country": "US"},
+        }

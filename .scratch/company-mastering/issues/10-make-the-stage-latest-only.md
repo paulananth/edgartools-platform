@@ -68,5 +68,41 @@ Each must be settled, one at a time, before the migration is written:
   Company, empty while the record waits. It is not in the key, because a
   waiting record has none. One row per company per source follows from the
   latest-only upsert.
-- [ ] Settle field provenance after a replacement
+- [x] Settle field provenance after a replacement — operator (2026-09-25):
+  keep raw history in bronze and only the latest normalized row in Stage.
+  The immutable journal keeps compact decision receipts and bronze references,
+  not full historical assertions. The dated Company row already retains each
+  selected field's value, winner and conflicts; the receipt must carry the
+  source key, exact bronze object/hash and locator, mapping and rule versions,
+  decisive predicate values, and decision outcome. An old full raw record is
+  re-read from verified bronze when investigation needs it.
 - [ ] Migration on a populated store, Merge Stage change, PG16 tests
+
+## Implementation contract for the next change
+
+- Add a unique Stage key `(source_code, record_key)`, with a nullable bound
+  `entity_id`. A later source revision replaces that row only if its native
+  revision and mapping reading win the declared order; duplicates and late
+  older deliveries keep the current row. Every row carries an exact bronze
+  object and hash. No source record is silently retired by absence.
+- A patch source's latest Stage row must include the **resolved current source
+  snapshot** as well as the latest raw assertion. Apply value, clear, retract
+  and unknown operations against the previous snapshot atomically, so a sparse
+  patch cannot erase an unchanged field when old Stage rows leave. Preserve
+  each surviving field's source assertion and publication references.
+- A bound record is reassessed at the end of its source-load batch. Same
+  identifiers keep its ID; a contradiction routes to correction/review, never
+  moves a binding by overwriting the Stage row. Merge/reversal replays current
+  Stage snapshots; bronze is read only to investigate a past decision.
+- Stop copying full assertions into `batch.effects`. Keep a request hash and
+  compact receipts so a redelivery can be checked and observed without
+  recomputing a hash from a retained full request. This requires a fenced
+  duplicate-observation capability and a migration of existing batches before
+  changing `commit_batch`; do not truncate prior audit data in place.
+- The Company API obtains historic winner evidence from dated Company rows and
+  the compact receipt. A verified bronze reread supplies the full source row
+  on demand. A missing or hash-mismatched bronze object is a blocking recovery
+  error, not a fabricated provenance response.
+- Prove old and new layouts on populated PostgreSQL 16, including sparse
+  patches, reordered/future-effective revisions, correction, reversal, lost
+  acknowledgements and publication retries before the migration is enabled.

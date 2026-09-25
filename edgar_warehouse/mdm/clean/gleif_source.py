@@ -361,7 +361,7 @@ def validate_release(manifest: dict, native: dict) -> None:
         raise Conflict("Invalid native release metadata or Company scope") from exc
 
 
-def dataset_contract(member: str, *, level1_source: str = "gleif.lei.v1") -> dict:
+def dataset_contract(member: str, *, level1_source: str = "gleif.level1.v1") -> dict:
     """Governance input, not registration or activation. Field ranks live in policy."""
     mapping: dict = {
         "version": VERSION,
@@ -395,6 +395,15 @@ def dataset_contract(member: str, *, level1_source: str = "gleif.lei.v1") -> dic
             # `jurisdiction` is GLEIF's alone; SEC gives state of incorporation
             # as its own field (operator, 2026-09-24).
             "name": "Entity.LegalName.$",
+            "address": {
+                "components": {
+                    "street": "Entity.LegalAddress.FirstAddressLine.$",
+                    "city": "Entity.LegalAddress.City.$",
+                    "region": "Entity.LegalAddress.Region.$",
+                    "postcode": "Entity.LegalAddress.PostalCode.$",
+                    "country": "Entity.LegalAddress.Country.$",
+                }
+            },
             "jurisdiction": "Entity.LegalJurisdiction.$",
             "gleif_legal_form": "Entity.LegalForm.EntityLegalFormCode.$",
             "gleif_entity_status": "Entity.EntityStatus.$",

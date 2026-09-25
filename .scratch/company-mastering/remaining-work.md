@@ -65,21 +65,24 @@ priority SEC then GLEIF, every field from every source).
 
 ## 3. The dated Company table, the final authority (ticket 09)
 
-- [ ] Decide the identifying-field columns
-- [ ] Decide what `valid_from` means (source change time, or MDM's decision time)
-- [ ] Address as one field (SEC's address table is not yet read)
-- [ ] Refuse a policy source name that matches no registered source
-- [ ] Settle the GLEIF source name (`gleif.lei.v1` vs `gleif.level1.v1`)
+- [x] Identifying-field columns plus extensible selected fields and identifiers
+- [x] `valid_from` is MDM's recorded decision time
+- [x] SEC and GLEIF addresses map to one structured field selected as a whole
+- [x] Refuse an arriving Company source missing from its priority list
+- [x] GLEIF Level 1 source name is `gleif.level1.v1`
 - [ ] Policy file changes without a code release
 - [ ] Stores holding readings under the old field names
-- [ ] Migration, Merge Stage writes the table in the same transaction, tests on
-  a populated store; remove the `company_master` view
+- [x] Migration 037 backfills and writes the table in the Merge Stage's
+  transaction; populated-store PG16 test; `company_master` view removed
 
 ## 4. Stage holds only the latest record per source (ticket 10)
 
 - [ ] What a match decision points to once the record it named is replaced
 - [ ] Reversal and replay re-read bronze instead of kept Stage rows
-- [ ] Field provenance after a replacement
+- [ ] Field provenance after a replacement: design settled to retain the
+  winner and conflicts in the dated Company version, compact decision receipts
+  with bronze references in the journal, and raw history in bronze (operator,
+  2026-09-25); implementation remains open.
 - [ ] Lift the append-only guard on the Stage; migration on a populated store;
   merge runs at the end of each source load
 

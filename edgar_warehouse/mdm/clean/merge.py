@@ -29,6 +29,23 @@ def anchors(decision: dict) -> set[str]:
     }
 
 
+def check_company_sources(policy: dict, assertions: list[dict]) -> None:
+    """A kind-level fill rule must name every Company source now in scope.
+
+    A policy may be registered before a later source dataset, but once that
+    source first arrives, an incorrect priority name must fail the batch
+    instead of silently omitting all its fields.
+    """
+    defaults = (policy.get("kinds") or {}).get("company", {}).get("defaults")
+    if not defaults:
+        return
+    declared = set(defaults.get("sources", []))
+    present = {a["source_code"] for a in assertions if a["kind"] == "company"}
+    missing = present - declared
+    if missing:
+        raise Conflict("Company policy has no source priority for: " + ", ".join(sorted(missing)))
+
+
 def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: int):
     """Conservative closure includes historical merges and incoming/outgoing edges.
 
@@ -392,6 +409,7 @@ class MergeStage:
             stored_a, stored_d, stored_ids = load_closure(
                 conn, assertions, decisions, limit=self.closure_limit
             )
+            check_company_sources(policy, [*stored_a, *assertions])
             context = _context if _context is not None else {}
             if preview and any(d["operation"] in {"bind", "merge"} for d in decisions):
                 all_assertions = [*stored_a, *assertions]

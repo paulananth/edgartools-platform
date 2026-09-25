@@ -106,9 +106,10 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     assert CLASSIFICATION_VERDICTS - KINDS == {"entity_undetermined", "deferred"}
     # Plus one view across every kind: the records still waiting, each with
     # its Probable Kind (036).
-    assert installed_views(database) == {
+    assert installed_views(database) == ({
         f"{kind}_{shape}" for kind in schema_kinds for shape in SHAPES
-    } | {"stage_waiting"}
+    } | {"stage_waiting"}) - {"company_master"}
+    assert columns(database, "company")
     # Exact equality above already forbids it, but say it outright: 034 renamed
     # 033's source-side pair, so not one view still carries the old name.
     assert not [v for v in installed_views(database) if "_evidence" in v]
@@ -127,7 +128,7 @@ RENAMED_OR_DROPPED = {
 
 @pytest.mark.parametrize(
     ("base", "view"),
-    [("assertion", "company_stage"), ("projection", "company_master")],
+    [("assertion", "company_stage"), ("projection", "person_master")],
 )
 def test_a_whole_record_view_shows_every_column_of_its_base_table(database, base, view):
     """A view freezes its column list at creation.
@@ -333,7 +334,7 @@ def test_the_master_field_view_names_the_source_that_won_each_field(database):
             ("name", "Acme", "fixture.primary", 1),
         ]
         assert conn.execute(
-            text("SELECT entity_id,status FROM mdm_v2.company_master")
+            text("SELECT entity_id::text,status FROM mdm_v2.company WHERE valid_to IS NULL")
         ).all() == [(identity["entity_id"], "accepted")]
         # The same entity is absent from every other kind's master view.
         assert conn.scalar(text("SELECT count(*) FROM mdm_v2.person_master")) == 0
@@ -457,6 +458,7 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
             "034_clean_mdm_stage_view_naming.sql",
             "035_clean_mdm_automatic_assessment.sql",
             "036_clean_mdm_stage_waiting.sql",
+            "037_clean_mdm_company_versions.sql",
         ]
         # 034 renamed rather than duplicated: the name 033 created is gone.
         assert (
@@ -473,7 +475,7 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
             for r in conn.execute(text("SELECT record_key FROM mdm_v2.person_stage"))
         ] == ["pop-2"]
         assert conn.execute(
-            text("SELECT entity_id FROM mdm_v2.company_master")
+            text("SELECT entity_id::text FROM mdm_v2.company WHERE valid_to IS NULL")
         ).all() == [(identity["entity_id"],)]
         assert (
             conn.scalar(text("SELECT count(*) FROM mdm_v2.company_master_field")) == 1
