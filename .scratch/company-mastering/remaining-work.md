@@ -9,26 +9,25 @@ from GLEIF**, decided by approved rules, proven locally on real PostgreSQL 16.
 Already done: tickets 01–04, 07, 11; parts of 09 (Company rule as data, source
 priority SEC then GLEIF, every field from every source).
 
-## 1. SEC Company rule: Shell and ASML become Companies (ticket 12, PR #710)
+## 1. SEC Company rule: Shell and ASML become Companies (ticket 12, PR #712)
 
-- [x] Bar per decision type; Company classification acts at 95%
-- [x] Rule `.8` measured: step 2 299/300 (98.5%), step 4 300/300 (99.1%),
-  0 wrong in 483 trick records (2026-09-24 21:50 ET)
-- [x] Full test suite green (2026-09-24 22:07 ET): MDM 889 passed, architecture
-  570 passed; PG16 integration 130 passed, 2 fixed (tests that read SEC
-  records without the policy the contract now names; rerun 2 passed), 1 known
-  `fastapi` baseline
-- [x] Commit the lint fixes to the test files (2026-09-24 21:57 ET; ruff clean on
-  every changed test file; the two research scripts stay as hashed in the proof)
-- [x] Three-axis review; the proof check now holds each step to the bar (2026-09-24 22:21 ET)
-- [ ] **Step 2 fails a fresh trick set: 18 of 200 are Funds** (2026-09-24 22:21 ET); tighten
-  it, then re-measure on fresh draws
-- [ ] Show the operator the exact rule document, explain its fingerprint, ask
-  for approval
-- [ ] On approval: switch the rule on, pin the approved fingerprint in the
-  tests, re-run the four-company test (Apple, Microsoft, Shell, ASML
-  Companies; Cook, Nadella wait)
-- [ ] Three-axis review, CI green, merge on the operator's word
+- [x] Bar per decision type; Company classification requires a 95% one-sided
+  lower bound at 95% confidence (operator, 2026-09-24).
+- [x] The old Legal-form rule failed a fresh adversarial draw (18 Funds in its
+  step-2 arm); its proof and approval were withdrawn (2026-09-24 22:21 ET).
+- [x] The Account hold-back replaced it and passed its frozen bronze-based
+  labels: 600/600 sampled Company calls, each Company step 300/300 with a
+  0.9911 lower bound, and 0/328 adversarial violations (2026-09-25 08:13 ET).
+- [x] The pending rule stays inactive while tests pin its exact digest;
+  focused tests, three repaired PG16 tests, Ruff, and the new CI re-score
+  pass (2026-09-25 08:33 ET).
+- [x] Full PostgreSQL 16 Clean suite: 134 passed without skips in 6m42s;
+  all seven PR #712 CI checks green; Standards/Spec findings repaired and GoF
+  review recommends no refactor (2026-09-25 08:37 ET).
+- [ ] Present the current Account hold-back brief and receive explicit approval
+  of its exact rule fingerprint.
+- [ ] On approval: switch on that rule, pin the final active fingerprint,
+  rerun the four-company PG16 test, then merge on the operator's word.
 
 ## 2. Match SEC and GLEIF records into one Company (ticket 08) — critical path
 

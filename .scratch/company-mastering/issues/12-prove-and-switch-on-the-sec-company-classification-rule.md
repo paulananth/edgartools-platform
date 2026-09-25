@@ -327,9 +327,13 @@ code as the digest's key.
   0.9955); steps 8 and 10 each 300 of 300 (0.9911); **adversarial 0 of 328**.
   Held at step 5: 16 Funds, 18 Companies (13 BDCs); Probable Kind Fund
   Structure kept, noted as an even split.
-- [ ] PROOF, `PENDING_ACTIVATION`, tests pinning `.8`, suites, CI.
-- [ ] Three-axis `/code-review`; fix findings.
-- [ ] Plain-English brief; **operator approves the exact digest**.
+- [x] PROOF, `PENDING_ACTIVATION`, current tests, suites, and CI: 1,572 MDM
+  and architecture tests, 134 PG16 Clean tests without skips, and all seven
+  PR #712 checks passed (2026-09-25 08:37 ET).
+- [x] Three-axis review: fixed stale documentation and `.12` checklist items,
+  added CI re-scoring of frozen labels, and replaced the old brief; GoF review
+  recommends no runtime refactor (2026-09-25 08:37 ET).
+- [ ] Plain-English brief written; operator approval of the exact digest pending.
 - [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
 - [x] Handed to Codex with the PROOF and PENDING_ACTIVATION written; old `.8`
   tests still to update (`12-handover-to-codex-2.md`, 2026-09-25 08:14 ET).
@@ -337,8 +341,8 @@ code as the digest's key.
 ### Codex completion checklist (Account hold-back)
 
 - [x] Update the activation, source, and four-company tests to the frozen Account hold-back rule and its exact pending digest; keep the standard policy inactive (86 focused unit tests and three affected PG16 tests passed, 2026-09-25 08:33 ET).
-- [ ] Verify the pinned research hashes and run MDM, architecture, and real PostgreSQL 16 Clean MDM tests without prerequisite skips.
-- [ ] Push the reviewable branch, obtain green CI, and run Standards, Spec, and GoF reviews; repair any findings.
+- [x] Verify pinned research hashes and run MDM, architecture, and real PG16 Clean MDM tests: 1,572 unit/architecture plus 134 PG16, no skips; CI re-score also passed (2026-09-25 08:37 ET).
+- [x] Push branch and run Standards, Spec, and GoF reviews: PR #712 has seven green checks; documentation and CI re-score findings repaired, no GoF refactor justified (2026-09-25 08:37 ET).
 - [x] Write the Account hold-back brief with the pending digest, measured results, borderline readings, and limits (`12-approval-brief.md`, 2026-09-25 08:33 ET).
 - [ ] Present the brief and obtain explicit approval of the exact rule fingerprint.
 - [ ] Record the real approval time, activate only that approved digest, rerun the four-company PostgreSQL 16 test and CI, then merge on the operator's word.
