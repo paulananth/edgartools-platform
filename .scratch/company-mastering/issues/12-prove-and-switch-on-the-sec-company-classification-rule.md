@@ -38,6 +38,12 @@ Ticket 06's approval remains pending and is not asked or recorded here.
   privately (Form D) is a Fund** (Goldman Sachs Real Estate Finance Trust,
   Sculptor Diversified Real Estate Income Trust, HPS Net Lease Income REIT);
   listed and publicly offered REITs stay Companies (2026-09-25 06:09 ET).
+- **"Fund" in these rulings means a Fund Structure identity** (with a Fund
+  profile), not a Company holding a Fund profile, even where the arrangement
+  is a legal person (a Delaware LP fund). BDCs stay Companies with a Fund
+  profile. Fund Structure, Person, Government Entity and International
+  Organization records wait in the Stage, labelled with the kind that will own
+  them, until the Company gate passes; Person comes first after it (2026-09-25 06:32 ET).
 - The Company classification bar is **95%** at 95% one-sided confidence
   (confidence bands, `company-policy.md`); merging two published Company IDs
   keeps 99.9%.

@@ -39,8 +39,8 @@ The kind that a rule step gives to a record it holds in the Stage. It sorts the 
 _Avoid_: hint, candidate kind, a decided kind
 
 **Fund Structure**:
-A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
-_Avoid_: treating every fund as a Company, treating a fund share as the fund itself
+A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile, whether or not it is a legal person: a registered fund, a privately offered fund or REIT, or an exchange-traded commodity or crypto trust. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
+_Avoid_: "Fund kind"; treating every fund as a Company; a business development company, which is a Company with a Fund profile; treating a fund share as the fund itself
 
 **Branch Identity**:
 The identity of a separately identified branch establishment linked to its head office, including where the branch is not a separate legal person.
