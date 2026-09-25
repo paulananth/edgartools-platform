@@ -137,7 +137,9 @@ BEGIN
         refs,selected->'name'->>'value',selected->'sic'->>'value',
         selected->'sic_description'->>'value',selected->'state_of_incorporation'->>'value',
         selected->'fiscal_year_end'->>'value',selected->'description'->>'value',
-        selected->'jurisdiction'->>'value',selected->'address'->'value',
+        selected->'jurisdiction'->>'value',
+        CASE WHEN selected->'address'->'value'='null'::jsonb THEN NULL
+             ELSE selected->'address'->'value' END,
         selected->'gleif_legal_form'->>'value',selected->'gleif_entity_status'->>'value',
         selected->'gleif_registration_status'->>'value',
         selected->'gleif_initial_registration'->>'value',
@@ -181,6 +183,59 @@ END;
 $$;
 CREATE TRIGGER project_company_version AFTER INSERT OR UPDATE ON mdm_v2.projection
     FOR EACH ROW EXECUTE FUNCTION mdm_v2.project_company_version();
+
+-- Publication intent is assembled after the Company trigger has written the
+-- dated row. Resolve every Company object from that row before hashing the
+-- durable payload; projections are only the engine's working state.
+CREATE FUNCTION mdm_v2.company_payload_from_table(input_payload jsonb)
+RETURNS jsonb LANGUAGE plpgsql SET search_path=pg_catalog,mdm_v2 AS $$
+DECLARE
+    item jsonb;
+    authoritative jsonb;
+    canonical uuid;
+    rebuilt jsonb := '[]'::jsonb;
+    generation_number bigint := (input_payload->>'generation')::bigint;
+BEGIN
+    FOR item IN SELECT value FROM jsonb_array_elements(input_payload->'objects') LOOP
+        IF item->>'object_type'='entity' AND item->'body'->>'kind'='company' THEN
+            authoritative := NULL;
+            IF item->'body'->>'status'='alias' THEN
+                SELECT canonical_id INTO canonical FROM mdm_v2.company_alias
+                  WHERE alias_id=(item->>'object_id')::uuid
+                    AND from_generation<=generation_number
+                    AND (to_generation IS NULL OR to_generation>generation_number);
+                IF canonical IS NOT NULL THEN
+                    authoritative := jsonb_build_object(
+                        'entity_id',item->>'object_id','kind','company',
+                        'canonical_id',canonical::text,'status','alias');
+                END IF;
+            ELSE
+                SELECT body INTO authoritative FROM mdm_v2.company
+                  WHERE entity_id=(item->>'object_id')::uuid
+                    AND from_generation<=generation_number
+                    AND (to_generation IS NULL OR to_generation>generation_number);
+            END IF;
+            IF authoritative IS NULL THEN
+                RAISE EXCEPTION 'Company publication has no dated authority';
+            END IF;
+            item := jsonb_set(item,'{body}',authoritative);
+        END IF;
+        rebuilt := rebuilt || jsonb_build_array(item);
+    END LOOP;
+    RETURN jsonb_set(input_payload,'{objects}',rebuilt);
+END;
+$$;
+
+CREATE FUNCTION mdm_v2.publish_company_authority() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog,mdm_v2 AS $$
+BEGIN
+    NEW.payload := mdm_v2.company_payload_from_table(NEW.payload);
+    NEW.payload_hash := encode(sha256(convert_to(NEW.payload::text,'UTF8')),'hex');
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER publish_company_authority BEFORE INSERT ON mdm_v2.publication
+    FOR EACH ROW EXECUTE FUNCTION mdm_v2.publish_company_authority();
 
 -- Company field provenance is now read from the dated Company authority.
 DROP VIEW mdm_v2.company_master_field;

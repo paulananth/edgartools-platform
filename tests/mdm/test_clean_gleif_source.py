@@ -106,6 +106,7 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
             "LegalJurisdiction": {"$": "US-CA"},
             "LegalAddress": {
                 "FirstAddressLine": {"$": "One Main Street"},
+                "AdditionalAddressLine": [{"$": "Building A"}, {"$": "Suite 700"}],
                 "City": {"$": "Cupertino"},
                 "Region": {"$": "US-CA"},
                 "PostalCode": {"$": "95014"},
@@ -120,7 +121,7 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     kwargs = {
         "member": "level1",
         "contract": dataset_contract("level1"),
-        "source_code": "gleif.lei.v1",
+        "source_code": "gleif.level1.v1",
         "eligible_leis": {"HWUPKR0MPOU8FGXBT394"},
         "publication": {
             "publication_key": "p1",
@@ -135,6 +136,7 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     assert evidence["fields"]["jurisdiction"]["value"] == "US-CA"
     assert evidence["fields"]["address"]["value"] == {
         "street": "One Main Street",
+        "street2": "Building A\nSuite 700",
         "city": "Cupertino",
         "region": "US-CA",
         "postcode": "95014",

@@ -1,8 +1,10 @@
 # Write the versioned MDM Company table
 
 Type: task
-Status: in progress
-Blocked by: 04 (a Company master exists only once binding works)
+Status: claimed
+Blocked by: 04
+
+The full Company milestone still needs ticket 04's approved binding.
 
 ## Question
 
@@ -40,11 +42,11 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   removed; Company rows in `projection` are the engine's working state only,
   read by no reader or export; the Snowflake export and the API read
   Companies from `mdm_v2.company` alone
-- [x] Name `cik`, `lei`, `name`, structured `address`, SEC and GLEIF identifying
-  fields as columns; retain every future selected field and every cross-reference
-  in JSONB beside them (operator chose one structured address, 2026-09-25)
-- [x] `valid_from` is when MDM records the decision, not source effective time
-  (operator, 2026-09-25). A repeated `as_of` cutoff does not collapse two
+- [x] Name Company identifying columns — operator reply and migration 037 inspected (2026-09-25 16:23 ET).
+  `cik`, `lei`, `name`, structured `address`, SEC and GLEIF identifying fields
+  are columns; future selected fields and cross-references remain in JSONB.
+- [x] Set `valid_from` to MDM decision time — operator reply and PG16 test passed (2026-09-25 16:23 ET).
+  Source effective time stays in evidence. A repeated `as_of` cutoff does not collapse two
   separately committed decisions.
 - [x] Source priority for Company values: **SEC first, GLEIF next**,
   configurable per entity kind in the Mastering Policy — operator (2026-09-24 09:45 ET)
@@ -64,10 +66,10 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   to ISO 3166-2 — unit + PG16 on AAPL, MSFT, Shell, ASML (2026-09-24 10:17 ET)
 - [x] Build the kind-level default priority list — `defaults`, an authority
   section, so changing it moves every value's recorded digest (2026-09-24 10:17 ET)
-- [x] **Address** is one structured field. SEC business address and GLEIF legal
+- [ ] **Address** is one structured field. SEC business address and GLEIF legal
   address map to the same field; the winner supplies all components, and a
   different whole address remains conflicting evidence. The SEC country-code
-  gap remains ticket 14.
+  gap remains ticket 14. Final PG16 validation of all GLEIF address lines is pending.
 - [ ] ~~Foreign EDGAR location codes to ISO 3166~~ no longer needed: SEC's
   code is not compared with anything (2026-09-24 11:10 ET)
 - [x] Three-axis `/code-review` — Standards: 1 hard (defaults read outside the
@@ -76,11 +78,14 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   `_rules_for`, raw SEC code kept, `policies.load_kinds()`, error messages
   name formats generally, Stage assertion added, `defaults` documented in
   policy-language §8 (2026-09-24 10:19 ET)
-- [x] The Merge Stage refuses an arriving Company source missing from the
+- [x] Refuse an unlisted Company source — PG16 test passed (2026-09-25 16:23 ET).
+  The Merge Stage refuses an arriving Company source missing from the
   kind's default priority list, so a typo cannot silently drop its fields.
-  It permits a declared future source before that dataset is registered.
-- [x] `gleif_source.dataset_contract` now defaults `level1_source` to
-  `gleif.level1.v1`, matching the policy and native spec.
+  It permits a declared future source before that dataset is registered —
+  `test_company_fill_rule_refuses_an_unlisted_arriving_source` passed.
+- [x] Correct the GLEIF Level 1 source default — source unit tests passed (2026-09-25 16:23 ET).
+  `gleif_source.dataset_contract` defaults `level1_source` to `gleif.level1.v1`,
+  matching the policy and native spec.
 - [ ] Priority changes are data, but the file ships in the package, so a
   change still needs an image rebuild; the Rules Database is where a live
   change belongs (Codex's Source Contract area)
@@ -98,9 +103,9 @@ X to Y", and `company_master` is only a view over it. Downstream readers
   SEC-to-ISO conversion is removed. Supersedes "jurisdiction is one field"
   above. Shell now reads `DC` from SEC and `GB` from GLEIF. **Name** is the
   only field both sources supply today — PG16, four Companies (2026-09-24 11:10 ET)
-- [x] Migration 037 creates and backfills the dated table, routes aliases in
+- [ ] Migration 037 creates and backfills the dated table, routes aliases in
   a separate metadata table, writes new versions through the Merge Stage's
   projection trigger in the same transaction, removes `company_master`, and
   moves `company_master_field` onto the dated table. PostgreSQL 16 tests cover
   a populated upgrade, later writes, historical reads, alias reversal and
-  restricted writes (2026-09-25).
+  restricted writes; final PG16 suite is pending.

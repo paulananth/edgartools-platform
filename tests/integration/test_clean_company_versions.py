@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest import mock
 from uuid import uuid4
 
@@ -59,6 +60,12 @@ def test_company_versions_close_only_when_master_changes(database):
     assert history[1]["name"] == "Acme Holdings"
     assert history[1]["address"] == address
     assert history[1]["fields"]["name"]["winner"]["assertion_id"] == changed["assertion_id"]
+    cleared = core.source(
+        "dated", revision=3, fields={"address": {"op": "clear"}},
+        identifiers={"cik": "42"},
+    )
+    core.apply(database, 4, assertions=[cleared])
+    assert versions(database)[-1]["address"] is None
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT to_regclass('mdm_v2.company_master')")) is None
     with (
@@ -91,6 +98,18 @@ def test_populated_store_backfills_company_versions_before_new_writes(postgres):
         (2, None, "New"),
     ]
     assert rows[0]["valid_to"] == rows[1]["valid_from"]
+    # Both intents predate the migration. Delivery still rebuilds their
+    # Company objects from the newly backfilled dated authority.
+    destination = core.Destination()
+    destination.fail = False
+    store = Store(app)
+    assert store.deliver_one("export", "backfill-worker", destination)
+    assert store.deliver_one("export", "backfill-worker", destination)
+    assert {
+        item["body"]["fields"]["name"]["value"]
+        for payload, _ in destination.objects.values()
+        for item in payload["objects"] if item["object_type"] == "entity"
+    } == {"Old", "New"}
     # An immediately subsequent live commit uses the installed trigger.
     core.apply(
         db,
@@ -182,6 +201,20 @@ def test_publication_refuses_company_body_that_differs_from_dated_table(database
     source = core.source("publish")
     identity, binding = core.identity_and_binding(source)
     core.apply(database, 1, assertions=[source], identities=[identity], decisions=[binding])
+    with database.application.connect() as conn:
+        payload = conn.scalar(
+            text("SELECT payload FROM mdm_v2.publication WHERE consumer='export'")
+        )
+    forged = {**payload, "objects": [
+        {**item, "body": {"kind": "company", "status": "forged"}}
+        if item["object_type"] == "entity" else item
+        for item in payload["objects"]
+    ]}
+    with database.admin.connect() as conn:
+        assert conn.scalar(
+            text("SELECT mdm_v2.company_payload_from_table(CAST(:payload AS jsonb))"),
+            {"payload": json.dumps(forged)},
+        ) == payload
     with database.admin.begin() as conn:
         conn.execute(
             text("""UPDATE mdm_v2.company SET body=jsonb_set(body,'{status}','\"review\"'::jsonb)
@@ -190,10 +223,26 @@ def test_publication_refuses_company_body_that_differs_from_dated_table(database
         )
     publisher = core.Destination()
     publisher.fail = False
-    with pytest.raises(Conflict, match="differs from dated Company"):
+    with pytest.raises(Conflict, match="Dated Company body differs"):
         Store(database.application).deliver_one("export", "worker", publisher)
     assert publisher.objects == {}
     with database.application.connect() as conn:
         assert conn.scalar(
             text("SELECT verified_at FROM mdm_v2.publication WHERE consumer='export'")
         ) is None
+
+
+def test_publication_refuses_drift_in_named_company_columns(database):
+    source = core.source("named", fields={"name": "Acme"})
+    identity, binding = core.identity_and_binding(source)
+    core.apply(database, 1, assertions=[source], identities=[identity], decisions=[binding])
+    with database.admin.begin() as conn:
+        conn.execute(
+            text("UPDATE mdm_v2.company SET name='forged' WHERE entity_id=CAST(:id AS uuid)"),
+            {"id": identity["entity_id"]},
+        )
+    publisher = core.Destination()
+    publisher.fail = False
+    with pytest.raises(Conflict, match="column differs"):
+        Store(database.application).deliver_one("export", "worker", publisher)
+    assert publisher.objects == {}

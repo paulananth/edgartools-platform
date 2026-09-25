@@ -2,7 +2,9 @@
 
 Type: task
 Status: open
-Blocked by: none (design); build before the daily run feeds Clean MDM
+Blocked by: none
+
+Build before the daily run feeds Clean MDM.
 
 ## Question
 
@@ -68,7 +70,7 @@ Each must be settled, one at a time, before the migration is written:
   Company, empty while the record waits. It is not in the key, because a
   waiting record has none. One row per company per source follows from the
   latest-only upsert.
-- [x] Settle field provenance after a replacement — operator (2026-09-25):
+- [x] Settle provenance after replacement — operator compact-receipt reply verified (2026-09-25 16:23 ET).
   keep raw history in bronze and only the latest normalized row in Stage.
   The immutable journal keeps compact decision receipts and bronze references,
   not full historical assertions. The dated Company row already retains each

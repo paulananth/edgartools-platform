@@ -84,13 +84,30 @@ def mapped_field(row: dict, name: str, spec: str | dict):
     components = spec.get("components") if isinstance(spec, dict) else None
     if name != "address" or not isinstance(components, dict) or not components:
         raise UnsupportedRecord("invalid_field_mapping")
-    if set(components) - ADDRESS_COMPONENTS or any(
-        not isinstance(path, str) or not path for path in components.values()
-    ):
+    if set(components) - ADDRESS_COMPONENTS:
         raise UnsupportedRecord("invalid_field_mapping")
     address = {}
     for part, path in components.items():
-        item = value(row, path)
+        if isinstance(path, str) and path:
+            item = value(row, path)
+        elif (
+            part == "street2"
+            and isinstance(path, dict)
+            and set(path) == {"lines"}
+            and isinstance(path["lines"], str)
+            and path["lines"]
+        ):
+            lines = value(row, path["lines"])
+            if lines is not None and not isinstance(lines, list):
+                raise UnsupportedRecord("invalid_field_shape")
+            if lines is not None and any(
+                not isinstance(line, dict) or not isinstance(line.get("$"), str)
+                for line in lines
+            ):
+                raise UnsupportedRecord("invalid_field_shape")
+            item = "\n".join(line["$"].strip() for line in lines if line["$"].strip()) if lines else None
+        else:
+            raise UnsupportedRecord("invalid_field_mapping")
         if item is None or _blank(item):
             continue
         if not isinstance(item, str):

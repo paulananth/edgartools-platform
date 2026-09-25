@@ -430,6 +430,7 @@ def test_one_master_per_company_takes_fields_from_both_sources(
     }
     assert both == {"name", "address"}
     assert winner(APPLE, "address") == "gleif.level1.v1"
+    assert field(APPLE, "address")["value"]["street2"] == "330 N. Brand Blvd\nSuite 700"
     with database.application.connect() as conn:
         assert conn.scalar(
             text("SELECT address FROM mdm_v2.company WHERE entity_id=CAST(:id AS uuid) AND valid_to IS NULL"),

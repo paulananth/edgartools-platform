@@ -398,6 +398,7 @@ def dataset_contract(member: str, *, level1_source: str = "gleif.level1.v1") -> 
             "address": {
                 "components": {
                     "street": "Entity.LegalAddress.FirstAddressLine.$",
+                    "street2": {"lines": "Entity.LegalAddress.AdditionalAddressLine"},
                     "city": "Entity.LegalAddress.City.$",
                     "region": "Entity.LegalAddress.Region.$",
                     "postcode": "Entity.LegalAddress.PostalCode.$",
