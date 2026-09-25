@@ -30,8 +30,10 @@ priority SEC then GLEIF, every field from every source).
   fingerprint is pinned; all five four-company PG16 tests pass (2026-09-25 13:12 ET).
 - [x] Full local suites on the active rule: 1,573 MDM/architecture and 134
   PG16 Clean tests passed without skips (2026-09-25 13:21 ET).
-- [ ] PR #712 CI on the active rule; check its final fingerprint before
-  registration, then merge only on the operator's word.
+- [x] PR #712: all seven CI checks green on the active rule; active policy
+  fingerprint `35250dad…1321` recomputed by Claude, reviewed and approved by
+  the operator, merged as `e285d24c` (2026-09-25 13:45 ET). Draft #710 closed
+  as superseded.
 
 ## 2. Match SEC and GLEIF records into one Company (ticket 08) — critical path
 
