@@ -202,6 +202,13 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   land before rule `.10` (2026-09-25 07:10 ET). On main: 896 unit and 134 PG16
   clean tests pass. Its spec bullet was moved below the provenance paragraph
   it had split. When #710 is rebased after #711 merges, drop `cf95adbd`.
-- [ ] Three-axis `/code-review` of #711; CI green; merge on the operator's word.
+- [x] Three-axis `/code-review` of #711 (2026-09-25 07:25 ET). Fixed in `41ccddda`:
+  - GLEIF records outside the approved scope now carry their Probable Kind
+    (`category_kind`);
+  - "older ids unchanged" is corrected: a record newly given a Probable Kind
+    collides when its committed publication is re-read (the limit accepted
+    on 2026-09-23).
+  GoF: leave it. CI green on `41ccddda`.
+- [ ] Merge #711 on the operator's word; then rebase #710 and drop `cf95adbd`.
 - [ ] Option 1: the SEC contract reads tickers (`sec_company_ticker`), the
   ampersand defect is fixed, rule `.10`, fresh draws, hand-read, then approval.
