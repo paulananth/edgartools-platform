@@ -1,5 +1,5 @@
 {
-  "version": "company-2026-09-25.12",
+  "version": "company-2026-09-25.13",
   "defaults": {
     "sources": ["sec.submissions.company.v1", "gleif.level1.v1"],
     "allow_unknown_effective": true
@@ -7,7 +7,7 @@
   "rules": [
     {
       "rule_id": "sec-company-candidate",
-      "version": "2026-09-25.12",
+      "version": "2026-09-25.13",
       "family": "classification",
       "source": "sec.submissions.company.v1",
       "emits": [
@@ -352,6 +352,7 @@
   },
   "lists": {
     "fund_name": [
+      "ACCOUNT",
       "ETF",
       "ETFS",
       "FUND",

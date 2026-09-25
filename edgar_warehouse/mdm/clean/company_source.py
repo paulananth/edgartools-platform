@@ -57,7 +57,7 @@ CONTRACT = {
         "classification": {
             "kind": "company",
             "rule_id": "sec-company-candidate",
-            "version": "2026-09-25.12",
+            "version": "2026-09-25.13",
         },
         "identifiers": {"cik": "cik"},
         "identifier_formats": {"cik": "sec_cik"},

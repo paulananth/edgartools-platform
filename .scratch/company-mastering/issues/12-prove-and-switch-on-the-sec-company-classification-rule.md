@@ -274,6 +274,7 @@ code as the digest's key.
 | No-ticker hold-back | `2026-09-25.10` | no ticker + Emerging growth waits; `&` fix |
 | REIT hold-back | `2026-09-25.11` | REIT with no ticker, or only Emerging growth, waits |
 | Forms hold-back | `2026-09-25.12` | Form 10 + Form D without BDC, or fund reports, waits |
+| Account hold-back | `2026-09-25.13` | ACCOUNT joins the fund-name words (an insurance separate account) |
 
 ### Forms hold-back checklist (`2026-09-25.12`)
 
@@ -298,7 +299,8 @@ code as the digest's key.
   lower bound 0.991. Held back: 7a 2 Funds of 4 (Fund Structure kept); 7b 2
   Funds of 100 (Company confirmed). **Adversarial: 0 of 320 if the TIAA Real
   Estate Account is a Company, 1 of 320 if it is a Fund.**
-- [ ] **Operator ruling needed:** is an insurance company's separate account
+- [x] Operator (2026-09-25 08:10 ET): an insurance company's separate account **is a Fund**
+  (glossary updated). Was: **Operator ruling needed:** is an insurance company's separate account
   (TIAA Real Estate Account: pooled real estate inside TIAA, sold to annuity
   holders on S-1, files 10-K, not a legal person) a Fund? It is the only
   such filer among the 6,415 Companies. If a Fund, add ACCOUNT to the
@@ -310,3 +312,15 @@ code as the digest's key.
 - [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.
 - [ ] If it fails: record it, design the next fix, continue; ask only if the
   fix needs a new kind ruling.
+
+### Account hold-back checklist (`2026-09-25.13`)
+
+- [x] Written and frozen (2026-09-25 08:10 ET): ACCOUNT joins `fund_name`; moves exactly the
+  TIAA Real Estate Account. Seed `20260925.13`: 600 sample, 328 fresh
+  adversarial (4,309 earlier filers left out; four new name-blind arms: no
+  proxy, S-11, asset-backed reports, 13F), all 34 held at step 5.
+- [ ] Hand-read, label, score.
+- [ ] If it passes: PROOF, `PENDING_ACTIVATION`, tests pinning `.8`, suites, CI.
+- [ ] Three-axis `/code-review`; fix findings.
+- [ ] Plain-English brief; **operator approves the exact digest**.
+- [ ] Activate, four-company PG16 test, CI green; merge on the operator's word.

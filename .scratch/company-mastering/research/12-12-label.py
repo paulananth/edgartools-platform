@@ -45,6 +45,7 @@ OPEN = {
     "person and not registered under the Investment Company Act. No ruling "
     "covers an insurance separate account.",
 }
+# Operator, 2026-09-25: an insurance company's separate account is a Fund.
 OPEN_READING = "fund"
 
 BORDERLINE_COMPANY = {
