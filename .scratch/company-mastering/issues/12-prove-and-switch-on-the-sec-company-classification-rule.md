@@ -293,7 +293,16 @@ code as the digest's key.
   adversarial (3,722 earlier filers left out; the step 10 arms are spent:
   every member was read before, none a Fund), 104 held (all 4 at 7a, 100
   of 167 at 7b). 6,415 Companies, 91.58% of filers in the Stage.
-- [ ] Hand-read, write labels, score.
+- [x] Hand-read 1,024 records, labels written, scored (2026-09-25 08:08 ET,
+  `12-12-label.py`). Sample 600 of 600; steps 8 and 10 each 300 of 300,
+  lower bound 0.991. Held back: 7a 2 Funds of 4 (Fund Structure kept); 7b 2
+  Funds of 100 (Company confirmed). **Adversarial: 0 of 320 if the TIAA Real
+  Estate Account is a Company, 1 of 320 if it is a Fund.**
+- [ ] **Operator ruling needed:** is an insurance company's separate account
+  (TIAA Real Estate Account: pooled real estate inside TIAA, sold to annuity
+  holders on S-1, files 10-K, not a legal person) a Fund? It is the only
+  such filer among the 6,415 Companies. If a Fund, add ACCOUNT to the
+  fund-name words (moves exactly it) and draw fresh.
 - [ ] If it passes: PROOF with `by_step` and file hashes, `PENDING_ACTIVATION`
   on `.12`, update the tests that pin `.8`, full unit + PG16 suites, CI.
 - [ ] Three-axis `/code-review` of the branch; fix findings.

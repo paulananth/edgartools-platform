@@ -1,0 +1,52 @@
+{
+  "adversarial": {
+    "by_step": {
+      "8": 1
+    },
+    "n": 320,
+    "violating": [
+      [
+        "0000946155",
+        "TIAA REAL ESTATE ACCOUNT",
+        "fund"
+      ]
+    ],
+    "violations": 1
+  },
+  "by_step": {
+    "10": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+    },
+    "8": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+    }
+  },
+  "correct": 600,
+  "files": {
+    "12-12-adversarial.jsonl": "05e923c01fa82e25bf110533662d78676849aa10f522cd157661ae72e07346aa",
+    "12-12-held.jsonl": "4e207837d243977783bb82b80a67fdea7094c7d96a4f123f6691bcb935399b1e",
+    "12-12-label.py": "1dc001ca93368de3e8134d9d82c99426764561d7adfae4c5fb8fd363ea34a470",
+    "12-12-population.json": "fbabc33be5d89d298b4763478482b0e890b56c357802dd9c87a8c02411302324",
+    "12-12-sample.jsonl": "19126a35a37683cbe27ce3e67ebacac6597873c3d64a0a36a56c194e7c80746e",
+    "12-classify.py": "0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a",
+    "12-measure-12.py": "542f0ce1d45e0221b22bc9489e563f4e87242d462e9cc171098a61ec43230fce"
+  },
+  "held_back": {
+    "7a": {
+      "company": 2,
+      "fund": 2
+    },
+    "7b": {
+      "company": 98,
+      "fund": 2
+    }
+  },
+  "lower_bound": 0.9955110028711697,
+  "n": 600,
+  "rule_version": "2026-09-25.12",
+  "wrong_in_sample": []
+}
