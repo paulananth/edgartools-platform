@@ -325,6 +325,10 @@ def test_evidence_delivery_collision_rolls_back_every_effect(database):
         "assertion_id": "a",
         "source_code": "fixture.primary",
         "schema_version": "1",
+        # Every stored reading names its kind and subject; the latest-only
+        # Stage keys on them (ticket 10).
+        "kind": "company",
+        "subject": "c1-subject",
         "record_key": "c1",
         "publication_key": "p1",
         "revision": 1,

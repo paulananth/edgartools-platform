@@ -1,7 +1,7 @@
 # Make the Stage latest-only, with bronze as the only history
 
 Type: task
-Status: open
+Status: claimed (Claude, branch `claude/company-mastering-10-latest-only-stage`, 2026-09-25 18:48 ET)
 Blocked by: none
 
 Build before the daily run feeds Clean MDM.
@@ -78,7 +78,68 @@ Each must be settled, one at a time, before the migration is written:
   source key, exact bronze object/hash and locator, mapping and rule versions,
   decisive predicate values, and decision outcome. An old full raw record is
   re-read from verified bronze when investigation needs it.
-- [ ] Migration on a populated store, Merge Stage change, PG16 tests
+- [ ] Migration on a populated store, Merge Stage change, PG16 tests: in the
+  four slices below, each its own PR. Nothing stops being written, and nothing
+  is deleted, until its replacement is proven on populated PostgreSQL 16.
+
+## Slices (Claude, 2026-09-25 18:48 ET)
+
+Found while planning (facts, not rulings):
+- SEC Company records cite the silver landing member by hash, not bronze.
+  The same capture lands `sec_raw_object` (CIK, `storage_path`, `sha256`), so
+  the SEC adapter can carry each record's bronze object and hash. GLEIF
+  records already carry the Golden Copy archive hash and the record ordinal.
+- No current source sends a record effective after its load: SEC records
+  carry no effective time; a GLEIF record's is its `LastUpdateDate`, which
+  precedes its publication. **Technical decision (Claude):** once the Stage
+  is the authority (slice 4), it refuses a record effective after its
+  batch's as-of, rather than hold a value not yet in force. Until then it
+  keeps the winning reading whatever its effective time, since unit tests of
+  field selection still use future-effective readings. Reversible if a
+  future source needs it.
+- GLEIF records deliberately leave delivery details (archive hash, record
+  position) out of the assertion, so one record read from two deliveries is
+  one assertion (`adapters.py`). So the bronze reference cannot live in the
+  assertion: a batch names each reading's bronze object beside it
+  (`occurrences`), and the Stage keeps the winning reading's.
+- Undoing a binding replays decisions (`identity.py`: reverse, revoke), so
+  the Stage's `entity_id` belongs with the binding readers in slice 2.
+- Readers of the full history today: `merge.load_closure`,
+  `binding.holders`, `matching._stored`/`_held_leis`,
+  `survivorship.current_claims`, `consumer._provenance`, the per-kind Stage
+  views (033/034), `stage_waiting` (036), the dated Company trigger (037),
+  assessment (028/035); `consumer.py` also reads historic objects from
+  `batch.effects`, and the journal publication carries the full request.
+
+1. [ ] **The latest-only Stage, written beside the history.** Migration 038:
+   `mdm_v2.stage_record`, key `(source_code, record_key)`, the winning
+   reading, the resolved snapshot and its bronze reference. The evidence
+   wrapper keeps it once the core has stored the batch, in the same
+   transaction: the readings the batch newly stored, taken in (revision,
+   mapping version) order, never the batch's hash order. A reading wins on a
+   higher (revision, mapping version) and folds over the snapshot, so a
+   sparse patch erases nothing it does not name; a duplicate, or an older
+   reading delivered in a later batch, keeps the row; two readings at one
+   (revision, mapping version) are refused. A batch may name each reading's
+   bronze object (`occurrences`), set in the same step. Backfilled the same
+   way on a populated store. PG16: when readings arrive in revision order,
+   every Stage row equals what `current_claims` reads from the full history;
+   where an older reading arrives later the two differ on purpose (15 tests).
+   Limits recorded: a clash with an older reading the row already replaced
+   goes unseen; a profile's identifying values must be text.
+1b. [ ] **The sources name their bronze objects.** The SEC bundle pins
+   `sec_raw_object` and names each CIK's submissions object and hash; the
+   GLEIF bundle names the Golden Copy archive and the record's ordinal; the
+   apply command passes them as `occurrences`.
+2. [ ] **Readers move to the Stage and compact decision receipts**, each with
+   an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
+   the binding decisions.
+3. [ ] **Compact `batch.effects`**: a request hash, compact receipts and a
+   fenced duplicate-observation capability; existing batches migrated
+   additively, never rewritten or truncated.
+4. [ ] **Stop the growth**: stop appending full assertions; lift the
+   append-only guard on the Stage only; merge at the end of each source load;
+   a missing or mismatched bronze object on reread is a blocking error.
 
 ## Implementation contract for the next change
 
