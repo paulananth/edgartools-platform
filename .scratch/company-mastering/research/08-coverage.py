@@ -33,6 +33,7 @@ from pathlib import Path
 from edgar_warehouse.mdm.clean.names import (  # noqa: E402  the production code
     edgar_jurisdiction,
     jurisdictions_agree,
+    jurisdictions_conflict,
     legal_form_key,
     postal_codes_agree,
     sec_legal_form_key,
@@ -40,6 +41,12 @@ from edgar_warehouse.mdm.clean.names import (  # noqa: E402  the production code
 
 FOUR = {"0000320193": "Apple", "0000789019": "Microsoft",
         "0001306965": "Shell", "0000937966": "ASML"}
+
+
+def business_country(sec_addresses: dict | None) -> str | None:
+    business = (sec_addresses or {}).get("business") or {}
+    place = edgar_jurisdiction(business.get("stateOrCountry") or business.get("countryCode"))
+    return place.split("-")[0] if place else None
 
 
 def postal_agrees(sec_addresses: dict | None, hq: dict | None) -> bool:
@@ -103,21 +110,33 @@ def main(companies: str, scan: str, gleif: str, out: str) -> None:
                     edgar_jurisdiction(r["state_of_incorporation"]), g["jurisdiction"]
                 )
                 agree_p = postal_agrees(r["addresses"], g["hq"])
+                # Rule 2026-09-25.2: the postal step vetoes two different
+                # places of incorporation (the Name-and-postcode rule's misses).
+                conflict = jurisdictions_conflict(
+                    edgar_jurisdiction(r["state_of_incorporation"]),
+                    g["jurisdiction"],
+                    sec_business_country=business_country(r["addresses"]),
+                )
                 if g["category"] != "GENERAL":
                     outcome = f"defer: GLEIF category {g['category']}"
                 elif g["registration_status"] in {"DUPLICATE", "ANNULLED"}:
                     outcome = f"defer: GLEIF {g['registration_status']}"
                 elif sec_count[r["key"]] > 1:
                     outcome = "defer: name names several SEC filers"
-                elif not (agree_j or agree_p):
-                    outcome = "defer: no jurisdiction or postal agreement"
+                elif agree_j:
+                    outcome = "BIND jurisdiction"
+                elif agree_p and not conflict:
+                    outcome = "BIND postal"
+                elif agree_p:
+                    outcome = "defer: postal agrees, jurisdictions conflict"
                 else:
-                    outcome = "BIND " + ("jurisdiction" if agree_j else "postal")
+                    outcome = "defer: no jurisdiction or postal agreement"
                 r["gleif"] = {k: g[k] for k in ("lei", "legal_name", "category",
                                                 "jurisdiction", "registration_status",
                                                 "entity_status", "legal_form")}
                 r["gleif"]["hq"] = g["hq"]
-                r["agree"] = {"jurisdiction": agree_j, "postal": agree_p}
+                r["agree"] = {"jurisdiction": agree_j, "postal": agree_p,
+                              "conflict": conflict, "postal_rule": agree_p and not conflict}
             # An INACTIVE entity has ceased (merged, dissolved) while its SEC
             # filer still files: the labelling standard reads it unresolved.
             if outcome.startswith("BIND") and r["gleif"]["entity_status"] != "ACTIVE":

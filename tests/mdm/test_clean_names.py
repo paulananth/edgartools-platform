@@ -9,6 +9,7 @@ import pytest
 from edgar_warehouse.mdm.clean.names import (
     edgar_jurisdiction,
     jurisdictions_agree,
+    jurisdictions_conflict,
     legal_form_key,
     postal_codes_agree,
     sec_legal_form_key,
@@ -135,3 +136,41 @@ class TestPostalCodesAgree:
     def test_a_blank_code_never_agrees(self):
         assert not postal_codes_agree("", "US", "", "US")
         assert not postal_codes_agree(None, "US", "95014", "US")
+
+
+class TestJurisdictionsConflict:
+    """Ticket 08: the postal step's veto, from the Name-and-postcode rule's misses."""
+
+    @pytest.mark.parametrize(
+        ("sec", "gleif"),
+        [
+            ("US-NV", "US-OK"),  # AAON: a Nevada parent, its Oklahoma subsidiary
+            ("US-VA", "US-IL"),
+            ("CA-BC", "CA-ON"),
+            ("KY", "CA-ON"),
+            ("MU", "KY"),
+        ],
+    )
+    def test_two_definite_places_conflict(self, sec, gleif):
+        assert jurisdictions_conflict(sec, gleif, sec_business_country="US")
+
+    @pytest.mark.parametrize(
+        ("sec", "gleif"),
+        [
+            ("US-DE", "US-DE"),  # they agree
+            (None, "US-DE"),  # SEC names no place
+            ("US-DE", None),
+            ("US", "US-DE"),  # a country-only side is no conflict in that country
+            ("US-DE", "US"),
+            ("CA", "CA-ON"),
+        ],
+    )
+    def test_no_conflict(self, sec, gleif):
+        assert not jurisdictions_conflict(sec, gleif, sec_business_country="US")
+
+    def test_a_us_state_both_other_sources_contradict_is_set_aside(self):
+        # Shell: SEC's state of incorporation reads "DC", but SEC's own business
+        # address and GLEIF's jurisdiction both put Shell in Britain.
+        assert not jurisdictions_conflict("US-DC", "GB", sec_business_country="GB")
+        assert jurisdictions_conflict("US-DC", "GB", sec_business_country="US")
+        assert jurisdictions_conflict("US-DC", "GB", sec_business_country=None)

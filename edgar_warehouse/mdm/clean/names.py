@@ -173,6 +173,36 @@ def jurisdictions_agree(sec: str | None, gleif: str | None) -> bool:
     return "-" not in sec or "-" not in gleif
 
 
+def jurisdictions_conflict(
+    sec: str | None, gleif: str | None, *, sec_business_country: str | None
+) -> bool:
+    """Whether SEC and GLEIF name two different places of incorporation.
+
+    The postal step's veto (ticket 08). Its first version bound AAON, Inc., a
+    Nevada parent, to GLEIF's AAON, Inc. of Oklahoma, its subsidiary of the
+    same name at the same address. A side naming no place, or naming only the
+    country the other side's subdivision sits in, is no conflict.
+
+    SEC's US state is set aside when SEC's own business address and GLEIF's
+    jurisdiction both put the entity in one other country: Shell's SEC state
+    of incorporation reads "DC", while both place it in Britain.
+    """
+    if not sec or not gleif:
+        return False
+    sec, gleif = sec.upper(), gleif.upper()
+    if jurisdictions_agree(sec, gleif):
+        return False
+    s_country, g_country = sec.split("-")[0], gleif.split("-")[0]
+    if s_country == g_country and ("-" not in sec or "-" not in gleif):
+        return False
+    return not (
+        s_country == "US"
+        and sec_business_country is not None
+        and sec_business_country != "US"
+        and sec_business_country == g_country
+    )
+
+
 def _postal(code: Any) -> str:
     text = re.sub(r"[^A-Z0-9]", "", str("" if code is None else code).upper())
     return text[:5] if re.fullmatch(r"\d{5}(\d{4})?", text) else text
