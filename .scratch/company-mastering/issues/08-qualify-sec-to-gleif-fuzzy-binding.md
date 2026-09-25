@@ -142,8 +142,11 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
 - [ ] Apple, Microsoft, Shell and ASML each end as one master with CIK and
   LEI on real PostgreSQL 16. Apple, Microsoft and ASML do; Shell waits until
   silver lands SEC's `countryCode` (a warehouse change, not this ticket).
-- [x] Unit, architecture and PG16 suites; three-axis `/code-review`; CI green
-  on PR #713.
+- [x] Unit, architecture and PG16 suites (1,666 and 148 passed at
+  `fa916ddb`); three-axis `/code-review` on the approval commit (no blocking
+  finding; GoF: leave it).
+- [ ] CI green on PR #713's final head, then merge on the operator's word
+  (the merger checks it; see the PR's checks).
 - [x] Plain-English brief; operator approved the matching rules' fingerprint
   `983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049` and
   asked for the merge (2026-09-25 15:21 ET). It approves the two rules as

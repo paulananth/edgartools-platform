@@ -48,8 +48,9 @@ priority SEC then GLEIF, every field from every source).
 - [x] Two matching rules, name plus place: the Name-and-state rule and the
   Postcode rule with state veto. Ticker/CUSIP/ISIN later as corroboration
 - [x] Each measured at the 95% bar: 300/300, lower bound 0.9911, 0 adversarial
-  pairs wrong; 3,050 of 6,414 Companies match. Routing below the bar to a
-  Steward is not built; a pair that fails waits in the Stage
+  pairs wrong; 3,050 of 6,414 Companies match
+- [ ] Below 50% goes to a Steward: not built; a pair no rule passes waits in
+  the Stage
 - [x] Operator approved the rules' fingerprint `983352e8…4049` as declared,
   not active (2026-09-25 15:21 ET, PR #713)
 - [ ] Apple, Microsoft, Shell, ASML each end as **one** master with CIK and LEI:
@@ -58,7 +59,9 @@ priority SEC then GLEIF, every field from every source).
 - [ ] Undo a wrong link and stop it recurring (identity correction): a new
   ticket, and it must land before either matching rule is switched on
 - [ ] Switch the matching rules on: the operator's separate approval of their
-  proofs, after identity correction and ticket 04's identifier rules
+  proofs, after identity correction. It also depends on ticket 04's
+  identifier rules being active, since a matching rule joins a GLEIF record
+  only to a Company an SEC record already holds by CIK
 
 ## 3. The dated Company table, the final authority (ticket 09)
 

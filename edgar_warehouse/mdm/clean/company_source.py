@@ -21,6 +21,7 @@ import pyarrow.parquet as pq
 
 from ..policies import load_kinds
 from .evidence import instant
+from .matching import FAMILY
 from .name_census import entry as census_entry
 from .names import edgar_jurisdiction
 from .store import Conflict, canonical, digest
@@ -699,7 +700,7 @@ def name_matching_policy(*, active: bool) -> dict:
             *(
                 {
                     "kind": "company",
-                    "family": "name_binding",
+                    "family": FAMILY,
                     "rule_id": rule["rule_id"],
                     "rule_version": rule["version"],
                     "verdict": "bind",
@@ -707,7 +708,7 @@ def name_matching_policy(*, active: bool) -> dict:
                     "proof": NAME_PROOFS[rule["rule_id"]],
                 }
                 for rule in body["kinds"]["company"]["rules"]
-                if rule["family"] == "name_binding"
+                if rule["family"] == FAMILY
             ),
         ]
     return body
