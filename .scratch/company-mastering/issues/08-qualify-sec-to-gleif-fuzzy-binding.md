@@ -126,10 +126,10 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
 - [x] Coverage with both passing rules: 3,050 of 6,414 Companies bind
   (2,855 by state, 195 by postcode); Apple, Microsoft, Shell and ASML
   included.
-- [ ] Production: the Name Census builder and its pin in the SEC bundle; SEC
+- [x] Production: the Name Census builder and its pin in the SEC bundle; SEC
   adapter v5 (business address, census entry) and GLEIF adapter v2
   (headquarters postcode and country) into `provenance.matching`.
-- [ ] Production: the `name_binding` family (rule check, 95% bar, measured
+- [x] Production: the `name_binding` family (rule check, 95% bar, measured
   activation), its primitives, `clean/matching.py` proposing in the Merge
   Stage in both directions (a GLEIF record meeting a bound SEC record, and an
   SEC record meeting a waiting GLEIF record), the two rules in
@@ -220,3 +220,38 @@ Next, in order:
 6. Parity: production census and rule over one whole capture vs research
    coverage `97e5d118…` (expect 3,040 plus explained differences).
 7. Unit/architecture/PG16 suites, three-axis review, CI, plain-English brief.
+
+## Decisions made while building (Claude, 2026-09-25 evening)
+
+Recorded from the three-axis review (Standards, Spec, GoF).
+
+- **Census freshness is checked per record, not per publication.** A GLEIF
+  record in the Stage carries no archive hash, by design: delivery details
+  are not source assertions. So the rule requires the census's recorded
+  `LastUpdateDate` for the LEI to equal the Stage record's
+  `gleif_last_update`. A record GLEIF changed since the census waits. A new
+  GLEIF entity that took the same name after the census is **not** caught;
+  the census must be rebuilt for each full Golden Copy (`local-operations.md`).
+- **The rules are proposed beside the live policy, not in it.**
+  `policies/proposals/company-name-matching.json` is not read by
+  `load_kinds`, so the live fingerprint stays `35250dad…`, the operator's
+  approval of ticket 12. The operator approves the fingerprint of
+  `name_matching_policy()`: `983352e8…` with the rules declared. On approval,
+  the rules move into `company.json`.
+- **A rule's arguments decide.** Every name-binding test reads its declared
+  fields, paths, normalizers and code table, and refuses one it cannot honour.
+  A unit test holds the registry equal to what `matching.py` implements.
+- **Blocking activation, not this PR: undoing a wrong link.** The Stage cannot
+  yet move or undo an established source binding ("requires a correction
+  contract"), and a Match Exclusion is between two Companies, not between a
+  record and a Company. Undoing a wrong link and blocking it from recurring
+  needs an identity-correction capability; it is a new ticket and must land
+  before either rule is switched on.
+- **Blocking automatic Companies: the identifier rules.** The live policy
+  activates no ticket 04 identifier rule yet, so no SEC record holds a
+  Company automatically. The four-company test activates them as fixtures.
+- **Parity (2026-09-25, `research/08-parity.json`).** The production census
+  (`107c0e04…`, 76,117 entries) and rule tests over all 76,230 SEC filers
+  and the full Golden Copy bind the same 3,050 Companies as the research
+  (0 differences). Read as silver lands the SEC address, 3,040 bind: the 10
+  missing are exactly the `countryCode`-only filers, Shell among them.

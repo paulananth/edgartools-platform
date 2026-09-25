@@ -23,17 +23,16 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .activation import activated
-from .binding import _survivors, nothing
+from .binding import nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
 from .names import (
     edgar_jurisdiction,
     jurisdictions_agree,
     jurisdictions_conflict,
-    legal_form_key,
     postal_codes_agree,
-    sec_legal_form_key,
 )
+from .primitives import NORMALIZERS
 from .store import Conflict, rows
 
 FAMILY = "name_binding"
@@ -57,10 +56,41 @@ def _matching(record: dict) -> dict:
     return (record.get("provenance") or {}).get("matching") or {}
 
 
-def _census_match(sec: dict, gleif: dict, _args: dict) -> bool:
+def _read(record: dict, path: str):
+    """A rule's declared path: `matching.<name>` or a field name. Data, never code."""
+    if path.startswith("matching."):
+        return _matching(record).get(path.removeprefix("matching."))
+    return _value(record, path)
+
+
+def _normalizer(name: str):
+    if name not in NORMALIZERS:
+        raise Conflict(f"Name binding names an unknown normalizer: {name}")
+    return NORMALIZERS[name]
+
+
+# The one code table `sec_codes` may name; a new table is a new version.
+SEC_CODES = {"edgar-iso-v1": edgar_jurisdiction}
+
+
+def _codes(args: dict):
+    if args.get("sec_codes") not in SEC_CODES:
+        raise Conflict(
+            f"Name binding names an unknown code table: {args.get('sec_codes')}"
+        )
+    return SEC_CODES[args["sec_codes"]]
+
+
+def _census_lei(record: dict) -> str | None:
+    """The first LEI the record's census entry names; the rule needs exactly one."""
+    leis = (_matching(record).get("name_census") or {}).get("leis") or []
+    return leis[0][0] if leis else None
+
+
+def _census_match(sec: dict, gleif: dict, args: dict) -> bool:
     entry = _matching(sec).get("name_census") or {}
     lei = (gleif.get("identifiers") or {}).get("lei")
-    key = sec_legal_form_key(_value(sec, "name"))
+    key = _normalizer(args["sec_normalizer"])(_value(sec, "name"))
     return (
         entry.get("version") == CENSUS_VERSION
         and entry.get("cik_count") == 1
@@ -69,13 +99,17 @@ def _census_match(sec: dict, gleif: dict, _args: dict) -> bool:
         and entry.get("other_name_holders") == 0
         and entry.get("leis") == [[lei, _value(gleif, "gleif_last_update") or ""]]
         and bool(key)
-        and entry.get("key") == key == legal_form_key(_value(gleif, "name"))
+        and entry.get("key")
+        == key
+        == _normalizer(args["gleif_normalizer"])(_value(gleif, "name"))
     )
 
 
 def _eligible(_sec: dict, gleif: dict, args: dict) -> bool:
-    # A GLEIF record the Stage holds as a Company is GENERAL already: the
-    # contract admits no other category as a Company (`gleif_source.py`).
+    # The GLEIF contract admits only GENERAL as a Company (`gleif_source.py`),
+    # so that is the one category this test can honour; any other fails closed.
+    if args.get("categories") != ["GENERAL"]:
+        raise Conflict("Name binding can require only the GENERAL category")
     return (
         gleif.get("kind") == "company"
         and _value(gleif, "gleif_entity_status") in args["entity_statuses"]
@@ -84,34 +118,33 @@ def _eligible(_sec: dict, gleif: dict, args: dict) -> bool:
     )
 
 
-def _sec_place(sec: dict) -> str | None:
-    return edgar_jurisdiction(_value(sec, "state_of_incorporation"))
+def _jurisdiction_agrees(sec: dict, gleif: dict, args: dict) -> bool:
+    return jurisdictions_agree(
+        _codes(args)(_read(sec, args["sec_field"])), _read(gleif, args["gleif_field"])
+    )
 
 
-def _jurisdiction_agrees(sec: dict, gleif: dict, _args: dict) -> bool:
-    return jurisdictions_agree(_sec_place(sec), _value(gleif, "jurisdiction"))
-
-
-def _no_conflict(sec: dict, gleif: dict, _args: dict) -> bool:
+def _no_conflict(sec: dict, gleif: dict, args: dict) -> bool:
     return not jurisdictions_conflict(
-        _sec_place(sec),
-        _value(gleif, "jurisdiction"),
-        sec_business_country=_matching(sec).get("business_country"),
+        _codes(args)(_read(sec, args["sec_field"])),
+        _read(gleif, args["gleif_field"]),
+        sec_business_country=_read(sec, args["sec_business_country"]),
     )
 
 
-def _postal_agrees(sec: dict, gleif: dict, _args: dict) -> bool:
-    s, g = _matching(sec), _matching(gleif)
+def _postal_agrees(sec: dict, gleif: dict, args: dict) -> bool:
     return postal_codes_agree(
-        s.get("business_postal_code"),
-        s.get("business_country"),
-        g.get("headquarters_postal_code"),
-        g.get("headquarters_country"),
+        _read(sec, args["sec_code"]),
+        _read(sec, args["sec_country"]),
+        _read(gleif, args["gleif_code"]),
+        _read(gleif, args["gleif_country"]),
     )
 
 
-# The record-pair tests; `holds_no_other_lei@1` needs master state and is
-# checked with the Company in hand.
+# Every name-binding test the registry holds, implemented here: the record-pair
+# tests, and the one that needs master state (`HELD_LEI_TEST`), checked with
+# the Company in hand. A unit test holds this equal to the registry.
+HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
     "name_census_match@1": _census_match,
     "gleif_entity_eligible@1": _eligible,
@@ -124,7 +157,7 @@ PAIR_TESTS = {
 def _passes(rule: dict, sec: dict, gleif: dict) -> bool:
     for test in rule["when"]:
         name = test["primitive"]
-        if name == "holds_no_other_lei@1":
+        if name == HELD_LEI_TEST:
             continue
         if name not in PAIR_TESTS:
             raise Conflict(f"Name binding test {name} has no implementation")
@@ -142,10 +175,18 @@ def _latest(found: list[dict]) -> dict[str, dict]:
     return by_subject
 
 
-def _stored(conn, source: str, where: str, values: list[str]) -> list[dict]:
-    """The latest stored version of each record of `source` matching `where`."""
+# The only lookups `_stored` runs: fixed expressions, never caller text.
+_LOOKUPS = {
+    "lei": "body->'identifiers'->>'lei'",
+    "census_lei": "body->'provenance'->'matching'->'name_census'->'leis'->0->>0",
+}
+
+
+def _stored(conn, source: str, lookup: str, values: list[str]) -> list[dict]:
+    """The latest stored version of each record of `source` matching `lookup`."""
     if not values:
         return []
+    where = _LOOKUPS[lookup]
     return [
         r["body"]
         for r in rows(
@@ -222,29 +263,24 @@ def propose(
         ]
         sec_here = [a for a in batch.values() if a["source_code"] == holder]
         # Each side of a pair: from this batch, or the latest stored version.
-        lei_of_sec = {
-            (_matching(a).get("name_census") or {}).get("leis", [[None]])[0][0]
-            for a in sec_here
-        } - {None}
+        lei_of_sec = {_census_lei(a) for a in sec_here} - {None}
         gleif_all = _latest(
-            _stored(conn, source, "body->'identifiers'->>'lei'", sorted(lei_of_sec))
-            + gleif_here
+            _stored(conn, source, "lei", sorted(lei_of_sec)) + gleif_here
         )
         leis = [(a.get("identifiers") or {}).get("lei") for a in gleif_all.values()]
         sec_all = _latest(
             _stored(
                 conn,
                 holder,
-                "body->'provenance'->'matching'->'name_census'->'leis'->0->>0",
+                "census_lei",
                 [lei for lei in leis if lei],
             )
             + sec_here
         )
         sec_by_lei = defaultdict(list)
         for sec in sec_all.values():
-            entry = _matching(sec).get("name_census") or {}
-            if entry.get("leis"):
-                sec_by_lei[entry["leis"][0][0]].append(sec)
+            if lei := _census_lei(sec):
+                sec_by_lei[lei].append(sec)
         subjects = set(gleif_all) | set(sec_all)
         bound = _bindings(conn, subjects, decisions + result["decisions"])
         pairs = []
@@ -258,8 +294,8 @@ def propose(
                     pairs.append((gleif, sec, next(iter(companies))))
         if not pairs:
             continue
-        survivors = _survivors(conn, {entity for _, _, entity in pairs})
-        pairs = [(g, s, survivors.get(e, e)) for g, s, e in pairs]
+        merged = survivors(conn, {entity for _, _, entity in pairs})
+        pairs = [(g, s, merged.get(e, e)) for g, s, e in pairs]
         held = _held_leis(conn, source, {e for _, _, e in pairs})
         targets: dict[str, set] = defaultdict(set)
         for gleif, _sec, entity in pairs:
@@ -279,8 +315,10 @@ def propose(
                 continue
             if not targets[gleif["subject"]]:
                 continue
-            # A legal entity has one LEI: a Company holding another defers.
-            if held[entity] - {lei}:
+            # A legal entity has one LEI: a Company holding another defers,
+            # when the rule asks it to.
+            vetoes = any(t["primitive"] == HELD_LEI_TEST for t in rule["when"])
+            if vetoes and held[entity] - {lei}:
                 continue
             result["decisions"].append(
                 decision(

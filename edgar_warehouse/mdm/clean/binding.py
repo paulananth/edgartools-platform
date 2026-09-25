@@ -85,14 +85,15 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
             values=sorted(values),
             sources=_issuers(policy, namespace),
         )
-        survivors = _survivors(conn, {r["entity_id"] for r in found_rows})
+        merged = survivors(conn, {r["entity_id"] for r in found_rows})
         for row in found_rows:
             key = (namespace, _normal(policy, namespace, row["value"]))
-            found[key][survivors.get(row["entity_id"], row["entity_id"])] = row["kind"]
+            found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
     return found
 
 
-def _survivors(conn, entity_ids: set[str]) -> dict[str, str]:
+def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
+    """Each merged-away Company's survivor; shared with `matching.py`."""
     if not entity_ids:
         return {}
     return {

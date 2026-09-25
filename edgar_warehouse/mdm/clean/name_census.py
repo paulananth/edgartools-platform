@@ -29,10 +29,16 @@ from collections.abc import Iterable
 from typing import BinaryIO
 
 from .gleif_source import inspect_archive
-from .names import legal_form_key, sec_legal_form_key
+from .primitives import NORMALIZERS
 from .store import Conflict
 
 VERSION = "sec-gleif-name-census-v1"
+# The normalizers the census counts with, by the versions it records; a rule
+# re-derives both keys through the same registered names (`matching.py`).
+SEC_NORMALIZER = "normalize_text@sec-legal-form-kept-v1"
+GLEIF_NORMALIZER = "normalize_text@legal-form-kept-v1"
+sec_legal_form_key = NORMALIZERS[SEC_NORMALIZER]
+legal_form_key = NORMALIZERS[GLEIF_NORMALIZER]
 # Enough to tell one from several; the rule reads only "exactly one".
 CAP = 5
 
@@ -124,10 +130,7 @@ def build(
         }
     return {
         "version": VERSION,
-        "normalizers": {
-            "sec": "normalize_text@sec-legal-form-kept-v1",
-            "gleif": "normalize_text@legal-form-kept-v1",
-        },
+        "normalizers": {"sec": SEC_NORMALIZER, "gleif": GLEIF_NORMALIZER},
         "sec": sec_population,
         "gleif": {
             "archive_sha256": gleif_sha256,
