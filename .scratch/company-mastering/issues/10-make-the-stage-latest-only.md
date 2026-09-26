@@ -165,7 +165,40 @@ Found while planning (facts, not rulings):
      no existing row; the approved path is a fresh rebuild from pinned input.
 2. [ ] **Readers move to the Stage and compact decision receipts**, each with
    an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
-   the binding decisions.
+   the binding decisions. In three PRs (Claude, 2026-09-25 21:30 ET):
+   - [ ] **2a. Who a record is bound to, and its winning reading.** Migration
+     039: the Stage's `entity_id` (the bind decision's own entity, never its
+     survivor: a binding never moves, `identity.replay`), set when a bind
+     commits, refused if it names another entity, backfilled from
+     `mdm_v2.decision`; and the winning reading's full body (`reading`),
+     since the name rules read its provenance and slice 4 stops storing it
+     elsewhere. Readers moved: `binding.holders`, the bound-subject lookup in
+     `binding.propose`, `matching._stored`, `_bindings` and `_held_leis`.
+     Survivors still resolve through `survivors()`. A latest reading is the
+     highest (revision, mapping version) either way, so these readers match
+     the old queries, held equal by PG16 tests on a seeded history that
+     includes an older reading delivered later. Two intended differences,
+     both where the history read could match a reading a later one replaced:
+     `_stored` took the latest reading *that matched*, so a replaced Name
+     Census LEI still matched; `_held_leis` counted every LEI any reading of
+     a bound record carried. The Stage reads the current reading only, as
+     `holders` already did. A GLEIF record's key is its LEI, so the second
+     never differs on real GLEIF data.
+   - [ ] **2b. The Merge Stage reads the Stage**: `load_closure`,
+     `current_claims` and the assessment snapshot (028) read Stage
+     snapshots, keeping the retired-source filter. `current_claims` leaves
+     out a reading effective after the batch's as-of, and a folded snapshot
+     cannot, so the refusal of future-effective readings recorded above for
+     slice 4 moves here, at write time. Its test surface is measured first.
+     An assessment still open when this ships goes stale and is re-assessed.
+   - [ ] **2c. The views, provenance and compact receipts**: the per-kind
+     Stage views (033/034) become latest-only; `consumer._provenance` reads
+     the dated Company row and the compact receipt. Open design point: a
+     field a sparse patch left in place was stated by an older reading, and
+     the row keeps only the winner's bronze, so each claim item may need its
+     own reading's bronze reference.
+   Not covered by any slice yet: `mdm_v2.deferred_record` (read by
+   `stage_waiting`, 036) also grows with every capture.
 3. [ ] **Compact `batch.effects`**: a request hash, compact receipts and a
    fenced duplicate-observation capability; existing batches migrated
    additively, never rewritten or truncated.

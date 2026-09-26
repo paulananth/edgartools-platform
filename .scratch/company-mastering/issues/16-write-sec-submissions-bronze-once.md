@@ -53,7 +53,9 @@ in `warehouse_orchestrator.py`.
 
 ## Checklist
 
-- [ ] Operator decision: A, B or C.
+- [x] Operator decision: **A, the content hash in the key** (operator,
+  2026-09-25 21:17 ET). Each version of a document gets its own object;
+  nothing is overwritten or refused.
 - [ ] Change the submissions writer, and every other `_write_bronze_object`
   caller the decision covers, to write once.
 - [ ] Keep the cached-snapshot lookups (`submissions_main_glob`, checkpoints)
