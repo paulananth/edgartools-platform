@@ -718,8 +718,9 @@ class MergeStage:
                 ):
                     before = old + rows(
                         conn,
-                        """SELECT object_type,object_id,body FROM mdm_v2.projection
-                        WHERE object_type='entity' AND object_id=ANY(:ids) LIMIT :lim""",
+                        """SELECT 'entity' AS object_type,object_id,body
+                        FROM mdm_v2.current_entity
+                        WHERE object_id=ANY(:ids) LIMIT :lim""",
                         ids=sorted(all_ids),
                         lim=self.closure_limit + 1,
                     )

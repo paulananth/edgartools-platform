@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from unittest import mock
 from uuid import uuid4
 
@@ -195,54 +194,3 @@ def test_company_fill_rule_refuses_an_unlisted_arriving_source(database):
         )
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 0
-
-
-def test_publication_refuses_company_body_that_differs_from_dated_table(database):
-    source = core.source("publish")
-    identity, binding = core.identity_and_binding(source)
-    core.apply(database, 1, assertions=[source], identities=[identity], decisions=[binding])
-    with database.application.connect() as conn:
-        payload = conn.scalar(
-            text("SELECT payload FROM mdm_v2.publication WHERE consumer='export'")
-        )
-    forged = {**payload, "objects": [
-        {**item, "body": {"kind": "company", "status": "forged"}}
-        if item["object_type"] == "entity" else item
-        for item in payload["objects"]
-    ]}
-    with database.admin.connect() as conn:
-        assert conn.scalar(
-            text("SELECT mdm_v2.company_payload_from_table(CAST(:payload AS jsonb))"),
-            {"payload": json.dumps(forged)},
-        ) == payload
-    with database.admin.begin() as conn:
-        conn.execute(
-            text("""UPDATE mdm_v2.company SET body=jsonb_set(body,'{status}','\"review\"'::jsonb)
-                    WHERE entity_id=CAST(:id AS uuid) AND valid_to IS NULL"""),
-            {"id": identity["entity_id"]},
-        )
-    publisher = core.Destination()
-    publisher.fail = False
-    with pytest.raises(Conflict, match="Dated Company body differs"):
-        Store(database.application).deliver_one("export", "worker", publisher)
-    assert publisher.objects == {}
-    with database.application.connect() as conn:
-        assert conn.scalar(
-            text("SELECT verified_at FROM mdm_v2.publication WHERE consumer='export'")
-        ) is None
-
-
-def test_publication_refuses_drift_in_named_company_columns(database):
-    source = core.source("named", fields={"name": "Acme"})
-    identity, binding = core.identity_and_binding(source)
-    core.apply(database, 1, assertions=[source], identities=[identity], decisions=[binding])
-    with database.admin.begin() as conn:
-        conn.execute(
-            text("UPDATE mdm_v2.company SET name='forged' WHERE entity_id=CAST(:id AS uuid)"),
-            {"id": identity["entity_id"]},
-        )
-    publisher = core.Destination()
-    publisher.fail = False
-    with pytest.raises(Conflict, match="column differs"):
-        Store(database.application).deliver_one("export", "worker", publisher)
-    assert publisher.objects == {}

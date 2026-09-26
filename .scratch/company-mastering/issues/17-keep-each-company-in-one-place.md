@@ -41,38 +41,68 @@ loop copies the growing array on each append.
 
 ## Checklist (times ET)
 
-- [ ] `/gof-refactor-reviewer` on the Company write and read paths, before
-  any code.
-- [ ] Find every reader of Company rows in `projection`, in Python and SQL,
-  and write down how each one reads the Company table instead. Known so far:
-  - `binding.py`: status, survivor and review checks;
+- [x] `/gof-refactor-reviewer` on the Company write and read paths, before
+  any code (2026-09-26 13:20 ET). **Verdict:** do B through one read seam.
+  - Five readers each know where a current entity is stored. #714 had to
+    touch them 18 hours ago, and B would touch four of them again.
+  - The seam is one SQL view, `mdm_v2.current_entity (object_id, kind,
+    status, canonical_id, body)`, made of `projection` entities, the open
+    Company rows and the open alias rows. Every reader uses it, and none
+    branches on kind. The single writer, `commit_batch_core`, routes by kind
+    in one place.
+  - The view stores nothing, so it adds no copy.
+  - Expected cost: the snapshot's hash input changes, so a `ready`
+    assessment stored before the migration would be assessed again.
+    **Not so in the result:** the view's rows equal what `projection` held,
+    so the snapshot is byte-identical and such an assessment still applies
+    (proved by `test_migration_041_applies_to_a_populated_store`).
+  - Not changed: review reads in `bookkeeping.py`.
+- [x] Find every reader of Company rows in `projection`, in Python and SQL.
+  Each one now reads `mdm_v2.current_entity`:
+  - `binding.py`: the survivor and in-review checks;
   - `merge.py`: the "before" state kept with an assessment;
-  - `consumer.py`: the read API;
   - `cli.py`: the counts report;
-  - `assessment_snapshot` (028), the hash of the scope;
-  - the tests that read `documents(..., "entity")` for a Company.
-- [ ] Tests first (PostgreSQL 16). Each one fails on today's code:
-  - a commit writes no Company to `projection`;
-  - the Company table holds the same current body the Merge Stage computed;
-  - a merged-away Company appears only in `company_alias`;
-  - a publication's objects equal the batch's computed objects, with no
-    rewrite;
-  - a stale assessment is still refused when a Company in its scope changes.
-- [ ] One new migration restates each changed SQL function whole, not by
-  text edit:
-  - `commit_batch_core` writes a Company entity to the Company table, and
-    everything else to `projection` as before;
-  - `assessment_snapshot` hashes Companies from the Company table;
+  - `assessment_snapshot`, the hash of the scope;
+  - the tests' `documents(..., "entity")`.
+  - `consumer.py` needs no change. `entity()` always resolves a generation,
+    so a Company is read from the Company table at that generation
+    (`_company_at`). Its `projection` branch for `generation is None` is
+    never reached from `entity()`.
+- [x] Tests first (PostgreSQL 16), in `test_clean_company_one_place.py`.
+  Each one failed on the code before this ticket:
+  - a commit writes no Company to `projection`, and the Company table holds
+    the body the Merge Stage computed;
+  - a merged-away Company is only an alias row;
+  - a Person stays in `projection`;
+  - the copy steps are gone;
+  - a publication carries the objects the Merge Stage computed
+    (characterization: true before and after);
+  - 041 applies to a populated store (below).
+  - A stale assessment is still refused when a Company in its scope changes:
+    covered by the existing assessment tests, which now read the view.
+- [x] One new migration, `041_clean_mdm_company_one_place.sql`, restates each
+  changed SQL function whole:
+  - `commit_batch_core` sends a Company entity to
+    `record_company_projection` (037) and everything else to `projection`;
+  - `assessment_snapshot` reads entities from `current_entity`;
   - it drops the triggers `project_company_version` and
     `publish_company_authority`, and `company_payload_from_table`;
-  - a populated store moves its Company rows out of `projection` (the
-    Company table already holds them, from 037's backfill).
-- [ ] Remove `Store._company_output_from_table`. Delivery sends the stored
-  payload.
+  - on a populated store, each Company row in `projection` is checked
+    against the Company table, then removed.
+- [x] Removed `Store._company_output_from_table`. Delivery sends the stored
+  payload. With it went the delivery-time check of the named columns against
+  the selected fields, and its two tests; the named columns are written from
+  the same body in one function (037).
 - [ ] Prove it on PostgreSQL 16:
-  - the full Clean suite;
-  - a store populated before the migration;
-  - ticket 05's chunk 1 again, for the new timing.
+  - [x] a store populated at 040, then migrated (Companies unchanged, the
+    stored snapshot still matches, the assessment applies);
+  - [ ] the full Clean suite. First run (2026-09-26 14:03 ET): 8 failures.
+    Seven tests fill a store built at an older migration with today's code,
+    which reads `current_entity` before 041 exists. Fix: the shared test
+    helper gives such a store a stand-in view over `projection`, and 041
+    uses `CREATE OR REPLACE VIEW` to replace it. The eighth counted views
+    and now includes `current_entity`;
+  - [ ] ticket 05's chunk 1 again, for the new timing.
 - [ ] Three-axis `/code-review` (Standards, Spec, GoF), then PR and CI.
 
 ## Noted, not in scope

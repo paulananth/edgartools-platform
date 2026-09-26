@@ -104,11 +104,11 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     # classification.CLASSIFICATION_VERDICTS is derived from KINDS rather than
     # restated, so it needs no copy of its own -- only its two extra verdicts.
     assert CLASSIFICATION_VERDICTS - KINDS == {"entity_undetermined", "deferred"}
-    # Plus one view across every kind: the records still waiting, each with
-    # its Probable Kind (036).
+    # Plus two views across every kind: the records still waiting, each with
+    # its Probable Kind (036), and the one read of a current entity (042).
     assert installed_views(database) == ({
         f"{kind}_{shape}" for kind in schema_kinds for shape in SHAPES
-    } | {"stage_waiting"}) - {"company_master"}
+    } | {"stage_waiting", "current_entity"}) - {"company_master"}
     assert columns(database, "company")
     # Exact equality above already forbids it, but say it outright: 034 renamed
     # 033's source-side pair, so not one view still carries the old name.
@@ -463,6 +463,7 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
             "039_clean_mdm_stage_binding.sql",
             "040_clean_mdm_assessment_safety.sql",
             "041_clean_mdm_binding_correction.sql",
+            "042_clean_mdm_company_one_place.sql",
         ]
         # 034 renamed rather than duplicated: the name 033 created is gone.
         assert (
