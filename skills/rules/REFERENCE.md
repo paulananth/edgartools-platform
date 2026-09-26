@@ -8,7 +8,7 @@ reads it (`edgar_warehouse/mdm/clean/adapters.py`, `normalize`).
 ```yaml
 source: <provider>.<dataset>          # the folder name, e.g. acme.registry
 bronze:
-  family: <bronze family>            # where the captured files live
+  family: <bronze family>            # the main captured-file family (no code reads it yet)
 mdm:
   <source_code>:                     # e.g. acme.registry.firms.v1; one per record type
     contract:
@@ -20,8 +20,65 @@ mdm:
       effective_time: <plain words: when a record takes effect, or unknown>
       semantics: <patch: a record changes only what it says; absence never retires>
       completeness: <plain words: what one publication covers>
-      adapter: {...}                 # below
+      nonblocking_deferred_reasons: [...]   # optional, below
+      publication_families: [...]           # optional, below
+      adapter: {...}                        # below
 ```
+
+The folder name is the source's name: lowercase, dotted. When the repo
+already names the source, or its reader names the folder, keep that name.
+
+## Defaults
+
+Start every contract from these, and change one only with a reason written
+beside it:
+
+```yaml
+adapter:
+  retain_deferred: true           # keep a record MDM cannot take yet, with its reason
+  source_record_provenance: true  # keep the record key and adapter version with each fact
+  field_shape: nullable_text      # every field is text or empty
+  provenance:
+    native_record: <key>          # if the reader keeps the source's own record under a key, map it
+```
+
+When the files arrive as releases the reader numbers and verifies, also set
+`publication_families` (for a full release, the family the reader names).
+
+## Blocking and non-blocking
+
+A record set aside for a reason in `nonblocking_deferred_reasons` does not
+stop its batch; any other reason stops the batch until a person resolves it.
+Only an expected, explained exclusion is non-blocking: a record outside the
+approved scope, or of a kind MDM does not take yet. **A defect always
+blocks:** a bad identifier (a failed check digit), a malformed record, a
+missing key. Never list a defect as non-blocking.
+
+## Full files and changes
+
+`semantics: patch` means a record changes only what it says, and a record
+missing from a file retires nothing. This holds even for a source that
+publishes full files: MDM never retires an identity because a file left it
+out. Say in `completeness` whether each file is complete or holds changes
+only. A reader may require an exact `schema_version`; when it checks one,
+use that value.
+
+## Names that are part of every record's identity
+
+`schema_version` and `adapter.version` are written into every record MDM
+keeps from this source, and a source code is fixed once it is registered.
+So:
+- name each one once, for example `acme-firm-record-v1`;
+- never reuse a name for different content;
+- a change to a registered source is a new version, and the operator
+  approves it.
+
+## Optional envelope keys
+
+| Key | Meaning |
+|---|---|
+| `nonblocking_deferred_reasons` | Reasons a record is set aside that do **not** block its batch, for example records outside the approved scope, or of a kind MDM does not take yet. Any other reason blocks the batch until a person resolves it. List only reasons you expect and can explain. |
+| `publication_families` | For a source whose files arrive as numbered native publications: the families this contract accepts, for example a full release. |
 
 ## Values
 

@@ -1,0 +1,116 @@
+digest equal: False
+
+## gleif.level1.v1  <->  gleif.level1.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF (Global Legal Entity Identifier Foundation)'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif_golden_copy'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  'the LEI: 20 characters, ISO 17442, mod 97 check digits'
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  "one Golden Copy publication: its publish date and time (e.g. 20260911-1600, the UTC data cut-off in GLEIF's file name), shared by its Level 1, RR and REPEX files; read from the captured publication manifest, never from a file name"
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  "the record's Registration.LastUpdateDate, GLEIF's last update of the LEI record"
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  "a full Golden Copy holds every LEI record ever published (GLEIF never deletes one); a delta holds only records new or changed since its delta start; MDM takes a record only when its LEI is on the run's approved Company list, and only category GENERAL as a Company"
+  missing   provenance.native_record: proven='_native' trial=None
+  missing   source_record_provenance: proven=True trial=None
+  missing   retain_deferred: proven=True trial=None
+  different nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial='invalid_lei_checksum'
+  missing   publication_families[0]: proven='golden_copy' trial=None
+
+## gleif.relationships.v1  <->  gleif.relationships.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF (Global Legal Entity Identifier Foundation)'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif_golden_copy'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  "the child LEI (StartNode) plus the relationship type, GLEIF's own rule for one relationship record"
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  "one Golden Copy publication: its publish date and time (e.g. 20260911-1600, the UTC data cut-off in GLEIF's file name), shared by its Level 1, RR and REPEX files; read from the captured publication manifest, never from a file name"
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  "the relationship record's Registration.LastUpdateDate"
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  "a full Golden Copy holds each current relationship record (registration PUBLISHED or LAPSED); GLEIF drops others, so a missing relationship is not proof of none; a delta flags removals; MDM takes a record only when both LEIs are on the run's approved Company list"
+  different record_key[1]: proven='end' trial='relationship_type'
+  missing   record_key[2]: proven='relationship_type' trial=None
+  extra     identifiers.lei: proven=None trial='start'
+  extra     identifier_formats.lei: proven=None trial='lei'
+  missing   field_shape: proven='nullable_text' trial=None
+  extra     relationships[0].properties.registration_status: proven=None trial='registration_status'
+  missing   relationships[0].properties.source_registration_status: proven='registration_status' trial=None
+  missing   relationships[0].properties.source_relationship_status: proven='status' trial=None
+  extra     relationships[0].properties.status: proven=None trial='status'
+  missing   relationships[0].scope: proven='GLEIF accounting consolidation' trial=None
+  extra     relationships[0].type_values.IS_FEEDER_TO: proven=None trial='IS_FEEDER_TO'
+  extra     relationships[0].type_values.IS_FUND-MANAGED_BY: proven=None trial='IS_FUND-MANAGED_BY'
+  extra     relationships[0].type_values.IS_INTERNATIONAL_BRANCH_OF: proven=None trial='IS_INTERNATIONAL_BRANCH_OF'
+  extra     relationships[0].type_values.IS_SUBFUND_OF: proven=None trial='IS_SUBFUND_OF'
+  missing   provenance.native_record: proven='_native' trial=None
+  missing   source_record_provenance: proven=True trial=None
+  missing   retain_deferred: proven=True trial=None
+  different nonblocking_deferred_reasons[1]: proven='unsupported_identity_kind' trial='invalid_lei_checksum'
+  missing   nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial=None
+  missing   publication_families[0]: proven='golden_copy' trial=None
+
+## gleif.reporting_exceptions.v1  <->  gleif.reporting_exceptions.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF (Global Legal Entity Identifier Foundation)'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif_golden_copy'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  "the child LEI plus the exception category (direct or ultimate accounting parent), GLEIF's own rule for one exception"
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  "one Golden Copy publication: its publish date and time (e.g. 20260911-1600, the UTC data cut-off in GLEIF's file name), shared by its Level 1, RR and REPEX files; read from the captured publication manifest, never from a file name"
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  'unknown; a reporting exception carries no date'
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  'a full Golden Copy holds each current reporting exception; a relationship record of the same type replaces it; a missing parent is not proof of no parent; every exception is kept as evidence only, never a field or an edge'
+  missing   kind: proven='company' trial=None
+  extra     identifiers.lei: proven=None trial='LEI.$'
+  extra     identifier_formats.lei: proven=None trial='lei'
+  missing   field_shape: proven='nullable_text' trial=None
+  missing   provenance.native_record: proven='_native' trial=None
+  missing   source_record_provenance: proven=True trial=None
+  missing   retain_deferred: proven=True trial=None
+  different nonblocking_deferred_reasons[1]: proven='unsupported_identity_kind' trial='reported_parent_exception'
+  different nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial='invalid_lei_checksum'
+  missing   publication_families[0]: proven='golden_copy' trial=None
+
+totals: {'equal': 50, 'different': 5, 'missing': 20, 'extra': 10}

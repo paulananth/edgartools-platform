@@ -1,0 +1,37 @@
+digest equal: False
+
+## sec.submissions.company.v1  <->  sec.submissions.company.v1
+  text provider:
+    proven: 'SEC'
+    trial:  'SEC'
+  text family:
+    proven: 'submissions'
+    trial:  'submissions'
+  text schema_version:
+    proven: 'silver-company-v1'
+    trial:  'sec-company-landing-v1'
+  text record_key:
+    proven: 'zero-padded 10-digit CIK'
+    trial:  "the filer's CIK, 10 digits zero-padded"
+  text publication_key:
+    proven: 'capture run plus exact company landing member digest, plus the exact filing-list, business-address and ticker catalog member digests, plus the Name Census digest'
+    trial:  "one capture run's pinned sec_company, sec_company_filing and sec_company_address members, the ticker catalog run's sec_company_ticker member and the Name Census, each by sha256 (as mdm prepare-clean-company builds it)"
+  text effective_time:
+    proven: 'unknown; last_synced_at is observation time only'
+    trial:  'unknown; last_synced_at is when the file was observed, kept as provenance observed_at'
+  text semantics:
+    proven: 'patch'
+    trial:  'patch; absence never retires an identity'
+  text completeness:
+    proven: 'explicit bounded Company sample; no retirement by absence'
+    trial:  "a bounded sample (at most 1000) of one capture run's Company rows; never the whole SEC filer universe, and individual filers are not landed as Company rows"
+  missing   provenance.address_landing_sha256: proven='_origin.business_address.sha256' trial=None
+  missing   provenance.capture_run_id: proven='last_sync_run_id' trial=None
+  missing   provenance.filing_landing_sha256: proven='_origin.forms.sha256' trial=None
+  missing   provenance.landing_manifest_sha256: proven='_origin.manifest_sha256' trial=None
+  missing   provenance.landing_sha256: proven='_origin.sha256' trial=None
+  missing   provenance.raw_object_id: proven='raw_object_id' trial=None
+  missing   provenance.ticker_landing_sha256: proven='_origin.tickers.sha256' trial=None
+  missing   provenance.ticker_run_id: proven='_origin.tickers.run_id' trial=None
+
+totals: {'equal': 26, 'different': 0, 'missing': 8, 'extra': 0}
