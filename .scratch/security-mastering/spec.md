@@ -53,6 +53,10 @@ Master securities from 13F. One CUSIP is one Security. The display title is the 
 - A result that points `464287200` at BlackRock fails.
 - Prior art is the contract test that checks one information-table row, and the master-data tests that assert entities and relationships rather than helper functions.
 
+## Relationships that are not mastered
+
+`IS_ENTITY_OF` and `IS_PERSON_OF` are not relationships. They only said an adviser record was the same party as a Company or a Person. The Adviser Profile hangs on that Company or Person, so the glue edge is not published and is not derived. `MANAGES_FUND`, `EMPLOYED_BY`, and Holdings stay. They are different facts.
+
 ## Out of Scope
 
 - Building the N-CEN or N-PORT parsers. Mastering consumes that evidence once it exists.

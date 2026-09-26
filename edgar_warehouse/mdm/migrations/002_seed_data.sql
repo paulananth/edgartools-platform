@@ -257,11 +257,6 @@ INSERT INTO mdm_relationship_type (rel_type_name, source_node_type, target_node_
      '["source_entity_id","target_entity_id"]',
      'extend_temporal',
      'Security is issued by company'),
-    ('IS_ENTITY_OF',
-     'adviser',  'company',  'outbound', TRUE,
-     '["source_entity_id","target_entity_id"]',
-     'replace',
-     'Adviser is the same legal entity as a registered company'),
     ('HAS_PARENT_COMPANY',
      'company',  'company',  'outbound', TRUE,
      '["source_entity_id","target_entity_id"]',
@@ -271,12 +266,7 @@ INSERT INTO mdm_relationship_type (rel_type_name, source_node_type, target_node_
      'adviser',  'fund',     'outbound', TRUE,
      '["source_entity_id","target_entity_id"]',
      'extend_temporal',
-     'Adviser manages a private fund'),
-    ('IS_PERSON_OF',
-     'adviser',  'person',   'outbound', FALSE,
-     '["source_entity_id","target_entity_id"]',
-     'replace',
-     'Individual adviser CIK is the same natural person')
+     'Adviser manages a private fund')
 ON CONFLICT (rel_type_name) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -544,33 +534,6 @@ SELECT
     'MANAGES_FUND from Form ADV Schedule D private funds. Pipeline derives adviser via sec_adv_filing.crd_number and effective_from via sec_adv_filing.effective_date.'
 FROM mdm_relationship_type rt
 WHERE rt.rel_type_name = 'MANAGES_FUND'
-ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
-
--- IS_ENTITY_OF derived from adviser CIK matching company CIK
-INSERT INTO mdm_relationship_source_mapping (
-    rel_type_id, source_system, source_table,
-    source_entity_field, target_entity_field,
-    source_entity_type, target_entity_type,
-    property_mapping,
-    effective_from_field, effective_to_field,
-    filter_condition,
-    description
-)
-SELECT
-    rt.rel_type_id,
-    'derived',
-    'mdm_adviser',
-    'cik',
-    'cik',
-    'adviser',
-    'company',
-    '{}'::JSONB,
-    NULL,
-    NULL,
-    '{"cik_not_null": {"field": "cik", "op": "IS NOT NULL"}}'::JSONB,
-    'IS_ENTITY_OF derived by matching adviser CIK to company CIK in mdm_company'
-FROM mdm_relationship_type rt
-WHERE rt.rel_type_name = 'IS_ENTITY_OF'
 ON CONFLICT (rel_type_id, source_system, source_table) DO NOTHING;
 
 -- HAS_PARENT_COMPANY derived from mdm_company.parent_company_entity_id

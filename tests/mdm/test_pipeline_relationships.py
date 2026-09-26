@@ -4,8 +4,6 @@ Exercises the bronze-layer relationship ingestion code added on top of the
 existing resolver-based pipeline:
 
   * IS_INSIDER       (person  -> company,  Form 3/4/5)
-  * IS_ENTITY_OF     (adviser -> company,  via MdmAdviser.linked_company_entity_id)
-  * IS_PERSON_OF     (adviser -> person,   adviser CIK matches person owner_cik)
 
 The test seeds an in-memory SQLite store with all five MDM entity-type
 definitions and graph relationship types (matching the production seed
@@ -178,10 +176,8 @@ def _seed_registry(session: Session) -> dict[str, str]:
         ("HOLDS",               "person",   "security",    "extend_temporal"),
         ("COMPANY_HOLDS",       "company",  "security",    "extend_temporal"),
         ("ISSUED_BY",           "security", "company",     "extend_temporal"),
-        ("IS_ENTITY_OF",        "adviser",  "company",     "replace"),
         ("HAS_PARENT_COMPANY",  "company",  "company",     "replace"),
         ("MANAGES_FUND",        "adviser",  "fund",        "extend_temporal"),
-        ("IS_PERSON_OF",        "adviser",  "person",      "replace"),
         # Fundamentals-sourced types (sec_executive_record, sec_accounting_flag, sec_thirteenf_holding)
         ("EMPLOYED_BY",         "person",   "company",     "extend_temporal"),
         ("AUDITED_BY",          "company",  "audit_firm",  "extend_temporal"),
@@ -363,22 +359,6 @@ class TestPipelineHelpers:
         assert pipe._adviser_entity_id("nonexistent-acc") is None
         assert pipe._adviser_entity_id(None) is None
 
-    def test_adviser_company_pairs(self, session, fixture_world):
-        pipe = MDMPipeline(session=session, silver=StubSilver({}))
-        pairs = list(pipe._adviser_company_pairs())
-        assert len(pairs) == 1
-        adv_id, co_id = pairs[0]
-        assert adv_id == fixture_world["firm_adviser_id"]
-        assert co_id  == fixture_world["linked_company_id"]
-
-    def test_adviser_person_pairs_only_unlinked(self, session, fixture_world):
-        pipe = MDMPipeline(session=session, silver=StubSilver({}))
-        pairs = list(pipe._adviser_person_pairs())
-        # firm adviser is excluded (linked_company_entity_id is set)
-        assert len(pairs) == 1
-        adv_id, person_id = pairs[0]
-        assert adv_id    == fixture_world["individual_adviser_id"]
-        assert person_id == fixture_world["individual_person_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -487,31 +467,15 @@ class TestRunRelationships:
             for r in rows
         )
 
-    def test_writes_is_entity_of(self, session, fixture_world):
+    def test_does_not_write_identity_glue_edges(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
         pipe.run_relationships()
-
         rows = list(session.scalars(
             select(MdmRelationshipInstance)
             .join(MdmRelationshipType)
-            .where(MdmRelationshipType.rel_type_name == "IS_ENTITY_OF")
+            .where(MdmRelationshipType.rel_type_name.in_(("IS_ENTITY_OF", "IS_PERSON_OF")))
         ))
-        assert len(rows) == 1
-        assert rows[0].source_entity_id == fixture_world["firm_adviser_id"]
-        assert rows[0].target_entity_id == fixture_world["linked_company_id"]
-
-    def test_writes_is_person_of(self, session, fixture_world):
-        pipe = MDMPipeline(session=session, silver=self._stub())
-        pipe.run_relationships()
-
-        rows = list(session.scalars(
-            select(MdmRelationshipInstance)
-            .join(MdmRelationshipType)
-            .where(MdmRelationshipType.rel_type_name == "IS_PERSON_OF")
-        ))
-        assert len(rows) == 1
-        assert rows[0].source_entity_id == fixture_world["individual_adviser_id"]
-        assert rows[0].target_entity_id == fixture_world["individual_person_id"]
+        assert rows == []
 
     def test_writes_has_parent_company_relationship(self, session, fixture_world):
         child_id = _add_entity(session, "company")
@@ -569,8 +533,8 @@ class TestRunRelationships:
     def test_returned_count_matches_inserts(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
         written = pipe.run_relationships()
-        # 2 IS_INSIDER + 1 IS_ENTITY_OF + 1 IS_PERSON_OF + 1 MANAGES_FUND + 1 ISSUED_BY = 6
-        assert written == 6
+        # 2 IS_INSIDER + 1 MANAGES_FUND + 1 ISSUED_BY = 4
+        assert written == 4
 
     def test_properties_include_role_and_title(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -821,10 +785,10 @@ class TestRunRelationships:
         first = pipe.run_relationships()
         second = pipe.run_relationships()
 
-        assert first == 6
+        assert first == 4
         assert second == 0
         rows = list(session.scalars(select(MdmRelationshipInstance)))
-        assert len(rows) == 6
+        assert len(rows) == 4
 
     def test_target_per_type_counts_existing_rows(self, session, fixture_world):
         pipe = MDMPipeline(session=session, silver=self._stub())
@@ -1756,9 +1720,7 @@ class TestRunRelationships:
             "COMPANY_HOLDS",
             "ISSUED_BY",
             "MANAGES_FUND",
-            "IS_ENTITY_OF",
             "HAS_PARENT_COMPANY",
-            "IS_PERSON_OF",
             "EMPLOYED_BY",
             "AUDITED_BY",
             "INSTITUTIONAL_HOLDS",
@@ -1772,9 +1734,7 @@ class TestRunRelationships:
         assert first["COMPANY_HOLDS"]["inserted"] == 0
         assert first["ISSUED_BY"]["inserted"] == 1
         assert first["MANAGES_FUND"]["inserted"] == 1
-        assert first["IS_ENTITY_OF"]["inserted"] == 1
         assert first["HAS_PARENT_COMPANY"]["inserted"] == 0
-        assert first["IS_PERSON_OF"]["inserted"] == 1
         # First-run insert assertions (3 new fundamentals types — 06-02)
         assert first["EMPLOYED_BY"]["inserted"] >= 1
         assert first["AUDITED_BY"]["inserted"] >= 1
@@ -3459,10 +3419,9 @@ class TestRelationshipTypesConcurrency:
         to the old sequential loop for the test suite's StaticPool fixture.
         """
         summary = MDMPipeline(session=session, silver=StubSilver({})).derive_relationships(
-            relationship_types=["MANAGES_FUND", "ISSUED_BY", "IS_ENTITY_OF"]
+            relationship_types=["MANAGES_FUND", "ISSUED_BY"]
         )
-        assert set(summary.keys()) == {"MANAGES_FUND", "ISSUED_BY", "IS_ENTITY_OF"}
-        assert summary["IS_ENTITY_OF"]["inserted"] == 1  # fixture_world's one adviser/company pair
+        assert set(summary.keys()) == {"MANAGES_FUND", "ISSUED_BY"}
 
 
 class TestZeroSharesDisposalGuard:
