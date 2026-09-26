@@ -179,6 +179,11 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   a rule creates cannot yet be undone (brought to
   [ticket 06](issues/06-activation-approval-for-one-digest.md)).
 
+- [Source data findings from the rules skill trials](issues/18-source-data-findings-from-the-rules-trials.md)
+  (opened 2026-09-26): six problems two trial agents found in today's SEC and
+  GLEIF readers, most important first a GLEIF deletion field on 4% of
+  reporting exceptions. None is fixed; each needs triage.
+
 ## Not yet specified
 
 - **Which cohort the Proving Run uses.** The 1,000-row research cohort and its
