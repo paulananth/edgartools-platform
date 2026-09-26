@@ -1,0 +1,13 @@
+[package]
+name = "source-contract"
+version = "0.1.0"
+edition = "2021"
+description = "Read a Source Contract and parse one bronze artifact into rows."
+
+[[bin]]
+name = "source-contract"
+path = "src/main.rs"
+
+[dependencies]
+quick-xml = "0.37"
+serde_yaml = "0.9"

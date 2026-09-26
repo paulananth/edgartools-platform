@@ -1,0 +1,57 @@
+# 13F information table. Emits cusip, the filed title, and the filed issuer
+# name. Security identity, Security Title, and ISSUED_BY are decided later,
+# per docs/specs/clean-mdm/security-identity.md. This file does not create them.
+source: sec.thirteenf.information_table
+version: "prototype-1"
+bronze: { family: sec.thirteenf_infotable }
+
+read:
+  format: xml
+  root: informationTable
+  on_parse_error: retry_without_control_chars
+  tables:
+    sec_thirteenf_holding:
+      each: infoTable
+      columns:
+        holding_index: { ordinal: {} }
+        cusip:
+          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: cusip.$, default: "" } } } }
+        issuer_name:
+          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: nameOfIssuer.$, default: "" } } } }
+        security_title:
+          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: titleOfClass.$, default: "" } } } }
+        shares_held: { number: { path: shrsOrPrnAmt.sshPrnamt.$, default: null } }
+        share_type:
+          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: shrsOrPrnAmt.sshPrnamtType.$, default: "" } } } }
+        market_value: { number: { path: value.$, default: null } }
+        put_call:
+          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: putCall.$, default: "" } } } }
+        discretion_type:
+          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: investmentDiscretion.$, default: "" } } } }
+        voting_auth_sole: { number: { path: votingAuthority.Sole.$, default: null } }
+        voting_auth_shared: { number: { path: votingAuthority.Shared.$, default: null } }
+        voting_auth_none: { number: { path: votingAuthority.None.$, default: null } }
+
+silver:
+  sec_thirteenf_holding:
+    columns:
+      holding_index: bigint
+      cusip: string?
+      issuer_name: string?
+      security_title: string?
+      shares_held: double?
+      share_type: string?
+      market_value: double?
+      put_call: string?
+      discretion_type: string?
+      voting_auth_sole: double?
+      voting_auth_shared: double?
+      voting_auth_none: double?
+
+tests:
+  - case: one information table yields one row per infoTable
+    fixture: fixtures/one-row.xml
+    expect:
+      silver:
+        sec_thirteenf_holding:
+          - { holding_index: 1, cusip: 88579Y101, issuer_name: 3M CO, shares_held: 54242, market_value: 7877566 }
