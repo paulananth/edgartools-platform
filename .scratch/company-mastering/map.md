@@ -186,6 +186,10 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   answered where it sits, which was half the question).
 - **Consolidation of two published Company IDs** (Q10, Q11): its own
   statistical gate, after binding works.
+- **Rebuilding after a CIK contradiction** (Q9: "suspends the affected
+  established link and rebuilds from remaining trusted evidence"). Ticket
+  04 suspends new rule links to a Company in conflict review; nothing yet
+  rebuilds it, and ticket 13 covers wrong name-rule links only.
 - **Relationship and lifecycle work** (parent links, duplicate LEI successors,
   reporting exceptions as evidence): named in the handover's item 5, but it
   waits until a Company binds at all.

@@ -316,3 +316,37 @@ def test_a_company_that_holds_another_lei_waits(database):
     load(database, policy, "gleif-2", other, checkpoint=3)
     (only,) = companies(database)
     assert only["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
+
+
+def test_a_company_in_conflict_review_gains_no_record_by_name(database):
+    """Ticket 04: the name rules honour the same suspension as the identifier
+    rules. The GLEIF record waits with a review; the batch commits."""
+    policy = name_policy(database)
+    load(database, policy, "sec", sec())
+    second = core.source(
+        key="sec-2",
+        source_code=SEC,
+        fields={"name": "APPLE INC"},
+        identifiers={"cik": APPLE_CIK},
+    )
+    load(database, policy, "sec-2", second, checkpoint=2)
+    moved = core.source(
+        key="sec-2",
+        source_code=SEC,
+        revision=2,
+        fields={"name": "APPLE INC"},
+        identifiers={"cik": "0000000002"},
+    )
+    load(database, policy, "sec-2b", moved, checkpoint=3)
+    (company,) = companies(database)
+    assert company["status"] == "review"
+    record = gleif()
+    load(database, policy, "gleif", record, checkpoint=4)
+    (company,) = companies(database)
+    assert record["subject"] not in company["subjects"]
+    reviews = [
+        r
+        for r in core.documents(database, "review").values()
+        if r.get("open") and r.get("subject") == record["subject"]
+    ]
+    assert "suspended_identifier" in {r["reason"] for r in reviews}

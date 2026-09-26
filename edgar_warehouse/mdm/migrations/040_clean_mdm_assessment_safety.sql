@@ -1,21 +1,28 @@
 -- Two ticket 04 safety items, in the one function that commits a new batch
 -- (company mastering ticket 04, closed under ticket 15).
 --
--- 1. A backdated new Company is refused. A Company a matching rule creates
---    takes the batch's as_of as its publish time, and the earliest-published
---    Company survives a merge (identity.replay). A caller supplies as_of, so
---    a backdated batch could create a Company that later wins every merge.
---    A batch whose rule-created Company would be published before the newest
---    identity already stored is refused, so "earliest published" means
---    earliest committed. A chronological rebuild still passes. Only a rule's
---    new Companies are checked: a steward's identity states its own time.
---    Technical decision, reversible (Claude, 2026-09-26).
+-- 1. A rule's new Company is never published at or before another of its
+--    kind. The earliest-published Company survives a merge (identity.replay),
+--    and a caller supplies a batch's as_of, so a late or backdated batch
+--    could create the Company that later wins every merge. The Merge Stage
+--    publishes a rule's new Company at the batch's as_of or just after the
+--    newest identity of its kind already stored, whichever is later
+--    (binding.publish_floor), and re-proposes under its lock when a newer one
+--    has committed since. A late batch still creates its Company. This is the
+--    last guard: a rule-created identity at or before the newest stored
+--    identity of its kind is refused. A steward's identity states its own
+--    time and is not checked. Technical decision, reversible (Claude,
+--    2026-09-26).
 --
--- 2. An orphaned assessment is closed. A crash between an assessment and its
---    apply leaves a `ready` assessment no one applies; the next run proposes
---    again with fresh ids and commits the batch. Committing a batch now marks
---    every other unapplied `ready` assessment for that batch superseded, in
---    the same transaction, so none stays open forever.
+-- 2. An orphaned assessment is closed when its batch commits. A crash
+--    between an assessment and its apply leaves a `ready` assessment no one
+--    applies; the next run proposes again with fresh ids and commits the
+--    batch. Committing a batch now marks every other unapplied `ready`
+--    assessment for that batch superseded, in the same transaction. An
+--    orphan whose batch never commits stays open, and orphans of batches
+--    committed before this migration are not backfilled (a backfill would
+--    write run ids that never ran into an immutable log; no shared store has
+--    been migrated).
 --
 -- 028's commit_batch is restated whole (not edited by text fragment); the
 -- two additions are marked. CREATE OR REPLACE keeps its owner and grants.
@@ -41,13 +48,13 @@ BEGIN
         IF b->>'snapshot' IS DISTINCT FROM mdm_v2.assessment_snapshot(b->'scope') THEN
             RAISE EXCEPTION USING ERRCODE='P0A01', MESSAGE='Stale identity assessment';
         END IF;
-        -- 040 (1): a rule's new Company is published no earlier than the
-        -- newest identity already stored.
+        -- 040 (1): a rule's new Company is published after every stored
+        -- identity of its kind.
         IF EXISTS(
             SELECT 1 FROM jsonb_array_elements(coalesce(b->'automatic'->'identities','[]')) i
             WHERE (i->>'published_at')::timestamptz
-                  < (SELECT max(published_at) FROM mdm_v2.identity)) THEN
-            RAISE EXCEPTION 'A new Company would be published before an identity already stored';
+                  <= (SELECT max(published_at) FROM mdm_v2.identity WHERE kind=i->>'kind')) THEN
+            RAISE EXCEPTION 'A new Company would be published at or before an identity of its kind already stored';
         END IF;
     ELSIF key IS NOT NULL THEN
         RAISE EXCEPTION 'Assessment supplied without an identity proposal';
@@ -73,8 +80,8 @@ BEGIN
 END;
 $$;
 
--- The newest publish time is read under the Merge Stage lock on every batch
--- that creates a Company.
-CREATE INDEX clean_identity_published_at ON mdm_v2.identity(published_at);
+-- The newest publish time of a kind is read when a rule proposes a new
+-- Company and again under the Merge Stage lock.
+CREATE INDEX clean_identity_kind_published_at ON mdm_v2.identity(kind, published_at);
 
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mdm_v2 FROM PUBLIC;

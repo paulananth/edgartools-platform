@@ -411,25 +411,12 @@ class MergeStage:
             check_policy(policy)
             # Under the lock, every rule proposal is re-checked: a concurrent
             # run may have bound its identifier, given it to another Company,
-            # or put the target Company in review since it was assessed.
-            # Re-assess rather than mint twice or join the wrong Company.
+            # or published a newer Company of its kind since it was assessed.
+            # Re-assess rather than mint twice, join the wrong Company, or
+            # publish a new Company before one already stored.
             if not preview and binding.proposal_is_stale(conn, policy, automatic):
                 raise assessment.StaleAssessment(
                     "A rule's proposal no longer holds; re-assess"
-                )
-            # A rule's new Company is published no earlier than the newest
-            # identity already stored, so a backdated batch cannot create the
-            # Company that survives every later merge (ticket 04; also
-            # refused in SQL, 040).
-            if automatic["identities"] and conn.scalar(
-                text(
-                    """SELECT EXISTS(SELECT 1 FROM mdm_v2.identity
-                    WHERE published_at > CAST(:t AS timestamptz))"""
-                ),
-                {"t": min(i["published_at"] for i in automatic["identities"])},
-            ):
-                raise Conflict(
-                    "A new Company would be published before an identity already stored"
                 )
             stored_a, stored_d, stored_ids = load_closure(
                 conn, assertions, decisions, limit=self.closure_limit
@@ -535,8 +522,11 @@ class MergeStage:
                     for ns, values in identifiers.items()
                     if len(values) > 1
                 )
+                # Only a new bind or merge *into* this Company is refused; one
+                # elsewhere in the batch commits and this Company waits in
+                # review (ticket 04).
                 if conflicts and any(
-                    d["operation"] in {"bind", "merge"} for d in decisions
+                    _touches(d, entity_id, state.canonical) for d in decisions
                 ):
                     raise Conflict(
                         "Identity decision has unresolved authoritative identifier or kind conflict"
@@ -764,6 +754,18 @@ def _occurrences(occurrences: list[dict], assertions: list[dict]) -> list[dict]:
             raise Conflict("Invalid bronze occurrence")
         seen.add(o["assertion_id"])
     return sorted(occurrences, key=lambda o: o["assertion_id"])
+
+
+def _touches(decision: dict, entity_id: str, canonical: dict[str, str]) -> bool:
+    """Whether a bind or merge lands in the Company whose root is `entity_id`."""
+    if decision["operation"] == "bind":
+        return canonical.get(str(decision["entity_id"])) == entity_id
+    if decision["operation"] == "merge":
+        return entity_id in {
+            canonical.get(str(decision["left"])),
+            canonical.get(str(decision["right"])),
+        }
+    return False
 
 
 def _identity_work(decisions: list[dict] | None, automatic: dict | None) -> bool:

@@ -24,7 +24,7 @@ from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean import assessment
 from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
+from edgar_warehouse.mdm.clean.store import Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm.test_clean_activation import CIK_CONTRACT, CIK_RULE
 
@@ -413,6 +413,35 @@ def test_migration_035_applies_to_a_populated_store(postgres):
     assert len(companies(database)) == 2
 
 
+def _issuer_conflict(database, policy, *also):
+    """A Company whose two SEC records came to name two CIKs (Q9's contradiction).
+
+    a creates the Company from its CIK; b, another record from the CIK's
+    issuing source, joins it through the same CIK; b's next reading names a
+    different CIK. Returns the Company and the batch's other results.
+    """
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    load(database, policy, "b2", record("b", cik=APPLE_CIK), checkpoint=2)
+    (company,) = companies(database)
+    moved = core.source("b", revision=2, identifiers={"cik": "0000000002"})
+    load(database, policy, "b3", moved, *also, checkpoint=3)
+    return company
+
+
+def test_a_contradiction_does_not_fail_a_batch_that_binds_elsewhere(database):
+    """Ticket 04: the Merge Stage refuses a new identity decision that would
+    bind or merge *into* a conflicted Company, not every decision in the
+    batch. The conflicting reading and an unrelated new Company commit
+    together; the conflicted Company waits in review."""
+    policy = matching_policy(database)
+    unrelated = record("d", cik="0000000005")
+    company = _issuer_conflict(database, policy, unrelated)
+    after = companies(database)
+    assert after[company]["status"] == "review"
+    (new,) = [c for c in after.values() if c["entity_id"] != company]
+    assert new["identifiers"] == {"cik": ["0000000005"]}
+
+
 def test_a_company_in_conflict_review_is_not_joined_and_the_batch_commits(database):
     """Ticket 04, suspended identifiers (Q9 read with Q14).
 
@@ -422,21 +451,7 @@ def test_a_company_in_conflict_review_is_not_joined_and_the_batch_commits(databa
     the batch commits.
     """
     policy = matching_policy(database)
-    load(database, policy, "b1", record("a", cik=APPLE_CIK))
-    joiner = core.source(
-        "b", source_code="fixture.secondary", identifiers={"cik": APPLE_CIK}
-    )
-    load(database, policy, "b2", joiner, checkpoint=2)
-    (company,) = companies(database)
-    # b's next reading names another CIK: the Company holds two, so it waits
-    # in review for an authoritative identifier conflict.
-    moved = core.source(
-        "b",
-        source_code="fixture.secondary",
-        revision=2,
-        identifiers={"cik": "0000000002"},
-    )
-    load(database, policy, "b3", moved, checkpoint=3)
+    company = _issuer_conflict(database, policy)
     assert companies(database)[company]["status"] == "review"
     # A new record carrying the conflicted Company's CIK, beside an unrelated one.
     late = core.source(
@@ -528,21 +543,55 @@ def test_an_orphaned_assessment_is_closed_when_its_batch_commits(database):
     assert still_open == 0
 
 
-def test_a_backdated_new_company_is_refused(database):
-    """Ticket 04: the earliest-published Company survives a merge, so a rule
-    may not create one published before an identity already stored."""
+def published(database) -> list:
+    """Each Company identity's publish time, oldest first."""
+    with database.application.connect() as conn:
+        return list(
+            conn.scalars(
+                text(
+                    "SELECT published_at FROM mdm_v2.identity "
+                    "WHERE kind='company' ORDER BY published_at"
+                )
+            )
+        )
+
+
+def test_a_late_batch_publishes_its_new_company_after_the_newest(database):
+    """Ticket 04: the earliest-published Company survives a merge, so a rule's
+    new Company is never published before one already stored. A batch
+    delivered late (an older as_of) still creates its Company, published
+    just after the newest; reordered delivery keeps working."""
     policy = matching_policy(database)
     stage = MergeStage(Store(database.application))
     load(database, policy, "b1", record("a", cik=APPLE_CIK))
-    backdated = _command(
-        policy, "old", record("m", cik="0000789019"), as_of="2026-01-01T00:00:00+00:00"
+    (first,) = published(database)
+    late = _command(
+        policy, "late", record("m", cik="0000789019"), as_of="2026-01-01T00:00:00+00:00"
     )
-    with pytest.raises(Conflict, match="published before an identity already stored"):
-        stage.apply(**backdated)
-    assert len(companies(database)) == 1
-    # In date order it is created.
-    stage.apply(**{**backdated, "run_id": str(uuid4()), "as_of": core.AS_OF})
+    stage.apply(**late)
     assert len(companies(database)) == 2
+    older, newer = published(database)
+    assert older == first and newer > first
+
+
+def test_a_newer_company_committed_meanwhile_makes_a_proposal_stale(database):
+    """Ticket 04: under the lock, a proposal whose new Company would now be
+    published at or before a stored one is re-assessed with a fresh time."""
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    early = _command(
+        policy,
+        "early",
+        record("m", cik="0000789019"),
+        as_of="2026-01-01T00:00:00+00:00",
+    )
+    prepared = stage.assess(**early, automatic=stage.propose(**early))
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    with pytest.raises(assessment.StaleAssessment):
+        stage.apply_assessment(prepared["assessment_id"], run_id=early["run_id"])
+    stage.apply(**{**early, "run_id": str(uuid4())})
+    first, second = published(database)
+    assert second > first
 
 
 def test_the_sql_refuses_a_backdated_new_company_too(database):
@@ -568,7 +617,9 @@ def test_the_sql_refuses_a_backdated_new_company_too(database):
         generation = conn.scalar(text("SELECT max(generation) FROM mdm_v2.batch"))
     request = {**effects, "assessment_id": key, "expected_generation": generation}
     with (
-        pytest.raises(DBAPIError, match="published before an identity already stored"),
+        pytest.raises(
+            DBAPIError, match="published at or before an identity of its kind"
+        ),
         database.application.begin() as conn,
     ):
         conn.execute(
@@ -623,7 +674,8 @@ def test_migration_040_applies_to_a_populated_store(postgres):
 
     A store at 039 holds a committed Company and an orphaned assessment left
     by a crash. After 040 the Company survives, the next commit of the
-    orphan's batch closes it, and a backdated rule-created Company is refused.
+    orphan's batch closes it, and a late batch's new Company is published
+    after the newest.
     """
     from unittest import mock
 
@@ -655,12 +707,14 @@ def test_migration_040_applies_to_a_populated_store(postgres):
             )
             == 1
         )
-    with pytest.raises(Conflict, match="published before"):
-        stage.apply(
-            **_command(
-                policy,
-                "old",
-                record("x", cik="0000000009"),
-                as_of="2026-01-01T00:00:00+00:00",
-            )
+    # A batch delivered late still creates its Company, published after the newest.
+    stage.apply(
+        **_command(
+            policy,
+            "old",
+            record("x", cik="0000000009"),
+            as_of="2026-01-01T00:00:00+00:00",
         )
+    )
+    times = published(database)
+    assert len(times) == 3 and times[-1] > times[-2]
