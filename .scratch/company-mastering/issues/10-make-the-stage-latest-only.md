@@ -128,26 +128,39 @@ Found while planning (facts, not rulings):
    where an older reading arrives later the two differ on purpose (15 tests).
    Limits recorded: a clash with an older reading the row already replaced
    goes unseen; a profile's identifying values must be text.
-1b. [ ] **GLEIF names its bronze objects; the channel for any source.** Native
+1b. [x] **GLEIF names its bronze objects; the channel for any source** (PR
+   #716, merged `0df0be28`, 2026-09-25 20:17 ET). Native
    GLEIF batches name the verified member's `bronze_artifact_reference`, its
    raw evidence hash and `level1:record:<ordinal>`. A pinned source row may
    name its bronze object under `_origin.bronze`; the manifest reader turns
    it into that reading's occurrence, built field by field. PG16: every
    GLEIF Stage row in the four-company test names its archive; the SEC rows
    there carry fixture bronze to test the channel only.
-1c. [ ] **SEC names its bronze objects.** Found while building 1b (Claude,
-   2026-09-25): no production writer lands submissions rows in
-   `sec_raw_object` (it holds filing artifacts only), so the Company landing
-   cannot name its bronze object. But a Company row's `raw_object_id` **is**
-   the sha256 of its submissions document, and each capture path records
-   that document's bronze path beside the hash: the warehouse path in the
-   run's bookkeeping `pipeline_run.raw_writes_json` (path, sha256); the
-   acquisition-gated path (`drive-submissions-discovery`) in the ledger's
-   `source_revision` (`bronze_artifact_reference`, `raw_evidence_hash`).
-   Design: resolve the object by that hash from the record the capture kept,
-   never by listing bronze per CIK. Check which path the bundles' captures
-   come from, and the architecture boundary between Clean MDM and the
-   warehouse, before choosing.
+1c. [ ] **SEC names its bronze objects.** No production writer lands
+   submissions rows in `sec_raw_object` (it holds filing artifacts only), but
+   a Company row's `raw_object_id` **is** the sha256 of its submissions
+   document. The warehouse capture path (`bootstrap_batch`, which produced the
+   real local landing `local-fewco-20260917`) records each document's bronze
+   path and sha256 in bookkeeping `pipeline_run.raw_writes_json`, keyed by the
+   same run id the landing carries. `mdm bronze-receipts --run-id` writes
+   those receipts (sha256 to object, one path per identical copy, canonical);
+   `prepare-clean-company --bronze-receipts` requires the landing's own run
+   and gives each row whose document they name `_origin.bronze` (object,
+   sha256, locator `$`). Never a bronze listing per CIK. The
+   acquisition-gated path (`drive-submissions-discovery`) records the same
+   facts in the ledger's `source_revision`; a receipts builder for it waits
+   for a landing from that path.
+   Found in review (Claude, 2026-09-25): a run records every write, and
+   filing attachments and ADV manifests carry no sha256, so receipts leave
+   unhashed writes out; only a `succeeded` run's receipts are taken. Limits:
+   - **SEC submissions are written with the mutable writer** (`write_bytes`,
+     a date-partitioned key), not `write_immutable_bytes`, so a second fetch
+     the same day replaces the object an earlier receipt names. The recorded
+     hash still detects it: slice 4's bronze reread refuses a mismatch. A
+     warehouse change for the operator to decide, not this slice.
+   - The Stage keeps bronze only for readings a batch newly stores, so
+     re-preparing an already committed landing with receipts names bronze on
+     no existing row; the approved path is a fresh rebuild from pinned input.
 2. [ ] **Readers move to the Stage and compact decision receipts**, each with
    an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
    the binding decisions.

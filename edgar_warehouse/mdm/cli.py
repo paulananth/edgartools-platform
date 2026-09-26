@@ -48,7 +48,13 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare.add_argument("--as-of", required=True)
     prepare.add_argument("--revision", type=int, required=True)
     prepare.add_argument("--limit", type=int, default=100)
+    prepare.add_argument("--bronze-receipts", help="Bronze receipts of this same capture run (mdm bronze-receipts): each record names its bronze object")
     prepare.set_defaults(model="clean", handler=_logged_handler("prepare-clean-company", _handle_clean_decisions))
+
+    receipts = mdm_sub.add_parser("bronze-receipts", help="Write one capture run's bronze write receipts (path and sha256 of each document) from bookkeeping")
+    receipts.add_argument("--run-id", required=True, help="The capture run: the landing manifest's run_id")
+    receipts.add_argument("--output", required=True)
+    receipts.set_defaults(model="clean", handler=_logged_handler("bronze-receipts", _handle_clean_decisions))
 
     census = mdm_sub.add_parser("name-census", help="Count one SEC capture and one full GLEIF Golden Copy into a Name Census file")
     census.add_argument("--landing-root", required=True)
