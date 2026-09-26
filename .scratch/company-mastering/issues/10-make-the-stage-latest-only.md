@@ -136,7 +136,8 @@ Found while planning (facts, not rulings):
    it into that reading's occurrence, built field by field. PG16: every
    GLEIF Stage row in the four-company test names its archive; the SEC rows
    there carry fixture bronze to test the channel only.
-1c. [ ] **SEC names its bronze objects.** No production writer lands
+1c. [x] **SEC names its bronze objects** (PR #717, merged `7d515861`,
+   2026-09-25 21:04 ET). No production writer lands
    submissions rows in `sec_raw_object` (it holds filing artifacts only), but
    a Company row's `raw_object_id` **is** the sha256 of its submissions
    document. The warehouse capture path (`bootstrap_batch`, which produced the
@@ -157,7 +158,8 @@ Found while planning (facts, not rulings):
      a date-partitioned key), not `write_immutable_bytes`, so a second fetch
      the same day replaces the object an earlier receipt names. The recorded
      hash still detects it: slice 4's bronze reread refuses a mismatch. A
-     warehouse change for the operator to decide, not this slice.
+     warehouse change for the operator to decide, not this slice: opened as
+     [Write each SEC submissions document to bronze once](16-write-sec-submissions-bronze-once.md).
    - The Stage keeps bronze only for readings a batch newly stores, so
      re-preparing an already committed landing with receipts names bronze on
      no existing row; the approved path is a fresh rebuild from pinned input.

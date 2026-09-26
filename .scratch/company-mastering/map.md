@@ -153,6 +153,11 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   were opened at the operator's direction on 2026-09-25. They remain open;
   opening them activates no rule.
 
+- [Write each SEC submissions document to bronze once](issues/16-write-sec-submissions-bronze-once.md)
+  was opened at the operator's direction on 2026-09-25 21:10 ET. Today a
+  same-day re-fetch overwrites the bronze object a Stage row names. It blocks
+  ticket 10's slice 4 and waits on the operator's choice of key.
+
 - [Qualify the first SEC-to-GLEIF Company binding rule](issues/08-qualify-sec-to-gleif-fuzzy-binding.md)
   (added 2026-09-23, blocked by 04; now blocks 05). Tickets 03 and 04 only
   make a Company recognisable within one source: SEC and GLEIF share no
