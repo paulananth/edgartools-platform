@@ -34,12 +34,16 @@ while a combined output waits for every required consumer. Operator's structured
 reply verified 2026-09-26 10:34 ET. This does not claim a cross-system atomic
 transaction or weaken MDM's own atomic master/journal/checkpoint commit.
 
-Q2 next: choose shared durable source evidence with independent consumer mappings,
-or independently read/parse bronze for each consumer. Recommendation: shared
-source evidence; its fidelity, retention and version contracts remain later gates.
+Q2 accepted: shared durable source evidence with independent consumer mappings;
+separate raw parsing is a source-specific exception when the shared records cannot
+serve the source's needs. Operator's structured reply verified 2026-09-26 10:35 ET.
 
-Later questions depend on Q2: retention and replay horizon, contract/version
-ownership, and the bounded migration trial. Only Q1 is accepted so far.
+Q3 next: preserve all structured source fields/repeating groups, or only fields
+currently needed. Recommendation: all structured fields; greater stored size,
+less raw reparsing when future mappings need an unused field.
+
+Later questions: transformation boundary, retention and replay horizon,
+contract/version ownership, and the bounded migration trial. Q1 and Q2 are accepted.
 
 Research completion does not accept or implement an architecture. The interview,
 ADR/spec, migration tickets and cost/fidelity prototype are follow-up work after

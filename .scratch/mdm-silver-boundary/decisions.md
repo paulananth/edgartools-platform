@@ -8,8 +8,10 @@ and [primary-source research](research/2026-09-26-primary-sources.md).
 
 - [x] Q1: independent consumer progress — operator accepted the recommendation;
   structured reply verified 2026-09-26 10:34 ET.
-- [ ] Q2: shared source evidence or separate raw parsing.
-- [ ] Evidence fidelity and the boundary of consumer-specific transformations.
+- [x] Q2: shared parsing and separate mappings — operator accepted the
+  recommendation; structured reply verified 2026-09-26 10:35 ET.
+- [ ] Q3: preserve all structured source fields or only fields currently needed.
+- [ ] Boundary of consumer-specific transformations and irregular source formats.
 - [ ] Version changes, replay and retained input scope.
 - [ ] Retention, lagging consumers and correction/investigation requirements.
 - [ ] Migration proof and implementation scope.
@@ -28,17 +30,31 @@ boundary for master changes, journal evidence, checkpoints and publication inten
 A shared parser, if selected in Q2, remains a prerequisite for both consumers
 for the affected artifact.
 
-## Q2: the shared reading boundary — pending
+## Q2: the shared reading boundary — accepted
 
-Recommendation: parse verified source bytes once per pinned reader/version into
+Parse verified source bytes once per pinned reader/version into
 a durable source-evidence publication, then apply independent MDM and analytical
 mappings. Preserve source facts and provenance before either consumer's business
 filtering, matching or field selection. This avoids duplicate decoding on routine
 consumer retries but adds stored derived evidence and a common dependency.
 
-The alternative is independent bronze-to-MDM and bronze-to-silver reads/parses;
-sharing parser code alone still permits duplicate processing executions.
+Independent raw parsing remains a source-specific exception when the consumers'
+needs cannot fit the shared records. Sharing parser code alone would still
+permit duplicate processing executions and does not meet the selected default.
 
 Fidelity, retention, publication/version semantics and measured cost are unresolved.
 The existing Source Contract's silver-to-Dataset Contract mapping is not silently
 redefined; changes to it require the completed decision/spec discussion.
+
+## Q3: evidence fidelity — pending
+
+For structured source files (JSON, CSV and XML), should shared source records
+preserve all source fields and repeating groups, including fields neither consumer
+uses today, or only the currently required fields?
+
+Recommendation: preserve all structured source fields with source names and
+presence/repetition distinctions. MDM and analytics each select and transform what
+they use. This reduces raw reparsing when a mapping needs a previously unused
+field, at the cost of larger stored records. Exact raw bytes remain under the
+existing source retention contract. This does not promise a generic extractor
+can discover every fact in irregular HTML or PDF documents.
