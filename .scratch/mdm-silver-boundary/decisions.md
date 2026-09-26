@@ -23,8 +23,13 @@ and [primary-source research](research/2026-09-26-primary-sources.md).
 - [x] Preserve existing correction/investigation, exact-fingerprint activation
   and source-retention requirements; Q4–Q5 introduce no identity-rule or raw
   deletion changes — decision text checked 2026-09-26 10:49 ET.
-- [ ] Q6: bounded SEC Company + GLEIF proof before broader migration.
-- [ ] Confirm shared understanding and write the final ADR/spec.
+- [x] Q6: bounded SEC Company + GLEIF proof before broader migration —
+  operator's structured reply verified 2026-09-26 10:54 ET.
+- [ ] Confirm shared understanding and finalize the ADR/spec.
+
+Review package: [architecture brief](architecture.md),
+[proposed specification](specification.md),
+[proposed ADR](../../docs/adr/0016-independent-mdm-and-silver-mappings.md).
 
 ## Q1: independent progress — accepted
 
@@ -98,9 +103,9 @@ execution digests must capture only their actual dependencies. Changes affecting
 identity decisions remain subject to the existing exact-fingerprint approval
 contract, not automatic activation inferred from this architecture choice.
 
-## Q6: migration scope and proof — pending
+## Q6: migration scope and proof — accepted
 
-Recommendation: prove the architecture on a bounded SEC Company and GLEIF
+Prove the architecture on a bounded SEC Company and GLEIF
 cohort first. Preserve current production entry points and existing outputs
 until the new path is qualified. Other entities and source parsers stay outside
 the first implementation slice; irregular formats retain their existing custom

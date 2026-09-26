@@ -26,6 +26,20 @@ that require processing files twice with different configuration?
   question — independent consumer progress asked through structured user input;
   2026-09-26 07:29 ET.
 
+## Architecture discussion checklist
+
+- [x] Record six accepted decisions with the operator replies and verification
+  times — [decision log](../decisions.md) checked; 2026-09-26 10:58 ET.
+- [x] Rebase onto current main and refresh the historical countryCode example —
+  `3ea3a6b1`, PRs #720/#721 verified; 2026-09-26 10:54 ET.
+- [x] Write a concrete review package: architecture brief, proposed specification
+  and proposed ADR — seven Markdown files and 27 local links validated,
+  whitespace checked; 2026-09-26 10:58 ET.
+- [ ] Confirm the complete shared understanding and finalize decision-record status.
+
+Engineering qualification and runtime implementation remain outside this
+completed research. The proposed specification explicitly lists their gates.
+
 ## Decision frontier
 
 Q1 accepted: MDM continues from verified evidence when analytical silver
@@ -50,13 +64,15 @@ change reruns the affected consumer from retained parsed evidence. Raw reparsing
 follows reader changes, not unrelated mapping changes. Reply verified
 2026-09-26 10:49 ET.
 
-Q6 next: bounded SEC Company + GLEIF proof before broader migration; preserve the
+Q6 accepted: bounded SEC Company + GLEIF proof before broader migration; preserve the
 existing outputs until correctness, recovery, selective replay and measured cost
-are qualified. Recommendation: yes.
+are qualified. Operator's structured reply verified 2026-09-26 10:54 ET.
 
 Consumer-specific transformations follow Q2–Q3; irregular formats retain the
-existing source-specific exception. Q1–Q5 are accepted. After Q6, present the
-complete decision package for confirmation and finalize the ADR/spec.
+existing source-specific exception. Q1–Q6 are accepted. The concrete
+[architecture brief](../architecture.md) and [proposed specification](../specification.md)
+are ready for the shared-understanding check; no implementation ticket or runtime
+change is claimed.
 
 Research completion does not accept or implement an architecture. The interview,
 ADR/spec, migration tickets and cost/fidelity prototype are follow-up work after

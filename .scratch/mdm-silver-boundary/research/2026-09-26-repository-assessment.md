@@ -4,6 +4,13 @@ Date: 2026-09-26. Reviewed base: `2b52b2913d12679df3651bc5cd3e05b125abc403`.
 Status: research and recommendation, **not an accepted architecture decision**.
 No runtime code, contract, retention policy or production deployment is changed.
 
+Refresh, 2026-09-26 10:54 ET: branch rebased onto `3ea3a6b1` after PRs #720 and
+#721 merged. PR #720 now carries `countryCode` into the address projection and
+Company matching; the omission below is a historical example on the reviewed
+`2b52b291` base, **not an open defect on refreshed main**. The reader remains
+dependent on the silver projection schema. PR #721's CIK safety work is outside
+this architecture research and its implementation has not been reviewed here.
+
 ## Answer
 
 For this platform's flexibility goal, MDM should own its interpretation,
