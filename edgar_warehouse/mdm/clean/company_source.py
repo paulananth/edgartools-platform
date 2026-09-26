@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from ...rules import files as rules_files
+from edgar_warehouse.rules import files as rules_files
+
 from .evidence import instant
 from .matching import FAMILY
 from .name_census import entry as census_entry

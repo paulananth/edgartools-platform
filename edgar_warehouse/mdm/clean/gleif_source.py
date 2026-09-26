@@ -12,7 +12,8 @@ from typing import IO, BinaryIO
 import ijson
 from lxml import etree
 
-from ...rules import files as rules_files
+from edgar_warehouse.rules import files as rules_files
+
 from .adapters import (
     UnsupportedRecord,
     category_kind,
@@ -362,18 +363,20 @@ def validate_release(manifest: dict, native: dict) -> None:
         raise Conflict("Invalid native release metadata or Company scope") from exc
 
 
-def dataset_contract(member: str, *, level1_source: str = "gleif.level1.v1") -> dict:
+def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
     """Governance input, not registration or activation. Field ranks live in policy.
 
     Each member's mapping is data in `rules/sources/gleif/source.yaml` (rules
-    skill ticket 01). `level1_source` names the Level 1 source a relationship
-    points at, for a caller that registers Level 1 under another code.
+    skill ticket 01). A relationship points at the Level 1 source the file
+    names; `level1_source` replaces it for a caller that registers Level 1
+    under another code.
     """
     for entry in rules_files.source("gleif")["mdm"].values():
         contract = entry["contract"]
         if contract["adapter"]["native_member"] == member:
-            for relationship in contract["adapter"].get("relationships", []):
-                relationship["target_source"] = level1_source
+            if level1_source is not None:
+                for relationship in contract["adapter"].get("relationships", []):
+                    relationship["target_source"] = level1_source
             return contract
     raise ValueError("Unknown native GLEIF member")
 

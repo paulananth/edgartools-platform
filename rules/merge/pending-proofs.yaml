@@ -1,6 +1,9 @@
-# Proofs of the SEC-to-GLEIF name rules, declared in kinds/company.yaml and not
-# active (ticket 08, 2026-09-25 15:21 ET). They carry no approval: switching a
-# rule on is a separate decision, recorded by filling approved_by and approved_at.
+# Proofs of the SEC-to-GLEIF name rules (ticket 08), measured on bronze and the
+# pinned GLEIF Golden Copy (2026-09-11 16:00 UTC) and passing. The operator
+# approved them as declared rules (policy fingerprint 983352e8..., 2026-09-25
+# 15:21 ET); they sit in kinds/company.yaml, inactive. The proofs carry no
+# approval: switching a rule on is a separate decision, recorded by filling
+# approved_by and approved_at.
 sec-gleif-name-jurisdiction:
   method: wilson_lower_bound
   one_sided_confidence: 0.95

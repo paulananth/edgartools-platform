@@ -14,14 +14,13 @@ The writer quotes any string the loader would not read back as that string.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-ROOT = Path(os.environ.get("RULES_ROOT") or Path(__file__).resolve().parents[2] / "rules")
+ROOT = Path(__file__).resolve().parents[2] / "rules"
 
 _JSON_INT = re.compile(r"-?(?:0|[1-9][0-9]*)")
 _JSON_FLOAT = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
@@ -86,7 +85,7 @@ def loads(text: str, name: str = "<rules>") -> Any:
         for event in yaml.parse(text, Loader=yaml.SafeLoader):
             if isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
                 raise RulesFileError(f"{_where(name, event)}: anchors and aliases are not allowed")
-            if getattr(event, "tag", None) and not getattr(event, "implicit", (True,))[0]:
+            if getattr(event, "tag", None) is not None:
                 raise RulesFileError(f"{_where(name, event)}: tags are not allowed")
         node = yaml.compose(text, Loader=yaml.SafeLoader)
     except yaml.YAMLError as error:

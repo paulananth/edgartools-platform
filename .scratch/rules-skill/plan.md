@@ -48,8 +48,8 @@ add; remove a layer rather than tune it; no extra work.
 rules/
   outputs.yaml                     silver targets: lakehouse (Delta path, partitions), lakebase (DSN env name)
   merge/policy.yaml                Mastering Policy envelope: version, required_consumers, automatic_rules
-  merge/<kind>.yaml                per-kind merge rules (company.yaml moved from edgar_warehouse/mdm/policies/company.json)
-  merge/pending.yaml               declared-but-inactive rules (today's NAME_PROOFS)
+  merge/kinds/<kind>.yaml          per-kind merge rules (company.yaml moved from edgar_warehouse/mdm/policies/company.json)
+  merge/pending-proofs.yaml        proofs of declared-but-inactive rules (today's NAME_PROOFS)
   sources/<source>/source.yaml     source · bronze{family} · read · mdm{<source_code>: {table, contract}} · silver · tests · gate
   sources/<source>/fixtures/ , custom.py (optional)
 ```
@@ -103,8 +103,8 @@ old content under a new version label.
 ## Phases (one branch, worktree and PR each; P5 and P6 may run in parallel after P3)
 
 **P1 — Rules files; production loads them; digests unchanged** (no DB, no new dependency)
-- New `edgar_warehouse/rules/files.py`: strict PyYAML loader (JSON-typed scalars only; refuses duplicate and non-string keys; errors carry line numbers) and a writer that quotes any string that would read back as another type; `compose_policy()`, `load_source(name)`.
-- New `rules/merge/{policy,company,pending}.yaml`, `rules/sources/sec.submissions.company/source.yaml`, `rules/sources/gleif/source.yaml`.
+- New `edgar_warehouse/rules/files.py`: strict PyYAML loader (JSON-typed scalars only; refuses duplicate keys and collection keys, and reads every scalar key as text, since a JSON key is always text; errors carry line numbers) and a writer that quotes any string that would read back as another type; `policy()` (the envelope plus every `merge/kinds/*.yaml`), `source(name)`, `mdm_contract(...)`, `pending_proofs()`. (As built in ticket 01.)
+- New `rules/merge/policy.yaml`, `rules/merge/kinds/company.yaml`, `rules/merge/pending-proofs.yaml`, `rules/sources/sec.submissions.company/source.yaml`, `rules/sources/gleif/source.yaml`.
 - `company_source.py` keeps its names (`CONTRACT`, `FIELDS`, `POLICY`, `PROOF`, `APPROVED_ACTIVATION`, `NAME_PROOFS`; ~15 test modules import them) but loads values from files; `gleif_source.dataset_contract` becomes a file read. Delete `edgar_warehouse/mdm/policies/` and its `pyproject.toml` include; add `COPY rules /app/rules` to `Dockerfile` and `Dockerfile.mdm-neo4j` (both copy only `edgar`, `edgar_warehouse` today); fix `tests/mdm/test_clean_company_source.py:418`.
 - Tests: exact JSON→YAML→JSON round trip for every moved body; tricky scalars (`"1"`, `"010"`, `"2026-09-25T17:09:33Z"`, `"yes"`, `"null"`, `"1e5"`, `""`); `digest(POLICY) == 983352e8…`; each contract's digest equals its pre-move value; architecture test that the images copy `rules/`.
 

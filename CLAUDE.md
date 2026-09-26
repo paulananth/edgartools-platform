@@ -178,6 +178,7 @@ problem entirely.
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
 | MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm publish-relationships`/`mdm reconcile` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
 | Operator MDM/graph review dashboard | `examples/mdm_graph_dashboard/` |
+| Clean MDM rules (source mappings, merge rules) | `rules/` (YAML people edit, reviewed in PRs), read by `edgar_warehouse/rules/files.py`; map `.scratch/rules-skill/` |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
 | Standalone Streamlit dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
 | AWS Terraform (prod) | `infra/terraform/accounts/prod/` |
@@ -1149,6 +1150,7 @@ docker push "${ECR}/${REPO}:mdm-dev"
 |---------------|---------|
 | `edgar_warehouse/**` (excluding `edgar_warehouse/mdm/`) | warehouse only |
 | `edgar_warehouse/mdm/**` | MDM only |
+| `rules/**` or `edgar_warehouse/rules/**` | MDM (Clean MDM loads its mappings and merge rules from `rules/`); both images copy `rules/`, so rebuild both to keep them equal |
 | Both (e.g. `orchestrator.py` + `mdm/cli.py`) | both |
 | `Dockerfile` / `Dockerfile.warehouse-deps` | warehouse (+ deps if lock changed) |
 | `Dockerfile.mdm-neo4j` / `Dockerfile.mdm-deps` | MDM (+ deps if lock changed) |

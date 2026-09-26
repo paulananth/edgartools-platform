@@ -48,10 +48,20 @@ JSON copies are gone. Every digest is unchanged, so behaviour is unchanged
   their public names (2026-09-26 15:55 ET). GLEIF's member `if/elif` became a
   lookup by `native_member`. Deleted `edgar_warehouse/mdm/policies/`. The
   `pyproject.toml` include now names `rules/**/*.yaml`.
-  `docs/specs/mdm/policy-language.md` names the new folder.
+  `docs/specs/mdm/policy-language.md` names the new folder. Verified by
+  `tests/mdm/test_rules_config_digests.py` (the loaded names equal their
+  digests before the move) and `test_clean_company_source.py`/
+  `test_clean_gleif_source.py`.
 - [x] Ship `rules/` in both images: `COPY rules /app/rules` (2026-09-26
   15:55 ET). The images run from `/app`, so `files.ROOT` resolves to
-  `/app/rules`. `RULES_ROOT` overrides it.
+  `/app/rules`. Verified 16:05 ET: built `Dockerfile.mdm-neo4j` locally on
+  the cached `mdm-deps-1b3db75385592471` and ran it. `files.ROOT` is
+  `/app/rules`, the policy digest is `983352e8…4049`, the contract digest is
+  `6d833beb…`, and the pending proofs digest is `42e7b849…`. That deps image
+  is older than the lock and has no `ijson`, so importing `company_source`
+  inside it fails on `main` too. That is unrelated to this change. A wheel
+  (`uv build`) holds `rules/` beside `edgar_warehouse/`, which is where
+  `files.ROOT` looks.
 - [x] Tests (2026-09-26 15:57 ET; 155 passed with the affected
   `test_clean_company_source.py` and `test_clean_gleif_source.py`):
   - `tests/unit/test_rules_files.py`: exact round trip for tricky values, and
@@ -61,4 +71,24 @@ JSON copies are gone. Every digest is unchanged, so behaviour is unchanged
   - `tests/architecture/test_rules_files_ship.py`: the images copy `rules/`,
     and `.dockerignore` keeps it.
 - [ ] Unit/architecture, `tests/mdm` and the full Clean PG16 suite pass.
-- [ ] Three-axis `/code-review`, then PR and CI.
+- [x] Three-axis `/code-review` (2026-09-26 16:07 ET). GoF: no findings; its
+  notes for ticket 02 are recorded there. Fixed:
+  - collection tags (`!!map`, `!!seq`, `--- !!map`) crashed with a
+    `TypeError`; every tag is now refused with its line, and tested;
+  - removed the `RULES_ROOT` override: nothing used it, and it would let the
+    environment swap the digest-pinned rules;
+  - `gleif_source.dataset_contract` keeps the file's Level 1 source unless a
+    caller names another one;
+  - absolute imports of `edgar_warehouse.rules`;
+  - `pending-proofs.yaml` again records the operator's approval of the
+    ticket 08 rules as declared rules at policy `983352e8…`;
+  - `plan.md` names the layout as built (`merge/kinds/`,
+    `merge/pending-proofs.yaml`, `policy()`, keys as text);
+  - `CLAUDE.md`: a Quick Navigation row and an image rebuild row for `rules/`;
+  - `.scratch/company-mastering/research/08-parity.py` reads the rules files.
+
+  Not fixed, by design: `.scratch/company-mastering/research/12-classify.py`
+  still imports `edgar_warehouse.mdm.policies`. Its sha256 is pinned inside
+  the live policy's proof (`PROOF.cohort.files`), so an edit would change
+  `983352e8…`. To rerun it, check out the commit before this change.
+- [ ] PR and CI.
