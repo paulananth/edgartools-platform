@@ -43,7 +43,7 @@ run worthless. They are not reported.
 
 Checklist (times ET):
 
-- [ ] **Freeze CIK manifest v1** (a reversible technical choice, Claude):
+- [x] **Freeze CIK manifest v1** (a reversible technical choice, Claude):
   - the population is ticket 12's frozen cohort of 76,230 bronze filers,
     with each filer's object key from the ticket 08 scan;
   - the cohort is the 6,414 filers the active Company rule
@@ -52,16 +52,30 @@ Checklist (times ET):
   - it is dealt into seven chunks of 1,000;
   - the seed and SHA-256 are recorded.
 
-  The 308 adjudicated links are not used.
-- [ ] Copy the 7,000 submissions documents from prod bronze, with S3 reads
-  only, and hash each one.
-- [ ] Land SEC's ticker catalog from bronze through the production writer
+  The 308 adjudicated links are not used. Done 2026-09-26 11:01 ET:
+  `research/05-manifest.json`, sha256 `3607ae6c…60cc`, seed `20260926.05`
+  (`05-manifest.py`; a rerun reproduces it).
+- [x] Copy the 7,000 submissions documents from prod bronze, with S3 reads
+  only, and hash each one. Done 11:04 ET (`05-copy-bronze.py`): 7,000
+  documents, 638 MB, plus the ticker catalog `836140c5…`. After all seven
+  captures, all 7,001 copies still match their hashes.
+- [x] Land SEC's ticker catalog from bronze through the production writer
   (`_parse_company_ticker_rows`, `SilverLandingStore.replace_company_tickers`,
   `write_landing_export`). This needs no network, because
   `_sync_reference_data` lands tickers only after a fresh SEC download.
-- [ ] Capture each chunk with `bootstrap-batch` behind a dead proxy with
+  Done 11:05 ET (`05-land-tickers.py`): 10,391 ticker rows.
+- [x] Capture each chunk with `bootstrap-batch` behind a dead proxy with
   blocked AWS keys. Show that no SEC request was made and no bronze object
-  was written.
+  was written. Done 11:08–11:24 ET, about 90 seconds each (a fresh local
+  bookkeeping database):
+  - there are no proxy errors or tracebacks;
+  - the only new files are each run's own manifests under `bronze/runs`
+    and `bronze/reference/cik_universe`;
+  - the largest filings member is 22 MB, under the preparer's 64 MB limit.
+
+  **Finding:** the capture lands no Company row for an SEC `other` filer
+  that the warehouse reads as an individual. In chunk 1 that is 34
+  controls. Every Company landed.
 - [ ] For each chunk, build a census and a bundle with the production
   commands.
 - [ ] **The candidate policy:**
