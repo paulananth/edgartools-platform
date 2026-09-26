@@ -188,5 +188,25 @@ duplicate occurrences; identical assertions have one business effect.
 
 The preparation does not activate source coverage or allocate identities.
 Unknown effective time remains unknown; a sample never retires absent records.
+
+### Name each record's bronze object
+
+The latest-only Stage keeps, for each source record, the bronze object its
+winning reading came from (ticket 10). A Company row's `raw_object_id` is the
+sha256 of its SEC submissions document, and the capture run recorded where
+it wrote each document (`pipeline_run.raw_writes_json` in bookkeeping). Write
+that run's receipts once, then pass them to the preparation:
+
+```bash
+BOOKKEEPING_DATABASE_URL=... edgar-warehouse mdm bronze-receipts \
+  --run-id "$COMPANY_CAPTURE_RUN_ID" --output "$BRONZE_RECEIPTS_JSON"
+edgar-warehouse mdm prepare-clean-company ... --bronze-receipts "$BRONZE_RECEIPTS_JSON"
+```
+
+The receipts must belong to the landing's own run. Each record whose document
+they name carries `_origin.bronze` (object, sha256, locator `$`: the whole
+document); the scope counts `bronze_named`, and the file is pinned as
+`bronze-receipts.json`. The record itself is unchanged. A GLEIF record's
+bronze object comes from its verified native publication.
 Apply owner migrations and approved registry/dataset/policy registration before
 using its manifest with the normal bounded Clean MDM commands.

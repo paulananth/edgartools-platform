@@ -16,7 +16,9 @@ from edgar_warehouse.mdm.clean.company_source import (
     CONTRACT,
     POLICY,
     SOURCE_CODE,
+    bronze_receipts,
     prepare_company_bundle,
+    write_bronze_receipts,
     write_name_census,
 )
 from edgar_warehouse.mdm.clean.store import Conflict
@@ -642,3 +644,155 @@ class TestMatchingEvidenceIsPinned:
             "op": "value",
             "value": {"postcode": "95014", "country": "US"},
         }
+
+
+def document_sha(cik):
+    """What production writes as raw_object_id: the submissions document's sha256."""
+    return hashlib.sha256(f"submissions {cik}".encode()).hexdigest()
+
+
+def receipt(cik, path=None):
+    return {
+        "path": path or f"s3://bronze/submissions/cik={cik}/CIK{cik:010d}.json",
+        "sha256": document_sha(cik),
+        "raw_object_id": document_sha(cik),
+        "cik": cik,
+        "cached": False,
+    }
+
+
+class TestEachRecordNamesItsBronzeObject:
+    """Ticket 10: a record names the bronze document it was read from.
+
+    A Company row's raw_object_id is the sha256 of its submissions document;
+    the capture's write receipts say where that document was written.
+    """
+
+    def receipts_file(self, tmp_path, writes, run_id="capture-1"):
+        path = tmp_path / "bronze-receipts.json"
+        path.write_text(json.dumps(bronze_receipts(run_id, writes)))
+        return str(path)
+
+    def records(self, args):
+        prepare_company_bundle(**args)
+        text = (Path(args["output"]) / "records.jsonl").read_text()
+        return [json.loads(line) for line in text.splitlines()]
+
+    def rows(self):
+        return [
+            source_row(123, raw_object_id=document_sha(123)),
+            source_row(456, raw_object_id=document_sha(456)),
+        ]
+
+    def test_receipts_are_keyed_by_hash_and_keep_one_path_per_copy(self):
+        copy_path = "s3://bronze/submissions/cik=123/2026/01/02/CIK0000000123.json"
+        first = bronze_receipts(
+            "r", [receipt(123), receipt(123, copy_path), receipt(456)]
+        )
+        again = bronze_receipts(
+            "r", [receipt(456), receipt(123, copy_path), receipt(123)]
+        )
+        assert first == again
+        assert [r["sha256"] for r in first["receipts"]] == sorted(
+            [document_sha(123), document_sha(456)]
+        )
+        assert first["receipts"][
+            [r["sha256"] for r in first["receipts"]].index(document_sha(123))
+        ]["object"] == min(copy_path, receipt(123)["path"])
+
+    @pytest.mark.parametrize(
+        "change", [{"sha256": "ABC"}, {"sha256": None}, {"path": ""}]
+    )
+    def test_a_malformed_receipt_is_refused(self, change):
+        with pytest.raises(Conflict, match="bronze write receipt"):
+            bronze_receipts("r", [{**receipt(123), **change}])
+
+    def test_a_record_names_its_bronze_document(self, tmp_path):
+        args = landing(tmp_path, self.rows())
+        receipts = self.receipts_file(tmp_path, [receipt(123)])
+        found = self.records({**args, "limit": 2, "bronze_receipts": receipts})
+        assert found[0]["_origin"]["bronze"] == {
+            "object": receipt(123)["path"],
+            "sha256": document_sha(123),
+            "locator": "$",
+        }
+        # The capture recorded no write for this document: it names none.
+        assert "bronze" not in found[1]["_origin"]
+        report = prepare_company_bundle(
+            **{**args, "limit": 2, "bronze_receipts": receipts}
+        )
+        assert report["scope"]["bronze_named"] == 1
+        assert "bronze-receipts.json" in report["files"]
+
+    def test_the_record_itself_is_unchanged(self, tmp_path):
+        args = landing(tmp_path, self.rows())
+        receipts = self.receipts_file(tmp_path, [receipt(123)])
+        with_bronze = self.records({**args, "bronze_receipts": receipts})[0]
+        without = copy.deepcopy(with_bronze)
+        del without["_origin"]["bronze"]
+        publication = {
+            "publication_key": "p",
+            "revision": 0,
+            "effective_at": None,
+            "artifact_sha256": "a" * 64,
+            "member": "m",
+        }
+        read = [
+            normalize(
+                row, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication
+            )
+            for row in (with_bronze, without)
+        ]
+        assert read[0] == read[1]
+
+    def test_without_receipts_no_record_names_one(self, tmp_path):
+        report = prepare_company_bundle(**landing(tmp_path, self.rows()))
+        assert report["scope"]["bronze_named"] == 0
+        assert "bronze-receipts.json" not in report["files"]
+
+    def test_receipts_of_another_capture_are_refused(self, tmp_path):
+        args = landing(tmp_path, self.rows())
+        receipts = self.receipts_file(tmp_path, [receipt(123)], run_id="capture-2")
+        with pytest.raises(Conflict, match="another capture run"):
+            prepare_company_bundle(**{**args, "bronze_receipts": receipts})
+
+    def test_receipts_not_in_canonical_form_are_refused(self, tmp_path):
+        args = landing(tmp_path, self.rows())
+        path = tmp_path / "bronze-receipts.json"
+        body = bronze_receipts("capture-1", [receipt(123), receipt(456)])
+        body["receipts"].reverse()
+        path.write_text(json.dumps(body))
+        with pytest.raises(Conflict, match="canonical form"):
+            prepare_company_bundle(**{**args, "bronze_receipts": str(path)})
+
+    def test_receipts_are_written_from_the_capture_runs_bookkeeping(self, tmp_path):
+        from sqlalchemy import create_engine, text
+
+        book = create_engine(f"sqlite:///{tmp_path / 'book.db'}")
+        with book.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE pipeline_run (pipeline_run_id TEXT, raw_writes_json TEXT)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO pipeline_run VALUES ('capture-1', :w), ('empty', NULL)"
+                ),
+                {"w": json.dumps([receipt(456), receipt(123)])},
+            )
+        out = tmp_path / "receipts.json"
+        report = write_bronze_receipts(book, run_id="capture-1", output=str(out))
+        assert report["receipts"] == 2
+        assert json.loads(out.read_text()) == bronze_receipts(
+            "capture-1", [receipt(123), receipt(456)]
+        )
+        # Idempotent; never overwritten with other content.
+        assert (
+            write_bronze_receipts(book, run_id="capture-1", output=str(out)) == report
+        )
+        out.write_text("{}")
+        with pytest.raises(Conflict, match="different content"):
+            write_bronze_receipts(book, run_id="capture-1", output=str(out))
+        with pytest.raises(Conflict, match="recorded no bronze writes"):
+            write_bronze_receipts(book, run_id="empty", output=str(tmp_path / "e.json"))

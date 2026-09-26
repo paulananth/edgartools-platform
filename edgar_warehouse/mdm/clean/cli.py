@@ -403,7 +403,19 @@ def handle(command: str, args) -> int:
             limit=args.limit,
             as_of=args.as_of,
             revision=args.revision,
+            bronze_receipts=getattr(args, "bronze_receipts", None),
         )
+        print(json.dumps(report, sort_keys=True))
+        return 0
+    if command == "bronze-receipts":
+        from .company_source import write_bronze_receipts
+
+        # Read-only: the run coordinator's own bookkeeping connection.
+        book = engine_from_env("BOOKKEEPING_DATABASE_URL")
+        try:
+            report = write_bronze_receipts(book, run_id=args.run_id, output=args.output)
+        finally:
+            book.dispose()
         print(json.dumps(report, sort_keys=True))
         return 0
     if command == "name-census":
