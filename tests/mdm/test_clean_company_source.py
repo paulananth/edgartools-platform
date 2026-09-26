@@ -604,6 +604,51 @@ class TestMatchingEvidenceIsPinned:
         assert key.endswith(f":name_census:{record['name_census']['census']}")
         assert ":sec_company_address:" in key
 
+    def test_a_foreign_address_takes_its_country_from_country_code(self, tmp_path):
+        # Shell plc as SEC writes it: no state, the EDGAR country code "X0".
+        args = landing(
+            tmp_path,
+            [source_row(1306965, entity_name="Shell plc")],
+            addresses=[
+                address_row(
+                    1306965,
+                    city="LONDON",
+                    state_or_country=None,
+                    zip_code="SE1 7NA",
+                    country=None,
+                    country_code="X0",
+                ),
+                address_row(999, country_code=None),
+            ],
+        )
+        prepare_company_bundle(**args)
+        record = json.loads((Path(args["output"]) / "records.jsonl").read_text())
+        assert record["business_address"]["region"] is None
+        assert record["business_address"]["country"] == "GB"
+
+    def test_an_address_with_no_state_or_country_code_has_no_country(self, tmp_path):
+        args = landing(
+            tmp_path,
+            [source_row(123)],
+            addresses=[address_row(123, state_or_country=None, country_code=None)],
+        )
+        prepare_company_bundle(**args)
+        record = json.loads((Path(args["output"]) / "records.jsonl").read_text())
+        assert record["business_address"]["country"] is None
+
+    def test_a_landing_from_before_country_code_reads_as_before(self, tmp_path):
+        # No country_code column at all: a foreign filer has no country, as
+        # before ticket 14. (A state still means the United States: the test
+        # above that pins Apple's address.)
+        args = landing(
+            tmp_path,
+            [source_row(1306965)],
+            addresses=[address_row(1306965, state_or_country=None)],
+        )
+        prepare_company_bundle(**args)
+        record = json.loads((Path(args["output"]) / "records.jsonl").read_text())
+        assert record["business_address"]["country"] is None
+
     def test_a_filer_without_a_business_address_carries_none(self, tmp_path):
         args = landing(tmp_path, [source_row(123)])
         prepare_company_bundle(**args)

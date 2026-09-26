@@ -250,6 +250,7 @@ CREATE TABLE IF NOT EXISTS sec_company_address (
     state_or_country TEXT,
     zip_code TEXT,
     country TEXT,
+    country_code TEXT,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL

@@ -153,6 +153,7 @@ COLUMNS: MappingProxyType[str, tuple[str, ...]] = MappingProxyType({
         'state_or_country',
         'zip_code',
         'country',
+        'country_code',
         'last_sync_run_id',
         'last_synced_at',
     ),

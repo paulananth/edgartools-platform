@@ -111,6 +111,9 @@ def stage_address_loader(
                 "state_or_country": addr.get("stateOrCountry"),
                 "zip_code": addr.get("zipCode"),
                 "country": addr.get("stateOrCountryDescription"),
+                # A foreign address carries its EDGAR country code here, not in
+                # stateOrCountry (Shell: "X0"); the two never both hold a value.
+                "country_code": addr.get("countryCode"),
                 "sync_run_id": sync_run_id,
                 "raw_object_id": raw_object_id,
                 "load_mode": load_mode,
