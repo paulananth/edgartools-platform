@@ -15,7 +15,8 @@ select
     zip_code,
     country,
     last_sync_run_id,
-    last_synced_at
+    last_synced_at,
+    country_code
 from {{ source('edgartools_silver_landing', 'SEC_COMPANY_ADDRESS') }}
 qualify row_number() over (
     partition by cik, address_type

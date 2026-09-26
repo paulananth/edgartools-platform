@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS sec_company_address (
     country TEXT,
     last_sync_run_id TEXT,
     last_synced_at TIMESTAMP_TZ,
+    country_code TEXT,
     parse_sequence BIGINT DEFAULT PARSE_SEQ.NEXTVAL
     , PRIMARY KEY (parse_sequence)
 );

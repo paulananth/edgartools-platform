@@ -155,6 +155,7 @@ COLUMNS: MappingProxyType[str, tuple[str, ...]] = MappingProxyType({
         'country',
         'last_sync_run_id',
         'last_synced_at',
+        'country_code',
     ),
     'sec_company_filing': (
         'accession_number',

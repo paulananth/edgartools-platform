@@ -247,9 +247,12 @@ def _business_addresses(landing: dict, parquet: pq.ParquetFile) -> dict[int, dic
     """Each CIK's business address postcode and country, from its own capture.
 
     SEC writes a state code where a country belongs; a state means the United
-    States (`names.edgar_jurisdiction`). Silver keeps `stateOrCountry` only,
-    not SEC's separate `countryCode`, so a foreign filer that SEC files under
-    `countryCode` alone (Shell) has no country here (ticket 08).
+    States (`names.edgar_jurisdiction`). A foreign address carries its EDGAR
+    country code in `countryCode` instead and leaves `stateOrCountry` empty
+    (Shell: "X0"); the two never both hold a value, so the country is read
+    from the first, else the second, as the matching rules were measured
+    (ticket 14). A landing written before silver kept `country_code` has no
+    such column and reads as it always did.
     """
     found: dict[int, dict] = {}
     for batch in parquet.iter_batches(batch_size=10_000):
@@ -258,7 +261,9 @@ def _business_addresses(landing: dict, parquet: pq.ParquetFile) -> dict[int, dic
                 raise Conflict("Address row belongs to a different capture run")
             if row["cik"] is None or row["address_type"] != "business":
                 continue
-            place = edgar_jurisdiction(row["state_or_country"])
+            place = edgar_jurisdiction(
+                row["state_or_country"] or row.get("country_code")
+            )
             found[int(row["cik"])] = {
                 "street": row["street1"] or None,
                 "street2": row["street2"] or None,

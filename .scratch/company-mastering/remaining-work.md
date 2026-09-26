@@ -53,9 +53,11 @@ priority SEC then GLEIF, every field from every source).
   the Stage
 - [x] Operator approved the rules' fingerprint `983352e8…4049` as declared,
   not active (2026-09-25 15:21 ET, PR #713)
-- [ ] Apple, Microsoft, Shell, ASML each end as **one** master with CIK and LEI:
-  Apple, Microsoft and ASML do in the PG16 test; Shell waits for silver to
-  land SEC's `countryCode`
+- [x] Apple, Microsoft, Shell, ASML each end as **one** master with CIK and LEI
+  in the PG16 test, the matching rules switched on there as fixtures (Shell
+  since ticket 14 lands SEC's `countryCode`, PR #720, 2026-09-26 08:02 ET).
+  In production this waits on the rules being switched on and on a capture
+  made after ticket 14 deploys.
 - [ ] Undo a wrong link and stop it recurring (identity correction): a new
   ticket, and it must land before either matching rule is switched on
 - [ ] Switch the matching rules on: the operator's separate approval of their

@@ -8,9 +8,12 @@ Companies with the declared rules (`policies/company.json`, `name_binding`).
 It compares the Companies that bind with the research coverage
 (`08-coverage.py`, sha256 97e5d118...).
 
-Two readings of the SEC business country: `bronze` uses `countryCode` where
+Three readings of the SEC business country: `bronze` uses `countryCode` where
 `stateOrCountry` is empty, as the research did; `silver` does not, because
-silver lands `stateOrCountry` only.
+silver landed `stateOrCountry` only; `silver_country_code` (ticket 14) lands
+each filer's bronze address with the production extractor
+(`stage_address_loader`, which now keeps `country_code`) and reads the
+country with the production Company adapter (`_business_addresses`).
 
     uv run --no-sync python .scratch/company-mastering/research/08-parity.py \\
         <sec-scan.jsonl> <companies.jsonl> <coverage-2.jsonl> <gleif-all.jsonl> \\
@@ -24,6 +27,13 @@ import json
 import sys
 from pathlib import Path
 
+import io
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+from edgar_warehouse.loaders.bronze_submission_extractors import stage_address_loader
+from edgar_warehouse.mdm.clean.company_source import _business_addresses
 from edgar_warehouse.mdm.clean.matching import _passes
 from edgar_warehouse.mdm.clean.name_census import build, entry
 from edgar_warehouse.mdm.clean.names import edgar_jurisdiction
@@ -74,8 +84,18 @@ def main(scan, companies, coverage, gleif_all, archive, out):
             g = json.loads(line)
             wanted[g["lei"]] = g
     rules = [r for r in load_kinds()["company"]["rules"] if r["family"] == "name_binding"]
+    landed = []
+    for r in rows:
+        for row in stage_address_loader(
+            {"addresses": r.get("addresses") or {}}, int(r["cik"]), "parity", "parity", "parity"
+        ):
+            landed.append({**row, "last_sync_run_id": "parity"})
+    table = pa.Table.from_pylist(landed)
+    buffer = io.BytesIO()
+    pq.write_table(table, buffer)
+    production = _business_addresses({"run_id": "parity"}, pq.ParquetFile(buffer))
     result = {}
-    for reading in ("bronze", "silver"):
+    for reading in ("bronze", "silver", "silver_country_code"):
         bound = set()
         for r in rows:
             e = r["entry"]
@@ -87,6 +107,9 @@ def main(scan, companies, coverage, gleif_all, archive, out):
             if reading == "bronze":
                 code = code or business.get("countryCode")
             place = edgar_jurisdiction(code)
+            if reading == "silver_country_code":
+                address = production.get(int(r["cik"]))
+                place = address and address["country"]
             sec = {
                 "record_key": r["cik"],
                 "fields": {
