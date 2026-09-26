@@ -1,0 +1,219 @@
+{
+ "bundles": [
+  {
+   "chunk": 1,
+   "publication_key": "local-cm05-chunk1:sec_company:0cd3b5f5d32dec98363ed77d673f7e0ebed0ad34886cf994e9915c998ebfc825:local-cm05-chunk1:sec_company_filing:1022ca0bbec75a5b2c5f346b144e65319d3584a32810ba7701ab0fb042a65a24:local-cm05-chunk1:sec_company_address:c9c2d95dbe16b5546fc91c8a9ebe5b1cc39aed1ea58495cca613c4de849d2fd2:local-cm05-tickers-20260902:sec_company_ticker:10c82356a8e483d1e8e35cc2314dcdb47d0fa0a5517df394346a0ffc97e0f36f:name_census:a517234435eac342395b23d71fadf9a726827864c0c9ad2914791d25b7265ad6",
+   "records": 966,
+   "records_sha256": "eb7a9887b6d5c5e68566093b9716af31a4c8eb0744ddb2b079d55a5e99c1dfac"
+  },
+  {
+   "chunk": 2,
+   "publication_key": "local-cm05-chunk2:sec_company:73d2f398eff0d609bad231bca664518174c85efb2ac661a45396ba2658ed8192:local-cm05-chunk2:sec_company_filing:22ff54d3430759fa7a1462018a43d155104d5666cbdaf19ef9318241479038a5:local-cm05-chunk2:sec_company_address:f5e788f16f10d9be5a2da670c2a224364b718f1bcd49c9e845efd01eabd592c8:local-cm05-tickers-20260902:sec_company_ticker:10c82356a8e483d1e8e35cc2314dcdb47d0fa0a5517df394346a0ffc97e0f36f:name_census:6ede1fbbe2561ab5ea7d48d6cd83511e43fdd76fd8f206652b0106368e9f1cd3",
+   "records": 960,
+   "records_sha256": "6294032c805dac9ac7ae8752a2ba44872badb37529a70228573690f327465ef3"
+  },
+  {
+   "chunk": 4,
+   "publication_key": "local-cm05-chunk4:sec_company:e91f39bd008a36b0192109646afdb2236eba62e6adc49ec1cca90b834ce8500f:local-cm05-chunk4:sec_company_filing:7c7007ab4b048de0f876422a29a2ce6457be873ac2870f3f7d525fcdf2219265:local-cm05-chunk4:sec_company_address:d47b92481952bf603ec73640479b717db6bfeea31675fc84d6b1a2b75d559a35:local-cm05-tickers-20260902:sec_company_ticker:10c82356a8e483d1e8e35cc2314dcdb47d0fa0a5517df394346a0ffc97e0f36f:name_census:5e627b6520e78f2379044ea0e3ddaed470e098ffba2df2415ea3dad1b0c477a1",
+   "records": 959,
+   "records_sha256": "1d1a3eed4144063627789223817b4f21fb6cc45f75c54c10b7b308d46d7aa99f"
+  },
+  {
+   "chunk": 6,
+   "publication_key": "local-cm05-chunk6:sec_company:5c13e275486e921d9857b61a8b4cb09f3ced729fc74049a2c5db83e689f055bd:local-cm05-chunk6:sec_company_filing:f29135834b9742ea9e6ed4b0075fe8cb183dbbfa7f3560d85be6febed2af9992:local-cm05-chunk6:sec_company_address:a2ff821f05425127712c4f5c07ab83ed83356012fd2945a77d35b19d745b158c:local-cm05-tickers-20260902:sec_company_ticker:10c82356a8e483d1e8e35cc2314dcdb47d0fa0a5517df394346a0ffc97e0f36f:name_census:c34a40744b9b504887f6eff435f077c476025215976517810e1dea743532c251",
+   "records": 960,
+   "records_sha256": "6d956eab6ea2f3557e85bcb39cf5951e1aea92e429648697401ee297a5f7b5cd"
+  },
+  {
+   "chunk": 3,
+   "publication_key": "local-cm05-chunk3:sec_company:2aff5d1590f23f5bebf2a43911654a03f8133054d81fd1c8d903271b04b5ec2d:local-cm05-chunk3:sec_company_filing:c3001141d85d0680b38d3513af8a20975454233f84bffa54261a6fafdffa91d1:local-cm05-chunk3:sec_company_address:eff2daa07e2ae0820ce26416b312716c6aac4354c12f5800d4c447d91e72cb7d:local-cm05-tickers-20260902:sec_company_ticker:10c82356a8e483d1e8e35cc2314dcdb47d0fa0a5517df394346a0ffc97e0f36f:name_census:9105b881591e1e88118cb7ecb606a8654867e1c2c02fefa1d165e73fb3c0daf0",
+   "records": 957,
+   "records_sha256": "3aef26b16df59fbe44b23d8841894b5cff8ba997d3e09eb0f2fbab785ed4c763"
+  },
+  {
+   "chunk": 5,
+   "publication_key": "local-cm05-chunk5:sec_company:719315f92d72cdde93fdbaef3f6a00085b809ae4478097ce942b2751f038bc3c:local-cm05-chunk5:sec_company_filing:d50fbaeb2f38b9db01782d33e4fba66fd28b7a91e518b7720fd97e8673a9e38c:local-cm05-chunk5:sec_company_address:3965f8f6b3d0a3fec7c5e7294d6f4eb409d820079724edd16710bcdf754cd695:local-cm05-tickers-20260902:sec_company_ticker:10c82356a8e483d1e8e35cc2314dcdb47d0fa0a5517df394346a0ffc97e0f36f:name_census:71dff292661d217625d16bd0aac3d8c899985d78058f010be41d08f372bec255",
+   "records": 965,
+   "records_sha256": "cb1a650289ed33580a756d5c3b46b028a5984e009809fc23edcbe88829095a8c"
+  },
+  {
+   "chunk": 7,
+   "publication_key": "local-cm05-chunk7:sec_company:0c8a1dd35fb44a00029352c7917100bfc54b1d2d5582b10bb7182b604b6b68c8:local-cm05-chunk7:sec_company_filing:501898fd87985ccf934b6bbe113df29371ae8531c2d2725f8f86876fad8e7481:local-cm05-chunk7:sec_company_address:c3de2079f683bd4806f58d7c74cdd394ae0c692d96ed9ca189ce8495f52dbcfa:local-cm05-tickers-20260902:sec_company_ticker:10c82356a8e483d1e8e35cc2314dcdb47d0fa0a5517df394346a0ffc97e0f36f:name_census:f491144ab767fe9f1ed7e15cfa02c59cc47d0f666979d3c9d4660ad287140a7b",
+   "records": 959,
+   "records_sha256": "f7b1c9d2e298840cf4f11970daf749f685cf449491bd9348f75d114e8250c02c"
+  }
+ ],
+ "by_research_label_and_outcome": {
+  "company -> Company by CIK": 6414,
+  "control -> not landed": 274,
+  "control -> waiting": 312
+ },
+ "candidate_policy_for_approval": {
+  "approval_fields": {
+   "approved_at": null,
+   "approved_by": null,
+   "reason": null
+  },
+  "digest": "36637a09b23cd2672ab75df3a47b5d26012d3ba2ab7e4237a318c0e48715bbba",
+  "version": "company-2026-09-26.cik-matching-rule"
+ },
+ "chunks": [
+  1,
+  2,
+  4,
+  6,
+  3,
+  5,
+  7
+ ],
+ "cik_on_more_than_one_company": [],
+ "companies_created": 6414,
+ "company_with_more_than_one_sec_record": [],
+ "disagreements_with_research_labels": [],
+ "live_policy": "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
+ "manifest_sha256": "3607ae6c80216e90d8decbe827c8688ec3c608d232be868d58c8d231585360cc",
+ "named": {
+  "ASML": "Company by CIK",
+  "Apple": "Company by CIK",
+  "Microsoft": "Company by CIK",
+  "Satya Nadella (control)": "not landed",
+  "Shell": "Company by CIK",
+  "Tim Cook (control)": "not landed"
+ },
+ "open_reviews": {
+  "classification_deferred": 312
+ },
+ "outcomes_sha256": "ae72eef6520baf5bf9419d876dfeff4925485ebb0ef6708b85181ddbcd62c3e9",
+ "records_in_manifest": 7000,
+ "records_prepared": 6726,
+ "registered_for_the_run": {
+  "approval_fields": {
+   "approved_at": "2026-09-26T16:11:23+00:00",
+   "approved_by": "proving-run",
+   "reason": "Company mastering ticket 05 Proving Run only; not an approval"
+  },
+  "digest": "d90fa391394d5651be50e1405083cee19a90b438038623a52a4099387e25b655"
+ },
+ "second_pass_changed_nothing": true,
+ "sql_functions_first_pass": [
+  {
+   "calls": 42,
+   "function": "mdm_v2.company_payload_from_table",
+   "self_ms": 1638661,
+   "total_ms": 1638661
+  },
+  {
+   "calls": 21,
+   "function": "mdm_v2.assessment_snapshot",
+   "self_ms": 149308,
+   "total_ms": 149308
+  },
+  {
+   "calls": 14,
+   "function": "mdm_v2.commit_batch_core",
+   "self_ms": 59117,
+   "total_ms": 1727104
+  },
+  {
+   "calls": 12828,
+   "function": "mdm_v2.record_company_projection",
+   "self_ms": 18159,
+   "total_ms": 18159
+  },
+  {
+   "calls": 12828,
+   "function": "mdm_v2.record_binding",
+   "self_ms": 18143,
+   "total_ms": 18143
+  },
+  {
+   "calls": 12828,
+   "function": "mdm_v2.record_stage",
+   "self_ms": 17816,
+   "total_ms": 25098
+  },
+  {
+   "calls": 14,
+   "function": "mdm_v2.keep_stage",
+   "self_ms": 12876,
+   "total_ms": 56117
+  },
+  {
+   "calls": 14,
+   "function": "mdm_v2.commit_batch_evidence",
+   "self_ms": 12349,
+   "total_ms": 1795570
+  },
+  {
+   "calls": 7,
+   "function": "mdm_v2.record_assessment",
+   "self_ms": 8187,
+   "total_ms": 8187
+  },
+  {
+   "calls": 42,
+   "function": "mdm_v2.publish_company_authority",
+   "self_ms": 8162,
+   "total_ms": 1646823
+  },
+  {
+   "calls": 12828,
+   "function": "mdm_v2.stage_fold",
+   "self_ms": 7282,
+   "total_ms": 7282
+  },
+  {
+   "calls": 7,
+   "function": "mdm_v2.commit_batch",
+   "self_ms": 6553,
+   "total_ms": 938957
+  }
+ ],
+ "timings": [
+  {
+   "chunk": 1,
+   "records": 966,
+   "seconds": 334.9
+  },
+  {
+   "chunk": 2,
+   "records": 960,
+   "seconds": 334.3
+  },
+  {
+   "chunk": 4,
+   "records": 959,
+   "seconds": 348.4
+  },
+  {
+   "chunk": 6,
+   "records": 960,
+   "seconds": 356.7
+  },
+  {
+   "chunk": 3,
+   "records": 957,
+   "seconds": 205.1
+  },
+  {
+   "chunk": 5,
+   "records": 965,
+   "seconds": 256.3
+  },
+  {
+   "chunk": 7,
+   "records": 959,
+   "seconds": 183.0
+  }
+ ],
+ "waiting_by_probable_kind_and_step": {
+  "None / step 1": 8,
+  "None / step 11": 295,
+  "None / step 7": 2,
+  "company / step 7b": 2,
+  "fund_structure / step 2": 1,
+  "fund_structure / step 5": 1,
+  "government / step 3": 1,
+  "person / step 9": 2
+ }
+}

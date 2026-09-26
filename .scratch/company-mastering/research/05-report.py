@@ -107,6 +107,7 @@ def main(manifest: str, harness: str, outcomes: str, summary: str) -> None:
         "timings": [
             {k: t[k] for k in ("chunk", "records", "seconds")} for t in report["timings"]
         ],
+        "sql_functions_first_pass": report["sql_functions_first_pass"],
     }
     with open(summary, "w") as stream:
         stream.write(json.dumps(out, sort_keys=True, indent=1) + "\n")

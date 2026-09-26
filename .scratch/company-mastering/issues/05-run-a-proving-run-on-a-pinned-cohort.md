@@ -1,7 +1,7 @@
 # Run a Proving Run on a pinned SEC + GLEIF cohort
 
 Type: task
-Status: claimed (Claude, branch `claude/company-mastering-05-proving-run`, 2026-09-26 11:00 ET)
+Status: Phase 1 done (Claude, branch `claude/company-mastering-05-proving-run`, 2026-09-26 12:53 ET); Phase 2 open
 Blocked by: 04's identifier rules and 08's matching rules, both built (Claude, 2026-09-26: the Proving Run is rolled back and publishes nothing, so it does not wait for the operator's answers in ticket 15 on suspension; its counts can inform them)
 
 ## Question
@@ -76,9 +76,14 @@ Checklist (times ET):
   **Finding:** the capture lands no Company row for an SEC `other` filer
   that the warehouse reads as an individual. In chunk 1 that is 34
   controls. Every Company landed.
-- [ ] For each chunk, build a census and a bundle with the production
-  commands.
-- [ ] **The candidate policy:**
+- [x] For each chunk, build a census and a bundle with the production
+  commands. Done 12:42 ET (`05-bundles.sh`):
+  - about 25–31 minutes per census, which streams the full 3.4-million-record
+    GLEIF copy;
+  - 6,726 records are prepared;
+  - the 274 CIKs not prepared are all controls that the capture landed no
+    Company row for (SEC `other` filers read as individuals).
+- [x] **The candidate policy:**
   - the approved Company policy plus the CIK matching rule
     (`company-cik`), its Identifier Contract and a deterministic
     activation, under a named version;
@@ -87,14 +92,23 @@ Checklist (times ET):
     approval". The body the operator is asked to approve differs from it
     only in those three approval fields.
   - `983352e8…4049` is unchanged.
-- [ ] Apply all seven bundles, then apply them again. The second pass must
-  create no new Company.
-- [ ] **The report:**
+
+  Done: `research/05-candidate-policy.json`, version
+  `company-2026-09-26.cik-matching-rule`, digest **`36637a09…bbba`**. Its
+  tolerance line is the spec's for an SEC CIK contract (`warm_up_decisions`
+  10,000, `max_per_10k` 5). The copy the run registered is `d90fa391…b655`.
+- [x] Apply all seven bundles, then apply them again. The second pass must
+  create no new Company. Done 12:11–12:53 ET: passed, and the second pass
+  changed nothing.
+- [x] **The report:**
   - each record's outcome: Company or waiting, and new Company, joined,
     conflict or suspended, with the rule;
   - CIK uniqueness;
   - where production classification differs from the research labels;
   - what the run does not establish.
+
+  Done: `research/05-summary.json`, and `research/05-outcomes.jsonl` with
+  one line per CIK. The results are below.
 
 **Phase 2: the whole population and the name rules (a later slice).**
 - A resumable whole-population preparer: a CIK manifest with offset and
@@ -105,3 +119,108 @@ Checklist (times ET):
 
 This is production code, so it needs `/gof-refactor-reviewer`, TDD and
 review. It gates Company Q12 and the name-rule approval, not ticket 06.
+
+## Phase 1 results (Claude, 2026-09-26 12:53 ET)
+
+The run used the production path end to end:
+- 7,000 CIKs, 6,726 records prepared, on a disposable PostgreSQL 16 under
+  the restricted runtime role;
+- zero SEC requests, and no bronze document changed.
+
+| What happened to each CIK | Count |
+| --- | --- |
+| A Company by the CIK rule (research label: Company) | **6,414 of 6,414** |
+| Held in the Stage by the Company rule (research label: control) | 312 |
+| No Company row landed by the capture (research label: control) | 274 |
+| A control that became a Company | **0** |
+| A Company the research named that did not become one | **0** |
+
+- **One Company per CIK.** No CIK sits on two Companies, and no Company
+  holds two SEC records. There are 6,414 identities, 6,414 open Company
+  versions and 6,414 bind decisions.
+- **The four named Companies:** Apple, Microsoft, Shell and ASML each
+  became one Company by their CIK.
+- **The named controls:** Tim Cook and Satya Nadella have no Company row at
+  all. The capture reads them as individuals.
+- **Idempotent.** Applying all seven bundles again changed no count.
+- **No review other than the Company rule's.** The 312 open reviews are all
+  `classification_deferred`. There are none for an ambiguous, conflicting
+  or suspended identifier, so the two questions in ticket 15 did not arise
+  in this cohort.
+- **The held-back records, by the Company rule's step:**
+  - 295 wait at step 11, the rule's last step, with no Probable Kind;
+  - 8 at step 1;
+  - 2 at step 7 and 2 at step 7b (Probable Kind: Company);
+  - 2 at step 9 (Probable Kind: Person);
+  - 1 each at steps 2 and 5 (Fund) and step 3 (Government).
+
+  By SEC entity type, 284 are `other`, 15 `investment` and 13 `operating`.
+- **The capture filter.** The 274 records not landed are all SEC `other`
+  filers that the warehouse reads as individuals, so they never reach the
+  Company rule. No Company in the cohort was lost this way, but some names
+  do not look like people ("Control Empresarial de Capitales S.A. de C.V.",
+  "BMA VIII L.L.C."). The filter decides before any rule does, and no
+  proof measures it. Recorded as fog on the map.
+
+### Found: one SQL function takes 91% of the Merge Stage's time
+
+The run switched on per-function timing (`track_functions`).
+`mdm_v2.company_payload_from_table` (migration 037, called by the
+publication trigger `publish_company_authority`) took:
+- **1,639 of the 1,796 seconds** spent in the batch commit;
+- 42 calls, about 39 seconds each.
+
+Its loop appends each publication object to a JSON array
+(`rebuilt := rebuilt || jsonb_build_array(item)`). Each append copies the
+array built so far, so a batch of about 1,000 Companies costs time in
+proportion to the square of its size.
+
+A batch of about 960 records took 183–357 seconds, about 3–6 minutes
+depending on the CPU the censuses were using. One `jsonb_agg` over the
+array would remove that cost. That is a production migration, recorded as
+[ticket 17](17-speed-up-the-company-publication-payload.md), not made here.
+At today's speed, Phase 2's whole population (77 batches) would take about
+four to eight hours.
+
+### Found: a Company a rule creates cannot yet be undone
+
+`identity.replay` refuses to move an established binding ("requires a
+correction contract"), and `revoke` reaches only overrides, exclusions and
+reversals. So once the CIK rule is switched on, a Company it creates stays,
+even if the Company rule had mislabelled the record.
+
+The Company rule's measured lower bound is 99.11% per step at 95%. At that
+bound, up to about 57 of 6,414 Companies could be mislabelled. The point
+estimate is 0: 600 of 600 in the sample, 0 of 328 adversarial.
+
+Ticket 13 builds a correction contract, but only for name-rule links. The
+operator should weigh this at ticket 06.
+
+### What this run does not establish
+
+The ticket asks for this plainly.
+
+- **It is not activation.** Nothing was registered in a shared store, and
+  no rule is switched on. The run used a disposable PostgreSQL 16 that no
+  longer exists.
+- **It is not the operator's approval.** The copy the run registered is
+  stamped "Proving Run, not an approval". Approval is ticket 06. The digest
+  the operator is asked to approve (`36637a09…bbba`) is the body with its
+  three approval fields empty. After approval, those fields hold the
+  operator's name, time and reason, so the active digest will differ. It
+  is shown again for a final review, as ticket 12 did.
+- **It is not Company Q3 or Q12.**
+  - The cohort is the 6,414 Companies of ticket 12's frozen bronze
+    population, not a CIK manifest the operator approved.
+  - The run holds no GLEIF record, so no Company gains an LEI. Q12 needs
+    qualified multisource matching, which is Phase 2.
+- **It says nothing about the name rules.** Each chunk's Name Census
+  counts only its own capture of about 960 filers, so any name-rule result
+  from it would be falsely optimistic. The name rules are not switched on
+  in the candidate policy, and none of their numbers are reported.
+- **CIK uniqueness is shown within the 7,000 CIKs only.** It is not shown
+  across all 76,230 filers. A CIK is SEC's own key and each bronze
+  document is keyed by it, but the run did not test the whole population.
+- **It is not a precision study.** Under Q14, identifier-only binding needs
+  a verified Identifier Contract, not a statistical bar. The run is that
+  contract's verification evidence.

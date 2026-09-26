@@ -168,6 +168,16 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   matching, which no ticket built. Without it the Proving Run would report
   every Company as "no GLEIF match" and the milestone would look complete.
 
+- [Run a Proving Run on a pinned cohort](issues/05-run-a-proving-run-on-a-pinned-cohort.md),
+  Phase 1 done 2026-09-26: under the candidate CIK matching rule
+  (`36637a09…bbba`), 6,414 of 6,414 SEC Companies each became one Company by
+  their CIK; no control became one; a second pass changed nothing. Phase 2,
+  the whole population and the name rules, is open. Found at scale:
+  [Speed up the Company publication payload](issues/17-speed-up-the-company-publication-payload.md)
+  (one SQL function takes 91% of the Merge Stage's time), and that a Company
+  a rule creates cannot yet be undone (brought to
+  [ticket 06](issues/06-activation-approval-for-one-digest.md)).
+
 ## Not yet specified
 
 - **Which cohort the Proving Run uses.** The 1,000-row research cohort and its
@@ -191,6 +201,11 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   established link and rebuilds from remaining trusted evidence"). Ticket
   04 suspends new rule links to a Company in conflict review; nothing yet
   rebuilds it, and ticket 13 covers wrong name-rule links only.
+- **The capture's individual-filer filter.** The warehouse lands no Company
+  row for an SEC `other` filer it reads as an individual (274 of ticket 05's
+  586 controls, some with corporate names). It decides before the Company
+  rule and no proof measures it. Whether it belongs in the measured rule
+  sharpens with Phase 2.
 - **Relationship and lifecycle work** (parent links, duplicate LEI successors,
   reporting exceptions as evidence): named in the handover's item 5, but it
   waits until a Company binds at all.
