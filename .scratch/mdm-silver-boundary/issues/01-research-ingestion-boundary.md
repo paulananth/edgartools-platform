@@ -28,13 +28,18 @@ that require processing files twice with different configuration?
 
 ## Decision frontier
 
-Q1 pending: should MDM continue from verified evidence when analytical silver
-publication fails or lags, and vice versa? Recommendation: yes; each has its own
-progress/retries, while a combined output waits for every required consumer.
+Q1 accepted: MDM continues from verified evidence when analytical silver
+publication fails or lags, and vice versa. Each has its own progress/retries,
+while a combined output waits for every required consumer. Operator's structured
+reply verified 2026-09-26 10:34 ET. This does not claim a cross-system atomic
+transaction or weaken MDM's own atomic master/journal/checkpoint commit.
 
-Later questions depend on Q1: shared evidence versus independent reads, retention
-and replay horizon, contract/version ownership, and the bounded migration trial.
-No architectural option is marked accepted while the operator is still deciding.
+Q2 next: choose shared durable source evidence with independent consumer mappings,
+or independently read/parse bronze for each consumer. Recommendation: shared
+source evidence; its fidelity, retention and version contracts remain later gates.
+
+Later questions depend on Q2: retention and replay horizon, contract/version
+ownership, and the bounded migration trial. Only Q1 is accepted so far.
 
 Research completion does not accept or implement an architecture. The interview,
 ADR/spec, migration tickets and cost/fidelity prototype are follow-up work after
