@@ -1,8 +1,9 @@
 -- Two ticket 04 safety items, in the one function that commits a new batch
 -- (company mastering ticket 04, closed under ticket 15).
 --
--- 1. A rule's new Company is never published at or before another of its
---    kind. The earliest-published Company survives a merge (identity.replay),
+-- 1. A rule's new Company is never published at or before an identity of its
+--    kind already stored (new Companies of one batch share one time; a tie
+--    among them falls to the entity id, as before). The earliest-published Company survives a merge (identity.replay),
 --    and a caller supplies a batch's as_of, so a late or backdated batch
 --    could create the Company that later wins every merge. The Merge Stage
 --    publishes a rule's new Company at the batch's as_of or just after the

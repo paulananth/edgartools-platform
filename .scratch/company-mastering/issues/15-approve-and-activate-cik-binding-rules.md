@@ -18,9 +18,14 @@ The approval of ticket 08's declared name rules does not activate these.
   existing Company before saving, crash recovery of assessments, caller as-of
   publish time, and a real concurrent-run test. Built (Claude, 2026-09-26):
   ticket 04, "Closing the five open safety items".
-- [ ] The operator confirms (or changes) the suspended-identifier reading in
-  ticket 04, and says whether a non-issuer's identifier claim should put a
-  Company in review at all.
+- [ ] The operator answers two questions (ticket 04, "Suspended identifier"):
+  1. When a Company is in review because its own records disagree on an
+     identifier (for example two SEC records naming two CIKs), should the
+     matching rules stop adding any record to it until the conflict is
+     resolved? Built that way; the record waits in the Stage with a review.
+  2. Should an identifier stated by a source that does not issue it (a
+     GLEIF record carrying a CIK) be able to put a Company in review at
+     all? Today it can; it does not arise under today's adapters.
 - [ ] Verify CIK uniqueness, conflicting or stale identifiers, duplicate and
   reordered delivery, idempotent retry, and no unapproved consolidation on
   PostgreSQL 16.

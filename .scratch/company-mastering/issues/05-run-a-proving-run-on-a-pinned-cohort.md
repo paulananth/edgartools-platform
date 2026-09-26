@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: 04, 08
+Blocked by: 04's identifier rules and 08's matching rules, both built (Claude, 2026-09-26: the Proving Run is rolled back and publishes nothing, so it does not wait for the operator's answers in ticket 15 on suspension; its counts can inform them)
 
 ## Question
 

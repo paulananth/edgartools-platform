@@ -1,8 +1,8 @@
 # Qualify the first SEC-to-GLEIF Company binding rule
 
 Type: task
-Status: done (2026-09-26 ET): every item ticked; the reversal item moved to ticket 13. The two rules are declared, not active; switching them on is a separate approval after ticket 13.
-Blocked by: 04
+Status: done (2026-09-26 ET): every item done except the wrong-link reversal, moved to ticket 13. The two rules are declared, not active; switching them on is a separate approval after ticket 13.
+Blocked by: none (ticket 04's identifier rules are built; the rules here are declared, not active)
 
 ## Question
 
@@ -135,9 +135,9 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
   SEC record meeting a waiting GLEIF record), the two rules in
   `company.json` declared and inactive, their PROOFs pinned with a CI
   re-score.
-- [x] A wrong link is reversible by evidence-bound reversal, and a Match
-  Exclusion stops it recurring: tests. **Moved out of this ticket** (to
-  [ticket 13](13-correct-an-incorrect-company-link.md)): the
+- [ ] A wrong link is reversible by evidence-bound reversal, and a Match
+  Exclusion stops it recurring: tests. **Moved out of this ticket, not done
+  here** (to [ticket 13](13-correct-an-incorrect-company-link.md)): the
   Stage has no identity correction yet (see "Decisions made while building").
   It is a new ticket and blocks switching either rule on.
 - [x] Apple, Microsoft, Shell and ASML each end as one master with CIK and

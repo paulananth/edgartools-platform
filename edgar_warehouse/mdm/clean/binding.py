@@ -334,13 +334,13 @@ def propose(
             key = (namespace, value)
             if key not in minted:
                 minted[key] = str(uuid4())
+                if record["kind"] not in floors:  # one read per kind per batch
+                    floors[record["kind"]] = publish_floor(conn, record["kind"], as_of)
                 result["identities"].append(
                     {
                         "entity_id": minted[key],
                         "kind": record["kind"],
-                        "published_at": floors.setdefault(
-                            record["kind"], publish_floor(conn, record["kind"], as_of)
-                        ),
+                        "published_at": floors[record["kind"]],
                     }
                 )
                 # The raw form is what the store holds and what the lookup
@@ -397,13 +397,20 @@ def proposal_is_stale(conn, policy: dict, automatic: dict) -> bool:
         return True
     if any(set(held(j)) != {j["entity_id"]} for j in joins):
         return True
+    # One read per kind: every new Company of a kind in a batch shares the
+    # earliest publish time among them.
+    earliest: dict[str, str] = {}
+    for i in automatic.get("identities") or []:
+        at = earliest.get(i["kind"])
+        if at is None or instant(i["published_at"]) < instant(at):
+            earliest[i["kind"]] = i["published_at"]
     return any(
         conn.scalar(
             text(
                 """SELECT EXISTS(SELECT 1 FROM mdm_v2.identity WHERE kind=:kind
                 AND published_at >= CAST(:at AS timestamptz))"""
             ),
-            {"kind": i["kind"], "at": i["published_at"]},
+            {"kind": kind, "at": at},
         )
-        for i in automatic.get("identities") or []
+        for kind, at in sorted(earliest.items())
     )

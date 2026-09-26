@@ -61,10 +61,11 @@ Business name: a **matching rule** (operator, 2026-09-24); "binding" in code.
 - [x] Four real Companies: SEC records create Companies, GLEIF records wait —
   PG16 (2026-09-24 17:34 ET)
 - [x] Three-axis `/code-review`; fixes above (2026-09-24 17:34 ET)
-- [ ] Full suite, PR and CI green
+- [x] Full suite, PR and CI green (PR #708, merged `e97b675b`)
 - [ ] **Suspended** identifiers (Q14 lists them among what defers): nothing is
   suspended yet (the suspension table is ticket 03's, unbuilt), so none can
-  gain authority; build the check with the table
+  gain authority; build the check with the table. *Superseded 2026-09-26:
+  built without a table, from the Merge Stage's review status; see below.*
 - [x] A binding to an existing Company is not re-checked at apply when a
   *different* Company acquires the same identifier meanwhile (only new
   Companies are); the assessment snapshot covers changes to the Company itself
@@ -91,13 +92,20 @@ was built.
   Company itself (a merge, review) moves the snapshot, which
   `assessment.check` already refuses. PG16: a steward gives the CIK to a
   second Company between assess and apply; the join goes stale and the
-  retry reviews it as ambiguous.
-- [ ] **Suspended identifier: a technical reading of Q9, for the operator
-  to confirm** (ticket 15 asks). A Company the Merge Stage has put in
-  review for an identifier or kind conflict gains no record by a rule,
-  identifier or name: the record waits in the Stage with a
-  `suspended_identifier` review and the rest of the batch commits. Before,
-  such a join failed the whole batch. PG16 on a contradiction between two
+  retry reviews it as ambiguous; a join resting on a CIK and an LEI goes
+  stale when the CIK, not the LEI, moves.
+- [ ] **Suspended identifier: an extension of Q9, for the operator to
+  confirm** (ticket 15 asks). Q9 suspends the *established* link a
+  contradiction affects; this extends it to *new* links: a Company the
+  Merge Stage has put in review for an identifier or kind conflict gains no
+  record by a rule, identifier or name. The record waits in the Stage with
+  a `suspended_identifier` review and the rest of the batch commits.
+  Before, such a join failed the whole batch. What is at stake: a Company
+  in review shows no selected fields until the conflict is resolved, so a
+  rule adding records to it would only deepen the conflict. Known gap: a
+  batch that carries both the contradiction and a rule's join into that
+  same Company still fails whole (the review does not exist yet when the
+  rule proposes), and fails again on retry. PG16 on a contradiction between two
   records of the CIK's issuing source. **The question underneath, for the
   operator:** the Merge Stage counts every member's identifier claims when
   it decides a Company is in conflict, so a non-issuer's stray value (a
@@ -105,14 +113,17 @@ was built.
   claim from a source that does not issue that identifier count at all
   (Q14: "a Company holds an identifier only through its issuer's own
   record")? That is a change to the Merge Stage's conflict count, not made
-  here. Q9's "rebuild from remaining trusted evidence" for a CIK
+  here. Under today's adapters it does not arise yet (GLEIF Level 1 maps no
+  CIK, and SEC's own `lei` key is unmapped); the Proving Run can count how
+  often it would. Q9's "rebuild from remaining trusted evidence" for a CIK
   contradiction has no ticket (ticket 13 covers name-rule links); noted on
   the map.
 - [x] **The Merge Stage refuses only a bind or merge into a conflicted
   Company** (found in review). It used to refuse every identity decision in
   a batch that held any conflict, so one contradiction beside an unrelated
   new Company failed both. PG16: the contradicting reading and an unrelated
-  new Company commit together; the conflicted Company waits in review.
+  new Company commit together; the conflicted Company waits in review; a
+  bind *into* it is still refused.
 - [x] **An orphaned assessment is closed when its batch commits**
   (migration 040, 028's `commit_batch` restated whole). The
   `MergeStage.apply` docstring now says what a crash leaves. An orphan whose
@@ -124,13 +135,20 @@ was built.
   kind** (technical decision, reversible). It is published at the batch's
   `as_of`, or one microsecond after the newest stored identity of its kind,
   whichever is later (`binding.publish_floor`), so a late or backdated
-  batch still creates its Company, and "earliest published" means earliest
-  committed across batches (within one batch, equal times fall back to the
-  entity id, as before). SQL refuses anything else (040). Gaps, recorded: a
-  steward's identity states its own time and is not checked, and one dated
-  in the future raises the floor for every later rule-created Company of
-  its kind. PG16: a late batch; a newer Company committed between assess
-  and apply makes the proposal stale; the SQL refusal called directly.
+  batch still creates its Company, and among rule-created Companies
+  "earliest published" means earliest committed across batches (within
+  one batch, equal times fall back to the entity id, as before). SQL
+  refuses anything else (040). Gaps, recorded: a steward's identity states
+  its own time and is not checked, so a backdated one committed later is
+  still the earliest; a steward identity or a rule batch dated in the
+  future raises the floor for every later rule-created Company of its kind
+  (nothing compares `as_of` with the clock); and a late batch's new Company
+  can be published after its own bind's time (the bind keeps the batch's
+  `as_of`), which replay accepts. PG16: a late batch; the Company committed
+  first survives a default merge; a newer Company committed between assess
+  and apply makes the proposal stale; two new Companies of a batch share
+  one time and a newer Person identity leaves the Company floor alone; the
+  SQL refusal called directly.
 - [x] **Real concurrency:** two threads, separate connections, both
   assessed before either applies: one Company, the other run re-assesses
   and joins it (passed three times in a row).

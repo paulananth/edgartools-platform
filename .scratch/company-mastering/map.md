@@ -160,7 +160,8 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   object's name (2026-09-25 21:17 ET).
 
 - [Qualify the first SEC-to-GLEIF Company binding rule](issues/08-qualify-sec-to-gleif-fuzzy-binding.md)
-  (added 2026-09-23, blocked by 04; now blocks 05). Tickets 03 and 04 only
+  (added 2026-09-23; done 2026-09-26, its wrong-link reversal moved to
+  ticket 13). Tickets 03 and 04 only
   make a Company recognisable within one source: SEC and GLEIF share no
   identifier the adapters map (SEC's own `lei` key is unmapped and was null
   for all four Companies checked), so the first link between them needs Q4's qualified fuzzy

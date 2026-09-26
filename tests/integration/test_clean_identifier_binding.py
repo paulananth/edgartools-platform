@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -24,7 +25,7 @@ from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean import assessment
 from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm.test_clean_activation import CIK_CONTRACT, CIK_RULE
 
@@ -718,3 +719,105 @@ def test_migration_040_applies_to_a_populated_store(postgres):
     )
     times = published(database)
     assert len(times) == 3 and times[-1] > times[-2]
+
+
+def test_a_join_rechecks_every_identifier_that_pointed_at_its_company(database):
+    """A join resting on a CIK and an LEI is stale when *either* moves."""
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    (company,) = companies(database)
+    gleif = record("g", "fixture.secondary", lei=APPLE_LEI)
+    _, link = core.identity_and_binding(gleif, company)
+    stage.apply(**_command(policy, "link", gleif), decisions=[link])
+    both = record("b", "fixture.secondary", cik=APPLE_CIK, lei=APPLE_LEI)
+    late = _command(policy, "late", both)
+    proposed = stage.propose(**late)
+    assert sorted(j["namespace"] for j in proposed["joins"]) == ["cik", "lei"]
+    prepared = stage.assess(**late, automatic=proposed)
+    # The CIK, not the LEI, moves: a second Company acquires it.
+    other = record("a2", cik=APPLE_CIK)
+    identity, bind = core.identity_and_binding(other)
+    stage.apply(
+        **_command(policy, "steward", other), identities=[identity], decisions=[bind]
+    )
+    with pytest.raises(assessment.StaleAssessment):
+        stage.apply_assessment(prepared["assessment_id"], run_id=late["run_id"])
+
+
+def test_a_bind_into_a_conflicted_company_is_still_refused(database):
+    """Only binds *elsewhere* commit beside a conflict; one into it does not."""
+    policy = matching_policy(database)
+    company = _issuer_conflict(database, policy)
+    joiner = record("j", "fixture.secondary")
+    _, bind = core.identity_and_binding(joiner, company)
+    with pytest.raises(Conflict, match="unresolved authoritative identifier"):
+        MergeStage(Store(database.application)).apply(
+            **_command(policy, "into", joiner), decisions=[bind]
+        )
+
+
+def test_new_companies_of_one_batch_share_a_floor_of_their_own_kind(database):
+    """The floor reads identities of the new Company's kind only."""
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    (first,) = published(database)
+    # A Person identity published far later does not raise the Company floor.
+    person = core.source("p", kind="person", fields={"name": "Someone"})
+    identity, bind = core.identity_and_binding(person)
+    identity["published_at"] = "2030-01-01T00:00:00+00:00"
+    stage.apply(
+        **_command(policy, "person", person), identities=[identity], decisions=[bind]
+    )
+    load(
+        database,
+        policy,
+        "b2",
+        record("m", cik="0000789019"),
+        record("n", cik="0001018724"),
+        checkpoint=2,
+    )
+    _, second, third = published(database)
+    assert second == third  # one batch, one publish time
+    assert first < second < datetime.fromisoformat("2030-01-01T00:00:00+00:00")
+
+
+def test_the_earlier_committed_company_survives_a_merge(database):
+    """Why the floor exists: after a late batch, the Company committed first is
+    still the earliest published, so a default merge keeps its ID."""
+    from edgar_warehouse.mdm.clean.evidence import decision
+    from edgar_warehouse.mdm.clean.identity import replay
+
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    (first_company,) = companies(database)
+    MergeStage(Store(database.application)).apply(
+        **_command(
+            policy,
+            "late",
+            record("m", cik="0000789019"),
+            as_of="2026-01-01T00:00:00+00:00",
+        )
+    )
+    with database.application.connect() as conn:
+        identities = [
+            dict(r)
+            for r in conn.execute(
+                text(
+                    "SELECT entity_id::text, kind, published_at::text "
+                    "FROM mdm_v2.identity WHERE kind='company'"
+                )
+            ).mappings()
+        ]
+    left, right = (i["entity_id"] for i in identities)
+    merge = decision(
+        "merge",
+        actor="steward",
+        reason="fixture",
+        at=core.AS_OF,
+        left=left,
+        right=right,
+    )
+    state = replay(identities, [merge], "2026-12-31T00:00:00+00:00")
+    assert state.canonical[left] == state.canonical[right] == first_company
