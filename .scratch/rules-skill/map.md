@@ -48,18 +48,24 @@ non-SEC source. The approved plan is [plan.md](plan.md).
 ## Decisions so far
 
 - [Approved plan](plan.md): seven phases, P1–P7 (approved 2026-09-26, before 15:49 ET).
+- **Skill first** (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill first, however must test skill on company entity for each source from scratch and fine tune and fix the skill, the incorporate all company data pipelines and test". The skill is written now
+  (ticket 07). Each source that feeds Company is onboarded with it from
+  scratch, and the result is compared with the rules already proven in
+  `rules/`; every difference is a skill fix. Then all Company data
+  pipelines move onto it and are tested. Tickets 02–06 build only what a
+  trial round shows the skill needs.
 
 ## Tickets
 
 | # | Ticket | Blocked by |
 |---|---|---|
 | 01 | [Rules files; production loads them](issues/01-rules-files-production-loads-them.md) | — |
-| 02 | [The Rules Database](issues/02-the-rules-database.md) | 01 |
-| 03 | [The production engine](issues/03-the-production-engine.md) | 01 |
-| 04 | [Run a source into MDM](issues/04-run-a-source-into-mdm.md) | 02, 03 |
-| 05 | [Silver outputs](issues/05-silver-outputs.md) | 03 |
-| 06 | [Profile any source](issues/06-profile-any-source.md) | 03 |
-| 07 | [The skill and a cold trial](issues/07-the-skill-and-a-cold-trial.md) | 04, 05, 06 |
+| 02 | [The Rules Database](issues/02-the-rules-database.md) | 01; built when a trial needs it |
+| 03 | [The production engine](issues/03-the-production-engine.md) | 01; built when a trial needs it |
+| 04 | [Run a source into MDM](issues/04-run-a-source-into-mdm.md) | built when a trial needs it |
+| 05 | [Silver outputs](issues/05-silver-outputs.md) | built when a trial needs it |
+| 06 | [Profile any source](issues/06-profile-any-source.md) | built when a trial needs it |
+| 07 | [The skill, then Company trials](issues/07-the-skill-and-a-cold-trial.md) | 01 (merged) |
 
 ## Not yet specified
 

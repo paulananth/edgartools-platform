@@ -70,7 +70,11 @@ JSON copies are gone. Every digest is unchanged, so behaviour is unchanged
     every rules file round-trips;
   - `tests/architecture/test_rules_files_ship.py`: the images copy `rules/`,
     and `.dockerignore` keeps it.
-- [ ] Unit/architecture, `tests/mdm` and the full Clean PG16 suite pass.
+- [x] Suites on the fixed code: unit/architecture 1,988 passed, 4 skipped
+  (2026-09-26 16:12 ET); `tests/mdm` 1,121 passed (16:14 ET). The Clean PG16
+  suite is left to CI's integration job (`ci.yml`, `tests/integration/` on
+  PG16): the operator asked why a skill needs local Python runs, and CI
+  runs the same suite on the PR.
 - [x] Three-axis `/code-review` (2026-09-26 16:07 ET). GoF: no findings; its
   notes for ticket 02 are recorded there. Fixed:
   - collection tags (`!!map`, `!!seq`, `--- !!map`) crashed with a

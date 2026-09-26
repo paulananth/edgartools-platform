@@ -100,6 +100,23 @@ old content under a new version label.
 - **Two databases, no shared transaction**: `activate` registers in Clean MDM first (idempotent; a rerun compares `current_reading` minus `registry_evidence`), then flips status in one rules-DB transaction. Only `activate` ever registers; `deploy` runs as the runtime role.
 - **Identifiers**: LEI (mod-97), CUSIP, ISIN checked by check digit; CIK, CRD, EIN, ticker only by shape — the profiler ranks them as candidates, the operator confirms.
 
+## Change of order: skill first
+
+Operator, 2026-09-26, answered between 16:15 and 16:21 ET: "skill first, however must test skill on company entity for each source from scratch and fine tune and fix the skill, the incorporate all company data pipelines and test".
+
+- P7's skill is written next, right after P1.
+- Trials: each source that feeds Company (SEC submissions Company; GLEIF
+  Level 1, relationships and reporting exceptions) is onboarded with the
+  skill from scratch, by a fresh agent that cannot see its answer in
+  `rules/`. The result is scored against the proven files and digests.
+  Every difference is fixed in the skill, never in the answer.
+- P2–P6 below become a menu: each is built only when a trial round shows
+  the skill needs it, and only as much as it needs.
+- Then all Company data pipelines move onto the skill and are tested.
+- A skill-only change (SKILL.md) is not production code: no Python suite
+  and no GoF consult. Code the skill calls gets targeted tests; CI runs the
+  rest.
+
 ## Phases (one branch, worktree and PR each; P5 and P6 may run in parallel after P3)
 
 **P1 — Rules files; production loads them; digests unchanged** (no DB, no new dependency)
