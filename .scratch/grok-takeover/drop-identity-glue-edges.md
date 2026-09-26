@@ -11,6 +11,8 @@ Recovery: original Grok worktrees are untouched. Heads, tracked patch and non-bu
 - [x] Review change scope — original 14-file removal plus narrow naming/comment fixes and this note; no generated artifacts or credentials; `git diff --check` passes (2026-09-26 13:26 ET).
 - [x] Commit and push — check-in `03ec4942` equals the remote hash and worktree is clean; this checklist update follows that verification (2026-09-26 13:27 ET).
 
+- [ ] Open a regular PR against `main` and verify its head and state.
+
 ## Review
 
 GoF review read the pipeline/graph implementation and its recent relationship-closing, batch and versioning history. Removing two fixed dispatch branches does not justify a new Strategy hierarchy. Existing explicit dispatch stays in place.
