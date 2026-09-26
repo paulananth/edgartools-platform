@@ -41,6 +41,12 @@ that require processing files twice with different configuration?
 Engineering qualification and runtime implementation remain outside this
 completed research. The proposed specification explicitly lists their gates.
 
+## PR delivery checklist
+
+- [x] Recheck the final documentation diff and local links against current main —
+  eight Markdown files, 35 local links and whitespace passed; 2026-09-26 11:15 ET.
+- [ ] Push the dedicated branch and create a non-draft documentation PR.
+
 ## Decision frontier
 
 Q1 accepted: MDM continues from verified evidence when analytical silver
