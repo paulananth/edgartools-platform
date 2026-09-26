@@ -173,8 +173,9 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   (`36637a09…bbba`), 6,414 of 6,414 SEC Companies each became one Company by
   their CIK; no control became one; a second pass changed nothing. Phase 2,
   the whole population and the name rules, is open. Found at scale:
-  [Speed up the Company publication payload](issues/17-speed-up-the-company-publication-payload.md)
-  (one SQL function takes 91% of the Merge Stage's time), and that a Company
+  one SQL function takes 91% of the Merge Stage's time, copying each Company
+  back from the Company table (removed by
+  [Keep each Company in one place](issues/17-keep-each-company-in-one-place.md)), and that a Company
   a rule creates cannot yet be undone (brought to
   [ticket 06](issues/06-activation-approval-for-one-digest.md)).
 

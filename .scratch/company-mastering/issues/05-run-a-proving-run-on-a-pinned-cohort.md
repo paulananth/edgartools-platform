@@ -95,8 +95,10 @@ Checklist (times ET):
 
   Done: `research/05-candidate-policy.json`, version
   `company-2026-09-26.cik-matching-rule`, digest **`36637a09…bbba`**. Its
-  tolerance line is the spec's for an SEC CIK contract (`warm_up_decisions`
-  10,000, `max_per_10k` 5). The copy the run registered is `d90fa391…b655`.
+  tolerance line is the spec's `sec.cik` row, which the spec wrote for a
+  Person (`warm_up_decisions` 10,000, `max_per_10k` 5). With a
+  `kind_equal@1` compatibility check, its name-mismatch alarm may never fire
+  for a Company. The operator should know this at ticket 06. The copy the run registered is `d90fa391…b655`.
 - [x] Apply all seven bundles, then apply them again. The second pass must
   create no new Company. Done 12:11–12:53 ET: passed, and the second pass
   changed nothing.
@@ -172,13 +174,16 @@ publication trigger `publish_company_authority`) took:
 
 Its loop appends each publication object to a JSON array
 (`rebuilt := rebuilt || jsonb_build_array(item)`). Each append copies the
-array built so far, so a batch of about 1,000 Companies costs time in
-proportion to the square of its size.
+array built so far, so the cost likely grows with the square of the batch
+size. That comes from reading the code; it has not been timed at several
+batch sizes.
 
 A batch of about 960 records took 183–357 seconds, about 3–6 minutes
-depending on the CPU the censuses were using. One `jsonb_agg` over the
-array would remove that cost. That is a production migration, recorded as
-[ticket 17](17-speed-up-the-company-publication-payload.md), not made here.
+depending on the CPU the censuses were using. The operator chose to remove the
+cause, not tune it (2026-09-26 13:03 ET): a Company is kept in one place,
+the dated Company table, and the copy steps go. That is
+[Keep each Company in one place](17-keep-each-company-in-one-place.md),
+ticket 17, on its own branch.
 At today's speed, Phase 2's whole population (77 batches) would take about
 four to eight hours.
 
