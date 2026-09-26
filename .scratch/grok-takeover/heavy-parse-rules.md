@@ -11,6 +11,8 @@ Recovery: original Grok worktrees are untouched. Heads, tracked patch and non-bu
 - [x] Review staged source/evidence — no binaries, private keys, AWS credentials or DSNs; Rust `target/` ignored and `git diff --cached --check` passes (2026-09-26 13:36 ET).
 - [x] Commit and push — check-in `3c07c536` equals the remote hash and worktree is clean; this checklist update follows that verification (2026-09-26 13:37 ET).
 
+- [ ] Open a regular PR against `main` and verify its head and state.
+
 ## Review
 
 GoF review read the prototype reader and production parser boundary plus the Source Contract prototype/cold-onboarding history. The existing format dispatcher is an external-input boundary; a Strategy hierarchy would add indirection without demonstrated recurring cost. Keep the explicit reader and small custom value step.
