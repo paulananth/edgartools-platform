@@ -21,7 +21,9 @@ overwriting writer:
   document name (`dataset_path_catalog.py`, `submissions_main_path`).
 
 So a second fetch of one CIK on the same day writes to the same key and
-replaces the object an earlier receipt names. The recorded sha256 still
+replaces the object an earlier receipt names. A normal run reuses an existing
+snapshot first (its checkpoint, then a glob over any date), so the overwrite
+happens on a `--force` repair or when that lookup misses. The recorded sha256 still
 detects it: slice 4 treats a mismatched re-read as a blocking error. But the
 older version, the only history the Stage has, is gone.
 
@@ -47,9 +49,10 @@ choice is:
 Recommendation: A. It matches "bronze is the only history", and slice 1c's
 receipts already choose one path per identical copy.
 
-The other callers of `_write_bronze_object` (pagination documents, daily
-index, and so on) need the same review. They are listed at their call sites
-in `warehouse_orchestrator.py`.
+The other callers of `_write_bronze_object` in `warehouse_orchestrator.py`
+need the same review: the pagination documents and the daily index. The ADV
+bulk and Firm Roster uploads call `write_bytes` directly, but their keys carry
+the run id, so they are lower risk.
 
 ## Checklist
 

@@ -187,6 +187,19 @@ def old_held_leis(conn, source, entities):
     return held
 
 
+def bindings_on_stage(db) -> dict[str, str]:
+    """Each bound Stage record's key and the entity it is bound to."""
+    with db.application.connect() as conn:
+        return dict(
+            conn.execute(
+                text(
+                    "SELECT record_key, entity_id::text FROM mdm_v2.stage_record "
+                    "WHERE entity_id IS NOT NULL"
+                )
+            ).all()
+        )
+
+
 def by_id(bodies):
     return sorted(bodies, key=lambda b: b["assertion_id"])
 
@@ -237,14 +250,12 @@ def test_which_records_are_bound_reads_as_before(database):
         assert matching._bindings(conn, everyone, []) == {
             s: {e} for s, e in old_bound_subjects(conn, everyone).items()
         }
-        stored = conn.execute(
-            text(
-                "SELECT subject, entity_id::text FROM mdm_v2.stage_record "
-                "WHERE entity_id IS NOT NULL"
-            )
-        ).all()
-    assert len(stored) == 4
-    assert {e for _, e in stored} == {seeded["e1"], seeded["e2"]}
+    assert bindings_on_stage(database) == {
+        "a": seeded["e1"],
+        "g": seeded["e1"],
+        "c": seeded["e2"],
+        "h": seeded["e2"],
+    }
 
 
 def test_the_leis_a_company_holds_are_its_records_latest(database):
@@ -253,9 +264,9 @@ def test_the_leis_a_company_holds_are_its_records_latest(database):
     with database.application.connect() as conn:
         new = matching._held_leis(conn, GLEIF, entities)
         old = old_held_leis(conn, GLEIF, entities)
-    # The one intended difference: h's LEI changed from L2 to L3. The history
-    # read kept both; the Stage keeps the latest, as `holders` always did. A
-    # GLEIF record's key is its LEI, so real GLEIF data never differs here.
+    # An intended difference: h's LEI changed from L2 to L3. The history read
+    # kept both; the Stage keeps the latest, as `holders` always did. A GLEIF
+    # level 1 record's key is its LEI, so real GLEIF data never differs here.
     assert new == {seeded["e1"]: {L1}, seeded["e2"]: {L3}}
     assert old == {seeded["e1"]: {L1}, seeded["e2"]: {L2, L3}}
 
@@ -285,6 +296,7 @@ def call(database, sql, **params):
 
 
 def test_a_binding_never_moves_on_the_stage(database):
+    """Binding again to the same entity is a no-op; another entity is refused."""
     seeded = seed(database)
     with database.application.connect() as conn:
         (subject,) = conn.scalars(
@@ -308,15 +320,8 @@ def test_a_populated_store_backfills_bindings_and_readings(postgres):
         db = core.initialize_database(admin, app)
         seeded = seed(db)
     store_module.migrate(admin, application_role="clean_application")
+    bound_now = bindings_on_stage(db)
     with db.application.connect() as conn:
-        bound_now = dict(
-            conn.execute(
-                text(
-                    "SELECT record_key, entity_id::text FROM mdm_v2.stage_record "
-                    "WHERE entity_id IS NOT NULL"
-                )
-            ).all()
-        )
         wanted = {"cik": CIKS, "lei": {L1, L2, L3}}
         assert binding.holders(conn, POLICY, wanted) == old_holders(
             conn, POLICY, wanted

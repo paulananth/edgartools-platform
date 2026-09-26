@@ -182,14 +182,27 @@ Found while planning (facts, not rulings):
      `_stored` took the latest reading *that matched*, so a replaced Name
      Census LEI still matched; `_held_leis` counted every LEI any reading of
      a bound record carried. The Stage reads the current reading only, as
-     `holders` already did. A GLEIF record's key is its LEI, so the second
-     never differs on real GLEIF data.
+     `holders` already did. A GLEIF level 1 record's key is its LEI, so the
+     second never differs on real GLEIF data.
+     Found in review, recorded, not changed here (Claude, 2026-09-25):
+     - `_held_leis` is asked about the surviving Company, but a record bound
+       to a Company later merged away carries that Company's own ID, so its
+       LEI is missed by the one-LEI veto. The old query missed it the same
+       way. Belongs with the ticket 04 safety items (remaining work §5).
+     - When a bound record's newer reading carries a different identifier,
+       the Stage keeps the binding (it never moves), but nothing yet sends
+       the contradiction to review, as the contract asks. The old readers
+       did not either. It belongs to 2b, where the Merge Stage reassesses
+       the record from the Stage.
    - [ ] **2b. The Merge Stage reads the Stage**: `load_closure`,
      `current_claims` and the assessment snapshot (028) read Stage
      snapshots, keeping the retired-source filter. `current_claims` leaves
      out a reading effective after the batch's as-of, and a folded snapshot
      cannot, so the refusal of future-effective readings recorded above for
-     slice 4 moves here, at write time. Its test surface is measured first.
+     slice 4 moves here, at write time. Measured (2026-09-25 21:40 ET): with
+     `current_claims` patched to refuse such a reading, 1 of 1,109 MDM unit
+     tests fails (the one that tests that filter directly) and all 172 PG16
+     Clean tests pass.
      An assessment still open when this ships goes stale and is re-assessed.
    - [ ] **2c. The views, provenance and compact receipts**: the per-kind
      Stage views (033/034) become latest-only; `consumer._provenance` reads

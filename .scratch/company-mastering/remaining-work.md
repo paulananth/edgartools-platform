@@ -93,6 +93,8 @@ priority SEC then GLEIF, every field from every source).
 - [ ] An assessment left behind by a crash between assessment and save
 - [ ] A new Company's publish time comes from the caller's as-of time
 - [ ] A real two-runs-at-once concurrency test
+- [ ] The one-LEI veto also counts GLEIF records bound to a Company later
+  merged away (found in ticket 10 slice 2a review; the old query missed them too)
 
 ## 6. Whole Proving Run and final approval (tickets 05, 06)
 

@@ -31,7 +31,7 @@ The common mastering stage that resolves identity before selecting identity and 
 _Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
 
 **Source Stage**:
-What one source says now about one entity, per field, before any survivorship is applied — read per kind. It holds only the latest record per source record, and a later reading replaces it; each record names the bronze object it came from, and bronze is the only history of what a source said before. A record waits in the Stage, unbound, until a matching rule links it to an identity.
+What one source says now about one entity, per field, before any survivorship is applied — read per kind. It holds one record per source record, its newest reading; a newer reading replaces it and an older one arriving late does not. A record names the bronze object it was read from, and bronze is the only history of what a source said before. A record waits in the Stage, unbound, until a matching rule links it to an identity.
 _Avoid_: Confusing it with the Merge Stage, which is the step that reads it; a history of every reading (bronze is that); the surviving value, which is the master record's
 
 **Probable Kind**:

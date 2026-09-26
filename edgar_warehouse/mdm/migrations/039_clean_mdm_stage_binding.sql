@@ -93,7 +93,10 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'A binding names no Stage record';
     END IF;
-    IF bound IS NOT NULL AND bound <> (d->>'entity_id')::uuid THEN
+    IF bound = (d->>'entity_id')::uuid THEN
+        RETURN;
+    END IF;
+    IF bound IS NOT NULL THEN
         RAISE EXCEPTION 'Moving an established source binding requires a correction contract';
     END IF;
     UPDATE mdm_v2.stage_record SET entity_id = (d->>'entity_id')::uuid
@@ -101,48 +104,131 @@ BEGIN
 END;
 $$;
 
--- Backfill from every committed bind, in commit order, as a live batch keeps it.
+-- Backfill every committed bind in one statement. A binding never moves, so
+-- order cannot matter; a subject bound to two entities is refused as the
+-- live path refuses it, and so is a bind naming no Stage record.
 DO $$
-DECLARE d record;
 BEGIN
-    FOR d IN
-        SELECT x.body FROM mdm_v2.decision x JOIN mdm_v2.batch b USING (batch_id)
-        WHERE x.operation = 'bind'
-        ORDER BY b.generation, x.decision_id
-    LOOP
-        PERFORM mdm_v2.record_binding(d.body);
-    END LOOP;
-    IF (SELECT count(*) FROM mdm_v2.stage_record WHERE entity_id IS NOT NULL)
-       IS DISTINCT FROM (SELECT count(DISTINCT body->>'subject') FROM mdm_v2.decision
-                         WHERE operation = 'bind') THEN
-        RAISE EXCEPTION 'Stage binding backfill missed a bound record';
+    IF EXISTS (SELECT 1 FROM mdm_v2.decision WHERE operation = 'bind'
+               GROUP BY body->>'subject' HAVING count(DISTINCT body->>'entity_id') > 1) THEN
+        RAISE EXCEPTION 'Moving an established source binding requires a correction contract';
     END IF;
+    IF EXISTS (SELECT 1 FROM mdm_v2.decision d WHERE d.operation = 'bind'
+               AND NOT EXISTS (SELECT 1 FROM mdm_v2.stage_record s
+                               WHERE s.subject = d.body->>'subject')) THEN
+        RAISE EXCEPTION 'A binding names no Stage record';
+    END IF;
+    UPDATE mdm_v2.stage_record s SET entity_id = b.entity_id
+    FROM (SELECT DISTINCT body->>'subject' AS subject, (body->>'entity_id')::uuid AS entity_id
+          FROM mdm_v2.decision WHERE operation = 'bind') b
+    WHERE s.subject = b.subject;
 END;
 $$;
 
--- The evidence wrapper keeps each bind this batch commits, after the batch's
--- readings are on the Stage, so a bind citing a reading of this batch finds
--- its row. Exact-fragment guard on 038's text; the next edit at this point
--- must match this longer text.
+-- What the evidence wrapper keeps once the core has stored a new batch: the
+-- batch's readings, then its binds, so a bind citing a reading of this batch
+-- finds its row. 038 edited this into the wrapper by exact text; it moves
+-- here whole, and the wrapper calls it once. A later slice replaces this
+-- function whole rather than editing the wrapper's text again.
+CREATE FUNCTION mdm_v2.keep_stage(r jsonb)
+RETURNS void LANGUAGE plpgsql SET search_path=pg_catalog,mdm_v2 AS $$
+DECLARE
+    item jsonb;
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o
+        WHERE jsonb_typeof(o) IS DISTINCT FROM 'object'
+           OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(o) k)
+              IS DISTINCT FROM ARRAY['assertion_id','locator','object','sha256']
+           OR EXISTS (SELECT 1 FROM unnest(ARRAY['assertion_id','locator','object','sha256']) k
+                      WHERE jsonb_typeof(o->k) IS DISTINCT FROM 'string')
+           OR nullif(o->>'object','') IS NULL OR nullif(o->>'locator','') IS NULL
+           OR coalesce(o->>'sha256','') !~ '^[0-9a-f]{64}$')
+       OR EXISTS (
+        SELECT o->>'assertion_id' FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o
+        EXCEPT
+        SELECT x->>'assertion_id' FROM jsonb_array_elements(coalesce(r->'assertions','[]')) x)
+       OR (SELECT count(*) FROM jsonb_array_elements(coalesce(r->'occurrences','[]')))
+          IS DISTINCT FROM (SELECT count(DISTINCT o->>'assertion_id')
+                            FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o) THEN
+        RAISE EXCEPTION 'Invalid bronze occurrence';
+    END IF;
+    -- item is [the stored reading, its occurrence or null]. Readings are
+    -- found by id from the batch, never by scanning the assertion table.
+    FOR item IN
+        WITH named AS (
+            SELECT coalesce(jsonb_object_agg(o->>'assertion_id', o), '{}'::jsonb) AS by_id
+            FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o)
+        SELECT jsonb_build_array(s.body, named.by_id->s.assertion_id)
+        FROM jsonb_array_elements(coalesce(r->'assertions','[]')) x
+        JOIN mdm_v2.assertion s
+          ON s.assertion_id = x->>'assertion_id' AND s.batch_id = r->>'batch_id'
+        CROSS JOIN named
+        ORDER BY s.source_code, s.record_key, s.revision, s.mapping_version,
+                 s.publication_key, s.assertion_id
+    LOOP
+        PERFORM mdm_v2.record_stage(item->0, r->>'batch_id',
+            CASE WHEN jsonb_typeof(item->1) = 'object' THEN item->1 END);
+    END LOOP;
+    FOR item IN
+        SELECT value FROM jsonb_array_elements(coalesce(r->'decisions','[]'))
+        WHERE value->>'operation' = 'bind'
+    LOOP
+        PERFORM mdm_v2.record_binding(item);
+    END LOOP;
+END;
+$$;
+
+-- The last exact-fragment edit of the wrapper: 038's whole Stage block
+-- becomes one call.
 DO $$
 DECLARE definition text; old_fragment text; new_fragment text;
 BEGIN
     SELECT pg_get_functiondef('mdm_v2.commit_batch_evidence(text,uuid)'::regprocedure) INTO definition;
-    old_fragment := $old$            PERFORM mdm_v2.record_stage(item->0, r->>'batch_id',
+    old_fragment := $old$        RAISE EXCEPTION 'Deferred evidence requires its registered open review disposition';
+    END IF;
+    IF coalesce((result->>'duplicate')::boolean, false) IS FALSE THEN
+        IF EXISTS (
+            SELECT 1 FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o
+            WHERE jsonb_typeof(o) IS DISTINCT FROM 'object'
+               OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(o) k)
+                  IS DISTINCT FROM ARRAY['assertion_id','locator','object','sha256']
+               OR EXISTS (SELECT 1 FROM unnest(ARRAY['assertion_id','locator','object','sha256']) k
+                          WHERE jsonb_typeof(o->k) IS DISTINCT FROM 'string')
+               OR nullif(o->>'object','') IS NULL OR nullif(o->>'locator','') IS NULL
+               OR coalesce(o->>'sha256','') !~ '^[0-9a-f]{64}$')
+           OR EXISTS (
+            SELECT o->>'assertion_id' FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o
+            EXCEPT
+            SELECT x->>'assertion_id' FROM jsonb_array_elements(coalesce(r->'assertions','[]')) x)
+           OR (SELECT count(*) FROM jsonb_array_elements(coalesce(r->'occurrences','[]')))
+              IS DISTINCT FROM (SELECT count(DISTINCT o->>'assertion_id')
+                                FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o) THEN
+            RAISE EXCEPTION 'Invalid bronze occurrence';
+        END IF;
+        -- item is [the stored reading, its occurrence or null]. Readings are
+        -- found by id from the batch, never by scanning the assertion table.
+        FOR item IN
+            WITH named AS (
+                SELECT coalesce(jsonb_object_agg(o->>'assertion_id', o), '{}'::jsonb) AS by_id
+                FROM jsonb_array_elements(coalesce(r->'occurrences','[]')) o)
+            SELECT jsonb_build_array(s.body, named.by_id->s.assertion_id)
+            FROM jsonb_array_elements(coalesce(r->'assertions','[]')) x
+            JOIN mdm_v2.assertion s
+              ON s.assertion_id = x->>'assertion_id' AND s.batch_id = r->>'batch_id'
+            CROSS JOIN named
+            ORDER BY s.source_code, s.record_key, s.revision, s.mapping_version,
+                     s.publication_key, s.assertion_id
+        LOOP
+            PERFORM mdm_v2.record_stage(item->0, r->>'batch_id',
                 CASE WHEN jsonb_typeof(item->1) = 'object' THEN item->1 END);
         END LOOP;
     END IF;
     RETURN result;$old$;
-    new_fragment := $new$            PERFORM mdm_v2.record_stage(item->0, r->>'batch_id',
-                CASE WHEN jsonb_typeof(item->1) = 'object' THEN item->1 END);
-        END LOOP;
-        FOR item IN
-            SELECT value FROM jsonb_array_elements(coalesce(r->'decisions','[]'))
-            WHERE value->>'operation' = 'bind'
-            ORDER BY value->>'at', value->>'decision_id'
-        LOOP
-            PERFORM mdm_v2.record_binding(item);
-        END LOOP;
+    new_fragment := $new$        RAISE EXCEPTION 'Deferred evidence requires its registered open review disposition';
+    END IF;
+    IF coalesce((result->>'duplicate')::boolean, false) IS FALSE THEN
+        PERFORM mdm_v2.keep_stage(r);
     END IF;
     RETURN result;$new$;
     IF position(old_fragment IN definition) = 0 THEN
