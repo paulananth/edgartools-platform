@@ -213,8 +213,16 @@ def batch_input(
             )
             bronze = (row.get("_origin") or {}).get("bronze")
             if bronze is not None:
+                if not isinstance(bronze, dict):
+                    raise Conflict("Invalid bronze occurrence")
+                # Named field by field: a row names only its own reading.
                 occurrences.append(
-                    {"assertion_id": result[-1]["assertion_id"], **bronze}
+                    {
+                        "assertion_id": result[-1]["assertion_id"],
+                        "object": bronze.get("object"),
+                        "sha256": bronze.get("sha256"),
+                        "locator": bronze.get("locator"),
+                    }
                 )
         except UnsupportedRecord as exc:
             if not retains_deferred:
@@ -313,7 +321,7 @@ def execute_manifest(
                 break
             native = native_batches[batch["batch_id"]]
             assertions, deferred = native["assertions"], native["deferred"]
-            occurrences = []  # the native batch names its own, merged below
+            occurrences = native.get("occurrences", [])
         else:
             found = batch_input(
                 batch, root, store, policy_digest=manifest["policy_digest"]

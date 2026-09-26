@@ -101,7 +101,11 @@ def rule_policy(*, active):
 
 
 def bronze_of(cik):
-    """The bronze object a fixture SEC row names as the one it was read from."""
+    """A bronze object written into a fixture SEC row by hand.
+
+    It tests the channel from a pinned row to the Stage, not SEC sourcing: no
+    production SEC bundle names its bronze object yet (ticket 10, slice 1c).
+    """
     return {
         "object": f"bronze/submissions/CIK{int(cik):010d}.json",
         "sha256": hashlib.sha256(str(int(cik)).encode()).hexdigest(),
@@ -287,8 +291,9 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
     assert masters == 0
 
     # Ticket 10: every latest-only Stage row names the bronze object its
-    # winning reading was delivered in, the SEC submissions document or the
-    # GLEIF archive and the record's place in it.
+    # winning reading was delivered in. GLEIF's comes from the verified
+    # native publication (the archive and the record's place in it); SEC's
+    # was written into the fixture rows, to test the channel only.
     with database.application.connect() as conn:
         bronze = dict(
             conn.execute(
