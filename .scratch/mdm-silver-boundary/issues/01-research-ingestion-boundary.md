@@ -45,7 +45,10 @@ completed research. The proposed specification explicitly lists their gates.
 
 - [x] Recheck the final documentation diff and local links against current main —
   eight Markdown files, 35 local links and whitespace passed; 2026-09-26 11:15 ET.
-- [ ] Push the dedicated branch and create a non-draft documentation PR.
+- [x] Push the dedicated branch and create a non-draft documentation PR —
+  [PR #722](https://github.com/paulananth/edgartools-platform/pull/722), open/non-draft
+  and matching local/remote head verified; 2026-09-26 11:16 ET. CI is running,
+  not recorded as passed.
 
 ## Decision frontier
 

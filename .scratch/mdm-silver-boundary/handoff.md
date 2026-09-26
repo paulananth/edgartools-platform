@@ -1,6 +1,8 @@
 # MDM/silver architecture handoff for Claude or the next agent
 
 Date: 2026-09-26. Branch: `codex/mdm-silver-boundary-research`.
+Review: [PR #722](https://github.com/paulananth/edgartools-platform/pull/722),
+regular documentation PR; recheck its live state and CI before landing.
 Worktree: `/Users/aneenaananth/projects/edgartools-platform-worktrees/codex-mdm-silver-boundary`.
 Base refreshed to `origin/main` at `3ea3a6b1`; recheck live refs before continuing.
 
