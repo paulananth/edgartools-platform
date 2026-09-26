@@ -225,7 +225,11 @@ def read_artifact(read: dict, raw: bytes) -> list[tuple[Any, dict]]:
                 root = ET.fromstring(_CONTROL.sub("", text))
             except ET.ParseError:
                 return []
-        if read.get("root") and root.tag != read["root"]:
+        # Compare the local name. SEC information-table XML puts the root in a
+        # namespace, so the Clark tag is "{...}informationTable", not the name
+        # a contract author writes.
+        local = root.tag.split("}", 1)[-1]
+        if read.get("root") and read["root"] not in (root.tag, local):
             return []
         return [(_xml_to_tree(root), header)]
     if fmt == "json":

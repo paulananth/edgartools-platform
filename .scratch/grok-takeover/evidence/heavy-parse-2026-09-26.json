@@ -1,0 +1,121 @@
+{
+  "base_commit": "082d9461e730eb2bc7bf7c2ec35c4450e25697ae",
+  "source_sha256": {
+    ".scratch/heavy-parse-rust/Cargo.lock": "6b038b72a32332f84421830ecc17d5b919b02f9df49122a658c0b5d1dbfd4d1a",
+    ".scratch/heavy-parse-rust/Cargo.toml": "0053fc0a55d08fbc9e0678d712a6564d8b6b5f1082eea76d25ad00501a009e37",
+    ".scratch/heavy-parse-rust/src/main.rs": "aa78f78ccaa8f583a6ad7b93730eb44a5862f6c69ee7bbe490c0ef12339595ed",
+    ".scratch/source-contract/prototype/compare_thirteenf.py": "27e4b2e6bca1547ebc6e85c35265596fb948507fbebc4311585c882181db8dbd",
+    ".scratch/source-contract/prototype/engine/source_engine.py": "dc596c33e67872314c224991288cbd2cd606bb197c6523268aa6be144e9efa58",
+    ".scratch/source-contract/prototype/engine/test_thirteenf.py": "7151332a07f0c8e2fc42af4d74c20b9cb44b1d53a7bfc068af976553e15cb33f",
+    ".scratch/source-contract/prototype/sources/thirteenf/contract.yaml": "fed20a1125f065c7e85ee14415f7c51c7c7deafeb22b05e0118858cfc3cc61fc",
+    ".scratch/source-contract/prototype/sources/thirteenf/custom.py": "2336299988424cdddad6ee041974e757746310ee428831c82d408f352a4de2d1"
+  },
+  "inventory_rows": 17259,
+  "sample_sizes_verified": 1000,
+  "pin_sha256": "a6befc4525371f0dcf2be20e364945d143fdb7fd668163fff7c81a5268dacbe4",
+  "packages": {
+    "edgartools": "5.30.0",
+    "pandas": "2.3.3",
+    "ruamel.yaml": "0.19.1",
+    "jsonschema": "4.26.0",
+    "rustc": "1.98.1",
+    "quick-xml": "0.37.5"
+  },
+  "completed_at_et": "2026-09-26 13:36 ET",
+  "python_comparison": {
+    "files": 10,
+    "match": 10,
+    "both_empty": 0,
+    "row_mismatch": 0,
+    "field_mismatch": 0,
+    "rules_rows": 286134,
+    "python_rows": 286134,
+    "rules_seconds": 243.46118251187727,
+    "python_seconds": 296.57617514394224,
+    "examples": [],
+    "rejects": 0,
+    "type_errors": 0,
+    "rss_bytes": 998866944
+  },
+  "rust_timing_fold": {
+    "files": 10,
+    "rows": 286134,
+    "value_sum": 10548036339361,
+    "share_sum": 118772858987,
+    "hash": 12153690896291139600,
+    "parse_seconds": 20.254,
+    "read_seconds": 0.2,
+    "field_equivalence_proven": false
+  },
+  "checks": {
+    "prototype_pytest_passed": 4,
+    "as_of_selftest_passed": 6,
+    "rust_tests_passed": 3,
+    "invalid_python_limits_rejected": [
+      0,
+      1001
+    ]
+  },
+  "cache_records": [
+    {
+      "key": "warehouse/bronze/filings/sec/cik=2012383/accession=0002012383-26-001841/attachments/form13fInfoTable.xml",
+      "etag": "22376cdd35caffc97eda76b775de611e",
+      "size": 23314132,
+      "sha256": "65d6ad16aa009950552e81f495ca65a227158a501a409238ee733362146042d6"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1000275/accession=0001140361-26-005577/attachments/informationtable.xml",
+      "etag": "4af98ef284b3c50c57b2d72aba174020",
+      "size": 16389538,
+      "sha256": "1cb892ad40b5f35ccf22c0c7204bbd9bd6e723cdd98816b5947a3b9fe6d02961"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1000275/accession=0001140361-25-031144/attachments/informationtable.xml",
+      "etag": "911529e9c616576699bb85e01553bf1e",
+      "size": 16108642,
+      "sha256": "8b95b8ea03f4386b7a1212101d904ef9abad3547ee6845b05dd0f42253309807"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1000275/accession=0001140361-25-042957/attachments/informationtable.xml",
+      "etag": "93259f064d97c22ea8c53fcd24565448",
+      "size": 16108642,
+      "sha256": "8e96a8cd96f4c62ef1d327bca88d195274ef8fb554939f52096c9af6f8e2a6a3"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1000275/accession=0001140361-25-042265/attachments/informationtable.xml",
+      "etag": "1ebab7a87b36e89b5baea6fd8e58f749",
+      "size": 15652562,
+      "sha256": "d8790b88879ec4fa033b6e25feea79e69e0b38f553f2ba58035a32bd55ea44cf"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1000275/accession=0001140361-26-021585/attachments/informationtable.xml",
+      "etag": "e75a3abe23434d3adcb35f43e212dea5",
+      "size": 14446747,
+      "sha256": "ae366df2886fb45d8e4c05a59854a8fce7d4490f83ee7a5a42276f94b0d737b5"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1000275/accession=0001140361-25-042953/attachments/informationtable.xml",
+      "etag": "15ea5221f6a2fc7fef219bdbe86b77ce",
+      "size": 14410533,
+      "sha256": "0f0e93585614a578f0cfb74fc9addb30de7169eeadaf5b067e49759a6602a366"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1167557/accession=0001167557-26-000115/attachments/infotable.xml",
+      "etag": "5ff9b3ab9b13bb59b98ae4382f2ba14c",
+      "size": 13148926,
+      "sha256": "2a89dc79660bc8a61d1662fe1f096a15afcc1fe704ad5ff1c950191f9e340e59"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=914208/accession=0000914208-25-000341/attachments/form13fInfoTable.xml",
+      "etag": "7c990964d3d8ca5dc201ad2136ddc65c",
+      "size": 13033864,
+      "sha256": "c56fdf9bff2c40dd6c2b33e98978337502cf2b7a52887ee448b61554e2a54b8e"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=914208/accession=0000914208-25-000430/attachments/form13fInfoTable.xml",
+      "etag": "d7a069143ccc01435e5fad48de62f2c3",
+      "size": 12969962,
+      "sha256": "7c2380616701c4a874ea3e94cb2b8c14f90f85f62c7d5a7d3c8a8c5b23c3a2f2"
+    }
+  ]
+}
