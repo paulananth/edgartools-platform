@@ -1011,6 +1011,7 @@ def test_no_bootstrap_sql_file_is_missing_from_the_full_plan(tmp_path: Path) -> 
     bootstrap_dir = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap"
     covered_directly = {
         "07", "08", "06", "09", "10", "11", "12", "13", "14", "16", "17", "18", "19", "20",
+        "21",
     }
     superseded_by_terraform_or_deprecated = {"01", "02", "03", "04", "05"}
     covered_via_deploy_snowflake_stack = {"15"}

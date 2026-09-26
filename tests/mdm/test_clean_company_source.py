@@ -606,9 +606,13 @@ class TestMatchingEvidenceIsPinned:
 
     def test_a_foreign_address_takes_its_country_from_country_code(self, tmp_path):
         # Shell plc as SEC writes it: no state, the EDGAR country code "X0".
+        # Apple beside it, in the same landing: a state, no country code.
         args = landing(
             tmp_path,
-            [source_row(1306965, entity_name="Shell plc")],
+            [
+                source_row(1306965, entity_name="Shell plc"),
+                source_row(320193, entity_name="APPLE INC"),
+            ],
             addresses=[
                 address_row(
                     1306965,
@@ -618,13 +622,42 @@ class TestMatchingEvidenceIsPinned:
                     country=None,
                     country_code="X0",
                 ),
-                address_row(999, country_code=None),
+                address_row(320193, country_code=None),
             ],
         )
-        prepare_company_bundle(**args)
-        record = json.loads((Path(args["output"]) / "records.jsonl").read_text())
-        assert record["business_address"]["region"] is None
-        assert record["business_address"]["country"] == "GB"
+        prepare_company_bundle(**{**args, "limit": 2})
+        records = {
+            r["cik"]: r
+            for r in map(
+                json.loads,
+                (Path(args["output"]) / "records.jsonl").read_text().splitlines(),
+            )
+        }
+        shell, apple = records[1306965], records[320193]
+        assert (
+            shell["business_address"]["region"],
+            apple["business_address"]["region"],
+        ) == (
+            None,
+            "CA",
+        )
+        assert shell["business_address"]["country"] == "GB"
+        assert apple["business_address"]["country"] == "US"
+        # And the matching rules read it from the record's provenance.
+        body = normalize(
+            shell,
+            source_code=SOURCE_CODE,
+            contract=CONTRACT,
+            publication={
+                "publication_key": "capture-1/company",
+                "revision": 0,
+                "effective_at": None,
+                "artifact_sha256": "a" * 64,
+                "member": "records.jsonl",
+            },
+        )
+        assert body["provenance"]["matching"]["business_country"] == "GB"
+        assert body["provenance"]["matching"]["business_postal_code"] == "SE1 7NA"
 
     def test_an_address_with_no_state_or_country_code_has_no_country(self, tmp_path):
         args = landing(

@@ -8,6 +8,7 @@ landing it, and hold every place one landing column must be named in step.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from edgar_warehouse import silver_schema
@@ -90,25 +91,44 @@ def test_the_landing_row_keeps_the_country_code():
     assert row["country_code"] == "X0"
 
 
-def test_every_place_a_landing_column_lives_names_country_code():
-    columns = silver_schema.COLUMNS["sec_company_address"]
-    assert columns[columns.index("country") + 1] == "country_code"
+def test_every_dbt_silver_model_selects_its_landing_columns():
+    """Each silver model names every column its landing table has.
+
+    `test_silver_schema_snapshot.py` holds the snapshot equal to 11's DDL; this
+    holds the dbt models to the snapshot, so a new landing column (here
+    `country_code`) cannot land and then be dropped by its silver model. A
+    model that selects `*` passes everything through and is not checked.
+    """
+    models = (
+        REPO / "infra" / "snowflake" / "dbt" / "edgartools_gold" / "models" / "silver"
+    )
+    checked = 0
+    for path in sorted(models.glob("*.sql")):
+        text = re.sub(r"--[^\n]*", "", path.read_text())
+        source = re.search(r"source\('edgartools_silver_landing',\s*'(\w+)'\)", text)
+        assert source, path.name
+        if re.search(r"select\s+\*", text, re.IGNORECASE):
+            continue
+        columns = silver_schema.COLUMNS[source.group(1).lower()]
+        missing = [c for c in columns if not re.search(rf"\b{c}\b", text)]
+        assert missing == [], f"{path.name} does not select {missing}"
+        checked += 1
+    assert checked >= 30
+    assert "country_code" in silver_schema.COLUMNS["sec_company_address"]
+
+
+def test_a_live_table_gains_the_column_before_dbt_reads_it():
     bootstrap = REPO / "infra" / "snowflake" / "sql" / "bootstrap"
-    create = (bootstrap / "11_silver_landing_schema.sql").read_text()
-    table = create[create.index("CREATE TABLE IF NOT EXISTS sec_company_address") :]
-    assert "country_code TEXT," in table[: table.index(");")]
     alter = (bootstrap / "21_silver_landing_company_country_code.sql").read_text()
     assert (
         "ALTER TABLE sec_company_address ADD COLUMN IF NOT EXISTS country_code TEXT;"
         in alter
     )
-    model = (
-        REPO
-        / "infra/snowflake/dbt/edgartools_gold/models/silver/sec_company_address.sql"
-    ).read_text()
-    assert "    country_code,\n" in model
     install = (REPO / "infra" / "scripts" / "install.sh").read_text()
     run = "-f infra/snowflake/sql/bootstrap/"
     assert install.index(f"{run}21_silver_landing_company_country_code.sql") > (
         install.index(f"{run}20_silver_landing_ownership_evidence.sql")
+    )
+    assert install.index(f"{run}21_silver_landing_company_country_code.sql") < (
+        install.index("dbt run --target")
     )

@@ -57,3 +57,47 @@ Do not infer a country from a state code or rewrite existing bronze.
   adapter: 3,050 bind, 0 differences from bronze, and the state veto
   unchanged.
 - [ ] Full suites, three-axis review, PR, CI green.
+
+## Readings and decisions (Claude, 2026-09-26, from the three-axis review)
+
+- **"Do not infer a country from a state code"** is read as: land SEC's own
+  `countryCode` as SEC wrote it, and invent no country SEC did not write.
+  It does not remove the ticket 08 rule that a US state code means the
+  United States (`names.edgar_jurisdiction`): the measured matching rules
+  depend on it, and removing it would drop "US" from 43,269 state-only
+  filers and break the 3,050 parity. For the operator to confirm.
+- **No mapping version change.** The Dataset Contract's body is unchanged,
+  and a landing written before this change prepares the same records. A new
+  landing is a new capture with its own publication key (the pinned
+  addresses file's digest is in it). Deploy the MDM image with the
+  warehouse image: an older MDM image preparing a new landing would give
+  one key and revision two different records, which the Stage refuses as a
+  contradictory publication (fails closed).
+- **The Company address field changes too.** The selected `address`
+  field's country comes from the same `business_address`, so Shell's
+  master address gains GB, not only its matching evidence.
+- **Deploy order.** Apply `21_silver_landing_company_country_code.sql`
+  before any warehouse image with this change captures (the landing COPY
+  matches by column name and drops a column the table lacks, and does not
+  reload those files after the ALTER), then
+  `dbt run --select sec_company_address --full-refresh`.
+- **Existing production rows** keep `country_code` NULL until each CIK's
+  submissions document is landed again. The ten waiting matches bind in a
+  Proving Run only if it reads a capture made after deploy (or the ten are
+  re-landed from bronze first); tickets 05 and 06 must pin such a capture.
+
+## Found outside this ticket (recorded, not changed)
+
+- `sec_company_ticker.cause_reference` is written by
+  `silver_landing_store.py` but is in neither `11_silver_landing_schema.sql`
+  nor `silver_schema.py`, and `19_silver_landing_retirement.sql`, which adds
+  it to the live table, is run by neither `install.sh` nor
+  `deploy-snowflake-stack.sh`. The install coverage test
+  (`test_no_bootstrap_sql_file_is_missing_from_the_full_plan`) misses it
+  because it matches by number and `19_installer_role.sql` also starts with
+  19.
+- `infra/scripts/load_local_silver_landing.py` creates a local table from
+  the first Parquet it sees and inserts by name, so a local silver database
+  whose `sec_company_address` predates this change refuses new Parquet
+  ("column country_code does not exist"). Migration 20's columns met the
+  same limit.

@@ -161,7 +161,7 @@ a loader's lookback default changes.
 | `company_tickers.json`, `company_tickers_exchange.json` | Direct SEC in warehouse seed; edgartools in `mdm seed-universe` | CIK, ticker, exchange. |
 | `sec_company_ticker` | Reference parser | CIK, ticker, exchange, source name, source rank, last sync run/time. |
 | `sec_company` | Direct SEC submissions JSON | CIK, entity name/type, SIC/code description, state of incorporation, fiscal year end, EIN, description, category, sync metadata. |
-| `sec_company_address` | Direct SEC submissions JSON | CIK, address type, street, city, state/country, postal code, country, sync metadata. |
+| `sec_company_address` | Direct SEC submissions JSON | CIK, address type, street, city, state/country, postal code, country, EDGAR country code of a foreign address (`countryCode`), sync metadata. |
 | `sec_company_former_name` | Direct SEC submissions JSON | CIK, former name, date changed, ordinal, sync metadata. |
 | `sec_company_submission_file` | Direct SEC submissions JSON | CIK, pagination file name, filing count, filing date range, sync metadata. |
 | `sec_company_sync_state` | Internal control-plane mirror | CIK, tracking status, bootstrap/pagination completion, last main sync, latest filing/acceptance seen, next sync, last error. |

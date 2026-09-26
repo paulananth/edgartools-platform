@@ -17,8 +17,14 @@
 -- value. The Company matching rules read the country from state_or_country,
 -- else country_code.
 --
--- Deploy order: run this file, then rebuild the silver dynamic table, whose
--- SQL body gains the column (dbt does not detect a body-only change):
+-- Deploy order: apply this file BEFORE any warehouse image carrying company
+-- mastering ticket 14 runs a capture. The landing COPY matches by column
+-- name, so Parquet that carries country_code into a table without the column
+-- loads with it silently dropped, and COPY's load metadata never reloads
+-- those files after the ALTER: their rows keep country_code NULL until the
+-- CIK's submissions document is landed again. Then rebuild the silver
+-- dynamic table, whose SQL body gains the column (dbt does not detect a
+-- body-only change):
 --   uv run --with dbt-snowflake dbt run --select sec_company_address --full-refresh
 -- Rows landed before this change keep country_code NULL until their CIK's
 -- submissions document is re-landed.
