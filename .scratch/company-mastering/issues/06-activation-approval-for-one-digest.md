@@ -47,3 +47,23 @@ Nothing here is the operator's answer; it is what they are asked.
 - **After approval:** the three approval fields carry the operator's name,
   time and reason, which changes the digest. Show that final digest for a
   last review before any shared registration (as ticket 12 did).
+
+### Before asking (open, 2026-09-26 13:30 ET)
+
+- **Production must build exactly this body.** The live Company policy is
+  built from `policies/company.json` (`load_kinds`) and `company_source.py`
+  (`POLICY`, version `sec-company-local-v2`, with `APPROVED_ACTIVATION`). The
+  Proving Run's body comes from its harness (`05_proving_run.py`,
+  `candidate()`). Before the ask:
+  - draft the production edit;
+  - confirm that production then builds `36637a09…bbba` without the approval
+    fields;
+  - if it cannot express the body (the rule's place in `rules`, the
+    `identifiers` block, the version name), say so in this ticket.
+- **Settle the verification block before the ask.** It holds only the
+  corpus hash today. The spec's `verification` names "counts, bound, corpus
+  hash, who/when". Adding the Proving Run's counts changes the digest, so
+  decide first.
+- **Tolerance:** the line used is the spec's `sec.cik` row, which the spec
+  wrote for a Person. With `kind_equal@1`, its name-mismatch alarm may never
+  fire for a Company.
