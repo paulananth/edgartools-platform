@@ -38,12 +38,15 @@ Q2 accepted: shared durable source evidence with independent consumer mappings;
 separate raw parsing is a source-specific exception when the shared records cannot
 serve the source's needs. Operator's structured reply verified 2026-09-26 10:35 ET.
 
-Q3 next: preserve all structured source fields/repeating groups, or only fields
-currently needed. Recommendation: all structured fields; greater stored size,
-less raw reparsing when future mappings need an unused field.
+Q3 accepted: preserve all structured source fields and repeating groups, including
+currently unused fields. Operator's structured reply verified 2026-09-26 10:37 ET.
 
-Later questions: transformation boundary, retention and replay horizon,
-contract/version ownership, and the bounded migration trial. Q1 and Q2 are accepted.
+Q4 next: parsed-evidence retention. Recommendation: keep current and pinned
+publications; prune superseded versions only after consumer/run pins clear and
+required replay remains possible under existing source-retention contracts.
+
+Later questions: transformation boundary, replay and contract/version ownership,
+irregular sources and the bounded migration trial. Q1–Q3 are accepted.
 
 Research completion does not accept or implement an architecture. The interview,
 ADR/spec, migration tickets and cost/fidelity prototype are follow-up work after
