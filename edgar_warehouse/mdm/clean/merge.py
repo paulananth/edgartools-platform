@@ -44,7 +44,9 @@ def check_company_sources(policy: dict, assertions: list[dict]) -> None:
     present = {a["source_code"] for a in assertions if a["kind"] == "company"}
     missing = present - declared
     if missing:
-        raise Conflict("Company policy has no source priority for: " + ", ".join(sorted(missing)))
+        raise Conflict(
+            "Company policy has no source priority for: " + ", ".join(sorted(missing))
+        )
 
 
 def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: int):
@@ -139,8 +141,9 @@ class MergeStage:
         Active identifier rules may propose bindings and new Companies for the
         batch's records (ticket 04). Every proposal, the caller's or a rule's,
         is assessed before it commits (Q13); a load batch with nothing to bind
-        keeps its direct path. A crash between the transactions leaves a
-        resumable assessment.
+        keeps its direct path. A crash between the transactions leaves an
+        assessment no one applies: the next run proposes again with fresh ids,
+        and committing the batch closes the orphan (migration 040).
         """
         if command.get("preview"):
             return self._execute(**command, automatic=self.propose(**command))
@@ -406,19 +409,27 @@ class MergeStage:
             # the store another way, or a build that no longer holds a named
             # primitive, is refused here the same way (`policy-language.md` §10).
             check_policy(policy)
-            # Only new Companies are re-checked here. A binding to an existing
-            # Company is covered by the assessment's snapshot, which moves when
-            # that Company's decisions change; a *different* Company acquiring
-            # the same value meanwhile is not re-checked (ticket 04 checklist).
-            if (
-                not preview
-                and automatic["mints"]
-                and binding.mint_is_stale(conn, policy, automatic["mints"])
-            ):
-                # Under the lock: a concurrent run bound this identifier since
-                # the proposal was assessed. Re-assess rather than mint twice.
+            # Under the lock, every rule proposal is re-checked: a concurrent
+            # run may have bound its identifier, given it to another Company,
+            # or put the target Company in review since it was assessed.
+            # Re-assess rather than mint twice or join the wrong Company.
+            if not preview and binding.proposal_is_stale(conn, policy, automatic):
                 raise assessment.StaleAssessment(
-                    "An identifier proposed for a new Company is now held"
+                    "A rule's proposal no longer holds; re-assess"
+                )
+            # A rule's new Company is published no earlier than the newest
+            # identity already stored, so a backdated batch cannot create the
+            # Company that survives every later merge (ticket 04; also
+            # refused in SQL, 040).
+            if automatic["identities"] and conn.scalar(
+                text(
+                    """SELECT EXISTS(SELECT 1 FROM mdm_v2.identity
+                    WHERE published_at > CAST(:t AS timestamptz))"""
+                ),
+                {"t": min(i["published_at"] for i in automatic["identities"])},
+            ):
+                raise Conflict(
+                    "A new Company would be published before an identity already stored"
                 )
             stored_a, stored_d, stored_ids = load_closure(
                 conn, assertions, decisions, limit=self.closure_limit

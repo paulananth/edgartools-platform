@@ -29,8 +29,12 @@ from .store import rows
 
 
 def nothing() -> dict:
-    """A fresh, empty set of proposals; never a shared one a caller could fill."""
-    return {"identities": [], "decisions": [], "reviews": [], "mints": []}
+    """A fresh, empty set of proposals; never a shared one a caller could fill.
+
+    `mints` and `joins` name the identifier each new Company or join to a
+    stored Company rests on, so the Merge Stage can re-check it under its lock.
+    """
+    return {"identities": [], "decisions": [], "reviews": [], "mints": [], "joins": []}
 
 
 def active_rules(policy: dict) -> list[tuple[str, dict]]:
@@ -116,6 +120,28 @@ def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
     }
 
 
+def in_review(conn, entity_ids: set[str]) -> set[str]:
+    """The Companies in review for an authoritative identifier or kind conflict.
+
+    The Merge Stage gives a Company status `review` for those conflicts only.
+    Q9: such a contradiction suspends the affected link, so its identifiers
+    give no rule authority to join another record to it (ticket 04; a
+    technical reading for the operator to confirm).
+    """
+    if not entity_ids:
+        return set()
+    return {
+        r["object_id"]
+        for r in rows(
+            conn,
+            """SELECT object_id FROM mdm_v2.projection
+            WHERE object_type='entity' AND object_id=ANY(:ids)
+              AND body->>'status'='review'""",
+            ids=sorted(entity_ids),
+        )
+    }
+
+
 def _contract(policy: dict, namespace: str) -> tuple[dict, dict] | None:
     """The namespace's Identifier Contract and the kind block declaring it."""
     for block in (policy.get("kinds") or {}).values():
@@ -181,6 +207,10 @@ def propose(
                 (subject, rule, namespace, _normal(policy, namespace, raw), raw)
             )
     found = holders(conn, policy, wanted)
+    # What the store says each value's holders are, before this batch's own
+    # bindings join them: the only holdings the Merge Stage can re-check.
+    stored = {key: set(held) for key, held in found.items()}
+    suspended = in_review(conn, {e for held in found.values() for e in held})
     # A Company this batch's own caller binds counts as a holder too, but only
     # of the identifiers the bound record's own source issues (Q14, as the
     # stored lookup above: an SEC record carrying an LEI holds no LEI).
@@ -227,13 +257,16 @@ def propose(
                 if kind != record["kind"]:
                     problem = ("incompatible_identifier_kind", namespace)
                     break
-                matches[entity] = (rule, namespace)
+                if entity in suspended:
+                    problem = ("suspended_identifier", namespace)
+                    break
+                matches[entity] = (rule, namespace, value, _raw)
             if problem:
                 break
         if problem is None and len(matches) > 1:
             problem = (
                 "conflicting_identifiers",
-                ",".join(sorted(ns for _, ns in matches.values())),
+                ",".join(sorted(m[1] for m in matches.values())),
             )
         if problem:
             result["reviews"].append(
@@ -246,7 +279,11 @@ def propose(
             )
             continue
         if matches:
-            ((entity, (rule, namespace)),) = matches.items()
+            ((entity, (rule, namespace, value, raw)),) = matches.items()
+            if entity in stored.get((namespace, value), ()):
+                result["joins"].append(
+                    {"entity_id": entity, "namespace": namespace, "raw": raw}
+                )
         else:
             minting = [i for i in items if i[1]["on_no_match"] == "mint"]
             if not minting:
@@ -285,17 +322,39 @@ def propose(
     return result
 
 
-def mint_is_stale(conn, policy: dict, mints: list[dict]) -> bool:
-    """Whether a Company proposed as new now already holds its identifier.
+def proposal_is_stale(conn, policy: dict, automatic: dict) -> bool:
+    """Whether a rule's proposal no longer holds, re-checked under the lock.
 
-    Run at apply, under the Merge Stage lock: a concurrent run may have bound
-    the identifier since this proposal was assessed.
+    Run at apply, under the Merge Stage lock, since a concurrent run may have
+    committed since the proposal was assessed. Stale, and re-assessed, when:
+    - an identifier proposed for a new Company is now held;
+    - an identifier a join rested on is no longer held by exactly that
+      Company (another Company acquired it, or the Company was merged away);
+    - a Company a rule binds a record to is now in review (`in_review`).
+    A join to a Company this batch's own caller binds is not in `joins`: it
+    has no stored holding yet, and the caller's decision covers it.
     """
+    mints = automatic.get("mints") or []
+    joins = automatic.get("joins") or []
     wanted: dict[str, set[str]] = defaultdict(set)
-    for m in mints:
+    for m in [*mints, *joins]:
         wanted[m["namespace"]].add(m["raw"])
     found = holders(conn, policy, wanted)
-    return any(
-        found.get((m["namespace"], _normal(policy, m["namespace"], m["raw"])))
-        for m in mints
-    )
+
+    def held(m):
+        return found.get(
+            (m["namespace"], _normal(policy, m["namespace"], m["raw"])), {}
+        )
+
+    if any(held(m) for m in mints):
+        return True
+    if any(set(held(j)) != {j["entity_id"]} for j in joins):
+        return True
+    new = {m["entity_id"] for m in mints}
+    targets = {
+        d["entity_id"]
+        for d in automatic.get("decisions") or []
+        if d["operation"] == "bind" and d["entity_id"] not in new
+    }
+    merged = survivors(conn, targets)
+    return bool(in_review(conn, {merged.get(t, t) for t in targets}))

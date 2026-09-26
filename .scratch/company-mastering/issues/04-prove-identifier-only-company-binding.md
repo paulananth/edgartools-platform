@@ -74,6 +74,44 @@ Business name: a **matching rule** (operator, 2026-09-24); "binding" in code.
   supplies; a backdated batch could make it the earliest-published survivor
 - [ ] Concurrency is proven by a deterministic interleaving, not real threads
 
+## Closing the five open safety items (Claude, 2026-09-26 08:00 ET)
+
+One PR, branch `claude/company-mastering-15-cik-rule-safety`; ticket 15's
+first checklist item points here. Each item is proved on PostgreSQL 16.
+
+- [ ] **One re-check under the Merge Stage lock for every automatic
+  proposal** (items "suspended" and "not re-checked" above). It replaces
+  `mint_is_stale`: at apply, a proposal is stale, and re-assessed, when the
+  holders of its identifier are no longer what was assessed (none, for a
+  new Company; only the target's survivor, for a join), or when the target
+  Company is in review for an unresolved authoritative identifier or kind
+  conflict. First a failing test shows the harm today.
+- [ ] **Suspended identifier, a technical reading of Q9 (for the operator
+  to confirm, not an operator ruling):** Q9 says an authoritative identity
+  contradiction suspends the affected link. So an identifier held by a
+  Company in review for such a conflict is suspended: it gives no rule
+  authority to bind another record to that Company; the record waits in the
+  Stage with a review, and the rest of the batch commits. No suspension
+  table: ticket 02's table suspends rules, not identifiers, and quarantine
+  is ticket 13's.
+- [ ] **An orphaned assessment is closed when its batch commits.** A crash
+  between assessment and apply leaves a `ready` assessment no one applies;
+  a later run proposes again with fresh ids and commits the batch. Committing
+  a batch now supersedes every other unapplied `ready` assessment for that
+  batch, in the same transaction (028's `commit_batch`, restated whole).
+  The `MergeStage.apply` docstring says what really happens.
+- [ ] **A backdated new Company is refused.** A Company a rule creates
+  takes the batch's `as_of` as its publish time, and the earliest-published
+  Company survives a merge. A batch whose new Company would be published
+  before the newest identity already stored is refused (technical decision,
+  reversible), so "earliest published" means earliest committed. A
+  chronological rebuild still passes.
+- [ ] **Real concurrency:** two threads, separate connections, both
+  proposing a new Company for one CIK and both assessed before either
+  applies: one Company, one binding per record, and the second run
+  re-assesses and joins it.
+- [ ] Full suites, three-axis review, PR, CI green.
+
 Not in this ticket: joining SEC to GLEIF (ticket 08); activating any rule in
 `policies/company.json` (ticket 06 approval); mapping SEC's own `lei` key;
 the §9.3 suspension counter.

@@ -15,14 +15,16 @@ rule before the operator approves its digest (ticket 06).
 from __future__ import annotations
 
 import copy
+import json
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean import assessment
 from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm.test_clean_activation import CIK_CONTRACT, CIK_RULE
 
@@ -409,3 +411,256 @@ def test_migration_035_applies_to_a_populated_store(postgres):
     load(database, policy, "after-035", record("new", cik=APPLE_CIK), consumer="after")
     assert assessments(database) == 2
     assert len(companies(database)) == 2
+
+
+def test_a_company_in_conflict_review_is_not_joined_and_the_batch_commits(database):
+    """Ticket 04, suspended identifiers (Q9 read with Q14).
+
+    A contradiction suspends the affected link: a Company in review for an
+    authoritative identifier conflict gives a rule no authority to join
+    another record to it. That record waits with a review, and the rest of
+    the batch commits.
+    """
+    policy = matching_policy(database)
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    joiner = core.source(
+        "b", source_code="fixture.secondary", identifiers={"cik": APPLE_CIK}
+    )
+    load(database, policy, "b2", joiner, checkpoint=2)
+    (company,) = companies(database)
+    # b's next reading names another CIK: the Company holds two, so it waits
+    # in review for an authoritative identifier conflict.
+    moved = core.source(
+        "b",
+        source_code="fixture.secondary",
+        revision=2,
+        identifiers={"cik": "0000000002"},
+    )
+    load(database, policy, "b3", moved, checkpoint=3)
+    assert companies(database)[company]["status"] == "review"
+    # A new record carrying the conflicted Company's CIK, beside an unrelated one.
+    late = core.source(
+        "c", source_code="fixture.secondary", identifiers={"cik": APPLE_CIK}
+    )
+    unrelated = record("d", cik="0000000005")
+    load(database, policy, "b4", late, unrelated, checkpoint=4)
+    after = companies(database)
+    assert late["subject"] not in after[company]["subjects"]
+    (new,) = [c for c in after.values() if c["entity_id"] != company]
+    assert new["identifiers"] == {"cik": ["0000000005"]}
+    waiting = [r for r in open_reviews(database) if r.get("subject") == late["subject"]]
+    assert {r["reason"] for r in waiting} >= {"suspended_identifier"}
+
+
+def _command(policy, batch, *assertions, consumer=None, as_of=None):
+    return {
+        "batch_id": batch,
+        "run_id": str(uuid4()),
+        "policy_digest": policy,
+        "consumer": consumer or batch,
+        "expected_checkpoint": 0,
+        "checkpoint": 1,
+        "as_of": as_of or core.AS_OF,
+        "assertions": list(assertions),
+    }
+
+
+def test_a_join_is_rechecked_when_another_company_acquires_the_identifier(database):
+    """Ticket 04: a join to a stored Company is re-checked under the lock.
+
+    The assessment's snapshot covers the Company itself, not a *different*
+    Company acquiring the same CIK meanwhile; only the re-check sees that.
+    """
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    joiner = core.source(
+        "b", source_code="fixture.secondary", identifiers={"cik": APPLE_CIK}
+    )
+    late = _command(policy, "late", joiner)
+    proposed = stage.propose(**late)
+    assert [j["raw"] for j in proposed["joins"]] == [APPLE_CIK]
+    prepared = stage.assess(**late, automatic=proposed)
+    # Meanwhile a steward gives the same CIK to a second Company.
+    other = record("a2", cik=APPLE_CIK)
+    identity, bind = core.identity_and_binding(other)
+    stage.apply(
+        **_command(policy, "steward", other),
+        identities=[identity],
+        decisions=[bind],
+    )
+    with pytest.raises(assessment.StaleAssessment):
+        stage.apply_assessment(prepared["assessment_id"], run_id=late["run_id"])
+    # The retry sees two holders and binds nothing.
+    stage.apply(**{**late, "run_id": str(uuid4())})
+    assert not any(
+        joiner["subject"] in c["subjects"] for c in companies(database).values()
+    )
+    assert "ambiguous_identifier" in {r["reason"] for r in open_reviews(database)}
+
+
+def test_an_orphaned_assessment_is_closed_when_its_batch_commits(database):
+    """Ticket 04: a crash between assessment and apply leaves no open assessment."""
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    late = _command(policy, "late", record("a", cik=APPLE_CIK))
+    # A run assesses, then crashes before applying.
+    orphan = stage.assess(**late, automatic=stage.propose(**late))["assessment_id"]
+    # The next run proposes again, with fresh ids, and commits the batch.
+    stage.apply(**{**late, "run_id": str(uuid4())})
+    (only,) = companies(database).values()
+    assert only["identifiers"] == {"cik": [APPLE_CIK]}
+    with database.application.connect() as conn:
+        events = conn.execute(
+            text(
+                "SELECT event, batch_id FROM mdm_v2.assessment_event "
+                "WHERE assessment_id=:a ORDER BY event_id"
+            ),
+            {"a": orphan},
+        ).all()
+        still_open = conn.scalar(
+            text("""SELECT count(*) FROM mdm_v2.assessment a
+            WHERE a.body->>'outcome'='ready' AND NOT EXISTS(
+              SELECT 1 FROM mdm_v2.assessment_event e WHERE e.assessment_id=a.assessment_id
+              AND e.event IN ('applied','superseded'))""")
+        )
+    assert [tuple(e) for e in events][-1] == ("superseded", "late")
+    assert still_open == 0
+
+
+def test_a_backdated_new_company_is_refused(database):
+    """Ticket 04: the earliest-published Company survives a merge, so a rule
+    may not create one published before an identity already stored."""
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    backdated = _command(
+        policy, "old", record("m", cik="0000789019"), as_of="2026-01-01T00:00:00+00:00"
+    )
+    with pytest.raises(Conflict, match="published before an identity already stored"):
+        stage.apply(**backdated)
+    assert len(companies(database)) == 1
+    # In date order it is created.
+    stage.apply(**{**backdated, "run_id": str(uuid4()), "as_of": core.AS_OF})
+    assert len(companies(database)) == 2
+
+
+def test_the_sql_refuses_a_backdated_new_company_too(database):
+    """The same refusal holds in commit_batch (040), past the Python check."""
+    policy = matching_policy(database)
+    stage = MergeStage(Store(database.application))
+    early = _command(
+        policy,
+        "early",
+        record("m", cik="0000789019"),
+        as_of="2026-01-01T00:00:00+00:00",
+    )
+    key = stage.assess(**early, automatic=stage.propose(**early))["assessment_id"]
+    # A later Company commits before the early batch applies.
+    load(database, policy, "b1", record("a", cik=APPLE_CIK))
+    with database.application.connect() as conn:
+        effects = conn.scalar(
+            text(
+                "SELECT body->'effects' FROM mdm_v2.assessment WHERE assessment_id=:k"
+            ),
+            {"k": key},
+        )
+        generation = conn.scalar(text("SELECT max(generation) FROM mdm_v2.batch"))
+    request = {**effects, "assessment_id": key, "expected_generation": generation}
+    with (
+        pytest.raises(DBAPIError, match="published before an identity already stored"),
+        database.application.begin() as conn,
+    ):
+        conn.execute(
+            text("SELECT mdm_v2.commit_batch(:r, CAST(:run AS uuid))"),
+            {"r": json.dumps(request), "run": str(uuid4())},
+        )
+
+
+def test_two_runs_at_once_create_one_company_for_one_cik(database):
+    """Ticket 04: real threads and separate connections, not an interleaving.
+
+    Both runs are assessed to create a Company for one CIK before either
+    applies; the Merge Stage lock lets one create it, and the other, stale,
+    re-assesses and joins it.
+    """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    policy = matching_policy(database)
+    commands = [
+        _command(policy, "run-a", record("a", cik=APPLE_CIK)),
+        _command(policy, "run-b", record("b", "fixture.secondary", cik=APPLE_CIK)),
+    ]
+    # b is not the issuer, so only a may create; give b an issuer record too.
+    commands[1]["assertions"].append(record("c", cik=APPLE_CIK))
+    both_assessed = threading.Barrier(2)
+
+    def run(command):
+        stage = MergeStage(Store(database.application))
+        prepared = stage.assess(**command, automatic=stage.propose(**command))
+        both_assessed.wait(timeout=30)
+        try:
+            stage.apply_assessment(prepared["assessment_id"], run_id=command["run_id"])
+            return "applied"
+        except assessment.StaleAssessment:
+            stage.apply(**{**command, "run_id": str(uuid4())})
+            return "re-assessed"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(run, c) for c in commands]
+        outcomes = {
+            c["batch_id"]: f.result(timeout=120) for c, f in zip(commands, futures)
+        }
+    assert sorted(outcomes.values()) == ["applied", "re-assessed"]
+    (only,) = companies(database).values()
+    assert only["identifiers"] == {"cik": [APPLE_CIK]}
+    assert len(only["subjects"]) == 3
+
+
+def test_migration_040_applies_to_a_populated_store(postgres):
+    """CLAUDE.md: over real rows, in production's order.
+
+    A store at 039 holds a committed Company and an orphaned assessment left
+    by a crash. After 040 the Company survives, the next commit of the
+    orphan's batch closes it, and a backdated rule-created Company is refused.
+    """
+    from unittest import mock
+
+    import edgar_warehouse.mdm.clean.store as store_module
+
+    admin, app = postgres
+    names = list(store_module.CLEAN_MDM_MIGRATIONS)
+    through_039 = tuple(n for n in names if n < "040")
+    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_039):
+        database = core.initialize_database(admin, app)
+        policy = matching_policy(database)
+        load(database, policy, "b1", record("a", cik=APPLE_CIK))
+        stage = MergeStage(Store(database.application))
+        late = _command(policy, "late", record("m", cik="0000789019"))
+        orphan = stage.assess(**late, automatic=stage.propose(**late))["assessment_id"]
+    core.migrate(admin, application_role="clean_application")
+    assert len(companies(database)) == 1
+    stage = MergeStage(Store(database.application))
+    stage.apply(**{**late, "run_id": str(uuid4())})
+    assert len(companies(database)) == 2
+    with database.application.connect() as conn:
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT count(*) FROM mdm_v2.assessment_event "
+                    "WHERE assessment_id=:a AND event='superseded'"
+                ),
+                {"a": orphan},
+            )
+            == 1
+        )
+    with pytest.raises(Conflict, match="published before"):
+        stage.apply(
+            **_command(
+                policy,
+                "old",
+                record("x", cik="0000000009"),
+                as_of="2026-01-01T00:00:00+00:00",
+            )
+        )

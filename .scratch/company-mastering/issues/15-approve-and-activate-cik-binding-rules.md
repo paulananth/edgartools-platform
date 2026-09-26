@@ -16,7 +16,8 @@ The approval of ticket 08's declared name rules does not activate these.
 
 - [ ] Close the ticket 04 safety items: suspended identifiers, recheck of an
   existing Company before saving, crash recovery of assessments, caller as-of
-  publish time, and a real concurrent-run test.
+  publish time, and a real concurrent-run test. In progress (Claude,
+  2026-09-26): checklist in ticket 04, "Closing the five open safety items".
 - [ ] Verify CIK uniqueness, conflicting or stale identifiers, duplicate and
   reordered delivery, idempotent retry, and no unapproved consolidation on
   PostgreSQL 16.
