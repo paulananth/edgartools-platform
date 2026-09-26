@@ -136,7 +136,8 @@ Found while planning (facts, not rulings):
    it into that reading's occurrence, built field by field. PG16: every
    GLEIF Stage row in the four-company test names its archive; the SEC rows
    there carry fixture bronze to test the channel only.
-1c. [ ] **SEC names its bronze objects.** No production writer lands
+1c. [x] **SEC names its bronze objects** (PR #717, merged `7d515861`,
+   2026-09-25 21:04 ET). No production writer lands
    submissions rows in `sec_raw_object` (it holds filing artifacts only), but
    a Company row's `raw_object_id` **is** the sha256 of its submissions
    document. The warehouse capture path (`bootstrap_batch`, which produced the
@@ -157,13 +158,60 @@ Found while planning (facts, not rulings):
      a date-partitioned key), not `write_immutable_bytes`, so a second fetch
      the same day replaces the object an earlier receipt names. The recorded
      hash still detects it: slice 4's bronze reread refuses a mismatch. A
-     warehouse change for the operator to decide, not this slice.
+     warehouse change for the operator to decide, not this slice: opened as
+     [Write each SEC submissions document to bronze once](16-write-sec-submissions-bronze-once.md).
    - The Stage keeps bronze only for readings a batch newly stores, so
      re-preparing an already committed landing with receipts names bronze on
      no existing row; the approved path is a fresh rebuild from pinned input.
 2. [ ] **Readers move to the Stage and compact decision receipts**, each with
    an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
-   the binding decisions.
+   the binding decisions. In three PRs (Claude, 2026-09-25 21:30 ET):
+   - [ ] **2a. Who a record is bound to, and its winning reading.** Migration
+     039: the Stage's `entity_id` (the bind decision's own entity, never its
+     survivor: a binding never moves, `identity.replay`), set when a bind
+     commits, refused if it names another entity, backfilled from
+     `mdm_v2.decision`; and the winning reading's full body (`reading`),
+     since the name rules read its provenance and slice 4 stops storing it
+     elsewhere. Readers moved: `binding.holders`, the bound-subject lookup in
+     `binding.propose`, `matching._stored`, `_bindings` and `_held_leis`.
+     Survivors still resolve through `survivors()`. A latest reading is the
+     highest (revision, mapping version) either way, so these readers match
+     the old queries, held equal by PG16 tests on a seeded history that
+     includes an older reading delivered later. Two intended differences,
+     both where the history read could match a reading a later one replaced:
+     `_stored` took the latest reading *that matched*, so a replaced Name
+     Census LEI still matched; `_held_leis` counted every LEI any reading of
+     a bound record carried. The Stage reads the current reading only, as
+     `holders` already did. A GLEIF level 1 record's key is its LEI, so the
+     second never differs on real GLEIF data.
+     Found in review, recorded, not changed here (Claude, 2026-09-25):
+     - `_held_leis` is asked about the surviving Company, but a record bound
+       to a Company later merged away carries that Company's own ID, so its
+       LEI is missed by the one-LEI veto. The old query missed it the same
+       way. Belongs with the ticket 04 safety items (remaining work §5).
+     - When a bound record's newer reading carries a different identifier,
+       the Stage keeps the binding (it never moves), but nothing yet sends
+       the contradiction to review, as the contract asks. The old readers
+       did not either. It belongs to 2b, where the Merge Stage reassesses
+       the record from the Stage.
+   - [ ] **2b. The Merge Stage reads the Stage**: `load_closure`,
+     `current_claims` and the assessment snapshot (028) read Stage
+     snapshots, keeping the retired-source filter. `current_claims` leaves
+     out a reading effective after the batch's as-of, and a folded snapshot
+     cannot, so the refusal of future-effective readings recorded above for
+     slice 4 moves here, at write time. Measured (2026-09-25 21:40 ET): with
+     `current_claims` patched to refuse such a reading, 1 of 1,109 MDM unit
+     tests fails (the one that tests that filter directly) and all 172 PG16
+     Clean tests pass.
+     An assessment still open when this ships goes stale and is re-assessed.
+   - [ ] **2c. The views, provenance and compact receipts**: the per-kind
+     Stage views (033/034) become latest-only; `consumer._provenance` reads
+     the dated Company row and the compact receipt. Open design point: a
+     field a sparse patch left in place was stated by an older reading, and
+     the row keeps only the winner's bronze, so each claim item may need its
+     own reading's bronze reference.
+   Not covered by any slice yet: `mdm_v2.deferred_record` (read by
+   `stage_waiting`, 036) also grows with every capture.
 3. [ ] **Compact `batch.effects`**: a request hash, compact receipts and a
    fenced duplicate-observation capability; existing batches migrated
    additively, never rewritten or truncated.

@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .activation import activated
-from .binding import nothing, survivors
+from .binding import bound, nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
 from .names import (
@@ -177,8 +177,8 @@ def _latest(found: list[dict]) -> dict[str, dict]:
 
 # The only lookups `_stored` runs: fixed expressions, never caller text.
 _LOOKUPS = {
-    "lei": "body->'identifiers'->>'lei'",
-    "census_lei": "body->'provenance'->'matching'->'name_census'->'leis'->0->>0",
+    "lei": "reading->'identifiers'->>'lei'",
+    "census_lei": "reading->'provenance'->'matching'->'name_census'->'leis'->0->>0",
 }
 
 
@@ -188,13 +188,11 @@ def _stored(conn, source: str, lookup: str, values: list[str]) -> list[dict]:
         return []
     where = _LOOKUPS[lookup]
     return [
-        r["body"]
+        r["reading"]
         for r in rows(
             conn,
-            f"""SELECT DISTINCT ON (source_code, record_key) body
-            FROM mdm_v2.assertion
-            WHERE source_code = :source AND {where} = ANY(:values)
-            ORDER BY source_code, record_key, revision DESC, mapping_version DESC""",
+            f"""SELECT reading FROM mdm_v2.stage_record
+            WHERE source_code = :source AND {where} = ANY(:values)""",
             source=source,
             values=sorted(set(values)),
         )
@@ -202,19 +200,13 @@ def _stored(conn, source: str, lookup: str, values: list[str]) -> list[dict]:
 
 
 def _bindings(conn, subjects: set[str], decisions: list[dict]) -> dict[str, set]:
-    bound: dict[str, set] = defaultdict(set)
+    entities: dict[str, set] = defaultdict(set)
     for d in decisions:
         if d["operation"] == "bind" and d["subject"] in subjects:
-            bound[d["subject"]].add(d["entity_id"])
-    for r in rows(
-        conn,
-        """SELECT body->>'subject' AS subject, body->>'entity_id' AS entity_id
-        FROM mdm_v2.decision
-        WHERE operation='bind' AND body->>'subject' = ANY(:subjects)""",
-        subjects=sorted(subjects),
-    ):
-        bound[r["subject"]].add(r["entity_id"])
-    return bound
+            entities[d["subject"]].add(d["entity_id"])
+    for subject, entity in bound(conn, subjects).items():
+        entities[subject].add(entity)
+    return entities
 
 
 def _held_leis(conn, source: str, entities: set[str]) -> dict:
@@ -222,13 +214,10 @@ def _held_leis(conn, source: str, entities: set[str]) -> dict:
     held: dict[str, set] = defaultdict(set)
     for r in rows(
         conn,
-        """SELECT DISTINCT d.body->>'entity_id' AS entity_id,
-               a.body->'identifiers'->>'lei' AS lei
-        FROM mdm_v2.decision d
-        JOIN mdm_v2.assertion a ON a.body->>'subject' = d.body->>'subject'
-        WHERE d.operation='bind' AND d.body->>'entity_id' = ANY(:entities)
-          AND a.source_code = :source
-          AND a.body->'identifiers'->>'lei' IS NOT NULL""",
+        """SELECT entity_id::text AS entity_id, reading->'identifiers'->>'lei' AS lei
+        FROM mdm_v2.stage_record
+        WHERE entity_id = ANY(CAST(:entities AS uuid[])) AND source_code = :source
+          AND reading->'identifiers'->>'lei' IS NOT NULL""",
         entities=sorted(entities),
         source=source,
     ):
@@ -282,14 +271,14 @@ def propose(
             if lei := _census_lei(sec):
                 sec_by_lei[lei].append(sec)
         subjects = set(gleif_all) | set(sec_all)
-        bound = _bindings(conn, subjects, decisions + result["decisions"])
+        bindings = _bindings(conn, subjects, decisions + result["decisions"])
         pairs = []
         for gleif in gleif_all.values():
-            if bound.get(gleif["subject"]):
+            if bindings.get(gleif["subject"]):
                 continue  # already joined; a name match never re-binds
             lei = (gleif.get("identifiers") or {}).get("lei")
             for sec in sec_by_lei.get(lei, []):
-                companies = bound.get(sec["subject"]) or set()
+                companies = bindings.get(sec["subject"]) or set()
                 if len(companies) == 1 and _passes(rule, sec, gleif):
                     pairs.append((gleif, sec, next(iter(companies))))
         if not pairs:

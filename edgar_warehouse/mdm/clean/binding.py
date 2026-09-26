@@ -64,24 +64,14 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
         # A literal from a fixed set, so the per-namespace index can be used.
         if namespace not in NAMESPACES:
             raise ValueError(f"Unsupported identifier namespace: {namespace}")
-        path = f"body->'identifiers'->>'{namespace}'"
+        # The Stage row holds each record's latest reading and its binding.
+        path = f"s.reading->'identifiers'->>'{namespace}'"
         found_rows = rows(
             conn,
-            f"""WITH latest AS (
-                SELECT DISTINCT ON (a.source_code, a.record_key)
-                       a.body->>'subject' AS subject, {path.replace("body", "a.body")} AS value
-                FROM mdm_v2.assertion a
-                WHERE (a.source_code, a.record_key) IN (
-                    SELECT source_code, record_key FROM mdm_v2.assertion
-                    WHERE {path} = ANY(:values) AND source_code = ANY(:sources))
-                ORDER BY a.source_code, a.record_key, a.revision DESC,
-                         a.mapping_version DESC)
-            SELECT l.value, d.body->>'entity_id' AS entity_id, i.kind
-            FROM latest l
-            JOIN mdm_v2.decision d
-              ON d.operation='bind' AND d.body->>'subject'=l.subject
-            JOIN mdm_v2.identity i ON i.entity_id=(d.body->>'entity_id')::uuid
-            WHERE l.value = ANY(:values)""",
+            f"""SELECT {path} AS value, s.entity_id::text AS entity_id, i.kind
+            FROM mdm_v2.stage_record s
+            JOIN mdm_v2.identity i ON i.entity_id = s.entity_id
+            WHERE {path} = ANY(:values) AND s.source_code = ANY(:sources)""",
             values=sorted(values),
             sources=_issuers(policy, namespace),
         )
@@ -90,6 +80,24 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
             key = (namespace, _normal(policy, namespace, row["value"]))
             found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
     return found
+
+
+def bound(conn, subjects) -> dict[str, str]:
+    """The entity each stored record is bound to; shared with `matching.py`.
+
+    The bind decision's own entity, not its survivor: a binding never moves.
+    """
+    if not subjects:
+        return {}
+    return {
+        r["subject"]: r["entity_id"]
+        for r in rows(
+            conn,
+            """SELECT subject, entity_id::text AS entity_id FROM mdm_v2.stage_record
+            WHERE subject = ANY(:subjects) AND entity_id IS NOT NULL""",
+            subjects=sorted(subjects),
+        )
+    }
 
 
 def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
@@ -150,21 +158,13 @@ def propose(
     ):
         latest[a["subject"]] = a
     subjects = sorted(latest)
-    bound = {d["subject"] for d in decisions if d["operation"] == "bind"}
-    bound.update(
-        r["subject"]
-        for r in rows(
-            conn,
-            """SELECT DISTINCT body->>'subject' AS subject FROM mdm_v2.decision
-            WHERE operation='bind' AND body->>'subject'=ANY(:subjects)""",
-            subjects=subjects,
-        )
-    )
+    taken = {d["subject"] for d in decisions if d["operation"] == "bind"}
+    taken.update(bound(conn, subjects))
     # (subject, rule, namespace, normalized value) for every rule that applies.
     applicable = []
     wanted: dict[str, set[str]] = defaultdict(set)
     for subject in subjects:
-        if subject in bound:
+        if subject in taken:
             continue
         record = latest[subject]
         for kind, rule in rules:
