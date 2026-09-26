@@ -6,11 +6,13 @@ The shared language for the AWS-first SEC EDGAR data platform: production operat
 
 ### Clean MDM identities and mastering
 
+MDM is the first scope. It masters identities and the relationships between them. A filing or a GLEIF file is evidence for that mastering. It is not itself a master record. Silver, gold, and the parser are outside this scope.
+
 The master data domains are Company, Person, Security, Fund Structure, Branch, Government Entity, International Organization, and Market/Venue. A profile hangs on one of those domains and is not itself a domain.
 
 **Company Identity**:
-The identity of one accepted company, shared by its governed Adviser, Audit Firm, and legally applicable Fund profiles.
-_Avoid_: A second identity per role, Person, a Fund name as proof of company legal form
+The identity of one accepted legal company, shared by its governed Adviser, Audit Firm, and legally applicable Fund profiles. A subsidiary, a filing trust, and its adviser are separate Companies when they have separate identifiers. A rename of one identifier stays one Company, and the old name is an alias.
+_Avoid_: A second identity per role, Person, a Fund name as proof of company legal form, merging two Companies because their names are similar
 
 **Person Identity**:
 The identity of one natural person, distinct from a Company and shared with an applicable individual Adviser profile.
@@ -42,7 +44,7 @@ _Avoid_: Duplicate legal entity, permanent role inferred from a filing name
 
 **Adviser Profile**:
 The governed investment-adviser registration of a Company or a Person. It shares that holder's identity.
-_Avoid_: A separate adviser identity, the Fund Series it manages, the Fund Company
+_Avoid_: A separate adviser identity, IS_ENTITY_OF, IS_PERSON_OF, the Fund Series it manages, the Fund Company
 
 **Audit Firm Profile**:
 The governed audit-firm registration of a Company. It shares that Company's identity.
@@ -97,7 +99,7 @@ An organization accepted as that kind from its source category, distinct from a 
 _Avoid_: Company, Government Entity, a new identity for every registry category
 
 **Holdings**:
-The relationship from a Person, a Company, or a Fund Structure to a Security it holds, for one reported period and capacity. The 13F manager is the reporting holder.
+The relationship from a Person, a Company, or a Fund Series to a Security it holds, for one reported period and capacity. The 13F manager is the reporting holder.
 _Avoid_: ISSUED_BY, MANAGES_FUND, employment, beneficial ownership inferred from the filing alone
 
 **AUDITED_BY**:
@@ -109,8 +111,20 @@ The relationship from a Person to a Company for a reported office and dates.
 _Avoid_: A holding, treating the person and the employer as one identity
 
 **IS_INTERNATIONAL_BRANCH_OF**:
-The relationship from a Branch to its accepted head office.
+The relationship from a Branch to its accepted head office. GLEIF relationship records are the evidence.
 _Avoid_: A subsidiary Company, the head office itself
+
+**Ownership Parent**:
+The relationship from a Company to a Company that owns it. Several owners are allowed. Exhibit 21 and Schedules 13D and 13G are evidence. This is not accounting consolidation.
+_Avoid_: Accounting Direct Parent, a GLEIF accounting parent, a similar name as proof of ownership
+
+**Accounting Direct Parent**:
+The one direct accounting-consolidating parent of a Company, in one scope and time. GLEIF relationship records are the evidence. A missing parent is not proof of no parent.
+_Avoid_: Ownership Parent, SEC beneficial ownership, Calculated Ultimate Parent
+
+**GLEIF Fund Link**:
+A fund-structure relationship as GLEIF states it: IS_FUND-MANAGED_BY, IS_SUBFUND_OF, or IS_FEEDER_TO. It keeps GLEIF's direction. It does not replace MANAGES_FUND from Form ADV or N-CEN.
+_Avoid_: MANAGES_FUND, Holdings, reversing the edge to match an SEC filing
 
 **Source Record Binding**:
 The evidence-backed assignment of one source record to the Company Identity, Person Identity, or other accepted identity that it describes.
