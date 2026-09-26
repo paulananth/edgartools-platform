@@ -6,6 +6,8 @@ The shared language for the AWS-first SEC EDGAR data platform: production operat
 
 ### Clean MDM identities and mastering
 
+The master data domains are Company, Person, Security, Fund Structure, Branch, Government Entity, International Organization, and Market/Venue. A profile hangs on one of those domains and is not itself a domain.
+
 **Company Identity**:
 The identity of one accepted company, shared by its governed Adviser, Audit Firm, and legally applicable Fund profiles.
 _Avoid_: A second identity per role, Person, a Fund name as proof of company legal form
@@ -37,6 +39,18 @@ _Avoid_: A single span from first to last sighting, an end inferred from silence
 **Governed Role Profile**:
 An evidence-backed, dated registration or capacity attached to an identity without creating another identity for its holder.
 _Avoid_: Duplicate legal entity, permanent role inferred from a filing name
+
+**Adviser Profile**:
+The governed investment-adviser registration of a Company or a Person. It shares that holder's identity.
+_Avoid_: A separate adviser identity, the Fund Series it manages, the Fund Company
+
+**Audit Firm Profile**:
+The governed audit-firm registration of a Company. It shares that Company's identity.
+_Avoid_: A separate auditor identity, a permanent auditor field on the audited Company
+
+**Fund Profile**:
+The governed fund registration of a Company or a Fund Structure. It shares that holder's identity.
+_Avoid_: A Security, an ETF share, a name ending in "fund" as proof of the profile
 
 **Merge Stage**:
 The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
@@ -77,6 +91,26 @@ _Avoid_: Government ownership as an identity kind, International Organization
 **Market/Venue**:
 A trading market or venue distinct from the organization operating it. Operating and segment venues relate through a venue hierarchy.
 _Avoid_: Operator Company, corporate ownership hierarchy
+
+**International Organization**:
+An organization accepted as that kind from its source category, distinct from a Company and from a Government Entity. It keeps the source classification it was accepted under.
+_Avoid_: Company, Government Entity, a new identity for every registry category
+
+**Holdings**:
+The relationship from a Person, a Company, or a Fund Structure to a Security it holds, for one reported period and capacity. The 13F manager is the reporting holder.
+_Avoid_: ISSUED_BY, MANAGES_FUND, employment, beneficial ownership inferred from the filing alone
+
+**AUDITED_BY**:
+The relationship from a Company to the Company that audits it for one engagement.
+_Avoid_: A permanent auditor field, the Audit Firm profile itself
+
+**EMPLOYED_BY**:
+The relationship from a Person to a Company for a reported office and dates.
+_Avoid_: A holding, treating the person and the employer as one identity
+
+**IS_INTERNATIONAL_BRANCH_OF**:
+The relationship from a Branch to its accepted head office.
+_Avoid_: A subsidiary Company, the head office itself
 
 **Source Record Binding**:
 The evidence-backed assignment of one source record to the Company Identity, Person Identity, or other accepted identity that it describes.
