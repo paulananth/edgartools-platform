@@ -9,7 +9,7 @@ Recovery: original Grok worktrees are untouched. Heads, tracked patch and non-bu
 - [x] Review source and git history with GoF — no new pattern warranted; correct portable paths/limits, root-name regression and silent Rust parse errors; separate measurement from production acceptance (2026-09-26 13:30 ET).
 - [x] Verify — 4 prototype tests, 6 lookup checks, 3 Rust tests; 10/10 real cached files and 286,134 rows match the ten compared fields with zero rejects/type errors; all 1,000 cached sizes verified (2026-09-26 13:36 ET).
 - [x] Review staged source/evidence — no binaries, private keys, AWS credentials or DSNs; Rust `target/` ignored and `git diff --cached --check` passes (2026-09-26 13:36 ET).
-- [ ] Commit and push the Codex branch, then verify the remote hash and clean worktree.
+- [x] Commit and push — check-in `3c07c536` equals the remote hash and worktree is clean; this checklist update follows that verification (2026-09-26 13:37 ET).
 
 ## Review
 
