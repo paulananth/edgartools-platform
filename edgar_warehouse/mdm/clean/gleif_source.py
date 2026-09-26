@@ -12,6 +12,8 @@ from typing import IO, BinaryIO
 import ijson
 from lxml import etree
 
+from edgar_warehouse.rules import files as rules_files
+
 from .adapters import (
     UnsupportedRecord,
     category_kind,
@@ -361,112 +363,22 @@ def validate_release(manifest: dict, native: dict) -> None:
         raise Conflict("Invalid native release metadata or Company scope") from exc
 
 
-def dataset_contract(member: str, *, level1_source: str = "gleif.level1.v1") -> dict:
-    """Governance input, not registration or activation. Field ranks live in policy."""
-    mapping: dict = {
-        "version": VERSION,
-        "native_member": member,
-        "retain_deferred": True,
-        "source_record_provenance": True,
-        "field_shape": "nullable_text",
-        "fields": {},
-        "provenance": {"native_record": "_native"},
-    }
-    if member == "level1":
-        mapping.update(
-            kind_field="Entity.EntityCategory.$",
-            kind_values={"GENERAL": "company"},
-            # What a record in each other GLEIF category probably is, so the
-            # Stage can sort it; none of these creates an identity. A sole
-            # proprietor is left unnamed: it is not settled as Person.
-            probable_kind_values={
-                "FUND": "fund_structure",
-                "BRANCH": "branch",
-                "RESIDENT_GOVERNMENT_ENTITY": "government",
-                "INTERNATIONAL_ORGANIZATION": "international_organization",
-            },
-            record_key=["LEI.$"],
-            record_key_format="lei",
-            identifiers={"lei": "LEI.$"},
-            identifier_formats={"lei": "lei"},
-        )
-        mapping["fields"] = {
-            # `name` is shared with SEC, SEC first where both supply it.
-            # `jurisdiction` is GLEIF's alone; SEC gives state of incorporation
-            # as its own field (operator, 2026-09-24).
-            "name": "Entity.LegalName.$",
-            "address": {
-                "components": {
-                    "street": "Entity.LegalAddress.FirstAddressLine.$",
-                    "street2": {"lines": "Entity.LegalAddress.AdditionalAddressLine"},
-                    "city": "Entity.LegalAddress.City.$",
-                    "region": "Entity.LegalAddress.Region.$",
-                    "postcode": "Entity.LegalAddress.PostalCode.$",
-                    "country": "Entity.LegalAddress.Country.$",
-                }
-            },
-            "jurisdiction": "Entity.LegalJurisdiction.$",
-            "gleif_legal_form": "Entity.LegalForm.EntityLegalFormCode.$",
-            "gleif_entity_status": "Entity.EntityStatus.$",
-            "gleif_registration_status": "Registration.RegistrationStatus.$",
-            "gleif_initial_registration": "Registration.InitialRegistrationDate.$",
-            "gleif_last_update": "Registration.LastUpdateDate.$",
-            "gleif_next_renewal": "Registration.NextRenewalDate.$",
-            "gleif_managing_lou": "Registration.ManagingLOU.$",
-            "gleif_validation_source": "Registration.ValidationSources.$",
-            "gleif_registration_authority": "Entity.RegistrationAuthority.RegistrationAuthorityID.$",
-            "gleif_registration_authority_entity_id": "Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$",
-            "gleif_entity_creation_date": "Entity.EntityCreationDate.$",
-        }
-        # What the SEC-to-GLEIF matching rules compare; not Company fields
-        # (ticket 08). The headquarters address, never a registered agent's.
-        mapping["matching"] = {
-            "headquarters_postal_code": "Entity.HeadquartersAddress.PostalCode.$",
-            "headquarters_country": "Entity.HeadquartersAddress.Country.$",
-        }
-    elif member == "relationships":
-        mapping.update(
-            kind="company",
-            record_key=["start", "end", "relationship_type"],
-            relationships=[
-                {
-                    "type_field": "relationship_type",
-                    "type_values": {
-                        "IS_DIRECTLY_CONSOLIDATED_BY": "IS_DIRECTLY_CONSOLIDATED_BY",
-                        "IS_ULTIMATELY_CONSOLIDATED_BY": "IS_ULTIMATELY_CONSOLIDATED_BY",
-                    },
-                    "target_key": ["end"],
-                    "target_source": level1_source,
-                    "valid_from": "valid_from",
-                    "valid_to": "valid_to",
-                    "scope": "GLEIF accounting consolidation",
-                    "properties": {
-                        "source_relationship_status": "status",
-                        "source_registration_status": "registration_status",
-                    },
-                }
-            ],
-        )
-    elif member == "reporting_exceptions":
-        mapping.update(kind="company", record_key=["LEI.$", "ExceptionCategory.$"])
-    else:
-        raise ValueError("Unknown native GLEIF member")
-    return {
-        "provider": "GLEIF",
-        "nonblocking_deferred_reasons": [
-            "outside_approved_company_scope",
-            "unsupported_identity_kind",
-            "reported_parent_exception",
-        ],
-        "family": "gleif",
-        "schema_version": VERSION,
-        "publication_families": ["golden_copy"],
-        "record_key": "native LEI or composite source key",
-        "publication_key": "verified GLEIF release",
-        "effective_time": "LastUpdateDate or unknown",
-        "semantics": "patch; absence never retires an identity",
-        "adapter": mapping,
-    }
+def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
+    """Governance input, not registration or activation. Field ranks live in policy.
+
+    Each member's mapping is data in `rules/sources/gleif/source.yaml` (rules
+    skill ticket 01). A relationship points at the Level 1 source the file
+    names; `level1_source` replaces it for a caller that registers Level 1
+    under another code.
+    """
+    for entry in rules_files.source("gleif")["mdm"].values():
+        contract = entry["contract"]
+        if contract["adapter"]["native_member"] == member:
+            if level1_source is not None:
+                for relationship in contract["adapter"].get("relationships", []):
+                    relationship["target_source"] = level1_source
+            return contract
+    raise ValueError("Unknown native GLEIF member")
 
 
 def record_evidence(

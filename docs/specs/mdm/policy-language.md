@@ -416,7 +416,8 @@ field any source supplies** and the ordered `sources` list decides only where
 several supply one. A field declared under `fields` inherits the default and
 may override any part of it, such as its own source order. `defaults` is an
 authority section. The kind documents live one file per kind in
-`edgar_warehouse/mdm/policies/`.
+`rules/merge/kinds/` (moved from `edgar_warehouse/mdm/policies/` by rules skill
+ticket 01, 2026-09-26, with no change to any digest).
 
 This document adds:
 
