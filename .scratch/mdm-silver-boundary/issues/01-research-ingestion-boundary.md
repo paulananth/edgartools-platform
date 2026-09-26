@@ -41,12 +41,16 @@ serve the source's needs. Operator's structured reply verified 2026-09-26 10:35 
 Q3 accepted: preserve all structured source fields and repeating groups, including
 currently unused fields. Operator's structured reply verified 2026-09-26 10:37 ET.
 
-Q4 next: parsed-evidence retention. Recommendation: keep current and pinned
-publications; prune superseded versions only after consumer/run pins clear and
-required replay remains possible under existing source-retention contracts.
+Q4 accepted: keep current and needed parsed versions; prune superseded versions
+only after consumer/run pins clear and required replay remains possible under
+existing source-retention contracts. Operator's reply verified 2026-09-26 10:48 ET.
 
-Later questions: transformation boundary, replay and contract/version ownership,
-irregular sources and the bounded migration trial. Q1–Q3 are accepted.
+Q5 next: independently version reading and consumer mappings, so a mapping-only
+change reruns the affected consumer from retained parsed evidence. Recommendation:
+yes; raw reparsing follows reader changes, not unrelated mapping changes.
+
+Later questions: transformation boundary, irregular sources and the bounded
+migration trial. Q1–Q4 are accepted.
 
 Research completion does not accept or implement an architecture. The interview,
 ADR/spec, migration tickets and cost/fidelity prototype are follow-up work after
