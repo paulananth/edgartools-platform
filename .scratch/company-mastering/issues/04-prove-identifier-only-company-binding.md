@@ -1,7 +1,7 @@
 # Prove identifier-only Company binding through a verified Identifier Contract
 
 Type: task
-Status: in progress
+Status: built; one item waits for the operator (PR #708 `e97b675b`, PR #721 `3ea3a6b1`, 2026-09-26). The suspended-identifier item waits on ticket 15's two questions
 Blocked by: 03
 
 ## Question

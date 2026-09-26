@@ -1,7 +1,7 @@
 # Carry SEC countryCode into silver Company evidence
 
 Type: task
-Status: in review (Claude, PR #720, branch `claude/company-mastering-14-country-code`)
+Status: done (PR #720, merged `843228bd`, 2026-09-26). Production deploy order is in the PR: bootstrap SQL 21, then the dbt full refresh, then both images
 Blocked by: none
 Blocks: Shell and nine other postcode matches in the Company proving run
 
