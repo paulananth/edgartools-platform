@@ -1,7 +1,7 @@
 # Rules files; production loads them
 
 Type: task
-Status: claimed (Claude, branch `claude/rules-p1-files`, 2026-09-26 15:49 ET)
+Status: resolved (PR #729, merged as `a0700904` on the operator's word, 2026-09-26 17:06 ET)
 Blocked by: none
 
 ## Outcome
@@ -95,4 +95,5 @@ JSON copies are gone. Every digest is unchanged, so behaviour is unchanged
   still imports `edgar_warehouse.mdm.policies`. Its sha256 is pinned inside
   the live policy's proof (`PROOF.cohort.files`), so an edit would change
   `983352e8…`. To rerun it, check out the commit before this change.
-- [ ] PR and CI.
+- [x] PR #729: all 7 CI checks green, including the PG16 integration job;
+  merged on the operator's word ("merge on by one"), 2026-09-26 17:06 ET.
