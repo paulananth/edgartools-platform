@@ -105,8 +105,26 @@ def batch_assertions(
 def batch_evidence(
     batch: dict, root: Path, store: Store, *, policy_digest: str | None = None
 ) -> tuple[list[dict], list[dict]]:
+    found = batch_input(batch, root, store, policy_digest=policy_digest)
+    return found["assertions"], found["deferred"]
+
+
+def batch_input(
+    batch: dict, root: Path, store: Store, *, policy_digest: str | None = None
+) -> dict:
+    """A batch's readings, its deferred records, and each reading's bronze object.
+
+    A pinned source row may name the bronze object it was read from
+    (`_origin.bronze`: object, sha256, locator). That is where the record was
+    delivered, not what it says, so it travels beside the reading as an
+    occurrence and the Stage keeps the winner's (ticket 10).
+    """
     if "input" not in batch:
-        return batch.get("assertions", []), batch.get("deferred", [])
+        return {
+            "assertions": batch.get("assertions", []),
+            "deferred": batch.get("deferred", []),
+            "occurrences": batch.get("occurrences", []),
+        }
     if batch.get("assertions") or batch.get("deferred"):
         raise ValueError("A source batch cannot mix file input and inline evidence")
     spec = batch["input"]
@@ -147,6 +165,7 @@ def batch_evidence(
         check_policy(policy)
     result: list[dict] = []
     deferred: list[dict] = []
+    occurrences: list[dict] = []
     retains_deferred = contract["adapter"].get("retain_deferred", False)
     if retains_deferred and type(spec.get("record_count")) is not int:
         raise ValueError("A source member requires an exact record_count")
@@ -192,6 +211,19 @@ def batch_evidence(
                     policy=policy,
                 )
             )
+            bronze = (row.get("_origin") or {}).get("bronze")
+            if bronze is not None:
+                if not isinstance(bronze, dict):
+                    raise Conflict("Invalid bronze occurrence")
+                # Named field by field: a row names only its own reading.
+                occurrences.append(
+                    {
+                        "assertion_id": result[-1]["assertion_id"],
+                        "object": bronze.get("object"),
+                        "sha256": bronze.get("sha256"),
+                        "locator": bronze.get("locator"),
+                    }
+                )
         except UnsupportedRecord as exc:
             if not retains_deferred:
                 raise
@@ -214,7 +246,7 @@ def batch_evidence(
             )
     if "record_count" in spec and len(result) + len(deferred) != spec["record_count"]:
         raise Conflict("Source member record_count mismatch")
-    return result, deferred
+    return {"assertions": result, "deferred": deferred, "occurrences": occurrences}
 
 
 def execute_manifest(
@@ -289,10 +321,13 @@ def execute_manifest(
                 break
             native = native_batches[batch["batch_id"]]
             assertions, deferred = native["assertions"], native["deferred"]
+            occurrences = native.get("occurrences", [])
         else:
-            assertions, deferred = batch_evidence(
+            found = batch_input(
                 batch, root, store, policy_digest=manifest["policy_digest"]
             )
+            assertions, deferred = found["assertions"], found["deferred"]
+            occurrences = found["occurrences"]
         cost = (
             0
             if batch["batch_id"] in retained
@@ -321,6 +356,8 @@ def execute_manifest(
             "preview": preview,
             "deferred": deferred,
         }
+        if occurrences:
+            command["occurrences"] = occurrences
         for key in (
             "source_family",
             "publication_family",

@@ -100,10 +100,25 @@ def rule_policy(*, active):
     return body
 
 
-def sec_batch(tmp_path):
-    raw = (
-        "\n".join(json.dumps(row, sort_keys=True) for row in FIXTURE["sec"]) + "\n"
-    ).encode()
+def bronze_of(cik):
+    """A bronze object written into a fixture SEC row by hand.
+
+    It tests the channel from a pinned row to the Stage, not SEC sourcing: no
+    production SEC bundle names its bronze object yet (ticket 10, slice 1c).
+    """
+    return {
+        "object": f"bronze/submissions/CIK{int(cik):010d}.json",
+        "sha256": hashlib.sha256(str(int(cik)).encode()).hexdigest(),
+        "locator": "$",
+    }
+
+
+def sec_batch(tmp_path, *, bronze=False):
+    rows = [
+        {**row, "_origin": {"bronze": bronze_of(row["cik"])}} if bronze else row
+        for row in FIXTURE["sec"]
+    ]
+    raw = ("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n").encode()
     (tmp_path / "sec.jsonl").write_bytes(raw)
     return {
         "batch_id": "sec-four-companies",
@@ -144,7 +159,9 @@ def stage_and_master(database):
         stage = conn.execute(
             text("SELECT source_code, record_key FROM mdm_v2.company_stage")
         ).all()
-        masters = conn.scalar(text("SELECT count(*) FROM mdm_v2.company WHERE valid_to IS NULL"))
+        masters = conn.scalar(
+            text("SELECT count(*) FROM mdm_v2.company WHERE valid_to IS NULL")
+        )
     return sorted(stage), masters
 
 
@@ -210,7 +227,7 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
                 "contract_version": 2,
                 "policy_digest": policy,
                 "as_of": core.AS_OF,
-                "batches": [sec_batch(tmp_path)],
+                "batches": [sec_batch(tmp_path, bronze=True)],
             }
         )
     )
@@ -272,6 +289,24 @@ def test_both_sources_wait_in_the_stage_and_no_master_is_created(
         + [("gleif.level1.v1", r["LEI"]["$"]) for r in gleif]
     )
     assert masters == 0
+
+    # Ticket 10: every latest-only Stage row names the bronze object its
+    # winning reading was delivered in. GLEIF's comes from the verified
+    # native publication (the archive and the record's place in it); SEC's
+    # was written into the fixture rows, to test the channel only.
+    with database.application.connect() as conn:
+        bronze = dict(
+            conn.execute(
+                text("SELECT record_key, bronze FROM mdm_v2.stage_record")
+            ).all()
+        )
+    for cik in COMPANIES:
+        assert bronze[cik] == bronze_of(cik)
+    archives = {bronze[r["LEI"]["$"]]["object"] for r in gleif}
+    assert len(archives) == 1 and archives != {None}
+    assert all(
+        bronze[r["LEI"]["$"]]["locator"].startswith("level1:record:") for r in gleif
+    )
 
 
 # The SEC and GLEIF record of each Company. The pairs are **test input**, picked
@@ -432,10 +467,15 @@ def test_one_master_per_company_takes_fields_from_both_sources(
     assert winner(APPLE, "address") == "gleif.level1.v1"
     assert field(APPLE, "address")["value"]["street2"] == "330 N. Brand Blvd\nSuite 700"
     with database.application.connect() as conn:
-        assert conn.scalar(
-            text("SELECT address FROM mdm_v2.company WHERE entity_id=CAST(:id AS uuid) AND valid_to IS NULL"),
-            {"id": entity_of[APPLE]},
-        ) == field(APPLE, "address")["value"]
+        assert (
+            conn.scalar(
+                text(
+                    "SELECT address FROM mdm_v2.company WHERE entity_id=CAST(:id AS uuid) AND valid_to IS NULL"
+                ),
+                {"id": entity_of[APPLE]},
+            )
+            == field(APPLE, "address")["value"]
+        )
 
     # GLEIF's own spelling is still in the Stage, whole, as evidence.
     with database.application.connect() as conn:

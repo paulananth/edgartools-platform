@@ -111,7 +111,8 @@ Found while planning (facts, not rulings):
   assessment (028/035); `consumer.py` also reads historic objects from
   `batch.effects`, and the journal publication carries the full request.
 
-1. [ ] **The latest-only Stage, written beside the history.** Migration 038:
+1. [x] **The latest-only Stage, written beside the history** (PR #715, merged
+   `cadb99d3`, 2026-09-25 19:50 ET). Migration 038:
    `mdm_v2.stage_record`, key `(source_code, record_key)`, the winning
    reading, the resolved snapshot and its bronze reference. The evidence
    wrapper keeps it once the core has stored the batch, in the same
@@ -127,10 +128,26 @@ Found while planning (facts, not rulings):
    where an older reading arrives later the two differ on purpose (15 tests).
    Limits recorded: a clash with an older reading the row already replaced
    goes unseen; a profile's identifying values must be text.
-1b. [ ] **The sources name their bronze objects.** The SEC bundle pins
-   `sec_raw_object` and names each CIK's submissions object and hash; the
-   GLEIF bundle names the Golden Copy archive and the record's ordinal; the
-   apply command passes them as `occurrences`.
+1b. [ ] **GLEIF names its bronze objects; the channel for any source.** Native
+   GLEIF batches name the verified member's `bronze_artifact_reference`, its
+   raw evidence hash and `level1:record:<ordinal>`. A pinned source row may
+   name its bronze object under `_origin.bronze`; the manifest reader turns
+   it into that reading's occurrence, built field by field. PG16: every
+   GLEIF Stage row in the four-company test names its archive; the SEC rows
+   there carry fixture bronze to test the channel only.
+1c. [ ] **SEC names its bronze objects.** Found while building 1b (Claude,
+   2026-09-25): no production writer lands submissions rows in
+   `sec_raw_object` (it holds filing artifacts only), so the Company landing
+   cannot name its bronze object. But a Company row's `raw_object_id` **is**
+   the sha256 of its submissions document, and each capture path records
+   that document's bronze path beside the hash: the warehouse path in the
+   run's bookkeeping `pipeline_run.raw_writes_json` (path, sha256); the
+   acquisition-gated path (`drive-submissions-discovery`) in the ledger's
+   `source_revision` (`bronze_artifact_reference`, `raw_evidence_hash`).
+   Design: resolve the object by that hash from the record the capture kept,
+   never by listing bronze per CIK. Check which path the bundles' captures
+   come from, and the architecture boundary between Clean MDM and the
+   warehouse, before choosing.
 2. [ ] **Readers move to the Stage and compact decision receipts**, each with
    an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
    the binding decisions.

@@ -112,6 +112,14 @@ class PublicationVerifier:
             raise Conflict("Missing or unverified fresh source revision")
         return dict(row)
 
+    def bronze_reference(self, revision_id) -> str:
+        """The bronze object a verified fresh source revision was captured to."""
+        with self.ledger_engine.begin() as conn:
+            # The same read-only processor role verify() reads the ledger as.
+            conn.execute(text("SET TRANSACTION READ ONLY"))
+            conn.execute(text("SET LOCAL ROLE edgartools_acquisition_processor"))
+            return self._revision(conn, revision_id)["bronze_artifact_reference"]
+
     def _bytes(self, revision, limit, *, retain=False):
         sha = hashlib.sha256()
         length = 0
