@@ -11,6 +11,8 @@ Recovery: original Grok worktrees are untouched. Heads, tracked patch and non-bu
 - [x] Review intended content — two Markdown files only; `git diff --check` passes, no secrets/build artifacts (2026-09-26 13:24 ET).
 - [x] Commit and push — check-in `90d4bdb3` equals the remote hash and worktree is clean; this checklist update follows that verification (2026-09-26 13:25 ET).
 
+- [ ] Open a regular PR against `main` and verify its head and state.
+
 ## Review
 
 No GoF refactor is warranted: this is a dated research note, not an implementation. The related parser histories and actual adapters remain intact. Code line references and package versions belong to the captured source revision; no Rust production adoption is approved.
