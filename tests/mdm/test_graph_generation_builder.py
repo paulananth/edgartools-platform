@@ -26,7 +26,7 @@ from edgar_warehouse.mdm.database import (
 )
 
 ALL_6_NODE_TYPES = ("company", "adviser", "person", "security", "fund", "audit_firm")
-ALL_11_RELATIONSHIP_TYPES = [
+ALL_9_RELATIONSHIP_TYPES = [
     ("IS_INSIDER", "person", "company"),
     ("HOLDS", "person", "security"),
     ("COMPANY_HOLDS", "company", "security"),
@@ -47,7 +47,7 @@ def _seed_registry(session: Session) -> dict[str, str]:
             display_name=et.title(), is_active=True,
         ))
     rel_types = {}
-    for name, src, tgt in ALL_11_RELATIONSHIP_TYPES:
+    for name, src, tgt in ALL_9_RELATIONSHIP_TYPES:
         rt_id = str(uuid.uuid4())
         session.add(MdmRelationshipType(
             rel_type_id=rt_id, rel_type_name=name,
@@ -126,7 +126,7 @@ def _finish_generation(session: Session, gen, status: str = "activated") -> None
 # ---------------------------------------------------------------------------
 
 class TestDefaultPlanning:
-    def test_emits_all_6_node_types_and_11_relationship_types_exactly_once(self, world, session):
+    def test_emits_all_6_node_types_and_9_relationship_types_exactly_once(self, world, session):
         gen = _new_generation(session)
         partitions = generation.plan_generation_partitions(session, gen.generation_id)
         session.commit()
@@ -134,7 +134,7 @@ class TestDefaultPlanning:
         node_types = [p.type_name for p in partitions if p.kind == "node"]
         edge_types = [p.type_name for p in partitions if p.kind == "edge"]
         assert sorted(node_types) == sorted(ALL_6_NODE_TYPES)
-        assert sorted(edge_types) == sorted(name for name, _, _ in ALL_11_RELATIONSHIP_TYPES)
+        assert sorted(edge_types) == sorted(name for name, _, _ in ALL_9_RELATIONSHIP_TYPES)
         assert len(node_types) == len(set(node_types))
         assert len(edge_types) == len(set(edge_types))
 

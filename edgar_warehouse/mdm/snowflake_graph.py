@@ -31,17 +31,17 @@ ALLOWED_RELATIONSHIP_TYPES = (
     "MANAGES_FUND",
 )
 # D-01 / EDGE-01..04: the 4 relationship types already populated this milestone.
-# The remaining 7 ALLOWED_RELATIONSHIP_TYPES (AUDITED_BY, EMPLOYED_BY,
+# The remaining 5 ALLOWED_RELATIONSHIP_TYPES (AUDITED_BY, EMPLOYED_BY,
 # HAS_PARENT_COMPANY, INSTITUTIONAL_HOLDS,
 # MANAGES_FUND) are intentionally excluded from named parity checks until
 # Phases 6-7 populate them -- named-checking a legitimately-zero type this
 # milestone does not yet cover would false-fail verify-graph (T-05-05).
 #
-# Phase 6 (fix-pipelines) investigated 5 of these 7 (EDGE-09 EMPLOYED_BY, EDGE-10 AUDITED_BY, EDGE-11
-# INSTITUTIONAL_HOLDS) and confirmed NONE reached graph-populated status --
-# see 06-PHASE-CLOSURE-LEDGER.md for the evidenced disposition of each (two
-# source-coverage exclusions, one structural-API exclusion, two confirmed
-# bugs with an identified but deferred fix). None is added here: per D-05,
+# Phase 6 (fix-pipelines) investigated EMPLOYED_BY, AUDITED_BY and
+# INSTITUTIONAL_HOLDS and confirmed none reached graph-populated status.
+# See 06-PHASE-CLOSURE-LEDGER.md for the original five-type investigation,
+# including the two identity glue types now removed from this registry.
+# None is added here: per D-05,
 # a type must not enter this tuple before its own mdm publish-relationships has
 # produced rows -- adding any of the 5 now would false-fail verify-graph
 # for a type this environment has never actually populated. HAS_PARENT_COMPANY
