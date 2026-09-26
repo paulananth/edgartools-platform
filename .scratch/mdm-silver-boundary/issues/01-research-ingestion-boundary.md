@@ -1,7 +1,7 @@
 # Research the MDM and analytical silver boundary
 
 Type: research
-Status: research complete; architecture decision pending
+Status: complete — research and architecture direction accepted
 Base: `origin/main` at `2b52b2913d12679df3651bc5cd3e05b125abc403`
 Branch: `codex/mdm-silver-boundary-research`
 
@@ -35,7 +35,8 @@ that require processing files twice with different configuration?
 - [x] Write a concrete review package: architecture brief, proposed specification
   and proposed ADR — seven Markdown files and 27 local links validated,
   whitespace checked; 2026-09-26 10:58 ET.
-- [ ] Confirm the complete shared understanding and finalize decision-record status.
+- [x] Confirm the complete shared understanding and finalize decision-record
+  status — Q7 operator reply verified; 2026-09-26 11:11 ET.
 
 Engineering qualification and runtime implementation remain outside this
 completed research. The proposed specification explicitly lists their gates.
@@ -70,9 +71,9 @@ are qualified. Operator's structured reply verified 2026-09-26 10:54 ET.
 
 Consumer-specific transformations follow Q2–Q3; irregular formats retain the
 existing source-specific exception. Q1–Q6 are accepted. The concrete
-[architecture brief](../architecture.md) and [proposed specification](../specification.md)
-are ready for the shared-understanding check; no implementation ticket or runtime
-change is claimed.
+[architecture brief](../architecture.md) and [architecture requirements](../specification.md)
+are accepted through Q7, reply verified 2026-09-26 11:11 ET. The interview frontier
+is closed. No implementation ticket or runtime change is claimed.
 
 Research completion does not accept or implement an architecture. The interview,
 ADR/spec, migration tickets and cost/fidelity prototype are follow-up work after

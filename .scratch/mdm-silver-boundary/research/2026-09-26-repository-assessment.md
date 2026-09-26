@@ -1,7 +1,9 @@
 # MDM and silver: repository assessment
 
 Date: 2026-09-26. Reviewed base: `2b52b2913d12679df3651bc5cd3e05b125abc403`.
-Status: research and recommendation, **not an accepted architecture decision**.
+Status: historical research and recommendation. The resulting architecture was
+accepted through Q7 on 2026-09-26; [the brief](../architecture.md) is the current
+decision record. This assessment remains evidence, not an implementation claim.
 No runtime code, contract, retention policy or production deployment is changed.
 
 Refresh, 2026-09-26 10:54 ET: branch rebased onto `3ea3a6b1` after PRs #720 and
@@ -145,6 +147,7 @@ MDM, not a missing design-pattern class.
 
 Recommended interview route from ask-matt: research → grill-with-docs → accepted
 ADR/spec → tickets. One question at a time, following the operator's preference.
-First settle the required independence: should each consumer continue when the
-other's publication fails? Then settle the common evidence boundary, retention,
-version/replay and migration requirements. No accepted ADR is written yet.
+The interview subsequently settled independence, the common evidence boundary,
+retention, version/replay and migration scope through Q1–Q7. The accepted
+[ADR](../../../docs/adr/0016-independent-mdm-and-silver-mappings.md) records that
+direction. The original findings above retain their pinned historical base.

@@ -1,7 +1,7 @@
 # Shared source parsing with independent MDM and analytical mappings
 
-Status: proposed complete decision record; Q1–Q6 accepted individually on
-2026-09-26, final shared-understanding check pending.
+Status: accepted, 2026-09-26. Q1–Q6 accepted individually; complete shared
+understanding confirmed by Q7, reply verified 2026-09-26 11:11 ET.
 
 MDM and analytical silver will consume versioned stored source records through
 separate mappings, progress and retries, preserving all structured source fields
@@ -23,4 +23,4 @@ Company and GLEIF before broader migration.
   explicit amendment. This record activates no consumer, rule or deployment.
 
 See the [review package](../../.scratch/mdm-silver-boundary/architecture.md) and
-[proposed specification](../../.scratch/mdm-silver-boundary/specification.md).
+[architecture requirements](../../.scratch/mdm-silver-boundary/specification.md).

@@ -1,8 +1,9 @@
-# MDM and analytical silver boundary: proposed specification
+# MDM and analytical silver boundary: architecture requirements
 
-Status: architecture decisions Q1–Q6 accepted; shared-understanding confirmation
-and implementation-detail qualification pending. This is not an executable
-implementation ticket or evidence of deployed behavior.
+Status: accepted architecture requirements; complete shared understanding confirmed
+by Q7, reply verified 2026-09-26 11:11 ET. Implementation-detail qualification
+remains pending. This is not an executable implementation ticket or evidence of
+deployed behavior.
 
 Basis: [architecture](architecture.md), [decisions](decisions.md),
 [primary sources](research/2026-09-26-primary-sources.md) and the refreshed

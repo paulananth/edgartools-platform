@@ -1,6 +1,8 @@
 # MDM and analytical silver: decision discussion
 
-Status: interview in progress. No runtime change is authorized by this file.
+Status: interview complete; architecture direction accepted. Q7's structured
+reply verified 2026-09-26 11:11 ET. This confirms the design direction, not a
+production deployment or matching-rule activation.
 Evidence: [repository assessment](research/2026-09-26-repository-assessment.md)
 and [primary-source research](research/2026-09-26-primary-sources.md).
 
@@ -25,11 +27,12 @@ and [primary-source research](research/2026-09-26-primary-sources.md).
   deletion changes — decision text checked 2026-09-26 10:49 ET.
 - [x] Q6: bounded SEC Company + GLEIF proof before broader migration —
   operator's structured reply verified 2026-09-26 10:54 ET.
-- [ ] Confirm shared understanding and finalize the ADR/spec.
+- [x] Q7: confirm shared understanding and finalize architecture-record status —
+  operator's structured reply verified 2026-09-26 11:11 ET.
 
 Review package: [architecture brief](architecture.md),
-[proposed specification](specification.md),
-[proposed ADR](../../docs/adr/0016-independent-mdm-and-silver-mappings.md).
+[architecture requirements](specification.md),
+[accepted ADR](../../docs/adr/0016-independent-mdm-and-silver-mappings.md).
 
 ## Q1: independent progress — accepted
 
@@ -41,7 +44,7 @@ input versions/watermarks are compatible.
 
 This separates consumer completion; it does not loosen MDM's transaction
 boundary for master changes, journal evidence, checkpoints and publication intent.
-A shared parser, if selected in Q2, remains a prerequisite for both consumers
+A shared parser, selected in Q2, remains a prerequisite for both consumers
 for the affected artifact.
 
 ## Q2: the shared reading boundary — accepted
@@ -60,7 +63,8 @@ Fidelity is resolved for structured fields by Q3 and parsed retention by Q4.
 Independent execution versions are resolved by Q5; publication mechanics and
 measured cost still need specification and proof.
 The existing Source Contract's silver-to-Dataset Contract mapping is not silently
-redefined; changes to it require the completed decision/spec discussion.
+redefined in the old document. The accepted architecture requires an explicit
+amendment during engineering specification work.
 
 ## Q3: evidence fidelity — accepted
 
@@ -117,3 +121,15 @@ independent consumer failure/retry and mapping-only replay, and measure the tota
 parse/storage/consumer cost on matched inputs. No savings or completed rollout
 is inferred from the research. The final specification must make these gates
 concrete before implementation tickets are generated.
+
+## Q7: complete shared understanding — accepted
+
+The operator confirmed the six-decision architecture package captures the intended
+direction. The ADR and architecture requirements are accepted. Engineering gates
+in the requirements remain open work; no prototype results, executable tickets,
+deployment or matching-rule activation are inferred from this confirmation.
+
+Next work is the bounded SEC Company + GLEIF qualification: settle the reading
+encoding/fidelity, derived-publication recovery, component execution identities,
+retention protection and proof commands, then generate buildable implementation
+tickets. See the [handoff](handoff.md) for continuation boundaries.

@@ -1,6 +1,7 @@
 # Shared parsing with independent MDM and analytical mappings
 
-Status: Q1–Q6 accepted individually; complete shared-understanding check pending.
+Status: accepted architecture direction; operator confirmed the complete brief
+in Q7, reply verified 2026-09-26 11:11 ET.
 Date: 2026-09-26. No implementation, activation or deployment is claimed.
 
 MDM needs source evidence for identity and field decisions. Analytical silver
@@ -64,6 +65,6 @@ still present the reading and both mappings; the execution versions follow their
 actual dependencies. The existing Source Contract specification and glossary
 need an explicit amendment during specification work.
 
-The [proposed specification](specification.md) defines the proof behavior and
+The [architecture requirements](specification.md) define the proof behavior and
 engineering gates. [Decisions](decisions.md) preserve each reply and time.
 [Research](research/2026-09-26-primary-sources.md) supplies the external rationale.
