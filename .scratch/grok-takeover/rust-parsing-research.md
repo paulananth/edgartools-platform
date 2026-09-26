@@ -9,7 +9,7 @@ Recovery: original Grok worktrees are untouched. Heads, tracked patch and non-bu
 - [x] Review and document limits — research-only snapshot pinned to `b4faa6ac`; clarified independent HTML libraries; no refactoring or code changes warranted (2026-09-26 13:24 ET).
 - [x] Verify the note — read all 457 lines, spot-check official quick-xml, serde_json, html5ever and lxml documentation; retain historical references and distinguish measurements from inference (2026-09-26 13:24 ET).
 - [x] Review intended content — two Markdown files only; `git diff --check` passes, no secrets/build artifacts (2026-09-26 13:24 ET).
-- [ ] Commit and push the Codex branch, then verify the remote hash and clean worktree.
+- [x] Commit and push — check-in `90d4bdb3` equals the remote hash and worktree is clean; this checklist update follows that verification (2026-09-26 13:25 ET).
 
 ## Review
 
@@ -19,4 +19,3 @@ No GoF refactor is warranted: this is a dated research note, not an implementati
 ## Verification
 
 Primary-source spot checks on 2026-09-26: [quick-xml 0.37.5](https://docs.rs/quick-xml/0.37.5/quick_xml/), [serde_json](https://docs.rs/serde_json/latest/serde_json/), [html5ever](https://docs.rs/html5ever/latest/html5ever/) and [lxml.html](https://lxml.de/lxmlhtml.html). No benchmark was performed for this note. The separate heavy-parser branch contains the 13F experiment and its limits.
-
