@@ -169,6 +169,12 @@ no edit to any Clean MDM file.
   fourth trial round, on the real engine with no task hints, is handed to
   Codex as an acceptance step for the engine (handover note).
 
+- [Research the Rules Database schema](issues/11-research-the-rules-database-schema.md)
+  — **files in git plus one table (`rules.rule_version`)**. The operator chose
+  this on 2026-09-26 over the research's two tables. Files are edited and the
+  database records, which changes ticket 06's "master store". The build moved
+  to the rules skill map (`.scratch/rules-skill/`).
+
 ## Not yet specified
 
 - **Change and replay**: when a Source Contract's version changes, which
