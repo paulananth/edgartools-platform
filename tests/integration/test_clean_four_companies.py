@@ -610,14 +610,14 @@ def test_matching_rules_create_sec_companies_and_gleif_waits(
 
 
 # Ticket 08: the business address each SEC record carries, as silver lands it
-# from bronze (`stateOrCountry` and `zipCode`; bronze read 2026-09-25). Silver
-# keeps no `countryCode`, so Shell, which SEC files under `countryCode` X0
-# alone, has no business country.
+# from bronze (`stateOrCountry`, `countryCode` and `zipCode`; bronze read
+# 2026-09-25). Shell's country is only in `countryCode` (X0); silver keeps it
+# since ticket 14, so Shell has a business country of GB.
 BUSINESS = {
     320193: {"postal_code": "95014", "country": "US"},
     789019: {"postal_code": "98052-6399", "country": "US"},
     937966: {"postal_code": "5504", "country": "NL"},
-    1306965: {"postal_code": "SE1 7NA", "country": None},
+    1306965: {"postal_code": "SE1 7NA", "country": "GB"},
 }
 
 
@@ -696,10 +696,11 @@ def matching_policy():
 def test_the_matching_rules_join_each_company_s_sec_and_gleif_records(
     database, source_db, command_databases, tmp_path
 ):
-    """Apple, Microsoft and ASML end as one master each, with CIK and LEI.
+    """Apple, Microsoft, Shell and ASML end as one master each, with CIK and LEI.
 
-    Shell waits: its SEC state of incorporation reads DC, and silver keeps no
-    business country for it, so the state veto cannot set the DC aside.
+    Shell binds on its postcode: its SEC state of incorporation reads DC, and
+    its business country (GB, from SEC's `countryCode`, ticket 14) lets the
+    state veto set that DC aside, as the Postcode rule was measured.
     """
     census = matching_census(tmp_path)
     from edgar_warehouse.mdm.clean.name_census import entry
@@ -767,8 +768,5 @@ def test_the_matching_rules_join_each_company_s_sec_and_gleif_records(
     ]
     by_cik = {m["identifiers"]["cik"][0]: m for m in masters}
     for cik, lei in PAIRS.items():
-        if cik == SHELL:
-            assert by_cik[cik]["identifiers"] == {"cik": [cik]}
-        else:
-            assert by_cik[cik]["identifiers"] == {"cik": [cik], "lei": [lei]}
+        assert by_cik[cik]["identifiers"] == {"cik": [cik], "lei": [lei]}
     assert len(masters) == 4

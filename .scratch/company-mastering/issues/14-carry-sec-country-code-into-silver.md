@@ -1,7 +1,7 @@
 # Carry SEC countryCode into silver Company evidence
 
 Type: task
-Status: claimed (Claude, branch `claude/company-mastering-14-country-code`, 2026-09-26 07:19 ET)
+Status: in review (Claude, PR #720, branch `claude/company-mastering-14-country-code`)
 Blocked by: none
 Blocks: Shell and nine other postcode matches in the Company proving run
 
@@ -13,11 +13,13 @@ Do not infer a country from a state code or rewrite existing bronze.
 
 ## Checklist
 
-- [ ] Verify the source-to-silver-to-MDM mapping on pinned SEC bronze records,
+- [x] Verify the source-to-silver-to-MDM mapping on pinned SEC bronze records,
   including Shell (`0001306965`) and records with a missing country code.
-- [ ] Rebuild the affected silver slice from approved bronze and show the ten
+- [x] Rebuild the affected silver slice from approved bronze and show the ten
   waiting postcode matches are accounted for without weakening the state veto.
-- [ ] Keep loader idempotency and the existing SEC capture contract intact.
+  (Locally; production rows need re-landing after deploy, see below.)
+- [x] Keep loader idempotency and the existing SEC capture contract intact:
+  no fetch, `--force` or bronze write path changed; old landings read as before.
 
 ## Facts found (Claude, 2026-09-26)
 
@@ -37,25 +39,32 @@ Do not infer a country from a state code or rewrite existing bronze.
 
 ## Implementation checklist (Claude, 2026-09-26)
 
-- [ ] The extractor lands `countryCode` as a new nullable `country_code`
+- [x] The extractor lands `countryCode` as a new nullable `country_code`
   column; nothing else in the row changes.
-- [ ] The silver schema carries it everywhere one column must go: the
+- [x] The silver schema carries it everywhere one column must go: the
   `silver_schema.py` snapshot, `11_silver_landing_schema.sql`'s CREATE TABLE,
   a new idempotent `21_silver_landing_company_country_code.sql` for live
   tables, wired into `install.sh` after 20, and the dbt silver model.
-- [ ] The Company adapter reads the country from `state_or_country`, else
+- [x] The Company adapter reads the country from `state_or_country`, else
   `country_code`. A landing written before this change has no such column
   and prepares exactly as before.
-- [ ] Unit tests: the extractor, the adapter (a `countryCode`-only filer, a
+- [x] Unit tests: the extractor, the adapter (a `countryCode`-only filer, a
   US filer, a filer with neither, an old landing), and one test that all six
   places name the column.
-- [ ] Real bronze, zero SEC requests: copy the 10 filers' and two controls'
+- [x] Real bronze, zero SEC requests: copy the 10 filers' and two controls'
   submissions documents from prod bronze, rebuild their silver slice with
   `bootstrap-batch`, and show Shell's business address lands `X0` and its
-  Company record carries country GB.
-- [ ] Ticket 08 parity re-run with the silver reading done by the production
+  Company record carries country GB. Done 2026-09-26 07:35 ET: S3 reads only,
+  the run behind a dead proxy wrote no new bronze object; Shell `X0` → GB,
+  the other nine GB, IN, BM, MX, CN, NL; Apple `CA` → US; QVC (no address)
+  none.
+- [x] Ticket 08 parity re-run with the silver reading done by the production
   adapter: 3,050 bind, 0 differences from bronze, and the state veto
-  unchanged.
+  unchanged. Done 2026-09-26 07:51 ET (`research/14-parity.json`, the same
+  census `107c0e04…` as ticket 08): `silver_country_code` binds 3,050 with 0
+  only-production and 0 only-research; the old `silver` reading still binds
+  3,040 (the 10). No new binding appears, so the state veto holds exactly
+  what it held.
 - [ ] Full suites, three-axis review, PR, CI green.
 
 ## Readings and decisions (Claude, 2026-09-26, from the three-axis review)
