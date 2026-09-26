@@ -1280,8 +1280,6 @@ def test_verify_graph_named_relationship_checks_exclude_unpopulated_types(
         "EMPLOYED_BY",
         "HAS_PARENT_COMPANY",
         "INSTITUTIONAL_HOLDS",
-        "IS_ENTITY_OF",
-        "IS_PERSON_OF",
         "MANAGES_FUND",
     }
     assert relationship_types_checked.isdisjoint(unpopulated_types)

@@ -54,10 +54,10 @@ def test_expected_classification_snapshot():
         "HOLDS": "value_signals_disposal",
         "COMPANY_HOLDS": "value_signals_disposal",
         "ISSUED_BY": "no_versioning_needed",
-        "IS_ENTITY_OF": "no_versioning_needed",
+
         "HAS_PARENT_COMPANY": "property_differs_from_prior",
         "MANAGES_FUND": "periodic_snapshot_diff",
-        "IS_PERSON_OF": "no_versioning_needed",
+
         "EMPLOYED_BY": "property_differs_from_prior",
         "AUDITED_BY": "property_differs_from_prior",
         "INSTITUTIONAL_HOLDS": "periodic_snapshot_diff",

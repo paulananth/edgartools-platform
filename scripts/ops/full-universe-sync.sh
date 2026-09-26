@@ -192,17 +192,15 @@ hr "Step 2 — Backfill"
 BACKFILL_LIMIT=${LIMIT:-10000}
 run "backfill" uv run edgar-warehouse mdm backfill-relationships --limit "$BACKFILL_LIMIT"
 
-# ── step 3a: derive 10 types (all except INSTITUTIONAL_HOLDS) ─────────────────
-hr "Step 3a — Derive relationships (10 types)"
-run "derive relationships (10 types)" uv run edgar-warehouse mdm derive-relationships \
+# ── step 3a: derive the standard types (all except INSTITUTIONAL_HOLDS) ──────
+hr "Step 3a — Derive relationships"
+run "derive relationships" uv run edgar-warehouse mdm derive-relationships \
     --relationship-type IS_INSIDER          \
     --relationship-type HOLDS               \
     --relationship-type COMPANY_HOLDS       \
     --relationship-type ISSUED_BY           \
-    --relationship-type IS_ENTITY_OF        \
     --relationship-type HAS_PARENT_COMPANY  \
     --relationship-type MANAGES_FUND        \
-    --relationship-type IS_PERSON_OF        \
     --relationship-type EMPLOYED_BY         \
     --relationship-type AUDITED_BY          \
     --target-per-type "$TARGET_PER_TYPE"

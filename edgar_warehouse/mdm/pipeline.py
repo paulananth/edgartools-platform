@@ -144,10 +144,8 @@ RELATIONSHIP_TYPES = (
     "HOLDS",
     "COMPANY_HOLDS",
     "ISSUED_BY",
-    "IS_ENTITY_OF",
     "HAS_PARENT_COMPANY",
     "MANAGES_FUND",
-    "IS_PERSON_OF",
     # ── New (fundamentals research) ───────────────────────────────────────────
     "EMPLOYED_BY",          # Person → Company     (DEF 14A proxy)
     "AUDITED_BY",           # Company → AuditFirm  (10-K dei_AuditorFirmId XBRL)
@@ -180,7 +178,6 @@ RELATIONSHIP_CLOSING_PATTERNS: dict[str, str] = {
     "HOLDS":                "value_signals_disposal",
     "COMPANY_HOLDS":        "value_signals_disposal",
     "ISSUED_BY":            "no_versioning_needed",
-    "IS_ENTITY_OF":         "no_versioning_needed",
     # HAS_PARENT_COMPANY currently derives zero relationships in prod (a
     # separate, already-known bug) -- registered under the pattern its
     # sec_subsidiary_evidence properties shape (parent_scope,
@@ -188,7 +185,6 @@ RELATIONSHIP_CLOSING_PATTERNS: dict[str, str] = {
     # so this registry doesn't need revisiting when that bug is resolved.
     "HAS_PARENT_COMPANY":   "property_differs_from_prior",
     "MANAGES_FUND":         "periodic_snapshot_diff",
-    "IS_PERSON_OF":         "no_versioning_needed",
     "EMPLOYED_BY":          "property_differs_from_prior",
     "AUDITED_BY":           "property_differs_from_prior",
     "INSTITUTIONAL_HOLDS":  "periodic_snapshot_diff",
@@ -1713,16 +1709,12 @@ class MDMPipeline:
                 )
             if rel_type_name == "ISSUED_BY":
                 return self._derive_issued_by(sync_engine, remaining)
-            if rel_type_name == "IS_ENTITY_OF":
-                return self._derive_is_entity_of(sync_engine, remaining)
             if rel_type_name == "HAS_PARENT_COMPANY":
                 return self._derive_has_parent_company(sync_engine, remaining)
             if rel_type_name == "MANAGES_FUND":
                 return self._derive_manages_fund(
                     sync_engine, remaining, reconciliation_pass=reconciliation_pass
                 )
-            if rel_type_name == "IS_PERSON_OF":
-                return self._derive_is_person_of(sync_engine, remaining)
             if rel_type_name == "EMPLOYED_BY":
                 return self._derive_employed_by(
                     sync_engine, remaining, reconciliation_pass=reconciliation_pass
@@ -2311,25 +2303,6 @@ class MDMPipeline:
         )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
-    def _derive_is_entity_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
-        inserted = 0
-        skipped_corporate = 0
-        skipped_unresolved_source = 0
-        skipped_unresolved_target = 0
-        skipped_existing = 0
-        for adviser_id, company_id in self._adviser_company_pairs():
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="IS_ENTITY_OF",
-                source_entity_id=adviser_id,
-                target_entity_id=company_id,
-                source_system="adv_filing",
-            )
-            inserted += 1 if created else 0
-            skipped_existing += 0 if created else 1
-            if remaining is not None and inserted >= remaining:
-                break
-        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
-
     def _derive_has_parent_company(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
         from edgar_warehouse.mdm.database import MdmCompany
 
@@ -2461,25 +2434,6 @@ class MDMPipeline:
             )
             self.session.flush()
         return entity_id
-
-    def _derive_is_person_of(self, sync_engine: GraphSyncEngine, remaining: Optional[int]) -> tuple[int, int, int, int, int]:
-        inserted = 0
-        skipped_corporate = 0
-        skipped_unresolved_source = 0
-        skipped_unresolved_target = 0
-        skipped_existing = 0
-        for adviser_id, person_id in self._adviser_person_pairs():
-            _rel, created = sync_engine.ensure_relationship(
-                rel_type_name="IS_PERSON_OF",
-                source_entity_id=adviser_id,
-                target_entity_id=person_id,
-                source_system="adv_filing",
-            )
-            inserted += 1 if created else 0
-            skipped_existing += 0 if created else 1
-            if remaining is not None and inserted >= remaining:
-                break
-        return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
 
     def _derive_manages_fund(
         self,
@@ -4760,24 +4714,6 @@ class MDMPipeline:
                 watermark_state["value"], batch_watermark
             )
         return inserted, skipped_corporate, skipped_unresolved_source, skipped_unresolved_target, skipped_existing
-
-    def _adviser_company_pairs(self):
-        from edgar_warehouse.mdm.database import MdmAdviser
-        from sqlalchemy import select
-        return self.session.execute(
-            select(MdmAdviser.entity_id, MdmAdviser.linked_company_entity_id)
-            .where(MdmAdviser.linked_company_entity_id.isnot(None))
-        ).all()
-
-    def _adviser_person_pairs(self):
-        from edgar_warehouse.mdm.database import MdmAdviser, MdmPerson
-        from sqlalchemy import select
-        return self.session.execute(
-            select(MdmAdviser.entity_id, MdmPerson.entity_id)
-            .join(MdmPerson, MdmPerson.owner_cik == MdmAdviser.cik)
-            .where(MdmAdviser.cik.isnot(None))
-            .where(MdmAdviser.linked_company_entity_id.is_(None))
-        ).all()
 
     @staticmethod
     def _first(rows: list[dict]) -> Optional[dict]:

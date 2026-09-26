@@ -38,10 +38,8 @@ ALL_11_RELATIONSHIP_TYPES = [
     ("HOLDS", "person", "security"),
     ("COMPANY_HOLDS", "company", "security"),
     ("ISSUED_BY", "security", "company"),
-    ("IS_ENTITY_OF", "adviser", "company"),
     ("HAS_PARENT_COMPANY", "company", "company"),
     ("MANAGES_FUND", "adviser", "fund"),
-    ("IS_PERSON_OF", "adviser", "person"),
     ("EMPLOYED_BY", "person", "company"),
     ("AUDITED_BY", "company", "audit_firm"),
     ("INSTITUTIONAL_HOLDS", "adviser", "security"),
@@ -381,7 +379,7 @@ class TestNamedRelationshipParityChecksExhaustiveMode:
             for name, _, _ in ALL_11_RELATIONSHIP_TYPES
         ])
         checks = _named_relationship_parity_checks(parity, coverage_map)
-        assert len(checks) == 11
+        assert len(checks) == 9
         assert {c["relationship_type"] for c in checks} == {
             name for name, _, _ in ALL_11_RELATIONSHIP_TYPES
         }
