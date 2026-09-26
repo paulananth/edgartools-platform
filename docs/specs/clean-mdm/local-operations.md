@@ -203,7 +203,9 @@ BOOKKEEPING_DATABASE_URL=... edgar-warehouse mdm bronze-receipts \
 edgar-warehouse mdm prepare-clean-company ... --bronze-receipts "$BRONZE_RECEIPTS_JSON"
 ```
 
-The receipts must belong to the landing's own run. Each record whose document
+The receipts must come from the landing's own run, and that run must have
+succeeded; writes with no sha256 (filing attachments, ADV manifests) are left
+out. Each record whose document
 they name carries `_origin.bronze` (object, sha256, locator `$`: the whole
 document); the scope counts `bronze_named`, and the file is pinned as
 `bronze-receipts.json`. The record itself is unchanged. A GLEIF record's

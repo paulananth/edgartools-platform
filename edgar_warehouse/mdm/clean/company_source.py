@@ -324,12 +324,17 @@ _SHA256 = re.compile("[0-9a-f]{64}")
 def bronze_receipts(run_id: str, raw_writes: list[dict]) -> dict:
     """One capture run's bronze objects, by the sha256 of their bytes.
 
-    Two receipts with one sha256 name byte-identical copies; the first path in
-    sort order is kept, so the file is the same however the run listed them.
+    A run records every write, and some (filing attachments, ADV manifests)
+    carry no sha256: nothing can name them by hash, so they are left out. A
+    stated sha256 that is not a lowercase digest is refused. Two receipts with
+    one sha256 name byte-identical copies; the first path in sort order is
+    kept, so the file is the same however the run listed them.
     """
     found: dict[str, str] = {}
     for write in raw_writes:
-        sha, path = write.get("sha256"), write.get("path")
+        if not isinstance(write, dict) or write.get("sha256") is None:
+            continue
+        sha, path = write["sha256"], write.get("path")
         if not isinstance(sha, str) or not _SHA256.fullmatch(sha):
             raise Conflict("A bronze write receipt has no lowercase sha256")
         if not isinstance(path, str) or not path:
@@ -347,10 +352,20 @@ def write_bronze_receipts(book, *, run_id: str, output: str) -> dict:
     from sqlalchemy import text
 
     with book.connect() as conn:
-        raw = conn.scalar(
-            text("SELECT raw_writes_json FROM pipeline_run WHERE pipeline_run_id=:id"),
-            {"id": run_id},
+        run = (
+            conn.execute(
+                text(
+                    "SELECT status, raw_writes_json FROM pipeline_run "
+                    "WHERE pipeline_run_id=:id"
+                ),
+                {"id": run_id},
+            )
+            .mappings()
+            .one_or_none()
         )
+    if run is None or run["status"] != "succeeded":
+        raise Conflict(f"Capture run {run_id} did not succeed")
+    raw = run["raw_writes_json"]
     if not raw:
         raise Conflict(f"Capture run {run_id} recorded no bronze writes")
     body = bronze_receipts(run_id, json.loads(raw))
@@ -400,7 +415,7 @@ def prepare_company_bundle(
     limit: int,
     as_of: str,
     revision: int,
-    bronze_receipts: str | None = None,
+    bronze_receipts_path: str | None = None,
 ) -> dict:
     """Pin a bounded Company sample with the evidence its rules read.
 
@@ -443,8 +458,8 @@ def prepare_company_bundle(
     census_hash = digest(census)
     catalog, catalog_manifest_bytes = _read_manifest(root, ticker_manifest)
     receipts_raw, bronze = (
-        _read_receipts(bronze_receipts, landing["run_id"])
-        if bronze_receipts is not None
+        _read_receipts(bronze_receipts_path, landing["run_id"])
+        if bronze_receipts_path is not None
         else (None, {})
     )
     pinned = (
@@ -560,8 +575,13 @@ def prepare_company_bundle(
         "capture_run_id": landing["run_id"],
         "ticker_run_id": catalog["run_id"],
         "ciks": [r["cik"] for r in records],
-        # How many records name the bronze object they were read from.
-        "bronze_named": sum("bronze" in r["_origin"] for r in records),
+        # How many records name the bronze object they were read from; stated
+        # only with receipts, so a bundle prepared without them is unchanged.
+        **(
+            {"bronze_named": sum("bronze" in r["_origin"] for r in records)}
+            if bronze_receipts_path is not None
+            else {}
+        ),
     }
     manifest = {
         "contract_version": 2,

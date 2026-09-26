@@ -403,7 +403,7 @@ def handle(command: str, args) -> int:
             limit=args.limit,
             as_of=args.as_of,
             revision=args.revision,
-            bronze_receipts=getattr(args, "bronze_receipts", None),
+            bronze_receipts_path=getattr(args, "bronze_receipts", None),
         )
         print(json.dumps(report, sort_keys=True))
         return 0

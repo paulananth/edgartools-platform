@@ -700,17 +700,23 @@ class TestEachRecordNamesItsBronzeObject:
             [r["sha256"] for r in first["receipts"]].index(document_sha(123))
         ]["object"] == min(copy_path, receipt(123)["path"])
 
-    @pytest.mark.parametrize(
-        "change", [{"sha256": "ABC"}, {"sha256": None}, {"path": ""}]
-    )
+    @pytest.mark.parametrize("change", [{"sha256": "ABC"}, {"sha256": 5}, {"path": ""}])
     def test_a_malformed_receipt_is_refused(self, change):
         with pytest.raises(Conflict, match="bronze write receipt"):
             bronze_receipts("r", [{**receipt(123), **change}])
 
+    def test_writes_with_no_hash_are_left_out(self):
+        # A run also records filing attachments and ADV manifests, unhashed.
+        attachment = {"path": "s3://bronze/filings/a.htm", "raw_object_id": "x"}
+        manifest = {"path": "s3://bronze/adv/manifest.json"}
+        assert bronze_receipts("r", [attachment, receipt(123), manifest]) == (
+            bronze_receipts("r", [receipt(123)])
+        )
+
     def test_a_record_names_its_bronze_document(self, tmp_path):
         args = landing(tmp_path, self.rows())
         receipts = self.receipts_file(tmp_path, [receipt(123)])
-        found = self.records({**args, "limit": 2, "bronze_receipts": receipts})
+        found = self.records({**args, "limit": 2, "bronze_receipts_path": receipts})
         assert found[0]["_origin"]["bronze"] == {
             "object": receipt(123)["path"],
             "sha256": document_sha(123),
@@ -719,7 +725,7 @@ class TestEachRecordNamesItsBronzeObject:
         # The capture recorded no write for this document: it names none.
         assert "bronze" not in found[1]["_origin"]
         report = prepare_company_bundle(
-            **{**args, "limit": 2, "bronze_receipts": receipts}
+            **{**args, "limit": 2, "bronze_receipts_path": receipts}
         )
         assert report["scope"]["bronze_named"] == 1
         assert "bronze-receipts.json" in report["files"]
@@ -727,7 +733,7 @@ class TestEachRecordNamesItsBronzeObject:
     def test_the_record_itself_is_unchanged(self, tmp_path):
         args = landing(tmp_path, self.rows())
         receipts = self.receipts_file(tmp_path, [receipt(123)])
-        with_bronze = self.records({**args, "bronze_receipts": receipts})[0]
+        with_bronze = self.records({**args, "bronze_receipts_path": receipts})[0]
         without = copy.deepcopy(with_bronze)
         del without["_origin"]["bronze"]
         publication = {
@@ -745,16 +751,18 @@ class TestEachRecordNamesItsBronzeObject:
         ]
         assert read[0] == read[1]
 
-    def test_without_receipts_no_record_names_one(self, tmp_path):
+    def test_without_receipts_the_bundle_is_as_before(self, tmp_path):
         report = prepare_company_bundle(**landing(tmp_path, self.rows()))
-        assert report["scope"]["bronze_named"] == 0
+        assert "bronze_named" not in report["scope"]
         assert "bronze-receipts.json" not in report["files"]
+        record = self.records(landing(tmp_path / "b", self.rows()))[0]
+        assert "bronze" not in record["_origin"]
 
     def test_receipts_of_another_capture_are_refused(self, tmp_path):
         args = landing(tmp_path, self.rows())
         receipts = self.receipts_file(tmp_path, [receipt(123)], run_id="capture-2")
         with pytest.raises(Conflict, match="another capture run"):
-            prepare_company_bundle(**{**args, "bronze_receipts": receipts})
+            prepare_company_bundle(**{**args, "bronze_receipts_path": receipts})
 
     def test_receipts_not_in_canonical_form_are_refused(self, tmp_path):
         args = landing(tmp_path, self.rows())
@@ -763,7 +771,7 @@ class TestEachRecordNamesItsBronzeObject:
         body["receipts"].reverse()
         path.write_text(json.dumps(body))
         with pytest.raises(Conflict, match="canonical form"):
-            prepare_company_bundle(**{**args, "bronze_receipts": str(path)})
+            prepare_company_bundle(**{**args, "bronze_receipts_path": str(path)})
 
     def test_receipts_are_written_from_the_capture_runs_bookkeeping(self, tmp_path):
         from sqlalchemy import create_engine, text
@@ -772,12 +780,14 @@ class TestEachRecordNamesItsBronzeObject:
         with book.begin() as conn:
             conn.execute(
                 text(
-                    "CREATE TABLE pipeline_run (pipeline_run_id TEXT, raw_writes_json TEXT)"
+                    "CREATE TABLE pipeline_run "
+                    "(pipeline_run_id TEXT, status TEXT, raw_writes_json TEXT)"
                 )
             )
             conn.execute(
                 text(
-                    "INSERT INTO pipeline_run VALUES ('capture-1', :w), ('empty', NULL)"
+                    "INSERT INTO pipeline_run VALUES ('capture-1', 'succeeded', :w), "
+                    "('empty', 'succeeded', NULL), ('failed', 'failed', :w)"
                 ),
                 {"w": json.dumps([receipt(456), receipt(123)])},
             )
@@ -796,3 +806,6 @@ class TestEachRecordNamesItsBronzeObject:
             write_bronze_receipts(book, run_id="capture-1", output=str(out))
         with pytest.raises(Conflict, match="recorded no bronze writes"):
             write_bronze_receipts(book, run_id="empty", output=str(tmp_path / "e.json"))
+        for run in ("failed", "missing"):
+            with pytest.raises(Conflict, match="did not succeed"):
+                write_bronze_receipts(book, run_id=run, output=str(tmp_path / "f.json"))

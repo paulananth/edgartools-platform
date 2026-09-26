@@ -150,6 +150,17 @@ Found while planning (facts, not rulings):
    acquisition-gated path (`drive-submissions-discovery`) records the same
    facts in the ledger's `source_revision`; a receipts builder for it waits
    for a landing from that path.
+   Found in review (Claude, 2026-09-25): a run records every write, and
+   filing attachments and ADV manifests carry no sha256, so receipts leave
+   unhashed writes out; only a `succeeded` run's receipts are taken. Limits:
+   - **SEC submissions are written with the mutable writer** (`write_bytes`,
+     a date-partitioned key), not `write_immutable_bytes`, so a second fetch
+     the same day replaces the object an earlier receipt names. The recorded
+     hash still detects it: slice 4's bronze reread refuses a mismatch. A
+     warehouse change for the operator to decide, not this slice.
+   - The Stage keeps bronze only for readings a batch newly stores, so
+     re-preparing an already committed landing with receipts names bronze on
+     no existing row; the approved path is a fresh rebuild from pinned input.
 2. [ ] **Readers move to the Stage and compact decision receipts**, each with
    an old-versus-new parity test; the Stage's nullable `entity_id`, kept by
    the binding decisions.
