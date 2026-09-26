@@ -9,7 +9,7 @@ Recovery: original Grok worktrees are untouched. Heads, tracked patch and non-bu
 - [x] Review source/history with GoF — retain current dispatch design; fix stale type counts and names; record existing-store retirement limits below (2026-09-26 13:26 ET).
 - [x] Verify — six affected MDM suites: 210 passed, zero skips; both shell scripts pass `bash -n` (2026-09-26 13:26 ET).
 - [x] Review change scope — original 14-file removal plus narrow naming/comment fixes and this note; no generated artifacts or credentials; `git diff --check` passes (2026-09-26 13:26 ET).
-- [ ] Commit and push the Codex branch, then verify the remote hash and clean worktree.
+- [x] Commit and push — check-in `03ec4942` equals the remote hash and worktree is clean; this checklist update follows that verification (2026-09-26 13:27 ET).
 
 ## Review
 
