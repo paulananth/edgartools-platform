@@ -1,0 +1,416 @@
+# Company merge rules: source priority, field rules, the classification rule and
+# the declared SEC-to-GLEIF name rules. Rules are data (operator, 2026-09-24):
+# adding a kind is a new file here, not an edit to a source.
+version: company-2026-09-25.13
+defaults:
+  sources:
+  - sec.submissions.company.v1
+  - gleif.level1.v1
+  allow_unknown_effective: true
+rules:
+- rule_id: sec-company-candidate
+  version: 2026-09-25.13
+  family: classification
+  source: sec.submissions.company.v1
+  emits:
+  - company
+  - deferred
+  steps:
+  - step: "1"
+    verdict: deferred
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: sic
+        values:
+        - "6189"
+  - step: "2"
+    verdict: deferred
+    probable_kind: fund_structure
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: sic
+        values:
+        - "6221"
+  - step: "3"
+    verdict: deferred
+    probable_kind: government
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: sic
+        values:
+        - "8888"
+  - step: "4"
+    verdict: deferred
+    probable_kind: company
+    when:
+    - primitive: fields_all_empty@1
+      args:
+        fields: ticker
+    - primitive: token_match@2
+      args:
+        field: category
+        normalizer: conformed
+        token_list: emerging_growth
+        min_count: 1
+  - step: "5"
+    verdict: deferred
+    probable_kind: fund_structure
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - operating
+    - primitive: token_match@2
+      args:
+        field: entity_name
+        normalizer: conformed
+        token_list: fund_name
+        min_count: 1
+  - step: "6"
+    verdict: deferred
+    probable_kind: fund_structure
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - operating
+    - primitive: field_in_set@1
+      args:
+        field: sic
+        values:
+        - "6199"
+        - "6211"
+        - "6282"
+        - "6799"
+        - "6798"
+    - primitive: field_in_set@1
+      args:
+        field: category
+        values:
+        - <br>Emerging growth company
+  - step: 6b
+    verdict: deferred
+    probable_kind: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - operating
+    - primitive: field_in_set@1
+      args:
+        field: sic
+        values:
+        - "6798"
+    - primitive: fields_all_empty@1
+      args:
+        fields: ticker
+  - step: "7"
+    verdict: deferred
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - operating
+    - primitive: fields_all_empty@1
+      args:
+        fields: industry_code
+  - step: 7a
+    verdict: deferred
+    probable_kind: fund_structure
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - operating
+    - primitive: values_overlap@1
+      args:
+        field: forms
+        values: fund_report
+        min_count: 1
+  - step: 7b
+    verdict: deferred
+    probable_kind: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - operating
+    - primitive: values_overlap@1
+      args:
+        field: forms
+        values: form_10
+        min_count: 1
+    - primitive: values_overlap@1
+      args:
+        field: forms
+        values: private_offering
+        min_count: 1
+    - primitive: values_overlap@1
+      args:
+        field: forms
+        values: bdc_election
+        max_count: 0
+  - step: "8"
+    verdict: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - operating
+  - step: "9"
+    verdict: deferred
+    probable_kind: person
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - other
+    - primitive: token_match@2
+      args:
+        field: entity_name
+        normalizer: conformed
+        token_list: person_suffix
+        min_count: 1
+  - step: "10"
+    verdict: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - other
+    - primitive: evidence_present@1
+      args:
+        document: sic
+    - primitive: evidence_present@1
+      args:
+        document: category
+    - primitive: token_match@2
+      args:
+        field: entity_name
+        normalizer: conformed
+        token_list: company_legal_form
+        min_count: 1
+  - step: "11"
+    verdict: deferred
+    otherwise: true
+- rule_id: sec-gleif-name-jurisdiction
+  version: 2026-09-25.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: name_census_match@1
+    args:
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+  - primitive: jurisdiction_agrees@1
+    args:
+      sec_field: state_of_incorporation
+      sec_codes: edgar-iso-v1
+      gleif_field: jurisdiction
+- rule_id: sec-gleif-name-postal
+  version: 2026-09-25.2
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: name_census_match@1
+    args:
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+  - primitive: jurisdictions_do_not_conflict@1
+    args:
+      sec_field: state_of_incorporation
+      sec_codes: edgar-iso-v1
+      gleif_field: jurisdiction
+      sec_business_country: matching.business_country
+  - primitive: postal_agrees@1
+    args:
+      sec_code: matching.business_postal_code
+      sec_country: matching.business_country
+      gleif_code: matching.headquarters_postal_code
+      gleif_country: matching.headquarters_country
+normalizers:
+  conformed: normalize_text@edgar-conformed-v1
+lists:
+  fund_name:
+  - ACCOUNT
+  - ETF
+  - ETFS
+  - FUND
+  - FUNDS
+  industry_code:
+  - sic
+  person_suffix:
+  - CFA
+  - CPA
+  - DDS
+  - ESQ
+  - JR
+  - MRS
+  - PHD
+  - SR
+  company_legal_form:
+  - A S
+  - AB
+  - ACQUISITION
+  - ACQUISITIONS
+  - ADVISERS
+  - ADVISORS
+  - ADVISORY
+  - AG
+  - AS
+  - ASSET
+  - ASSETS
+  - ASSOCIATES
+  - B V
+  - BANK
+  - BHD
+  - BV
+  - CAPITAL
+  - CAYMAN
+  - CO
+  - COMPANY
+  - CORP
+  - CORPORATION
+  - CREDIT
+  - DELAWARE
+  - ENERGY
+  - ENTERPRISES
+  - EQUITIES
+  - EQUITY
+  - FINANCE
+  - FINANCIAL
+  - GLOBAL
+  - GMBH
+  - GP
+  - GROUP
+  - HOLDING
+  - HOLDINGS
+  - INC
+  - INCORPORATED
+  - INDUSTRIES
+  - INSURANCE
+  - INTERNATIONAL
+  - INVESTMENT
+  - INVESTMENTS
+  - INVESTOR
+  - INVESTORS
+  - KABUSHIKI
+  - KG
+  - KK
+  - L L C
+  - L P
+  - LIFE
+  - LIMITADA
+  - LIMITED
+  - LLC
+  - LLLP
+  - LLP
+  - LP
+  - LTD
+  - LTDA
+  - MANAGEMENT
+  - MGMT
+  - N V
+  - NV
+  - OPPORTUNITIES
+  - OPPORTUNITY
+  - OY
+  - PARTNERS
+  - PARTNERS LP
+  - PARTNERSHIP
+  - PLC
+  - PTE
+  - PTY
+  - REAL ESTATE
+  - REIT
+  - RESOURCES
+  - S A
+  - S A R L
+  - S P A
+  - SA
+  - SARL
+  - SAS
+  - SDN
+  - SE
+  - SECURITIES
+  - SERVICES
+  - SPA
+  - SPONSOR
+  - SPONSORS
+  - SPV
+  - STRATEGIES
+  - SYSTEM
+  - SYSTEMS
+  - TECHNOLOGIES
+  - VENTURE
+  - VENTURES
+  ticker:
+  - tickers
+  emerging_growth:
+  - EMERGING GROWTH COMPANY
+  fund_report:
+  - N-CEN
+  - N-CSR
+  - N-CSRS
+  - NPORT-P
+  form_10:
+  - 10-12G
+  - 10-12G/A
+  private_offering:
+  - D
+  - D/A
+  bdc_election:
+  - N-54A
+bars:
+  classification:
+    min_precision: 0.95
+    method: wilson_lower_bound
+    one_sided_confidence: 0.95
+  name_binding:
+    min_precision: 0.95
+    one_sided_confidence: 0.95
+    method: wilson_lower_bound

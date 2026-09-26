@@ -1,0 +1,70 @@
+# SEC Company: the MDM mapping of SEC submissions records (the Dataset Contract
+# registered as sec.submissions.company.v1). Parsing stays in existing code
+# (`edgar-warehouse mdm prepare-clean-company`), so this source has no `read`.
+source: sec.submissions.company
+bronze:
+  family: submissions
+mdm:
+  sec.submissions.company.v1:
+    contract:
+      provider: SEC
+      family: submissions
+      schema_version: silver-company-v1
+      record_key: zero-padded 10-digit CIK
+      publication_key: capture run plus exact company landing member digest, plus the exact
+        filing-list, business-address and ticker catalog member digests, plus the Name Census
+        digest
+      effective_time: unknown; last_synced_at is observation time only
+      semantics: patch
+      completeness: explicit bounded Company sample; no retirement by absence
+      adapter:
+        version: sec-company-landing-v6
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        record_key:
+        - cik
+        record_key_format: sec_cik
+        # The measured Company classification rule, not a lookup table: SEC
+        # types a foreign issuer "other", as it does an individual (ticket 12).
+        classification:
+          kind: company
+          rule_id: sec-company-candidate
+          version: 2026-09-25.13
+        identifiers:
+          cik: cik
+        identifier_formats:
+          cik: sec_cik
+        fields:
+          name: entity_name
+          sic: sic
+          sic_description: sic_description
+          # SEC's own field, as SEC writes it ("CA", "DC", "E9"). Jurisdiction is
+          # GLEIF's, a separate field, so the two never compete (operator, 2026-09-24).
+          state_of_incorporation: state_of_incorporation
+          fiscal_year_end: fiscal_year_end
+          description: description
+          address:
+            components:
+              street: business_address.street
+              street2: business_address.street2
+              city: business_address.city
+              region: business_address.region
+              postcode: business_address.postal_code
+              country: business_address.country
+        provenance:
+          landing_sha256: _origin.sha256
+          landing_manifest_sha256: _origin.manifest_sha256
+          raw_object_id: raw_object_id
+          capture_run_id: last_sync_run_id
+          observed_at: last_synced_at
+          filing_landing_sha256: _origin.forms.sha256
+          ticker_landing_sha256: _origin.tickers.sha256
+          ticker_run_id: _origin.tickers.run_id
+          address_landing_sha256: _origin.business_address.sha256
+        # What the SEC-to-GLEIF matching rules compare, kept with the record and
+        # out of its fields (company mastering ticket 08).
+        matching:
+          business_postal_code: business_address.postal_code
+          business_country: business_address.country
+          name_census: name_census

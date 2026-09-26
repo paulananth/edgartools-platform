@@ -1,0 +1,147 @@
+# GLEIF: the MDM mappings of the three native Golden Copy members, one Dataset
+# Contract each. Parsing stays in existing code (`gleif_source.py`), so this
+# source has no `read`. Field ranks live in the merge rules, not here.
+source: gleif
+bronze:
+  family: gleif
+mdm:
+  gleif.level1.v1:
+    contract:
+      provider: GLEIF
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - unsupported_identity_kind
+      - reported_parent_exception
+      family: gleif
+      schema_version: gleif-native-record-v1
+      publication_families:
+      - golden_copy
+      record_key: native LEI or composite source key
+      publication_key: verified GLEIF release
+      effective_time: LastUpdateDate or unknown
+      semantics: patch; absence never retires an identity
+      adapter:
+        version: gleif-native-record-v1
+        native_member: level1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        fields:
+          # `name` is shared with SEC, SEC first where both supply it.
+          # `jurisdiction` is GLEIF's alone (operator, 2026-09-24).
+          name: Entity.LegalName.$
+          address:
+            components:
+              street: Entity.LegalAddress.FirstAddressLine.$
+              street2:
+                lines: Entity.LegalAddress.AdditionalAddressLine
+              city: Entity.LegalAddress.City.$
+              region: Entity.LegalAddress.Region.$
+              postcode: Entity.LegalAddress.PostalCode.$
+              country: Entity.LegalAddress.Country.$
+          jurisdiction: Entity.LegalJurisdiction.$
+          gleif_legal_form: Entity.LegalForm.EntityLegalFormCode.$
+          gleif_entity_status: Entity.EntityStatus.$
+          gleif_registration_status: Registration.RegistrationStatus.$
+          gleif_initial_registration: Registration.InitialRegistrationDate.$
+          gleif_last_update: Registration.LastUpdateDate.$
+          gleif_next_renewal: Registration.NextRenewalDate.$
+          gleif_managing_lou: Registration.ManagingLOU.$
+          gleif_validation_source: Registration.ValidationSources.$
+          gleif_registration_authority: Entity.RegistrationAuthority.RegistrationAuthorityID.$
+          gleif_registration_authority_entity_id: Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$
+          gleif_entity_creation_date: Entity.EntityCreationDate.$
+        provenance:
+          native_record: _native
+        kind_field: Entity.EntityCategory.$
+        kind_values:
+          GENERAL: company
+        # What a record in each other GLEIF category probably is, so the Stage can
+        # sort it; none of these creates an identity. A sole proprietor is left
+        # unnamed: it is not settled as Person.
+        probable_kind_values:
+          FUND: fund_structure
+          BRANCH: branch
+          RESIDENT_GOVERNMENT_ENTITY: government
+          INTERNATIONAL_ORGANIZATION: international_organization
+        record_key:
+        - LEI.$
+        record_key_format: lei
+        identifiers:
+          lei: LEI.$
+        identifier_formats:
+          lei: lei
+        matching:
+          headquarters_postal_code: Entity.HeadquartersAddress.PostalCode.$
+          headquarters_country: Entity.HeadquartersAddress.Country.$
+  gleif.relationships.v1:
+    contract:
+      provider: GLEIF
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - unsupported_identity_kind
+      - reported_parent_exception
+      family: gleif
+      schema_version: gleif-native-record-v1
+      publication_families:
+      - golden_copy
+      record_key: native LEI or composite source key
+      publication_key: verified GLEIF release
+      effective_time: LastUpdateDate or unknown
+      semantics: patch; absence never retires an identity
+      adapter:
+        version: gleif-native-record-v1
+        native_member: relationships
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        fields: {}
+        provenance:
+          native_record: _native
+        kind: company
+        record_key:
+        - start
+        - end
+        - relationship_type
+        relationships:
+        - type_field: relationship_type
+          type_values:
+            IS_DIRECTLY_CONSOLIDATED_BY: IS_DIRECTLY_CONSOLIDATED_BY
+            IS_ULTIMATELY_CONSOLIDATED_BY: IS_ULTIMATELY_CONSOLIDATED_BY
+          target_key:
+          - end
+          target_source: gleif.level1.v1
+          valid_from: valid_from
+          valid_to: valid_to
+          scope: GLEIF accounting consolidation
+          properties:
+            source_relationship_status: status
+            source_registration_status: registration_status
+  gleif.reporting_exceptions.v1:
+    contract:
+      provider: GLEIF
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - unsupported_identity_kind
+      - reported_parent_exception
+      family: gleif
+      schema_version: gleif-native-record-v1
+      publication_families:
+      - golden_copy
+      record_key: native LEI or composite source key
+      publication_key: verified GLEIF release
+      effective_time: LastUpdateDate or unknown
+      semantics: patch; absence never retires an identity
+      adapter:
+        version: gleif-native-record-v1
+        native_member: reporting_exceptions
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        fields: {}
+        provenance:
+          native_record: _native
+        kind: company
+        record_key:
+        - LEI.$
+        - ExceptionCategory.$

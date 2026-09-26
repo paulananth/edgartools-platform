@@ -410,14 +410,12 @@ class TestTheCompanyRule:
         assert fields["description"] == {"op": "unknown"}
 
     def test_the_company_rule_is_loaded_not_restated(self):
-        import json
-        from pathlib import Path
-
         from edgar_warehouse.mdm.clean import company_source
+        from edgar_warehouse.rules import files
 
-        file = Path(company_source.__file__).parents[1] / "policies" / "company.json"
+        file = files.ROOT / "merge" / "kinds" / "company.yaml"
         assert set(company_source.POLICY["kinds"]) == {"company"}
-        assert company_source.POLICY["kinds"]["company"] == json.loads(file.read_text())
+        assert company_source.POLICY["kinds"]["company"] == files.load(file)
         assert company_source.POLICY["kinds"]["company"]["defaults"]["sources"] == [
             "sec.submissions.company.v1",
             "gleif.level1.v1",
