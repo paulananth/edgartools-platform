@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .activation import activated
-from .binding import bound, nothing, survivors
+from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
 from .names import (
@@ -286,6 +286,7 @@ def propose(
         merged = survivors(conn, {entity for _, _, entity in pairs})
         pairs = [(g, s, merged.get(e, e)) for g, s, e in pairs]
         held = _held_leis(conn, source, {e for _, _, e in pairs})
+        suspended = in_review(conn, {e for _, _, e in pairs})
         targets: dict[str, set] = defaultdict(set)
         for gleif, _sec, entity in pairs:
             targets[gleif["subject"]].add(entity)
@@ -303,6 +304,19 @@ def propose(
                 targets[gleif["subject"]] = set()  # one review, no binding
                 continue
             if not targets[gleif["subject"]]:
+                continue
+            if entity in suspended:
+                # As for identifier rules (`binding.in_review`): a Company in
+                # review for a contradiction gains no record by a rule.
+                result["reviews"].append(
+                    {
+                        "reason": "suspended_identifier",
+                        "namespace": "lei",
+                        "subject": gleif["subject"],
+                        "assertion_id": gleif["assertion_id"],
+                    }
+                )
+                targets[gleif["subject"]] = set()
                 continue
             # A legal entity has one LEI: a Company holding another defers,
             # when the rule asks it to.

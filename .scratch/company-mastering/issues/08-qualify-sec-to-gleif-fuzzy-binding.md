@@ -1,8 +1,8 @@
 # Qualify the first SEC-to-GLEIF Company binding rule
 
 Type: task
-Status: open
-Blocked by: 04
+Status: done (2026-09-26 ET): every item done except the wrong-link reversal, moved to ticket 13. The two rules are declared, not active; switching them on is a separate approval after ticket 13.
+Blocked by: none (ticket 04's identifier rules are built; the rules here are declared, not active)
 
 ## Question
 
@@ -136,17 +136,18 @@ fingerprint approval, a "same legal entity" case no ruling covers, or merge.
   `company.json` declared and inactive, their PROOFs pinned with a CI
   re-score.
 - [ ] A wrong link is reversible by evidence-bound reversal, and a Match
-  Exclusion stops it recurring: tests. **Moved out of this ticket:** the
+  Exclusion stops it recurring: tests. **Moved out of this ticket, not done
+  here** (to [ticket 13](13-correct-an-incorrect-company-link.md)): the
   Stage has no identity correction yet (see "Decisions made while building").
   It is a new ticket and blocks switching either rule on.
-- [ ] Apple, Microsoft, Shell and ASML each end as one master with CIK and
-  LEI on real PostgreSQL 16. Apple, Microsoft and ASML do; Shell waits until
-  silver lands SEC's `countryCode` (a warehouse change, not this ticket).
+- [x] Apple, Microsoft, Shell and ASML each end as one master with CIK and
+  LEI on real PostgreSQL 16. Shell does since ticket 14 landed SEC's
+  `countryCode` (PR #720, merged `843228bd`, 2026-09-26 07:57 ET).
 - [x] Unit, architecture and PG16 suites (1,666 and 148 passed at
   `fa916ddb`); three-axis `/code-review` on the approval commit (no blocking
   finding; GoF: leave it).
-- [ ] CI green on PR #713's final head, then merge on the operator's word
-  (the merger checks it; see the PR's checks).
+- [x] CI green on PR #713's final head, then merge on the operator's word
+  (merged `b4faa6ac`, 2026-09-25).
 - [x] Plain-English brief; operator approved the matching rules' fingerprint
   `983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049` and
   asked for the merge (2026-09-25 15:21 ET). It approves the two rules as

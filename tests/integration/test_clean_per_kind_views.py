@@ -461,6 +461,7 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
             "037_clean_mdm_company_versions.sql",
             "038_clean_mdm_stage_record.sql",
             "039_clean_mdm_stage_binding.sql",
+            "040_clean_mdm_assessment_safety.sql",
         ]
         # 034 renamed rather than duplicated: the name 033 created is gone.
         assert (

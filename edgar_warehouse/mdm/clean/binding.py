@@ -20,17 +20,57 @@ same record keeps its Company without any lookup.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import timedelta
+from typing import NamedTuple
 from uuid import uuid4
 
+from sqlalchemy import text
+
 from .activation import NAMESPACES, activated, binding_namespaces
-from .evidence import decision
+from .evidence import decision, instant
 from .primitives import normalizer
 from .store import rows
 
 
+class _Match(NamedTuple):
+    """One identifier of a record that points at a stored or new Company."""
+
+    rule: dict
+    namespace: str
+    value: str  # normalized, for comparing
+    raw: str  # as the store holds it, for the lookup
+
+
+def publish_floor(conn, kind: str, as_of: str) -> str:
+    """When a Company a rule creates now is published: never before another.
+
+    The earliest-published Company survives a merge (`identity.replay`), and a
+    merge joins Companies of one kind. So a rule's new Company is published at
+    the batch's as_of, or one microsecond after the newest identity of its
+    kind already stored, whichever is later (037 steps `valid_from` the same
+    way). A batch delivered late then still creates its Company, and
+    "earliest published" means earliest committed (ticket 04).
+    """
+    newest = conn.scalar(
+        text("SELECT max(published_at) FROM mdm_v2.identity WHERE kind=:kind"),
+        {"kind": kind},
+    )
+    if newest is None or instant(as_of) > newest:
+        return as_of
+    return (
+        (newest + timedelta(microseconds=1))
+        .astimezone(instant(as_of).tzinfo)
+        .isoformat()
+    )
+
+
 def nothing() -> dict:
-    """A fresh, empty set of proposals; never a shared one a caller could fill."""
-    return {"identities": [], "decisions": [], "reviews": [], "mints": []}
+    """A fresh, empty set of proposals; never a shared one a caller could fill.
+
+    `mints` and `joins` name the identifier each new Company or join to a
+    stored Company rests on, so the Merge Stage can re-check it under its lock.
+    """
+    return {"identities": [], "decisions": [], "reviews": [], "mints": [], "joins": []}
 
 
 def active_rules(policy: dict) -> list[tuple[str, dict]]:
@@ -116,6 +156,28 @@ def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
     }
 
 
+def in_review(conn, entity_ids: set[str]) -> set[str]:
+    """The Companies in review for an authoritative identifier or kind conflict.
+
+    The Merge Stage gives a Company status `review` for those conflicts only.
+    Q9: such a contradiction suspends the affected link, so its identifiers
+    give no rule authority to join another record to it (ticket 04; a
+    technical reading for the operator to confirm).
+    """
+    if not entity_ids:
+        return set()
+    return {
+        r["object_id"]
+        for r in rows(
+            conn,
+            """SELECT object_id FROM mdm_v2.projection
+            WHERE object_type='entity' AND object_id=ANY(:ids)
+              AND body->>'status'='review'""",
+            ids=sorted(entity_ids),
+        )
+    }
+
+
 def _contract(policy: dict, namespace: str) -> tuple[dict, dict] | None:
     """The namespace's Identifier Contract and the kind block declaring it."""
     for block in (policy.get("kinds") or {}).values():
@@ -181,6 +243,11 @@ def propose(
                 (subject, rule, namespace, _normal(policy, namespace, raw), raw)
             )
     found = holders(conn, policy, wanted)
+    # What the store says each value's holders are, before this batch's own
+    # bindings join them: the only holdings the Merge Stage can re-check.
+    stored = {key: set(held) for key, held in found.items()}
+    floors: dict[str, str] = {}
+    suspended = in_review(conn, {e for held in found.values() for e in held})
     # A Company this batch's own caller binds counts as a holder too, but only
     # of the identifiers the bound record's own source issues (Q14, as the
     # stored lookup above: an SEC record carrying an LEI holds no LEI).
@@ -215,9 +282,9 @@ def propose(
         by_subject.items(), key=lambda entry: (not may_mint(entry), entry[0])
     ):
         record = latest[subject]
-        matches = {}
+        matches: dict[str, list[_Match]] = defaultdict(list)
         problem = None
-        for _, rule, namespace, value, _raw in items:
+        for _, rule, namespace, value, raw in items:
             held = found.get((namespace, value), {})
             if len(held) > 1:
                 # One value, several Companies: the forward claim is violated.
@@ -227,13 +294,18 @@ def propose(
                 if kind != record["kind"]:
                     problem = ("incompatible_identifier_kind", namespace)
                     break
-                matches[entity] = (rule, namespace)
+                if entity in suspended:
+                    problem = ("suspended_identifier", namespace)
+                    break
+                matches[entity].append(_Match(rule, namespace, value, raw))
             if problem:
                 break
         if problem is None and len(matches) > 1:
             problem = (
                 "conflicting_identifiers",
-                ",".join(sorted(ns for _, ns in matches.values())),
+                ",".join(
+                    sorted(found_by[-1].namespace for found_by in matches.values())
+                ),
             )
         if problem:
             result["reviews"].append(
@@ -246,7 +318,14 @@ def propose(
             )
             continue
         if matches:
-            ((entity, (rule, namespace)),) = matches.items()
+            ((entity, found_by),) = matches.items()
+            rule, namespace = found_by[-1].rule, found_by[-1].namespace
+            # Every identifier that pointed here is re-checked under the lock.
+            result["joins"].extend(
+                {"entity_id": entity, "namespace": m.namespace, "raw": m.raw}
+                for m in found_by
+                if entity in stored.get((m.namespace, m.value), ())
+            )
         else:
             minting = [i for i in items if i[1]["on_no_match"] == "mint"]
             if not minting:
@@ -255,11 +334,13 @@ def propose(
             key = (namespace, value)
             if key not in minted:
                 minted[key] = str(uuid4())
+                if record["kind"] not in floors:  # one read per kind per batch
+                    floors[record["kind"]] = publish_floor(conn, record["kind"], as_of)
                 result["identities"].append(
                     {
                         "entity_id": minted[key],
                         "kind": record["kind"],
-                        "published_at": as_of,
+                        "published_at": floors[record["kind"]],
                     }
                 )
                 # The raw form is what the store holds and what the lookup
@@ -285,17 +366,51 @@ def propose(
     return result
 
 
-def mint_is_stale(conn, policy: dict, mints: list[dict]) -> bool:
-    """Whether a Company proposed as new now already holds its identifier.
+def proposal_is_stale(conn, policy: dict, automatic: dict) -> bool:
+    """Whether a rule's proposal no longer holds, re-checked under the lock.
 
-    Run at apply, under the Merge Stage lock: a concurrent run may have bound
-    the identifier since this proposal was assessed.
+    Run at apply, under the Merge Stage lock, since a concurrent run may have
+    committed since the proposal was assessed. Stale, and re-assessed, when:
+    - an identifier proposed for a new Company is now held;
+    - an identifier a join rested on is no longer held by exactly that
+      Company (another Company acquired it, or the Company was merged away);
+    - an identity of a new Company's kind has since been published at or
+      after the new Company's publish time (`publish_floor`).
+    Changes to a target Company itself (a merge, or review) move the
+    assessment's snapshot, which `assessment.check` already refuses. A join
+    to a Company this batch's own caller binds is not in `joins`: it has no
+    stored holding yet, and the caller's decision covers it.
     """
+    mints = automatic.get("mints") or []
+    joins = automatic.get("joins") or []
     wanted: dict[str, set[str]] = defaultdict(set)
-    for m in mints:
+    for m in [*mints, *joins]:
         wanted[m["namespace"]].add(m["raw"])
     found = holders(conn, policy, wanted)
+
+    def held(m):
+        return found.get(
+            (m["namespace"], _normal(policy, m["namespace"], m["raw"])), {}
+        )
+
+    if any(held(m) for m in mints):
+        return True
+    if any(set(held(j)) != {j["entity_id"]} for j in joins):
+        return True
+    # One read per kind: every new Company of a kind in a batch shares the
+    # earliest publish time among them.
+    earliest: dict[str, str] = {}
+    for i in automatic.get("identities") or []:
+        at = earliest.get(i["kind"])
+        if at is None or instant(i["published_at"]) < instant(at):
+            earliest[i["kind"]] = i["published_at"]
     return any(
-        found.get((m["namespace"], _normal(policy, m["namespace"], m["raw"])))
-        for m in mints
+        conn.scalar(
+            text(
+                """SELECT EXISTS(SELECT 1 FROM mdm_v2.identity WHERE kind=:kind
+                AND published_at >= CAST(:at AS timestamptz))"""
+            ),
+            {"kind": kind, "at": at},
+        )
+        for kind, at in sorted(earliest.items())
     )
