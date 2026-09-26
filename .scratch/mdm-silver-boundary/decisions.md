@@ -12,13 +12,18 @@ and [primary-source research](research/2026-09-26-primary-sources.md).
   recommendation; structured reply verified 2026-09-26 10:35 ET.
 - [x] Q3: preserve all structured source fields and repeating groups — operator
   accepted the recommendation; structured reply verified 2026-09-26 10:37 ET.
-- [ ] Boundary of consumer-specific transformations and irregular source formats.
-- [ ] Q5: independently version reading and each consumer mapping; rerun only affected work.
+- [x] Consumer transformations remain separate, as Q2–Q3 specify; irregular
+  formats retain the existing source-specific exception — verified against
+  Source Contract §8 and the accepted Q2 exception; 2026-09-26 10:49 ET.
+- [x] Q5: independently version reading and each consumer mapping; rerun only
+  affected work — operator's structured reply verified 2026-09-26 10:49 ET.
 - [x] Q4: keep current and needed parsed versions, release superseded versions
   only when required replay remains possible — operator's structured reply
   verified 2026-09-26 10:48 ET.
-- [ ] Correction/investigation requirements under the existing raw-retention policies.
-- [ ] Migration proof and implementation scope.
+- [x] Preserve existing correction/investigation, exact-fingerprint activation
+  and source-retention requirements; Q4–Q5 introduce no identity-rule or raw
+  deletion changes — decision text checked 2026-09-26 10:49 ET.
+- [ ] Q6: bounded SEC Company + GLEIF proof before broader migration.
 - [ ] Confirm shared understanding and write the final ADR/spec.
 
 ## Q1: independent progress — accepted
@@ -47,7 +52,8 @@ needs cannot fit the shared records. Sharing parser code alone would still
 permit duplicate processing executions and does not meet the selected default.
 
 Fidelity is resolved for structured fields by Q3 and parsed retention by Q4.
-Publication/version semantics and measured cost are unresolved.
+Independent execution versions are resolved by Q5; publication mechanics and
+measured cost still need specification and proof.
 The existing Source Contract's silver-to-Dataset Contract mapping is not silently
 redefined; changes to it require the completed decision/spec discussion.
 
@@ -75,9 +81,9 @@ either retain the required parse or state that replay is unavailable under the
 accepted retention policy. Physical storage format, cleanup bounds and lag alerts
 remain engineering/specification work.
 
-## Q5: changes and replay — pending
+## Q5: changes and replay — accepted
 
-Recommendation: give reading/parsing, the MDM mapping and the analytical mapping
+Give reading/parsing, the MDM mapping and the analytical mapping
 separate immutable execution versions. A mapping-only change reruns its affected
 consumer from suitable retained source records, without a new raw parse or a
 rerun of the unaffected consumer. A source-reader change creates a new parsed
@@ -91,3 +97,18 @@ authoring bundle may still present the reading and both mappings together; the
 execution digests must capture only their actual dependencies. Changes affecting
 identity decisions remain subject to the existing exact-fingerprint approval
 contract, not automatic activation inferred from this architecture choice.
+
+## Q6: migration scope and proof — pending
+
+Recommendation: prove the architecture on a bounded SEC Company and GLEIF
+cohort first. Preserve current production entry points and existing outputs
+until the new path is qualified. Other entities and source parsers stay outside
+the first implementation slice; irregular formats retain their existing custom
+parsers or the source-specific exception selected in Q2.
+
+The proof must preserve original evidence, compare MDM and silver outputs,
+document intended corrections separately from unexpected differences, exercise
+independent consumer failure/retry and mapping-only replay, and measure the total
+parse/storage/consumer cost on matched inputs. No savings or completed rollout
+is inferred from the research. The final specification must make these gates
+concrete before implementation tickets are generated.
