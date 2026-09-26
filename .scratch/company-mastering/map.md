@@ -55,6 +55,11 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   `/code-review` on three axes, `/gof-refactor-reviewer` before touching
   production code.
 
+- **Lean, clean, KISS** (operator, 2026-09-26 13:03 ET): a simple MDM, with
+  sources fully decoupled and new MDM fields easy to add. When a layer causes
+  a problem, remove the layer; do not tune it or add work around it. First
+  applied in [Keep each Company in one place](issues/17-keep-each-company-in-one-place.md).
+
 ## Decisions so far
 
 - **Source priority is set per entity kind** (operator, 2026-09-24 09:45 ET): when sources
