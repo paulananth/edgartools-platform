@@ -14,10 +14,11 @@ The approval of ticket 08's declared name rules does not activate these.
 
 ## Checklist
 
-- [ ] Close the ticket 04 safety items: suspended identifiers, recheck of an
+- [x] Close the ticket 04 safety items: suspended identifiers, recheck of an
   existing Company before saving, crash recovery of assessments, caller as-of
   publish time, and a real concurrent-run test. Built (Claude, 2026-09-26):
-  ticket 04, "Closing the five open safety items".
+  ticket 04, "Closing the five open safety items". Merged in PR #721
+  (`3ea3a6b1`, 2026-09-26 10:47 ET).
 - [ ] The operator answers two questions (ticket 04, "Suspended identifier"):
   1. When a Company is in review because its own records disagree on an
      identifier (for example two SEC records naming two CIKs), should the
