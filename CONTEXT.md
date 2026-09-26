@@ -14,6 +14,18 @@ _Avoid_: A second identity per role, Person, a Fund name as proof of company leg
 The identity of one natural person, distinct from a Company and shared with an applicable individual Adviser profile.
 _Avoid_: Employer identity, role as identity, same name as proof of sameness
 
+**Security Identity**:
+The identity of one financial instrument. A 13F CUSIP is that identity, and the Security can exist before its issuer is known. One issuer has one Security per CUSIP, so Class A and Class C are two Securities. The reported class title is not the identity.
+_Avoid_: A share class stored on the Company, a second Security for the same CUSIP because a Form 4 used a different title, issuer plus title as proof of sameness
+
+**Security Title**:
+The one display title of a Security. A share class is written as the normalized class, such as Class A, and an instrument with no class is written as its kind, such as Option. A title that names neither waits. Each filing keeps the title its manager wrote.
+_Avoid_: Inheriting another class of the same Company, the most common filed spelling, every spelling as its own Security, a title stored on the Company
+
+**ISSUED_BY**:
+The relationship from a Security to the one mastered issuer. For an operating company that issuer is the Company. For an ETF share it is the Fund Company, the trust that files, not the investment adviser. Filed spellings of that issuer, including an old name, are the same issuer. Each filing keeps the issuer name its manager wrote.
+_Avoid_: BlackRock, Vanguard, or SSGA as the issuer of an iShares, Vanguard, or SPDR share; a security attribute of the Company; a second issuer for a new spelling; a Person as the issuer; a holding
+
 **Relationship Capacity**:
 The kind of relationship a natural person holds at a company — director, officer, employee, ten percent owner, owner, control person — and part of that relationship's identity.
 _Avoid_: A job title, a source form name, evidence of who the person is
@@ -41,6 +53,18 @@ _Avoid_: hint, candidate kind, a decided kind
 **Fund Structure**:
 A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile, whether or not it is a legal person: a registered fund, a privately offered fund or REIT, an exchange-traded commodity or crypto trust, or an insurance company's separate account that pools investors' money. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
 _Avoid_: "Fund kind"; treating every fund as a Company; a business development company, which is a Company with a Fund profile; treating a fund share as the fund itself
+
+**Fund Company**:
+The SEC registrant that files for a fund family, keyed by its CIK. iShares Trust, Vanguard Index Funds, and SPDR S&P 500 ETF Trust are Fund Companies. The adviser that manages them is not.
+_Avoid_: BlackRock, Vanguard, or SSGA as that registrant; a 13F issuer spelling as a new Company
+
+**Fund Series**:
+One fund product under a Fund Company, identified by its SEC series id. It holds Securities. An ETF series is still a Fund Series.
+_Avoid_: The traded share, the investment adviser
+
+**MANAGES_FUND**:
+The relationship from the investment adviser to the Fund Series it manages. BlackRock, Vanguard, and SSGA are advisers. N-CEN names them on the series.
+_Avoid_: ISSUED_BY, the Fund Company, the ETF share
 
 **Branch Identity**:
 The identity of a separately identified branch establishment linked to its head office, including where the branch is not a separate legal person.

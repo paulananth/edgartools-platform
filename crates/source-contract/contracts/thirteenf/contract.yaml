@@ -1,6 +1,6 @@
-# PROTOTYPE Source Contract — 13F information table XML.
-# Columns are the infoTable fields. CIK, accession, period, the pre-Q4-2022
-# thousands multiplier, and the edgartools ticker lookup are not in this file.
+# 13F information table. Emits cusip, the filed title, and the filed issuer
+# name. Security identity, Security Title, and ISSUED_BY are decided later,
+# per docs/specs/clean-mdm/security-identity.md. This file does not create them.
 source: sec.thirteenf.information_table
 version: "prototype-1"
 bronze: { family: sec.thirteenf_infotable }
