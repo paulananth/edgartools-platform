@@ -291,8 +291,12 @@ the dry run before and after.
 
 ## Initialize or migrate the Rules Database
 
-- `edgar-warehouse rules init` creates the Rules Database's table and roles.
-  It connects with `RULES_MIGRATION_DATABASE_URL`, the owner's login.
+- `edgar-warehouse rules init` creates the Rules Database's table and grants
+  its roles their rights; rerunning it changes nothing. It connects with
+  `RULES_MIGRATION_DATABASE_URL`, the owner's login. It does not create the
+  database or the roles: a PostgreSQL 16 database named `rules`, the agent's
+  login (`rules_agent`) and the `rules_approver` role must exist first, and
+  it refuses without them. If they are missing, ask.
 - `edgar-warehouse rules migrate --to-db --root rules --version <v>` saves
   every rules file as a version. `--to-files` writes them back, without
   their comments, and the comments hold decisions. Export to another folder

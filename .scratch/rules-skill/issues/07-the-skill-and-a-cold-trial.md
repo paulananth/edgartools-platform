@@ -202,4 +202,17 @@ Skill first (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill 
     - "a defect always blocks" is written in three places;
     - GLEIF's publication time stays in UTC, as GLEIF names it;
     - `link.sh` also links Claude's skills folder, which Claude needs.
-- [ ] PR and CI.
+- [x] Live command test, 2026-09-27 17:54 ET, on a throwaway PostgreSQL 16:
+  `init` (twice; the same checksum), `migrate --to-db` (twice; the rerun
+  changed nothing), `migrate --to-files` to another folder (all 4 digests
+  equal the repo's: policy `3520e890…`, SEC `742e73c7…`, GLEIF `a10ff20d…`,
+  graph-publication `65c374b5…`), `save`, `status`, `export`,
+  `record-proof`, `approve` as the operator. Refused as they should be:
+  new content under an existing version label; approve by the agent, before
+  proof, with a wrong digest, and twice; a proof for another digest, with a
+  wrong file hash, and a failed proof; activate before approval and without
+  the MDM connections; init by the agent login or on a database not named
+  `rules`. Rules suites: 204 passed (PG16 included). One skill gap fixed:
+  init does not create the database or the roles. Not carried by migrate:
+  `merge/pending-proofs.yaml` (company-mastering ticket 20 removes it).
+- [x] PR and CI: #737, merged 2026-09-27 14:00 ET. The live command test above follows in its own PR.
