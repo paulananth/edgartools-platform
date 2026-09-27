@@ -4,6 +4,11 @@
 # 15:21 ET); they sit in kinds/company.yaml, inactive. The proofs carry no
 # approval: switching a rule on is a separate decision, recorded by filling
 # approved_by and approved_at.
+#
+# Both proofs were measured with the 169-code SEC place table. Rules skill
+# ticket 08 made it the full 309-code table: 11 more codes occur in bronze,
+# touching 3 Companies' address country and no match; none of the 3 is in
+# either proof's sample or adversarial files.
 sec-gleif-name-jurisdiction:
   method: wilson_lower_bound
   one_sided_confidence: 0.95

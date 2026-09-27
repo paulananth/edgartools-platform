@@ -18,6 +18,8 @@ import re
 import unicodedata
 from typing import Any
 
+from edgar_warehouse.rules import files as rules_files
+
 # One spelling per legal form, longest first so "L L P" is not read as "L P".
 _FORMS = (
     ("L L C", "LLC"),
@@ -58,99 +60,22 @@ def sec_legal_form_key(name: Any) -> str:
 
 
 # EDGAR state and country codes (SEC `stateOfIncorporation`, address
-# `stateOrCountry` and `countryCode`) as GLEIF writes a jurisdiction. Built
-# from the descriptions SEC writes beside each code in bronze: 156 codes seen
-# across 76,230 filers (ticket 08, `research/08-edgar-codes.json`).
-_US_STATES = frozenset(
-    [
-        "AL",
-        "AK",
-        "AZ",
-        "AR",
-        "CA",
-        "CO",
-        "CT",
-        "DE",
-        "DC",
-        "FL",
-        "GA",
-        "HI",
-        "ID",
-        "IL",
-        "IN",
-        "IA",
-        "KS",
-        "KY",
-        "LA",
-        "ME",
-        "MD",
-        "MA",
-        "MI",
-        "MN",
-        "MS",
-        "MO",
-        "MT",
-        "NE",
-        "NV",
-        "NH",
-        "NJ",
-        "NM",
-        "NY",
-        "NC",
-        "ND",
-        "OH",
-        "OK",
-        "OR",
-        "PA",
-        "RI",
-        "SC",
-        "SD",
-        "TN",
-        "TX",
-        "UT",
-        "VT",
-        "VA",
-        "WA",
-        "WV",
-        "WI",
-        "WY",
-        "PR",
-        "GU",
-        "VI",
-    ]
-)
+# `stateOrCountry` and `countryCode`) as GLEIF writes a jurisdiction. The table
+# is reference data in `rules/reference/sec-place-codes.yaml`: SEC's whole list
+# (309 codes), with the ISO codes company mastering ticket 08 built from
+# bronze. The policy body carries the same file, so its digest pins it.
+_EDGAR_ISO = {
+    code: row["iso"]
+    for code, row in rules_files.reference("sec-place-codes")["codes"].items()
+    if row["iso"]
+}
 # SEC codes these as states; GLEIF may write them as countries.
-_US_TERRITORIES = frozenset({"PR", "GU", "VI"})
-_EDGAR_CODES = {
-    "A0": "CA-AB", "A1": "CA-BC", "A2": "CA-MB", "A3": "CA-NB", "A4": "CA-NL",
-    "A5": "CA-NS", "A6": "CA-ON", "A8": "CA-QC", "A9": "CA-SK", "Z4": "CA",
-    "1E": "BA", "1H": "EE", "1P": "KZ", "1Q": "LT", "1T": "MH", "1U": "MK",
-    "1Z": "RU", "2A": "SI", "2B": "SK", "2J": "UM", "2K": "UZ", "2M": "DE",
-    "2N": "CZ", "B1": "BW", "B9": "AG", "C0": "AE", "C1": "AR", "C3": "AU",
-    "C4": "AT", "C5": "BS", "C6": "BH", "C8": "BB", "C9": "BE", "D0": "BM",
-    "D1": "BZ", "D5": "BR", "D6": "IO", "D8": "VG", "E0": "BG", "E9": "KY",
-    "F3": "CL", "F4": "CN", "F5": "TW", "F8": "CO", "G2": "CR", "G4": "CY",
-    "G7": "DK", "G8": "DO", "H1": "EC", "H2": "EG", "H3": "SV", "H9": "FI",
-    "I0": "FR", "J1": "GI", "J3": "GR", "K3": "HK", "K5": "HU", "K6": "IS",
-    "K7": "IN", "K8": "ID", "L2": "IE", "L3": "IL", "L6": "IT", "L7": "CI",
-    "L8": "JM", "M0": "JP", "M2": "JO", "M3": "KE", "M5": "KR", "M6": "KW",
-    "M8": "LB", "N0": "LR", "N2": "LI", "N4": "LU", "N8": "MY", "O1": "MT",
-    "O4": "MU", "O5": "MX", "O9": "MC", "P4": "OM", "P7": "NL", "P8": "CW",
-    "Q1": "VN", "Q2": "NZ", "Q5": "NG", "Q8": "NO", "R0": "PK", "R1": "PA",
-    "R5": "PE", "R6": "PH", "R9": "PL", "S1": "PT", "S3": "QA", "T0": "SA",
-    "T3": "ZA", "U0": "SG", "U3": "ES", "U7": "KN", "V6": "SZ", "V7": "SE",
-    "V8": "CH", "W0": "TZ", "W1": "TH", "W5": "TT", "W6": "TN", "W8": "TR",
-    "X0": "GB", "X1": "US", "X3": "UY", "X5": "VE", "Y0": "WS", "Y7": "GG",
-    "Y8": "IM", "Y9": "JE", "Z2": "RS",
-}  # fmt: skip
+_US_TERRITORIES = frozenset({"PR", "GU", "VI", "MP", "AS"})
 
 
 def edgar_jurisdiction(code: Any) -> str | None:
     """An EDGAR state or country code as an ISO jurisdiction, or None if unknown."""
-    code = str("" if code is None else code).strip().upper()
-    if code in _US_STATES:
-        return f"US-{code}"
-    return _EDGAR_CODES.get(code)
+    return _EDGAR_ISO.get(str("" if code is None else code).strip().upper())
 
 
 def jurisdictions_agree(sec: str | None, gleif: str | None) -> bool:

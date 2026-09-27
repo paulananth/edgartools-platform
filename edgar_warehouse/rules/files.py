@@ -132,29 +132,40 @@ def mdm_contract(source_name: str, source_code: str, root: Path | None = None) -
 
 
 def policy(root: Path | None = None) -> dict:
-    """The Mastering Policy: `merge/policy.yaml` plus one file per kind."""
-    folder = (root or ROOT) / "merge"
-    body = load(folder / "policy.yaml")
-    body["kinds"] = {path.stem: load(path) for path in sorted((folder / "kinds").glob("*.yaml"))}
+    """The Mastering Policy: `merge/policy.yaml`, one file per kind, and every
+    reference table, so the policy's digest also covers the tables its rules
+    read (an edit to `reference/sec-place-codes.yaml` is a new policy)."""
+    root = root or ROOT
+    body = load(root / "merge" / "policy.yaml")
+    body["kinds"] = {path.stem: load(path) for path in sorted((root / "merge" / "kinds").glob("*.yaml"))}
+    body["reference"] = {path.stem: load(path) for path in sorted((root / "reference").glob("*.yaml"))}
     return body
 
 
 def write_policy(body: dict, root: Path) -> None:
-    """Export the one stored policy into the existing authoring layout."""
-    folder = root / "merge"
-    kinds = body.get("kinds", {})
-    if not isinstance(kinds, dict) or any(not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) for name in kinds):
-        raise RulesFileError("Policy kinds must be path-safe identifiers")
-    extra = {p.stem for p in (folder / "kinds").glob("*.yaml")} - set(kinds)
-    if extra:
-        raise RulesFileError("Output folder has kinds absent from this version; use an empty export folder")
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / "policy.yaml").write_text(dumps({k: v for k, v in body.items() if k != "kinds"}), encoding="utf-8")
-    (folder / "kinds").mkdir(exist_ok=True)
-    for name, value in kinds.items():
-        (folder / "kinds" / f"{name}.yaml").write_text(dumps(value), encoding="utf-8")
+    """Export the one stored policy into the existing authoring layout: the
+    reverse of `policy()`, so kinds and reference tables go back to their own
+    files."""
+    split = {"kinds": root / "merge" / "kinds", "reference": root / "reference"}
+    for key, folder in split.items():
+        parts = body.get(key, {})
+        if not isinstance(parts, dict) or any(not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) for name in parts):
+            raise RulesFileError(f"Policy {key} must be path-safe identifiers")
+        if {p.stem for p in folder.glob("*.yaml")} - set(parts):
+            raise RulesFileError(f"Output folder has {key} absent from this version; use an empty export folder")
+    (root / "merge").mkdir(parents=True, exist_ok=True)
+    (root / "merge" / "policy.yaml").write_text(dumps({k: v for k, v in body.items() if k not in split}), encoding="utf-8")
+    for key, folder in split.items():
+        folder.mkdir(parents=True, exist_ok=True)
+        for name, value in body.get(key, {}).items():
+            (folder / f"{name}.yaml").write_text(dumps(value), encoding="utf-8")
 
 
 def pending_proofs(root: Path | None = None) -> dict:
     """Proofs of declared rules that wait for the operator's approval."""
     return load((root or ROOT) / "merge" / "pending-proofs.yaml")
+
+
+def reference(name: str, root: Path | None = None) -> dict:
+    """A reference table rules and readers share: `reference/<name>.yaml`."""
+    return load((root or ROOT) / "reference" / f"{name}.yaml")

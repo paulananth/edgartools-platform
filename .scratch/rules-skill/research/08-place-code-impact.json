@@ -1,0 +1,75 @@
+{
+ "codes_whose_answer_changes": {
+  "1B": [
+   null,
+   "AM"
+  ],
+  "2Q": [
+   null,
+   "GE"
+  ],
+  "B6": [
+   null,
+   "AD"
+  ],
+  "E3": [
+   null,
+   "KH"
+  ],
+  "F6": [
+   null,
+   "CX"
+  ],
+  "J0": [
+   null,
+   "GH"
+  ],
+  "N5": [
+   null,
+   "MO"
+  ],
+  "P0": [
+   null,
+   "MN"
+  ],
+  "X2": [
+   null,
+   "BF"
+  ],
+  "Z0": [
+   null,
+   "BL"
+  ],
+  "Z5": [
+   null,
+   "ME"
+  ]
+ },
+ "companies_touched": [
+  {
+   "cik": "0000946936",
+   "name": "DESWELL INDUSTRIES INC",
+   "name_rules": "defer: no jurisdiction or postal agreement"
+  },
+  {
+   "cik": "0001948294",
+   "name": "CL Workshop Group Ltd",
+   "name_rules": "no GLEIF record with this name"
+  },
+  {
+   "cik": "0002024656",
+   "name": "Kandal M Venture Ltd",
+   "name_rules": "no GLEIF record with this name"
+  }
+ ],
+ "distinct_codes_in_bronze": 182,
+ "fields": {
+  "business.countryCode": 12,
+  "mailing.countryCode": 17
+ },
+ "filers_touched": 19,
+ "unplaced_in_bronze": {
+  "I9": 1,
+  "XX": 23
+ }
+}

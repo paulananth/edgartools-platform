@@ -66,6 +66,7 @@ non-SEC source. The approved plan is [plan.md](plan.md).
 | 05 | [Silver outputs](issues/05-silver-outputs.md) | built when a trial needs it |
 | 06 | [Profile any source](issues/06-profile-any-source.md) | built when a trial needs it |
 | 07 | [The skill, then Company trials](issues/07-the-skill-and-a-cold-trial.md) | 01 (merged) |
+| 08 | [SEC place codes: one reference table in rules/](issues/08-sec-place-codes-reference-table.md) | — |
 
 ## Not yet specified
 
