@@ -1,0 +1,190 @@
+# GLEIF Golden Copy: the MDM mapping of GLEIF's three full files (Level 1 LEI-CDF 3.1,
+# relationships RR-CDF 2.1, reporting exceptions REPEX 2.1), read by the native reader
+# `edgar_warehouse/mdm/clean/gleif_source.py`. The reader fixes the folder name (`gleif`),
+# `native_member`, and `schema_version` = `adapter.version` = gleif-native-record-v1.
+# One contract per file (operator, 2026-09-27). The publication-level contract (the three
+# member codes and the approved Company LEI scope) has no place in rules/ yet: it lives in
+# the registered dataset's `native_contract`.
+source: gleif
+bronze:
+  # One capture family for all three files, named like the rules folder (operator, 2026-09-27).
+  family: gleif
+mdm:
+  gleif.level1.v1:
+    contract:
+      provider: GLEIF
+      family: gleif
+      schema_version: gleif-native-record-v1
+      record_key: the LEI (20 characters, ISO 17442 check digits)
+      publication_key: one GLEIF Golden Copy publication (its publisher time, e.g. 2026-09-11
+        16:00 UTC), numbered by that time; the three member files are verified together
+      effective_time: Registration.LastUpdateDate of the record (the reader sets it)
+      semantics: patch
+      completeness: a full Golden Copy holds every LEI GLEIF has ever published, current and
+        historical, each once; a delta holds changes only; no retirement by absence
+      # Expected, explained exclusions only (operator, 2026-09-27): outside the approved Company
+      # scope; a kind MDM does not take yet (identity kind, and a relationship type left unmapped);
+      # a valid reporting exception. The same list on all three contracts. Every defect blocks,
+      # including an LEI that fails its check digit (256 L1, 1 RR, 99 REPEX in 2026-09-11).
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - unsupported_identity_kind
+      - unsupported_relationship_type
+      - reported_parent_exception
+      # The reader accepts only the Golden Copy family (`validate_release`).
+      publication_families:
+      - golden_copy
+      adapter:
+        version: gleif-native-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        native_member: level1
+        record_key:
+        - LEI.$
+        record_key_format: lei
+        # Only GENERAL is a Company (`matching.py`); the other categories wait with their Probable
+        # Kind (policy-language.md). SOLE_PROPRIETOR is left unnamed: Person is not settled.
+        kind_field: Entity.EntityCategory.$
+        kind_values:
+          GENERAL: company
+        probable_kind_values:
+          FUND: fund_structure
+          BRANCH: branch
+          RESIDENT_GOVERNMENT_ENTITY: government
+          INTERNATIONAL_ORGANIZATION: international_organization
+        # Only the LEI. GLEIF's other ids (validation authority, CIF, SIREN, fund numbers, successor
+        # LEIs) are left out this round; lookup-only identifiers are an open question (operator,
+        # 2026-09-27).
+        identifiers:
+          lei: LEI.$
+        identifier_formats:
+          lei: lei
+        fields:
+          name: Entity.LegalName.$
+          jurisdiction: Entity.LegalJurisdiction.$
+          # GLEIF's legal address, one structured value in the one address field, SEC first (operator,
+          # 2026-09-24). AddressNumber, AddressNumberWithinBuilding and MailRouting have no component.
+          address:
+            components:
+              street: Entity.LegalAddress.FirstAddressLine.$
+              street2:
+                lines: Entity.LegalAddress.AdditionalAddressLine
+              city: Entity.LegalAddress.City.$
+              region: Entity.LegalAddress.Region.$
+              postcode: Entity.LegalAddress.PostalCode.$
+              country: Entity.LegalAddress.Country.$
+          # The ELF code as written; 8888 means 'no ELF code' and cannot be made unknown yet. No field
+          # for the free-text OtherLegalForm (operator, 2026-09-27).
+          gleif_legal_form: Entity.LegalForm.EntityLegalFormCode.$
+          gleif_entity_status: Entity.EntityStatus.$
+          gleif_registration_status: Registration.RegistrationStatus.$
+          gleif_initial_registration: Registration.InitialRegistrationDate.$
+          # The raw text: the Name Census compares this exact string (`matching.py`).
+          gleif_last_update: Registration.LastUpdateDate.$
+          gleif_next_renewal: Registration.NextRenewalDate.$
+          gleif_managing_lou: Registration.ManagingLOU.$
+          gleif_validation_source: Registration.ValidationSources.$
+          # The registration-authority code and entity id stay fields, not identifiers (operator,
+          # 2026-09-27). Under RA000665 (SEC EDGAR) the id is a CIK, a series id or a file number.
+          gleif_registration_authority: Entity.RegistrationAuthority.RegistrationAuthorityID.$
+          gleif_registration_authority_entity_id: Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$
+          gleif_entity_creation_date: Entity.EntityCreationDate.$
+        # The reader keeps the whole native record under `_native`; file hashes travel as occurrences.
+        provenance:
+          native_record: _native
+        # What the SEC-to-GLEIF postcode rule compares: headquarters, kept out of the fields.
+        matching:
+          headquarters_postal_code: Entity.HeadquartersAddress.PostalCode.$
+          headquarters_country: Entity.HeadquartersAddress.Country.$
+  gleif.relationships.v1:
+    contract:
+      provider: GLEIF
+      family: gleif
+      schema_version: gleif-native-record-v1
+      # Paths run over the reader's reshaped row (start, end, relationship_type, valid_from,
+      # valid_to, status, registration_status, _native), not the raw file. The three together are
+      # unique over the 2026-09-11 file (487,721 records).
+      record_key: start LEI, relationship type and end LEI together
+      publication_key: one GLEIF Golden Copy publication (its publisher time, e.g. 2026-09-11
+        16:00 UTC), numbered by that time; the three member files are verified together
+      effective_time: Registration.LastUpdateDate of the record (the reader sets it)
+      semantics: patch
+      completeness: a full Golden Copy holds every relationship record GLEIF has ever published,
+        current and historical, each once; a delta holds changes only; no retirement by absence
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - unsupported_identity_kind
+      - unsupported_relationship_type
+      - reported_parent_exception
+      publication_families:
+      - golden_copy
+      adapter:
+        version: gleif-native-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        native_member: relationships
+        record_key:
+        - start
+        - relationship_type
+        - end
+        # The reader admits a pair only when both LEIs are in the approved Company scope. A company
+        # record from this code fails its batch until company.yaml lists the code in
+        # defaults.sources: a merge-rule change awaiting its own approval (operator, 2026-09-27).
+        # No `lei` identifier on the start node yet: an open design question (operator, 2026-09-27).
+        kind: company
+        relationships:
+        - type_field: relationship_type
+          # Only accounting consolidation (operator, 2026-09-27). IS_INTERNATIONAL_BRANCH_OF and the
+          # fund links (IS_FUND-MANAGED_BY, IS_SUBFUND_OF, IS_FEEDER_TO) stay captured evidence:
+          # Fund and Branch wait.
+          type_values:
+            IS_DIRECTLY_CONSOLIDATED_BY: IS_DIRECTLY_CONSOLIDATED_BY
+            IS_ULTIMATELY_CONSOLIDATED_BY: IS_ULTIMATELY_CONSOLIDATED_BY
+          target_key:
+          - end
+          target_source: gleif.level1.v1
+          valid_from: valid_from
+          valid_to: valid_to
+          scope: accounting consolidation as GLEIF states it
+          # GLEIF's own statuses; the text NULL occurs and blocks in the reader.
+          properties:
+            source_relationship_status: status
+            source_registration_status: registration_status
+        provenance:
+          native_record: _native
+  gleif.reporting_exceptions.v1:
+    contract:
+      provider: GLEIF
+      family: gleif
+      schema_version: gleif-native-record-v1
+      record_key: the LEI and the exception category together
+      publication_key: one GLEIF Golden Copy publication (its publisher time, e.g. 2026-09-11
+        16:00 UTC), numbered by that time; the three member files are verified together
+      effective_time: unknown; an exception record carries no dates
+      semantics: patch
+      completeness: a full Golden Copy holds every reporting exception GLEIF has ever published,
+        current and historical, each once, including exceptions GLEIF marks deleted; a delta
+        holds changes only; no retirement by absence
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - unsupported_identity_kind
+      - unsupported_relationship_type
+      - reported_parent_exception
+      publication_families:
+      - golden_copy
+      adapter:
+        version: gleif-native-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        native_member: reporting_exceptions
+        record_key:
+        - LEI.$
+        - ExceptionCategory.$
+        # Inert today: the reader sets every valid exception aside as reported_parent_exception
+        # (retained evidence, never a parent edge) and never maps it.
+        kind: company
+        provenance:
+          native_record: _native

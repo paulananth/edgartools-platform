@@ -74,3 +74,42 @@ differed):
 
 **Not a pass** under the ticket 07 bar. Round 3 is the last round before the
 results go to the operator.
+
+## Round 3 (2026-09-27 04:47–13:14 ET), the last round under the cap
+
+Same sandboxes and two phases as round 2. Answer key and tags:
+[answer-key.md](round-3/answer-key.md).
+
+| Source | Equal | Different | Missing | Extra | Questions | Should have inferred |
+|---|---|---|---|---|---|---|
+| [SEC submissions](round-3/sec/) | 25 | 0 | 9 (all `provenance`) | 2 | 8 | 0 |
+| [GLEIF](round-3/gleif/) | 69 | 6 | 0 | 3 | 12 | 4 (names, family, both blocking questions) |
+
+**Better than round 2.** GLEIF has no missing keys (round 2 had 9). The agent
+asked which relationship types are in scope, which round 2 never did, and it
+wrote the kinds, identifiers, fields and address exactly as proven. SEC asked
+nothing it should have inferred.
+
+**Every remaining difference, sorted:**
+- **The operator's later decisions (the proven SEC file is behind them):** the
+  9 SEC `provenance` keys (trace beside the record) and the extra `sec_ein`
+  (lookup only).
+- **Real open questions for the operator:**
+  - SEC: the agent made filers held back by the Company rule non-blocking. The
+    record keeps them blocking; "wait in the Stage" was recommended, never
+    decided.
+  - GLEIF: the agent made `unsupported_relationship_type` non-blocking on all
+    three members (4 of the 9 GLEIF differences). Under the proven file a fund
+    or branch link whose two ends are both in the approved Company list blocks
+    the run, although the record says those links "stay as captured source
+    evidence". The proven file may be wrong here.
+- **Skill gaps:**
+  - The relationship record key: the agent profiled GLEIF's unique key as
+    start, end, type, then wrote start, type, end. Key order changes each
+    record's identity. The skill should say: keep the source's own key order.
+  - The relationship `scope` text is a free label (no code reads it). The skill
+    should give a form for it: `<provider> <relationship family>`.
+
+**Not a pass** under the ticket 07 bar: GLEIF asked 4 questions the skill
+should have answered, and 6 keys differ. Per the cap, the results go to the
+operator.

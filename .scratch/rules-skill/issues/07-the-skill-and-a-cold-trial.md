@@ -117,8 +117,19 @@ Skill first (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill 
     only (company mastering ticket 19 measured matching on it).
   - **Not a pass.** The skill was fixed for round 3 in `12c59020`. Evidence is
     in `trials/round-2/`.
-- [ ] Round 3 (started 2026-09-27 04:47 ET): the last round under the cap.
-  The results go to the operator afterwards, pass or not.
+- [x] Round 3 (2026-09-27 04:47 – 13:14 ET), the last round under the cap:
+  - **SEC:** 25 equal, 0 different, 9 missing, 2 extra. All 11 follow the
+    operator's later decisions (trace beside the record; EIN lookup only)
+    except one: held-back filers made non-blocking. 8 questions, 0 "should
+    have inferred".
+  - **GLEIF:** 69 equal, 6 different, 0 missing, 3 extra. 12 questions, 4
+    "should have inferred". The differences: `unsupported_relationship_type`
+    non-blocking on all three members (a real question; the proven file may be
+    wrong), the relationship key order, and the relationship scope label.
+  - **Operator decision during the round:** SEC trace stays beside the record
+    (05:21 ET).
+  - **Not a pass.** Evidence and the sorted differences are in
+    `trials/round-3/` and the trials README. The results go to the operator.
 - [ ] Build only the commands a trial round shows the skill needs (tickets
   02–06 as a menu).
 - [ ] All Company data pipelines on the skill, tested.

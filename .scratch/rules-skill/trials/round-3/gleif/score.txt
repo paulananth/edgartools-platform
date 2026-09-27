@@ -1,0 +1,90 @@
+digest equal: False
+
+## gleif.level1.v1  <->  gleif.level1.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  'the LEI (20 characters, ISO 17442 check digits)'
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  'one GLEIF Golden Copy publication (its publisher time, e.g. 2026-09-11 16:00 UTC), numbered by that time; the three member files are verified together'
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  'Registration.LastUpdateDate of the record (the reader sets it)'
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  'a full Golden Copy holds every LEI GLEIF has ever published, current and historical, each once; a delta holds changes only; no retirement by absence'
+  different nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial='unsupported_relationship_type'
+  extra     nonblocking_deferred_reasons[3]: proven=None trial='reported_parent_exception'
+
+## gleif.relationships.v1  <->  gleif.relationships.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  'start LEI, relationship type and end LEI together'
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  'one GLEIF Golden Copy publication (its publisher time, e.g. 2026-09-11 16:00 UTC), numbered by that time; the three member files are verified together'
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  'Registration.LastUpdateDate of the record (the reader sets it)'
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  'a full Golden Copy holds every relationship record GLEIF has ever published, current and historical, each once; a delta holds changes only; no retirement by absence'
+  different record_key[1]: proven='end' trial='relationship_type'
+  different record_key[2]: proven='relationship_type' trial='end'
+  different relationships[0].scope: proven='GLEIF accounting consolidation' trial='accounting consolidation as GLEIF states it'
+  different nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial='unsupported_relationship_type'
+  extra     nonblocking_deferred_reasons[3]: proven=None trial='reported_parent_exception'
+
+## gleif.reporting_exceptions.v1  <->  gleif.reporting_exceptions.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  'the LEI and the exception category together'
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  'one GLEIF Golden Copy publication (its publisher time, e.g. 2026-09-11 16:00 UTC), numbered by that time; the three member files are verified together'
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  'unknown; an exception record carries no dates'
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  'a full Golden Copy holds every reporting exception GLEIF has ever published, current and historical, each once, including exceptions GLEIF marks deleted; a delta holds changes only; no retirement by absence'
+  different nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial='unsupported_relationship_type'
+  extra     nonblocking_deferred_reasons[3]: proven=None trial='reported_parent_exception'
+
+totals: {'equal': 69, 'different': 6, 'missing': 0, 'extra': 3}
