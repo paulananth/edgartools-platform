@@ -148,7 +148,9 @@ def test_deploy_script_conditionally_injects_bookkeeping_database_url_into_wareh
     text = _read(DEPLOY_SCRIPT)
 
     assert '{"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn}' in text
-    assert "if bookkeeping_postgres_dsn_secret_arn:" in text
+    # Original task families keep the optional legacy connection. Separate
+    # journal task families use only their clean Bookkeeping connection.
+    assert "if bookkeeping_postgres_dsn_secret_arn and not fresh:" in text
     assert 'is_empty "$BOOKKEEPING_POSTGRES_DSN_SECRET_ARN" && fail' not in text
 
 
