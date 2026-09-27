@@ -158,3 +158,8 @@ def write_policy(body: dict, root: Path) -> None:
 def pending_proofs(root: Path | None = None) -> dict:
     """Proofs of declared rules that wait for the operator's approval."""
     return load((root or ROOT) / "merge" / "pending-proofs.yaml")
+
+
+def reference(name: str, root: Path | None = None) -> dict:
+    """A reference table rules and readers share: `reference/<name>.yaml`."""
+    return load((root or ROOT) / "reference" / f"{name}.yaml")
