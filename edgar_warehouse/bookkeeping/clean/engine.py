@@ -4,6 +4,7 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass
+from datetime import UTC
 from uuid import uuid4, uuid5, UUID
 
 from sqlalchemy import text
@@ -322,7 +323,7 @@ class Bookkeeping:
         return envelope(producer=producer, event_key=event_key,
                         run_id=str(event["run_id"]), source=document.get("source", submission["name"]),
                         feed=scope.get("feed", document.get("bronze", {}).get("family", submission["target"])),
-                        event_type=event_type, occurred_at=event["created_at"].isoformat(),
+                        event_type=event_type, occurred_at=event["created_at"].astimezone(UTC).isoformat(),
                         scope={"step": event["step"], "unit_key": event["unit_key"], "target": submission["target"]},
                         evidence=[evidence,
                                   {"uri": f"bookkeeping-outbox:///{event['event_id']}", "sha256": digest(event["payload"])}])

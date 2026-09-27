@@ -82,3 +82,14 @@ Independent GoF review is available and was applied: one narrow publication
 Adapter is justified by the two pre-existing mirrors. Fenced transactions,
 mandatory reconciliation and source-independent capability selection remain
 functions, without a new inheritance tree.
+
+- Final review fix (2026-09-27 14:10 ET): producer timestamps normalize to UTC
+  before hashing. Real Bookkeeping and MDM sessions in America/New_York pass
+  duplicate/lost-ack tests; two PostgreSQL tests passed. Fresh CLI dispatch and
+  SEC transport refuse old ungated work when the journal runtime is configured.
+  This means fresh connection wiring must not replace legacy scheduled task
+  revisions before their configured replacement qualifies.
+
+- Fresh CLI/transport safeguards and existing SEC/architecture/CLI coverage: 36
+  passed (2026-09-27 14:10 ET). Refreshed main advanced only two Rules research
+  documents; rebase changed no tested source, configuration or test files.

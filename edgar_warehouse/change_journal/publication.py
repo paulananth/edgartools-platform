@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from sqlalchemy import text
 
 from .store import ChangeJournal, JournalConflict, envelope
@@ -71,7 +73,7 @@ class JournalPublisher:
                 "feed", document.get("bronze", {}).get("family", submission["target"])
             ),
             event_type="mdm.committed",
-            occurred_at=row["created_at"].isoformat(),
+            occurred_at=row["created_at"].astimezone(UTC).isoformat(),
             scope={"batch_id": batch, "generation": str(payload["generation"])},
             evidence=[{"uri": f"mdm-outbox:///{key}", "sha256": expected_hash}],
         )

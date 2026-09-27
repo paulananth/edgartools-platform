@@ -29,7 +29,10 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
     ) as conn:
         conn.exec_driver_sql(f"CREATE DATABASE {dbname}")
     owner = create_engine(databases.destination_admin.url.set(database=dbname))
-    runtime = create_engine(databases.mdm.url.set(database=dbname))
+    runtime = create_engine(
+        databases.mdm.url.set(database=dbname),
+        connect_args={"options": "-c timezone=America/New_York"},
+    )
     try:
         migrate(owner, application_role="clean_application")
         migrate_guard(owner, runtime_role="clean_application")

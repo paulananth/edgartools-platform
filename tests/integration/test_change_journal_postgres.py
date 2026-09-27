@@ -269,3 +269,49 @@ def test_cli_delivery_recovery_reports_pending_without_executing_work(
     assert book.status(rid)["pending_deliveries"] == 0
     assert book.status(rid)["counts"] == {"verified": 1}
     capsys.readouterr()
+
+
+def test_bookkeeping_producer_timezone_retains_identical_retry_receipt(
+    databases, tmp_path
+):
+    from sqlalchemy import create_engine
+    from edgar_warehouse.bookkeeping.clean.capabilities import standard_registry
+    from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
+    from tests.integration.test_configured_bookkeeping_postgres import complete, submit
+
+    timezone_engine = create_engine(
+        databases.runtime.url, connect_args={"options": "-c timezone=America/New_York"}
+    )
+    try:
+        book = Bookkeeping(timezone_engine, standard_registry())
+        book, rid, _, _ = submit(databases, tmp_path, count=1, book=book)
+        complete(book, rid)
+        assert book.deliver(databases.ledger, rid) == 1
+        with timezone_engine.connect() as conn:
+            event = (
+                conn.execute(
+                    text(
+                        "SELECT * FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid)"
+                    ),
+                    {"r": rid},
+                )
+                .mappings()
+                .one()
+            )
+        receipt = databases.ledger.get("bookkeeping", str(event["event_id"]))
+        assert receipt["event"]["occurred_at"].endswith("+00:00")
+        other_timezone = Bookkeeping(databases.runtime, standard_registry())
+        with databases.runtime.connect() as conn:
+            same = (
+                conn.execute(
+                    text(
+                        "SELECT * FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid)"
+                    ),
+                    {"r": rid},
+                )
+                .mappings()
+                .one()
+            )
+        assert databases.ledger.append(other_timezone.journal_event(same)) == receipt
+    finally:
+        timezone_engine.dispose()

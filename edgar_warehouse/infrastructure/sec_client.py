@@ -127,6 +127,8 @@ def download_sec_conditionally(
     last_modified: str | None = None,
     before_request=None,
 ) -> ConditionalSecResponse:
+    if os.environ.get("CHANGE_JOURNAL_DATABASE_URL") and before_request is None:
+        raise WarehouseRuntimeError("Fresh provider requests require journal acknowledgement and current Bookkeeping authority")
     import httpx
 
     _validate_sec_url(url)

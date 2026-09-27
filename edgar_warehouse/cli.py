@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 from edgar_warehouse.runtime import run_command
 
@@ -1826,4 +1827,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if os.environ.get("CHANGE_JOURNAL_DATABASE_URL") and args.command not in {"rules", "bookkeeping", "change-journal"}:
+        parser.error(
+            "Fresh Change Journal runtime requires configured Rules/Bookkeeping commands. "
+            "Legacy commands must run on their original stack until their feed qualifies."
+        )
     return args.handler(args)

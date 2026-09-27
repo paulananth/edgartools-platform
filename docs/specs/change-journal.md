@@ -126,6 +126,10 @@ delivery. Fresh provisioning never creates legacy source/mirror tables.
 control stores, with separate NOLOGIN owners and restricted runtime logins;
 it imports nothing and removes nothing. Original acquisition connection
 helpers reject a runtime with `CHANGE_JOURNAL_DATABASE_URL` configured.
+That marker also restricts the CLI to `rules`, `bookkeeping` and
+`change-journal`, and refuses ungated SEC transport. Legacy scheduled commands
+cannot be run with the fresh connections; keep their original task revisions
+until their complete replacement feed qualifies.
 
 Deploy through the existing AWS application workflow only after all affected
 feeds pass counts, authorization, durable receipts, completeness, destination
