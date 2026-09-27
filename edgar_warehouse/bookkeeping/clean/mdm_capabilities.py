@@ -97,7 +97,17 @@ def register_mdm(registry, mdm_engine, *, publisher_factory=None):
         return observed is not None and book.artifacts.json(found["evidence"]) == observed
 
     def publication_verified(book, context):
-        units = [context["item"]["unit"]] if "item" in context else context["manifest"]["units"]
+        if "item" in context:
+            units = [context["item"]["unit"]]
+        else:
+            if context["status"]["counts"].get("verified", 0) != context["run"]["expected_count"]:
+                return False
+            _, config, _, items = book._frozen(str(context["run"]["run_id"]))
+            stages = {s["name"] for s in config["steps"] if s["operation"].startswith("mdm.")}
+            units = [book._resolve_item({**item, "run_id": context["run"]["run_id"]})["unit"]
+                     for item in items if item["step"] in stages]
+            if not units and items:
+                return False
         for unit in units:
             body = book.artifacts.json(unit["input"])
             key = body.get("batch_id") or body.get("command", {}).get("batch_id")

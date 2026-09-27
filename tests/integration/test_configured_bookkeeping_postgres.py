@@ -19,7 +19,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.bookkeeping.clean.capabilities import standard_registry
+from edgar_warehouse.bookkeeping.clean.capabilities import receipt_for, standard_registry
 from edgar_warehouse.bookkeeping.clean.config import Blocked, Capability, canonical, digest
 from edgar_warehouse.bookkeeping.clean.database import migrate
 from edgar_warehouse.bookkeeping.clean.destinations import ChangeLedger, guard, migrate_guard, migrate_ledger
@@ -275,6 +275,129 @@ def test_out_of_order_and_stage_prerequisites(databases, tmp_path):
     assert next(c for c in book.status(rid)["checkpoints"] if c["scope"] == "s0")["ordinal"] == 2
     state = run(book, rid, databases.ledger)
     assert state["run"]["state"] == "complete"
+
+
+def staged_submission(databases, tmp_path):
+    """Different stage cardinalities and transformed output; no source callback."""
+    executions = []
+    registry = standard_registry()
+
+    def expected(book, item):
+        return book.artifacts.verified(item["unit"]["input"]).upper() + b"|transformed"
+
+    def transform(book, item, authority):
+        executions.append(item["unit_key"])
+        output = book.artifacts.put_bytes(item["unit"]["output"], expected(book, item))
+        return receipt_for(book, item, output)
+
+    def reconcile(book, item, authority):
+        try:
+            data = book.artifacts.read(item["unit"]["output"])
+        except Blocked:
+            return None
+        if data != expected(book, item):
+            raise Blocked("Transformed output differs from verified input")
+        return receipt_for(book, item, book.artifacts.put_bytes(item["unit"]["output"], data))
+
+    def verify(book, item, receipt):
+        evidence = book.artifacts.json(receipt["evidence"])
+        return (book.artifacts.verified({"uri": receipt["uri"], "sha256": receipt["sha256"]}) == expected(book, item)
+                and evidence["input"] == item["unit"]["input"]
+                and evidence["output"] == {"uri": receipt["uri"], "sha256": receipt["sha256"]})
+
+    registry.operation("fixture.transform", Capability("1", transform, reconcile, verify))
+    book = Bookkeeping(databases.runtime, registry)
+    body = config(3)
+    steps = body["bookkeeping"]["targets"]["silver"]["steps"]
+    for step, name, requires in zip(steps, ("z_capture", "a_transform", "b_finish"),
+                                    ([], ["z_capture"], ["a_transform"])):
+        step.update(name=name, requires=requires)
+    steps[1]["operation"] = "fixture.transform"
+
+    def unit(stage, key, source):
+        output = (tmp_path / stage / key).as_uri()
+        return {"keys": {"id": key, "destination": output}, "input": source,
+                "output": output, "cursor": {"key": key}}
+
+    capture = [unit("capture", f"raw{n}", book.artifacts.put_bytes((tmp_path / f"input{n}").as_uri(),
+                f"input-{n}".encode())) for n in range(2)]
+    transform_units = [unit("transform", f"parsed{n}", {"from": {"step": "z_capture", "key": f"raw{n % 2}"}})
+                       for n in range(3)]
+    finish = [unit("finish", "final", {"from": {"step": "a_transform", "key": "parsed2"}})]
+    manifest = {"version": 2, "steps": {"z_capture": capture, "a_transform": transform_units, "b_finish": finish}}
+    inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", manifest)
+    name = "stages-" + uuid4().hex
+    saved = databases.rules.save("pipeline", name, "1", body)
+    databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    databases.rules.activate("pipeline", name, "1")
+    rules = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri() + "/rules")
+    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
+    return book, rid, manifest, executions
+
+
+def test_stage_inputs_follow_verified_outputs_with_distinct_work_accounting(databases, tmp_path):
+    book, rid, manifest, executions = staged_submission(databases, tmp_path)
+    assert book.claim(rid, "a_transform", "parsed0", sleep=lambda _: None) is None
+    state = run(book, rid, databases.ledger, limit=3)
+    assert state["run"]["expected_count"] == 6
+    assert state["counts"]["verified"] == 3
+    assert state["run"]["state"] == "waiting"
+    assert executions == ["parsed0"]
+    assert book.claim(rid, "b_finish", "final", sleep=lambda _: None) is None
+    book.resume(rid)
+    state = run(book, rid, databases.ledger)
+    assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 6}
+    assert executions == ["parsed0", "parsed1", "parsed2"]
+    assert book.artifacts.read(manifest["steps"]["b_finish"][0]["output"]) == b"INPUT-0|transformed"
+    assert {c["scope"]: c["ordinal"] for c in state["checkpoints"]} == {"z_capture": 1, "a_transform": 2, "b_finish": 0}
+    receipt = next(i["receipt"] for i in state["items"] if i["step"] == "b_finish")
+    assert book.artifacts.json(receipt["evidence"])["input"]["uri"] == manifest["steps"]["a_transform"][2]["output"]
+    with databases.runtime.connect() as conn:
+        frozen = conn.scalar(text("SELECT unit->'input' FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) AND step='b_finish'"), {"r": rid})
+        assert frozen == {"from": {"step": "a_transform", "key": "parsed2"}}
+    book.resume(rid)
+    run(book, rid, databases.ledger)
+    assert executions == ["parsed0", "parsed1", "parsed2"]
+
+
+def test_chained_transform_reconciles_lost_ack_before_reexecution(databases, tmp_path):
+    book, rid, manifest, executions = staged_submission(databases, tmp_path)
+    run(book, rid, databases.ledger, limit=2)
+    claim = book.claim(rid, "a_transform", "parsed0")
+    capability = book.registry.operations["fixture.transform"]
+    retained = capability.execute(book, book.item(claim), Authority(claim))
+    expire(databases, claim)
+    book.resume(rid)
+    state = run(book, rid, databases.ledger)
+    assert state["run"]["state"] == "complete"
+    assert executions == ["parsed0", "parsed1", "parsed2"]
+    assert next(i["receipt"] for i in state["items"] if i["unit_key"] == "parsed0") == retained
+
+
+@pytest.mark.parametrize("corruption", ["output", "evidence", "missing_receipt"])
+def test_dependency_corruption_blocks_downstream_without_execution(databases, tmp_path, corruption):
+    book, rid, manifest, executions = staged_submission(databases, tmp_path)
+    state = run(book, rid, databases.ledger, limit=2)
+    upstream = next(i for i in state["items"] if i["step"] == "z_capture" and i["unit_key"] == "raw0")
+    if corruption == "missing_receipt":
+        with databases.admin.begin() as conn:
+            conn.execute(text("UPDATE bookkeeping.work_item SET receipt=NULL WHERE run_id=CAST(:r AS uuid) AND step='z_capture' AND unit_key='raw0'"), {"r": rid})
+    else:
+        uri = upstream["receipt"]["uri"] if corruption == "output" else upstream["receipt"]["evidence"]["uri"]
+        Path(uri.removeprefix("file://")).write_bytes(b"corrupt")
+    with pytest.raises(Blocked):
+        run(book, rid, databases.ledger)
+    assert book.status(rid)["run"]["state"] == "blocked" and executions == []
+
+
+def test_resume_rechecks_full_dependency_chain_and_blocks_corrupt_intermediate(databases, tmp_path):
+    book, rid, manifest, executions = staged_submission(databases, tmp_path)
+    state = run(book, rid, databases.ledger)
+    Path(manifest["steps"]["a_transform"][2]["output"].removeprefix("file://")).unlink()
+    with pytest.raises(Blocked):
+        book.resume(rid)
+    assert book.status(rid)["run"]["state"] == "blocked"
+    assert executions == ["parsed0", "parsed1", "parsed2"]
 
 
 def test_independent_concurrency_and_shared_contention(databases, tmp_path):
@@ -537,6 +660,51 @@ def test_actual_mdm_commit_keeps_hash_and_reconciles_lost_ack(databases, tmp_pat
     with databases.mdm.connect() as conn:
         assert conn.scalar(text("SELECT request_hash FROM mdm_v2.batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]}) == retained.request_hash
         assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
+
+
+def test_stage_manifest_chains_prepared_mdm_and_separate_publication_intents(databases, tmp_path):
+    book, original, payload = mdm_submission(databases, tmp_path)
+    body = book.artifacts.json(book._run(original)["submission"]["rules"])["body"]
+    target = body["bookkeeping"]["targets"]["mdm"]
+    merge = target["steps"][0]
+    target["steps"] = [
+        {**merge, "name": "archive", "operation": "artifact.copy", "requires": [],
+         "leases": ["artifact:{destination}"]},
+        {**merge, "name": "merge", "requires": ["archive"]},
+        {**merge, "name": "publish", "operation": "mdm.publish", "requires": ["merge"],
+         "leases": ["mdm:publication:{consumer}"]},
+    ]
+    archived = (tmp_path / "archived-command.json").as_uri()
+    inputs = book.artifacts.put(tmp_path.as_uri() + "/stage-manifests", {"version": 2, "steps": {
+        "archive": [{"keys": {"id": "prepared", "destination": archived},
+            "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", payload), "output": archived, "cursor": 0}],
+        "merge": [{"keys": {"id": "company", "consumer": "fixture"},
+            "input": {"from": {"step": "archive", "key": "prepared"}},
+            "output": (tmp_path / "merged.json").as_uri(), "cursor": 0}],
+        "publish": [{"keys": {"id": consumer, "consumer": consumer}, "cursor": n,
+            "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1,
+                "batch_id": payload["command"]["batch_id"], "consumer": consumer, "destination": str(tmp_path / consumer)}),
+            "output": (tmp_path / f"{consumer}-receipt.json").as_uri()}
+            for n, consumer in enumerate(("export", "graph"))],
+    }})
+    name = "staged-mdm-" + uuid4().hex
+    # The source document owns dataset registration; this is a source pipeline
+    # with multiple stages, not a platform job without a dataset contract.
+    saved = databases.rules.save("source", name, "1", body)
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    databases.approver.approve("source", name, "1", saved["digest"])
+    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin, registry_engine=databases.destination_admin)
+    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
+    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={})
+    state = run(book, rid, databases.ledger, limit=2)
+    assert state["counts"]["verified"] == 2 and state["run"]["state"] == "waiting"
+    assert not state["run"]["checks"]["mdm.publication"]
+    book.resume(rid)
+    state = run(book, rid, databases.ledger)
+    assert state["counts"] == {"verified": 4} and state["run"]["state"] == "complete"
+    assert state["run"]["checks"]["mdm.publication"]
+    book.resume(rid)
+    assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
 
 
 def test_retired_rules_resume_original_export_and_reading(databases, tmp_path):
