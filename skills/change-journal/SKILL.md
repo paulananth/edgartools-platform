@@ -55,6 +55,11 @@ checkpoint contention/holes and completeness tests. Required acceptance is
 `tests/integration/test_change_journal_postgres.py`,
 `test_change_journal_acquisition_postgres.py` and
 `test_configured_bookkeeping_postgres.py`; missing prerequisites must fail.
+Include `test_change_journal_source_evidence_postgres.py` when the target uses
+source manifests. Require typed scope inventories with actual member counts
+and business key digests, including explicit empty inventories. A source record
+inventory alone does not prove destination effects; retain the owner's
+committed-effect verification. Re-plan when the capability version changes.
 
 ## Deploy
 

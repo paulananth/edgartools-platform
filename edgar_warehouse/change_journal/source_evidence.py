@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import hashlib
 
+from sqlalchemy import text
+
+from edgar_warehouse.bookkeeping.clean.artifacts import json_value
 from edgar_warehouse.bookkeeping.clean.config import (
     Blocked,
     Capability,
@@ -13,6 +16,128 @@ from edgar_warehouse.bookkeeping.clean.config import (
 )
 
 from .authority import frozen_authority
+
+
+def scope_proof(book, spec, authority, evidence):
+    """Verify the exact source-owned inventory, including explicit zero scopes.
+
+    Byte producers count captured artifacts; row producers count actual JSON
+    records and their business keys. No listing or write acknowledgement is
+    interpreted as completion. Destination effects still need their own owner
+    verifier before producing this immutable inventory.
+    """
+    ref = spec["body"]["scope_complete"]
+    evidence(ref)
+    proof = book.artifacts.json(ref)
+    if (
+        set(proof)
+        != {
+            "version",
+            "kind",
+            "source",
+            "feed",
+            "scope",
+            "producer",
+            "expected",
+            "members",
+        }
+        or type(proof["version"]) is not int
+        or proof["version"] != 1
+        or proof["kind"] != "scope.complete"
+        or (proof["source"], proof["feed"], proof["scope"])
+        != (spec["source"], spec["feed"], spec["scope"])
+        or proof["producer"] not in authority["configuration"]["required_producers"]
+        or type(proof["expected"]) is not int
+        or proof["expected"] < 0
+        or not isinstance(proof["members"], list)
+        or len(proof["members"]) > 128
+    ):
+        raise Blocked(
+            "Scope completeness requires an exact typed source/feed inventory"
+        )
+    total, keys, artifacts = 0, set(), set()
+    for member in proof["members"]:
+        if (
+            not isinstance(member, dict)
+            or set(member)
+            != {"artifact", "format", "count", "key_fields", "business_keys_sha256"}
+            or member["format"] not in {"bytes", "json-array", "ndjson"}
+            or type(member["count"]) is not int
+            or member["count"] < 0
+            or not isinstance(member["key_fields"], list)
+            or any(
+                not isinstance(field, str) or not field
+                for field in member["key_fields"]
+            )
+            or len(set(member["key_fields"])) != len(member["key_fields"])
+        ):
+            raise Blocked("Invalid scope member inventory")
+        reference(member["artifact"])
+        identity = (member["artifact"]["uri"], member["artifact"]["sha256"])
+        if identity in artifacts:
+            raise Blocked("Scope inventory repeats an artifact")
+        artifacts.add(identity)
+        bound = (
+            authority["configuration"]["completeness"]["max_bytes"]
+            if member["format"] == "bytes"
+            else 16 * 1024**2
+        )
+        data = book.artifacts.verified(member["artifact"], max_bytes=bound)
+        if member["artifact"] not in spec["evidence"]:
+            raise Blocked("Scope inventory uses undeclared member evidence")
+        if member["format"] == "bytes":
+            from .capture import complete
+
+            if (
+                proof["producer"] != "capture"
+                or member["key_fields"]
+                or not complete(data, authority["configuration"]["completeness"])
+            ):
+                raise Blocked("Captured scope member fails approved completeness")
+            member_keys = [[member["artifact"]["sha256"]]]
+        else:
+            if not member["key_fields"]:
+                raise Blocked("Row inventory requires explicit business key fields")
+            try:
+                rows = (
+                    json_value(data)
+                    if member["format"] == "json-array"
+                    else [
+                        json_value(line) for line in data.splitlines() if line.strip()
+                    ]
+                )
+                if not isinstance(rows, list) or any(
+                    not isinstance(row, dict) for row in rows
+                ):
+                    raise ValueError("Not a record inventory")
+                member_keys = [
+                    [row[field] for field in member["key_fields"]] for row in rows
+                ]
+                if any(
+                    value is None or isinstance(value, (dict, list))
+                    for key in member_keys
+                    for value in key
+                ):
+                    raise ValueError("Invalid business identity")
+            except (ValueError, UnicodeError, KeyError, TypeError) as exc:
+                raise Blocked(
+                    "Scope records lack verified business identities"
+                ) from exc
+        if (
+            len(member_keys) != member["count"]
+            or digest(sorted(member_keys, key=canonical))
+            != member["business_keys_sha256"]
+        ):
+            raise Blocked("Scope member count or ordered business key digest differs")
+        for key in member_keys:
+            encoded = canonical(key)
+            if encoded in keys:
+                raise Blocked("Scope inventory repeats a business key")
+            keys.add(encoded)
+        total += len(member_keys)
+    if total != proof["expected"]:
+        raise Blocked("Scope expected count differs from verified member inventory")
+    return proof
 
 
 def verify_manifest(book, item) -> dict:
@@ -50,17 +175,24 @@ def verify_manifest(book, item) -> dict:
         or keys.get("journal_producer") != "source.evidence"
     ):
         raise Blocked("Source manifest must retain its original producer identity")
-    if not isinstance(spec["evidence"], list) or not spec["evidence"]:
+    if (
+        not isinstance(spec["evidence"], list)
+        or not spec["evidence"]
+        or len(spec["evidence"]) > 128
+    ):
         raise Blocked("Source manifest requires verified evidence references")
+    evidence_limit = max(
+        32 * 1024**2, authority["configuration"]["completeness"]["max_bytes"]
+    )
     for ref in spec["evidence"]:
-        book.artifacts.verified(ref)
+        book.artifacts.verified(ref, max_bytes=evidence_limit)
     body = spec["body"]
 
     def evidence(ref):
         reference(ref)
         if ref not in spec["evidence"]:
             raise Blocked("Source manifest uses undeclared evidence")
-        return book.artifacts.verified(ref)
+        return book.artifacts.verified(ref, max_bytes=evidence_limit)
 
     def operator():
         if (
@@ -119,7 +251,14 @@ def verify_manifest(book, item) -> dict:
         ):
             raise Blocked("Revision requires frozen versions and explicit completeness")
         if body["completeness"] == "full_snapshot":
-            evidence(body["scope_complete"])
+            proof = scope_proof(book, spec, authority, evidence)
+            if not any(
+                member["artifact"] == body["raw"] and member["format"] == "bytes"
+                for member in proof["members"]
+            ):
+                raise Blocked(
+                    "Full revision scope inventory must include its captured raw artifact"
+                )
         if body.get("prior") is None:
             if body.get("relationship") != "initial" or checkpoint["position"] != -1:
                 raise Blocked("First revision requires explicit baseline")
@@ -135,6 +274,50 @@ def verify_manifest(book, item) -> dict:
             if prior["body"]["position"] != checkpoint["position"]:
                 raise Blocked(
                     "Revision predecessor differs from frozen checkpoint position"
+                )
+            with book.engine.connect() as conn:
+                committed = (
+                    conn.execute(
+                        text("""SELECT w.unit FROM bookkeeping.work_item w
+                      JOIN bookkeeping.pipeline_run r USING(run_id)
+                      JOIN bookkeeping.journal_outbox o
+                        ON (o.run_id,o.step,o.unit_key)=(w.run_id,w.step,w.unit_key)
+                      WHERE w.state='verified' AND o.delivered_at IS NOT NULL
+                        AND w.receipt->>'uri'=:uri AND w.receipt->>'sha256'=:sha
+                        AND w.resources ? :resource
+                        AND w.unit->'keys' @> CAST(:scope AS jsonb)
+                        AND w.unit->'keys'->>'journal_event_type'='source.revision'
+                        AND w.unit->'keys'->>'journal_event_key'=:key
+                        AND r.submission->>'journal'='change-journal-v1'
+                        AND r.submission->'scope'->>'source'=:source
+                        AND r.submission->'scope'->>'feed'=:feed
+                        AND NOT EXISTS(SELECT 1 FROM bookkeeping.work_item p
+                          WHERE p.run_id=w.run_id
+                            AND p.unit->'keys' @> CAST(:scope AS jsonb)
+                            AND p.state<>'verified')
+                      LIMIT 2"""),
+                        {
+                            "uri": body["prior"]["uri"],
+                            "sha": body["prior"]["sha256"],
+                            "resource": checkpoint["resource"],
+                            "scope": canonical(spec["scope"]),
+                            "key": prior.get("event_key"),
+                            "source": spec["source"],
+                            "feed": spec["feed"],
+                        },
+                    )
+                    .scalars()
+                    .all()
+                )
+            if len(committed) != 1 or committed[0]["cursor"].get(
+                "resource_checkpoint"
+            ) != {
+                **checkpoint,
+                "revision": checkpoint["revision"] - 1,
+                "position": checkpoint["position"] - 1,
+            }:
+                raise Blocked(
+                    "Revision predecessor lacks committed, acknowledged scope completion"
                 )
             relationship = (
                 "unchanged"
@@ -186,7 +369,14 @@ def verify_manifest(book, item) -> dict:
             not in authority["configuration"]["required_producers"]
         ):
             raise Blocked("Producer requires exact complete accounting")
-        evidence(body["scope_complete"])
+        proof = scope_proof(book, spec, authority, evidence)
+        if (
+            proof["producer"] != body["producer"]
+            or proof["expected"] != body["expected"]
+        ):
+            raise Blocked(
+                "Producer accounting differs from its verified scope inventory"
+            )
         if kind == "scope.empty" and body["expected"] != 0:
             raise Blocked("Empty scope requires verified zero count")
     else:
@@ -257,5 +447,5 @@ def register_source_evidence(registry):
         return receipt
 
     registry.operation(
-        "source.evidence", Capability("source-manifest-v1", execute, reconcile, verify)
+        "source.evidence", Capability("source-manifest-v2", execute, reconcile, verify)
     )

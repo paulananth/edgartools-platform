@@ -124,3 +124,22 @@ functions, without a new inheritance tree.
   empty. No Rules version or history was installed. Private connections are in
   the recorded mode-0600 file outside the repository. This is local evidence,
   not hosted qualification or cutover.
+
+- User scope (2026-09-27): local qualification only. AWS rollout and feed
+  promotion remain outside this execution; no live changes are authorized by
+  local acceptance results.
+- Source completeness review: `source-manifest-v2` verifies typed scope
+  inventories, actual artifact/row counts, ordered business key hashes and
+  duplicate identities. Opaque proof, wrong feed, forged counts/digests and
+  invalid business keys fail closed. The source-evidence PostgreSQL suite
+  passed **30 tests**; updated SEC/GLEIF artifact fixture authority passed
+  **four tests**. Destination effect verification remains owner-specific and
+  is not inferred from record inventories.
+- Revision lineage additionally requires an actual committed predecessor
+  receipt, acknowledged journal intent, exact resource/checkpoint comparison
+  and no unsettled declared same-scope work. Real PostgreSQL tests reject
+  invented predecessors, missing acknowledgements and incomplete barriers.
+- Latest unit/architecture/Bookkeeping regression: **2,163 passed, 27 subtests
+  passed, eight existing optional skips**, with six existing SQLAlchemy
+  transaction warnings. New journal modules pass Ruff; skill validation,
+  Bash syntax and wheel build pass.

@@ -92,6 +92,25 @@ role, reason and authorization evidence. A producer's zero count still needs
 verified scope-completeness evidence. These are artifact contracts, not a
 claim that every legacy caller has migrated.
 
+The `source-manifest-v2` capability requires a typed `scope.complete` document
+with exact source, feed, scope and required producer identity. Its member
+inventory declares artifact references, format (`bytes`, `json-array` or
+`ndjson`), count, business key fields and the SHA256 of sorted canonical key
+tuples. Verification reads the actual immutable members, checks counts and key
+digests, and rejects repeated artifacts or business keys. Captured byte members
+also satisfy the approved feed completeness policy. Full revisions include
+their raw artifact in this inventory. Revision predecessors must match an
+actual verified Bookkeeping receipt with acknowledged journal intent, the
+exact leased resource, scope and preceding checkpoint comparison. Unverified
+work declared for that scope in the predecessor root blocks advancement.
+A zero scope requires a real typed empty
+inventory; an opaque evidence object cannot certify zero work. Row inventories
+describe source-owned records; the destination owner must verify committed
+effects before issuing them. They do not replace destination read-back.
+
+Changing this processing version invalidates old validation bundles; rebuild
+and qualify the exact source/feed plan before deployment.
+
 ## Commands and shared skill
 
 ```bash
