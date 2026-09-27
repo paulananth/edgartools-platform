@@ -6,7 +6,8 @@ reads it (`edgar_warehouse/mdm/clean/adapters.py`, `normalize`).
 ## The file
 
 ```yaml
-source: <provider>.<dataset>          # the folder name, e.g. acme.registry
+source: <source>                     # the folder name, e.g. acme.registry or gleif
+bookkeeping: {...}                   # the Bookkeeping skill's section; leave it alone
 bronze:
   family: <bronze family>            # the main captured-file family (no code reads it yet)
 mdm:
@@ -27,6 +28,8 @@ mdm:
 
 The folder name is the source's name: lowercase, dotted. When the repo
 already names the source, or its reader names the folder, keep that name.
+One folder may hold several source codes, one per file or record type, when
+one reader reads them all.
 
 ## Defaults
 
@@ -38,7 +41,7 @@ adapter:
   retain_deferred: true           # keep a record MDM cannot take yet, with its reason
   source_record_provenance: true  # keep the record key and adapter version with each fact
   field_shape: nullable_text      # every field is text or empty
-  provenance:                     # every trace field the reader attaches (file hashes, run ids, times)
+  provenance:                     # never capture hashes, run ids or sync times: they stay beside the record
     native_record: <key>          # only if the reader keeps the source's own record under a key
 ```
 
@@ -53,6 +56,21 @@ Only an expected, explained exclusion is non-blocking: a record outside the
 approved scope, or of a kind MDM does not take yet. **A defect always
 blocks:** a bad identifier (a failed check digit), a malformed record, a
 missing key. Never list a defect as non-blocking.
+
+The reason codes the code raises today:
+
+| What happened | Code | Default |
+|---|---|---|
+| Outside the approved scope | `outside_approved_company_scope` | does not block |
+| A kind MDM does not take yet | `unsupported_identity_kind` | does not block |
+| A valid reporting exception | `reported_parent_exception` | does not block |
+| Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | blocks until the operator rules otherwise |
+| A relationship type not mapped | `unsupported_relationship_type` | blocks; ask the operator |
+| The policy has not activated the verdict | `classification_not_activated` | blocks: the policy is wrong |
+| A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | always blocks |
+
+The three "does not block" reasons are the record's decision (native GLEIF
+operation); list each one a contract can raise. For any other reason, ask.
 
 ## Full files and changes
 
@@ -115,9 +133,9 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `COMPANY_NAMED_FIELDS` in `edgar_warehouse/mdm/clean/store.py`). |
 | `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. |
 | `field_shape` | `nullable_text`: every field is text or empty. |
-| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text naming what the relationship means, not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. |
+| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. |
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
-| `provenance` | `name: path` kept with each record, to trace it back to its file. |
+| `provenance` | `name: path` kept with each record. Only values that stay the same across captures (the source's own record); capture hashes, run ids and sync times stay beside the record. |
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
 | `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. |
 | `retain_deferred` | `true`: keep a record MDM cannot take yet, with its reason. |
@@ -125,8 +143,9 @@ source's parser produces it, not from the raw file, when a parser exists.
 
 ## Merge rules
 
-`rules/merge/kinds/<kind>.yaml` gives each field's source ranks (which source
-wins) and the matching rules. Adding a source to a field's ranks, adding a
+`rules/merge/kinds/<kind>.yaml` ranks the sources per kind (the first listed
+wins every field it fills) and holds the matching rules. Its comments record
+which of a source's values fills a field that two sources share. Adding a source to a field's ranks, adding a
 field or adding a kind changes what MDM decides. Each one needs the operator's
 ruling and approval. Every source whose records are of a kind must be in that
 kind's `defaults.sources`, or its batch fails: adding it is such a change.

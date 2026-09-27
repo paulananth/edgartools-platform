@@ -3,6 +3,11 @@
 # adding a kind is a new file here, not an edit to a source.
 version: company-2026-09-25.13
 defaults:
+  # Shared fields (operator, 2026-09-24): `name` and `address` are one field
+  # each across sources, SEC first. SEC fills `address` from its business
+  # address; GLEIF from its legal address (headquarters postcode and country
+  # go to matching only). `jurisdiction` is GLEIF's alone; SEC's state of
+  # incorporation stays SEC's own field, as SEC writes it.
   sources:
   - sec.submissions.company.v1
   - gleif.level1.v1

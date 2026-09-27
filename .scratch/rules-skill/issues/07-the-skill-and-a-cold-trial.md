@@ -130,9 +130,39 @@ Skill first (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill 
     (05:21 ET).
   - **Not a pass.** Evidence and the sorted differences are in
     `trials/round-3/` and the trials README. The results go to the operator.
+- [x] Operator (2026-09-27, received before 13:28 ET, after the round 3 results): "fix the skill gaps
+  and move on". No round 4.
+- [x] Round 3 skill fixes (2026-09-27 13:28 ET, branch rebased onto `main` after #732,
+  #734 and #735):
+  - **Commands:** the skill names the `rules` commands Codex built (`status`,
+    `save`, `record-proof`, `approve`, `activate`, `init`, `migrate`, `run`).
+    `profile`, `check` and a preview are still missing, each with a fallback.
+    The run itself is the Bookkeeping skill's work; the rules skill leaves a
+    file's `bookkeeping` section alone.
+  - **Names:** one folder per source; one source code per file in the
+    pattern the merge rules use; the capture family is the repo's, else the
+    folder name.
+  - **Defects:** never ask whether one blocks; count it and log it for a
+    reader ticket.
+  - **Non-blocking reasons:** a table of the codes the code raises, with
+    defaults. The three the record decides; a classification hold-back and an
+    unmapped relationship type block until the operator rules.
+  - **Provenance:** trace stays beside the record (operator, 2026-09-27).
+  - **Ranks:** per kind, not per field; shared-field decisions are comments in
+    the kind file.
+  - **Record key order** follows the source's own key; the relationship
+    `scope` label is `<Provider> <relationship family>`.
+  - **Profiling:** a zip member is one stream; time it first; check list paths
+    in every format the reader accepts.
+  - **Dry run:** how to call a native reader, and the `defaults.sources`
+    check.
+  - **Missing documents:** go on and log.
+  - **Record fix:** `rules/merge/kinds/company.yaml` now records the shared
+    field decisions as comments. The policy digest is unchanged
+    (`3520e890…`).
 - [ ] Build only the commands a trial round shows the skill needs (tickets
-  02–06 as a menu).
+  02–06 as a menu): `profile`, `check` and a preview are what remain.
 - [ ] All Company data pipelines on the skill, tested.
-- [ ] Test: every command the skill names exists.
+- [x] Test: every command the skill names exists (`tests/unit/test_rules_skill_commands.py`), or the skill marks it not built.
 - [ ] `CLAUDE.md` Quick Navigation entries for the skill.
 - [ ] Three-axis `/code-review` of any code, then PR and CI.

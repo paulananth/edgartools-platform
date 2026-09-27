@@ -65,8 +65,19 @@ language is in [REFERENCE.md](REFERENCE.md).
    - if its rules file exists, follow "Change a source" below;
    - if its rules file is missing, follow every step here (it needs a full
      profile), keeping the repo's names;
-   - either way, ask whether its source code is registered in Clean MDM.
-     `edgar-warehouse rules status` would say. *Not built yet:* ask.
+   - either way, find out whether its source code is registered: run
+     `edgar-warehouse rules status --source <name>` (it needs
+     `RULES_DATABASE_URL`). If you cannot reach the Rules Database, ask.
+
+   **Names.** When the repo does not fix a name, derive it from the names it
+   already has; never invent a new pattern:
+   - one folder per source, even when one reader reads several files (GLEIF
+     is one folder, `gleif`, for three files);
+   - one source code per file or record type, in the pattern the merge rules
+     already use: `<source>.<record type>.v1` (`gleif.level1.v1`, so its
+     relationships file is `gleif.relationships.v1`);
+   - the capture family: the family the repo already names for these files;
+     if it names none, the source's folder name. Log it either way.
 
 2. **Profile.** Run `edgar-warehouse rules profile <files>`. *Not built
    yet:* instead, write a short script in your scratchpad that streams the
@@ -75,7 +86,11 @@ language is in [REFERENCE.md](REFERENCE.md).
    sorted. Make a full pass only for a count that decides something, and
    time it on the sample first; when a JSON pass is too slow, count with a
    line-based pass over the file's fixed layout, checked against the JSON
-   pass on a slice. For each record type, find:
+   pass on a slice. A file inside a zip is one compressed stream: to reach
+   its middle or end you must decompress everything before it. Stream it
+   with Python's `zipfile` (much faster than `unzip -p`), time the first
+   100 MB, and say how long the full pass will take before you start it.
+   For each record type, find:
    - each path, its types, how often it is filled, its distinct count and
      samples;
    - candidate record keys (unique and always filled);
@@ -91,9 +106,17 @@ language is in [REFERENCE.md](REFERENCE.md).
 
    A file may hold several record types: profile each one separately. It
    may also hold a table as parallel arrays, one list per column. Zip those
-   into rows before you profile them.
+   into rows before you profile them. When the reader accepts more than one
+   format (JSON and XML), check each list path in both: XML often writes a
+   list of one as a single object.
 
-3. **Research.**
+   Count every defect you find (a failed check digit, a missing key, a
+   malformed record). Do not ask whether a defect blocks: it always does,
+   even when the reader rejects it before it checks scope. Log the counts
+   for a reader ticket.
+
+3. **Research.** When a document named here is missing from your copy of
+   the repo, go on without it and log it.
    - **Terms:** `CONTEXT.md` defines the words MDM uses.
    - **Clean MDM:** read `docs/specs/clean-mdm/`, starting with
      `source-evidence.md` and `company-policy.md`.
@@ -101,8 +124,12 @@ language is in [REFERENCE.md](REFERENCE.md).
    - **Fields:** for Company, `COMPANY_NAMED_FIELDS` in
      `edgar_warehouse/mdm/clean/store.py` lists the fields MDM keeps; they
      are the Company table's columns.
-   - **Ranks and matching rules:** `rules/merge/kinds/<kind>.yaml` says which
-     source wins each field (`defaults.sources`) and how records match.
+   - **Ranks and matching rules:** `rules/merge/kinds/<kind>.yaml` ranks the
+     sources per kind, not per field (`defaults.sources`): a listed source
+     may fill any field of the kind, and the first one listed wins. Its
+     comments record which of a source's values fills a field that two
+     sources share (the address, the name). Read them, and the comments in
+     the other rules files, before you ask about a shared field.
    - **Existing code for this source (its *reader*):** search the repo for
      code that loads this source's rules file (`rules_files.source("<name>")`,
      `mdm_contract(`) or names its source code. If a reader exists, map from
@@ -121,19 +148,29 @@ language is in [REFERENCE.md](REFERENCE.md).
 4. **Infer**, for each record type:
    - **Kind:** the kind from `KINDS`, or the field or rule that decides it. A
      new kind needs the operator's ruling.
-   - **Record key:** the key and its format.
+   - **Record key:** the key and its format. Write its parts in the order
+     the source defines its unique key (GLEIF: start, end, type). The order
+     is part of each record's identity.
    - **Identifiers:** each namespace with its format.
    - **Fields:** use the names MDM already has for the kind. A new field is
      a question for the operator.
    - **Relationships:** the type, the other end's key, the source it lives
      in, and its start and end. List every relationship type the source
-     carries; which are in scope is a question for the operator.
+     carries; which are in scope is a question for the operator. Label each
+     mapped relationship's `scope` `<Provider> <relationship family>`, for
+     example `ACME ownership`.
    - **Kinds not settled:** when a category could be a kind the operator
      has not settled (for example Person before Person mastering), leave it
      unnamed and ask.
-   - **Provenance:** every trace field the reader attaches to a record
-     (hashes of the captured files, run ids, observed time, raw object ids)
-     goes into `provenance`, so each fact leads back to its file.
+   - **Provenance:** trace stays beside the record, not in it (operator,
+     2026-09-27). Capture hashes, run ids and sync times change with every
+     capture, so they never go into `provenance`; the captured file's
+     receipt names them beside the record. Map into `provenance` only the
+     source's own record, when the reader keeps it under a key
+     (`native_record`).
+   - **A value the reader does not give yet:** when the operator wants a
+     value the reader drops, write a comment where it would go and log a
+     reader ticket. Do not map a path the reader lacks.
    - **The publication:** whether each file is complete or changes only
      (`semantics`), what a file covers (`completeness`), and when a record
      takes effect (`effective_time`).
@@ -146,9 +183,15 @@ language is in [REFERENCE.md](REFERENCE.md).
    - each identifier the source carries (see the hard rules);
    - the source code's name, when the repo does not already fix it.
 
-   Do not ask what a field the merge rules already rank for this source
-   means: a field ranked for this source is one it supplies. Do not ask what
-   the repo's names already fix.
+   Do not ask:
+   - what the repo's names already fix (see "Names" in step 1);
+   - whether a defect blocks (it does);
+   - which value fills a shared field, when the kind file's comments or an
+     existing rules file already say.
+
+   Which reasons do not block is a decision: list only the ones the record
+   decides (REFERENCE.md, "Blocking and non-blocking"), and ask about any
+   other exclusion you expect.
 
 6. **Write** `rules/sources/<source>/source.yaml`, in the shape of
    REFERENCE.md. Start from its "Defaults" section, and remember that a
@@ -160,15 +203,31 @@ language is in [REFERENCE.md](REFERENCE.md).
    and that your comments changed no value: `files.source('<source>')` must
    equal what you passed to `files.dumps`.
 
+   Write only `source`, `bronze` and `mdm`. The file's `bookkeeping` section
+   (how its pipeline runs) belongs to the Bookkeeping skill; keep an
+   existing one as it is.
+
 7. **Check.** Run `edgar-warehouse rules check <source>`. *Not built yet:*
    instead, run a dry run of the mapping on 5–10 sample records. When the
    source has a reader, run the reader on the sample: it reshapes records
    and applies checks that the mapping alone skips. Build small sample
    inputs in the shape the reader reads (a few records in a file of the
-   source's own format) rather than running it on a whole large file. When
-   the reader needs an approved scope you do not have, use a scope made
-   from the sample and label it as a test scope in the log. Otherwise, put
-   records in the reader's shape through
+   source's own format) rather than running it on a whole large file.
+
+   A reader of native publications (one that numbers and verifies each
+   release, like GLEIF's) also needs the publication's details and an
+   approved list of identifiers. Call its per-record function directly,
+   with publication details taken from the file names and a scope made from
+   the sample; label both as test inputs in the log.
+
+   Then check the kind's merge rules accept the source: a source whose
+   records are of a kind but which is missing from that kind's
+   `defaults.sources` fails its whole batch
+   (`merge.check_company_sources(files.policy(), assertions)` for Company).
+   Adding it is a merge-rule change: log it for the operator; do not make
+   it.
+
+   A source with no reader: put records in the reader's shape through
    `edgar_warehouse.mdm.clean.adapters.normalize`:
    - pass `contract=` your contract, `source_code=` your source code, and
      `policy=files.policy()`;
@@ -187,16 +246,24 @@ language is in [REFERENCE.md](REFERENCE.md).
    This dry run is not a preview: it matches nothing against existing
    records. Log the gap.
 
-8. **Preview.** Run `edgar-warehouse rules run <source> --target mdm
-   --preview`, on a copy of the local MDM. *Not built yet:* stop here. Hand
-   the operator the file, the dry run and the log.
+8. **Preview.** A preview shows real matches against a copy of the local
+   MDM. *Not built yet:* stop here. Hand the operator the file, the dry run
+   and the log.
 
-9. **Approve, activate, run.**
-   - The operator approves.
-   - `rules activate` registers the source in Clean MDM.
-   - `rules run <source> --target mdm --deploy`, then `--target silver`.
+9. **Save, prove, approve, activate, run.** Each command takes
+   `--source <name> --version <version>`:
+   - `edgar-warehouse rules save --source <name> --version <v> <file>`
+     saves the file as a draft;
+   - `rules record-proof` records the proof of a passing run;
+   - the operator runs `rules approve --digest <digest>` under their own
+     login. Before you ask, say in plain words what the digest is and what
+     it changes. Never run it yourself;
+   - `rules activate` registers the version in Clean MDM;
+   - the run itself is the Bookkeeping skill's work:
+     `$bookkeeping plan`, `validate` and `deploy` with
+     `--source <name> --feed <feed>`. It submits `rules run`.
 
-   *Not built yet.*
+   `rules status --source <name>` shows each version's state.
 
 ## Change a source or the merge rules
 
@@ -205,8 +272,13 @@ the dry run before and after.
 
 ## Initialize or migrate the Rules Database
 
-`edgar-warehouse rules init`, and `rules migrate --to-db` or `--to-files`.
-*Not built yet:* tell the operator.
+- `edgar-warehouse rules init` creates the Rules Database's table and roles.
+  It connects with `RULES_MIGRATION_DATABASE_URL`, the owner's login.
+- `edgar-warehouse rules migrate --to-db --root rules --version <v>` saves
+  every rules file as a version. `--to-files` writes them back.
+
+Every other command connects as the agent, through `RULES_DATABASE_URL`.
+The CLI takes about half a minute to start; that is not a hang.
 
 ## When a command is missing
 
