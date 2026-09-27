@@ -1,0 +1,89 @@
+# SEC submissions: the MDM mapping of one SEC filer, as the existing reader shapes it
+# (`edgar_warehouse/mdm/clean/company_source.py`, run by `edgar-warehouse mdm
+# prepare-clean-company`). The reader maps from silver landing rows, not the raw
+# submissions JSON: a `sec_company` row plus `forms`, `business_address`, `tickers`
+# and `name_census`, pinned beside it. Field ranks live in the merge rules.
+# New, not registered before (operator, 2026-09-27): fresh version names.
+source: sec.submissions.company
+bronze:
+  family: submissions
+mdm:
+  sec.submissions.company.v1:
+    contract:
+      provider: SEC
+      # The acquisition registry's family for submissions
+      # (`acquisition/submissions_discovery.py`). The ticker catalog the reader also
+      # pins is family `reference_catalog`; a contract names one family.
+      family: submissions
+      schema_version: sec-company-landing-record-v1
+      record_key: SEC CIK, 10 digits zero-padded
+      publication_key: capture run id and sha256 of its sec_company member, plus the run and
+        sha256 of each pinned member (filings, addresses, tickers) and the Name Census digest
+      effective_time: unknown; last_synced_at is observation time
+      semantics: patch; absence never retires an identity
+      completeness: each submissions file is one filer's complete current snapshot; one publication
+        is one capture run's bounded sample, never the whole SEC universe
+      # A record the Company rule holds back waits in the Stage with no Steward
+      # (operator's confidence bands, 2026-09-24), so it must not stop its batch.
+      # `classification_not_activated` stays blocking: it means the policy is wrong.
+      nonblocking_deferred_reasons:
+      - classification_deferred
+      adapter:
+        version: sec-company-landing-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        # No `provenance`: the file hash, run id and sync time stay out of the record;
+        # each batch names the bronze file beside the record from the capture run's
+        # bronze receipts (`--bronze-receipts`, ticket 10) (operator, 2026-09-27).
+        # The kind comes from the Company rule, never `kind`/`kind_field`: the rule
+        # sorts filers into Companies and held-back records. Individual filers never
+        # get here; the reader drops them first (people stay out, operator 2026-09-27).
+        classification:
+          kind: company
+          rule_id: sec-company-candidate
+          version: 2026-09-25.13
+        # The census names CIKs zero-padded to 10 digits and the name matching rules
+        # require its CIK to equal the record key, so the key must be `sec_cik`.
+        record_key:
+        - cik
+        record_key_format: sec_cik
+        # `sec_ein`: the IRS EIN as SEC states it, lookup only, never joins records
+        # (operator, 2026-09-26). No format check (operator, 2026-09-27). SEC writes
+        # `000000000` for "none"; it is kept as that text until the rules language can
+        # read a placeholder as unknown.
+        # SEC's stated LEI is kept too, as lookup-only `sec_lei` (operator, 2026-09-26),
+        # but the reader does not carry it yet, so it is not mapped (operator,
+        # 2026-09-27). Future mapping, once the loader lands SEC's `lei` on the
+        # `sec_company` row:   sec_lei: lei
+        # Identifiers are fixed once registered, so that change is a new source code.
+        identifiers:
+          cik: cik
+          sec_ein: ein
+        identifier_formats:
+          cik: sec_cik
+        # `name`, `state_of_incorporation` and `address` are the names the merge rules
+        # read. SEC first when both SEC and GLEIF have a value (operator, 2026-09-24).
+        # `jurisdiction` is GLEIF's alone and is not mapped here; SEC's state of
+        # incorporation is SEC's own field, as SEC writes it (same day).
+        # `address` is SEC's business address, not the mailing address.
+        fields:
+          name: entity_name
+          sic: sic
+          sic_description: sic_description
+          state_of_incorporation: state_of_incorporation
+          fiscal_year_end: fiscal_year_end
+          description: description
+          address:
+            components:
+              street: business_address.street
+              street2: business_address.street2
+              city: business_address.city
+              region: business_address.region
+              postcode: business_address.postal_code
+              country: business_address.country
+        # What the SEC-to-GLEIF name matching rules compare, kept outside the fields.
+        matching:
+          name_census: name_census
+          business_postal_code: business_address.postal_code
+          business_country: business_address.country
