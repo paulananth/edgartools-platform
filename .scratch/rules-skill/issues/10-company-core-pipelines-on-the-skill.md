@@ -36,9 +36,18 @@ Bookkeeping skill, with no second path:
   that the operator approves. Each run reports the waiting records counted
   by type, so a type GLEIF adds later is seen, because the reader does not
   check type names.
-- Open operator questions: whether SEC filers held back by the Company rule
-  block; whether GLEIF's other entity ids are lookup-only identifiers;
-  whether relationship records carry the start LEI as `lei`.
+- **Decided (operator, 2026-09-27 13:44 ET: "never stop the run"):** SEC filers held
+  back by the Company rule (`classification_deferred`,
+  `classification_entity_undetermined`) wait without stopping the run. Each
+  is kept with its reason and probable kind, and none becomes a Company.
+  `classification_not_activated` still stops it, because it means the merge
+  rules are wrong. This goes into `sec.submissions.company.v2`, which the
+  operator approves.
+- **Decided (operator, same answer):** "turn on merging" means switching on
+  the SEC-to-GLEIF name matching rules. That work is company-mastering
+  ticket 20.
+- Open operator questions: whether GLEIF's other entity ids are lookup-only
+  identifiers; whether relationship records carry the start LEI as `lei`.
 - Reader defects from company-mastering ticket 18 (check digit before scope,
   `NULL` statuses, the `P7` region, ICONIQ).
 

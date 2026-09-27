@@ -64,13 +64,14 @@ The reason codes the code raises today:
 | Outside the approved scope | `outside_approved_company_scope` | yes |
 | A kind MDM does not take yet | `unsupported_identity_kind` | yes |
 | A valid reporting exception | `reported_parent_exception` | yes |
-| Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | no, until the operator rules otherwise |
+| Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | yes (operator, 2026-09-27: "never stop the run") |
 | A relationship type not mapped yet | `unsupported_relationship_type` | yes (operator, 2026-09-27); each run reports a count by type, so a new type is seen |
 | The policy has not activated the verdict | `classification_not_activated` | no: it means the policy is wrong |
 | A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | never |
 
 A contract that lists no reason blocks on every one. The "yes" reasons are
-decided (native GLEIF operation; the operator for relationship types): list
+decided (native GLEIF operation; the operator for relationship types and
+classification hold-backs): list
 each one a contract can raise. For any other reason, ask.
 
 ## Full files and changes
