@@ -1,0 +1,20 @@
+pipeline: graph-publication
+bookkeeping:
+  version: 1
+  targets:
+    publish:
+      lease_seconds: 120
+      heartbeat_seconds: 30
+      retry:
+        attempts: 5
+        base_ms: 100
+        cap_ms: 5000
+      allow_zero_work: false
+      steps:
+        - name: graph-publication
+          operation: mdm.publish
+          requires: []
+          key: "{batch_id}:{consumer}"
+          leases: ["mdm:publication:{consumer}"]
+          checks: [input.hash, output.receipt]
+      checks: [manifest.hash, work.accounting, journal.delivered]

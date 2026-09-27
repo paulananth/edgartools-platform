@@ -1813,6 +1813,11 @@ def build_parser() -> argparse.ArgumentParser:
     except ImportError:
         pass  # MDM extras not installed (pipelines image)
 
+    from edgar_warehouse.bookkeeping.clean.cli import register as register_bookkeeping
+    from edgar_warehouse.rules.cli import register as register_rules
+    register_bookkeeping(subparsers)
+    register_rules(subparsers)
+
     return parser
 
 

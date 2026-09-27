@@ -25,6 +25,8 @@ class RuntimeImportTests(unittest.TestCase):
         # snapshot compare, same exclusion.
         warehouse_cli_commands = set(subparsers_action.choices) - {
             "mdm",
+            "rules",
+            "bookkeeping",
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",
@@ -55,6 +57,8 @@ class RuntimeImportTests(unittest.TestCase):
         # resolve-snowflake-env and compare-filing-artifact-capture are the same shape.
         all_commands = set(subparsers_action.choices) - {
             "mdm",
+            "rules",
+            "bookkeeping",
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",
@@ -107,6 +111,8 @@ class RuntimeImportTests(unittest.TestCase):
         #   compare (Ticket 10 Decision 2), never goes through the orchestrator
         skip = {
             "mdm",
+            "rules",
+            "bookkeeping",
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",

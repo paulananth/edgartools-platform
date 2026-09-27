@@ -121,6 +121,11 @@ def source(name: str, root: Path | None = None) -> dict:
     return load((root or ROOT) / "sources" / name / "source.yaml")
 
 
+def pipeline(name: str, root: Path | None = None) -> dict:
+    """A platform job uses the same Rules lifecycle as a source document."""
+    return load((root or ROOT) / "pipelines" / name / "pipeline.yaml")
+
+
 def mdm_contract(source_name: str, source_code: str, root: Path | None = None) -> dict:
     """The Dataset Contract one source registers under `source_code`."""
     return source(source_name, root)["mdm"][source_code]["contract"]
@@ -132,6 +137,22 @@ def policy(root: Path | None = None) -> dict:
     body = load(folder / "policy.yaml")
     body["kinds"] = {path.stem: load(path) for path in sorted((folder / "kinds").glob("*.yaml"))}
     return body
+
+
+def write_policy(body: dict, root: Path) -> None:
+    """Export the one stored policy into the existing authoring layout."""
+    folder = root / "merge"
+    kinds = body.get("kinds", {})
+    if not isinstance(kinds, dict) or any(not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) for name in kinds):
+        raise RulesFileError("Policy kinds must be path-safe identifiers")
+    extra = {p.stem for p in (folder / "kinds").glob("*.yaml")} - set(kinds)
+    if extra:
+        raise RulesFileError("Output folder has kinds absent from this version; use an empty export folder")
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "policy.yaml").write_text(dumps({k: v for k, v in body.items() if k != "kinds"}), encoding="utf-8")
+    (folder / "kinds").mkdir(exist_ok=True)
+    for name, value in kinds.items():
+        (folder / "kinds" / f"{name}.yaml").write_text(dumps(value), encoding="utf-8")
 
 
 def pending_proofs(root: Path | None = None) -> dict:

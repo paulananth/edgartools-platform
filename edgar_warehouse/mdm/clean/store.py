@@ -419,12 +419,22 @@ class Publisher(Protocol):
 
 
 class Store:
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: Engine, *, lease_authority=None):
         if engine.dialect.name != "postgresql":
             raise ValueError("Clean MDM requires PostgreSQL")
         self.engine = engine
+        self.lease_authority = lease_authority
+
+    def _authorize(self, conn: Connection) -> None:
+        if self.lease_authority is not None:
+            from edgar_warehouse.bookkeeping.clean.destinations import guard
+
+            # The guard and business effects commit in this destination's
+            # transaction. Authority never changes request_hash/batch_id.
+            guard(conn, self.lease_authority.current())
 
     def commit(self, conn: Connection, request: dict, run_id: str) -> dict:
+        self._authorize(conn)
         return conn.scalar(
             text("SELECT mdm_v2.commit_batch(:request,CAST(:run AS uuid))"),
             {"request": canonical(request), "run": str(UUID(run_id))},
@@ -490,11 +500,18 @@ class Store:
         publisher: Publisher,
         *,
         lease_seconds: int = 300,
+        batch_id: str | None = None,
     ) -> bool:
         with self.engine.begin() as conn:
+            self._authorize(conn)
+            claim_function = (
+                "SELECT mdm_v2.claim_publication(:c,:w,:seconds)"
+                if batch_id is None else
+                "SELECT bookkeeping_guard.claim_publication(:c,:w,:seconds,:batch)"
+            )
             claim = conn.scalar(
-                text("SELECT mdm_v2.claim_publication(:c,:w,:seconds)"),
-                {"c": consumer, "w": worker, "seconds": lease_seconds},
+                text(claim_function),
+                {"c": consumer, "w": worker, "seconds": lease_seconds, "batch": batch_id},
             )
         if claim is None:
             return False
@@ -505,6 +522,7 @@ class Store:
             receipt = publisher.verify(key, outgoing, claim["payload_hash"])
         except Exception as exc:
             with self.engine.begin() as conn:
+                self._authorize(conn)
                 conn.execute(
                     text("SELECT mdm_v2.finish_publication(:b,:c,:f,NULL,:err)"),
                     {
@@ -516,6 +534,7 @@ class Store:
                 )
             raise
         with self.engine.begin() as conn:
+            self._authorize(conn)
             conn.execute(
                 text("SELECT mdm_v2.finish_publication(:b,:c,:f,:h,NULL)"),
                 {
