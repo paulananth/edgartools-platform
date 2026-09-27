@@ -92,3 +92,10 @@ def test_every_us_territory_in_the_table_is_a_territory():
     us = {code: row["iso"][3:] for code, row in TABLE.items() if (row["iso"] or "").startswith("US-")}
     assert {suffix for code, suffix in us.items() if code != suffix} <= _US_TERRITORIES
     assert set(_US_TERRITORIES) <= set(us.values())
+
+
+def test_the_policy_exports_its_tables_back_to_their_own_files(tmp_path):
+    files.write_policy(files.policy(), tmp_path)
+    assert files.reference("sec-place-codes", tmp_path)["codes"] == TABLE
+    assert "reference" not in files.load(tmp_path / "merge" / "policy.yaml")
+    assert digest(files.policy(tmp_path)) == digest(files.policy())

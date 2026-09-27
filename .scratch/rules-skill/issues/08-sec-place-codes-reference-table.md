@@ -100,7 +100,19 @@ address's `stateOrCountry` and `countryCode`) are one reference table,
     counts. The inputs are `cm08-sec-scan.jsonl` (`bdf379bf…`) and
     `cm08-coverage-2.jsonl` (`97e5d118…`).
   - **Tests:** 288 affected tests pass.
-- [ ] Operator approves policy digest `3520e890…`; PR and CI.
+- [x] Operator: "merge" (2026-09-27 04:58 ET), after the fingerprint was explained,
+  taken as approval of policy digest `3520e890…`.
+- [x] Rebased onto `main` after Codex's #732 (configured Bookkeeping and the
+  Rules Database) merged (2026-09-27 04:58 ET). The fingerprint is unchanged (`3520e890…`;
+  `983352e8…` without the table).
+  - **Found:** #732's `write_policy()` exports a stored policy back to files.
+    It wrote everything except `kinds` into `merge/policy.yaml`, so it would
+    have put the table there and broken its own round-trip test.
+  - **Fixed:** `write_policy()` now writes kinds and reference tables back to
+    their own files, as the reverse of `policy()`.
+  - **Tests:** a unit round-trip test; Codex's PG16
+    `test_two_way_rules_migration_preserves_all_document_digests` passes.
+- [ ] CI on the rebased branch, then merge.
 
 ## Follow-up (not in this ticket)
 
