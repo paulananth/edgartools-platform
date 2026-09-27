@@ -4,6 +4,11 @@ Read bounded status and leases first. See the
 [specification](../../docs/specs/configured-bookkeeping.md) for authority and
 storage semantics; use live CLI help when an option differs.
 
+Resolve the requested source/feed again and compare its dataset/member set
+with the run's frozen manifest. A matching source name alone does not identify
+the same feed. Preserve the original Rules digest when recovering a run;
+today's authoring document may have changed.
+
 | Observation | Action |
 | --- | --- |
 | Waiting unit, another owner has an unexpired lease | Let bounded contention retry leave work waiting. Independent scopes can continue. Resume after ownership is available; preserve the current owner's lease. |
