@@ -250,18 +250,21 @@ language is in [REFERENCE.md](REFERENCE.md).
    MDM. *Not built yet:* stop here. Hand the operator the file, the dry run
    and the log.
 
-9. **Save, prove, approve, activate, run.** Each command takes
-   `--source <name> --version <version>`:
+9. **Save, prove, approve, activate, run.** Each command selects what it
+   acts on with `--source <name>`, or `--merge <name>` for merge rules:
    - `edgar-warehouse rules save --source <name> --version <v> <file>`
      saves the file as a draft;
-   - `rules record-proof` records the proof of a passing run;
-   - the operator runs `rules approve --digest <digest>` under their own
-     login. Before you ask, say in plain words what the digest is and what
-     it changes. Never run it yourself;
-   - `rules activate` registers the version in Clean MDM;
+   - `rules record-proof --source <name> --version <v> --proof-uri <uri>
+     --proof-sha256 <sha256>` records the proof of a passing run;
+   - the operator runs `rules approve --source <name> --version <v>
+     --digest <digest>` under their own login. Before you ask, say in plain
+     words what the digest is and what it changes. Never run it yourself;
+   - `rules activate --source <name> --version <v>` registers the version
+     in Clean MDM;
    - the run itself is the Bookkeeping skill's work:
      `$bookkeeping plan`, `validate` and `deploy` with
-     `--source <name> --feed <feed>`. It submits `rules run`.
+     `--source <name> --feed <feed>`. It submits `rules run`, which takes
+     `--target` and an input manifest with its sha256.
 
    `rules status --source <name>` shows each version's state.
 
@@ -275,7 +278,9 @@ the dry run before and after.
 - `edgar-warehouse rules init` creates the Rules Database's table and roles.
   It connects with `RULES_MIGRATION_DATABASE_URL`, the owner's login.
 - `edgar-warehouse rules migrate --to-db --root rules --version <v>` saves
-  every rules file as a version. `--to-files` writes them back.
+  every rules file as a version. `--to-files` writes them back, without
+  their comments, and the comments hold decisions. Export to another folder
+  and compare; never export over the repo's `rules/`.
 
 Every other command connects as the agent, through `RULES_DATABASE_URL`.
 The CLI takes about half a minute to start; that is not a hang.

@@ -160,9 +160,16 @@ Skill first (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill 
   - **Record fix:** `rules/merge/kinds/company.yaml` now records the shared
     field decisions as comments. The policy digest is unchanged
     (`3520e890…`).
-- [ ] Build only the commands a trial round shows the skill needs (tickets
-  02–06 as a menu): `profile`, `check` and a preview are what remain.
-- [ ] All Company data pipelines on the skill, tested.
-- [x] Test: every command the skill names exists (`tests/unit/test_rules_skill_commands.py`), or the skill marks it not built.
-- [ ] `CLAUDE.md` Quick Navigation entries for the skill.
+- [x] Moved out of this ticket, so its PR carries only the skill (one branch
+  per ticket):
+  - the commands the trials showed missing: `profile` is ticket 06; `check`
+    and a preview belong to ticket 04. Codex's #732 already built `save`,
+    `status`, `approve`, `record-proof`, `activate`, `migrate` and `run`;
+  - the Company core pipelines on the skill: ticket 10.
+- [x] Test: every `rules` command and flag the skill names exists, or the
+  skill marks the command not built (`tests/unit/test_rules_skill_commands.py`).
+- [x] The SEC worked example is marked where it is behind the operator's
+  later decisions (EIN and SEC's LEI lookup-only; trace beside the record),
+  so an agent does not copy it. Its digest is unchanged (`742e73c7…`).
+- [x] `CLAUDE.md` Quick Navigation entry for the skill.
 - [ ] Three-axis `/code-review` of any code, then PR and CI.
