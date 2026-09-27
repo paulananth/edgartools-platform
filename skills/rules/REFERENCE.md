@@ -65,13 +65,13 @@ The reason codes the code raises today:
 | A kind MDM does not take yet | `unsupported_identity_kind` | yes |
 | A valid reporting exception | `reported_parent_exception` | yes |
 | Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | no, until the operator rules otherwise |
-| A relationship type not mapped | `unsupported_relationship_type` | no; ask the operator |
+| A relationship type not mapped yet | `unsupported_relationship_type` | yes (operator, 2026-09-27); each run reports a count by type, so a new type is seen |
 | The policy has not activated the verdict | `classification_not_activated` | no: it means the policy is wrong |
 | A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | never |
 
-A contract that lists no reason blocks on every one. The three "yes" reasons
-are the record's decision (native GLEIF operation): list each one a contract
-can raise. For any other reason, ask.
+A contract that lists no reason blocks on every one. The "yes" reasons are
+decided (native GLEIF operation; the operator for relationship types): list
+each one a contract can raise. For any other reason, ask.
 
 ## Full files and changes
 

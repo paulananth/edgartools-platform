@@ -29,10 +29,16 @@ Bookkeeping skill, with no second path:
 - GLEIF relationships: the Company merge rules must list
   `gleif.relationships.v1`, and an LEI matching rule must exist, before a
   relationship becomes a link. Both need the operator's approval.
-- Open operator questions: whether an unmapped GLEIF relationship type
-  blocks; whether SEC filers held back by the Company rule block; whether
-  GLEIF's other entity ids are lookup-only identifiers; whether relationship
-  records carry the start LEI as `lei`.
+- **Decided (operator, 2026-09-27 13:40 ET, "agreed"):** a GLEIF
+  relationship of a type not mapped yet (the three fund types and the
+  branch type) waits without stopping the run. So each GLEIF contract lists
+  `unsupported_relationship_type` as non-blocking, in a new GLEIF version
+  that the operator approves. Each run reports the waiting records counted
+  by type, so a type GLEIF adds later is seen, because the reader does not
+  check type names.
+- Open operator questions: whether SEC filers held back by the Company rule
+  block; whether GLEIF's other entity ids are lookup-only identifiers;
+  whether relationship records carry the start LEI as `lei`.
 - Reader defects from company-mastering ticket 18 (check digit before scope,
   `NULL` statuses, the `P7` region, ICONIQ).
 
