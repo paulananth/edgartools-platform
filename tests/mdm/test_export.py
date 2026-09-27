@@ -24,22 +24,6 @@ class FakeWriter:
         return len(rows)
 
 
-class FakeCursor:
-    def __init__(self) -> None:
-        self.executed: list[str] = []
-        self.batches: list[tuple[str, list[tuple[str, ...]]]] = []
-        self.closed = False
-
-    def execute(self, sql: str) -> None:
-        self.executed.append(sql)
-
-    def executemany(self, sql: str, values: list[tuple[str, ...]]) -> None:
-        self.batches.append((sql, values))
-
-    def close(self) -> None:
-        self.closed = True
-
-
 # ---------------------------------------------------------------------------
 # MDMExporter mirror tests: keeping the sync-graph-source MDM schema mirror
 # current. Before this, nothing refreshed EDGARTOOLS_PROD.MDM after its

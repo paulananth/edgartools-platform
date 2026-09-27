@@ -125,6 +125,7 @@ jobs:
       - name: Syntax-check infra scripts
         run: |
           find infra/scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+          find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
           echo "All shell scripts pass syntax check."
 
   # ── Gate: all checks must pass before merge ────────────────────────────────
