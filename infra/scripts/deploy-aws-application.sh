@@ -87,7 +87,9 @@ Options:
   --change-journal-postgres-dsn-secret-arn <arn>
                                     Explicit runtime secrets for fresh configured work. Supply all
                                     three together. No legacy or MDM fallback; migration URLs are
-                                    never injected. Connection wiring does not cut over a feed.
+                                    never injected. Registers separate journal task families;
+                                    existing workflows retain their original connections/commands.
+                                    Connection wiring does not cut over a feed.
   --mdm-run-limit <n>               Default limit for mdm mastering state machine. Default: 0 (unbounded); a positive value bounds it.
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
@@ -1694,8 +1696,11 @@ if bronze_cik_limit:
     environment_values.append({"name": "WAREHOUSE_BRONZE_CIK_LIMIT", "value": bronze_cik_limit})
 
 secrets = [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}]
-secrets.extend(json.loads(fresh_control_secrets_json))
-if json.loads(fresh_control_secrets_json):
+fresh = profile.startswith("journal-")
+if fresh and not json.loads(fresh_control_secrets_json):
+    raise SystemExit("Journal task family requires all three fresh runtime connections")
+if fresh:
+    secrets.extend(json.loads(fresh_control_secrets_json))
     environment_values.append({"name": "BOOKKEEPING_MANIFEST_ROOT", "value": f"s3://{warehouse_bucket}/warehouse/artifacts/bookkeeping_manifests/"})
 # MDM_DATABASE_URL is required for gold-affecting commands (seed-universe, bootstrap-*, gold-refresh).
 # Inject it from Secrets Manager when MDM is deployed alongside the warehouse.
@@ -1713,14 +1718,14 @@ if mdm_snowflake_secret_arn:
 # bookkeeping_app Postgres credential, injected alongside MDM_DATABASE_URL
 # since both point at operational stores on the same shared Snowflake
 # Postgres instance. Optional until a caller-repointing ticket depends on it.
-if bookkeeping_postgres_dsn_secret_arn:
+if bookkeeping_postgres_dsn_secret_arn and not fresh:
     secrets.append({"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn})
 
 container_definitions = [{
     "name": "edgar-warehouse",
     "image": image_ref,
     "essential": True,
-    "command": ["--help"],
+    "command": ["change-journal", "status"] if fresh else ["--help"],
     "environment": environment_values,
     "secrets": secrets,
     "logConfiguration": {
@@ -1799,8 +1804,11 @@ mdm_secrets = [
     {"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": snowflake_secret_arn},
     {"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn},
 ]
-mdm_secrets.extend(json.loads(fresh_control_secrets_json))
-if json.loads(fresh_control_secrets_json):
+fresh = profile.startswith("mdm-journal-")
+if fresh and not json.loads(fresh_control_secrets_json):
+    raise SystemExit("Journal task family requires all three fresh runtime connections")
+if fresh:
+    mdm_secrets.extend(json.loads(fresh_control_secrets_json))
     environment_values.append({"name": "BOOKKEEPING_MANIFEST_ROOT", "value": f"s3://{warehouse_bucket}/warehouse/artifacts/bookkeeping_manifests/"})
 # BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover Ticket 15): added for
 # `mdm build-relationship-release-manifest`, which silver-merge-engine-migration
@@ -1808,7 +1816,7 @@ if json.loads(fresh_control_secrets_json):
 # warehouse profile's own injection above) when the ARN is provisioned;
 # whether another MDM command needs it is unchecked, and removing it would
 # change the MDM task definitions on the next deploy.
-if bookkeeping_postgres_dsn_secret_arn:
+if bookkeeping_postgres_dsn_secret_arn and not fresh:
     mdm_secrets.append(
         {"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn}
     )
@@ -1817,7 +1825,7 @@ container_definitions = [{
     "name": "edgar-warehouse",
     "image": image_ref,
     "essential": True,
-    "command": ["mdm", "--help"],
+    "command": ["change-journal", "status"] if fresh else ["mdm", "--help"],
     "environment": environment_values,
     "secrets": mdm_secrets,
     "logConfiguration": {
@@ -1885,6 +1893,24 @@ if [[ "$DEPLOY_MDM" == "true" ]]; then
   # mdm-large for residual holds graph (security resolve + INSTITUTIONAL_HOLDS +
   # multi-type sync-graph). 13F / holds tables are the memory-heavy path.
   TASK_DEF_MDM_LARGE_ARN="$(register_mdm_task_definition mdm-large 2048 8192)"
+fi
+
+# Fresh control is deliberately isolated from every original workflow ARN.
+# The default command only reads journal status. Feed execution is a separate
+# operator action after complete local/hosted qualification and approval.
+# Retain the existing large envelope; this introduces no sizing promotion.
+FRESH_CONTROL_TASK_DEFINITIONS_JSON='{}'
+if [[ "$FRESH_CONTROL_SECRETS_JSON" != '[]' ]]; then
+  TASK_DEF_JOURNAL_ARN="$(register_task_definition journal-large 2048 8192)"
+  TASK_DEF_MDM_JOURNAL_ARN=""
+  if [[ "$DEPLOY_MDM" == 'true' ]]; then
+    TASK_DEF_MDM_JOURNAL_ARN="$(register_mdm_task_definition mdm-journal-large 2048 8192)"
+  fi
+  FRESH_CONTROL_TASK_DEFINITIONS_JSON="$(python3 - "$TASK_DEF_JOURNAL_ARN" "$TASK_DEF_MDM_JOURNAL_ARN" <<'PY'
+import json, sys
+print(json.dumps({key: value for key, value in zip(("warehouse_large", "mdm_large"), sys.argv[1:]) if value}))
+PY
+)"
 fi
 
 task_definition_for_profile() {
@@ -5763,7 +5789,7 @@ MSYS_NO_PATHCONV=1 python3 - "$(win_path "$SUMMARY_FILE")" "$ENVIRONMENT" "$AWS_
   "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$(win_path "$WORKFLOW_ARNS_FILE")" \
   "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
-  "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$EDGAR_IDENTITY_SECRET_ARN" "$FRESH_CONTROL_SECRETS_JSON" <<'PY'
+  "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$EDGAR_IDENTITY_SECRET_ARN" "$FRESH_CONTROL_SECRETS_JSON" "$FRESH_CONTROL_TASK_DEFINITIONS_JSON" <<'PY'
 import json
 import pathlib
 import sys
@@ -5799,6 +5825,7 @@ import sys
     task_role_arn,
     edgar_identity_secret_arn,
     fresh_control_secrets_json,
+    fresh_control_task_definitions_json,
 ) = sys.argv[1:]
 
 task_definitions = {
@@ -5847,7 +5874,10 @@ if deploy_mdm == "true":
     }
 fresh_control = json.loads(fresh_control_secrets_json)
 if fresh_control:
-    summary["fresh_control"] = {"secrets": {item["name"]: item["valueFrom"] for item in fresh_control}}
+    summary["fresh_control"] = {
+        "secrets": {item["name"]: item["valueFrom"] for item in fresh_control},
+        "task_definitions": json.loads(fresh_control_task_definitions_json),
+    }
 
 pathlib.Path(output_file).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 PY

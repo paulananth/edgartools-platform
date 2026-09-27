@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
@@ -24,6 +24,119 @@ from edgar_warehouse.rules.files import load
 
 from .capture import register_capture
 from .source_evidence import register_source_evidence
+
+
+def verify_validation(bundle, evidence, *, book_engine, journal_engine, artifacts):
+    """Read committed validation authority; a JSON report is not an attestation.
+
+    For a different deployment store, provide both explicit read connections
+    to the retained validation stores. Never infer an old ledger connection.
+    This function performs no control or provider mutations.
+    """
+    from .store import ChangeJournal
+
+    urls = (
+        os.environ.get("BOOKKEEPING_VALIDATION_DATABASE_URL"),
+        os.environ.get("CHANGE_JOURNAL_VALIDATION_DATABASE_URL"),
+    )
+    if bool(urls[0]) != bool(urls[1]):
+        raise Blocked("Supply both retained validation store connections")
+    owned = (
+        [create_engine(url, pool_pre_ping=True) for url in urls] if all(urls) else []
+    )
+    control, journal = owned or [book_engine, journal_engine]
+    try:
+        with control.connect() as conn, conn.begin():
+            conn.execute(text("SET TRANSACTION READ ONLY"))
+            if (
+                int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16
+                or conn.scalar(text("SELECT current_database()")) != "bookkeeping_clean"
+            ):
+                raise Blocked(
+                    "Validation authority requires the fresh PostgreSQL 16 Bookkeeping store"
+                )
+            row = (
+                conn.execute(
+                    text(
+                        "SELECT * FROM bookkeeping.pipeline_run WHERE run_id=CAST(:r AS uuid)"
+                    ),
+                    {"r": evidence["run_id"]},
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None or row["state"] != "complete":
+                raise Blocked("Validation root is missing or has not completed")
+            submission = row["submission"]
+            if (
+                digest(submission) != row["submission_hash"]
+                or submission.get("journal") != "change-journal-v1"
+                or submission["inputs"] != bundle["inputs"]
+                or submission["processing_versions"] != bundle["processing_versions"]
+                or submission["name"] != bundle["source"]
+                or submission["scope"].get("feed") != bundle["feed"]
+                or submission["target"] != bundle["target"]
+                or artifacts.json(submission["rules"])["digest"]
+                != bundle["rules_digest"]
+                or row["checks"] != evidence["checks"]
+                or not row["checks"]
+                or any(value is not True for value in row["checks"].values())
+            ):
+                raise Blocked(
+                    "Committed validation scope or checks differ from the retained plan"
+                )
+            rows = (
+                conn.execute(
+                    text(
+                        "SELECT step,state,count(*) AS count FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) GROUP BY step,state"
+                    ),
+                    {"r": evidence["run_id"]},
+                )
+                .mappings()
+                .all()
+            )
+            counts = {step: 0 for step in bundle["expected"]}
+            for work in rows:
+                if work["state"] != "verified" or work["step"] not in counts:
+                    raise Blocked("Validation includes unverified or undeclared work")
+                counts[work["step"]] = work["count"]
+            pending = conn.scalar(
+                text(
+                    "SELECT count(*) FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid) AND delivered_at IS NULL"
+                ),
+                {"r": evidence["run_id"]},
+            )
+            if (
+                counts != bundle["expected"]
+                or pending
+                or row["expected_count"] != sum(counts.values())
+            ):
+                raise Blocked("Validation accounting or delivery backlog differs")
+        with journal.connect() as conn:
+            if (
+                int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16
+                or conn.scalar(text("SELECT current_database()"))
+                != "change_journal_clean"
+            ):
+                raise Blocked(
+                    "Validation receipts require the fresh PostgreSQL 16 journal"
+                )
+        sink = ChangeJournal(journal)
+        actual = sink.list(
+            source=bundle["source"],
+            feed=bundle["feed"],
+            run_id=evidence["run_id"],
+            limit=1000,
+        )
+        if not actual or actual != evidence["receipts"]:
+            raise Blocked(
+                "Validation receipt inspection differs from durable read-back"
+            )
+        for receipt in actual:
+            sink.verify(receipt)
+    finally:
+        for engine in owned:
+            engine.dispose()
 
 
 def plan(
@@ -147,6 +260,14 @@ def execute(
     book = configured_bookkeeping()
     rules, journal = rules_engine(), journal_engine()
     try:
+        if mode == "deploy":
+            verify_validation(
+                bundle,
+                evidence,
+                book_engine=book.engine,
+                journal_engine=journal,
+                artifacts=book.artifacts,
+            )
         if mode == "validate":
             for engine in (book.engine, rules, journal):
                 with engine.connect() as conn:

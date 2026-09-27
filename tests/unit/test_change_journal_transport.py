@@ -9,6 +9,33 @@ from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.infrastructure.sec_client import download_provider_conditionally
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://fixture.invalid/feed/../outside",
+        "https://fixture.invalid/feed/%2e%2e/outside",
+        "https://fixture.invalid/feed/%252e%252e/outside",
+        "https://fixture.invalid/feed/%2e%2e%2foutside",
+        "https://fixture.invalid/feed/%5coutside",
+        "https://fixture.invalid/feed/one\n",
+        "https://fixture.invalid:bad/feed/one",
+    ],
+)
+def test_approved_coverage_rejects_provider_path_normalization(url):
+    from edgar_warehouse.change_journal.capture import _approved_url
+
+    assert not _approved_url(url, ["https://fixture.invalid/feed/"])
+
+
+def test_approved_coverage_accepts_normal_member_path():
+    from edgar_warehouse.change_journal.capture import _approved_url
+
+    assert _approved_url(
+        "https://fixture.invalid/feed/release-1.xml.zip",
+        ["https://fixture.invalid/feed/"],
+    )
+
+
 def client_for(monkeypatch, handler):
     original = httpx.Client
     monkeypatch.setattr(

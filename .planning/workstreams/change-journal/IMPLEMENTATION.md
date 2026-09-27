@@ -93,3 +93,34 @@ functions, without a new inheritance tree.
 - Fresh CLI/transport safeguards and existing SEC/architecture/CLI coverage: 36
   passed (2026-09-27 14:10 ET). Refreshed main advanced only two Rules research
   documents; rebase changed no tested source, configuration or test files.
+
+- Follow-up review: deployment reads committed validation runs and exact journal
+  receipts before executing; missing/unfinished roots, invented checks, changed
+  receipts and incomplete validation connection pairs fail before provider
+  requests. The real PostgreSQL skill-mode test passes. Provider URL coverage
+  rejects encoded traversal, nested escapes, backslashes and control characters;
+  unit/Rules skill compatibility checks pass 19 tests. Boolean capture envelope
+  versions are refused. Main's Rules skill PR #737 is preserved, including its
+  SEC policy comments; no mapping or bookkeeping digest was changed by that sync.
+
+- AWS review correction: fresh connections are restricted to separate
+  `journal-large` / `mdm-journal-large` task families with a read-only status
+  default. Original task families ignore fresh connection flags and retain
+  the original Bookkeeping DSN and commands, so configured connection wiring
+  cannot break historical workflows. No workload sizing reference changes.
+
+- Final combined PostgreSQL 16 acceptance after validation read-back and URL
+  coverage fixes: **99 passed in 176.20 seconds, no skips**. Fresh/legacy AWS
+  task isolation, transport and current Rules skill compatibility: **27 passed**.
+  Final wheel contains byte-identical copies of all four new migrations;
+  the installed shared skill validates, Bash syntax and diff checks pass.
+
+- Physical empty local stores (2026-09-27 14:45 ET): PostgreSQL 16.15 container
+  `edgartools-change-journal-local-235e8eec`, endpoint `127.0.0.1:33613`.
+  [LOCAL-EMPTY-STORES.json](LOCAL-EMPTY-STORES.json) records all checksums, zero
+  rows in every fresh control table, zero legacy tables, and runtime roles with
+  no table mutation/schema creation/migration-owner membership. Journal init is
+  idempotent; restricted status reports zero events and bounded inspection is
+  empty. No Rules version or history was installed. Private connections are in
+  the recorded mode-0600 file outside the repository. This is local evidence,
+  not hosted qualification or cutover.

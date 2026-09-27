@@ -11,7 +11,7 @@ import hashlib
 import io
 import os
 import zipfile
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from edgar_warehouse.acquisition.ledger import (
     DecisionCause,
@@ -97,7 +97,20 @@ def complete(data: bytes, definition: dict) -> bool:
 
 
 def _approved_url(url: str, prefixes: list[str]) -> bool:
-    parsed = urlparse(url)
+    if not isinstance(url, str) or any(ord(c) <= 32 or c == "\\" for c in url):
+        return False
+    try:
+        parsed = urlparse(url)
+        # Inspect the decoded path that an HTTP client/provider may normalize.
+        # Reject nested escapes rather than accepting ambiguous coverage.
+        path = unquote(parsed.path, errors="strict")
+        if "%" in path or "\\" in path or any(ord(c) < 32 for c in path):
+            return False
+        if any(part in {".", ".."} for part in path.split("/")):
+            return False
+        _ = parsed.port
+    except (ValueError, UnicodeError):
+        return False
     if (
         parsed.scheme != "https"
         or not parsed.hostname
@@ -111,7 +124,7 @@ def _approved_url(url: str, prefixes: list[str]) -> bool:
         if (
             parsed.netloc == approved.netloc
             and parsed.path.startswith(approved.path)
-            and not any(part in {".", ".."} for part in parsed.path.split("/"))
+            and path.startswith(approved.path)
         ):
             return True
     return False
@@ -159,6 +172,7 @@ def register_capture(registry, journal, *, fetchers=None):
         if (
             set(spec)
             != {"version", "source", "feed", "scope", "request", "prior", "evidence"}
+            or type(spec["version"]) is not int
             or spec["version"] != 1
             or spec["source"] != authority["name"]
             or spec["feed"] != authority["feed"]

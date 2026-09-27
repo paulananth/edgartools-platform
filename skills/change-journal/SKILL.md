@@ -66,11 +66,20 @@ activation; deployment submits configured work through Bookkeeping. Apply
 journal migrations only through the separate owner connection with
 `edgar-warehouse change-journal init --runtime-role <role>`.
 
+Retain validation stores for durable read-back. When target stores differ,
+provide both `BOOKKEEPING_VALIDATION_DATABASE_URL` and
+`CHANGE_JOURNAL_VALIDATION_DATABASE_URL` as explicit read connections.
+The helper verifies the actual completed root, frozen submission, counts,
+checks, backlog and journal receipts; a local report alone is insufficient.
+
 AWS application rollout uses `infra/scripts/deploy-aws-application.sh` only
 after all affected feed gates pass. Finish or retain legacy runs on their
 original stack and drain their pending intent there. Never import history or
 relabel an old event for the fresh journal. Physical retirement is separate;
 preserve the archive indefinitely by default.
+Fresh connection flags create separate journal task families with a read-only
+status default. Existing workflows keep their original task bindings. Select
+a fresh task for an approved feed only after full replacement stages qualify.
 
 ## Recovery and result
 

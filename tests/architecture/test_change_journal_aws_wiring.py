@@ -16,8 +16,9 @@ SCRIPT = ROOT / "infra/scripts/deploy-aws-application.sh"
     "function", ["write_container_definitions", "write_mdm_container_definitions"]
 )
 @pytest.mark.parametrize("fresh", [False, True])
+@pytest.mark.parametrize("provided", [False, True])
 def test_generated_task_uses_separate_explicit_runtime_secrets(
-    tmp_path, function, fresh
+    tmp_path, function, fresh, provided
 ):
     source = SCRIPT.read_text()
     start = source.index(function + "() {\n")
@@ -37,11 +38,20 @@ def test_generated_task_uses_separate_explicit_runtime_secrets(
             }
             for name in names
         ]
-        if fresh
+        if provided
         else []
     )
     output = tmp_path / "container.json"
     driver = tmp_path / "driver.sh"
+    profile = (
+        (
+            "journal-large"
+            if function == "write_container_definitions"
+            else "mdm-journal-large"
+        )
+        if fresh
+        else "medium"
+    )
     driver.write_text(
         """set -euo pipefail
 win_path() { printf '%s' "$1"; }
@@ -68,9 +78,16 @@ BOOKKEEPING_POSTGRES_DSN_SECRET_ARN='legacy-book-arn'
         + function
         + " '"
         + str(output)
-        + "' medium\n"
+        + "' "
+        + profile
+        + "\n"
     )
-    subprocess.run(["bash", str(driver)], capture_output=True, text=True, check=True)
+    result = subprocess.run(["bash", str(driver)], capture_output=True, text=True)
+    if fresh and not provided:
+        assert result.returncode != 0 and "requires all three" in result.stderr
+        assert not output.exists()
+        return
+    assert result.returncode == 0, result.stderr
     container = json.loads(output.read_text())[0]
     actual = {entry["name"]: entry["valueFrom"] for entry in container["secrets"]}
     if fresh:
@@ -81,6 +98,14 @@ BOOKKEEPING_POSTGRES_DSN_SECRET_ARN='legacy-book-arn'
         assert {entry["name"]: entry["value"] for entry in container["environment"]}[
             "BOOKKEEPING_MANIFEST_ROOT"
         ].startswith("s3://warehouse/")
+        assert "BOOKKEEPING_DATABASE_URL" not in actual
+        assert container["command"] == ["change-journal", "status"]
     else:
         assert not set(names) & set(actual)
+        assert actual["BOOKKEEPING_DATABASE_URL"] == "legacy-book-arn"
+        assert container["command"] == (
+            ["--help"]
+            if function == "write_container_definitions"
+            else ["mdm", "--help"]
+        )
     assert not any("MIGRATION_DATABASE_URL" in name for name in actual)

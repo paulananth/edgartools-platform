@@ -109,6 +109,15 @@ Configured Rules submission supports an exact `--feed` binding. Install the
 shared source/feed skill with `bash skills/change-journal/link.sh` (or a
 temporary `--home` for installation tests). Both runtimes use one skill file.
 
+Skill deployment reads back the actual completed validation root, exact frozen
+submission, verified work counts, checks, zero delivery backlog and journal
+receipts. An edited validation report cannot replace that authority. When
+deploying to different stores, retain the validation databases and explicitly
+provide both `BOOKKEEPING_VALIDATION_DATABASE_URL` and
+`CHANGE_JOURNAL_VALIDATION_DATABASE_URL` as read connections. With neither
+set, the validation root must exist in the selected fresh target stores. There
+is no legacy lookup or history import when validation authority is unavailable.
+
 ## Qualification and cutover status
 
 Local acceptance covers actual PostgreSQL 16 restricted functions, duplicate
@@ -147,11 +156,17 @@ The application script accepts these three runtime secret ARN flags together:
 --change-journal-postgres-dsn-secret-arn
 ```
 
-Warehouse and MDM task definitions receive the three separate runtime DSNs
-and an S3 `BOOKKEEPING_MANIFEST_ROOT`. No migration connection is injected.
+Separate `journal-large` and `mdm-journal-large` task families receive the three
+runtime DSNs and an S3 `BOOKKEEPING_MANIFEST_ROOT`. They default to read-only
+`change-journal status`, retain the current large CPU/memory envelope and do
+not receive the legacy Bookkeeping connection. Original warehouse/MDM task
+families ignore the fresh secrets and preserve their connections and commands.
+No migration connection is injected.
 Flags/retained application summary are the only resolution sources for fresh
-connections; there is no legacy/MDM/name fallback. This is connection wiring,
-not feed promotion. The AWS state machines retain their original commands.
+connections; there is no legacy/MDM/name fallback. Fresh task ARNs are recorded
+under `fresh_control.task_definitions`; existing state machines keep their
+original task ARN bindings and commands. This is connection wiring, not feed
+promotion. No workflow has been redirected by this implementation.
 
 Before rollout, provision the three isolated PostgreSQL 16 databases with
 separate owners/runtime roles, apply checksummed migrations via owner

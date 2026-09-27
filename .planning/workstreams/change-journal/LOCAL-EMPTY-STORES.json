@@ -1,0 +1,70 @@
+{
+  "captured_at": "2026-09-27T18:45:02.602412+00:00",
+  "container": "edgartools-change-journal-local-235e8eec",
+  "credentials_file": "/Users/aneenaananth/.codex/runtime/change-journal-20260927-235e8eec/connections.env",
+  "endpoint": "127.0.0.1:33613",
+  "journal_status": {
+    "database": "change_journal_clean",
+    "events": 0,
+    "feed": null,
+    "last_id": null,
+    "source": null
+  },
+  "migrations": {
+    "bookkeeping_clean": {
+      "001_control.sql": "01ee61d9abbadc569c8bad6d86333638c2227a86a3583b46972ee7930db137f8",
+      "002_resource_checkpoint.sql": "ff59c54df7cf5bd58b5f79d5fa4dc1dd4efc55929c6952b4987f2e22cdcb1ceb",
+      "003_request_authorization.sql": "c60d8c77830c7ebdb522f371ced350a286f4aa973e67e7e32afc0e311d20b800"
+    },
+    "change_journal_clean": {
+      "001_event.sql": "02958b8430a9ad4097942da93ad4de8b2da776f2d61b1af1dbb3b167a942be87"
+    },
+    "rules": {
+      "001_rule_version.sql": "b387342786567a418798873f584e86e63f7256d6050ead0ea806954ff1d01ad2",
+      "002_acquisition_authority.sql": "292b85ecd7d02a194ec18bf4aef7401716f7ef6e8946efa8aa704e2c0ca67cc5"
+    }
+  },
+  "rules_approved": false,
+  "stores": {
+    "bookkeeping_clean": {
+      "legacy_tables": 0,
+      "restricted_runtime": true,
+      "row_counts": {
+        "checkpoint": 0,
+        "journal_outbox": 0,
+        "lease": 0,
+        "pipeline_run": 0,
+        "work_item": 0
+      },
+      "runtime_owner_membership": false,
+      "runtime_role": "bookkeeping_clean_runtime",
+      "runtime_schema_create": false,
+      "runtime_table_mutation": false,
+      "version": "16.15 (Debian 16.15-1.pgdg13+2)"
+    },
+    "change_journal_clean": {
+      "legacy_tables": 0,
+      "restricted_runtime": true,
+      "row_counts": {
+        "event": 0
+      },
+      "runtime_owner_membership": false,
+      "runtime_role": "change_journal_runtime",
+      "runtime_schema_create": false,
+      "runtime_table_mutation": false,
+      "version": "16.15 (Debian 16.15-1.pgdg13+2)"
+    },
+    "rules": {
+      "legacy_tables": 0,
+      "restricted_runtime": true,
+      "row_counts": {
+        "rule_version": 0
+      },
+      "runtime_owner_membership": false,
+      "runtime_role": "rules_agent",
+      "runtime_schema_create": false,
+      "runtime_table_mutation": false,
+      "version": "16.15 (Debian 16.15-1.pgdg13+2)"
+    }
+  }
+}

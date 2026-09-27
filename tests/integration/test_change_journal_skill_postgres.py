@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -62,15 +63,32 @@ def test_plan_has_no_live_changes_validate_executes_and_deploy_requires_matching
     validated = execute("validate", bundle, source=name, feed="new-feed")
     assert validated["qualified"] is True and validated["verified"] == {"capture": 1}
     assert len(calls) == 1 and len(validated["receipts"]) == 2
+    forged = deepcopy(validated)
+    forged["receipts"][0]["id"] += 1
     for damaged in (
         None,
         {**validated, "qualified": False},
         {**validated, "feed": "other"},
         {**validated, "plan_hash": "a" * 64},
         {**validated, "verified": {"capture": 0}},
+        {**validated, "run_id": str(uuid4())},
+        {**validated, "run_id": rid},  # matching scope, unfinished real root
+        {**validated, "checks": {"invented_check": True}},
+        forged,
     ):
         with pytest.raises(Blocked):
             execute("deploy", bundle, source=name, feed="new-feed", evidence=damaged)
+    assert len(calls) == 1
+    monkeypatch.setenv(
+        "BOOKKEEPING_VALIDATION_DATABASE_URL",
+        databases.runtime.url.render_as_string(hide_password=False),
+    )
+    with pytest.raises(Blocked, match="both retained"):
+        execute("deploy", bundle, source=name, feed="new-feed", evidence=validated)
+    monkeypatch.setenv(
+        "CHANGE_JOURNAL_VALIDATION_DATABASE_URL",
+        databases.ledger.engine.url.render_as_string(hide_password=False),
+    )
     deployed = execute(
         "deploy", bundle, source=name, feed="new-feed", evidence=validated
     )
