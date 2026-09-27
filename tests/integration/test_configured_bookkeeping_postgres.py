@@ -89,6 +89,10 @@ def databases():
         rules_admin = engine("rules")
         ledger_admin = engine("change_journal_clean")
         destination_admin = engine("destination")
+        with pytest.raises(Blocked, match="not initialized"):
+            migrate(admin, runtime_role="bk_runtime", existing_only=True)
+        with pytest.raises(Blocked, match="not initialized"):
+            migrate_journal(ledger_admin, runtime_role="ledger_runtime", existing_only=True)
         migrate(admin, runtime_role="bk_runtime")
         migrate_rules(rules_admin)
         migrate_journal(ledger_admin, runtime_role="ledger_runtime")
@@ -162,6 +166,22 @@ def test_exact_five_tables_restricted_runtime_and_migrations(databases):
                 "CREATE TABLE bookkeeping.bad(x text)", "SELECT bookkeeping.compact(30)"):
         with pytest.raises(DBAPIError), databases.runtime.begin() as conn:
             conn.execute(text(sql))
+
+
+def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(databases, monkeypatch, capsys):
+    from edgar_warehouse.cli import main
+
+    monkeypatch.setenv(
+        "BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL",
+        databases.admin.url.render_as_string(hide_password=False),
+    )
+    assert main(["bookkeeping", "init", "--runtime-role", "bk_runtime"]) == 0
+    assert "001_control.sql" in capsys.readouterr().out
+    assert main(["bookkeeping", "migrate", "--runtime-role", "bk_runtime"]) == 0
+    assert "001_control.sql" in capsys.readouterr().out
+    with databases.admin.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM bookkeeping.pipeline_run")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM bookkeeping.work_item")) == 0
 
 
 def test_pipeline_rules_and_approval_authority(databases, tmp_path):

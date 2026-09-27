@@ -1,4 +1,4 @@
 interface:
   display_name: "Change Journal"
-  short_description: "Plan, validate or deploy journal evidence for a source and feed"
-  default_prompt: "Use $change-journal with a mode, source and feed to manage journal evidence and delivery recovery."
+  short_description: "Initialize or migrate the journal, or manage feed evidence"
+  default_prompt: "Use $change-journal init or migrate for the fresh store, or plan, validate or deploy with --source and --feed."

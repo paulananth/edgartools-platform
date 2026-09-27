@@ -213,11 +213,13 @@ The script requires `BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL`,
 logins. `BOOKKEEPING_MANIFEST_ROOT` names file storage for offline acceptance
 or an S3 prefix for AWS.
 
-Existing databases can be migrated explicitly with
-`bookkeeping init --runtime-role <role>` and `rules init`, using
+Existing control databases can be migrated explicitly with
+`bookkeeping migrate --runtime-role <role>` and `rules init`, using
 `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
-`change-journal init` and `bookkeeping init-guard` use their separate migration
-URLs. They do not populate business or source data. Resource checkpoint and
+Use `bookkeeping init` only to initialize the fresh control schema;
+`bookkeeping migrate` refuses a missing schema. `change-journal init` or
+`change-journal migrate` and `bookkeeping init-guard` use their separate
+migration URLs. They do not populate business or source data. Resource checkpoint and
 request authorization migrations retain the five-table control boundary;
 see [Change Journal](change-journal.md) for their transaction/recovery contract.
 

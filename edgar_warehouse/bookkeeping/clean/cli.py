@@ -56,10 +56,16 @@ def _handle(args):
     from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
     from .runner import run
     operation = args.bookkeeping_command
-    if operation == "init":
+    if operation in {"init", "migrate"}:
         owner = create_engine(os.environ["BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL"])
-        result = migrate(owner, runtime_role=args.runtime_role)
-        owner.dispose()
+        try:
+            result = migrate(
+                owner,
+                runtime_role=args.runtime_role,
+                existing_only=operation == "migrate",
+            )
+        finally:
+            owner.dispose()
     elif operation == "init-guard":
         owner = create_engine(os.environ["DESTINATION_MIGRATION_DATABASE_URL"])
         result = migrate_guard(owner, runtime_role=args.runtime_role)
@@ -91,7 +97,7 @@ def _handle(args):
 def register(subparsers):
     parser = subparsers.add_parser("bookkeeping", help="Fresh configured control; never imports legacy checkpoints")
     commands = parser.add_subparsers(dest="bookkeeping_command", required=True)
-    for name in ("init", "init-guard"):
+    for name in ("init", "migrate", "init-guard"):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.set_defaults(handler=_handle)

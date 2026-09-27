@@ -1,21 +1,47 @@
 ---
 name: change-journal
-description: Plan, validate or deploy Change Journal for an explicit source and feed, including evidence receipts and owner-delegated delivery recovery. Work execution belongs to Bookkeeping and source policy to Rules.
+description: Initialize or migrate the fresh Change Journal store, or plan, validate and deploy journal evidence for an explicit source and feed. Delivery recovery delegates to the owning Bookkeeping or MDM outbox.
 ---
 
 # Change Journal
 
-Invoke `$change-journal plan|validate|deploy --source <source> --feed <feed>`.
-Each mode requires both identities. Preserve supplied values; resolve unknown
-or ambiguous feeds through the shared Bookkeeping descriptor resolver before
-dependent work. Read the [contract](../../docs/specs/change-journal.md).
+Invoke `$change-journal init|migrate` for the whole fresh store, or
+`$change-journal plan|validate|deploy --source <source> --feed <feed>` for a
+specific feed. Only the feed-scoped modes require both identities. Preserve
+supplied values; resolve unknown or ambiguous feeds through the shared
+Bookkeeping descriptor resolver before dependent work. Read the
+[contract](../../docs/specs/change-journal.md). The old Change Ledger is a
+separate legacy archive; do not redirect its backlog to this store.
 
 Use `uv run --extra mdm --extra s3` from the intended repository worktree.
 Resolve the skill's physical path so relative links refer to that checkout.
-The helper uses the same descriptor resolution as Bookkeeping:
+Feed-scoped modes use the same descriptor resolution as Bookkeeping:
 
 ```bash
 uv run --extra mdm --extra s3 skills/bookkeeping/scripts/resolve_feed.py --source <source> --feed <feed>
+```
+
+## Init and migrate
+
+Use `init` on an empty `change_journal_clean` PostgreSQL 16 database; use
+`migrate` only when its journal schema is already initialized and checksummed.
+Both apply pending numbered migrations and refresh restricted append/read
+function grants. `migrate` refuses to initialize a missing schema. A wrong
+database, legacy/business tables, untracked schema or checksum drift blocks
+the operation. These modes import no ledger history, create no event, and do
+not migrate Bookkeeping or Rules.
+
+Set `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` to a separate migration-owner
+login; ensure the named runtime role already exists and is restricted. Never
+use `CHANGE_LEDGER_DATABASE_URL`, `MDM_DATABASE_URL` or the runtime login as a
+migration fallback. Verify the target database, PostgreSQL version and role
+without printing connection secrets, then run the selected command and read
+back its checksums, sole `journal.event` table, function grants and event
+count:
+
+```bash
+uv run --extra mdm --extra s3 edgar-warehouse change-journal init --runtime-role <role>
+uv run --extra mdm --extra s3 edgar-warehouse change-journal migrate --runtime-role <role>
 ```
 
 ## Plan
@@ -68,8 +94,8 @@ Use `run_mode.py deploy --source <source> --feed <feed> --plan <plan.json>
 The helper rejects changed scope, Rules, processing versions, inputs or
 incomplete validation. Target Rules must already have the exact approval and
 activation; deployment submits configured work through Bookkeeping. Apply
-journal migrations only through the separate owner connection with
-`edgar-warehouse change-journal init --runtime-role <role>`.
+journal migrations only through the separate owner connection using the
+`init` or `migrate` mode appropriate to the target store.
 
 Retain validation stores for durable read-back. When target stores differ,
 provide both `BOOKKEEPING_VALIDATION_DATABASE_URL` and

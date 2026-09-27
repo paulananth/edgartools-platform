@@ -11,7 +11,7 @@ from sqlalchemy import text
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical
 
 
-def migrate(engine, *, runtime_role: str) -> dict:
+def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     if engine.dialect.name != "postgresql":
         raise Blocked("Change Journal requires PostgreSQL 16")
     paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
@@ -51,6 +51,10 @@ def migrate(engine, *, runtime_role: str) -> dict:
                 "SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='journal'"
             )
         )
+        if existing_only and not exists:
+            raise Blocked(
+                "Change Journal is not initialized; run change-journal init first"
+            )
         if exists and not saved:
             raise Blocked("Refusing to adopt an untracked journal schema")
         if conn.scalar(

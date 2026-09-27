@@ -14,10 +14,14 @@ def _handle(args):
     from .database import migrate
     from .store import ChangeJournal, get_engine
 
-    if args.journal_command == "init":
+    if args.journal_command in {"init", "migrate"}:
         owner = create_engine(os.environ["CHANGE_JOURNAL_MIGRATION_DATABASE_URL"])
         try:
-            result = migrate(owner, runtime_role=args.runtime_role)
+            result = migrate(
+                owner,
+                runtime_role=args.runtime_role,
+                existing_only=args.journal_command == "migrate",
+            )
         finally:
             owner.dispose()
     else:
@@ -116,6 +120,9 @@ def register(subparsers):
     init = commands.add_parser("init")
     init.add_argument("--runtime-role", required=True)
     init.set_defaults(handler=_handle)
+    migration = commands.add_parser("migrate")
+    migration.add_argument("--runtime-role", required=True)
+    migration.set_defaults(handler=_handle)
     for name in ("status", "events"):
         command = commands.add_parser(name)
         command.add_argument("--source")

@@ -16,7 +16,7 @@ def get_engine(url: str | None = None):
     return create_engine(url or os.environ["BOOKKEEPING_CLEAN_DATABASE_URL"], pool_pre_ping=True)
 
 
-def migrate(engine, *, runtime_role: str) -> dict:
+def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     if engine.dialect.name != "postgresql":
         raise Blocked("Bookkeeping requires PostgreSQL 16")
     quote = engine.dialect.identifier_preparer.quote
@@ -32,6 +32,10 @@ def migrate(engine, *, runtime_role: str) -> dict:
         conn.execute(text("SELECT pg_advisory_xact_lock(730501)"))
         exists = conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='bookkeeping')"))
         saved = conn.scalar(text("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='bookkeeping'"))
+        if existing_only and not exists:
+            raise Blocked(
+                "Bookkeeping is not initialized; run bookkeeping init first"
+            )
         if exists and not saved:
             raise Blocked("Existing untracked schema; refusing to adopt it")
         checksums = json.loads(saved) if saved else {}

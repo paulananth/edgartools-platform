@@ -170,6 +170,23 @@ def test_cli_inspection_and_receipt_verification(
     )
 
 
+def test_journal_cli_init_and_migrate_use_owner_and_preserve_events(databases, monkeypatch, capsys):
+    from edgar_warehouse.cli import main
+
+    with databases.ledger_admin.connect() as conn:
+        before = conn.scalar(text("SELECT count(*) FROM journal.event"))
+    monkeypatch.setenv(
+        "CHANGE_JOURNAL_MIGRATION_DATABASE_URL",
+        databases.ledger_admin.url.render_as_string(hide_password=False),
+    )
+    assert main(["change-journal", "init", "--runtime-role", "ledger_runtime"]) == 0
+    assert "001_event.sql" in capsys.readouterr().out
+    assert main(["change-journal", "migrate", "--runtime-role", "ledger_runtime"]) == 0
+    assert "001_event.sql" in capsys.readouterr().out
+    with databases.ledger_admin.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM journal.event")) == before
+
+
 def test_no_legacy_or_mdm_connection_fallback(monkeypatch):
     from edgar_warehouse.change_journal.store import get_engine
 

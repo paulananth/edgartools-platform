@@ -1,6 +1,6 @@
 ---
 name: bookkeeping
-description: Plan, validate or deploy Bookkeeping for a specified source and feed in edgartools-platform. Use for pipeline worklists, leases, checkpoints, verified completion and recovery; source mapping and merge-policy design belong to Rules.
+description: Initialize or migrate the fresh Bookkeeping store, or plan, validate and deploy work for a specified source and feed in edgartools-platform. Worklists, leases, checkpoints and recovery belong here; source policy belongs to Rules.
 ---
 
 # Bookkeeping
@@ -19,12 +19,16 @@ execution checkout contains the fresh engine; another worktree may be older.
 $bookkeeping plan --source <source> --feed <feed>
 $bookkeeping validate --source <source> --feed <feed>
 $bookkeeping deploy --source <source> --feed <feed>
+$bookkeeping init
+$bookkeeping migrate
 ```
 
-These are **skill arguments**, not warehouse CLI commands. Every mode requires
-both source and feed. Preserve values already provided in the conversation;
-ask for any missing mode, source or feed before dependent work. Additional
-inputs are a target/stage range, environment, bounded input references and,
+These are **skill arguments**, not warehouse CLI commands. Plan, validate and
+deploy require both source and feed. Init and migrate operate on the whole
+fresh control store, so they do not take source or feed. Preserve values already
+provided in the conversation; ask for missing source or feed only when a
+feed-scoped mode needs them. Additional inputs are a target/stage range,
+environment, bounded input references and,
 for continuation, a run id. Infer those when the request or retained evidence
 settles them; ask only when the choice changes the intended work.
 
@@ -39,7 +43,7 @@ must name the exact included members in the plan. Ambiguous or unknown feeds
 require clarification; a feed is neither a Bookkeeping target nor a guessed
 alias. Read documents through `edgar_warehouse.rules.files`.
 
-Resolve the binding deterministically before every mode:
+Resolve the binding deterministically before every feed-scoped mode:
 
 ```bash
 uv run --extra mdm --extra s3 skills/bookkeeping/scripts/resolve_feed.py \
@@ -66,6 +70,33 @@ Artifact copying uses available bytes, not a provider fetch or parser. Export
 and graph use offline contract sinks; hosted adapters and full legacy caller
 migration remain unfinished. Report unsupported capabilities as gaps rather
 than substituting a legacy run.
+
+## Init and migrate modes
+
+Use `init` for an empty `bookkeeping_clean` PostgreSQL 16 database; use
+`migrate` only for an already initialized, checksummed Bookkeeping schema.
+Both apply pending numbered migrations and refresh restricted runtime grants.
+`migrate` refuses to create a missing schema; checksum drift or an untracked
+schema blocks both. These modes create no run, import no legacy history or
+checkpoints, and do not change Rules, Change Journal or destination schemas.
+
+Use a separate migration owner in `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL`
+and an existing restricted runtime role. Never use the legacy
+`BOOKKEEPING_DATABASE_URL` or a runtime login as the migration owner. Check
+the exact database, PostgreSQL version and role before executing; do not print
+connection secrets. Then run the selected command and verify the returned
+migration checksums, five control tables, runtime privileges and zero imported
+run/work rows:
+
+```bash
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping init --runtime-role <role>
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping migrate --runtime-role <role>
+```
+
+Select one command for the requested state. If destination transaction guards
+are in scope, provision them separately with `bookkeeping init-guard` using
+`DESTINATION_MIGRATION_DATABASE_URL` and its restricted destination role.
+Neither control-store mode silently provisions a destination or executes work.
 
 ## Plan mode
 

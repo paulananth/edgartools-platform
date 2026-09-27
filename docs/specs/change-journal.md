@@ -26,6 +26,10 @@ ledger or MDM connection. Apply with:
 uv run --extra mdm --extra s3 edgar-warehouse change-journal init --runtime-role <role>
 ```
 
+For an already initialized, checksummed schema, use `change-journal migrate
+--runtime-role <role>` with the same separate migration connection. Migrate
+refuses to create a missing schema; neither command imports legacy events.
+
 The version 1 envelope contains `producer`, original `event_key`, root
 `run_id`, `source`, `feed`, identifier-only `scope`, `event_type`, UTC
 `occurred_at` and bounded exact URI/SHA-256 `evidence` references. It contains
