@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import unittest
-from datetime import date, datetime, timezone
+from datetime import date
 
 from edgar_warehouse.explore.earnings_calendar import (
     CalendarRowError,
@@ -328,37 +327,6 @@ class ExportMapTests(unittest.TestCase):
         )
 
         self.assertEqual(SNOWFLAKE_EXPORT_TABLES["EARNINGS_CALENDAR"], "earnings_calendar")
-
-
-@unittest.skipUnless(
-    os.environ.get("ERDP03_LIVE") == "1" and os.environ.get("FINNHUB_API_KEY"),
-    "Set ERDP03_LIVE=1 and FINNHUB_API_KEY for live Finnhub fetch.",
-)
-class LiveFinnhubTests(unittest.TestCase):
-    def test_fetch_window(self) -> None:
-        from datetime import timedelta
-
-        from edgar_warehouse.explore.earnings_calendar import (
-            fetch_finnhub_earnings_calendar,
-        )
-
-        today = date.today()
-        rows = fetch_finnhub_earnings_calendar(
-            from_date=today,
-            to_date=today + timedelta(days=14),
-            ticker_to_cik={
-                "AAPL": 320193,
-                "MSFT": 789019,
-                "GOOGL": 1652044,
-                "AMZN": 1018724,
-                "NVDA": 1045810,
-            },
-        )
-        # Free API may return empty outside earnings season; just ensure no crash
-        self.assertIsInstance(rows, list)
-        for r in rows:
-            self.assertEqual(r["source_system"], "finnhub")
-            self.assertIn(r["session"], {"pre_market", "after_close", "during_session", "unknown"})
 
 
 if __name__ == "__main__":

@@ -3,9 +3,8 @@
 sec_raw_object is landing-only (silver-merge-engine-migration Ticket 06d), so
 the legacy snapshot cannot `SELECT * FROM sec_raw_object` on a local store:
 it reads the raw objects the legacy capture just recorded through the
-run's own lookup (attachments, then raw object by id). The live SEC dual-path
-test (tests/application/test_dual_path_capture_parity.py) is skipped in CI, so
-this covers the snapshot without SEC or Postgres.
+run's own lookup (attachments, then raw object by id). This covers the
+snapshot without SEC or Postgres.
 """
 
 from __future__ import annotations

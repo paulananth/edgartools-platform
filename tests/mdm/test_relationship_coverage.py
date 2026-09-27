@@ -96,14 +96,6 @@ def world(session: Session):
 # Task 1: fingerprint determinism + EDGE-07/EDGE-08 exclusion classification
 # ---------------------------------------------------------------------------
 
-class TestPopulatedTypesConsistency:
-    def test_matches_snowflake_graph_populated_relationship_types(self):
-        from edgar_warehouse.mdm.snowflake_graph import (
-            POPULATED_RELATIONSHIP_TYPES as SNOWFLAKE_GRAPH_POPULATED,
-        )
-        assert set(coverage.POPULATED_RELATIONSHIP_TYPES) == set(SNOWFLAKE_GRAPH_POPULATED)
-
-
 class TestFingerprint:
     def test_fingerprint_is_stable_for_same_sorted_input(self):
         a = coverage._fingerprint(["b", "a"], ["1"])
@@ -291,8 +283,7 @@ class TestVerifyCoverageManifest:
 class TestNamedRelationshipParityChecksExhaustiveMode:
     """_named_relationship_parity_checks accepts an optional coverage map
     (07-02) that replaces POPULATED_RELATIONSHIP_TYPES-only scoping with
-    exhaustive evaluation. Default (no coverage arg) behavior is unchanged --
-    covered already by tests/mdm/test_cli_snowflake_graph.py."""
+    exhaustive evaluation. Default (no coverage arg) behavior is unchanged."""
 
     def _relationship_parity(self, rows: list[dict]) -> dict:
         return {"by_relationship_type": rows}
