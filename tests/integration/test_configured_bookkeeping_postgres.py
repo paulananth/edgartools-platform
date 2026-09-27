@@ -22,7 +22,9 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.capabilities import receipt_for, standard_registry
 from edgar_warehouse.bookkeeping.clean.config import Blocked, Capability, canonical, digest
 from edgar_warehouse.bookkeeping.clean.database import migrate
-from edgar_warehouse.bookkeeping.clean.destinations import ChangeLedger, guard, migrate_guard, migrate_ledger
+from edgar_warehouse.bookkeeping.clean.destinations import guard, migrate_guard
+from edgar_warehouse.change_journal import ChangeJournal, JournalConflict
+from edgar_warehouse.change_journal.database import migrate as migrate_journal
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.runner import Authority, run
 from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
@@ -34,7 +36,7 @@ class Databases:
     runtime: object
     rules: Rules
     approver: Rules
-    ledger: ChangeLedger
+    ledger: ChangeJournal
     ledger_admin: object
     destination: object
     destination_admin: object
@@ -80,16 +82,16 @@ def databases():
                 conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
             conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
             conn.exec_driver_sql("GRANT rules_approver TO operator")
-            for db in ("bookkeeping_clean", "rules", "change_ledger", "destination"):
+            for db in ("bookkeeping_clean", "rules", "change_journal_clean", "destination"):
                 conn.exec_driver_sql(f"CREATE DATABASE {db}")
         admin = engine("bookkeeping_clean")
         runtime = engine("bookkeeping_clean", "bk_runtime")
         rules_admin = engine("rules")
-        ledger_admin = engine("change_ledger")
+        ledger_admin = engine("change_journal_clean")
         destination_admin = engine("destination")
         migrate(admin, runtime_role="bk_runtime")
         migrate_rules(rules_admin)
-        migrate_ledger(ledger_admin, runtime_role="ledger_runtime")
+        migrate_journal(ledger_admin, runtime_role="ledger_runtime")
         migrate_guard(destination_admin, runtime_role="destination_runtime")
         with destination_admin.begin() as conn:
             conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
@@ -98,7 +100,7 @@ def databases():
         _apply_source_registry_migration(destination_admin)
         migrate_guard(destination_admin, runtime_role="clean_application")
         yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
-                        ChangeLedger(engine("change_ledger", "ledger_runtime")), ledger_admin,
+                        ChangeJournal(engine("change_journal_clean", "ledger_runtime")), ledger_admin,
                         engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
     finally:
         for value in engines:
@@ -252,13 +254,13 @@ def test_full_completion_and_duplicate_delivery(databases, tmp_path):
     assert state["run"]["state"] == "complete"
     assert state["counts"] == {"verified": 3}
     with databases.admin.connect() as conn:
-        events = conn.execute(text("SELECT event_id,payload FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid)"), {"r": rid}).all()
-    for event_id, payload in events:
-        databases.ledger.deliver(str(event_id), payload)
-        with pytest.raises(DBAPIError):
-            databases.ledger.deliver(str(event_id), {**payload, "checks": {"changed": True}})
+        events = conn.execute(text("SELECT * FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid)"), {"r": rid}).mappings().all()
+    for event in events:
+        databases.ledger.append(book.journal_event(event))
+        with pytest.raises(JournalConflict):
+            databases.ledger.append(book.journal_event({**event, "payload": {**event["payload"], "checks": {"changed": True}}}))
     with databases.ledger_admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM bookkeeping_mirror.event WHERE run_id=CAST(:r AS uuid)"), {"r": rid}) == 3
+        assert conn.scalar(text("SELECT count(*) FROM journal.event WHERE run_id=CAST(:r AS uuid)"), {"r": rid}) == 3
     book.resume(rid)
     assert run(book, rid, databases.ledger)["counts"] == {"verified": 3}
 
@@ -510,8 +512,8 @@ def test_outbox_atomic_with_progress_and_lost_delivery_ack(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     complete(book, rid)
     with databases.admin.connect() as conn:
-        event = conn.execute(text("SELECT event_id,payload FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid)"), {"r": rid}).one()
-    databases.ledger.deliver(str(event[0]), event[1])
+        event = conn.execute(text("SELECT * FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid)"), {"r": rid}).mappings().one()
+    databases.ledger.append(book.journal_event(event))
     assert book.finalize(rid)["run"]["state"] == "waiting"
     assert book.deliver(databases.ledger, rid) == 1
     assert book.finalize(rid)["run"]["state"] == "complete"
@@ -521,7 +523,7 @@ def test_journal_failure_and_recovery(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     complete(book, rid)
     class FailingLedger:
-        def deliver(self, *args):
+        def append(self, *args):
             raise ConnectionError("injected journal outage")
     with pytest.raises(ConnectionError):
         book.deliver(FailingLedger(), rid)
@@ -891,7 +893,7 @@ def test_operator_cli_submits_and_resumes_frozen_work(databases, tmp_path, monke
     _, _, inputs, name = submit(databases, tmp_path)
     monkeypatch.setenv("BOOKKEEPING_CLEAN_DATABASE_URL", databases.runtime.url.render_as_string(hide_password=False))
     monkeypatch.setenv("RULES_DATABASE_URL", databases.rules.engine.url.render_as_string(hide_password=False))
-    monkeypatch.setenv("CHANGE_LEDGER_DATABASE_URL", databases.ledger.engine.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("CHANGE_JOURNAL_DATABASE_URL", databases.ledger.engine.url.render_as_string(hide_password=False))
     monkeypatch.setenv("BOOKKEEPING_MANIFEST_ROOT", (tmp_path / "cli-manifests").as_uri())
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     assert main(["rules", "run", "--source", name, "--target", "silver",
@@ -917,6 +919,8 @@ def test_source_configs_use_same_control_contract():
     from edgar_warehouse.rules.files import source
     from edgar_warehouse.bookkeeping.clean.config import validate
     registry = standard_registry()
+    from edgar_warehouse.change_journal.capture import register_capture
+    register_capture(registry, None)
     for name in ("gleif", "sec.submissions.company"):
         selected = validate(source(name), "capture", registry)
         assert selected["lease_seconds"] == 120 and selected["heartbeat_seconds"] == 30
@@ -947,9 +951,10 @@ def test_provisioning_uses_nologin_owners_and_empty_stores(monkeypatch):
         monkeypatch.setenv("RULES_AGENT_PASSWORD", "test")
         script = Path(__file__).parents[2] / "infra/scripts/provision-clean-bookkeeping.py"
         provision = runpy.run_path(str(script))["provision"]
-        result = provision(url, rules=True)
-        assert set(result) == {"bookkeeping_clean", "rules"}
-        assert provision(url, rules=True) == result
+        monkeypatch.setenv("CHANGE_JOURNAL_RUNTIME_PASSWORD", "test")
+        result = provision(url, rules=True, journal=True)
+        assert set(result) == {"bookkeeping_clean", "rules", "change_journal_clean"}
+        assert provision(url, rules=True, journal=True) == result
         for database, role, table in (("bookkeeping_clean", "bookkeeping_clean_runtime", "bookkeeping.pipeline_run"),
                                       ("rules", "rules_agent", "rules.rule_version")):
             runtime = create_engine(f"postgresql://{role}:test@127.0.0.1:{port}/{database}")
@@ -958,8 +963,13 @@ def test_provisioning_uses_nologin_owners_and_empty_stores(monkeypatch):
                 assert conn.scalar(text(f"SELECT count(*) FROM {table}")) == 0
             with pytest.raises(DBAPIError), runtime.begin() as conn:
                 conn.execute(text(f"DELETE FROM {table}"))
+        journal_admin = create_engine(f"postgresql://postgres:test@127.0.0.1:{port}/change_journal_clean")
+        engines.append(journal_admin)
+        with journal_admin.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM journal.event")) == 0
+            assert conn.scalars(text("SELECT schemaname||'.'||tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')")).all() == ["journal.event"]
         with admin.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname IN ('rules_owner','bookkeeping_clean_owner') AND NOT rolcanlogin AND NOT rolsuper")) == 2
+            assert conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname IN ('rules_owner','bookkeeping_clean_owner','change_journal_owner') AND NOT rolcanlogin AND NOT rolsuper")) == 3
     finally:
         for engine in engines:
             engine.dispose()

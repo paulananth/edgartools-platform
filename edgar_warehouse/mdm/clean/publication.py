@@ -89,6 +89,11 @@ def migrate_mirror(engine, *, application_role: str) -> dict:
 
 
 class JournalMirror:
+    """Legacy sink only, retained for original-stack run/drain operations.
+
+    Fresh configured work uses change_journal.publication.JournalPublisher.
+    Never construct this as fallback when the fresh journal is unavailable.
+    """
     def __init__(self, engine):
         self.engine = engine
 

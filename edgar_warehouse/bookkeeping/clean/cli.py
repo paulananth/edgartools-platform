@@ -9,10 +9,20 @@ def configured_bookkeeping():
     from .database import get_engine
     from .engine import Bookkeeping
     book = Bookkeeping(get_engine(), standard_registry())
+    if os.environ.get("CHANGE_JOURNAL_DATABASE_URL"):
+        from edgar_warehouse.change_journal.capture import register_capture
+        from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
+        journal = journal_engine()
+        book.additional_engines.append(journal)
+        register_capture(book.registry, ChangeJournal(journal))
+    from edgar_warehouse.change_journal.source_evidence import register_source_evidence
+    register_source_evidence(book.registry)
     if os.environ.get("MDM_DATABASE_URL"):
         from sqlalchemy import create_engine
         from urllib.parse import unquote, urlparse
-        from edgar_warehouse.mdm.clean.publication import LocalContractSink, JournalMirror
+        from edgar_warehouse.mdm.clean.publication import LocalContractSink
+        from edgar_warehouse.change_journal.publication import JournalPublisher
+        from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
         from .mdm_capabilities import register_mdm
         from .config import Blocked
 
@@ -24,10 +34,10 @@ def configured_bookkeeping():
             key = (spec["consumer"], spec["destination"])
             if key in publishers:
                 return publishers[key]
-            if spec["consumer"] == "journal" and spec["destination"] == "change-ledger":
-                ledger = create_engine(os.environ["CHANGE_LEDGER_DATABASE_URL"], pool_pre_ping=True)
-                book.additional_engines.append(ledger)
-                publishers[key] = JournalMirror(ledger)
+            if spec["consumer"] == "journal" and spec["destination"] == "change-journal":
+                journal = journal_engine()
+                book.additional_engines.append(journal)
+                publishers[key] = JournalPublisher(ChangeJournal(journal), mdm, book)
                 return publishers[key]
             parsed = urlparse(spec["destination"])
             if spec["consumer"] in {"export", "graph"} and parsed.scheme == "file" and not parsed.netloc:
@@ -42,16 +52,13 @@ def configured_bookkeeping():
 def _handle(args):
     from sqlalchemy import create_engine
     from .database import migrate
-    from .destinations import ChangeLedger, migrate_ledger, migrate_guard
+    from .destinations import migrate_guard
+    from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
     from .runner import run
     operation = args.bookkeeping_command
     if operation == "init":
         owner = create_engine(os.environ["BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL"])
         result = migrate(owner, runtime_role=args.runtime_role)
-        owner.dispose()
-    elif operation == "init-ledger":
-        owner = create_engine(os.environ["CHANGE_LEDGER_MIGRATION_DATABASE_URL"])
-        result = migrate_ledger(owner, runtime_role=args.runtime_role)
         owner.dispose()
     elif operation == "init-guard":
         owner = create_engine(os.environ["DESTINATION_MIGRATION_DATABASE_URL"])
@@ -70,9 +77,9 @@ def _handle(args):
                 result = book.status(args.run_id, limit=args.limit)["leases"]
             else:
                 book.resume(args.run_id)
-                ledger_engine = create_engine(os.environ["CHANGE_LEDGER_DATABASE_URL"])
+                ledger_engine = journal_engine()
                 try:
-                    result = run(book, args.run_id, ChangeLedger(ledger_engine), limit=args.limit)
+                    result = run(book, args.run_id, ChangeJournal(ledger_engine), limit=args.limit)
                 finally:
                     ledger_engine.dispose()
         finally:
@@ -84,7 +91,7 @@ def _handle(args):
 def register(subparsers):
     parser = subparsers.add_parser("bookkeeping", help="Fresh configured control; never imports legacy checkpoints")
     commands = parser.add_subparsers(dest="bookkeeping_command", required=True)
-    for name in ("init", "init-ledger", "init-guard"):
+    for name in ("init", "init-guard"):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.set_defaults(handler=_handle)

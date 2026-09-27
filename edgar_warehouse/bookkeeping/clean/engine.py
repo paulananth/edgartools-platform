@@ -50,6 +50,8 @@ class Bookkeeping:
 
     def _frozen(self, run_id: str):
         run = self._run(run_id)
+        if run["submission"].get("journal") != "change-journal-v1":
+            raise Blocked("Legacy runs and deliveries must finish on their original stack")
         try:
             submission = run["submission"]
             if digest(submission) != run["submission_hash"]:
@@ -60,6 +62,9 @@ class Bookkeeping:
             if (export["kind"], export["name"], export["version"]) != (
                     submission["kind"], submission["name"], submission["rule_version"]):
                 raise Blocked("Rules reference disagrees with submission")
+            if "acquisition" in export["body"]:
+                from edgar_warehouse.change_journal.authority import frozen_authority
+                frozen_authority(export, submission["scope"].get("feed"), artifacts=self.artifacts)
             config = validate(export["body"], submission["target"], self.registry)
             versions = {step["operation"]: self.registry.operations[step["operation"]].version for step in config["steps"]}
             if versions != submission["processing_versions"]:
@@ -88,6 +93,14 @@ class Bookkeeping:
             raise Blocked("Submission requires a proven active Rules export")
         reference({"uri": rules_ref["uri"], "sha256": proof.get("batch_hash")})
         config = validate(export["body"], target, self.registry)
+        if "acquisition" in export["body"]:
+            from edgar_warehouse.change_journal.authority import frozen_authority
+            selected = frozen_authority(export, scope.get("feed"), artifacts=self.artifacts)
+            if scope.get("source") != export["name"]:
+                raise Blocked("Acquisition run requires exact source/feed binding")
+            if (any(s["operation"] == "provider.capture" for s in config["steps"])
+                    and not set(selected["configuration"]["required_producers"]) <= {s["name"] for s in config["steps"]}):
+                raise Blocked("Configured work omits required acquisition producers")
         # An approval is pinned to the exact immutable body, including its
         # Bookkeeping section. No automatic approval from an earlier version.
         if (export["kind"] == "merge" or export["body"].get("mdm") or target == "mdm"
@@ -97,7 +110,10 @@ class Bookkeeping:
                 raise Blocked("MDM configuration requires approval of its exact digest")
         manifest = self.artifacts.json(inputs_ref)
         items = worklist(manifest, config)
+        if "acquisition" in export["body"] and not items:
+            raise Blocked("An empty acquisition baseline requires explicit verified scope work")
         submission = {"version": 1, "kind": export["kind"], "name": export["name"],
+                      "journal": "change-journal-v1",
                       "rule_version": export["version"], "rules": rules_ref, "inputs": inputs_ref,
                       "target": target, "scope": scope, "worklist_hash": digest(items),
                       "processing_versions": {s["operation"]: self.registry.operations[s["operation"]].version for s in config["steps"]}}
@@ -210,8 +226,20 @@ class Bookkeeping:
         if not checks or not all(checks.values()):
             raise Blocked("Required checks failed")
         event_id = str(uuid5(UUID(claim.run_id), f"{claim.step}:{claim.key}"))
-        self._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
-                   r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof), v=canonical(receipt), c=canonical(checks), e=event_id)
+        parameters = dict(r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt,
+                          p=canonical(claim.proof), v=canonical(receipt), c=canonical(checks), e=event_id)
+        cursor = item["unit"]["cursor"]
+        checkpoint = cursor.get("resource_checkpoint") if isinstance(cursor, dict) else None
+        if checkpoint is not None:
+            self._call("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:resource,:revision,:position)",
+                       **parameters, **checkpoint)
+        else:
+            self._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))", **parameters)
+
+    def resource_checkpoint(self, resource: str) -> dict | None:
+        with self.engine.connect() as conn:
+            found = _rows(conn, "SELECT * FROM bookkeeping.checkpoint WHERE resource=:p", p=resource)
+        return found[0] if found else None
 
     def wait(self, claim: Claim, message: str):
         self._call("SELECT bookkeeping.wait_work(CAST(:r AS uuid),:s,:k,:m,CAST(:a AS uuid),CAST(:p AS jsonb))",
@@ -271,9 +299,54 @@ class Bookkeeping:
         self._call("SELECT bookkeeping.record_checks(CAST(:r AS uuid),CAST(:c AS jsonb))", r=run_id, c=canonical(checks))
         return self.status(run_id)
 
-    def deliver(self, ledger, run_id: str, *, limit: int = 100) -> int:
+    def journal_event(self, event: dict) -> dict:
+        """Stable conversion of local intent; business evidence stays with owner."""
+        from edgar_warehouse.change_journal import envelope
+        run, config, _, items = self._frozen(str(event["run_id"]))
+        submission = run["submission"]
+        document = self.artifacts.json(submission["rules"])["body"]
+        scope = submission["scope"]
+        event_type = event.get("event_type", "work.verified")
+        evidence = event["payload"].get("input") if event_type == "fetch.authorized" else event["payload"]["receipt"]["evidence"]
+        producer = "acquisition" if event_type == "fetch.authorized" else "bookkeeping"
+        event_key = event["payload"]["candidate_id"] if event_type == "fetch.authorized" else str(event["event_id"])
+        if event_type == "work.verified":
+            step = next(s for s in config["steps"] if s["name"] == event["step"])
+            if step["operation"] == "provider.capture":
+                item = next(i for i in items if i["step"] == event["step"] and i["key"] == event["unit_key"])
+                producer, event_key, event_type = "acquisition.outcome", item["unit"]["keys"]["candidate_id"], "fetch.outcome"
+            if step["operation"] == "source.evidence":
+                item = next(i for i in items if i["step"] == event["step"] and i["key"] == event["unit_key"])
+                keys = item["unit"]["keys"]
+                producer, event_key, event_type = keys["journal_producer"], keys["journal_event_key"], keys["journal_event_type"]
+        return envelope(producer=producer, event_key=event_key,
+                        run_id=str(event["run_id"]), source=document.get("source", submission["name"]),
+                        feed=scope.get("feed", document.get("bronze", {}).get("family", submission["target"])),
+                        event_type=event_type, occurred_at=event["created_at"].isoformat(),
+                        scope={"step": event["step"], "unit_key": event["unit_key"], "target": submission["target"]},
+                        evidence=[evidence,
+                                  {"uri": f"bookkeeping-outbox:///{event['event_id']}", "sha256": digest(event["payload"])}])
+
+    def authorize_request(self, claim: Claim, journal) -> Claim:
+        """Commit intent, verify remote acknowledgement, then recheck live lease."""
+        item = self.item(claim)
+        self.artifacts.verified(item["unit"]["input"])
+        event_id = str(uuid5(UUID(claim.run_id), f"{claim.step}:{claim.key}:fetch.authorized"))
+        self._call("SELECT bookkeeping.authorize_request(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:e AS uuid),CAST(:i AS jsonb))",
+                   r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof),
+                   e=event_id, i=canonical(item["unit"]["input"]))
+        with self.engine.connect() as conn:
+            event = _rows(conn, "SELECT * FROM bookkeeping.journal_outbox WHERE event_id=CAST(:e AS uuid)", e=event_id)[0]
+        value = self.journal_event(event)
+        receipt = journal.append(value)
+        journal.verify(receipt, expected=value)
+        self._call("SELECT bookkeeping.delivery(CAST(:e AS uuid),NULL)", e=event_id)
+        return self.heartbeat(claim)
+
+    def deliver(self, journal, run_id: str, *, limit: int = 100) -> int:
         if not 1 <= limit <= 1000:
             raise ValueError("delivery limit must be 1..1000")
+        self._frozen(run_id)
         with self.engine.connect() as conn:
             events = _rows(conn, "SELECT * FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid) AND delivered_at IS NULL ORDER BY created_at,event_id LIMIT :n", r=run_id, n=limit)
         delivered = 0
@@ -281,7 +354,8 @@ class Bookkeeping:
             try:
                 # Separate DB transaction. Duplicate delivery reconciles the
                 # exact envelope before acknowledging intent in Bookkeeping.
-                ledger.deliver(str(event["event_id"]), event["payload"])
+                receipt = journal.append(self.journal_event(event))
+                journal.verify(receipt, expected=self.journal_event(event))
                 self._call("SELECT bookkeeping.delivery(CAST(:e AS uuid),NULL)", e=str(event["event_id"]))
                 delivered += 1
             except Exception as exc:

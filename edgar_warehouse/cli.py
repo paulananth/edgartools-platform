@@ -1817,6 +1817,8 @@ def build_parser() -> argparse.ArgumentParser:
     from edgar_warehouse.rules.cli import register as register_rules
     register_bookkeeping(subparsers)
     register_rules(subparsers)
+    from edgar_warehouse.change_journal.cli import register as register_journal
+    register_journal(subparsers)
 
     return parser
 

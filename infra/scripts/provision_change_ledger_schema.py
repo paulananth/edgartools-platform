@@ -47,6 +47,8 @@ CHANGE_LEDGER_TABLES: tuple[str, ...] = (
 def provision(engine: Engine) -> None:
     """Apply Change Ledger migrations. Idempotent on PostgreSQL."""
     with engine.begin() as conn:
+        if conn.scalar(text("SELECT current_database()")) in {"change_journal_clean", "bookkeeping_clean", "rules"}:
+            raise ValueError("Legacy ledger provisioning is forbidden in fresh owner databases")
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
     _apply_acquisition_ledger_migration(engine)
     _apply_source_registry_migration(engine)

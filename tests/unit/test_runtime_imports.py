@@ -27,6 +27,7 @@ class RuntimeImportTests(unittest.TestCase):
             "mdm",
             "rules",
             "bookkeeping",
+            "change-journal",  # Own handlers; no bronze planned writes.
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",
@@ -59,6 +60,7 @@ class RuntimeImportTests(unittest.TestCase):
             "mdm",
             "rules",
             "bookkeeping",
+            "change-journal",
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",
@@ -113,6 +115,7 @@ class RuntimeImportTests(unittest.TestCase):
             "mdm",
             "rules",
             "bookkeeping",
+            "change-journal",
             "gold-verify-live",
             "resolve-snowflake-env",
             "reconcile-decision-watermark",

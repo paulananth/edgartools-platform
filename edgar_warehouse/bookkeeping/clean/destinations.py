@@ -1,4 +1,4 @@
-"""Destination-local authority and idempotent Change Ledger delivery."""
+"""Destination-local authority; legacy mirror helpers are archive interfaces."""
 from __future__ import annotations
 
 import hashlib
@@ -47,6 +47,10 @@ def migrate_guard(engine, *, runtime_role: str):
 
 
 def migrate_ledger(engine, *, runtime_role: str):
+    """Legacy provisioning only; fresh CLI uses change-journal init."""
+    with engine.connect() as conn:
+        if conn.scalar(text("SELECT current_database()")) in {"change_journal_clean", "bookkeeping_clean", "rules"}:
+            raise Blocked("Legacy mirror provisioning is forbidden in fresh owner databases")
     return _migrate(engine, "ledger.sql", "bookkeeping_mirror", runtime_role)
 
 
@@ -60,6 +64,7 @@ def guard(conn, claim):
 
 
 class ChangeLedger:
+    """Legacy sink for original-stack drains; never a fresh runtime fallback."""
     def __init__(self, engine):
         self.engine = engine
 

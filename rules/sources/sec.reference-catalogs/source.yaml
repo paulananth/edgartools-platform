@@ -1,0 +1,41 @@
+source: sec.reference-catalogs
+bronze:
+  family: reference_catalog
+acquisition:
+  version: 1
+  feeds:
+    reference_catalog:
+      family: reference_catalog
+      datasets: []
+      scope:
+      - catalog
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: ticker_catalog
+        required: []
+        allow_empty: true
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://www.sec.gov/files/company_tickers
+bookkeeping:
+  version: 1
+  targets:
+    capture:
+      steps:
+      - name: capture
+        operation: provider.capture
+        requires: []
+        key: '{candidate_id}'
+        leases:
+        - source:{source}:{feed}:{catalog}
+        checks:
+        - input.hash
+        - output.receipt
+      checks:
+      - manifest.hash
+      - work.accounting
+      - journal.delivered

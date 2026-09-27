@@ -57,6 +57,8 @@ def migrate(engine, *, runtime_role: str) -> dict:
             "heartbeat(uuid,text,text,uuid,jsonb,integer)", "finish(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid)",
             "wait_work(uuid,text,text,text,uuid,jsonb)", "record_checks(uuid,jsonb)",
             "resume_run(uuid)", "block_run(uuid,text)", "delivery(uuid,text)",
+            "finish_resource(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid,text,bigint,bigint)",
+            "authorize_request(uuid,text,text,uuid,jsonb,uuid,jsonb)",
         ):
             conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION bookkeeping.{signature} TO {runtime}")
         if conn.scalar(text("SELECT has_schema_privilege(:r,'bookkeeping','CREATE') OR EXISTS(SELECT 1 FROM pg_tables WHERE schemaname='bookkeeping' AND has_table_privilege(:r,format('%I.%I',schemaname,tablename),'INSERT,UPDATE,DELETE,TRUNCATE'))"), {"r": runtime_role}):

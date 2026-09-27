@@ -76,6 +76,45 @@ class ConditionalSecResponse:
     last_modified: str | None
 
 
+def download_provider_conditionally(url, identity, *, etag=None, last_modified=None,
+                                    before_request, max_bytes):
+    """Bounded transport; caller supplies frozen URL approval and live authority.
+
+    Redirects are refused because each destination needs its own authorization.
+    Recovery and retries belong to Bookkeeping, not this network transaction.
+    """
+    import httpx
+
+    headers = {"User-Agent": identity, "Accept": "*/*"}
+    if etag:
+        headers["If-None-Match"] = etag
+    if last_modified:
+        headers["If-Modified-Since"] = last_modified
+    with httpx.Client(timeout=30, follow_redirects=False) as client:
+        before_request()
+        with client.stream("GET", url, headers=headers) as response:
+            if response.status_code == 304:
+                return ConditionalSecResponse(True, b"", response.headers.get("etag", etag),
+                                              response.headers.get("last-modified", last_modified))
+            if response.status_code != 200:
+                raise WarehouseRuntimeError("Provider did not return a complete 200 response")
+            chunks, size = [], 0
+            for chunk in response.iter_bytes():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise WarehouseRuntimeError("Provider response exceeds approved size bound")
+                chunks.append(chunk)
+            return ConditionalSecResponse(False, b"".join(chunks), response.headers.get("etag"),
+                                          response.headers.get("last-modified"))
+
+
+def download_authorized_sec_conditionally(url, identity, **kwargs):
+    """Apply the SEC host/rate rules to the configured bounded transport."""
+    _validate_sec_url(url)
+    _SEC_RATE_LIMITER.try_acquire("sec_download")
+    return download_provider_conditionally(url, identity, **kwargs)
+
+
 def download_sec_bytes(url: str, identity: str) -> bytes:
     return download_sec_conditionally(url, identity).content
 
@@ -86,6 +125,7 @@ def download_sec_conditionally(
     *,
     etag: str | None = None,
     last_modified: str | None = None,
+    before_request=None,
 ) -> ConditionalSecResponse:
     import httpx
 
@@ -105,7 +145,9 @@ def download_sec_conditionally(
         started_at = time.monotonic()
         _emit_sec_pull_event("sec_pull_started", url=url, attempt=attempt, max_attempts=3)
         try:
-            with httpx.Client(follow_redirects=True, headers=headers, timeout=timeout) as client:
+            with httpx.Client(follow_redirects=before_request is None, headers=headers, timeout=timeout) as client:
+                if before_request is not None:
+                    before_request()
                 response = client.get(url, headers=request_headers or None)
                 if response.status_code == 304:
                     _validate_sec_url(str(response.url))

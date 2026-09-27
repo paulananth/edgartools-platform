@@ -82,6 +82,12 @@ Options:
                                     Secrets Manager ARN injected as BOOKKEEPING_DATABASE_URL on the
                                     warehouse profile. Default: resolved by name
                                     (<prefix>/bookkeeping/postgres_dsn), same as the MDM DSN.
+  --bookkeeping-clean-postgres-dsn-secret-arn <arn>
+  --rules-postgres-dsn-secret-arn <arn>
+  --change-journal-postgres-dsn-secret-arn <arn>
+                                    Explicit runtime secrets for fresh configured work. Supply all
+                                    three together. No legacy or MDM fallback; migration URLs are
+                                    never injected. Connection wiring does not cut over a feed.
   --mdm-run-limit <n>               Default limit for mdm mastering state machine. Default: 0 (unbounded); a positive value bounds it.
   --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
   --mdm-seed-universe-tracking-status <status>
@@ -299,6 +305,10 @@ MDM_ECR_REPOSITORY_URL=""
 MDM_POSTGRES_DSN_SECRET_ARN=""
 MDM_SNOWFLAKE_SECRET_ARN=""
 BOOKKEEPING_POSTGRES_DSN_SECRET_ARN=""
+BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN=""
+RULES_POSTGRES_DSN_SECRET_ARN=""
+CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN=""
+FRESH_CONTROL_SECRETS_JSON="[]"
 # diagnosing-bugs session, 2026-09-07: was 100 (a daily cap on how many
 # entities per type daily_incremental's nested Mastering step resolves).
 # Operator decision: MDM mastering must capture all changes -- 0 means
@@ -374,6 +384,9 @@ while [[ $# -gt 0 ]]; do
     --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-snowflake-secret-arn) MDM_SNOWFLAKE_SECRET_ARN="${2:?}"; shift 2 ;;
     --bookkeeping-postgres-dsn-secret-arn) BOOKKEEPING_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
+    --bookkeeping-clean-postgres-dsn-secret-arn) BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
+    --rules-postgres-dsn-secret-arn) RULES_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
+    --change-journal-postgres-dsn-secret-arn) CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-run-limit) MDM_RUN_LIMIT="${2:?}"; shift 2 ;;
     --mdm-graph-limit) MDM_GRAPH_LIMIT="${2:?}"; shift 2 ;;
     --mdm-seed-universe-tracking-status) MDM_SEED_UNIVERSE_TRACKING_STATUS="${2:?}"; shift 2 ;;
@@ -1236,6 +1249,21 @@ MDM_SNOWFLAKE_SECRET_ARN="$(first_nonempty "$MDM_SNOWFLAKE_SECRET_ARN" \
 BOOKKEEPING_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$BOOKKEEPING_POSTGRES_DSN_SECRET_ARN" \
   "$(manifest_value bookkeeping.secrets.postgres_dsn)" \
   "$(secret_arn_by_name "${NAME_PREFIX}/bookkeeping/postgres_dsn")")"
+BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN" "$(manifest_value fresh_control.secrets.BOOKKEEPING_CLEAN_DATABASE_URL)")"
+RULES_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$RULES_POSTGRES_DSN_SECRET_ARN" "$(manifest_value fresh_control.secrets.RULES_DATABASE_URL)")"
+CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN" "$(manifest_value fresh_control.secrets.CHANGE_JOURNAL_DATABASE_URL)")"
+FRESH_CONTROL_SECRETS_JSON="$(python3 - "$BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN" "$RULES_POSTGRES_DSN_SECRET_ARN" "$CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN" <<'PY'
+import json
+import sys
+values = sys.argv[1:]
+if any(values) and not all(values):
+    raise SystemExit("Fresh control requires all three explicit runtime secret ARNs")
+names = ("BOOKKEEPING_CLEAN_DATABASE_URL", "RULES_DATABASE_URL", "CHANGE_JOURNAL_DATABASE_URL")
+if any(value and not value.startswith("arn:aws:secretsmanager:") for value in values):
+    raise SystemExit("Fresh control connections must be Secrets Manager ARNs")
+print(json.dumps([{"name": name, "valueFrom": value} for name, value in zip(names, values) if value]))
+PY
+)"
 
 # Subnets and security groups — discovered via EC2 tags (no Terraform needed)
 if is_empty "$PUBLIC_SUBNET_IDS_JSON"; then
@@ -1617,7 +1645,7 @@ write_container_definitions() {
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
     "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" "${MDM_SNOWFLAKE_SECRET_ARN:-}" \
-    "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
+    "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" "${FRESH_CONTROL_SECRETS_JSON:-[]}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1638,6 +1666,7 @@ import sys
     mdm_postgres_dsn_secret_arn,
     mdm_snowflake_secret_arn,
     bookkeeping_postgres_dsn_secret_arn,
+    fresh_control_secrets_json,
 ) = sys.argv[1:]
 
 snowflake_export_root = f"s3://{snowflake_export_bucket}/warehouse/artifacts/snowflake_exports"
@@ -1665,6 +1694,9 @@ if bronze_cik_limit:
     environment_values.append({"name": "WAREHOUSE_BRONZE_CIK_LIMIT", "value": bronze_cik_limit})
 
 secrets = [{"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn}]
+secrets.extend(json.loads(fresh_control_secrets_json))
+if json.loads(fresh_control_secrets_json):
+    environment_values.append({"name": "BOOKKEEPING_MANIFEST_ROOT", "value": f"s3://{warehouse_bucket}/warehouse/artifacts/bookkeeping_manifests/"})
 # MDM_DATABASE_URL is required for gold-affecting commands (seed-universe, bootstrap-*, gold-refresh).
 # Inject it from Secrets Manager when MDM is deployed alongside the warehouse.
 if mdm_postgres_dsn_secret_arn:
@@ -1732,7 +1764,7 @@ write_mdm_container_definitions() {
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$MDM_IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$MDM_POSTGRES_DSN_SECRET_ARN" \
     "$MDM_SNOWFLAKE_SECRET_ARN" \
-    "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" <<'PY'
+    "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" "${FRESH_CONTROL_SECRETS_JSON:-[]}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1750,6 +1782,7 @@ import sys
     edgar_secret_arn,
     log_group_name,
     bookkeeping_postgres_dsn_secret_arn,
+    fresh_control_secrets_json,
 ) = sys.argv[1:]
 
 environment_values = [
@@ -1766,6 +1799,9 @@ mdm_secrets = [
     {"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": snowflake_secret_arn},
     {"name": "EDGAR_IDENTITY", "valueFrom": edgar_secret_arn},
 ]
+mdm_secrets.extend(json.loads(fresh_control_secrets_json))
+if json.loads(fresh_control_secrets_json):
+    environment_values.append({"name": "BOOKKEEPING_MANIFEST_ROOT", "value": f"s3://{warehouse_bucket}/warehouse/artifacts/bookkeeping_manifests/"})
 # BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover Ticket 15): added for
 # `mdm build-relationship-release-manifest`, which silver-merge-engine-migration
 # Ticket 11 deleted with release mode. Still injected (optional, same as the
@@ -5727,7 +5763,7 @@ MSYS_NO_PATHCONV=1 python3 - "$(win_path "$SUMMARY_FILE")" "$ENVIRONMENT" "$AWS_
   "$MDM_POSTGRES_DSN_SECRET_ARN" "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$(win_path "$WORKFLOW_ARNS_FILE")" \
   "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$SNOWFLAKE_EXPORT_BUCKET_NAME" \
-  "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$EDGAR_IDENTITY_SECRET_ARN" <<'PY'
+  "$EXECUTION_ROLE_ARN" "$TASK_ROLE_ARN" "$EDGAR_IDENTITY_SECRET_ARN" "$FRESH_CONTROL_SECRETS_JSON" <<'PY'
 import json
 import pathlib
 import sys
@@ -5762,6 +5798,7 @@ import sys
     execution_role_arn,
     task_role_arn,
     edgar_identity_secret_arn,
+    fresh_control_secrets_json,
 ) = sys.argv[1:]
 
 task_definitions = {
@@ -5808,6 +5845,9 @@ if deploy_mdm == "true":
             "snowflake": snowflake_secret_arn,
         },
     }
+fresh_control = json.loads(fresh_control_secrets_json)
+if fresh_control:
+    summary["fresh_control"] = {"secrets": {item["name"]: item["valueFrom"] for item in fresh_control}}
 
 pathlib.Path(output_file).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 PY

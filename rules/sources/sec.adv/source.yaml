@@ -1,0 +1,81 @@
+source: sec.adv
+bronze:
+  family: adv_filing
+acquisition:
+  version: 1
+  feeds:
+    adv_filing:
+      family: adv_filing
+      datasets: []
+      scope:
+      - cik
+      - accession
+      - filename
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: text
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://www.sec.gov/Archives/
+    adv_bulk:
+      family: adv_bulk_dataset
+      datasets: []
+      scope:
+      - source_kind
+      - dataset_period
+      - variant
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: zip
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://reports.adviserinfo.sec.gov/reports/foia/
+    firm_roster:
+      family: adv_bulk_dataset
+      datasets: []
+      scope:
+      - source_kind
+      - dataset_period
+      - variant
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: text
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://www.sec.gov/
+bookkeeping:
+  version: 1
+  targets:
+    capture:
+      steps:
+      - name: capture
+        operation: provider.capture
+        requires: []
+        key: '{candidate_id}'
+        leases:
+        - source:{source}:{feed}:{logical_key}
+        checks:
+        - input.hash
+        - output.receipt
+      checks:
+      - manifest.hash
+      - work.accounting
+      - journal.delivered

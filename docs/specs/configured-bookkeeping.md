@@ -17,8 +17,8 @@ not add a sixth control table. No old history or checkpoints are imported.
 Runtime may read the tables and execute bounded control functions. It may
 not change tables directly, create schema objects, or compact records.
 Migration checks inherited privileges as well as explicit grants. An
-independent destination has `bookkeeping_guard.resource`, and the Change
-Ledger has an append-only `bookkeeping_mirror.event`; neither is another
+independent destination has `bookkeeping_guard.resource`, and the shared
+Change Journal has an append-only `journal.event`; neither is another
 Bookkeeping root run.
 
 The shared interface is `Bookkeeping.start`, `claim`, `heartbeat`, `check`,
@@ -35,9 +35,11 @@ Implemented capabilities:
 | `mdm.merge` | Existing bounded Merge Stage command; destination guard in the actual commit transaction; committed observation, request hash and generation reconcile lost acknowledgements. |
 | `mdm.ingest` | Bounded NDJSON input normalized by the existing common adapter under the exact source reading frozen in Rules; exact record accounting, retained deferred evidence, guarded Merge Stage and committed receipt. |
 | `mdm.publish` | Existing MDM consumer fences, narrowed to the configured batch while preserving generation order; consumer read-back before receipt. |
+| `provider.capture` | Configured source-owned capture manifest; committed authorization and verified journal acknowledgement before provider requests; conditional unchanged outcomes and exact outcome reconciliation. |
+| `source.evidence` | Verified source-owned revision, conflict, import, exclusion and producer manifests; original producer keys and no source-record control tables. |
 
 The default CLI registers MDM capabilities when `MDM_DATABASE_URL` exists.
-Journal delivery uses the existing Clean MDM journal adapter. Export and graph
+Journal delivery uses the shared Change Journal adapter. Export and graph
 currently use the existing **offline contract sink** for local acceptance.
 Unsupported hosted destinations block; no new deployment path is introduced.
 
@@ -183,7 +185,7 @@ has its own deferred authority check. Transactions in different databases
 are explicitly separate.
 
 Verified completion and its outbox intent commit together. Delivery uses an
-idempotent exact-envelope key in the Change Ledger. Lost sink acknowledgements
+idempotent exact-envelope key in the Change Journal. Lost sink acknowledgements
 cause duplicate delivery and reconciliation, never premature completion.
 Ordered checkpoints advance only through the contiguous verified prefix.
 Completion requires expected-work accounting, configured checks, and all
@@ -214,8 +216,10 @@ or an S3 prefix for AWS.
 Existing databases can be migrated explicitly with
 `bookkeeping init --runtime-role <role>` and `rules init`, using
 `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
-`bookkeeping init-ledger` and `init-guard` use their separate destination
-migration URLs. They do not populate business or source data.
+`change-journal init` and `bookkeeping init-guard` use their separate migration
+URLs. They do not populate business or source data. Resource checkpoint and
+request authorization migrations retain the five-table control boundary;
+see [Change Journal](change-journal.md) for their transaction/recovery contract.
 
 ```bash
 edgar-warehouse rules save --source gleif --version <new-version> rules/sources/gleif/source.yaml
@@ -231,9 +235,11 @@ edgar-warehouse bookkeeping checks <UUID>
 edgar-warehouse bookkeeping leases <UUID>
 ```
 
-Activation of mappings also requires `RULES_MDM_ACTIVATION_DATABASE_URL` and
-the existing registry in `CHANGE_LEDGER_DATABASE_URL`. No real rule versions
-are approved or activated by this implementation task.
+Activation of mappings also requires `RULES_MDM_ACTIVATION_DATABASE_URL`.
+Fresh source documents declare acquisition authority in Rules and no longer
+require a legacy registry connection. The explicit `Rules.activate` Python
+legacy registry argument remains for original-stack handoffs. No real rule
+versions are approved or activated by this implementation task.
 
 ## Verification and remaining acceptance
 

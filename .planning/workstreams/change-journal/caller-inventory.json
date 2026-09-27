@@ -1,0 +1,777 @@
+[
+  {
+    "path": "edgar_warehouse/acquisition/acceptance_evidence.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ExpectedProducerOutcome",
+          "ExpectedProducerStatus"
+        ],
+        "line": 27
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "ContentImpact"
+        ],
+        "line": 28
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/adv_bulk_dataset_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "TERMINAL_NO_DOWNLOAD_DISPOSITIONS",
+          "AcquisitionLedger",
+          "DecisionCause",
+          "DecisionOwnerRole",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "FetchWorkState",
+          "execute_source_request"
+        ],
+        "line": 43
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/adv_bulk_dataset_silver_acceptance.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 30
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ExpectedProducerOutcome",
+          "ExpectedProducerSpec",
+          "ProcessingDecision",
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 31
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "ContentImpact",
+          "SourceRevisionLedger"
+        ],
+        "line": 38
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/capture_parity.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.models",
+        "names": [
+          "SourceFetchDecisionRecord",
+          "SourceFetchWorkRecord"
+        ],
+        "line": 320
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/company_facts_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "TERMINAL_NO_DOWNLOAD_DISPOSITIONS",
+          "AcquisitionLedger",
+          "DecisionCause",
+          "DecisionOwnerRole",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "FetchWorkState",
+          "execute_source_request"
+        ],
+        "line": 23
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/company_facts_silver_acceptance.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 64
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ExpectedProducerOutcome",
+          "ExpectedProducerSpec",
+          "ProcessingDecision",
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 65
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "ContentImpact",
+          "SourceRevisionLedger"
+        ],
+        "line": 72
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/conflict.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "ProcessingTransitionRole",
+          "require_processor_role",
+          "set_postgres_role"
+        ],
+        "line": 41
+      },
+      {
+        "module": "edgar_warehouse.acquisition.models",
+        "names": [
+          "SourceEvidenceConflictRecord"
+        ],
+        "line": 46
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "SourceRevision",
+          "SourceRevisionLedger"
+        ],
+        "line": 47
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "TERMINAL_NO_DOWNLOAD_DISPOSITIONS",
+          "AcquisitionLedger",
+          "DecisionCause",
+          "DecisionOwnerRole",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "FetchWorkState",
+          "execute_source_request"
+        ],
+        "line": 28
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/evidence_import.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "DecisionOwnerRole",
+          "require_operator_role",
+          "set_postgres_role"
+        ],
+        "line": 34
+      },
+      {
+        "module": "edgar_warehouse.acquisition.models",
+        "names": [
+          "SourceEvidenceImportRecord"
+        ],
+        "line": 35
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/facade.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "DecisionCause",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "FetchLease",
+          "FetchTransitionRole",
+          "FetchWorkState",
+          "SourceChangeStatus",
+          "StaleFencingToken",
+          "execute_source_request"
+        ],
+        "line": 29
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/ledger.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.models",
+        "names": [
+          "SourceFetchDecisionRecord",
+          "SourceFetchTransitionRecord",
+          "SourceFetchWorkRecord",
+          "SourceObservationCursor"
+        ],
+        "line": 15
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/processing.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "DecisionOwnerRole",
+          "ProcessingTransitionRole",
+          "require_processor_role",
+          "require_silver_finalizer_role",
+          "set_postgres_role"
+        ],
+        "line": 52
+      },
+      {
+        "module": "edgar_warehouse.acquisition.models",
+        "names": [
+          "SourceExpectedProducerRecord",
+          "SourceFetchDecisionRecord",
+          "SourceFetchWorkRecord",
+          "SourceProcessingDecisionRecord",
+          "SourceRevisionRecord"
+        ],
+        "line": 59
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/reference_catalog_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "TERMINAL_NO_DOWNLOAD_DISPOSITIONS",
+          "AcquisitionLedger",
+          "DecisionCause",
+          "DecisionOwnerRole",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "FetchWorkState",
+          "execute_source_request"
+        ],
+        "line": 38
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/reference_catalog_silver_acceptance.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 47
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "DUCKDB_PRODUCER_KIND",
+          "SNOWFLAKE_LANDING_PRODUCER_KIND",
+          "ExpectedProducerOutcome",
+          "ExpectedProducerSpec",
+          "ProcessingDecision",
+          "ProcessingLedger",
+          "SilverFinalizer",
+          "verify_snowflake_landing_producer"
+        ],
+        "line": 48
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "ContentImpact",
+          "SourceRevisionLedger"
+        ],
+        "line": 59
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/registry_ledger.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "RegistryTransitionRole",
+          "require_registry_owner_role",
+          "set_postgres_role"
+        ],
+        "line": 53
+      },
+      {
+        "module": "edgar_warehouse.acquisition.models",
+        "names": [
+          "SourceRegistryCoverageRecord",
+          "SourceRegistryVersionRecord"
+        ],
+        "line": 58
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/revisions.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "FetchWorkState",
+          "ProcessingTransitionRole",
+          "require_processor_role",
+          "reserve_observation_position",
+          "set_postgres_role"
+        ],
+        "line": 50
+      },
+      {
+        "module": "edgar_warehouse.acquisition.models",
+        "names": [
+          "SourceFetchDecisionRecord",
+          "SourceFetchWorkRecord",
+          "SourceRevisionRecord"
+        ],
+        "line": 57
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/silver_acceptance.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 31
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ExpectedProducerOutcome",
+          "ExpectedProducerSpec",
+          "ProcessingDecision",
+          "ProcessingLedger",
+          "SilverFinalizer",
+          "SilverOutcome"
+        ],
+        "line": 32
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "ContentImpact",
+          "SourceRevisionLedger"
+        ],
+        "line": 40
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/submissions_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "TERMINAL_NO_DOWNLOAD_DISPOSITIONS",
+          "AcquisitionLedger",
+          "DecisionCause",
+          "DecisionOwnerRole",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "FetchWorkState",
+          "execute_source_request"
+        ],
+        "line": 32
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/acquisition/submissions_silver_acceptance.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState",
+          "SourceChangeStatus"
+        ],
+        "line": 41
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ExpectedProducerOutcome",
+          "ExpectedProducerSpec",
+          "ProcessingDecision",
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 46
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "ContentImpact",
+          "SourceRevision",
+          "SourceRevisionLedger"
+        ],
+        "line": 53
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/application/workflows/capture_filing_artifact.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "DecisionCause",
+          "DecisionOwnerRole",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "execute_source_request"
+        ],
+        "line": 27
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "build_active_source_family_registry"
+        ],
+        "line": 35
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/application/workflows/drive_adv_bulk_dataset_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 38
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 39
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger",
+          "active_family_coverage",
+          "build_active_source_family_registry"
+        ],
+        "line": 40
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "SourceRevisionLedger"
+        ],
+        "line": 45
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/application/workflows/drive_company_facts_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 42
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 43
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger",
+          "active_family_coverage",
+          "build_active_source_family_registry"
+        ],
+        "line": 44
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "SourceRevisionLedger"
+        ],
+        "line": 49
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/application/workflows/drive_filing_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchDisposition",
+          "FetchWorkState"
+        ],
+        "line": 61
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 62
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger",
+          "active_family_coverage",
+          "active_in_scope_forms",
+          "build_active_source_family_registry"
+        ],
+        "line": 63
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "SourceRevisionLedger"
+        ],
+        "line": 69
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/application/workflows/drive_reference_catalog_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 40
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 41
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger",
+          "active_family_coverage",
+          "build_active_source_family_registry"
+        ],
+        "line": 42
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "SourceRevisionLedger"
+        ],
+        "line": 47
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/application/workflows/drive_submissions_discovery.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "AcquisitionLedger",
+          "FetchWorkState"
+        ],
+        "line": 32
+      },
+      {
+        "module": "edgar_warehouse.acquisition.processing",
+        "names": [
+          "ProcessingLedger",
+          "SilverFinalizer"
+        ],
+        "line": 33
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger",
+          "active_family_coverage",
+          "build_active_source_family_registry"
+        ],
+        "line": 34
+      },
+      {
+        "module": "edgar_warehouse.acquisition.revisions",
+        "names": [
+          "SourceRevisionLedger"
+        ],
+        "line": 39
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/bookkeeping/clean/cli.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.mdm.clean.publication",
+        "names": [
+          "LocalContractSink"
+        ],
+        "line": 23
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/change_journal/capture.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.ledger",
+        "names": [
+          "DecisionCause",
+          "DecisionOwnerRole",
+          "FetchDecisionRequest",
+          "FetchDisposition",
+          "_validate_decision_owner",
+          "_validate_terminal_evidence"
+        ],
+        "line": 16
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/mdm/clean/store.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.bookkeeping.clean.destinations",
+        "names": [
+          "guard"
+        ],
+        "line": 437
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  },
+  {
+    "path": "edgar_warehouse/mdm/cli.py",
+    "imports": [
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "CoverageSpec"
+        ],
+        "line": 1775
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger"
+        ],
+        "line": 1824
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger"
+        ],
+        "line": 1838
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger"
+        ],
+        "line": 1848
+      },
+      {
+        "module": "edgar_warehouse.acquisition.registry_ledger",
+        "names": [
+          "SourceRegistryLedger"
+        ],
+        "line": 1868
+      }
+    ],
+    "owner": "legacy stack unless explicitly replaced in qualification matrix"
+  }
+]

@@ -231,10 +231,11 @@ def register_policy(conn: Connection, body: dict) -> str:
 def register_dataset(
     conn: Connection,
     code: str,
-    registry_version: str,
+    registry_version: str | None,
     body: dict,
     *,
     registry_connection: Connection | None = None,
+    rules_authority: dict | None = None,
 ) -> None:
     """Pin metadata from existing registry authority; do not create a new registry.
 
@@ -271,15 +272,21 @@ def register_dataset(
     registry_connection = (
         registry_connection if registry_connection is not None else conn
     )
-    authority = rows(
-        registry_connection,
-        """SELECT v.version_id::text,v.status,
+    if rules_authority is not None:
+        from edgar_warehouse.change_journal.authority import registration_authority
+        evidence = registration_authority(rules_authority, code, body)
+        registry_version = evidence["version_id"]
+        authority = [evidence]
+    else:
+        authority = rows(
+            registry_connection,
+            """SELECT v.version_id::text,v.status,
       v.operator_authorization_reference,c.source_family,c.coverage_action
       FROM public.source_registry_version v JOIN public.source_registry_coverage c USING(version_id)
       WHERE v.version_id=CAST(:v AS uuid) AND c.source_family=:family""",
-        v=registry_version,
-        family=body["family"],
-    )
+            v=registry_version,
+            family=body["family"],
+        )
     if (
         len(authority) != 1
         or authority[0]["status"] != "active"

@@ -2,9 +2,87 @@
 # Contract each. Parsing stays in existing code (`gleif_source.py`), so this
 # source has no `read`. Field ranks live in the merge rules, not here.
 source: gleif
+acquisition:
+  version: 1
+  feeds:
+    level1:
+      family: gleif
+      datasets:
+      - gleif.level1.v1
+      scope:
+      - release
+      - member
+      capabilities:
+        capture: provider.capture
+        fetch: http.conditional
+      completeness:
+        format: zip
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://leidata.gleif.org/
+      - https://goldencopy.gleif.org/
+    relationships:
+      family: gleif
+      datasets:
+      - gleif.relationships.v1
+      scope:
+      - release
+      - member
+      capabilities:
+        capture: provider.capture
+        fetch: http.conditional
+      completeness:
+        format: zip
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://leidata.gleif.org/
+      - https://goldencopy.gleif.org/
+    reporting_exceptions:
+      family: gleif
+      datasets:
+      - gleif.reporting_exceptions.v1
+      scope:
+      - release
+      - member
+      capabilities:
+        capture: provider.capture
+        fetch: http.conditional
+      completeness:
+        format: zip
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://leidata.gleif.org/
+      - https://goldencopy.gleif.org/
 bookkeeping:
   version: 1
   targets:
+    acquire:
+      steps:
+      - name: capture
+        operation: provider.capture
+        requires: []
+        key: '{candidate_id}'
+        leases:
+        - source:{source}:{feed}:{release}:{member}
+        checks:
+        - input.hash
+        - output.receipt
+      checks:
+      - manifest.hash
+      - work.accounting
+      - journal.delivered
     capture:
       steps:
         - name: capture

@@ -53,13 +53,15 @@ verify those against captured source manifests in the chosen mode.
 Keep source, feed, resolved document/datasets and target in the plan and
 validation evidence. Bind the selected feed in frozen worklist control keys
 and verify input artifacts belong to those datasets/publications. The runtime
-uses `--source <resolved-rules-name>` and `--target`; it has no `--feed` flag.
+uses `--source <resolved-rules-name>`, `--target` and an explicit `--feed`
+binding on Rules submission for acquisition documents.
 Recover a run only after its retained manifest proves the same source/feed.
 
 Confirm live commands with `edgar-warehouse bookkeeping --help` and
 `edgar-warehouse rules run --help` under the `uv run` prefix. Read
 `edgar_warehouse/bookkeeping/clean/cli.py` for runtime bindings. Current
-operations are `artifact.copy`, `mdm.ingest`, `mdm.merge` and `mdm.publish`.
+operations are `artifact.copy`, `provider.capture`, `source.evidence`,
+`mdm.ingest`, `mdm.merge` and `mdm.publish`.
 Artifact copying uses available bytes, not a provider fetch or parser. Export
 and graph use offline contract sinks; hosted adapters and full legacy caller
 migration remain unfinished. Report unsupported capabilities as gaps rather
