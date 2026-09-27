@@ -184,6 +184,12 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   GLEIF readers, most important first a GLEIF deletion field on 4% of
   reporting exceptions. None is fixed; each needs triage.
 
+- [Investigate matching on an LEI below the name rules](issues/19-lei-matching-at-lower-priority.md)
+  (2026-09-26): SEC's own LEI reaches 4 Companies the name rules miss and
+  GLEIF's CIK route reaches 4 poor targets. Neither can meet the 95% bar on
+  today's data (7 and 10 pairs; 52 needed). Recommended: no LEI rule now, a
+  conflict check later, and fix the name rules' misses. Awaiting the operator.
+
 ## Not yet specified
 
 - **Which cohort the Proving Run uses.** The 1,000-row research cohort and its
