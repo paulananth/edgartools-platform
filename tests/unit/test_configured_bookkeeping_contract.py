@@ -88,3 +88,85 @@ def test_cli_commands_remain_available_and_resume_is_bounded():
     assert parser.parse_args(["bookkeeping", "leases", "original"]).limit == 100
     assert parser.parse_args(["gold-refresh"]).handler
     assert pipeline("graph-publication")["pipeline"] == "graph-publication"
+
+
+def stage_manifest():
+    selected = validate(source("gleif"), "capture", standard_registry())
+    selected["steps"] = [
+        {**selected["steps"][0], "name": "capture", "requires": [], "key": "{artifact_id}"},
+        {**selected["steps"][0], "name": "parse", "requires": ["capture"], "key": "{artifact_id}"},
+    ]
+    unit = {"keys": {"artifact_id": "one", "destination": "s3://bucket/capture"},
+            "input": {"uri": "s3://bucket/source", "sha256": "a"*64},
+            "output": "s3://bucket/capture", "cursor": 0}
+    dependent = {**unit, "input": {"from": {"step": "capture", "key": "one"}},
+                 "keys": {"artifact_id": "parsed", "destination": "s3://bucket/parse"},
+                 "output": "s3://bucket/parse"}
+    return selected, {"version": 2, "steps": {"capture": [unit], "parse": [dependent]}}
+
+
+def test_stage_worklists_preserve_distinct_scope_and_inputs():
+    config, manifest = stage_manifest()
+    manifest["steps"]["parse"].append({**manifest["steps"]["parse"][0],
+        "keys": {"artifact_id": "second", "destination": "s3://bucket/second"},
+        "output": "s3://bucket/second"})
+    items = worklist(manifest, config)
+    assert [(i["step"], i["key"], i["ordinal"]) for i in items] == [
+        ("capture", "one", 0), ("parse", "parsed", 0), ("parse", "second", 1)]
+    assert items[1]["unit"]["input"] == {"from": {"step": "capture", "key": "one"}}
+    assert items[1]["resources"] == ["artifact:s3://bucket/parse"]
+
+
+@pytest.mark.parametrize("edit", ["unknown_stage", "missing_stage", "stage_not_list", "unknown_unit",
+    "unknown_input", "missing_unit", "undeclared_dependency", "forward_dependency", "mixed_reference",
+    "bad_dependency", "empty_stage", "duplicate_unit", "v1_selector", "bad_version"])
+def test_invalid_stage_scope_blocks_before_execution(edit):
+    config, manifest = stage_manifest()
+    dependent = manifest["steps"]["parse"][0]
+    if edit == "unknown_stage":
+        manifest["steps"]["extra"] = []
+    elif edit == "missing_stage":
+        del manifest["steps"]["capture"]
+    elif edit == "stage_not_list":
+        manifest["steps"]["capture"] = {}
+    elif edit == "unknown_unit":
+        dependent["rows"] = []
+    elif edit == "unknown_input":
+        dependent["input"] = {"guess_latest": True}
+    elif edit == "missing_unit":
+        dependent["input"]["from"]["key"] = "missing"
+    elif edit == "undeclared_dependency":
+        config["steps"][1]["requires"] = []
+    elif edit == "forward_dependency":
+        manifest["steps"]["capture"][0]["input"] = {"from": {"step": "parse", "key": "parsed"}}
+    elif edit == "mixed_reference":
+        dependent["input"]["uri"] = "s3://bucket/guess"
+    elif edit == "bad_dependency":
+        dependent["input"]["from"] = {"step": "capture", "key": []}
+    elif edit == "empty_stage":
+        manifest["steps"]["parse"] = []
+    elif edit == "duplicate_unit":
+        manifest["steps"]["parse"].append(dependent)
+    elif edit == "v1_selector":
+        manifest = {"version": 1, "units": [dependent]}
+    else:
+        manifest["version"] = True
+    with pytest.raises(Blocked):
+        worklist(manifest, config)
+
+
+def test_version_one_worklist_remains_identical_for_frozen_runs():
+    config, manifest = stage_manifest()
+    unit = manifest["steps"]["capture"][0]
+    assert worklist({"version": 1, "units": [unit]}, config) == [
+        {"step": name, "key": "one", "ordinal": 0, "resources": ["artifact:s3://bucket/capture"], "unit": unit}
+        for name in ("capture", "parse")]
+
+
+def test_empty_stage_requires_explicit_configuration_even_with_other_work():
+    config, manifest = stage_manifest()
+    config["allow_zero_work"] = True
+    manifest["steps"]["parse"] = []
+    assert len(worklist(manifest, config)) == 1
+    manifest["steps"]["capture"] = []
+    assert worklist(manifest, config) == []

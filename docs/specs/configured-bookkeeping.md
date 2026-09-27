@@ -1,6 +1,7 @@
 # Fresh configured Bookkeeping
 
-Implementation branch: `codex/configured-bookkeeping`. The complete supplied
+Core branch: `codex/configured-bookkeeping` (PR #732). Stage work continues on
+`codex/bookkeeping-stage-work`, based on the refreshed core branch. The complete supplied
 plan is the objective. **The current implementation does not yet replace every
 legacy caller or qualify a production cutover.**
 
@@ -111,6 +112,52 @@ A publication input contains `version`, `batch_id`, `consumer`, and an exact
 `destination`. Authority is supplied separately by the worker, preserving
 the business batch id and request hash on retry.
 
+Version 1 worklists retain their original interpretation and frozen digest:
+every configured step gets the listed units. Version 2 declares a separate
+bounded worklist for **every** configured step, with independent keys, output
+URIs, cursors and counts. A later input may either be an exact URI/hash or
+name a unit in one of its declared prerequisites:
+
+```json
+{
+  "version": 2,
+  "steps": {
+    "archive": [{
+      "keys": {"artifact_id": "batch-1", "destination": "s3://bucket/prepared/batch-1.json"},
+      "input": {"uri": "s3://bucket/source/batch-1.json", "sha256": "<64 lowercase hex characters>"},
+      "output": "s3://bucket/prepared/batch-1.json",
+      "cursor": {"offset": 0}
+    }],
+    "merge": [{
+      "keys": {"batch_id": "batch-1", "consumer": "mastering/company"},
+      "input": {"from": {"step": "archive", "key": "batch-1"}},
+      "output": "s3://bucket/control/receipts/batch-1.json",
+      "cursor": {"offset": 0}
+    }]
+  }
+}
+```
+
+This example requires corresponding configured `archive` and `merge` steps;
+`merge.requires` must include `archive`. Input selectors use the rendered
+work-unit key, not a position or latest-output query. Missing or unknown
+steps, absent upstream units, forward references and undeclared dependencies
+block submission before a root is created. Empty stages require explicit
+`allow_zero_work` even when other stages contain work.
+
+Stage barriers retain their configured order: every prerequisite's unit must
+complete before a dependent step can claim work. The stored unit and input
+manifest keep the immutable selector. Workers resolve it to the retained
+receipt's output URI/hash only after rechecking the prerequisite's evidence,
+operation verifier, required checks, and the output bytes. The same checks
+follow the complete input chain during resume. Missing or corrupt evidence
+blocks execution rather than discovering scope or repeating committed work.
+Capabilities still receive an ordinary input reference, so their existing
+versions and business idempotency keys are unchanged. Separate publication
+intent worklists can follow a merged batch without treating its commit receipt
+as a publication command. Final MDM verification checks the MDM worklists
+and exact required consumer set.
+
 The `ingest` target accepts a `mdm.ingest` artifact containing `version: 1`,
 the same `command` without inline assertions, deferred records or occurrences,
 and a `source_input` object with `source_code`, an `artifact` URI/hash,
@@ -212,18 +259,19 @@ stores. No AWS state, old Bookkeeping data or active Rules versions were changed
 
 Verification recorded during implementation:
 
-- Complete configured control acceptance: 35 passed in 199.80 seconds,
-  no skips, including invalid-proof/approval rejection and the operator CLI's
-  bounded submission, frozen resume, status, checks and run discovery.
+- Complete configured control acceptance with stage worklists: 42 passed in
+  99.96 seconds, no skips. Covers invalid-proof/approval rejection, the operator
+  CLI, transformed output chains, different stage counts, lost acknowledgements,
+  corrupt prerequisite evidence, and real MDM merge/publication stage order.
 - Contract, CLI inventory, Rules files and existing SEC/GLEIF source suites:
   168 passed in 25.23 seconds.
 - Existing complete Clean MDM PostgreSQL suite: 56 passed. After adding
   assessment authorization, its eight assessment tests passed again.
-- The broader unit/architecture run produced 1,994 passes, eight existing
-  optional skips and three command-inventory failures. The failures treated
-  the new standalone command groups as legacy orchestrator commands. Their
-  corrected classifications passed the targeted inventory rerun; the entire
-  broader suite was not rerun after that correction.
+- The complete unit/architecture follow-up passed 2,020 tests and 27 subtests
+  in 188.28 seconds, with eight existing optional skips. This includes the
+  corrected standalone CLI inventory classifications and version 2 contracts.
+- Targeted Rules files, CLI inventory and Company/GLEIF source regressions:
+  149 passed in 23.79 seconds.
 - Wheel build and migration packaging succeeded; `git diff --check` passed.
 
 New submissions print their durable run id on stderr before execution while
@@ -242,12 +290,15 @@ Still required before the supplied plan is complete:
 3. Bind capture acquisition fences and parse/silver/gold operations to shared
    capability descriptors, preserving current stage order and entry points.
    `artifact.copy` must not be presented as provider API capture or parsing.
-   The current flat worklist repeats each unit for every configured step;
-   stage-specific input/output references are still needed for transformation
-   chains that consume a preceding step's verified output.
+   Version 2 now supplies stage-specific worklists and verified-output input
+   chains. The business acquisition and transformation capabilities still
+   need integration; the transformation used in acceptance is a test fixture.
 4. Finish the Rules proof evaluator and runner integration with Claude's
    source engine; qualify SEC and GLEIF end to end, including native source
    continuity, alongside the unseen source and platform jobs.
+   MDM dataset registration currently belongs to source documents; platform
+   documents declaring their own MDM contracts still need an explicit handoff
+   receipt before they can execute mastering.
 5. Qualify hosted publication and an isolated full-pipeline build, then
    prepare a reviewed AWS cutover. Retire the old database separately.
 

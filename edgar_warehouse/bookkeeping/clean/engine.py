@@ -141,7 +141,47 @@ class Bookkeeping:
                           r=claim.run_id, s=claim.step, k=claim.key)
         if not found:
             raise Blocked("Unknown unit")
-        return found[0]
+        return self._resolve_item(found[0])
+
+    def _resolve_item(self, item: dict, *, context: dict | None = None) -> dict:
+        """Materialize an input from immutable, reverified prerequisite evidence.
+
+        The stored unit retains the frozen selector. Capabilities receive an
+        ordinary URI/hash, so their business interface and versions stay the
+        same. A missing receipt never triggers upstream discovery or replay.
+        """
+        source = item["unit"]["input"]
+        if "from" not in source:
+            return item
+        if context is None:
+            run, config, manifest, _ = self._frozen(str(item["run_id"]))
+            context = {"run": run, "config": config, "manifest": manifest}
+        dependency = source["from"]
+        with self.engine.connect() as conn:
+            found = _rows(conn, """SELECT * FROM bookkeeping.work_item
+                WHERE run_id=CAST(:r AS uuid) AND step=:s AND unit_key=:k AND state='verified'""",
+                r=str(item["run_id"]), s=dependency["step"], k=dependency["key"])
+        if not found:
+            raise Blocked("Prerequisite input lacks verified completion")
+        upstream = self._resolve_item(found[0], context=context)
+        self._verify_item(upstream, context)
+        receipt = upstream["receipt"]
+        resolved = reference({"uri": receipt["uri"], "sha256": receipt["sha256"]})
+        self.artifacts.verified(resolved)
+        return {**item, "unit": {**item["unit"], "input": resolved}}
+
+    def _verify_item(self, item: dict, context: dict):
+        step = next(s for s in context["config"]["steps"] if s["name"] == item["step"])
+        receipt = item["receipt"]
+        if not isinstance(receipt, dict) or set(receipt) != {"uri", "sha256", "evidence"}:
+            raise Blocked("Prerequisite completion receipt is missing or malformed")
+        reference({"uri": receipt["uri"], "sha256": receipt["sha256"]})
+        self.artifacts.verified(receipt["evidence"])
+        if self.registry.operations[step["operation"]].verify(self, item, receipt) is not True:
+            raise Blocked("Previously completed evidence is no longer valid")
+        context = {**context, "item": item, "receipt": receipt}
+        if not all(self.registry.checks[name](self, context) is True for name in step["checks"]):
+            raise Blocked("Previously completed checks no longer pass")
 
     def check(self, run_id: str, *, claim: Claim | None = None, receipt: dict | None = None) -> dict:
         run, config, manifest, _ = self._frozen(run_id)
@@ -183,15 +223,10 @@ class Bookkeeping:
         with self.engine.connect() as conn:
             items = _rows(conn, "SELECT * FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) AND state='verified' ORDER BY step,ordinal", r=run_id)
         try:
+            run, _, manifest, _ = self._frozen(run_id)
+            context = {"run": run, "config": config, "manifest": manifest}
             for item in items:
-                step = next(s for s in config["steps"] if s["name"] == item["step"])
-                receipt = item["receipt"]
-                self.artifacts.verified(receipt["evidence"])
-                if self.registry.operations[step["operation"]].verify(self, item, receipt) is not True:
-                    raise Blocked("Previously completed evidence is no longer valid")
-                context = {"run": self._run(run_id), "config": config, "item": item, "receipt": receipt}
-                if not all(self.registry.checks[name](self, context) is True for name in step["checks"]):
-                    raise Blocked("Previously completed checks no longer pass")
+                self._verify_item(self._resolve_item(item, context=context), context)
         except (Blocked, KeyError, TypeError) as exc:
             self._call("SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)", r=run_id, m=str(exc))
             raise Blocked(str(exc)) from exc

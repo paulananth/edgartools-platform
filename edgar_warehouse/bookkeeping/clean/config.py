@@ -135,18 +135,42 @@ def validate(document: dict, target: str, registry: Registry) -> dict:
 
 
 def worklist(manifest: dict, config: dict) -> list[dict]:
-    """Only control identifiers and artifact references enter Bookkeeping."""
-    if set(manifest) != {"version", "units"} or type(manifest["version"]) is not int or manifest["version"] != 1 or not isinstance(manifest["units"], list):
+    """Freeze stage scope; version 1 retains its original worklist digest.
+
+    Version 2 lists units separately for every configured step. An input may
+    name a preceding prerequisite's unit; only its verified output can be
+    resolved at execution time. No paths or work are discovered on resume.
+    """
+    if not isinstance(manifest, dict) or type(manifest.get("version")) is not int:
         raise Blocked("Unsupported input manifest")
-    if not manifest["units"] and not config.get("allow_zero_work", False):
+    if manifest["version"] == 1 and set(manifest) == {"version", "units"}:
+        stages = {step["name"]: manifest["units"] for step in config["steps"]}
+    elif manifest["version"] == 2 and set(manifest) == {"version", "steps"}:
+        stages = manifest["steps"]
+        if not isinstance(stages, dict) or set(stages) != {s["name"] for s in config["steps"]}:
+            raise Blocked("Manifest must declare exactly the configured steps")
+    else:
+        raise Blocked("Unsupported input manifest")
+    if any(not isinstance(units, list) for units in stages.values()):
+        raise Blocked("Each stage worklist must be a list")
+    if any(not units for units in stages.values()) and not config.get("allow_zero_work", False):
         raise Blocked("Zero work is not permitted")
     items = []
     identities = set()
     for step in config["steps"]:
-        for ordinal, unit in enumerate(manifest["units"]):
-            if set(unit) != {"keys", "input", "output", "cursor"}:
+        for ordinal, unit in enumerate(stages[step["name"]]):
+            if not isinstance(unit, dict) or set(unit) != {"keys", "input", "output", "cursor"}:
                 raise Blocked("Units contain keys, input/output references and an opaque cursor only")
-            reference(unit["input"])
+            source = unit["input"]
+            if manifest["version"] == 2 and isinstance(source, dict) and set(source) == {"from"}:
+                dependency = source["from"]
+                if (not isinstance(dependency, dict) or set(dependency) != {"step", "key"}
+                        or not isinstance(dependency["step"], str) or not isinstance(dependency["key"], str)
+                        or dependency["step"] not in step["requires"]
+                        or (dependency["step"], dependency["key"]) not in identities):
+                    raise Blocked("Input must name an existing unit in a preceding prerequisite")
+            else:
+                reference(source)
             # Output URI names intent; verified content hash is supplied by the
             # durable destination receipt, not guessed during submission.
             if not isinstance(unit["output"], str) or not unit["output"]:
