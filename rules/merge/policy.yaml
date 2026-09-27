@@ -1,5 +1,7 @@
-# The Company Mastering Policy (live digest 983352e8…4049): this envelope plus one
-# file per kind in kinds/. A change here is a change to what Clean MDM runs.
+# The Company Mastering Policy (digest 3520e890…1e17): this envelope, one file
+# per kind in kinds/, and every table in ../reference/. A change to any of them
+# is a change to what Clean MDM runs. Without the reference tables the digest is
+# 983352e8…4049, the one the operator approved on 2026-09-25.
 version: sec-company-local-v2
 required_consumers:
 - journal

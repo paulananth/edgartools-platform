@@ -132,10 +132,13 @@ def mdm_contract(source_name: str, source_code: str, root: Path | None = None) -
 
 
 def policy(root: Path | None = None) -> dict:
-    """The Mastering Policy: `merge/policy.yaml` plus one file per kind."""
-    folder = (root or ROOT) / "merge"
-    body = load(folder / "policy.yaml")
-    body["kinds"] = {path.stem: load(path) for path in sorted((folder / "kinds").glob("*.yaml"))}
+    """The Mastering Policy: `merge/policy.yaml`, one file per kind, and every
+    reference table, so the policy's digest also covers the tables its rules
+    read (an edit to `reference/sec-place-codes.yaml` is a new policy)."""
+    root = root or ROOT
+    body = load(root / "merge" / "policy.yaml")
+    body["kinds"] = {path.stem: load(path) for path in sorted((root / "merge" / "kinds").glob("*.yaml"))}
+    body["reference"] = {path.stem: load(path) for path in sorted((root / "reference").glob("*.yaml"))}
     return body
 
 

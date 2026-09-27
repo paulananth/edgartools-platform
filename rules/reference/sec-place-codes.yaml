@@ -5,14 +5,19 @@
 #
 # The codes, places and types are SEC's list as edgartools 5.30.0 ships it
 # (edgar/reference/data/place_codes.csv, sha256 1daf0cc6...ab14); no SEC
-# request was made. The ISO codes of the 169 codes seen in bronze were built in
-# company mastering ticket 08 from the description SEC writes beside each code
-# across 76,230 filers. The other 140 were added on 2026-09-26 by country name
-# and checked by hand; no filer in bronze uses any of them. XX is SEC's
-# "unknown" and has no ISO code.
+# request was made. The ISO codes of 169 codes (156 seen in bronze, plus 13 US
+# postal codes) were built in company mastering ticket 08 from the description
+# SEC writes beside each code across 76,230 filers. The other 140 were added on
+# 2026-09-26 by country name and checked by hand. 11 of them occur in bronze,
+# only in address countryCode (rules skill ticket 08). XX is SEC's "unknown"
+# and has no ISO code.
 #
-# SEC writes a US state as its postal code (DE) and a territory the same way
-# (PR, GU, VI); both read as US-<code>. X1 is the United States with no state.
+# A US state reads as US-<postal code> (DE: US-DE). A US territory reads the
+# same way (PR, GU, VI; and 1V: US-MP, B5: US-AS), and GLEIF may write it as a
+# country. X1 is the United States with no state.
+#
+# The policy body carries this file, so an edit here changes the Company
+# policy's digest and needs the operator's approval.
 codes:
   AL:
     place: ALABAMA

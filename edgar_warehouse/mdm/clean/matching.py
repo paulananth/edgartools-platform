@@ -69,7 +69,9 @@ def _normalizer(name: str):
     return NORMALIZERS[name]
 
 
-# The one code table `sec_codes` may name; a new table is a new version.
+# The one code table `sec_codes` may name. Its content is
+# `rules/reference/sec-place-codes.yaml`, which the policy body carries, so
+# the policy's digest pins it: an edit to the table is a new policy.
 SEC_CODES = {"edgar-iso-v1": edgar_jurisdiction}
 
 

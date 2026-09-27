@@ -68,7 +68,39 @@ address's `stateOrCountry` and `countryCode`) are one reference table,
     - a US territory agrees with its own country code.
   - 202 targeted tests pass: names, matching, Company source, Company
     address, the rules files and the image layout.
-- [ ] Three-axis `/code-review`, then PR and CI.
+- [x] Three-axis `/code-review` (2026-09-27 00:40 ET).
+  - **The main finding, from all three axes:** the table sat outside the
+    policy's digest, so an edit to it would change matches and SEC Company
+    records under the approved fingerprint `983352e8…`.
+  - **The fix:** `files.policy()` now carries every `rules/reference/` table
+    in the policy body, so the digest pins it. The name stays `edgar-iso-v1`,
+    and its content is now pinned by the policy digest. Renaming it to v2
+    would have changed both name rules' bodies under their unchanged version
+    labels.
+  - **Fingerprints:**
+    - the new policy digest is `3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17`;
+    - without the `reference` section it is still `983352e8…4049`;
+    - `name_matching_policy(active=True)` is `ad70680a…`.
+
+    Pinned in `test_rules_config_digests.py`, `test_clean_activation.py` and
+    `test_clean_four_companies.py`, each also checking the old value without
+    the table. **Merging needs the operator's approval of `3520e890…`.**
+  - **Also fixed:**
+    - the YAML header now says 156 codes were seen plus 13 US codes, that 11
+      of the new codes occur in bronze, and names the territories;
+    - the test constants are renamed (`PRE_MOVE_CODES`);
+    - the edgartools drift test checks the list's sha256 first and says what
+      to do when it changes;
+    - a territory drift test;
+    - `pending-proofs.yaml` notes that the proofs were measured with the
+      169-code table and that none of the 3 touched Companies is in their
+      files (checked 00:45 ET).
+  - **Evidence:** `.scratch/rules-skill/research/08-place-code-impact.py` and
+    its output `08-place-code-impact.json` reproduce the 182 / 11 / 19 / 3
+    counts. The inputs are `cm08-sec-scan.jsonl` (`bdf379bf…`) and
+    `cm08-coverage-2.jsonl` (`97e5d118…`).
+  - **Tests:** 288 affected tests pass.
+- [ ] Operator approves policy digest `3520e890…`; PR and CI.
 
 ## Follow-up (not in this ticket)
 

@@ -22,6 +22,10 @@ BEFORE = {
     "name_proofs": "42e7b849964f64d17eaf35ae2e9f02c46ee8783501ac87e8206e65eb031be6ef",
     "name_matching_active": "c21dc69cdf1f2004d28afdacc120ca086c46475621b3709dfcfdc3fad1a6d0fb",
 }
+WITH_PLACE_CODES = {
+    "policy": "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
+    "name_matching_active": "ad70680ac2cbeb04da821038436ccd0c5eff8bfa74f96e29cc205bdd0cd8db80",
+}
 GLEIF_BEFORE = {
     "level1": "0978006ab17593a7f66b5e5b8a6110ff7890aca53f1544b1758bd14dcd8480ef",
     "relationships": "a5a253a8c697bfaf9980bfc995caba260b10b182a103772b61849a7480859136",
@@ -30,16 +34,21 @@ GLEIF_BEFORE = {
 
 
 def test_the_company_configuration_is_unchanged():
-    assert digest(company_source.POLICY) == BEFORE["policy"]
+    # Rules skill ticket 08 added the SEC place-code table to the policy body;
+    # without it the policy is the one that moved here.
+    assert digest(company_source.POLICY) == WITH_PLACE_CODES["policy"]
+    assert digest({k: v for k, v in company_source.POLICY.items() if k != "reference"}) == (
+        BEFORE["policy"]
+    )
     assert digest(company_source.CONTRACT) == BEFORE["contract"]
     assert digest(company_source.FIELDS) == BEFORE["fields"]
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
     assert digest(company_source.NAME_PROOFS) == BEFORE["name_proofs"]
-    assert digest(company_source.name_matching_policy(active=False)) == BEFORE["policy"]
+    assert digest(company_source.name_matching_policy(active=False)) == WITH_PLACE_CODES["policy"]
     assert (
         digest(company_source.name_matching_policy(active=True))
-        == BEFORE["name_matching_active"]
+        == WITH_PLACE_CODES["name_matching_active"]
     )
 
 
