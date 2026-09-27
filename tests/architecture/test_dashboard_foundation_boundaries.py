@@ -596,7 +596,7 @@ class DashboardFoundationBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(mdm_commands, allowed_commands)
         self.assertIn(
-            "uv run pytest tests/mdm/test_dashboard_readonly.py tests/mdm/test_graph_readonly.py tests/architecture/test_dashboard_foundation_boundaries.py -q",
+            "uv run pytest tests/architecture/test_dashboard_foundation_boundaries.py -q",
             text,
         )
 

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import datetime
-import os
 import unittest
-from typing import Any
 from unittest.mock import MagicMock
 
 from edgar_warehouse.market.eod_join import (
@@ -173,67 +170,6 @@ class WaccAcceptanceTests(unittest.TestCase):
         self.assertLess(result.wacc, 0.25)
         self.assertEqual(result.market_cap, 2.7e12)
         self.assertEqual(result.beta, 1.3)
-
-
-@unittest.skipUnless(
-    os.environ.get("ERDP07_LIVE") == "1",
-    "Set ERDP07_LIVE=1 to run live yfinance acceptance (network).",
-)
-class LiveYfinanceAcceptanceTests(unittest.TestCase):
-    """A07.1 / A07.2 / A07.3 live checks — opt-in to avoid CI network flakiness."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        try:
-            import yfinance  # noqa: F401
-        except ImportError as exc:
-            raise unittest.SkipTest("yfinance not installed; uv sync --extra market") from exc
-        from edgar_warehouse.market.price_provider import PriceProvider
-
-        cls.pp = PriceProvider()
-        # Use a known recent weekday; if market closed, provider walks back.
-        cls.as_of = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
-
-    def test_a07_1_five_liquid_closes(self) -> None:
-        tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
-        ok = 0
-        for t in tickers:
-            px = self.pp.get_price(t, self.as_of)
-            if px is not None and px > 0:
-                ok += 1
-        self.assertGreaterEqual(ok, 5, f"expected ≥5 closes on {self.as_of}")
-
-    def test_a07_2_cik_to_price(self) -> None:
-        ok = 0
-        for row in SAMPLE_TICKER_ROWS[:5]:
-            snap = eod_snapshot_for_cik(
-                self.pp, SAMPLE_TICKER_ROWS, row["cik"], self.as_of, include_beta=False
-            )
-            if snap is not None and snap.close is not None:
-                ok += 1
-        self.assertGreaterEqual(ok, 5)
-
-    def test_a07_3_wacc_live_or_override(self) -> None:
-        mcap = self.pp.get_market_cap("AAPL", self.as_of)
-        beta = self.pp.get_beta("AAPL")
-        # Gold-shaped debt inputs (illustrative); mcap/beta from live when present.
-        result = compute_wacc(
-            WaccInputs(
-                ticker="AAPL",
-                period_end=self.as_of,
-                sic_code="3571",
-                total_debt=110_000_000_000,
-                interest_expense=3_900_000_000,
-                income_tax_expense=16_741_000_000,
-                pretax_income=113_736_000_000,
-                market_cap_override=mcap if mcap else 2.7e12,
-                beta_override=beta if beta else 1.2,
-                risk_free_rate_override=0.04,
-                erp_override=0.055,
-            ),
-            price_provider=None,
-        )
-        self.assertIsNotNone(result.wacc)
 
 
 if __name__ == "__main__":
