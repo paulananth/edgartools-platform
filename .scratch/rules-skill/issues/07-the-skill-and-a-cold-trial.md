@@ -106,6 +106,19 @@ Skill first (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill 
   - **What a pass proves:** the skill onboards reader-backed sources, which
     is all of Company core. It does not prove "any source"; that needs the
     non-SEC cold trial on the engine later.
+- [x] Round 2 (2026-09-26 18:40 – 20:15 ET), under the pass bar above:
+  - **SEC:** 25 of 34 equal, 0 different, 9 missing (all `provenance`),
+    1 extra (EIN, the operator's new decision). 5 questions, 1 of them
+    "should have inferred" (the address).
+  - **GLEIF:** 64 equal, 2 different, 9 missing, 11 extra. 9 questions, 3 of
+    them "should have inferred".
+  - **Operator decisions during the round:** EIN and SEC's own LEI are
+    lookup-only identifiers; tickers belong to Security; SEC's LEI is lookup
+    only (company mastering ticket 19 measured matching on it).
+  - **Not a pass.** The skill was fixed for round 3 in `12c59020`. Evidence is
+    in `trials/round-2/`.
+- [ ] Round 3 (started 2026-09-27 04:47 ET): the last round under the cap.
+  The results go to the operator afterwards, pass or not.
 - [ ] Build only the commands a trial round shows the skill needs (tickets
   02–06 as a menu).
 - [ ] All Company data pipelines on the skill, tested.
