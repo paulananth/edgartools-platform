@@ -68,7 +68,7 @@ address's `stateOrCountry` and `countryCode`) are one reference table,
     - a US territory agrees with its own country code.
   - 202 targeted tests pass: names, matching, Company source, Company
     address, the rules files and the image layout.
-- [x] Three-axis `/code-review` (2026-09-27 00:40 ET).
+- [x] Three-axis `/code-review` (finished 2026-09-27 01:41 ET, by `date`).
   - **The main finding, from all three axes:** the table sat outside the
     policy's digest, so an edit to it would change matches and SEC Company
     records under the approved fingerprint `983352e8…`.
@@ -94,7 +94,7 @@ address's `stateOrCountry` and `countryCode`) are one reference table,
     - a territory drift test;
     - `pending-proofs.yaml` notes that the proofs were measured with the
       169-code table and that none of the 3 touched Companies is in their
-      files (checked 00:45 ET).
+      files (checked before 01:41 ET).
   - **Evidence:** `.scratch/rules-skill/research/08-place-code-impact.py` and
     its output `08-place-code-impact.json` reproduce the 182 / 11 / 19 / 3
     counts. The inputs are `cm08-sec-scan.jsonl` (`bdf379bf…`) and
