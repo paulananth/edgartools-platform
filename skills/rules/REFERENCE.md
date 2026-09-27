@@ -19,7 +19,7 @@ mdm:
       publication_key: <plain words: what identifies one publication>
       effective_time: <plain words: when a record takes effect, or unknown>
       semantics: <patch: a record changes only what it says; absence never retires>
-      completeness: <plain words: what one publication covers>
+      completeness: <plain words: what one publication covers; optional>
       nonblocking_deferred_reasons: [...]   # optional, below
       publication_families: [...]           # optional, below
       adapter: {...}                        # below
@@ -38,8 +38,8 @@ adapter:
   retain_deferred: true           # keep a record MDM cannot take yet, with its reason
   source_record_provenance: true  # keep the record key and adapter version with each fact
   field_shape: nullable_text      # every field is text or empty
-  provenance:
-    native_record: <key>          # if the reader keeps the source's own record under a key, map it
+  provenance:                     # every trace field the reader attaches (file hashes, run ids, times)
+    native_record: <key>          # only if the reader keeps the source's own record under a key
 ```
 
 When the files arrive as releases the reader numbers and verifies, also set
@@ -67,7 +67,8 @@ use that value.
 
 `schema_version` and `adapter.version` are written into every record MDM
 keeps from this source, and a source code is fixed once it is registered.
-So:
+`schema_version` names the record shape the mapping reads; a reader may
+require it to equal `adapter.version`. So:
 - name each one once, for example `acme-firm-record-v1`;
 - never reuse a name for different content;
 - a change to a registered source is a new version, and the operator
@@ -111,10 +112,10 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `classification` | Instead of a kind: the Mastering Policy rule that decides it: `kind`, `rule_id`, `version`. |
 | `identifiers` | `namespace: path`, e.g. `lei: firm.lei`. |
 | `identifier_formats` | `namespace: format`, from `FORMATS`. |
-| `fields` | `mdm_field: path`. The field names come from `rules/merge/kinds/<kind>.yaml`. |
-| `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>` for a list of lines. |
+| `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `COMPANY_NAMED_FIELDS` in `edgar_warehouse/mdm/clean/store.py`). |
+| `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. |
 | `field_shape` | `nullable_text`: every field is text or empty. |
-| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), `scope`, `valid_from`, `valid_to`, `properties`. |
+| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text naming what the relationship means, not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. |
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
 | `provenance` | `name: path` kept with each record, to trace it back to its file. |
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
@@ -127,7 +128,15 @@ source's parser produces it, not from the raw file, when a parser exists.
 `rules/merge/kinds/<kind>.yaml` gives each field's source ranks (which source
 wins) and the matching rules. Adding a source to a field's ranks, adding a
 field or adding a kind changes what MDM decides. Each one needs the operator's
-ruling and approval.
+ruling and approval. Every source whose records are of a kind must be in that
+kind's `defaults.sources`, or its batch fails: adding it is such a change.
+A relationship record becomes a link only once a matching rule joins its
+record to the kind's records.
+
+Not expressible yet, so log them: a publication-level contract (a reader's
+list of approved identifiers, or the files that make one release), a
+source placeholder that means "none", a kind taken from a record in another
+file.
 
 ## Worked examples
 

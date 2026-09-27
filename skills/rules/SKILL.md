@@ -28,8 +28,19 @@ language is in [REFERENCE.md](REFERENCE.md).
 - **Read and write rules files only through `edgar_warehouse.rules.files`**
   (`load`, `source`, `dumps`). It refuses YAML that would change a value
   silently (`yes`, `010`, a date).
-- **A registered source code is live.** Change its mapping only with the
+- **A registered source code is fixed.** Change its mapping only with the
   operator, as a new version.
+- **When two written decisions disagree, the later operator decision wins.**
+  Cite both in the log.
+- **Keep every identifier the source carries** (operator, 2026-09-26). An
+  identifier MDM has no field for is kept as a lookup-only identifier under
+  its own name. Only `cik` and `lei` can ever join two records into one.
+  An identifier a *different* authority issues (for example SEC stating an
+  LEI) gets a name that says who stated it (`sec_lei`), never the issuer's
+  name. Ask the operator about each identifier; do not drop one silently.
+- **A value that belongs to another kind stays out of this kind.** Example:
+  a ticker belongs to a Security, not a Company. Log it for that kind.
+- **Read the source's documentation, never its data API.**
 - **Questions:** plain words, one at a time, each with your recommendation.
   Ask only what the files, this repo and the source's public documentation
   cannot tell you.
@@ -49,18 +60,22 @@ language is in [REFERENCE.md](REFERENCE.md).
 
    Then check whether it is new. Search `rules/sources/` and the repo for
    the provider's and dataset's names. If the repo already names this source
-   (a source code, a parser, a rank in the merge rules), it is not new:
-   - keep every name the repo already uses;
-   - ask the operator whether its source code is registered in Clean MDM.
-     `edgar-warehouse rules status` would say. *Not built yet:* ask;
-   - follow "Change a source" below.
+   (a source code, a reader, a rank in the merge rules), keep every name the
+   repo already uses, and:
+   - if its rules file exists, follow "Change a source" below;
+   - if its rules file is missing, follow every step here (it needs a full
+     profile), keeping the repo's names;
+   - either way, ask whether its source code is registered in Clean MDM.
+     `edgar-warehouse rules status` would say. *Not built yet:* ask.
 
 2. **Profile.** Run `edgar-warehouse rules profile <files>`. *Not built
    yet:* instead, write a short script in your scratchpad that streams the
-   files. Log the gap. Profile a bounded sample first, for example the
-   first 10,000 records of each file. Make a full pass only for a count that
-   decides something, and time it on the sample before you start. For each
-   record type, find:
+   files. Log the gap. Profile a bounded sample first: records from the
+   start, the middle and the end of each file, because a file is often
+   sorted. Make a full pass only for a count that decides something, and
+   time it on the sample first; when a JSON pass is too slow, count with a
+   line-based pass over the file's fixed layout, checked against the JSON
+   pass on a slice. For each record type, find:
    - each path, its types, how often it is filled, its distinct count and
      samples;
    - candidate record keys (unique and always filled);
@@ -69,7 +84,10 @@ language is in [REFERENCE.md](REFERENCE.md).
    - repeated groups, and keys that point at other records (candidate
      relationships);
    - names shaped like organisations or like people, plus dates and
-     addresses.
+     addresses;
+   - placeholder values the source writes for "none" (`000000000`, the text
+     `NULL`, a code such as `8888`). The contract cannot turn them into
+     unknown yet: log each one.
 
    A file may hold several record types: profile each one separately. It
    may also hold a table as parallel arrays, one list per column. Zip those
@@ -85,12 +103,15 @@ language is in [REFERENCE.md](REFERENCE.md).
      are the Company table's columns.
    - **Ranks and matching rules:** `rules/merge/kinds/<kind>.yaml` says which
      source wins each field (`defaults.sources`) and how records match.
-   - **Existing code for this source:** search the repo for the provider and
-     dataset names. If code already turns these files into records (the
-     source's *reader*), map from *its* records and name the command that
-     runs it. Do not write a second parser. Find the reader by searching for
-     the code that calls `normalize` for this source. When that code names
-     the rules folder or a source code, those names are fixed.
+   - **Existing code for this source (its *reader*):** search the repo for
+     code that loads this source's rules file (`rules_files.source("<name>")`,
+     `mdm_contract(`) or names its source code. If a reader exists, map from
+     *its* records, not the raw files, and profile a few records in *its*
+     shape too (build them from its code). Name the command that runs it.
+     Do not write a second parser. Names the reader uses (the rules folder,
+     source codes, versions, families) are fixed. Read its validation code:
+     it may require exact values (a `schema_version`, a `family`, a
+     publication family) or refuse keys.
    - **The source's public documentation on the web** (never `sec.gov`):
      field definitions, identifiers, how often it publishes, and whether
      each file is complete or holds changes only. When the source's own
@@ -105,31 +126,50 @@ language is in [REFERENCE.md](REFERENCE.md).
    - **Fields:** use the names MDM already has for the kind. A new field is
      a question for the operator.
    - **Relationships:** the type, the other end's key, the source it lives
-     in, and its start and end.
+     in, and its start and end. List every relationship type the source
+     carries; which are in scope is a question for the operator.
+   - **Kinds not settled:** when a category could be a kind the operator
+     has not settled (for example Person before Person mastering), leave it
+     unnamed and ask.
+   - **Provenance:** every trace field the reader attaches to a record
+     (hashes of the captured files, run ids, observed time, raw object ids)
+     goes into `provenance`, so each fact leads back to its file.
    - **The publication:** whether each file is complete or changes only
      (`semantics`), what a file covers (`completeness`), and when a record
      takes effect (`effective_time`).
 
 5. **Ask.** One question at a time, in plain words, with your recommendation.
    The usual real decisions are:
-   - whether a record type is in scope;
+   - whether a record type, or a relationship type, is in scope;
    - which of two fields holds the source's authoritative value;
    - whether a new MDM field or kind is wanted;
-   - the source code's name.
+   - each identifier the source carries (see the hard rules);
+   - the source code's name, when the repo does not already fix it.
+
+   Do not ask what a field the merge rules already rank for this source
+   means: a field ranked for this source is one it supplies. Do not ask what
+   the repo's names already fix.
 
 6. **Write** `rules/sources/<source>/source.yaml`, in the shape of
    REFERENCE.md. Start from its "Defaults" section, and remember that a
    defect always blocks: a bad identifier or a malformed record is never a
    non-blocking reason. Write the values with `files.dumps`, then add a short YAML
    comment by hand wherever a choice needs a reason: an operator's answer, a
-   field left out, a surprising path. Check that it still loads:
-   `uv run --no-sync python -c "from edgar_warehouse.rules import files; print(files.source('<source>'))"`.
+   field left out, a surprising path. `files.dumps` folds long values over
+   several lines, so put comments between keys. Check that it still loads
+   and that your comments changed no value: `files.source('<source>')` must
+   equal what you passed to `files.dumps`.
 
 7. **Check.** Run `edgar-warehouse rules check <source>`. *Not built yet:*
    instead, run a dry run of the mapping on 5–10 sample records. When the
    source has a reader, run the reader on the sample: it reshapes records
-   and applies checks that the mapping alone skips. Otherwise, put records
-   in the reader's shape through `edgar_warehouse.mdm.clean.adapters.normalize`:
+   and applies checks that the mapping alone skips. Build small sample
+   inputs in the shape the reader reads (a few records in a file of the
+   source's own format) rather than running it on a whole large file. When
+   the reader needs an approved scope you do not have, use a scope made
+   from the sample and label it as a test scope in the log. Otherwise, put
+   records in the reader's shape through
+   `edgar_warehouse.mdm.clean.adapters.normalize`:
    - pass `contract=` your contract, `source_code=` your source code, and
      `policy=files.policy()`;
    - pass `publication={"artifact_sha256": <sha256 of the sample file>,
