@@ -172,4 +172,34 @@ Skill first (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill 
   later decisions (EIN and SEC's LEI lookup-only; trace beside the record),
   so an agent does not copy it. Its digest is unchanged (`742e73c7…`).
 - [x] `CLAUDE.md` Quick Navigation entry for the skill.
-- [ ] Three-axis `/code-review` of any code, then PR and CI.
+- [x] Three-axis `/code-review` against `origin/main` (finished 2026-09-27 13:35 ET).
+  - **GoF:** nothing worth changing. The command test guards the one kind of
+    drift the history shows.
+  - **Spec, fixed:**
+    - a change to identifiers or a record key needs a new source code, not a
+      new version (`PROTECTED_ADAPTER_PARTS`). So the SEC change is
+      `sec.submissions.company.v2` (skill, reference, SEC comment, ticket
+      10);
+    - the operator approves under their own login;
+    - `activate` names its two other logins;
+    - MDM first, then silver;
+    - the "keep every identifier" rule now says only SEC's EIN and LEI are
+      decided;
+    - the census digest and publication key are in ticket 10;
+    - `python -m edgar_warehouse.cli` is a silent no-op;
+    - the reader's `batch_input` loop is the faithful dry run;
+    - only `address` takes components.
+  - **Standards, fixed:**
+    - commands run with `uv run`;
+    - `link.sh` now refuses to move an existing link, like Bookkeeping's;
+    - "ranks per kind" is stated the same way in both files;
+    - the reason table says what to list;
+    - the hand-comment exception is named;
+    - the skill call is written for both runtimes;
+    - `default_prompt` added.
+  - **Left as is:**
+    - the test reads argparse internals (GoF: stable, loud if it breaks);
+    - "a defect always blocks" is written in three places;
+    - GLEIF's publication time stays in UTC, as GLEIF names it;
+    - `link.sh` also links Claude's skills folder, which Claude needs.
+- [ ] PR and CI.

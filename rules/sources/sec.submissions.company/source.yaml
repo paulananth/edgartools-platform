@@ -62,8 +62,9 @@ mdm:
           rule_id: sec-company-candidate
           version: 2026-09-25.13
         # Behind the operator's decision (2026-09-26): EIN and SEC's stated LEI
-        # are kept as lookup-only identifiers. They wait for the next SEC
-        # mapping version; do not copy this list as an example.
+        # are kept as lookup-only identifiers. Identifiers are fixed within a
+        # source code, so they wait for a new one (sec.submissions.company.v2);
+        # do not copy this list as an example.
         identifiers:
           cik: cik
         identifier_formats:
@@ -87,7 +88,7 @@ mdm:
               country: business_address.country
         # Behind the operator's decision (2026-09-27): capture hashes, run id and
         # sync time stay beside the record, not in it. The next SEC mapping
-        # version drops them; do not copy this block as an example.
+        # drops them; do not copy this block as an example.
         provenance:
           landing_sha256: _origin.sha256
           landing_manifest_sha256: _origin.manifest_sha256

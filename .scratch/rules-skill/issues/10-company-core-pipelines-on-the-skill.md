@@ -16,10 +16,16 @@ Bookkeeping skill, with no second path:
 
 ## Known work, from the trials (ticket 07)
 
-- A new SEC mapping version: capture hashes, run id and sync time leave
-  `provenance` (operator, 2026-09-27); EIN and SEC's LEI become lookup-only
-  identifiers (operator, 2026-09-26). The reader must first land SEC's LEI
-  and stop building the publication key from the run id and file hashes.
+- A new SEC source code, `sec.submissions.company.v2`: EIN and SEC's LEI
+  become lookup-only identifiers (operator, 2026-09-26), and identifiers are
+  fixed within one source code (`PROTECTED_ADAPTER_PARTS`). The same change
+  takes capture hashes, run id and sync time out of `provenance` (operator,
+  2026-09-27). The reader must first land SEC's LEI.
+- "Trace beside the record" is not fully true until the reader changes too:
+  its publication key is built from the run id and file hashes, and the
+  Name Census entry kept for matching carries the census digest, so every
+  capture still gives each fact a new fingerprint. The publication key is
+  also fixed within one source code.
 - GLEIF relationships: the Company merge rules must list
   `gleif.relationships.v1`, and an LEI matching rule must exist, before a
   relationship becomes a link. Both need the operator's approval.

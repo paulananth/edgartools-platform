@@ -9,7 +9,7 @@ reads it (`edgar_warehouse/mdm/clean/adapters.py`, `normalize`).
 source: <source>                     # the folder name, e.g. acme.registry or gleif
 bookkeeping: {...}                   # the Bookkeeping skill's section; leave it alone
 bronze:
-  family: <bronze family>            # the main captured-file family (no code reads it yet)
+  family: <bronze family>            # the main captured-file family; name any other in a comment
 mdm:
   <source_code>:                     # e.g. acme.registry.firms.v1; one per record type
     contract:
@@ -59,18 +59,19 @@ missing key. Never list a defect as non-blocking.
 
 The reason codes the code raises today:
 
-| What happened | Code | Default |
+| What happened | Code | List it as non-blocking? |
 |---|---|---|
-| Outside the approved scope | `outside_approved_company_scope` | does not block |
-| A kind MDM does not take yet | `unsupported_identity_kind` | does not block |
-| A valid reporting exception | `reported_parent_exception` | does not block |
-| Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | blocks until the operator rules otherwise |
-| A relationship type not mapped | `unsupported_relationship_type` | blocks; ask the operator |
-| The policy has not activated the verdict | `classification_not_activated` | blocks: the policy is wrong |
-| A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | always blocks |
+| Outside the approved scope | `outside_approved_company_scope` | yes |
+| A kind MDM does not take yet | `unsupported_identity_kind` | yes |
+| A valid reporting exception | `reported_parent_exception` | yes |
+| Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | no, until the operator rules otherwise |
+| A relationship type not mapped | `unsupported_relationship_type` | no; ask the operator |
+| The policy has not activated the verdict | `classification_not_activated` | no: it means the policy is wrong |
+| A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | never |
 
-The three "does not block" reasons are the record's decision (native GLEIF
-operation); list each one a contract can raise. For any other reason, ask.
+A contract that lists no reason blocks on every one. The three "yes" reasons
+are the record's decision (native GLEIF operation): list each one a contract
+can raise. For any other reason, ask.
 
 ## Full files and changes
 
@@ -90,7 +91,10 @@ require it to equal `adapter.version`. So:
 - name each one once, for example `acme-firm-record-v1`;
 - never reuse a name for different content;
 - a change to a registered source is a new version, and the operator
-  approves it.
+  approves it. A change to a record key, the publication key or the
+  identifiers needs a new source code instead: the engine refuses it within
+  one source code (`PROTECTED_ADAPTER_PARTS` in
+  `edgar_warehouse/mdm/clean/store.py`).
 
 ## Optional envelope keys
 
@@ -131,7 +135,7 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `identifiers` | `namespace: path`, e.g. `lei: firm.lei`. |
 | `identifier_formats` | `namespace: format`, from `FORMATS`. |
 | `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `COMPANY_NAMED_FIELDS` in `edgar_warehouse/mdm/clean/store.py`). |
-| `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. |
+| `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. Only `address` takes components; every other field is one path. |
 | `field_shape` | `nullable_text`: every field is text or empty. |
 | `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. |
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
@@ -145,8 +149,9 @@ source's parser produces it, not from the raw file, when a parser exists.
 
 `rules/merge/kinds/<kind>.yaml` ranks the sources per kind (the first listed
 wins every field it fills) and holds the matching rules. Its comments record
-which of a source's values fills a field that two sources share. Adding a source to a field's ranks, adding a
-field or adding a kind changes what MDM decides. Each one needs the operator's
+which of a source's values fills a field that two sources share. Adding a
+source to a kind's ranks, adding a field or adding a kind changes what MDM
+decides. Each one needs the operator's
 ruling and approval. Every source whose records are of a kind must be in that
 kind's `defaults.sources`, or its batch fails: adding it is such a change.
 A relationship record becomes a link only once a matching rule joins its

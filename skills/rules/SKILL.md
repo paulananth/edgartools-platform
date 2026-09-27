@@ -27,17 +27,25 @@ language is in [REFERENCE.md](REFERENCE.md).
   files.
 - **Read and write rules files only through `edgar_warehouse.rules.files`**
   (`load`, `source`, `dumps`). It refuses YAML that would change a value
-  silently (`yes`, `010`, a date).
+  silently (`yes`, `010`, a date). The one exception: the comments you add
+  by hand in step 6, checked by reloading the file.
+- **Run commands with `uv`**, from the repository root:
+  `uv run --extra mdm edgar-warehouse rules …`. The commands below leave the
+  prefix out.
 - **A registered source code is fixed.** Change its mapping only with the
-  operator, as a new version.
+  operator, as a new version. A change to what identifies a record (the
+  contract's `record_key` or `publication_key`; the adapter's `record_key`,
+  `record_key_format`, `identifiers` or `identifier_formats`) is refused
+  within one source code: it needs a new source code (`….v2`).
 - **When two written decisions disagree, the later operator decision wins.**
   Cite both in the log.
-- **Keep every identifier the source carries** (operator, 2026-09-26). An
-  identifier MDM has no field for is kept as a lookup-only identifier under
-  its own name. Only `cik` and `lei` can ever join two records into one.
-  An identifier a *different* authority issues (for example SEC stating an
-  LEI) gets a name that says who stated it (`sec_lei`), never the issuer's
-  name. Ask the operator about each identifier; do not drop one silently.
+- **Ask about every identifier the source carries**; never drop one
+  silently. The operator wants cross-reference identifiers kept for lookup
+  (2026-09-26: SEC's EIN and SEC's stated LEI). Recommend keeping each one
+  as a lookup-only identifier under its own name, and ask. Only `cik` and
+  `lei` can ever join two records into one. An identifier a *different*
+  authority issues (for example SEC stating an LEI) gets a name that says
+  who stated it (`sec_lei`), never the issuer's name.
 - **A value that belongs to another kind stays out of this kind.** Example:
   a ticker belongs to a Security, not a Company. Log it for that kind.
 - **Read the source's documentation, never its data API.**
@@ -235,6 +243,11 @@ language is in [REFERENCE.md](REFERENCE.md).
      "member": <file name>, "publication_key": "dry-run", "revision": 0}`;
    - show the operator what MDM would receive.
 
+   That `normalize` call skips what a reader adds (its publication key,
+   record locators, deferred records). For a reader that builds batches,
+   copy the loop in `edgar_warehouse.mdm.clean.cli.batch_input` into your
+   scratchpad instead; it needs a database only for `current_reading`.
+
    Build the sample records with the source's parser, where one exists.
    Sometimes the parser needs inputs you do not have, such as another run or
    a census. Then build records in the parser's output shape by hand, from
@@ -257,14 +270,17 @@ language is in [REFERENCE.md](REFERENCE.md).
    - `rules record-proof --source <name> --version <v> --proof-uri <uri>
      --proof-sha256 <sha256>` records the proof of a passing run;
    - the operator runs `rules approve --source <name> --version <v>
-     --digest <digest>` under their own login. Before you ask, say in plain
+     --digest <digest>` with `RULES_DATABASE_URL` set to their own approver
+     login; the database records that login as the approver. Before you ask, say in plain
      words what the digest is and what it changes. Never run it yourself;
    - `rules activate --source <name> --version <v>` registers the version
-     in Clean MDM;
-   - the run itself is the Bookkeeping skill's work:
-     `$bookkeeping plan`, `validate` and `deploy` with
+     in Clean MDM. It also needs `RULES_MDM_ACTIVATION_DATABASE_URL` (the
+     MDM governance login) and `CHANGE_LEDGER_DATABASE_URL` (the registry);
+   - the run itself is the Bookkeeping skill's work (`$bookkeeping` in
+     Codex, `/bookkeeping` in Claude): its `plan`, `validate` and `deploy` with
      `--source <name> --feed <feed>`. It submits `rules run`, which takes
-     `--target` and an input manifest with its sha256.
+     `--target` and an input manifest with its sha256. Run the MDM target
+     first, then silver.
 
    `rules status --source <name>` shows each version's state.
 
@@ -282,7 +298,8 @@ the dry run before and after.
   their comments, and the comments hold decisions. Export to another folder
   and compare; never export over the repo's `rules/`.
 
-Every other command connects as the agent, through `RULES_DATABASE_URL`.
+Every other command connects through `RULES_DATABASE_URL`: the agent's
+login, except for `approve`, which the operator runs under their own.
 The CLI takes about half a minute to start; that is not a hang.
 
 ## When a command is missing
@@ -291,5 +308,9 @@ This skill is written before its commands. Each command is built when a trial
 shows it is needed. When you reach a missing command:
 - if the step says what to do instead, do that in your scratchpad;
 - if it does not, stop at that step.
+
+Run a command as `uv run --extra mdm edgar-warehouse …`, never
+`python -m edgar_warehouse.cli`: that form prints nothing and exits 0, so a
+missing command looks like success.
 
 Either way, write it in the log.
