@@ -2,6 +2,36 @@
 # registered as sec.submissions.company.v1). Parsing stays in existing code
 # (`edgar-warehouse mdm prepare-clean-company`), so this source has no `read`.
 source: sec.submissions.company
+bookkeeping:
+  version: 1
+  targets:
+    capture:
+      steps:
+        - name: capture
+          operation: artifact.copy
+          requires: []
+          key: "{artifact_id}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt]
+      checks: [manifest.hash, work.accounting, journal.delivered]
+    mdm:
+      steps:
+        - name: merge
+          operation: mdm.merge
+          requires: []
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt]
+      checks: [manifest.hash, work.accounting, journal.delivered, mdm.publication]
+    ingest:
+      steps:
+        - name: merge
+          operation: mdm.ingest
+          requires: []
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt]
+      checks: [manifest.hash, work.accounting, journal.delivered, mdm.publication]
 bronze:
   family: submissions
 mdm:

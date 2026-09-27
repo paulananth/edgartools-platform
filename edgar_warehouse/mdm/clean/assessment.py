@@ -13,6 +13,7 @@ class StaleAssessment(Conflict):
 
 def record(store, body: dict, run_id: str) -> dict:
     with store.engine.begin() as conn:
+        store._authorize(conn)
         key = conn.scalar(
             text("SELECT mdm_v2.record_assessment(:body,CAST(:run AS uuid))"),
             {"body": canonical(body), "run": run_id},
@@ -53,6 +54,7 @@ def supersede(store, key: str, run_id: str) -> None:
     # Outside the rolled-back master transaction. A concurrent successful
     # application wins; the SQL capability never supersedes an applied proposal.
     with store.engine.begin() as conn:
+        store._authorize(conn)
         conn.execute(
             text("SELECT mdm_v2.supersede_assessment(:key,CAST(:run AS uuid))"),
             {"key": key, "run": run_id},

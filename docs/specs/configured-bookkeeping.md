@@ -1,0 +1,254 @@
+# Fresh configured Bookkeeping
+
+Implementation branch: `codex/configured-bookkeeping`. The complete supplied
+plan is the objective. **The current implementation does not yet replace every
+legacy caller or qualify a production cutover.**
+
+## Implemented boundary
+
+`edgar_warehouse.bookkeeping.clean` uses only
+`BOOKKEEPING_CLEAN_DATABASE_URL`, never the old `BOOKKEEPING_DATABASE_URL`.
+The PostgreSQL 16 database is `bookkeeping_clean`. Its schema has exactly
+five tables: `pipeline_run`, `work_item`, `lease`, `checkpoint`, and
+`journal_outbox`. Migration checksums live in a schema comment, so they do
+not add a sixth control table. No old history or checkpoints are imported.
+
+Runtime may read the tables and execute bounded control functions. It may
+not change tables directly, create schema objects, or compact records.
+Migration checks inherited privileges as well as explicit grants. An
+independent destination has `bookkeeping_guard.resource`, and the Change
+Ledger has an append-only `bookkeeping_mirror.event`; neither is another
+Bookkeeping root run.
+
+The shared interface is `Bookkeeping.start`, `claim`, `heartbeat`, `check`,
+`record_verified_completion`, `resume`, and `status`. The bounded worker
+runner also exposes `deliver` and `finalize`. Operations have a version,
+executor, reconciler, and verifier. Checks and operations are registered by
+capability name. There is no branch or callback selected by source name.
+
+Implemented capabilities:
+
+| Capability | Effects and verification |
+| --- | --- |
+| `artifact.copy` | Immutable file/S3 conditional persistence of already available bytes; exact input/output hashes and durable receipt. This does not fetch from a provider API. |
+| `mdm.merge` | Existing bounded Merge Stage command; destination guard in the actual commit transaction; committed observation, request hash and generation reconcile lost acknowledgements. |
+| `mdm.ingest` | Bounded NDJSON input normalized by the existing common adapter under the exact source reading frozen in Rules; exact record accounting, retained deferred evidence, guarded Merge Stage and committed receipt. |
+| `mdm.publish` | Existing MDM consumer fences, narrowed to the configured batch while preserving generation order; consumer read-back before receipt. |
+
+The default CLI registers MDM capabilities when `MDM_DATABASE_URL` exists.
+Journal delivery uses the existing Clean MDM journal adapter. Export and graph
+currently use the existing **offline contract sink** for local acceptance.
+Unsupported hosted destinations block; no new deployment path is introduced.
+
+## Rules ownership and lifecycle
+
+The operator assigned Codex the required Rules integration during this task,
+including schema, resolver and runner. This extends Claude's planned single
+`rules.rule_version` table with the `pipeline` document kind. No other
+configuration table is created. The implementation lives in the existing
+`edgar_warehouse.rules` package; Claude should reuse it when adding its parse
+engine, proof runner and skill commands, rather than implement another store.
+
+Files remain the authoring surface. `Rules.save` stores canonical JSON and
+its SHA-256 as an immutable draft. Proof pins the body digest and input batch
+hash. A person's own approver login approves versions feeding MDM. Status
+only moves draft → proven → active → retired. One active version per kind
+and name is enforced by a partial unique index. The agent cannot insert or
+update approval columns.
+
+Activation of source mappings and merge policies requires explicit MDM
+governance connections and approval. The idempotent MDM handoff commits
+first, followed by Rules activation in a separate transaction. Registration
+receipts pin dataset readings. A Bookkeeping-only edit does not create a new
+MDM mapping. Export retains these receipts along with proof and approval.
+
+`Rules.resolve` exports an active version into content-addressed control
+storage during submission. Workers use that frozen export and input manifest,
+never YAML or the live Rules database. Retiring a version does not change an
+existing run's export. Changing the input reference or operation version
+requires a new run. Resume rechecks retained completion evidence; it never
+imports a legacy run or invents a missing worklist.
+
+Submission requires a boolean passed proof for the exact Rules digest and a
+valid proof batch hash. Mastering operations require exact-digest approval
+even under a pipeline document or a target with a different name.
+
+`rules record-proof` records a hashed proof produced by a separate evaluator.
+It does **not** perform source parsing tests, named cases, or a Batch Gate.
+Claude's planned proof evaluator remains necessary for production approval.
+File → DB → file round trips preserve the JSON digest, not comments or YAML
+ordering. Approval metadata is not copied into a mutable authoring file.
+
+## Authoring and input manifests
+
+Each existing source has a `bookkeeping` section; graph publication is under
+`rules/pipelines/graph-publication/pipeline.yaml`. Targets declare ordered
+steps, preceding-step prerequisites, work keys, actual conflicting resource
+keys, required checks, lease duration, heartbeat interval and retry policy.
+Defaults are 120 seconds, 30 seconds, and five bounded attempts with
+exponential backoff capped at five seconds and jitter. Unknown options,
+capabilities, missing keys and dependency cycles block execution.
+
+Input worklists belong to the source. They contain identifiers and references,
+not business records:
+
+```json
+{
+  "version": 1,
+  "units": [{
+    "keys": {"batch_id": "batch-1", "consumer": "mastering/company"},
+    "input": {"uri": "s3://bucket/prepared/batch-1.json", "sha256": "<64 lowercase hex characters>"},
+    "output": "s3://bucket/control/receipts/batch-1.json",
+    "cursor": {"offset": 0}
+  }]
+}
+```
+
+An MDM input artifact contains `{"version":1,"command":{...}}`, an existing
+Merge Stage command without `run_id`, preview flags or lease proof. Records
+must agree with the source readings frozen in the Rules registration receipt.
+A publication input contains `version`, `batch_id`, `consumer`, and an exact
+`destination`. Authority is supplied separately by the worker, preserving
+the business batch id and request hash on retry.
+
+The `ingest` target accepts a `mdm.ingest` artifact containing `version: 1`,
+the same `command` without inline assertions, deferred records or occurrences,
+and a `source_input` object with `source_code`, an `artifact` URI/hash,
+`publication` (`publication_key`, nonnegative `revision`, optional
+`effective_at`) and exact `record_count`. Members must be NDJSON, at most
+16 MiB and 1,000 records. The existing adapter creates assertions and retained
+deferred evidence from those bytes. It reads the mapping version pinned in
+the source Rules registration, never the latest registered mapping. An unseen
+Company fixture exercises this entire path without new registry entries or
+source callbacks, including a later mapping correction and lost acknowledgement.
+
+MDM steps must lease `mdm:consumer:<command consumer>`; publication steps
+must lease `mdm:publication:<consumer>`. Configured batch/consumer keys must
+agree with the immutable command. Additional declared resource scopes are
+allowed. The guard also covers assessment retention and supersession inside
+their own transactions; these occur separately from the master commit.
+
+Lease acquisition sorts resources, rolls back a partially acquired set on
+contention, and increments tokens on takeover. Ownership checks use database
+time. A destination guard locks its resource rows inside the business
+transaction; a deferred check rejects expiry at commit. Bookkeeping completion
+has its own deferred authority check. Transactions in different databases
+are explicitly separate.
+
+Verified completion and its outbox intent commit together. Delivery uses an
+idempotent exact-envelope key in the Change Ledger. Lost sink acknowledgements
+cause duplicate delivery and reconciliation, never premature completion.
+Ordered checkpoints advance only through the contiguous verified prefix.
+Completion requires expected-work accounting, configured checks, and all
+required journal acknowledgements. Empty work requires explicit configuration
+and a verified input manifest.
+
+Owner-only compaction defaults to 30 days. It retains run summaries,
+checkpoints, receipt references and lease tokens; pinned or incomplete runs
+and pending journal deliveries are retained.
+
+## Local use
+
+Use an isolated PostgreSQL 16 instance. Provisioning creates empty stores and
+restricted logins under NOLOGIN owners. It refuses to adopt databases owned by
+another workstream. Passwords come from environment variables and are not
+printed or committed.
+
+```bash
+uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py --rules
+```
+
+The script requires `BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL`,
+`BOOKKEEPING_CLEAN_RUNTIME_PASSWORD` and, with `--rules`,
+`RULES_AGENT_PASSWORD`. Set runtime connection variables to the created
+logins. `BOOKKEEPING_MANIFEST_ROOT` names file storage for offline acceptance
+or an S3 prefix for AWS.
+
+Existing databases can be migrated explicitly with
+`bookkeeping init --runtime-role <role>` and `rules init`, using
+`BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
+`bookkeeping init-ledger` and `init-guard` use their separate destination
+migration URLs. They do not populate business or source data.
+
+```bash
+edgar-warehouse rules save --source gleif --version <new-version> rules/sources/gleif/source.yaml
+edgar-warehouse rules record-proof --source gleif --version <new-version> --proof-uri <URI> --proof-sha256 <SHA256>
+# Approval uses the person's own Rules login and exact saved digest.
+edgar-warehouse rules approve --source gleif --version <new-version> --digest <SHA256>
+edgar-warehouse rules activate --source gleif --version <new-version>
+edgar-warehouse rules run --source gleif --target mdm --input-manifest <URI> --input-sha256 <SHA256> --limit 100
+edgar-warehouse rules run --source gleif --target mdm --resume-run-id <UUID> --limit 100
+edgar-warehouse bookkeeping status <UUID>
+edgar-warehouse bookkeeping runs --state waiting --limit 100
+edgar-warehouse bookkeeping checks <UUID>
+edgar-warehouse bookkeeping leases <UUID>
+```
+
+Activation of mappings also requires `RULES_MDM_ACTIVATION_DATABASE_URL` and
+the existing registry in `CHANGE_LEDGER_DATABASE_URL`. No real rule versions
+are approved or activated by this implementation task.
+
+## Verification and remaining acceptance
+
+Mandatory PostgreSQL acceptance has no prerequisite skips:
+
+```bash
+uv run --extra mdm --extra s3 pytest tests/integration/test_configured_bookkeeping_postgres.py
+```
+
+It runs restricted logins against a disposable `postgres:16-alpine`, testing
+independent concurrency, shared-resource contention, renewal/takeover, stale
+authority, multiple-resource rollback, ordered checkpoints, commit expiry,
+lost acknowledgements, duplicate delivery, journal failure, bad manifests,
+processing version drift, zero work, retention, actual Merge Stage commits,
+and publication verification failure/recovery. Source files validate against
+the same control contract; an unseen source runs without registry edits.
+
+The canonical local PostgreSQL 16 instance was provisioned with empty
+`bookkeeping_clean` and `rules` stores, restricted runtime logins, and NOLOGIN
+owners. Its control schema has five tables and zero runs; Rules has zero
+versions. Acceptance fixtures use separate disposable containers, not these
+stores. No AWS state, old Bookkeeping data or active Rules versions were changed.
+
+Verification recorded during implementation:
+
+- Complete configured control acceptance: 35 passed in 199.80 seconds,
+  no skips, including invalid-proof/approval rejection and the operator CLI's
+  bounded submission, frozen resume, status, checks and run discovery.
+- Contract, CLI inventory, Rules files and existing SEC/GLEIF source suites:
+  168 passed in 25.23 seconds.
+- Existing complete Clean MDM PostgreSQL suite: 56 passed. After adding
+  assessment authorization, its eight assessment tests passed again.
+- The broader unit/architecture run produced 1,994 passes, eight existing
+  optional skips and three command-inventory failures. The failures treated
+  the new standalone command groups as legacy orchestrator commands. Their
+  corrected classifications passed the targeted inventory rerun; the entire
+  broader suite was not rerun after that correction.
+- Wheel build and migration packaging succeeded; `git diff --check` passed.
+
+New submissions print their durable run id on stderr before execution while
+leaving result stdout as JSON. `bookkeeping runs` is bounded and also lets an
+operator find the root after a lost submission acknowledgement.
+
+Still required before the supplied plan is complete:
+
+1. Convert all existing warehouse orchestration, SEC discovery/parse, silver,
+   legacy MDM and Clean MDM RunCoordinator callers. They currently retain
+   their old control interfaces. The fresh runner is an additional path, not
+   a completed replacement.
+2. Reconstruct SEC filing worklists and tracking scope from source-owned
+   immutable manifests. Do not relocate source records into the five control
+   tables or import old control checkpoints.
+3. Bind capture acquisition fences and parse/silver/gold operations to shared
+   capability descriptors, preserving current stage order and entry points.
+   `artifact.copy` must not be presented as provider API capture or parsing.
+   The current flat worklist repeats each unit for every configured step;
+   stage-specific input/output references are still needed for transformation
+   chains that consume a preceding step's verified output.
+4. Finish the Rules proof evaluator and runner integration with Claude's
+   source engine; qualify SEC and GLEIF end to end, including native source
+   continuity, alongside the unseen source and platform jobs.
+5. Qualify hosted publication and an isolated full-pipeline build, then
+   prepare a reviewed AWS cutover. Retire the old database separately.
+
+No AWS rollout, legacy database reset or retirement is performed here.
