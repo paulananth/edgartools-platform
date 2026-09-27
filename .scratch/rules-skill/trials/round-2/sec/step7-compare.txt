@@ -1,0 +1,12 @@
+companies before/after: 7 7 set aside before/after: 12 12 same set-aside CIKs: True
+  0000320193 identifiers {'cik': '0000320193'} -> {'cik': '0000320193', 'ein': '942404110'} | other keys changed: ['identifiers', 'provenance'] | assertion_id changed: True
+  0000789019 identifiers {'cik': '0000789019'} -> {'cik': '0000789019', 'ein': '911144442'} | other keys changed: ['identifiers', 'provenance'] | assertion_id changed: True
+  0000937966 identifiers {'cik': '0000937966'} -> {'cik': '0000937966', 'ein': '000000000'} | other keys changed: ['identifiers', 'provenance'] | assertion_id changed: True
+  0001018724 identifiers {'cik': '0001018724'} -> {'cik': '0001018724', 'ein': '911646860'} | other keys changed: ['identifiers', 'provenance'] | assertion_id changed: True
+  0001306965 identifiers {'cik': '0001306965'} -> {'cik': '0001306965', 'ein': '000000000'} | other keys changed: ['identifiers', 'provenance'] | assertion_id changed: True
+  0001650664 identifiers {'cik': '0001650664'} -> {'cik': '0001650664', 'ein': '464097528'} | other keys changed: ['identifiers', 'provenance'] | assertion_id changed: True
+  0001806201 identifiers {'cik': '0001806201'} -> {'cik': '0001806201', 'ein': '845031428'} | other keys changed: ['identifiers', 'provenance'] | assertion_id changed: True
+binding rule on ein: refused -> Binding rule probe-ein must name exactly one namespace of ['cik', 'lei']: ['ein']
+binding rule on sec_lei: refused -> Binding rule probe-sec_lei must name exactly one namespace of ['cik', 'lei']: ['sec_lei']
+binding rule on ticker: refused -> Binding rule probe-ticker must name exactly one namespace of ['cik', 'lei']: ['ticker']
+binding rule on lei: accepted by the rule checker

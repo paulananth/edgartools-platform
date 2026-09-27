@@ -1,0 +1,212 @@
+# GLEIF Golden Copy: the MDM mapping of GLEIF's three coordinated files (Level 1
+# LEI records, Level 2 relationship records, Level 2 reporting exceptions), one
+# Dataset Contract per file. Parsing stays in existing code: the reader
+# `edgar_warehouse/mdm/clean/gleif_source.py` loads this folder by name ("gleif"),
+# reshapes each record and calls `normalize`, run by `edgar-warehouse mdm
+# mastering --model clean --manifest ...`. It needs all three contracts registered
+# together. New, nothing registered (operator, 2026-09-26).
+#
+# Not in this file: the publication-level contract the verifier reads (the
+# approved Company LEI list `company_leis`, `record_sources`, the publication
+# contract). It has no home in `rules/` yet (operator, 2026-09-26).
+source: gleif
+bronze:
+  # One capture family for all three files, named after the source (operator,
+  # 2026-09-26). The reader requires contract.family to equal it.
+  family: gleif
+mdm:
+  gleif.level1.v1:
+    contract:
+      provider: GLEIF
+      family: gleif
+      # The reader requires schema_version to equal adapter.version.
+      schema_version: gleif-native-record-v1
+      record_key: 'the LEI: 20 characters, ISO 17442 check digits'
+      publication_key: 'one Golden Copy publication: its publisher time (the content date,
+        e.g. 2026-09-11T16:00Z) as its sequence, plus the digest of its verified manifest'
+      effective_time: the record's Registration.LastUpdateDate
+      semantics: patch
+      completeness: a full Golden Copy file holds every record GLEIF has ever published, current
+        and historical (lapsed, retired, annulled included); a delta holds only the records
+        changed in its window. Only records whose LEIs are on the approved Company LEI scope
+        reach MDM. No retirement by absence
+      # Expected exclusions only: a record outside the approved Company scope, and a
+      # category MDM does not take as a Company (FUND, BRANCH, ...). Every defect
+      # blocks, including the 256 GLEIF-annulled or duplicate LEIs in the
+      # 2026-09-11 copy that fail their check digit (operator, 2026-09-26; the reader
+      # fix is a separate code ticket).
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - unsupported_identity_kind
+      publication_families:
+      - golden_copy
+      adapter:
+        version: gleif-native-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        native_member: level1
+        record_key:
+        - LEI.$
+        record_key_format: lei
+        # Only GENERAL is a Company: the SEC-to-GLEIF name rules can honour only
+        # that category (matching.py). The others sort the Stage, never an identity.
+        kind_field: Entity.EntityCategory.$
+        kind_values:
+          GENERAL: company
+        probable_kind_values:
+          FUND: fund_structure
+          BRANCH: branch
+          # GLEIF: "an individual acting in a business capacity".
+          SOLE_PROPRIETOR: person
+          RESIDENT_GOVERNMENT_ENTITY: government
+          INTERNATIONAL_ORGANIZATION: international_organization
+        identifiers:
+          lei: LEI.$
+        identifier_formats:
+          lei: lei
+        fields:
+          # name, jurisdiction and address are one field each across SEC and GLEIF,
+          # SEC first when both have a value (operator, 2026-09-24).
+          name: Entity.LegalName.$
+          jurisdiction: Entity.LegalJurisdiction.$
+          # The legal address, not the headquarters address (operator, 2026-09-26).
+          # MailRouting, AddressNumber and AddressNumberWithinBuilding are left out:
+          # the language has no component for them; they stay in the native record.
+          address:
+            components:
+              street: Entity.LegalAddress.FirstAddressLine.$
+              street2:
+                lines: Entity.LegalAddress.AdditionalAddressLine
+              city: Entity.LegalAddress.City.$
+              region: Entity.LegalAddress.Region.$
+              postcode: Entity.LegalAddress.PostalCode.$
+              country: Entity.LegalAddress.Country.$
+          # The ELF code, not the OtherLegalForm text that code 8888 points to
+          # (operator, 2026-09-26).
+          gleif_legal_form: Entity.LegalForm.EntityLegalFormCode.$
+          # Kept as GLEIF writes it, including the text NULL ("not applicable").
+          gleif_entity_status: Entity.EntityStatus.$
+          gleif_registration_status: Registration.RegistrationStatus.$
+          gleif_initial_registration: Registration.InitialRegistrationDate.$
+          # Raw: the Name Census stores this exact string and the name rules compare
+          # it for equality.
+          gleif_last_update: Registration.LastUpdateDate.$
+          gleif_next_renewal: Registration.NextRenewalDate.$
+          gleif_managing_lou: Registration.ManagingLOU.$
+          gleif_validation_source: Registration.ValidationSources.$
+          gleif_registration_authority: Entity.RegistrationAuthority.RegistrationAuthorityID.$
+          gleif_registration_authority_entity_id: Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$
+          gleif_entity_creation_date: Entity.EntityCreationDate.$
+        # What the sec-gleif-name-postal rule compares, kept out of the fields
+        # (operator, 2026-09-26).
+        matching:
+          headquarters_postal_code: Entity.HeadquartersAddress.PostalCode.$
+          headquarters_country: Entity.HeadquartersAddress.Country.$
+        provenance:
+          native_record: _native
+  # Company-kind records from their own source code: company.yaml
+  # defaults.sources must list this code before its first batch, or
+  # merge.check_company_sources fails the batch. Not changed here (operator,
+  # 2026-09-26: a merge-rules change is approved on its own).
+  gleif.relationships.v1:
+    contract:
+      provider: GLEIF
+      family: gleif
+      schema_version: gleif-native-record-v1
+      record_key: the start node's LEI plus the relationship type
+      publication_key: 'one Golden Copy publication: its publisher time (the content date,
+        e.g. 2026-09-11T16:00Z) as its sequence, plus the digest of its verified manifest'
+      effective_time: the record's Registration.LastUpdateDate
+      semantics: patch
+      completeness: a full Golden Copy file holds every record GLEIF has ever published, current
+        and historical (lapsed, retired, annulled included); a delta holds only the records
+        changed in its window. Only records whose LEIs are on the approved Company LEI scope
+        reach MDM. No retirement by absence
+      # Every other reason blocks, including the reader's interval, status and
+      # period checks (operator, 2026-09-26).
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      publication_families:
+      - golden_copy
+      adapter:
+        version: gleif-native-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        native_member: relationships
+        # Paths are into the reader's reshaped record (start, end,
+        # relationship_type, valid_from, valid_to, status, registration_status),
+        # not the raw file. (start, type) is unique across the 2026-09-11 copy, so a
+        # changed parent is a new version of the same record.
+        record_key:
+        - start
+        - relationship_type
+        # The reader admits a record only when both ends are in the Company scope.
+        kind: company
+        # So an LEI binding rule can bind this record to its Company. It never makes
+        # this record a second holder of the LEI: every holder lookup reads only the
+        # issuing source's records (matching._stored, _held_leis; binding.holders).
+        identifiers:
+          lei: start
+        identifier_formats:
+          lei: lei
+        relationships:
+        # GLEIF's six types, unchanged; all six are in relationships.CONTRACTS.
+        - type_field: relationship_type
+          type_values:
+            IS_DIRECTLY_CONSOLIDATED_BY: IS_DIRECTLY_CONSOLIDATED_BY
+            IS_ULTIMATELY_CONSOLIDATED_BY: IS_ULTIMATELY_CONSOLIDATED_BY
+            IS_INTERNATIONAL_BRANCH_OF: IS_INTERNATIONAL_BRANCH_OF
+            IS_FUND-MANAGED_BY: IS_FUND-MANAGED_BY
+            IS_SUBFUND_OF: IS_SUBFUND_OF
+            IS_FEEDER_TO: IS_FEEDER_TO
+          target_key:
+          - end
+          target_source: gleif.level1.v1
+          valid_from: valid_from
+          valid_to: valid_to
+          properties:
+            status: status
+            registration_status: registration_status
+        provenance:
+          native_record: _native
+  gleif.reporting_exceptions.v1:
+    contract:
+      provider: GLEIF
+      family: gleif
+      schema_version: gleif-native-record-v1
+      record_key: the LEI plus the exception category (direct or ultimate parent)
+      publication_key: 'one Golden Copy publication: its publisher time (the content date,
+        e.g. 2026-09-11T16:00Z) as its sequence, plus the digest of its verified manifest'
+      effective_time: unknown; a reporting exception carries no date
+      semantics: patch
+      completeness: a full Golden Copy file holds every record GLEIF has ever published, current
+        and historical (lapsed, retired, annulled included); a delta holds only the records
+        changed in its window. Only records whose LEIs are on the approved Company LEI scope
+        reach MDM. No retirement by absence
+      # The reader keeps every valid exception as source evidence, never as an MDM
+      # record ("a missing parent is not proof of no parent"), so that reason is
+      # expected and must not block.
+      nonblocking_deferred_reasons:
+      - outside_approved_company_scope
+      - reported_parent_exception
+      publication_families:
+      - golden_copy
+      adapter:
+        version: gleif-native-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        native_member: reporting_exceptions
+        # One LEI can hold a direct and an ultimate exception.
+        record_key:
+        - LEI.$
+        - ExceptionCategory.$
+        # No kind: no exception becomes an MDM record today.
+        identifiers:
+          lei: LEI.$
+        identifier_formats:
+          lei: lei
+        provenance:
+          native_record: _native

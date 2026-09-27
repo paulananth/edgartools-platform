@@ -1,0 +1,95 @@
+{
+ "test_scope_size": 26,
+ "left_out_of_scope": [
+  "004L5FPTUREIWK9T2N63",
+  "00TR8NKAEL48RGTZEW89",
+  "01ERPZV3DOLNXY2MLB90"
+ ],
+ "contract_checks": {
+  "gleif.level1.v1": {
+   "native_member_matches": true,
+   "adapter_version_is_reader": true,
+   "schema_version_is_reader": true,
+   "family": "gleif",
+   "no_classification": true,
+   "probable_kinds_are_kinds": true,
+   "formats_known": true,
+   "mapped_relationship_types_have_contracts": true,
+   "nonblocking": [
+    "outside_approved_company_scope",
+    "unsupported_identity_kind",
+    "unsupported_relationship_type",
+    "reported_parent_exception"
+   ]
+  },
+  "gleif.relationships.v1": {
+   "native_member_matches": true,
+   "adapter_version_is_reader": true,
+   "schema_version_is_reader": true,
+   "family": "gleif",
+   "no_classification": true,
+   "probable_kinds_are_kinds": true,
+   "formats_known": true,
+   "mapped_relationship_types_have_contracts": true,
+   "nonblocking": [
+    "outside_approved_company_scope",
+    "unsupported_identity_kind",
+    "unsupported_relationship_type",
+    "reported_parent_exception"
+   ]
+  },
+  "gleif.reporting_exceptions.v1": {
+   "native_member_matches": true,
+   "adapter_version_is_reader": true,
+   "schema_version_is_reader": true,
+   "family": "gleif",
+   "no_classification": true,
+   "probable_kinds_are_kinds": true,
+   "formats_known": true,
+   "mapped_relationship_types_have_contracts": true,
+   "nonblocking": [
+    "outside_approved_company_scope",
+    "unsupported_identity_kind",
+    "unsupported_relationship_type",
+    "reported_parent_exception"
+   ]
+  }
+ },
+ "validate_release_test_manifest": "passed",
+ "check_company_sources": "refused: Company policy has no source priority for: gleif.relationships.v1"
+}
+
+== gleif.level1.v1 {'record_count': 13, 'compressed_bytes': 4301, 'expanded_bytes': 22480} {'deferred:invalid_lei_checksum:BLOCKING': 1, 'deferred:outside_approved_company_scope:ok': 2, 'assertion:company:ok': 5, 'deferred:unsupported_identity_kind:ok': 5}
+{"target": "bad_lei", "outcome": "deferred", "reason": "invalid_lei_checksum", "blocking": true, "probable_kind": null, "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:0"}
+{"target": "general_with_street2", "outcome": "deferred", "reason": "outside_approved_company_scope", "blocking": false, "probable_kind": "company", "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:1"}
+{"target": "general_with_street2", "outcome": "assertion", "kind": "company", "record_key": "00GBW0Z2GYIER7DHDS71", "effective_at": "2025-09-12T09:56:49.008000+00:00", "identifiers": {"lei": "00GBW0Z2GYIER7DHDS71"}, "fields": {"name": "ARISTEIA CAPITAL, L.L.C.", "jurisdiction": "US-DE", "address": {"street": "C/O The Corporation Trust Company", "street2": "Corporation Trust Center\n1209 Orange St", "city": "Wilmington", "region": "US-DE", "postcode": "19801", "country": "US"}, "gleif_legal_form": "HZEH", "gleif_entity_status": "ACTIVE", "gleif_registration_status": "ISSUED", "gleif_initial_registration": "2012-06-06T15:55:00.000Z", "gleif_last_update": "2025-09-12T09:56:49.008Z", "gleif_next_renewal": "2026-09-23T19:58:00.000Z", "gleif_managing_lou": "5493001KJTIIGC8Y1R12", "gleif_validation_source": "FULLY_CORROBORATED", "gleif_registration_authority": "RA000602", "gleif_registration_au
+{"target": "general_8888", "outcome": "assertion", "kind": "company", "record_key": "00TV1D5YIV5IDUGWBW29", "effective_at": "2026-04-20T13:30:00.015000+00:00", "identifiers": {"lei": "00TV1D5YIV5IDUGWBW29"}, "fields": {"name": "Ceridian Corporation Retirement Plan Trust", "jurisdiction": "US-DE", "address": {"street": "RL&F Service Corp", "city": "Wilmington", "region": "US-DE", "postcode": "19801", "country": "US"}, "gleif_legal_form": "8888", "gleif_entity_status": "ACTIVE", "gleif_registration_status": "LAPSED", "gleif_initial_registration": "2012-11-14T19:43:00.000Z", "gleif_last_update": "2026-04-20T13:30:00.015Z", "gleif_next_renewal": "2026-04-19T19:11:44.072Z", "gleif_managing_lou": "5493001KJTIIGC8Y1R12", "gleif_validation_source": "ENTITY_SUPPLIED_ONLY", "gleif_registration_authority": "RA999999", "gleif_registration_authority_entity_id": "unknown", "gleif_entity_creation_date"
+{"target": "general_status_null", "outcome": "assertion", "kind": "company", "record_key": "097900BIIQ0000167515", "effective_at": "2024-10-01T20:56:08.377000+00:00", "identifiers": {"lei": "097900BIIQ0000167515"}, "fields": {"name": "Sovereign Invest a.s.", "jurisdiction": "SK", "address": {"street": "Námestie Ľudovíta Štúra 2", "city": "Bratislava - mestská časť Staré Mesto", "postcode": "811 02", "country": "SK"}, "gleif_legal_form": "2EEG", "gleif_entity_status": "NULL", "gleif_registration_status": "DUPLICATE", "gleif_initial_registration": "2018-08-16T00:00:00+02:00", "gleif_last_update": "2024-10-01T22:56:08.377+02:00", "gleif_next_renewal": "2019-08-20T00:00:00+02:00", "gleif_managing_lou": "097900BEFH0000000217", "gleif_validation_source": "FULLY_CORROBORATED", "gleif_registration_authority": "RA000526", "gleif_registration_authority_entity_id": "50794787", "gleif_entity_creatio
+{"target": "general_sec_ra", "outcome": "assertion", "kind": "company", "record_key": "2138003FEE5HVK4QD737", "effective_at": "2025-09-17T10:55:05.537000+00:00", "identifiers": {"lei": "2138003FEE5HVK4QD737"}, "fields": {"name": "CLEAR HARBOR ASSET MANAGEMENT, LLC", "jurisdiction": "US-NY", "address": {"street": "263 TRESSER BLVD, 15TH FLOOR, CT", "city": "STAMFORD", "region": "US-CT", "postcode": "06901", "country": "US"}, "gleif_legal_form": "SDX0", "gleif_entity_status": "ACTIVE", "gleif_registration_status": "ISSUED", "gleif_initial_registration": "2019-11-07T00:00:00Z", "gleif_last_update": "2025-09-17T10:55:05.537Z", "gleif_next_renewal": "2026-11-10T00:00:00Z", "gleif_managing_lou": "213800WAVVOPS85N2205", "gleif_validation_source": "FULLY_CORROBORATED", "gleif_registration_authority": "RA000665", "gleif_registration_authority_entity_id": "0001511857", "gleif_entity_creation_date"
+{"target": "general_plain", "outcome": "deferred", "reason": "outside_approved_company_scope", "blocking": false, "probable_kind": "company", "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:6"}
+{"target": "general_plain", "outcome": "assertion", "kind": "company", "record_key": "00X5RQKJQQJFFX0WPA53", "effective_at": "2026-04-16T10:45:31.362000+00:00", "identifiers": {"lei": "00X5RQKJQQJFFX0WPA53"}, "fields": {"name": "The Greater Morristown Young Men's Christian Association, Inc.", "jurisdiction": "US-NJ", "address": {"street": "79 Horsehill Road", "city": "Cedar Knolls", "region": "US-NJ", "postcode": "07927-2003", "country": "US"}, "gleif_legal_form": "XSNP", "gleif_entity_status": "ACTIVE", "gleif_registration_status": "LAPSED", "gleif_initial_registration": "2012-11-22T10:55:00.000Z", "gleif_last_update": "2026-04-16T10:45:31.362Z", "gleif_next_renewal": "2013-11-22T10:38:00.000Z", "gleif_managing_lou": "5493001KJTIIGC8Y1R12", "gleif_validation_source": "FULLY_CORROBORATED", "gleif_registration_authority": "RA000625", "gleif_registration_authority_entity_id": "0900069854",
+{"target": "fund", "outcome": "deferred", "reason": "unsupported_identity_kind", "blocking": false, "probable_kind": "fund_structure", "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:8"}
+{"target": "branch", "outcome": "deferred", "reason": "unsupported_identity_kind", "blocking": false, "probable_kind": "branch", "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:9"}
+{"target": "sole_proprietor", "outcome": "deferred", "reason": "unsupported_identity_kind", "blocking": false, "probable_kind": null, "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:10"}
+{"target": "government", "outcome": "deferred", "reason": "unsupported_identity_kind", "blocking": false, "probable_kind": "government", "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:11"}
+{"target": "international_org", "outcome": "deferred", "reason": "unsupported_identity_kind", "blocking": false, "probable_kind": "international_organization", "record_locator": "36445562451ab158e2c9dfc4bee52a2173742c7a0c765d13c7adb08d5d198e3e:record:12"}
+
+== gleif.relationships.v1 {'record_count': 10, 'compressed_bytes': 1939, 'expanded_bytes': 10767} {'deferred:invalid_lei_checksum:BLOCKING': 1, 'deferred:ambiguous_relationship_period:BLOCKING': 1, 'deferred:invalid_relationship_status_interval:BLOCKING': 2, 'assertion:company:ok': 3, 'deferred:outside_approved_company_scope:ok': 1, 'deferred:unsupported_relationship_type:ok': 2}
+{"target": "bad_lei", "outcome": "deferred", "reason": "invalid_lei_checksum", "blocking": true, "probable_kind": null, "record_locator": "5cafc0cff99f028f581812924071ef17db861bd5bc71193045d8d6c2fdb45965:record:0"}
+{"target": "no_period", "outcome": "deferred", "reason": "ambiguous_relationship_period", "blocking": true, "probable_kind": null, "record_locator": "5cafc0cff99f028f581812924071ef17db861bd5bc71193045d8d6c2fdb45965:record:1"}
+{"target": "status_null", "outcome": "deferred", "reason": "invalid_relationship_status_interval", "blocking": true, "probable_kind": null, "record_locator": "5cafc0cff99f028f581812924071ef17db861bd5bc71193045d8d6c2fdb45965:record:2"}
+{"target": "consolidation_inactive", "outcome": "deferred", "reason": "invalid_relationship_status_interval", "blocking": true, "probable_kind": null, "record_locator": "5cafc0cff99f028f581812924071ef17db861bd5bc71193045d8d6c2fdb45965:record:3"}
+{"target": "direct_multi_period", "outcome": "assertion", "kind": "company", "record_key": "[\"010PWNH4K3BLIC3I7R03\",\"IS_DIRECTLY_CONSOLIDATED_BY\",\"549300COKYB5EGSU1838\"]", "effective_at": "2024-10-07T17:01:38+00:00", "identifiers": {}, "fields": {}, "relationships": [{"type": "IS_DIRECTLY_CONSOLIDATED_BY", "target_subject": "f48c1166d197116235134d0a5fa39acab11b1ab1cdd94a4364f53d5841a9c549", "scope": "accounting consolidation as GLEIF states it", "valid_from": "2017-12-06T00:00:00+00:00", "valid_to": null, "properties": {"source_relationship_status": "ACTIVE", "source_registration_status": "LAPSED"}}], "provenance": {"record_key": "[\"010PWNH4K3BLIC3I7R03\",\"IS_DIRECTLY_CONSOLIDATED_BY\",\"549300COKYB5EGSU1838\"]", "adapter_version": "gleif-native-record-v1", "source": {"native_record": "<native record, 1014 bytes>"}}}
+{"target": "direct", "outcome": "assertion", "kind": "company", "record_key": "[\"9884008H9HW0YBMTJT20\",\"IS_DIRECTLY_CONSOLIDATED_BY\",\"549300ML2LNRZUCS7149\"]", "effective_at": "2022-02-24T17:23:27+00:00", "identifiers": {}, "fields": {}, "relationships": [{"type": "IS_DIRECTLY_CONSOLIDATED_BY", "target_subject": "4a34ef786bfa4bc7bf39e63ed6ff32832a44a5f72d652e0d72c03648b43dacad", "scope": "accounting consolidation as GLEIF states it", "valid_from": "2022-01-18T00:00:00+00:00", "valid_to": null, "properties": {"source_relationship_status": "ACTIVE", "source_registration_status": "PUBLISHED"}}], "provenance": {"record_key": "[\"9884008H9HW0YBMTJT20\",\"IS_DIRECTLY_CONSOLIDATED_BY\",\"549300ML2LNRZUCS7149\"]", "adapter_version": "gleif-native-record-v1", "source": {"native_record": "<native record, 902 bytes>"}}}
+{"target": "ultimate", "outcome": "assertion", "kind": "company", "record_key": "[\"010PWNH4K3BLIC3I7R03\",\"IS_ULTIMATELY_CONSOLIDATED_BY\",\"549300B2Q47IR0CR5B54\"]", "effective_at": "2024-10-07T17:01:38+00:00", "identifiers": {}, "fields": {}, "relationships": [{"type": "IS_ULTIMATELY_CONSOLIDATED_BY", "target_subject": "fa5e5b12f7a37a42977ed5fc71d4a7679cb4e26ff79906c7d004571d822d295f", "scope": "accounting consolidation as GLEIF states it", "valid_from": "2017-12-06T00:00:00+00:00", "valid_to": null, "properties": {"source_relationship_status": "ACTIVE", "source_registration_status": "LAPSED"}}], "provenance": {"record_key": "[\"010PWNH4K3BLIC3I7R03\",\"IS_ULTIMATELY_CONSOLIDATED_BY\",\"549300B2Q47IR0CR5B54\"]", "adapter_version": "gleif-native-record-v1", "source": {"native_record": "<native record, 1308 bytes>"}}}
+{"target": "ultimate", "outcome": "deferred", "reason": "outside_approved_company_scope", "blocking": false, "probable_kind": null, "record_locator": "5cafc0cff99f028f581812924071ef17db861bd5bc71193045d8d6c2fdb45965:record:7"}
+{"target": "fund_managed", "outcome": "deferred", "reason": "unsupported_relationship_type", "blocking": false, "probable_kind": null, "record_locator": "5cafc0cff99f028f581812924071ef17db861bd5bc71193045d8d6c2fdb45965:record:8"}
+{"target": "branch", "outcome": "deferred", "reason": "unsupported_relationship_type", "blocking": false, "probable_kind": null, "record_locator": "5cafc0cff99f028f581812924071ef17db861bd5bc71193045d8d6c2fdb45965:record:9"}
+
+== gleif.reporting_exceptions.v1 {'record_count': 6, 'compressed_bytes': 456, 'expanded_bytes': 1043} {'deferred:invalid_lei_checksum:BLOCKING': 1, 'deferred:reported_parent_exception:ok': 4, 'deferred:outside_approved_company_scope:ok': 1}
+{"target": "bad_lei", "outcome": "deferred", "reason": "invalid_lei_checksum", "blocking": true, "probable_kind": null, "record_locator": "7a3471abfec68f5f2c23c88a18300fcb852a732f0b975c753833959342fc6b2d:record:0"}
+{"target": "deleted_marker", "outcome": "deferred", "reason": "reported_parent_exception", "blocking": false, "probable_kind": null, "record_locator": "7a3471abfec68f5f2c23c88a18300fcb852a732f0b975c753833959342fc6b2d:record:1"}
+{"target": "with_reference", "outcome": "deferred", "reason": "reported_parent_exception", "blocking": false, "probable_kind": null, "record_locator": "7a3471abfec68f5f2c23c88a18300fcb852a732f0b975c753833959342fc6b2d:record:2"}
+{"target": "plain_DIRECT_ACCOUNTING_CONSOLIDATION_PARENT", "outcome": "deferred", "reason": "reported_parent_exception", "blocking": false, "probable_kind": null, "record_locator": "7a3471abfec68f5f2c23c88a18300fcb852a732f0b975c753833959342fc6b2d:record:3"}
+{"target": "plain_DIRECT_ACCOUNTING_CONSOLIDATION_PARENT", "outcome": "deferred", "reason": "outside_approved_company_scope", "blocking": false, "probable_kind": null, "record_locator": "7a3471abfec68f5f2c23c88a18300fcb852a732f0b975c753833959342fc6b2d:record:4"}
+{"target": "plain_ULTIMATE_ACCOUNTING_CONSOLIDATION_PARENT", "outcome": "deferred", "reason": "reported_parent_exception", "blocking": false, "probable_kind": null, "record_locator": "7a3471abfec68f5f2c23c88a18300fcb852a732f0b975c753833959342fc6b2d:record:5"}

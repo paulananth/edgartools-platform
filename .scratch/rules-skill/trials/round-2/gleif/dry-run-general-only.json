@@ -1,0 +1,839 @@
+{
+ "scope_size": 15,
+ "members": {
+  "level1": {
+   "source_code": "gleif.level1.v1",
+   "register_dataset_checks": "reached the database step: contract checks passed",
+   "consumer_contract_check": true,
+   "archive": {
+    "record_count": 17,
+    "compressed_bytes": 5329,
+    "expanded_bytes": 68055
+   },
+   "sample_zip_sha256": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c",
+   "records": [
+    {
+     "ordinal_in_sample": 0,
+     "picked_because": "fund",
+     "ordinal_in_file": 0,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "fund_structure",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:0",
+     "lei": "001GPB6A9XPE8XJICC14"
+    },
+    {
+     "ordinal_in_sample": 1,
+     "picked_because": "general_legal_and_hq_postcodes_differ",
+     "ordinal_in_file": 1,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "004L5FPTUREIWK9T2N63",
+     "kind": "company",
+     "subject": "c67d1df2270b1b670583fa0c1ee377e6315e4d39e6fbb2e3acb23cee31977349",
+     "effective_at": "2026-05-27T17:40:22.294000+00:00",
+     "identifiers": {
+      "lei": "004L5FPTUREIWK9T2N63"
+     },
+     "fields": {
+      "name": "Hutchin Hill Capital, LP",
+      "jurisdiction": "US-DE",
+      "address": {
+       "street": "C/O CORPORATION SERVICE COMPANY",
+       "street2": "251 LITTLE FALLS DRIVE",
+       "city": "WILMINGTON",
+       "region": "US-DE",
+       "postcode": "19808",
+       "country": "US"
+      },
+      "gleif_legal_form": "T91T",
+      "gleif_entity_status": "ACTIVE",
+      "gleif_registration_status": "LAPSED",
+      "gleif_initial_registration": "2012-06-06T15:56:00.000Z",
+      "gleif_last_update": "2026-05-27T17:40:22.294Z",
+      "gleif_next_renewal": "2018-05-08T13:46:00.000Z",
+      "gleif_managing_lou": "5493001KJTIIGC8Y1R12",
+      "gleif_validation_source": "FULLY_CORROBORATED",
+      "gleif_registration_authority": "RA000602",
+      "gleif_registration_authority_entity_id": "4386463",
+      "gleif_entity_creation_date": "2007-07-10T00:00:00.000Z"
+     },
+     "relationships": [],
+     "matching": {
+      "headquarters_postal_code": "10106",
+      "headquarters_country": "US"
+     },
+     "provenance_keys": [
+      "adapter_version",
+      "matching",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "e6ef7bfef9390b9d69c203d62ffce47cb3eea836b38bc481eca1bd98dc99e4c4",
+     "assertion_bytes": 3081
+    },
+    {
+     "ordinal_in_sample": 2,
+     "picked_because": "general_active_issued_with_address_lines",
+     "ordinal_in_file": 3,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "00GBW0Z2GYIER7DHDS71",
+     "kind": "company",
+     "subject": "10458736d2449e27acf312b7f6d8265fb9559de7f11cb72722c814f7751cd2b2",
+     "effective_at": "2025-09-12T09:56:49.008000+00:00",
+     "identifiers": {
+      "lei": "00GBW0Z2GYIER7DHDS71"
+     },
+     "fields": {
+      "name": "ARISTEIA CAPITAL, L.L.C.",
+      "jurisdiction": "US-DE",
+      "address": {
+       "street": "C/O The Corporation Trust Company",
+       "street2": "Corporation Trust Center\n1209 Orange St",
+       "city": "Wilmington",
+       "region": "US-DE",
+       "postcode": "19801",
+       "country": "US"
+      },
+      "gleif_legal_form": "HZEH",
+      "gleif_entity_status": "ACTIVE",
+      "gleif_registration_status": "ISSUED",
+      "gleif_initial_registration": "2012-06-06T15:55:00.000Z",
+      "gleif_last_update": "2025-09-12T09:56:49.008Z",
+      "gleif_next_renewal": "2026-09-23T19:58:00.000Z",
+      "gleif_managing_lou": "5493001KJTIIGC8Y1R12",
+      "gleif_validation_source": "FULLY_CORROBORATED",
+      "gleif_registration_authority": "RA000602",
+      "gleif_registration_authority_entity_id": "2758229",
+      "gleif_entity_creation_date": "1997-06-03T00:00:00.000Z"
+     },
+     "relationships": [],
+     "matching": {
+      "headquarters_postal_code": "06830",
+      "headquarters_country": "US"
+     },
+     "provenance_keys": [
+      "adapter_version",
+      "matching",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "4ab97dea39e63a1a204909635e352c0ffb8506172ef8a6cb8b7abae46f970207",
+     "assertion_bytes": 3129
+    },
+    {
+     "ordinal_in_sample": 3,
+     "picked_because": "general_inactive_retired",
+     "ordinal_in_file": 6,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "00TR8NKAEL48RGTZEW89",
+     "kind": "company",
+     "subject": "2ad3de0772c0dd720df927996a378169c33c4fd92354c04d988f21b712b047ed",
+     "effective_at": "2024-12-10T15:57:57.269000+00:00",
+     "identifiers": {
+      "lei": "00TR8NKAEL48RGTZEW89"
+     },
+     "fields": {
+      "name": "ESG DOMESTIC OPPORTUNITY OFFSHORE FUND LTD.",
+      "jurisdiction": "KY",
+      "address": {
+       "street": "89 Nexus Way",
+       "city": "Camana Bay",
+       "postcode": "KY1-9009",
+       "country": "KY"
+      },
+      "gleif_legal_form": "9999",
+      "gleif_entity_status": "INACTIVE",
+      "gleif_registration_status": "RETIRED",
+      "gleif_initial_registration": "2012-08-24T20:53:00.000+02:00",
+      "gleif_last_update": "2024-12-10T16:57:57.269+01:00",
+      "gleif_next_renewal": "2019-02-14T01:32:00.000+01:00",
+      "gleif_managing_lou": "39120001KULK7200U106",
+      "gleif_validation_source": "FULLY_CORROBORATED",
+      "gleif_registration_authority": "RA000087",
+      "gleif_registration_authority_entity_id": "574206",
+      "gleif_entity_creation_date": "<unknown>"
+     },
+     "relationships": [],
+     "matching": {
+      "headquarters_postal_code": null,
+      "headquarters_country": "CW"
+     },
+     "provenance_keys": [
+      "adapter_version",
+      "matching",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "1e0353c39d5b1b18e797444662162e05a98b45276fa8de605a6a7baa7ba1b7c0",
+     "assertion_bytes": 4309
+    },
+    {
+     "ordinal_in_sample": 4,
+     "picked_because": "general_left_out_of_dry_run_scope",
+     "ordinal_in_file": 7,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "company",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:4",
+     "lei": "00TV1D5YIV5IDUGWBW29"
+    },
+    {
+     "ordinal_in_sample": 5,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 106,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "0292001568C3M3WGI292",
+     "kind": "company",
+     "subject": "c2d9db09fc6e25927ac14f4c4637f135cf00138343f4ed7ba311f304b0cfd679",
+     "effective_at": "2026-08-17T11:56:09+00:00",
+     "identifiers": {
+      "lei": "0292001568C3M3WGI292"
+     },
+     "fields": {
+      "name": "ARM SECURITIES LTD",
+      "jurisdiction": "NG",
+      "address": {
+       "street": "1 MEKUNWEN ROAD OFF OYINKAN ABAYOMI DRIVE",
+       "street2": "IKOYI",
+       "city": "LAGOS",
+       "region": "NG-LA",
+       "postcode": "101233",
+       "country": "NG"
+      },
+      "gleif_legal_form": "9999",
+      "gleif_entity_status": "ACTIVE",
+      "gleif_registration_status": "ISSUED",
+      "gleif_initial_registration": "2016-08-17T12:30:00Z",
+      "gleif_last_update": "2026-08-17T11:56:09Z",
+      "gleif_next_renewal": "2027-08-17T03:30:00Z",
+      "gleif_managing_lou": "029200067A7K6CH0H586",
+      "gleif_validation_source": "FULLY_CORROBORATED",
+      "gleif_registration_authority": "RA000469",
+      "gleif_registration_authority_entity_id": "125242",
+      "gleif_entity_creation_date": "2004-01-01T12:30:00Z"
+     },
+     "relationships": [],
+     "matching": {
+      "headquarters_postal_code": "101233",
+      "headquarters_country": "NG"
+     },
+     "provenance_keys": [
+      "adapter_version",
+      "matching",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "9a145c07c6b3946d2dad21c6cc28e200553a2634ddf26a9034d1bd510a7e09ce",
+     "assertion_bytes": 3049
+    },
+    {
+     "ordinal_in_sample": 6,
+     "picked_because": "annulled_bad_check_digit",
+     "ordinal_in_file": 113,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "invalid_lei_checksum",
+     "blocks": true,
+     "probable_kind": null,
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:6",
+     "lei": "0292001629A3Q7XJ0D13"
+    },
+    {
+     "ordinal_in_sample": 7,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 356,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "0292004558B0R5B7I133",
+     "kind": "company",
+     "subject": "5e8c46a2e6fb53d898d6b893d54737ad3650a94479cc6760ab5aa0c2a9f79489",
+     "effective_at": "2026-04-01T12:02:54+00:00",
+     "identifiers": {
+      "lei": "0292004558B0R5B7I133"
+     },
+     "fields": {
+      "name": "ARM TRADITIONAL ASSET MANAGEMENT LIMITED",
+      "jurisdiction": "NG",
+      "address": {
+       "street": "5 MEKUNWEN ROAD OFF OYINKAN ABAYOMI DRIVE",
+       "street2": "IKOYI",
+       "city": "LAGOS",
+       "region": "NG-LA",
+       "postcode": "101233",
+       "country": "NG"
+      },
+      "gleif_legal_form": "9999",
+      "gleif_entity_status": "ACTIVE",
+      "gleif_registration_status": "ISSUED",
+      "gleif_initial_registration": "2021-03-31T10:40:57Z",
+      "gleif_last_update": "2026-04-01T12:02:54Z",
+      "gleif_next_renewal": "2027-03-31T04:40:57Z",
+      "gleif_managing_lou": "029200067A7K6CH0H586",
+      "gleif_validation_source": "FULLY_CORROBORATED",
+      "gleif_registration_authority": "RA000469",
+      "gleif_registration_authority_entity_id": "1187279",
+      "gleif_entity_creation_date": "2021-03-31T10:40:57Z"
+     },
+     "relationships": [],
+     "matching": {
+      "headquarters_postal_code": "101233",
+      "headquarters_country": "NG"
+     },
+     "provenance_keys": [
+      "adapter_version",
+      "matching",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "b11418a89309960032a3eb7cd33923f275b6bd40f444670816cb45c378f2166f",
+     "assertion_bytes": 3096
+    },
+    {
+     "ordinal_in_sample": 8,
+     "picked_because": "government",
+     "ordinal_in_file": 549,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "government",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:8",
+     "lei": "029200640K7U6F5H6G54"
+    },
+    {
+     "ordinal_in_sample": 9,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 731,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "fund_structure",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:9",
+     "lei": "05XOXL7DW084I0I72F95"
+    },
+    {
+     "ordinal_in_sample": 10,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 762,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "fund_structure",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:10",
+     "lei": "08HGTHG281BFQRFCD148"
+    },
+    {
+     "ordinal_in_sample": 11,
+     "picked_because": "sole_proprietor",
+     "ordinal_in_file": 1036,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "person",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:11",
+     "lei": "097900BGE10000044681"
+    },
+    {
+     "ordinal_in_sample": 12,
+     "picked_because": "branch",
+     "ordinal_in_file": 1298,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "branch",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:12",
+     "lei": "097900BHFR0000075034"
+    },
+    {
+     "ordinal_in_sample": 13,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 1474,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "branch",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:13",
+     "lei": "097900BHM40000115289"
+    },
+    {
+     "ordinal_in_sample": 14,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 2003,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "097900BIFW0000156119",
+     "kind": "company",
+     "subject": "5df0fca507dcef39d0ba80ed133747aa98d0f5ed8dbf42f180dbf4b0443bdefb",
+     "effective_at": "2026-04-21T06:33:01.506000+00:00",
+     "identifiers": {
+      "lei": "097900BIFW0000156119"
+     },
+     "fields": {
+      "name": "OLD HEROLD, s.r.o.",
+      "jurisdiction": "SK",
+      "address": {
+       "street": "Bratislavská 36",
+       "city": "Trenčín",
+       "postcode": "911 05",
+       "country": "SK"
+      },
+      "gleif_legal_form": "VSZS",
+      "gleif_entity_status": "ACTIVE",
+      "gleif_registration_status": "ISSUED",
+      "gleif_initial_registration": "2018-05-22T00:00:00+02:00",
+      "gleif_last_update": "2026-04-21T08:33:01.506+02:00",
+      "gleif_next_renewal": "2027-05-30T00:00:00+02:00",
+      "gleif_managing_lou": "097900BEFH0000000217",
+      "gleif_validation_source": "FULLY_CORROBORATED",
+      "gleif_registration_authority": "RA000526",
+      "gleif_registration_authority_entity_id": "36380547",
+      "gleif_entity_creation_date": "1998-05-20T08:00:00+02:00"
+     },
+     "relationships": [],
+     "matching": {
+      "headquarters_postal_code": "911 05",
+      "headquarters_country": "SK"
+     },
+     "provenance_keys": [
+      "adapter_version",
+      "matching",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "197d0e79071930dfbdedbea9fef313d750c54d483325163976db86acebabe3a4",
+     "assertion_bytes": 2844
+    },
+    {
+     "ordinal_in_sample": 15,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 6170,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": "fund_structure",
+     "record_locator": "7bdeb1c8ef96d5cb3e3e2db3c19703756fa30ceadeeff7f2f8f6128d3b6c821c:record:15",
+     "lei": "0N2JSH1PTH72JCCP2A88"
+    },
+    {
+     "ordinal_in_sample": 16,
+     "picked_because": "rr_endpoint",
+     "ordinal_in_file": 11318,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "1G3OSH3GLGJ7X1JC5I61",
+     "kind": "company",
+     "subject": "cdd721582d775193664a722bf97f16ae7dbed2da7c576dfb50f0afcee9a4d02b",
+     "effective_at": "2025-09-22T07:57:45.565000+00:00",
+     "identifiers": {
+      "lei": "1G3OSH3GLGJ7X1JC5I61"
+     },
+     "fields": {
+      "name": "MASSACHUSETTS FINANCIAL SERVICES COMPANY",
+      "jurisdiction": "US-DE",
+      "address": {
+       "street": "C/O THE CORPORATION TRUST COMPANY",
+       "street2": "CORPORATION TRUST CENTER\n1209 ORANGE ST",
+       "city": "WILMINGTON",
+       "region": "US-DE",
+       "postcode": "19801",
+       "country": "US"
+      },
+      "gleif_legal_form": "XTIQ",
+      "gleif_entity_status": "ACTIVE",
+      "gleif_registration_status": "ISSUED",
+      "gleif_initial_registration": "2012-06-06T15:51:00.000Z",
+      "gleif_last_update": "2025-09-22T07:57:45.565Z",
+      "gleif_next_renewal": "2026-10-05T15:29:00.000Z",
+      "gleif_managing_lou": "5493001KJTIIGC8Y1R12",
+      "gleif_validation_source": "FULLY_CORROBORATED",
+      "gleif_registration_authority": "RA000602",
+      "gleif_registration_authority_entity_id": "929767",
+      "gleif_entity_creation_date": "1982-01-07T00:00:00.000Z"
+     },
+     "relationships": [],
+     "matching": {
+      "headquarters_postal_code": "02199",
+      "headquarters_country": "US"
+     },
+     "provenance_keys": [
+      "adapter_version",
+      "matching",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "b5239b7242ab9a7a665785addf5b3ab1e863df63420bc9f2479f33581ac840a1",
+     "assertion_bytes": 3113
+    }
+   ]
+  },
+  "relationships": {
+   "source_code": "gleif.relationships.v1",
+   "register_dataset_checks": "reached the database step: contract checks passed",
+   "consumer_contract_check": true,
+   "archive": {
+    "record_count": 8,
+    "compressed_bytes": 1925,
+    "expanded_bytes": 22944
+   },
+   "sample_zip_sha256": "01cebad65aa69f92960ca8c6dcbf726979f6ebfd16709e246a36cf1c2c4e6a86",
+   "records": [
+    {
+     "ordinal_in_sample": 0,
+     "picked_because": "both_ends:IS_DIRECTLY_CONSOLIDATED_BY",
+     "ordinal_in_file": 28,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "[\"0292001568C3M3WGI292\",\"IS_DIRECTLY_CONSOLIDATED_BY\"]",
+     "kind": "company",
+     "subject": "5dfd203ac5cac45522b749fc86901f01938b2c82be62b111f8f4e0c4a8bc9ff6",
+     "effective_at": "2026-08-17T11:56:09+00:00",
+     "identifiers": {
+      "lei": "0292001568C3M3WGI292"
+     },
+     "fields": {},
+     "relationships": [
+      {
+       "type": "IS_DIRECTLY_CONSOLIDATED_BY",
+       "target_subject": "5e8c46a2e6fb53d898d6b893d54737ad3650a94479cc6760ab5aa0c2a9f79489",
+       "scope": "",
+       "valid_from": "2014-04-28T00:00:00+00:00",
+       "valid_to": null,
+       "properties": {
+        "status": "ACTIVE",
+        "registration_status": "PUBLISHED"
+       }
+      }
+     ],
+     "matching": null,
+     "provenance_keys": [
+      "adapter_version",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "d3d996d7588ca89ba76ccb5524ff1b6a63b237ca99a35b82d79bb3d538b55463",
+     "assertion_bytes": 2166
+    },
+    {
+     "ordinal_in_sample": 1,
+     "picked_because": "both_ends:IS_ULTIMATELY_CONSOLIDATED_BY",
+     "ordinal_in_file": 29,
+     "outcome": "assertion",
+     "stable_id": true,
+     "record_key": "[\"0292001568C3M3WGI292\",\"IS_ULTIMATELY_CONSOLIDATED_BY\"]",
+     "kind": "company",
+     "subject": "6c82526a01a95fa38cf183b40053f417dbc5525e5cfcf4166154f2560fab8b93",
+     "effective_at": "2026-08-17T11:56:09+00:00",
+     "identifiers": {
+      "lei": "0292001568C3M3WGI292"
+     },
+     "fields": {},
+     "relationships": [
+      {
+       "type": "IS_ULTIMATELY_CONSOLIDATED_BY",
+       "target_subject": "5e8c46a2e6fb53d898d6b893d54737ad3650a94479cc6760ab5aa0c2a9f79489",
+       "scope": "",
+       "valid_from": "2014-04-28T00:00:00+00:00",
+       "valid_to": null,
+       "properties": {
+        "status": "ACTIVE",
+        "registration_status": "PUBLISHED"
+       }
+      }
+     ],
+     "matching": null,
+     "provenance_keys": [
+      "adapter_version",
+      "record_key",
+      "source"
+     ],
+     "native_record_kept": true,
+     "assertion_id": "6c8c90b5887950e562519c1e1af6fc5fd0d1e9671e21cd1b440a487902660a91",
+     "assertion_bytes": 2174
+    },
+    {
+     "ordinal_in_sample": 2,
+     "picked_because": "both_ends:IS_SUBFUND_OF",
+     "ordinal_in_file": 109,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "01cebad65aa69f92960ca8c6dcbf726979f6ebfd16709e246a36cf1c2c4e6a86:record:2",
+     "lei": "05XOXL7DW084I0I72F95"
+    },
+    {
+     "ordinal_in_sample": 3,
+     "picked_because": "both_ends:IS_FUND-MANAGED_BY",
+     "ordinal_in_file": 133,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "01cebad65aa69f92960ca8c6dcbf726979f6ebfd16709e246a36cf1c2c4e6a86:record:3",
+     "lei": "08HGTHG281BFQRFCD148"
+    },
+    {
+     "ordinal_in_sample": 4,
+     "picked_because": "both_ends:IS_INTERNATIONAL_BRANCH_OF",
+     "ordinal_in_file": 264,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "01cebad65aa69f92960ca8c6dcbf726979f6ebfd16709e246a36cf1c2c4e6a86:record:4",
+     "lei": "097900BHM40000115289"
+    },
+    {
+     "ordinal_in_sample": 5,
+     "picked_because": "no_relationship_period",
+     "ordinal_in_file": 688,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "ambiguous_relationship_period",
+     "blocks": true,
+     "probable_kind": null,
+     "record_locator": "01cebad65aa69f92960ca8c6dcbf726979f6ebfd16709e246a36cf1c2c4e6a86:record:5",
+     "lei": "0C0SZC7H22UWI2NA3R46"
+    },
+    {
+     "ordinal_in_sample": 6,
+     "picked_because": "start_outside_dry_run_scope",
+     "ordinal_in_file": 10968,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "01cebad65aa69f92960ca8c6dcbf726979f6ebfd16709e246a36cf1c2c4e6a86:record:6",
+     "lei": "2138007RI17FKMZCW393"
+    },
+    {
+     "ordinal_in_sample": 7,
+     "picked_because": "status_null",
+     "ordinal_in_file": 41826,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "invalid_relationship_status_interval",
+     "blocks": true,
+     "probable_kind": null,
+     "record_locator": "01cebad65aa69f92960ca8c6dcbf726979f6ebfd16709e246a36cf1c2c4e6a86:record:7",
+     "lei": "213800TQ8Q2668XD1U88"
+    }
+   ]
+  },
+  "reporting_exceptions": {
+   "source_code": "gleif.reporting_exceptions.v1",
+   "register_dataset_checks": "reached the database step: contract checks passed",
+   "consumer_contract_check": true,
+   "archive": {
+    "record_count": 7,
+    "compressed_bytes": 527,
+    "expanded_bytes": 2477
+   },
+   "sample_zip_sha256": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb",
+   "records": [
+    {
+     "ordinal_in_sample": 0,
+     "picked_because": "bad_check_digit_lei",
+     "ordinal_in_file": null,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "invalid_lei_checksum",
+     "blocks": true,
+     "probable_kind": null,
+     "record_locator": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb:record:0",
+     "lei": "4469000001BG7ASKSB18"
+    },
+    {
+     "ordinal_in_sample": 1,
+     "picked_because": "first_ultimate",
+     "ordinal_in_file": null,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb:record:1",
+     "lei": "001GPB6A9XPE8XJICC14"
+    },
+    {
+     "ordinal_in_sample": 2,
+     "picked_because": "first_records",
+     "ordinal_in_file": 0,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb:record:2",
+     "lei": "001GPB6A9XPE8XJICC14"
+    },
+    {
+     "ordinal_in_sample": 3,
+     "picked_because": "first_records",
+     "ordinal_in_file": 1,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "reported_parent_exception",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb:record:3",
+     "lei": "004L5FPTUREIWK9T2N63"
+    },
+    {
+     "ordinal_in_sample": 4,
+     "picked_because": "first_records",
+     "ordinal_in_file": 2,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "outside_approved_company_scope",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb:record:4",
+     "lei": "00EHHQ2ZHDCFXJCPCL46"
+    },
+    {
+     "ordinal_in_sample": 5,
+     "picked_because": "non_public",
+     "ordinal_in_file": 637,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "reported_parent_exception",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb:record:5",
+     "lei": "02S2RPPVO9RP4NEU2740"
+    },
+    {
+     "ordinal_in_sample": 6,
+     "picked_because": "two_reasons",
+     "ordinal_in_file": 34336,
+     "outcome": "deferred",
+     "stable_id": true,
+     "reason": "reported_parent_exception",
+     "blocks": false,
+     "probable_kind": null,
+     "record_locator": "92d8b71b596da7073c97c40964b2476181eff94a94b62570c2ad4260c9e687fb:record:6",
+     "lei": "2138004J8MLDWD62D102"
+    }
+   ]
+  }
+ },
+ "checks": {
+  "relationship_targets": [
+   {
+    "type": "IS_DIRECTLY_CONSOLIDATED_BY",
+    "end_lei": "0292004558B0R5B7I133",
+    "target_subject_is_level1_subject_of_end": true,
+    "end_level1_record_in_sample_as_company": true
+   },
+   {
+    "type": "IS_ULTIMATELY_CONSOLIDATED_BY",
+    "end_lei": "0292004558B0R5B7I133",
+    "target_subject_is_level1_subject_of_end": true,
+    "end_level1_record_in_sample_as_company": true
+   }
+  ],
+  "check_company_sources:level1": "passes (7 assertions)",
+  "check_company_sources:relationships": "FAILS: Company policy has no source priority for: gleif.relationships.v1",
+  "check_company_sources:reporting_exceptions": "passes (0 assertions)",
+  "matching_reads": [
+   {
+    "lei": "004L5FPTUREIWK9T2N63",
+    "gleif_entity_eligible": true,
+    "jurisdiction": "US-DE",
+    "headquarters_postal_code": "10106",
+    "headquarters_country": "US",
+    "name_for_census": "Hutchin Hill Capital, LP",
+    "last_update_for_census": "2026-05-27T17:40:22.294Z",
+    "raw_last_update": "2026-05-27T17:40:22.294Z"
+   },
+   {
+    "lei": "00GBW0Z2GYIER7DHDS71",
+    "gleif_entity_eligible": true,
+    "jurisdiction": "US-DE",
+    "headquarters_postal_code": "06830",
+    "headquarters_country": "US",
+    "name_for_census": "ARISTEIA CAPITAL, L.L.C.",
+    "last_update_for_census": "2025-09-12T09:56:49.008Z",
+    "raw_last_update": "2025-09-12T09:56:49.008Z"
+   },
+   {
+    "lei": "00TR8NKAEL48RGTZEW89",
+    "gleif_entity_eligible": false,
+    "jurisdiction": "KY",
+    "headquarters_postal_code": null,
+    "headquarters_country": "CW",
+    "name_for_census": "ESG DOMESTIC OPPORTUNITY OFFSHORE FUND LTD.",
+    "last_update_for_census": "2024-12-10T16:57:57.269+01:00",
+    "raw_last_update": "2024-12-10T16:57:57.269+01:00"
+   },
+   {
+    "lei": "0292001568C3M3WGI292",
+    "gleif_entity_eligible": true,
+    "jurisdiction": "NG",
+    "headquarters_postal_code": "101233",
+    "headquarters_country": "NG",
+    "name_for_census": "ARM SECURITIES LTD",
+    "last_update_for_census": "2026-08-17T11:56:09Z",
+    "raw_last_update": "2026-08-17T11:56:09Z"
+   },
+   {
+    "lei": "0292004558B0R5B7I133",
+    "gleif_entity_eligible": true,
+    "jurisdiction": "NG",
+    "headquarters_postal_code": "101233",
+    "headquarters_country": "NG",
+    "name_for_census": "ARM TRADITIONAL ASSET MANAGEMENT LIMITED",
+    "last_update_for_census": "2026-04-01T12:02:54Z",
+    "raw_last_update": "2026-04-01T12:02:54Z"
+   },
+   {
+    "lei": "097900BIFW0000156119",
+    "gleif_entity_eligible": true,
+    "jurisdiction": "SK",
+    "headquarters_postal_code": "911 05",
+    "headquarters_country": "SK",
+    "name_for_census": "OLD HEROLD, s.r.o.",
+    "last_update_for_census": "2026-04-21T08:33:01.506+02:00",
+    "raw_last_update": "2026-04-21T08:33:01.506+02:00"
+   },
+   {
+    "lei": "1G3OSH3GLGJ7X1JC5I61",
+    "gleif_entity_eligible": true,
+    "jurisdiction": "US-DE",
+    "headquarters_postal_code": "02199",
+    "headquarters_country": "US",
+    "name_for_census": "MASSACHUSETTS FINANCIAL SERVICES COMPANY",
+    "last_update_for_census": "2025-09-22T07:57:45.565Z",
+    "raw_last_update": "2025-09-22T07:57:45.565Z"
+   }
+  ]
+ },
+ "scope_mode": "general-only"
+}

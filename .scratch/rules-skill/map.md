@@ -48,6 +48,10 @@ non-SEC source. The approved plan is [plan.md](plan.md).
 ## Decisions so far
 
 - [Approved plan](plan.md): seven phases, P1–P7 (approved 2026-09-26, before 15:49 ET).
+- [Rules files; production loads them](issues/01-rules-files-production-loads-them.md):
+  **done** (PR #729, 2026-09-26 17:06 ET). The SEC and GLEIF mappings and the
+  Company merge rules are `rules/` files that production loads; every digest
+  is unchanged (live policy `983352e8…4049`).
 - **Skill first** (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill first, however must test skill on company entity for each source from scratch and fine tune and fix the skill, the incorporate all company data pipelines and test". The skill is written now
   (ticket 07). Each source that feeds Company is onboarded with it from
   scratch, and the result is compared with the rules already proven in
