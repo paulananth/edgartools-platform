@@ -43,3 +43,34 @@ differed):
 > skill's log and record where each mapping decision came from; report the
 > file, the log, the question count, the missing commands and every unclear
 > or wrong thing in the skill.
+
+## Round 2 (2026-09-26 18:40–20:15 ET)
+
+- **Sandboxes.** No `tests/`, `.scratch/`, `.planning/` or Source Contract
+  spec. The GLEIF sandbox also has none of the GLEIF docs that restate its
+  mapping.
+- **Two phases.** In phase A the agent works up to the questions and stops.
+  Answers come from the written record only; see
+  [answer-key.md](round-2/answer-key.md) for how each question was tagged.
+  In phase B it writes the file and dry-runs it.
+- **Operator answers during the round.** Question 5 of the SEC trial was
+  answered by the operator directly: keep EIN and SEC's LEI as lookup-only
+  identifiers; tickers belong to Security.
+
+| Source | Equal | Different | Missing | Extra | Questions | Should have inferred |
+|---|---|---|---|---|---|---|
+| [SEC submissions](round-2/sec/) | 25 | 0 | 9 (all `provenance`) | 1 (EIN, the operator's new decision) | 5 | 1 (the address) |
+| [GLEIF](round-2/gleif/) | 64 | 2 | 9 | 11 | 9 | 3 (names, family, address) |
+
+**What round 2 still misses:**
+- **SEC:** the reader's trace fields (`provenance`).
+- **GLEIF Level 1:** the sole-proprietor kind. The record leaves it unnamed;
+  the agent chose Person.
+- **GLEIF relationships:** the agent never asked which relationship types are
+  in scope, and added four fund and branch types.
+- **Design choices that differ from the proven file:** the relationship
+  record key, and an `lei` identifier on relationship and exception records.
+  These are real decisions, not errors.
+
+**Not a pass** under the ticket 07 bar. Round 3 is the last round before the
+results go to the operator.

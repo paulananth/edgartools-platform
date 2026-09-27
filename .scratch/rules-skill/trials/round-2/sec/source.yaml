@@ -1,0 +1,97 @@
+# SEC submissions: the MDM mapping of one filer's submissions header, as the
+# existing reader shapes it (`company_source.py`, `mdm prepare-clean-company`),
+# not the raw JSON. The reader names this folder and the source code. A first
+# version: nothing was registered before it (operator, 2026-09-26). Field ranks
+# live in the merge rules, not here.
+source: sec.submissions.company
+bronze:
+  # The tickers the Company rule reads come from a second family,
+  # `reference_catalog` (company_tickers.json, company_tickers_exchange.json);
+  # this envelope names one.
+  family: submissions
+mdm:
+  sec.submissions.company.v1:
+    contract:
+      provider: SEC EDGAR
+      # None: every record the Company rule sets aside opens a review and
+      # blocks its batch, as does every defect (operator, 2026-09-26).
+      nonblocking_deferred_reasons: []
+      family: submissions
+      schema_version: sec-company-landing-record-v1
+      record_key: CIK, ten digits zero-padded
+      publication_key: capture run id and the sha256 of its pinned sec_company, sec_company_filing
+        and sec_company_address members, the ticker catalog run and its sec_company_ticker
+        member, and the Name Census digest
+      # SEC states no date a header field took effect; the reader sets none.
+      effective_time: unknown
+      semantics: patch; absence never retires an identity
+      completeness: one capture run's current submissions header per filer SEC treats as an
+        entity, with its forms, business address, catalog tickers and Name Census entry; prepare-clean-company
+        pins a bounded sample of at most 1000 records, never the whole source
+      adapter:
+        version: sec-company-landing-record-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        # No `provenance.native_record`: the reader keeps no native record. The
+        # bronze submissions document travels beside the record as
+        # `_origin.bronze`, outside its hash.
+        # The kind is the Company rule's verdict, "the Account hold-back".
+        classification:
+          kind: company
+          rule_id: sec-company-candidate
+          version: 2026-09-25.13
+        record_key:
+        - cik
+        record_key_format: sec_cik
+        # EIN and SEC's own LEI are lookup only (operator, 2026-09-26): a
+        # document can be found by any of its ids, but neither may join two
+        # records into one Company; only a proven, approved rule joins.
+        # Tickers are not Company ids: they belong to the Security (operator,
+        # 2026-09-26). The Company rule still reads the reader's `tickers` to
+        # decide the kind; that is all this contract does with them.
+        identifiers:
+          cik: cik
+          # Lookup only. No binding rule can name `ein` (the engine accepts
+          # only cik and lei), so it cannot join records. SEC writes
+          # 000000000 for a filer with no EIN (ASML, Shell); no format can yet
+          # read that as "none", so it is kept as written.
+          ein: ein
+        identifier_formats:
+          cik: sec_cik
+        # Not mapped: SEC's own LEI, because the reader drops it (sec_company
+        # has no `lei`). Once it lands, map it as `sec_lei: lei` with format
+        # `lei`, never under `lei`, the name the merge code joins SEC and GLEIF
+        # on (operator, 2026-09-26); that will be a new version.
+        # Left out (operator, 2026-09-26): tickers and exchange (a Security
+        # mapping), phone, website, former names. `jurisdiction` is GLEIF's
+        # alone (operator, 2026-09-24).
+        fields:
+          # `name` and `address` are one field each across SEC and GLEIF, SEC
+          # first where both have a value (operator, 2026-09-24).
+          name: entity_name
+          sic: sic
+          sic_description: sic_description
+          # SEC's own field, written as SEC writes it (operator, 2026-09-24):
+          # a state code, or in the captured files an EDGAR country code (U0).
+          state_of_incorporation: state_of_incorporation
+          fiscal_year_end: fiscal_year_end
+          description: description
+          # The business address, not the mailing one (operator, 2026-09-26).
+          # When SEC writes a foreign filer's EDGAR country code in
+          # stateOrCountry (ASML: P7), the reader puts it in `region`; when SEC
+          # uses countryCode instead (Shell: X0), `region` is empty. `country`
+          # is the ISO country either way.
+          address:
+            components:
+              street: business_address.street
+              street2: business_address.street2
+              city: business_address.city
+              region: business_address.region
+              postcode: business_address.postal_code
+              country: business_address.country
+        # What the SEC-to-GLEIF name rules compare; kept outside the fields.
+        matching:
+          business_postal_code: business_address.postal_code
+          business_country: business_address.country
+          name_census: name_census

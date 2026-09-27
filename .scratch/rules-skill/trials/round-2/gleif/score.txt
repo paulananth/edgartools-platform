@@ -1,0 +1,103 @@
+digest equal: False
+
+## gleif.level1.v1  <->  gleif.level1.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  'the LEI: 20 characters, ISO 17442 check digits'
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  'one Golden Copy publication: its publisher time (the content date, e.g. 2026-09-11T16:00Z) as its sequence, plus the digest of its verified manifest'
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  "the record's Registration.LastUpdateDate"
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  'a full Golden Copy file holds every record GLEIF has ever published, current and historical (lapsed, retired, annulled included); a delta holds only the records changed in its window. Only records whose LEIs are on the approved Company LEI scope reach MDM. No retirement by absence'
+  extra     probable_kind_values.SOLE_PROPRIETOR: proven=None trial='person'
+  missing   nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial=None
+
+## gleif.relationships.v1  <->  gleif.relationships.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  "the start node's LEI plus the relationship type"
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  'one Golden Copy publication: its publisher time (the content date, e.g. 2026-09-11T16:00Z) as its sequence, plus the digest of its verified manifest'
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  "the record's Registration.LastUpdateDate"
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  'a full Golden Copy file holds every record GLEIF has ever published, current and historical (lapsed, retired, annulled included); a delta holds only the records changed in its window. Only records whose LEIs are on the approved Company LEI scope reach MDM. No retirement by absence'
+  different record_key[1]: proven='end' trial='relationship_type'
+  missing   record_key[2]: proven='relationship_type' trial=None
+  extra     identifiers.lei: proven=None trial='start'
+  extra     identifier_formats.lei: proven=None trial='lei'
+  extra     relationships[0].properties.registration_status: proven=None trial='registration_status'
+  missing   relationships[0].properties.source_registration_status: proven='registration_status' trial=None
+  missing   relationships[0].properties.source_relationship_status: proven='status' trial=None
+  extra     relationships[0].properties.status: proven=None trial='status'
+  missing   relationships[0].scope: proven='GLEIF accounting consolidation' trial=None
+  extra     relationships[0].type_values.IS_FEEDER_TO: proven=None trial='IS_FEEDER_TO'
+  extra     relationships[0].type_values.IS_FUND-MANAGED_BY: proven=None trial='IS_FUND-MANAGED_BY'
+  extra     relationships[0].type_values.IS_INTERNATIONAL_BRANCH_OF: proven=None trial='IS_INTERNATIONAL_BRANCH_OF'
+  extra     relationships[0].type_values.IS_SUBFUND_OF: proven=None trial='IS_SUBFUND_OF'
+  missing   nonblocking_deferred_reasons[1]: proven='unsupported_identity_kind' trial=None
+  missing   nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial=None
+
+## gleif.reporting_exceptions.v1  <->  gleif.reporting_exceptions.v1
+  text provider:
+    proven: 'GLEIF'
+    trial:  'GLEIF'
+  text family:
+    proven: 'gleif'
+    trial:  'gleif'
+  text schema_version:
+    proven: 'gleif-native-record-v1'
+    trial:  'gleif-native-record-v1'
+  text record_key:
+    proven: 'native LEI or composite source key'
+    trial:  'the LEI plus the exception category (direct or ultimate parent)'
+  text publication_key:
+    proven: 'verified GLEIF release'
+    trial:  'one Golden Copy publication: its publisher time (the content date, e.g. 2026-09-11T16:00Z) as its sequence, plus the digest of its verified manifest'
+  text effective_time:
+    proven: 'LastUpdateDate or unknown'
+    trial:  'unknown; a reporting exception carries no date'
+  text semantics:
+    proven: 'patch; absence never retires an identity'
+    trial:  'patch'
+  text completeness:
+    proven: None
+    trial:  'a full Golden Copy file holds every record GLEIF has ever published, current and historical (lapsed, retired, annulled included); a delta holds only the records changed in its window. Only records whose LEIs are on the approved Company LEI scope reach MDM. No retirement by absence'
+  missing   kind: proven='company' trial=None
+  extra     identifiers.lei: proven=None trial='LEI.$'
+  extra     identifier_formats.lei: proven=None trial='lei'
+  different nonblocking_deferred_reasons[1]: proven='unsupported_identity_kind' trial='reported_parent_exception'
+  missing   nonblocking_deferred_reasons[2]: proven='reported_parent_exception' trial=None
+
+totals: {'equal': 64, 'different': 2, 'missing': 9, 'extra': 11}

@@ -1,0 +1,91 @@
+capture landing: {'sec_company': 19, 'sec_company_address': 38, 'sec_company_former_name': 7, 'sec_company_submission_file': 6, 'sec_company_filing': 7013}
+ticker landing: {'sec_company_ticker': 20782}
+filers NOT landed as sec_company (is_individual_filer): ['0000938419', '0001091323', '0001179386', '0001213693', '0001248830', '0001278058', '0001366770', '0001532287', '0001556064', '0001566175', '0001699726', '0001733318', '0001781934', '0001788554', '0001825486', '0001825921', '0001939048', '0001982687', '0001998772', '0002072014', '0002113214']
+reader scope: {"available_company_records": 19, "capture_run_id": "dryrun-capture-0001", "ciks": [320193, 789019, 937966, 1018724, 1109147, 1306965, 1650664, 1717479, 1806201, 1818752, 1964532, 2015731, 2032331, 2086413, 2134860, 2137036, 2141353, 2150698, 2153788], "mode": "bounded_sample", "selected_records": 19, "ticker_run_id": "dryrun-tickers-0001", "whole_source_complete": false}
+bundle dataset.json == rules file contract: True
+
+records 19: assertions 7, set aside 12
+
+COMPANY 0000320193 kind=company ids={'cik': '0000320193'} step=8 schema=sec-company-landing-record-v1
+    name                     Apple Inc.
+    sic                      3571
+    sic_description          Electronic Computers
+    state_of_incorporation   CA
+    fiscal_year_end          0926
+    description              None
+    address                  {'street': 'ONE APPLE PARK WAY', 'city': 'CUPERTINO', 'region': 'CA', 'postcode': '95014', 'country': 'US'}
+    matching: postal=95014 country=US census={'key': 'APPLE INC', 'cik_count': 1, 'lei_count': 0}
+
+COMPANY 0000789019 kind=company ids={'cik': '0000789019'} step=8 schema=sec-company-landing-record-v1
+    name                     MICROSOFT CORP
+    sic                      7372
+    sic_description          Services-Prepackaged Software
+    state_of_incorporation   WA
+    fiscal_year_end          0630
+    description              None
+    address                  {'street': 'ONE MICROSOFT WAY', 'city': 'REDMOND', 'region': 'WA', 'postcode': '98052-6399', 'country': 'US'}
+    matching: postal=98052-6399 country=US census={'key': 'MICROSOFT CORP', 'cik_count': 1, 'lei_count': 0}
+
+COMPANY 0000937966 kind=company ids={'cik': '0000937966'} step=10 schema=sec-company-landing-record-v1
+    name                     ASML HOLDING NV
+    sic                      3559
+    sic_description          Special Industry Machinery, NEC
+    state_of_incorporation   None
+    fiscal_year_end          1231
+    description              None
+    address                  {'street': 'DE RUN 6501', 'city': 'DR VELDHOVEN', 'region': 'P7', 'postcode': '5504', 'country': 'NL'}
+    matching: postal=5504 country=NL census={'key': 'ASML HOLDING NV', 'cik_count': 1, 'lei_count': 0}
+
+COMPANY 0001018724 kind=company ids={'cik': '0001018724'} step=8 schema=sec-company-landing-record-v1
+    name                     AMAZON COM INC
+    sic                      5961
+    sic_description          Retail-Catalog & Mail-Order Houses
+    state_of_incorporation   DE
+    fiscal_year_end          1231
+    description              None
+    address                  {'street': '410 TERRY AVENUE NORTH', 'city': 'SEATTLE', 'region': 'WA', 'postcode': '98109', 'country': 'US'}
+    matching: postal=98109 country=US census={'key': 'AMAZON COM INC', 'cik_count': 1, 'lei_count': 0}
+
+COMPANY 0001306965 kind=company ids={'cik': '0001306965'} step=10 schema=sec-company-landing-record-v1
+    name                     Shell plc
+    sic                      1311
+    sic_description          Crude Petroleum & Natural Gas
+    state_of_incorporation   DC
+    fiscal_year_end          1231
+    description              None
+    address                  {'street': 'SHELL CENTRE', 'street2': '2 YORK ROAD', 'city': 'LONDON', 'postcode': 'SE1 7NA', 'country': 'GB'}
+    matching: postal=SE1 7NA country=GB census={'key': 'SHELL PLC', 'cik_count': 1, 'lei_count': 0}
+
+COMPANY 0001650664 kind=company ids={'cik': '0001650664'} step=8 schema=sec-company-landing-record-v1
+    name                     Editas Medicine, Inc.
+    sic                      2836
+    sic_description          Biological Products, (No Diagnostic Substances)
+    state_of_incorporation   DE
+    fiscal_year_end          1231
+    description              None
+    address                  {'street': '11 HURLEY ST.', 'city': 'CAMBRIDGE', 'region': 'MA', 'postcode': '02141', 'country': 'US'}
+    matching: postal=02141 country=US census={'key': 'EDITAS MEDICINE INC', 'cik_count': 1, 'lei_count': 0}
+
+COMPANY 0001806201 kind=company ids={'cik': '0001806201'} step=8 schema=sec-company-landing-record-v1
+    name                     Open Lending Corp
+    sic                      6141
+    sic_description          Personal Credit Institutions
+    state_of_incorporation   None
+    fiscal_year_end          1231
+    description              None
+    address                  {'street': '1501 S. MOPAC EXPRESSWAY', 'street2': 'SUITE #450', 'city': 'AUSTIN', 'region': 'TX', 'postcode': '78746', 'country': 'US'}
+    matching: postal=78746 country=US census={'key': 'OPEN LENDING CORP', 'cik_count': 1, 'lei_count': 0}
+
+SET ASIDE (each opens a blocking review: no non-blocking reasons):
+   1109147 classification_deferred          step=11 probable=None | AXIOM INVESTORS LLC /DE
+   1717479 classification_deferred          step=11 probable=None | Redwood Investment Management, LLC
+   1818752 classification_deferred          step=11 probable=None | Contraline, Inc.
+   1964532 classification_deferred          step=11 probable=None | Kaydan Wealth Management, Inc.
+   2015731 classification_deferred          step=11 probable=None | Lord Abbett Institutional High Yield Trust
+   2032331 classification_deferred          step=11 probable=None | Arrowpoint Investment Partners (Singapore) Pte. Ltd.
+   2086413 classification_deferred          step=11 probable=None | Moorstone Structured Commodities Master Fund II, L.P.
+   2134860 classification_deferred          step=11 probable=None | SCA Murrells Inlet, LLC
+   2137036 classification_deferred          step=11 probable=None | Hempel Industrial Outdoor Storage Fund I, LLC
+   2141353 classification_deferred          step=11 probable=None | Grove Lynnwood, LLC
+   2150698 classification_deferred          step=11 probable=None | 2am Ventures Opportunity Fund II, LP
+   2153788 classification_deferred          step=11 probable=None | Fundamental Ventures SPV D Wally Health LP
