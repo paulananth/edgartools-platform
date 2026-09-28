@@ -69,6 +69,21 @@ record, through GLEIF's other names (Canon, Hitachi, Sony, Nokia).
 - P5 to P7 have few labelled pairs (49, 181, 66), all drawn from today's
   binds; each pass needs its own draw.
 
+## Decided: a conflict in place of incorporation (operator, 2026-09-28 19:49 ET)
+
+Asked whether a pass should refuse a pair when SEC's state of incorporation
+and GLEIF's jurisdiction differ (the AAON case), the operator answered "They
+both may be true Hyatt (SEC says Illinois, GLEIF says Delaware)". GLEIF's
+Hyatt Hotels Corporation (T27JQIMTYSH41TCD5186) is US-DE, so SEC's Illinois
+is likely stale: the same company. GLEIF's only "AAON, INC."
+(549300ZHF0E5VM7PUD37) is US-OK, and ticket 08's labels found it the
+subsidiary: nothing in the pair itself tells the two cases apart.
+
+Ruling ("Yes" to the recommendation): **no veto; the proof decides.** A pair
+whose places of incorporation conflict goes through the passes like any
+other and is its own labelled stratum. If that stratum clears the 95% bar
+it binds; if not, those pairs go to a Steward for review.
+
 ## Decided with ticket 22 (operator, 2026-09-28)
 
 - **Addresses:** a pass compares the address the quality rule left fit:
