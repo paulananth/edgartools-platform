@@ -251,7 +251,7 @@ service, `edgartools-rules`:
 | Database | Schema | Tables | Columns |
 |---|---|---|---|
 | `sources` | one per source | one per feed, one per Dataset Contract | a feed: the keys naming a captured file; a dataset: each source path it reads, with its use (identifier, record key, MDM field, matching only, kind) |
-| `mdm` | `clean` | one per kind | each MDM field: the datasets that fill it, first wins, the winner and the rule |
+| `mdm` | `clean` | one per kind | each MDM field: the datasets that fill it in order (the first with a value wins) and the rule |
 
 Lineage runs from a feed to the datasets that read its files, and from a
 dataset to its kind, column by column (an address's parts all feed one

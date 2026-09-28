@@ -9,8 +9,6 @@ import pytest
 
 from edgar_warehouse.rules import catalog, files
 
-pytest.importorskip("openpyxl")  # `catalog` shares the Mapping Document's winners
-
 
 def _tables(plan: dict) -> dict[str, dict]:
     return {f"{t['databaseSchema']}.{catalog.quote(t['name'])}": t for t in plan["tables"]}
@@ -33,7 +31,10 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     company = tables["edgartools-rules.mdm.clean.company"]
     assert {"name", "address", "jurisdiction", "state_of_incorporation"} <= {c["name"] for c in company["columns"]}
     name = next(c for c in company["columns"] if c["name"] == "name")
-    assert "`sec.submissions.company.v1`, `gleif.level1.v1`, first wins" in name["description"]
+    assert "`sec.submissions.company.v1`, then `gleif.level1.v1`: the first with a value wins" in name["description"]
+    relationships = tables['edgartools-rules.sources.gleif."gleif.relationships.v1"']
+    assert "it fills no company field" in relationships["description"]
+    assert "Read by the classification rule" in next(c for c in sec["columns"] if c["name"] == "sic")["description"]
     assert "Critical data elements" in sec["description"]
 
 
@@ -75,10 +76,13 @@ class _Server:
             name = f"{body['databaseSchema']}.{catalog.quote(body['name'])}"
             self.ids[name] = f"id-{len(self.ids)}"
             return {"fullyQualifiedName": name, "id": self.ids[name]}
-        if method == "GET" and path == "/tables":
+        if method == "GET" and path == "/tables" and not params.get("after"):  # two pages
             stale = {"fullyQualifiedName": "edgartools-rules.sources.gone.old", "id": "id-old"}
-            return {"data": [{"fullyQualifiedName": n, "id": i} for n, i in self.ids.items()] + [stale],
-                    "paging": {}}
+            # a server that ignores `service` also lists another service's table
+            other = {"fullyQualifiedName": "someone-else.db.schema.table", "id": "id-other"}
+            return {"data": [stale, other], "paging": {"after": "page-2"}}
+        if method == "GET" and path == "/tables":
+            return {"data": [{"fullyQualifiedName": n, "id": i} for n, i in self.ids.items()], "paging": {}}
         if method == "GET" and path == "/databases":
             return {"data": [{"fullyQualifiedName": f"edgartools-rules.{d['name']}", "id": d["name"]}
                              for d in self.plan["databases"]]}
@@ -86,7 +90,9 @@ class _Server:
             return {"data": [{"fullyQualifiedName": "edgartools-rules.sources.gone", "id": "id-gone"}]}
         if method == "GET" and path.startswith("/lineage/table/name/edgartools-rules.mdm.clean.company"):
             company = self.ids["edgartools-rules.mdm.clean.company"]
-            return {"upstreamEdges": [{"fromEntity": "id-stale", "toEntity": company}]}
+            ours = self.ids["edgartools-rules.sources.gleif.relationships"]  # a feed: never a source of company
+            return {"upstreamEdges": [{"fromEntity": ours, "toEntity": company},
+                                      {"fromEntity": "id-other", "toEntity": company}]}
         return {"data": []} if method == "GET" else {}
 
 
@@ -96,7 +102,8 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     result = catalog.publish(plan, server)
     deletes = [path for method, path in server.calls if method == "DELETE"]
     company = server.ids["edgartools-rules.mdm.clean.company"]
-    assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/id-stale/table/{company}"]
+    feed = server.ids["edgartools-rules.sources.gleif.relationships"]
+    assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
     assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1}
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
 

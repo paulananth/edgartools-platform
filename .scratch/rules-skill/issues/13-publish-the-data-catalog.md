@@ -66,7 +66,22 @@ Live proof, 2026-09-28 19:27 ET:
   stops the publish).
 - [x] Live proof (above).
 - [x] SKILL.md, REFERENCE.md.
-- [ ] Three-axis review.
+- [x] Three-axis review (2026-09-28). Fixed:
+  - Standards: a publish deletes only inside `edgartools-rules`, even if the
+    server ignores its `service` filter, and removes only lineage from its
+    own tables; a server that does not answer is a plain error, not a
+    traceback; a test skip that hid the suite without openpyxl.
+  - Spec: "Winner" read as though GLEIF never wins; a field now says the
+    datasets fill it in order, the first with a value wins. A dataset that
+    fills no field says so. Lineage only to fields the merge takes from that
+    dataset. The fields the classification rule reads are listed.
+  - GoF: the catalog and the Mapping Document share one reader for mapped
+    paths (`mapdoc.paths`) and for critical data elements
+    (`mapdoc.critical_elements`), so the two cannot describe the rules
+    differently.
+  - Live proof re-run after the fixes, 19:40 ET: same results.
+  - Left as is: identifiers (`cik`, `lei`) are dataset columns, not Company
+    fields, as the merge rules have them.
 - [ ] PR, CI; merge on the operator's word.
 
 ## Not in this ticket

@@ -11,7 +11,8 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
   it captures) and a table per dataset (a Dataset Contract), whose columns are
   the source paths the dataset reads;
 - database `mdm`, schema `clean`: a table per kind, whose columns are its MDM
-  fields, each naming the datasets that fill it, first wins;
+  fields, each naming the datasets that fill it in order (the first with a
+  value wins);
 - lineage: feed to the datasets it captures, and dataset to kind, column by
   column (the source paths that fill each MDM field).
 
@@ -25,12 +26,12 @@ import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote as escape, urlencode
 from urllib.request import Request, urlopen
 
 from . import files
-from .mapdoc import QUALITY_WORDS, _words, winners
+from .mapdoc import critical_elements, paths, winners
 
 SERVICE = "edgartools-rules"
 SOURCES, MDM, CLEAN = "sources", "mdm", "clean"
@@ -55,16 +56,6 @@ def rules_digest(root: Path) -> str:
     return digest.hexdigest()
 
 
-def _paths(spec: Any) -> list[tuple[str, str]]:
-    """(part, source path) for one mapped value: a path, or an address's parts."""
-    if isinstance(spec, str):
-        return [("", spec)]
-    found = []
-    for part, path in (spec.get("components") or {}).items():
-        found.append((part, path["lines"] if isinstance(path, dict) else path))
-    return found
-
-
 def _kinds(adapter: dict, known: set[str]) -> list[str]:
     """The kinds a dataset's records become, among those with merge rules."""
     named = {adapter.get("kind"), (adapter.get("classification") or {}).get("kind"),
@@ -72,8 +63,21 @@ def _kinds(adapter: dict, known: set[str]) -> list[str]:
     return sorted(k for k in named if k in known)
 
 
-def _dataset(source: str, code: str, contract: dict, kinds: list[str]) -> tuple[dict, list[dict]]:
-    """A dataset's table, and its lineage to each kind it fills."""
+def _classified(kinds: dict, code: str) -> set[str]:
+    """The fields a kind's classification rule reads from this dataset."""
+    read = set()
+    for rules in kinds.values():
+        for rule in rules.get("rules") or []:
+            if rule.get("family") == "classification" and rule.get("source") == code:
+                for step in rule.get("steps") or []:
+                    read |= {(w.get("args") or {}).get("field") for w in step.get("when") or []}
+    return read - {None}
+
+
+def _dataset(source: str, code: str, contract: dict, kinds: list[str], fills: dict[str, set],
+             classified: set[str]) -> tuple[dict, list[dict]]:
+    """A dataset's table, and its lineage to each kind it fills. `fills`:
+    kind -> the fields the merge takes from this dataset (`winners`)."""
     adapter = contract.get("adapter") or {}
     uses: dict[str, list[str]] = defaultdict(list)  # source path -> what it is used for
     to_field: dict[str, list[str]] = defaultdict(list)  # MDM field -> source paths
@@ -83,21 +87,21 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str]) -> tuple[
         uses[path].append("Record key")
     for section, used in (("fields", "MDM field"), ("matching", "Matching only")):
         for field, spec in (adapter.get(section) or {}).items():
-            for part, path in _paths(spec):
+            for part, path in paths(spec):
                 uses[path].append(f"{used} `{field}`" + (f" ({part})" if part else ""))
                 if section == "fields":
                     to_field[field].append(path)
     if adapter.get("kind_field"):
         uses[adapter["kind_field"]].append("Decides the kind")
-    critical = []
-    for check in (contract.get("quality") or {}).get("checks") or []:
-        if check.get("on_fail") == "exception":  # a critical data element
-            field = str(check.get("value") or "").removeprefix("fields.")
-            critical.append(f"`{field}`: {_words(QUALITY_WORDS, check.get('test'), check.get('args') or {})}")
+    for path in classified:
+        uses[path].append("Read by the classification rule")
+    critical = [f"`{field}`: {test}" for _, field, test in critical_elements(contract.get("quality") or {})]
     about = [f"Dataset Contract `{code}` from {contract.get('provider') or source}.",
              f"One record is: {contract.get('record_key') or 'not stated'}."]
-    if kinds:
-        about.append("Its records become: " + ", ".join(kinds) + ".")
+    for kind in kinds:
+        filled = sorted(fills.get(kind, set()) & set(to_field))
+        about.append(f"Its records become {kind}; " + (f"it fills {len(filled)} {kind} fields." if filled
+                                                       else f"it fills no {kind} field."))
     if critical:
         about.append("Critical data elements (a record missing one is an exception, never merged): "
                      + "; ".join(critical) + ".")
@@ -109,9 +113,9 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str]) -> tuple[
     at = fqn(SERVICE, SOURCES, source, code)
     lineage = []
     for kind in kinds:
-        columns = [{"fromColumns": [f"{at}.{quote(p)}" for p in sorted(set(paths))],
+        columns = [{"fromColumns": [f"{at}.{quote(p)}" for p in sorted(set(read))],
                     "toColumn": fqn(SERVICE, MDM, CLEAN, kind, field)}
-                   for field, paths in sorted(to_field.items())]
+                   for field, read in sorted(to_field.items()) if field in fills.get(kind, set())]
         if columns:
             lineage.append({"from": at, "to": fqn(SERVICE, MDM, CLEAN, kind), "columns": columns,
                             "description": f"`{code}` fills these {kind} fields."})
@@ -148,21 +152,24 @@ def plan(root: Path | None = None) -> dict:
                                     "description": f"Dataset `{code}` reads the files feed `{feed}` captures."})
         for code, entry in sorted(mdm.items()):
             contract = entry.get("contract") or {}
-            table, edges = _dataset(source, code, contract, _kinds(contract.get("adapter") or {}, set(kinds)))
+            fills = {kind: {f for f, (sources, _) in by_field.items() if code in sources}
+                     for kind, by_field in by_kind.items()}
+            table, edges = _dataset(source, code, contract, _kinds(contract.get("adapter") or {}, set(kinds)),
+                                    fills, _classified(kinds, code))
             tables.append(table)
             lineage += edges
     for kind, rules in sorted(kinds.items()):
         order = (rules.get("defaults") or {}).get("sources") or []
         columns = []
         for field, (sources, row) in sorted(by_kind.get(kind, {}).items()):
-            _, winner, which, at = row
-            filled = ", ".join(f"`{s}`" for s in sources) or "no dataset yet"
+            _, _, which, at = row
+            filled = ", then ".join(f"`{s}`" for s in sources) or "no dataset yet"
             columns.append({"name": field, "dataType": TEXT, "description":
-                            f"Filled by {filled}, first wins. Winner: `{winner or 'none'}`. "
+                            f"Filled by {filled}: the first with a value wins. "
                             f"Rule: {which} (rules/{at})."})
         tables.append({"name": kind, "databaseSchema": fqn(SERVICE, MDM, CLEAN), "columns": columns,
                        "description": f"The MDM kind `{kind}`, rules version `{rules.get('version')}`. "
-                                      "Preferred datasets, first wins: " + ", ".join(f"`{s}`" for s in order)
+                                      "Preferred datasets, in order: " + ", ".join(f"`{s}`" for s in order)
                                       + f". Rules: rules/merge/kinds/{kind}.yaml."})
     return {
         "service": {"name": SERVICE, "serviceType": "CustomDatabase",
@@ -204,16 +211,21 @@ def connect(url: str, token: str) -> Call:
             if error.code == 404 and method in ("GET", "DELETE"):
                 return None
             raise CatalogError(f"{method} {path}: {error.code} {error.read()[:500]!r}") from None
+        except URLError as error:
+            raise CatalogError(f"{method} {path}: the catalog server did not answer ({error.reason})") from None
         return json.loads(text) if text else None
 
     return call
 
 
 def _listed(call: Call, path: str, params: dict) -> list[dict]:
+    """Every entity the server lists, page by page, keeping only those inside
+    our own service: a publish never touches another service, even when a
+    server ignores the filter it was asked for."""
     found, after = [], None
     while True:
         page = call("GET", path, params={**params, "limit": 1000, **({"after": after} if after else {})}) or {}
-        found += page.get("data") or []
+        found += [e for e in page.get("data") or [] if e["fullyQualifiedName"].startswith(SERVICE + ".")]
         after = (page.get("paging") or {}).get("after")
         if not after:
             return found
@@ -251,6 +263,7 @@ def publish(plan: dict, call: Call) -> dict:
             if schema["fullyQualifiedName"] not in planned_schemas:
                 call("DELETE", f"/databaseSchemas/{schema['id']}", params={"hardDelete": "true", "recursive": "true"})
                 removed["schemas"] += 1
+    ours = set(ids.values())
     upstream: dict[str, set] = defaultdict(set)
     for edge in plan["lineage"]:
         to, source = ids[edge["to"]], ids[edge["from"]]
@@ -262,7 +275,8 @@ def publish(plan: dict, call: Call) -> dict:
     for name, table_id in sorted(ids.items()):
         graph = call("GET", f"/lineage/table/name/{escape(name, safe='')}", params={"upstreamDepth": 1, "downstreamDepth": 0}) or {}
         for edge in graph.get("upstreamEdges") or []:
-            if edge["toEntity"] == table_id and edge["fromEntity"] not in upstream[table_id]:
+            stale = edge["fromEntity"] in ours and edge["fromEntity"] not in upstream[table_id]
+            if edge["toEntity"] == table_id and stale:  # a link from another service is not ours to remove
                 call("DELETE", f"/lineage/table/{edge['fromEntity']}/table/{table_id}")
                 removed["lineage"] += 1
     return {"service": service, "tables": len(plan["tables"]), "lineage": len(plan["lineage"]), "removed": removed}

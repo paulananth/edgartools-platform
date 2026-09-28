@@ -142,7 +142,12 @@ def _catalog(args):
     if not url or not token:
         print("Set OPENMETADATA_URL and OPENMETADATA_TOKEN (a bot's token: Settings > Bots)", file=sys.stderr)
         return 2
-    print(json.dumps(catalog.publish(plan, catalog.connect(url, token)), indent=2, sort_keys=True))
+    try:
+        result = catalog.publish(plan, catalog.connect(url, token))
+    except catalog.CatalogError as error:
+        print(f"The catalog was not published: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 

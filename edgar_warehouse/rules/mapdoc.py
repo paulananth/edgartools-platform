@@ -92,7 +92,7 @@ def _text(value: Any) -> str:
     return str(value)
 
 
-def _words(table: dict, name: str, args: dict) -> str:
+def words(table: dict, name: str, args: dict) -> str:
     """Plain words for a named test, fix or condition; its code if it has none."""
     template = table.get(name)
     if template is None:
@@ -100,7 +100,7 @@ def _words(table: dict, name: str, args: dict) -> str:
     return template.format_map(defaultdict(str, {k: _text(v) for k, v in (args or {}).items()}))
 
 
-def _paths(spec: Any) -> list[tuple[str, str]]:
+def paths(spec: Any) -> list[tuple[str, str]]:
     """(part, source path) for one mapped value: a path, or an address's parts."""
     if isinstance(spec, str):
         return [("", spec)]
@@ -110,6 +110,15 @@ def _paths(spec: Any) -> list[tuple[str, str]]:
             path = f"{path['lines']} (lines)"
         parts.append((part, _text(path)))
     return parts
+
+
+def critical_elements(block: dict) -> list[tuple[int, str, str]]:
+    """A dataset's critical data elements: (the check's index, the MDM field,
+    the test in plain words) for each check whose failure makes the record
+    an exception, never merged."""
+    return [(i, _text(check.get("value")).removeprefix("fields."),
+             words(QUALITY_WORDS, check.get("test"), check.get("args") or {}))
+            for i, check in enumerate(block.get("checks") or []) if check.get("on_fail") == "exception"]
 
 
 def _kind_of(adapter: dict) -> str:
@@ -184,7 +193,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
         ]
         for section, used_for in (("fields", "MDM field"), ("matching", "Matching only")):
             for field, spec in (adapter.get(section) or {}).items():
-                for part, path in _paths(spec):
+                for part, path in paths(spec):
                     fields.append([code, field, part, path, used_for, f"{at}.adapter.{section}.{field}"])
         for relationship in adapter.get("relationships") or []:
             kinds = relationship.get("type") or _text(list((relationship.get("type_values") or {}).values()))
@@ -198,17 +207,15 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
         block = contract.get("quality") or {}
         for i, fix in enumerate(block.get("fixes") or []):
             args = fix.get("args") or {}
-            quality.append([code, _text(fix.get("id")), "Fix", _words(QUALITY_WORDS, fix.get("fix"), args),
+            quality.append([code, _text(fix.get("id")), "Fix", words(QUALITY_WORDS, fix.get("fix"), args),
                             _text(args.get("field") or args.get("name")), "", f"quality.{code}.fixes[{i}]"])
         for i, check in enumerate(block.get("checks") or []):
             args = check.get("args") or {}
-            words = _words(QUALITY_WORDS, check.get("test"), args)
             fails = ON_FAIL_WORDS.get(check.get("on_fail"), _text(check.get("on_fail")))
-            quality.append([code, _text(check.get("id")), "Check", words, _text(check.get("value")), fails,
-                            f"quality.{code}.checks[{i}]"])
-            if check.get("on_fail") == "exception":  # a critical data element
-                critical.append([code, _text(check.get("value")).removeprefix("fields."), words, fails,
-                                 f"quality.{code}.checks[{i}]"])
+            quality.append([code, _text(check.get("id")), "Check", words(QUALITY_WORDS, check.get("test"), args),
+                            _text(check.get("value")), fails, f"quality.{code}.checks[{i}]"])
+        for i, field, test in critical_elements(block):
+            critical.append([code, field, test, ON_FAIL_WORDS["exception"], f"quality.{code}.checks[{i}]"])
         for kind, by_field in by_kind.items():
             for field, (sources, row) in by_field.items():
                 if code in sources:
@@ -220,7 +227,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
 # --- a kind's workbook --------------------------------------------------------------
 
 def _conditions(items: list[dict]) -> str:
-    return "; and ".join(_words(CONDITION_WORDS, w.get("primitive"), w.get("args") or {}) for w in items)
+    return "; and ".join(words(CONDITION_WORDS, w.get("primitive"), w.get("args") or {}) for w in items)
 
 
 def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict[str, list[list[str]]]:
