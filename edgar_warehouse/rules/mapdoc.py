@@ -120,23 +120,40 @@ def _kind_of(adapter: dict) -> str:
     return _text((adapter.get("classification") or {}).get("kind"))
 
 
-def _ranked(policy: dict) -> dict[str, list[str]]:
-    """Each kind's sources, first wins (`defaults.sources`)."""
-    return {kind: (rules.get("defaults") or {}).get("sources") or []
-            for kind, rules in (policy.get("kinds") or {}).items()}
-
-
-def _field_sources(policy: dict, root: Path) -> dict[str, dict[str, list[str]]]:
-    """kind -> MDM field -> the datasets that fill it, in rank order."""
-    ranked = _ranked(policy)
+def _winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], list[str]]]]:
+    """kind -> MDM field -> (the datasets that fill it, first wins; the sheet
+    row: those datasets, the winner, which rule orders them, its path), as
+    the merge engine picks a winner
+    (`survivorship._select_values`): a field with its own rule
+    (`fields.<name>`) takes the kind's `defaults` and changes any part of
+    it, its source order included; every other field takes the default."""
     filled: dict[str, set] = defaultdict(set)
     for path in sorted((root / "sources").glob("*/source.yaml")):
         for code, entry in (files.load_source(path).get("mdm") or {}).items():
             for field in ((entry.get("contract") or {}).get("adapter") or {}).get("fields") or {}:
                 filled[field].add(code)
-    return {kind: {field: [c for c in order if c in codes] for field, codes in sorted(filled.items())
-                   if any(c in order for c in codes)}
-            for kind, order in ranked.items()}
+    found: dict[str, dict] = {}
+    for kind, rules in (policy.get("kinds") or {}).items():
+        defaults = rules.get("defaults") or {}
+        own = rules.get("fields") or {}
+        found[kind] = {}
+        for field in sorted(set(filled) | set(own)):
+            rule = {**defaults, **own.get(field, {})}
+            order = rule.get("sources") or []
+            sources = [c for c in order if c in filled.get(field, set())]
+            if not sources and field not in own:
+                continue  # no source of this kind fills it
+            if field in own:
+                extra = {k: v for k, v in own[field].items() if k != "sources"}
+                which = "Its own rule" + (f" ({_text(extra)})" if extra else "")
+                at = f"merge/kinds/{kind}.yaml fields.{field}"
+                if "sources" not in own[field]:  # its order is still the kind's
+                    which += ", order from the kind default"
+                    at += f"; merge/kinds/{kind}.yaml defaults.sources"
+            else:
+                which, at = "Kind default", f"merge/kinds/{kind}.yaml defaults.sources"
+            found[kind][field] = (sources, [_text(sources), sources[0] if sources else "", which, at])
+    return found
 
 
 # --- a source's workbook ----------------------------------------------------------
@@ -149,10 +166,10 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
                     "Can it change", "Rules path"]]
     critical = [["Dataset", "MDM field", "Test", "When it fails", "Rules path"]]
     quality = [["Dataset", "Id", "Fix or check", "What it does", "Reads", "When it fails", "Rules path"]]
-    wins = [["Kind", "MDM field", "Filled by, first wins", "Winner", "Rules path"]]
+    wins = [["Kind", "MDM field", "Filled by, first wins", "Winner", "Rule", "Rules path"]]
     from edgar_warehouse.mdm.clean.activation import NAMESPACES  # the identifiers that join records
 
-    by_field = _field_sources(policy, root)
+    winners = _winners(policy, root)
     for code, entry in (body.get("mdm") or {}).items():
         contract = entry.get("contract") or {}
         adapter = contract.get("adapter") or {}
@@ -192,13 +209,10 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
             if check.get("on_fail") == "exception":  # a critical data element
                 critical.append([code, _text(check.get("value")).removeprefix("fields."), words, fails,
                                  f"quality.{code}.checks[{i}]"])
-        for kind, order in _ranked(policy).items():
-            if code not in order:
-                continue
-            for field, sources in by_field.get(kind, {}).items():
+        for kind, by_field in winners.items():
+            for field, (sources, row) in by_field.items():
                 if code in sources:
-                    wins.append([kind, field, _text(sources), sources[0],
-                                 f"merge/kinds/{kind}.yaml defaults.sources"])
+                    wins.append([kind, field, *row])
     return {"Source": about, "Fields": fields, "Identifiers": identifiers,
             "Critical data elements": critical, "Data quality": quality, "Who wins": wins}
 
@@ -210,12 +224,13 @@ def _conditions(items: list[dict]) -> str:
 
 
 def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict[str, list[list[str]]]:
+    """`by_field`: this kind's rows from `_winners`."""
     preferred = [["Rank (1 wins)", "Dataset", "Rules path"]]
     for i, code in enumerate((rules.get("defaults") or {}).get("sources") or []):
         preferred.append([str(i + 1), _text(code), f"merge/kinds/{kind}.yaml defaults.sources[{i}]"])
-    per_field = [["MDM field", "Filled by, first wins", "Winner", "Rules path"]]
-    for field, sources in by_field.items():
-        per_field.append([field, _text(sources), sources[0], f"merge/kinds/{kind}.yaml defaults.sources"])
+    per_field = [["MDM field", "Filled by, first wins", "Winner", "Rule", "Rules path"]]
+    for field, (_, row) in by_field.items():
+        per_field.append([field, *row])
     classification = [["Rule", "Version", "Dataset", "Step", "Verdict", "Probably", "When", "Rules path"]]
     matching = [["Order", "Rule", "Version", "Links", "To", "Every one of these must hold", "If nothing matches",
                  "Rules path"]]
@@ -268,7 +283,7 @@ def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[
     source or kind it describes, its sheets, and the rules files behind it."""
     root = root or files.ROOT
     policy = files.policy(root)
-    by_field = _field_sources(policy, root)
+    winners = _winners(policy, root)
     found: dict[Path, tuple] = {}
     for path in sorted((root / "sources").glob("*/source.yaml")):
         body = files.load_source(path)
@@ -278,7 +293,7 @@ def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[
                 name, _source_sheets(name, body, policy, root), [path, path.parent / "quality.yaml"])
     for kind, rules in sorted((policy.get("kinds") or {}).items()):
         yaml = root / "merge" / "kinds" / f"{kind}.yaml"
-        found[yaml.with_suffix(".xlsx")] = (kind, _kind_sheets(kind, rules, by_field.get(kind, {})), [yaml])
+        found[yaml.with_suffix(".xlsx")] = (kind, _kind_sheets(kind, rules, winners.get(kind, {})), [yaml])
     return found
 
 

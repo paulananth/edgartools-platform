@@ -150,7 +150,12 @@ source's parser produces it, not from the raw file, when a parser exists.
 ## Merge rules
 
 `rules/merge/kinds/<kind>.yaml` ranks the sources per kind (the first listed
-wins every field it fills) and holds the matching rules. Its comments record
+wins every field it fills) and holds the matching rules. One field may have
+its own rule, `fields.<name>`: it takes `defaults` and changes any part of
+it, such as `sources` (its own order), `clear_sources` (who may empty it),
+`max_age_days` or `allow_unknown_effective`. For example,
+`fields: {address: {sources: [gleif.level1.v1, sec.submissions.company.v1]}}`
+makes GLEIF win the address while SEC wins every other field. Its comments record
 which of a source's values fills a field that two sources share. Adding a
 source to a kind's ranks, adding a field or adding a kind changes what MDM
 decides. Each one needs the operator's
