@@ -39,8 +39,60 @@ A **data catalog** lists every source, dataset and MDM field in one place.
   ([research 11](../research/11-mapping-document-format.md)).
   `CONTEXT.md`'s "Do not edit by hand" changes with the chosen format.
 
-## Open
+- 10:21 ET, after [research 11](../research/11-mapping-document-format.md)
+  and a plain list of options: "1 B, + E / 2 option 1 / 3. Option 1, auto
+  approve / 4 option 1". So:
+  1. **Format:** the Mapping Document is a **spreadsheet** (Excel), and the
+     data catalog is kept in a **catalog server** (OpenMetadata or DataHub).
+     The research recommended Markdown; the operator chose otherwise.
+  2. **Stewards may change everything** in the Mapping Document; Claude
+     turns each change into the rules.
+  3. **Stewards may change merge priorities**, "auto approve": asked what
+     approves, the operator chose "Steward's approval counts": the steward
+     who makes the change runs `rules approve` on its digest under their own
+     login, after Claude shows the proof (which winners move). The Rules
+     Database still records a named approver. Claude never approves.
+  4. **Catalog scope:** sources, datasets and MDM fields.
 
-- Where the mapping document and the catalog live, and their shape.
-- Whether a check warns when the document and the rules disagree.
-- The catalog's scope: sources and MDM fields only, or silver and gold too.
+- 10:23 ET: the catalog server is **OpenMetadata**, published one way from
+  the rules; nobody edits rules in it.
+
+## Design (Claude, from the rulings; defaults, not new questions)
+
+- **One workbook per source** (`rules/sources/<source>/MAPPING.xlsx`) and
+  **one per kind** (`rules/merge/kinds/<kind>.xlsx`), generated from the
+  rules. Source sheets: Source, Fields, Identifiers, Critical data elements,
+  Data quality, Who wins, Notes. Kind sheets: Preferred sources, Matching
+  rules, Notes. Plain words in every header; one row per rule fact, naming
+  the rules path it comes from.
+- **Notes** (a sheet per workbook) are the stewards' own: kept as written
+  when the workbook is regenerated. The reasons now in YAML comments move
+  there.
+- **An edit becomes rules:** the steward commits the edited workbook in a
+  pull request. `rules mapdoc diff` prints what changed, cell by cell, in
+  plain text (a spreadsheet does not diff in a pull request, so this report
+  is what reviewers read). Claude turns each change into the YAML, runs the
+  dry run with counts and examples, and regenerates the workbook. Then
+  `rules save` and `record-proof`; the steward approves the digest under
+  their own login (a merge priority change included). Claude never approves.
+- **Drift:** a test regenerates every workbook from the rules and fails when
+  any cell outside Notes differs.
+- **Init mode:** Claude profiles the captured files, writes a working draft
+  of the rules (unsaved), generates the workbook from it, and iterates with
+  the stewards; only an agreed workbook's rules are saved.
+- **Catalog:** OpenMetadata, published from the rules: each source and
+  dataset, each MDM field with the sources that fill it, in priority order.
+  It runs first on a laptop (Colima); hosting in AWS is a later decision.
+
+## Checklist (times ET)
+
+- [x] Research the format (09:57 to 10:10 ET).
+- [x] The operator's rulings (10:21, 10:23 ET).
+- [ ] `/gof-refactor-reviewer` on `edgar_warehouse/rules/`.
+- [ ] Workbook generator and `rules mapdoc` (write, diff, check), with the
+  drift test; `openpyxl` added.
+- [ ] Notes sheet kept on regenerate; today's YAML comments moved into it.
+- [ ] Rules skill: the init mode and the steward edit loop; REFERENCE.md.
+- [ ] `CONTEXT.md` (Mapping Document, Data Catalog) and spec §5, §20.
+- [ ] OpenMetadata on Colima; publish the catalog; a separate PR.
+- [ ] Three-axis review, PR, CI; merge on the operator's word.
