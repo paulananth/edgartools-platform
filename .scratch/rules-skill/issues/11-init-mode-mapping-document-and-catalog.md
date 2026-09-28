@@ -88,7 +88,7 @@ A **data catalog** lists every source, dataset and MDM field in one place.
 
 - [x] Research the format (09:57 to 10:10 ET).
 - [x] The operator's rulings (10:21, 10:23 ET).
-- [x] `/gof-refactor-reviewer` on `edgar_warehouse/rules/` (10:25 ET): leave
+- [x] `/gof-refactor-reviewer` on `edgar_warehouse/rules/` (2026-09-28): leave
   the structure; `mapdoc` gets its own CLI handler (no database), and a
   plain dict of sheet builders per document type.
 - [x] Workbook generator (`edgar_warehouse/rules/mapdoc.py`) and `rules
