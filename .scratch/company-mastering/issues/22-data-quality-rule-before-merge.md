@@ -1,8 +1,11 @@
 # Check data quality in its own rule, before the merge
 
 Type: build
-Status: in progress
-Blocked by: none. Blocks ticket 21 (the cascade merge).
+Status: waiting
+Blocked by: Codex PR #738 (operator, 2026-09-27 20:47 ET: "Wait for #738"). It edits
+`edgar_warehouse/rules/db.py`, `cli.py`, adds Rules migration `002`, and edits
+`store.py` and both SEC and GLEIF `source.yaml` files, which this ticket also
+needs. Blocks ticket 21 (the cascade merge).
 
 ## Question
 
@@ -17,25 +20,36 @@ Research: [data-quality 01](../../data-quality/research/01-datakitchen-testgen-o
 (on branch `claude/research-dataops-testgen`): borrow TestGen's check ideas;
 do not adopt the tool.
 
-## Design (Claude, 2026-09-27; defaults, not operator rulings)
+## Design (grilling with the operator, 2026-09-27, Q1-Q13 agreed)
 
-1. **A separate rules document.** `rules/quality/<kind>.yaml`, saved in the
-   Rules Database as its own document kind, `quality`, with its own versions.
-   It feeds MDM, so each version needs the operator's approval.
-2. **Each check is data:** an id, the source, the value it reads, a test from
-   a fixed list, and what a failure does:
-   - `withhold`: the value is kept on the record but never used to match
-     (a registered agent's address, a placeholder);
-   - `reject`: the record is set aside with the reason `quality_<id>`, which
-     blocks, as any defect does (a failed LEI check digit);
-   - `flag`: counted and reported only.
-3. **It runs in the Merge Stage, before any matching,** on the active quality
-   version. A stored record is re-checked when the rule changes, and its
-   stored reading never changes.
-4. **Each run reports a count per check,** as it does for deferred reasons.
-5. **First tests** (from the research, only what the cascade needs first):
-   registered-agent address, address shared by too many entities, placeholder
-   value, value in a reference file, LEI check digit.
+1. **Owner:** the Rules skill: an onboarding quality step (after Infer,
+   before Check) and a "quality" mode for live feeds. Bookkeeping runs it.
+2. **File:** `rules/sources/<source>/quality.yaml`, its own Rules Database
+   document (kind `quality`), own versions, operator approval. A check across
+   sources (over-shared addresses) sits with the kind's merge rules.
+3. **Checks:** value present, in a set, in a reference file, pattern, LEI
+   check digit, placeholder, registered-agent address. On failure: `reject`
+   (set aside, blocks, as a defect), `withhold` (kept, never used to match),
+   `flag` (counted). Defects block from day one.
+4. **Fixes:** SEC name state marker to state of incorporation; an invalid
+   code to empty; address standardized. A fix writes the corrected value
+   beside the original and names itself on the record; MDM matches and
+   merges on the corrected value.
+5. **Runs** once per batch, before MDM and silver. A new version applies to
+   new batches only; re-checking old batches is an explicit re-run.
+6. **Proof:** a proving run on a pinned batch: exact counts and about 10
+   examples per check and fix; no 95% bar.
+7. **Report:** a count per check and fix in the run result.
+8. **Over-shared address threshold:** measure 10, 25 and 100 entities per
+   address; the operator picks.
+9. **First users:** SEC Company and GLEIF.
+
+Shape (Claude, 2026-09-27 20:47 ET): both batch paths call `adapters.normalize`
+(`cli.py:205`, `gleif_source.py:495`), so quality applies there, to the mapped
+fields, before the record's fingerprint. Activation folds the active quality
+version into the Dataset Contract it registers (`contract.quality`);
+`register_dataset` already makes a changed contract a new mapping version,
+so a new quality version applies to new batches only.
 
 ## Checklist (times ET)
 
