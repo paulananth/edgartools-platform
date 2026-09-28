@@ -1,6 +1,6 @@
 ---
 name: rules
-description: Add a data source to Clean MDM, or change one, starting from its captured files. Identify the source, profile it, infer its MDM entities, identifiers, fields and relationships, ask the operator plain questions, write its rules file and its data quality checks and fixes, then check, preview and run it after approval. Also initializes and migrates the Rules Database. Use when the user wants to add or onboard a source, change a source's mapping, its data quality or the merge rules, or says "rules" or "data quality".
+description: Add a data source to Clean MDM, or change one, starting from its captured files. Identify the source, profile it, infer its MDM entities, identifiers, fields and relationships, ask the operator plain questions, write its rules file and its data quality checks and fixes, generate its Mapping Document (a spreadsheet stewards review and change), then check, preview and run it after approval. Also initializes and migrates the Rules Database. Use when the user wants to add or onboard a source, change a source's mapping, its data quality or the merge rules, apply a steward's change to a Mapping Document, or says "rules", "data quality" or "mapping document".
 ---
 
 # Rules
@@ -17,6 +17,12 @@ People edit the files and review them in PRs:
   one approval covers the mapping and its checks.
 - `rules/merge/policy.yaml` and `rules/merge/kinds/<kind>.yaml`: the merge
   rules (the Mastering Policy), one file per kind.
+- `rules/sources/<source>/MAPPING.xlsx` and `rules/merge/kinds/<kind>.xlsx`:
+  the Mapping Documents, spreadsheets generated from the files above for
+  people to read and change. Every sheet but Notes is generated; Notes is
+  the stewards' own and is kept when the workbook is regenerated. A
+  steward's change becomes rules only through you (see "A steward changed a
+  Mapping Document"), and CI fails when a workbook differs from its rules.
 
 The files already in `rules/sources/` are worked examples. The contract
 language is in [REFERENCE.md](REFERENCE.md).
@@ -56,6 +62,9 @@ language is in [REFERENCE.md](REFERENCE.md).
 - **Questions:** plain words, one at a time, each with your recommendation.
   Ask only what the files, this repo and the source's public documentation
   cannot tell you.
+- **Keep the Mapping Documents equal to the rules.** After any change to a
+  rules file, run `edgar-warehouse rules mapdoc write` and commit the
+  workbooks with the change; `rules mapdoc check` (and CI) fails otherwise.
 - **Keep a log** at `<your scratchpad>/rules-log.md`. Record:
   - every question you asked, with the answer;
   - every command this skill names that did not exist;
@@ -248,6 +257,15 @@ language is in [REFERENCE.md](REFERENCE.md).
    both files from one body. Then `files.source('<source>')` must load, with
    `quality` inside each contract you gave checks.
 
+   These files are your working draft; nothing is saved to the Rules
+   Database yet. Generate the source's Mapping Document from them:
+   `edgar-warehouse rules mapdoc write --only <source>`. Its Notes sheet
+   starts with the reasons you wrote as comments. Give the workbook to the
+   stewards and the operator (operator, 2026-09-28: the Mapping Document is
+   generated first, then stewards change it). Apply their changes as in "A
+   steward changed a Mapping Document", and repeat until they agree it.
+   Only rules whose workbook they agreed go on to step 10.
+
 8. **Check.** Run `edgar-warehouse rules check <source>`. *Not built yet:*
    instead, run a dry run of the mapping on 5–10 sample records. When the
    source has a reader, run the reader on the sample: it reshapes records
@@ -312,8 +330,11 @@ language is in [REFERENCE.md](REFERENCE.md).
      --proof-sha256 <sha256>` records the proof of a passing run;
    - the operator runs `rules approve --source <name> --version <v>
      --digest <digest>` with `RULES_DATABASE_URL` set to their own approver
-     login; the database records that login as the approver. Before you ask, say in plain
-     words what the digest is and what it changes. Never run it yourself;
+     login; the database records that login as the approver. For a change a
+     steward made in a Mapping Document, merge priorities included, that
+     steward approves it the same way, under their own login (operator,
+     2026-09-28). Before you ask, say in plain words what the digest is and
+     what it changes. Never run it yourself;
    - `rules activate --source <name> --version <v>` registers the version
      in Clean MDM. It also needs `RULES_MDM_ACTIVATION_DATABASE_URL` (the
      MDM governance login) and `CHANGE_LEDGER_DATABASE_URL` (the registry);
@@ -329,6 +350,29 @@ language is in [REFERENCE.md](REFERENCE.md).
 
 Follow steps 3 to 10. Show the operator what changes, record by record, from
 the dry run before and after.
+
+## A steward changed a Mapping Document
+
+A steward changes a workbook's cells (not only Notes) and commits it in a
+pull request:
+
+1. Run `edgar-warehouse rules mapdoc diff --only <source or kind>`. It lists
+   each changed cell: the sheet, the row, the column, what the rules say and
+   what the workbook says. A spreadsheet does not show its changes in a pull
+   request; paste this list into it.
+2. Turn each change into the rules files, with the hard rules above: an
+   identifier or record key change needs a new source code; a test or fix
+   not in REFERENCE.md is new code (log it for a ticket); a new MDM field or
+   kind needs the operator's ruling. A change you cannot make: say why in
+   plain words, and leave the rules as they are.
+3. Run the dry run (step 8) and show what the change does, with counts and
+   up to 10 examples. A change to "Preferred sources" or "Matching rules"
+   moves which source wins or which records join: show those records.
+4. Run `rules mapdoc write --only <source or kind>`. The generated rows
+   replace the steward's; the steward confirms they say what was meant.
+   `rules mapdoc check` must then pass.
+5. Save and prove as in step 10. The steward who made the change approves
+   it under their own login; you never approve.
 
 ## Check or change a feed's data quality
 

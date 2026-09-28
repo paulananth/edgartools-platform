@@ -88,11 +88,17 @@ A **data catalog** lists every source, dataset and MDM field in one place.
 
 - [x] Research the format (09:57 to 10:10 ET).
 - [x] The operator's rulings (10:21, 10:23 ET).
-- [ ] `/gof-refactor-reviewer` on `edgar_warehouse/rules/`.
-- [ ] Workbook generator and `rules mapdoc` (write, diff, check), with the
-  drift test; `openpyxl` added.
-- [ ] Notes sheet kept on regenerate; today's YAML comments moved into it.
-- [ ] Rules skill: the init mode and the steward edit loop; REFERENCE.md.
-- [ ] `CONTEXT.md` (Mapping Document, Data Catalog) and spec §5, §20.
-- [ ] OpenMetadata on Colima; publish the catalog; a separate PR.
+- [x] `/gof-refactor-reviewer` on `edgar_warehouse/rules/` (10:25 ET): leave
+  the structure; `mapdoc` gets its own CLI handler (no database), and a
+  plain dict of sheet builders per document type.
+- [x] Workbook generator (`edgar_warehouse/rules/mapdoc.py`) and `rules
+  mapdoc` (write, diff, check), with the drift test; `openpyxl` added to
+  the `mdm` extra. Workbooks for the sources that feed MDM (SEC Company,
+  GLEIF) and the Company kind.
+- [x] Notes sheet kept on regenerate; a new workbook starts it with the
+  YAML comments (the decisions a rules export drops).
+- [x] Rules skill: the init mode (step 7) and "A steward changed a Mapping
+  Document"; REFERENCE.md "Mapping Documents".
+- [x] `CONTEXT.md` (Mapping Document, Data Catalog) and spec §5, §20.
+- [ ] OpenMetadata on Colima; publish the catalog: a separate PR, after this one.
 - [ ] Three-axis review, PR, CI; merge on the operator's word.

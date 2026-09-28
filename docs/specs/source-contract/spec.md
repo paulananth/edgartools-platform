@@ -135,7 +135,7 @@ sources/<name>/
   custom.py                         optional: this source's Custom Steps
   fixtures/…                        Bronze Artifacts for Named Cases
   fixtures/families/<family>/…      lookup targets for Named Cases (§10)
-  MAPPING.md                        generated; never edited by hand
+  MAPPING.xlsx                      generated; stewards change it (§20)
 ```
 
 Nothing outside the folder may name the source (acceptance checks 1–3). The
@@ -866,6 +866,16 @@ one table per silver table, with these columns:
 
 It ends with the MDM kind and the **custom fraction** (check 11). It is never
 hand-written, so it cannot drift from what runs.
+
+**Superseded in part (operator, 2026-09-28, rules skill ticket 11).** The
+Mapping Document is a spreadsheet (`MAPPING.xlsx` per source, `<kind>.xlsx`
+per kind), generated from the rules (`edgar-warehouse rules mapdoc write`)
+and then changed by stewards. A steward's change becomes rules only when
+Claude applies it to the rules files and a rules version with it is
+approved; the steward approves their own change. The Notes sheet is the
+stewards' own. `rules mapdoc check` fails when a workbook differs from its
+rules, so it still cannot drift from what runs. The Data Catalog is
+published one way from the rules to OpenMetadata.
 
 ## 21. Acceptance checks
 

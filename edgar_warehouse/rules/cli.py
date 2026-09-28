@@ -105,6 +105,31 @@ def _handle(args):
     return 3 if isinstance(result, dict) and result.get("run", {}).get("state") in ("waiting", "blocked") else 0
 
 
+def _mapdoc(args):
+    """The Mapping Documents: from the rules files alone, no database."""
+    from . import mapdoc
+
+    root = Path(args.root)
+    found = mapdoc.documents(root)
+    if args.only:
+        found = {path: item for path, item in found.items()
+                 if args.only in (path.parent.name, path.stem)}
+        if not found:
+            print(f"No source or kind named {args.only}", file=sys.stderr)
+            return 2
+    if args.action == "write":
+        for path, (sheets, sources) in found.items():
+            mapdoc.write(path, sheets, sources)
+            print(path)
+        return 0
+    changed = {path: mapdoc.differences(path, sheets) for path, (sheets, _) in found.items()}
+    for path, lines in changed.items():
+        for line in lines:
+            print(f"{path}: {line}")
+    # `diff` reports what a steward changed; `check` fails on it (CI).
+    return 1 if args.action == "check" and any(changed.values()) else 0
+
+
 def register(subparsers):
     parser = subparsers.add_parser("rules", help="Versioned Rules files, approvals and configured run submission")
     commands = parser.add_subparsers(dest="rules_command", required=True)
@@ -118,6 +143,14 @@ def register(subparsers):
     migration.add_argument("--root", required=True)
     migration.add_argument("--version", required=True)
     migration.set_defaults(handler=_handle)
+    mapping = commands.add_parser(
+        "mapdoc", help="The Mapping Documents (spreadsheets) generated from the rules files")
+    mapping.add_argument("action", choices=("write", "diff", "check"),
+                         help="write: regenerate, keeping Notes; diff: what a workbook changed; "
+                              "check: fail when any workbook differs from its rules")
+    mapping.add_argument("--only", help="One source (its folder name) or kind")
+    mapping.add_argument("--root", default=str(files.ROOT))
+    mapping.set_defaults(handler=_mapdoc)
     for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):
         command = commands.add_parser(operation)
         _selection(command)
