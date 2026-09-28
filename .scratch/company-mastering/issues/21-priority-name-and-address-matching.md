@@ -2,7 +2,12 @@
 
 Type: research, then build
 Status: in progress
-Blocked by: none
+Blocked by: ticket 22 (data quality before merge)
+
+Operator ruling, 2026-09-27, after the research and three measured designs:
+"need data quality checks before merge, dq will be a seperate rule, finally
+cascade merge". So this ticket builds the operator's cascade, on the values
+ticket 22's quality rule leaves fit to use.
 
 ## Question
 
