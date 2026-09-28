@@ -66,8 +66,9 @@ A **data catalog** lists every source, dataset and MDM field in one place.
   rules, Notes. Plain words in every header; one row per rule fact, naming
   the rules path it comes from.
 - **Notes** (a sheet per workbook) are the stewards' own: kept as written
-  when the workbook is regenerated. The reasons now in YAML comments move
-  there.
+  when the workbook is regenerated. A new workbook starts them with the
+  reasons in the YAML comments (copied, not moved: the comments stay for
+  engineers reading the files; the workbook's Notes are the record).
 - **An edit becomes rules:** the steward commits the edited workbook in a
   pull request. `rules mapdoc diff` prints what changed, cell by cell, in
   plain text (a spreadsheet does not diff in a pull request, so this report
@@ -100,5 +101,12 @@ A **data catalog** lists every source, dataset and MDM field in one place.
 - [x] Rules skill: the init mode (step 7) and "A steward changed a Mapping
   Document"; REFERENCE.md "Mapping Documents".
 - [x] `CONTEXT.md` (Mapping Document, Data Catalog) and spec §5, §20.
-- [ ] OpenMetadata on Colima; publish the catalog: a separate PR, after this one.
+- [x] Three-axis review (2026-09-28): fixed four bugs (cells not text; text
+  read as a formula; `diff` by row position; `--only` matching folder
+  names), a per-field "Who wins" sheet, conditions in plain words, every
+  exception check listed as critical, byte-stable workbooks.
+- [ ] OpenMetadata on Colima; publish the catalog (every source, including
+  those that feed no MDM kind, every dataset and MDM field): a separate PR,
+  after this one. A per-field winner cannot be written in the rules yet
+  (ranks are per kind): a ticket if stewards need it.
 - [ ] Three-axis review, PR, CI; merge on the operator's word.

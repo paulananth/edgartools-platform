@@ -228,10 +228,10 @@ works from the rules files alone, with no database.
 | Workbook | Sheets |
 |---|---|
 | `rules/sources/<source>/MAPPING.xlsx` (only a source with an `mdm` section) | Source, Fields (MDM field or matching only), Identifiers, Critical data elements (a `present@1` check with `on_fail: exception`), Data quality, Who wins, Notes |
-| `rules/merge/kinds/<kind>.xlsx` | Kind, Preferred sources, Classification, Matching rules, Notes |
+| `rules/merge/kinds/<kind>.xlsx` | Kind, Preferred sources, Who wins each field, Classification, Matching rules (each condition in plain words), Notes |
 
 Every row names its rules path. A list longer than 12 values shows as a
-count. Notes (Note, About, Who, When) is kept on `write`. A new workbook
+count. Critical data elements are the checks with `on_fail: exception`. Notes (Note, About, Who, When) is kept on `write`. A new workbook
 starts it with the comments in its rules files. `diff` prints each changed
 cell, and `check` fails on any.
 

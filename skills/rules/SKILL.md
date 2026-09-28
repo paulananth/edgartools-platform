@@ -364,7 +364,14 @@ pull request:
    identifier or record key change needs a new source code; a test or fix
    not in REFERENCE.md is new code (log it for a ticket); a new MDM field or
    kind needs the operator's ruling. A change you cannot make: say why in
-   plain words, and leave the rules as they are.
+   plain words, and leave the rules as they are. The usual ones:
+   - a row added to "Critical data elements": a `present@1` check on that
+     field with `on_fail: exception` in `quality.yaml`, its reason
+     `quality_<id>` listed in the contract's `nonblocking_deferred_reasons`;
+   - "Preferred sources" reordered: `defaults.sources` in the kind file;
+   - one field's winner changed ("Who wins each field"): the merge rules
+     rank sources per kind, not per field, so this cannot be written yet.
+     Log it for a ticket and say so.
 3. Run the dry run (step 8) and show what the change does, with counts and
    up to 10 examples. A change to "Preferred sources" or "Matching rules"
    moves which source wins or which records join: show those records.

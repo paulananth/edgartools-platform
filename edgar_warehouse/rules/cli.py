@@ -106,23 +106,22 @@ def _handle(args):
 
 
 def _mapdoc(args):
-    """The Mapping Documents: from the rules files alone, no database."""
+    """The Mapping Documents, from the rules files alone (no database). Plain
+    text, not JSON: stewards read it, and `diff` goes into a pull request."""
     from . import mapdoc
 
-    root = Path(args.root)
-    found = mapdoc.documents(root)
+    found = mapdoc.documents(Path(args.root))
     if args.only:
-        found = {path: item for path, item in found.items()
-                 if args.only in (path.parent.name, path.stem)}
+        found = {path: item for path, item in found.items() if item[0] == args.only}
         if not found:
-            print(f"No source or kind named {args.only}", file=sys.stderr)
+            print(f"No source or kind named {args.only} has a Mapping Document", file=sys.stderr)
             return 2
     if args.action == "write":
-        for path, (sheets, sources) in found.items():
+        for path, (_, sheets, sources) in found.items():
             mapdoc.write(path, sheets, sources)
             print(path)
         return 0
-    changed = {path: mapdoc.differences(path, sheets) for path, (sheets, _) in found.items()}
+    changed = {path: mapdoc.differences(path, sheets) for path, (_, sheets, _) in found.items()}
     for path, lines in changed.items():
         for line in lines:
             print(f"{path}: {line}")
