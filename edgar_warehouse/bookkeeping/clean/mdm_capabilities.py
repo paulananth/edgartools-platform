@@ -14,6 +14,7 @@ def register_mdm(registry, mdm_engine, *, publisher_factory=None):
     compact batch/generation evidence. New source names require no changes.
     """
     from edgar_warehouse.mdm.clean.merge import MergeStage
+    from edgar_warehouse.mdm.clean.quality import counts as quality_counts
     from edgar_warehouse.mdm.clean.store import Store
 
     def command(book, item):
@@ -70,9 +71,11 @@ def register_mdm(registry, mdm_engine, *, publisher_factory=None):
         result = MergeStage(Store(mdm_engine)).apply(**batch, run_id=str(item["run_id"]), preview=True)
         if not result.get("duplicate"):
             raise Blocked("Committed MDM batch did not reconcile")
+        # What the data quality rule did to this batch's records, per fix and check.
+        quality = quality_counts(batch.get("assertions", []), batch.get("deferred", []))
         return {"version": 1, "run_id": str(item["run_id"]), "batch_id": row["batch_id"],
                 "generation": row["generation"], "request_hash": row["request_hash"],
-                "input": item["unit"]["input"]}
+                "input": item["unit"]["input"], **({"quality": quality} if quality else {})}
 
     def receipt(book, item, body):
         ref = book.artifacts.put_bytes(item["unit"]["output"], canonical(body).encode())

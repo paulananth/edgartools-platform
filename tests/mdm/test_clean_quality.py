@@ -179,3 +179,41 @@ class TestTheFiles:
         )
         with pytest.raises(files.RulesFileError, match="not a Dataset Contract"):
             files.load_source(tmp_path / "source.yaml")
+
+
+class TestTheRunReport:
+    def test_a_run_reports_quality_counts_for_the_batches_it_commits(self, tmp_path, monkeypatch):
+        import json
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+        from uuid import uuid4
+
+        from edgar_warehouse.mdm.clean import cli
+
+        batches = [{"batch_id": f"b{i}", "stage": "mastering", "consumer": "c",
+                    "expected_checkpoint": i, "checkpoint": i + 1} for i in range(2)]
+        path = tmp_path / "manifest.json"
+        path.write_text(json.dumps({"contract_version": 2, "policy_digest": "p", "as_of": "t",
+                                    "batches": batches}))
+        records = {"b0": [read(sec())], "b1": [read(sec(name="SHELL PLC", street="1209 ORANGE STREET"))]}
+        monkeypatch.setattr(cli, "batch_input", lambda batch, *a, **k: {
+            "assertions": records[batch["batch_id"]], "deferred": [], "occurrences": []})
+        duplicate = {"b0": False, "b1": True}  # b1 was committed by an earlier run
+
+        class Stage:
+            def __init__(self, store): pass
+            def apply(self, **command): return {"duplicate": duplicate[command["batch_id"]]}
+
+        monkeypatch.setattr(cli, "MergeStage", Stage)
+
+        @contextmanager
+        def connect():
+            yield SimpleNamespace(scalars=lambda *a, **k: [])
+
+        coordinator = SimpleNamespace(start=lambda *a, **k: None,
+                                      execute=lambda run, batch, work: work(),
+                                      reconcile=lambda run: {})
+        result = cli.execute_manifest(SimpleNamespace(engine=SimpleNamespace(connect=connect)), coordinator,
+                                      path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
+        assert result["quality"] == {"fixed:dc_state_is_empty": 1, "fixed:standard_address": 1,
+                                     "fixed:state_from_name_tag": 1}

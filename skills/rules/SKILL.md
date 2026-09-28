@@ -1,6 +1,6 @@
 ---
 name: rules
-description: Add a data source to Clean MDM, or change one, starting from its captured files. Identify the source, profile it, infer its MDM entities, identifiers, fields and relationships, ask the operator plain questions, write its rules file, then check, preview and run it after approval. Also initializes and migrates the Rules Database. Use when the user wants to add or onboard a source, change a source's mapping or the merge rules, or says "rules".
+description: Add a data source to Clean MDM, or change one, starting from its captured files. Identify the source, profile it, infer its MDM entities, identifiers, fields and relationships, ask the operator plain questions, write its rules file and its data quality checks and fixes, then check, preview and run it after approval. Also initializes and migrates the Rules Database. Use when the user wants to add or onboard a source, change a source's mapping, its data quality or the merge rules, or says "rules" or "data quality".
 ---
 
 # Rules
@@ -11,6 +11,10 @@ People edit the files and review them in PRs:
 - `rules/sources/<source>/source.yaml`: one file per source. Its `mdm`
   section holds one Dataset Contract per source code: how the source's
   records become MDM records.
+- `rules/sources/<source>/quality.yaml`: the source's data quality checks
+  and fixes, run on each record before the merge. It has its own version
+  name, and the loader puts it into each Dataset Contract as `quality`, so
+  one approval covers the mapping and its checks.
 - `rules/merge/policy.yaml` and `rules/merge/kinds/<kind>.yaml`: the merge
   rules (the Mastering Policy), one file per kind.
 
@@ -28,7 +32,7 @@ language is in [REFERENCE.md](REFERENCE.md).
 - **Read and write rules files only through `edgar_warehouse.rules.files`**
   (`load`, `source`, `dumps`). It refuses YAML that would change a value
   silently (`yes`, `010`, a date). The one exception: the comments you add
-  by hand in step 6, checked by reloading the file.
+  by hand in step 7, checked by reloading the file.
 - **Run commands with `uv`**, from the repository root:
   `uv run --extra mdm edgar-warehouse rules …`. The commands below leave the
   prefix out.
@@ -183,13 +187,32 @@ language is in [REFERENCE.md](REFERENCE.md).
      (`semantics`), what a file covers (`completeness`), and when a record
      takes effect (`effective_time`).
 
-5. **Ask.** One question at a time, in plain words, with your recommendation.
+5. **Quality.** From the profile, list what would harm a match or a merge,
+   and pick a check or a fix for each from REFERENCE.md, "Data quality":
+   - a code the source writes wrongly or for "none" (SEC's "DC" as a state
+     of incorporation, `000000000`): a fix that blanks it
+     (`blank_values@1`), so the field reads as unknown;
+   - an address that is a registered agent's or a placeholder: a check that
+     withholds it from matching (`withhold`); it stays on the record;
+   - a value MDM cannot use at all (no name): a check that rejects the
+     record (`reject`). A rejected record blocks its batch, as a defect does;
+   - anything else worth watching: a check that only counts (`flag`).
+
+   Every check and fix reads the record *after* the mapping (`fields.<name>`
+   or `matching.<name>`), never the raw file. A test or fix that is not in
+   the list is new code: log it for a ticket, do not write it. Count, on the
+   profile sample, how many records each check and fix would touch; the
+   operator decides with those counts (step 8).
+
+6. **Ask.** One question at a time, in plain words, with your recommendation.
    The usual real decisions are:
    - whether a record type, or a relationship type, is in scope;
    - which of two fields holds the source's authoritative value;
    - whether a new MDM field or kind is wanted;
    - each identifier the source carries (see the hard rules);
-   - the source code's name, when the repo does not already fix it.
+   - the source code's name, when the repo does not already fix it;
+   - each check's `on_fail` (reject, withhold or flag) and each fix, with
+     its count from step 5 and two or three examples.
 
    Do not ask:
    - what the repo's names already fix (see "Names" in step 1);
@@ -201,7 +224,7 @@ language is in [REFERENCE.md](REFERENCE.md).
    decides (REFERENCE.md, "Blocking and non-blocking"), and ask about any
    other exclusion you expect.
 
-6. **Write** `rules/sources/<source>/source.yaml`, in the shape of
+7. **Write** `rules/sources/<source>/source.yaml`, in the shape of
    REFERENCE.md. Start from its "Defaults" section, and remember that a
    defect always blocks: a bad identifier or a malformed record is never a
    non-blocking reason. Write the values with `files.dumps`, then add a short YAML
@@ -215,7 +238,13 @@ language is in [REFERENCE.md](REFERENCE.md).
    (how its pipeline runs) belongs to the Bookkeeping skill; keep an
    existing one as it is.
 
-7. **Check.** Run `edgar-warehouse rules check <source>`. *Not built yet:*
+   Write the checks and fixes to `rules/sources/<source>/quality.yaml`, never
+   inside the contract (the loader refuses that): `version`, then `quality`
+   with one entry per source code. `files.write_source(body, folder)` writes
+   both files from one body. Then `files.source('<source>')` must load, with
+   `quality` inside each contract you gave checks.
+
+8. **Check.** Run `edgar-warehouse rules check <source>`. *Not built yet:*
    instead, run a dry run of the mapping on 5–10 sample records. When the
    source has a reader, run the reader on the sample: it reshapes records
    and applies checks that the mapping alone skips. Build small sample
@@ -256,14 +285,22 @@ language is in [REFERENCE.md](REFERENCE.md).
    If the repo has tests for the parser you mapped from, run them:
    `uv run --no-sync pytest -q <those test files>`.
 
+   `normalize` runs the contract's quality checks and fixes too. Each record
+   it returns shows what they did under `provenance.quality` (the fixes with
+   their original values, the withheld paths, the flags); a rejected record
+   raises `UnsupportedRecord("quality_<id>")`. Give the operator the counts
+   per check and fix (`edgar_warehouse.mdm.clean.quality.counts(records,
+   deferred)`) and up to 10 examples of each: that is the proof they approve
+   a quality version on.
+
    This dry run is not a preview: it matches nothing against existing
    records. Log the gap.
 
-8. **Preview.** A preview shows real matches against a copy of the local
+9. **Preview.** A preview shows real matches against a copy of the local
    MDM. *Not built yet:* stop here. Hand the operator the file, the dry run
    and the log.
 
-9. **Save, prove, approve, activate, run.** Each command selects what it
+10. **Save, prove, approve, activate, run.** Each command selects what it
    acts on with `--source <name>`, or `--merge <name>` for merge rules:
    - `edgar-warehouse rules save --source <name> --version <v> <file>`
      saves the file as a draft;
@@ -286,8 +323,23 @@ language is in [REFERENCE.md](REFERENCE.md).
 
 ## Change a source or the merge rules
 
-Follow steps 3 to 9. Show the operator what changes, record by record, from
+Follow steps 3 to 10. Show the operator what changes, record by record, from
 the dry run before and after.
+
+## Check or change a feed's data quality
+
+When the operator asks about a live feed's data quality, or a run's quality
+counts look wrong:
+
+1. Read the source's `quality.yaml` and the counts of its last runs.
+2. Run the dry run of step 8 on a pinned sample (the files of one capture,
+   named by their sha256). Report the counts per check and fix, with up to
+   10 examples each.
+3. For a new check or fix, or a change to one, follow steps 5, 6 and 8,
+   then give `quality.yaml` a new `version` name. The source's contract
+   changes with it, so the change is a new source version, saved, proved,
+   approved and activated as in step 10. A new version applies to new
+   batches only; it never rewrites a batch MDM already took.
 
 ## Initialize or migrate the Rules Database
 

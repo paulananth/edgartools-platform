@@ -1,11 +1,9 @@
 # Check data quality in its own rule, before the merge
 
 Type: build
-Status: waiting
-Blocked by: Codex PR #738 (operator, 2026-09-27 20:47 ET: "Wait for #738"). It edits
-`edgar_warehouse/rules/db.py`, `cli.py`, adds Rules migration `002`, and edits
-`store.py` and both SEC and GLEIF `source.yaml` files, which this ticket also
-needs. Blocks ticket 21 (the cascade merge).
+Status: in progress
+Blocks ticket 21 (the cascade merge). Codex PR #738 merged (ad43cfac,
+2026-09-28); nothing else blocks.
 
 ## Question
 
@@ -51,13 +49,47 @@ version into the Dataset Contract it registers (`contract.quality`);
 `register_dataset` already makes a changed contract a new mapping version,
 so a new quality version applies to new batches only.
 
+## Two changes to the agreed design (Claude, 2026-09-28, under the operator's
+"you can own every thing ... move forward and fix")
+
+1. **Q2, the file's home.** `quality.yaml` is its own file with its own
+   version name, but not its own Rules Database document kind. The loader
+   puts it into each Dataset Contract as `contract.quality`, as
+   `files.policy()` composes the kind files. Why: #738 made registration
+   (`change_journal/authority.registration_authority`) and Bookkeeping's
+   `source_input` require the registered contract to equal the approved
+   source document exactly, so a separate document would need a second
+   approval chain threaded through both. One approval now covers the
+   mapping and its checks, and a quality change is a new mapping version,
+   which applies to new batches only (Q5). Reversible: a later kind can
+   carry the same block.
+2. **Q4, the address fix only.** A standardized address is a matching copy
+   (`matching.address`); the address MDM shows stays as the source wrote
+   it. Why: "3050 BOWERS AVE" is a better key but a worse value to show.
+   The value-correcting fixes ("DC" to empty, "/DE" to DE) do change the
+   field MDM shows and merges on, as agreed; the original stays on the
+   record.
+
+## GoF consult (2026-09-28)
+
+Leave the structure. One hook in `adapters.normalize`, which all three
+readers call (`cli.batch_input`, the native GLEIF reader, Bookkeeping's
+`source_input`); checks and fixes are a fixed table of functions, as the
+matching tests are.
+
 ## Checklist (times ET)
 
-- [ ] `/gof-refactor-reviewer` on the Merge Stage and the rules loader.
-- [ ] The file format, its loader, and the Rules Database kind `quality`
-  (a migration: the kind list is a CHECK).
-- [ ] The Merge Stage step: withhold, reject, flag; the counts per check.
-- [ ] `rules/quality/company.yaml` with the first checks for SEC and GLEIF.
-- [ ] Measure on the ticket 08 inputs: what each check withholds or rejects.
-- [ ] The Rules skill: how to write a quality check.
-- [ ] Three-axis review, PR, CI; merge on the operator's word.
+- [x] `/gof-refactor-reviewer` on the Merge Stage and the rules loader.
+- [x] The file format and its loader (`files.load_source`/`write_source`);
+  no Rules Database kind (change 1 above).
+- [x] The quality step in `normalize`: fixes, then reject, withhold, flag
+  (`edgar_warehouse/mdm/clean/quality.py`); matching skips withheld values.
+- [x] `rules/sources/sec.submissions.company/quality.yaml` and
+  `rules/sources/gleif/quality.yaml`, the first checks and fixes.
+- [x] Counts per check and fix in the run result (`quality` in the MDM run
+  result and in the Bookkeeping MDM receipt) (2026-09-28 07:38 ET).
+- [x] The Rules skill: step 5 "Quality", the quality mode, REFERENCE.md
+  "Data quality" (07:30 ET).
+- [ ] Proving run on the ticket 08 inputs: counts and examples per check and
+  fix; over-shared address counts at 10, 25 and 100 (Q8).
+- [ ] Full suite, three-axis review, PR, CI; merge on the operator's word.

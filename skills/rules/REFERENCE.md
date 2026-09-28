@@ -159,9 +159,65 @@ A relationship record becomes a link only once a matching rule joins its
 record to the kind's records.
 
 Not expressible yet, so log them: a publication-level contract (a reader's
-list of approved identifiers, or the files that make one release), a
-source placeholder that means "none", a kind taken from a record in another
-file.
+list of approved identifiers, or the files that make one release), a kind
+taken from a record in another file. A source placeholder that means "none"
+is now a data quality fix (`blank_values@1`, below).
+
+## Data quality
+
+`rules/sources/<source>/quality.yaml` holds the checks and fixes run on each
+record after the mapping and before the merge
+(`edgar_warehouse/mdm/clean/quality.py`):
+
+```yaml
+version: <quality version name>       # e.g. acme-firm-quality-v1; a change is a new name
+quality:
+  <source_code>:                      # a Dataset Contract of this source
+    fixes:                            # run first, in order
+    - id: <lower_case_id>
+      fix: <fix>@<n>
+      args: {...}
+    checks:                           # run after the fixes, on the fixed values
+    - id: <lower_case_id>
+      test: <test>@<n>
+      value: <path>                   # fields.<name>, fields.address.<part> or matching.<name>
+      on_fail: reject | withhold | flag
+      args: {...}
+```
+
+The loader puts each entry into its contract as `contract.quality` (with the
+file's `version`), so the contract's digest and one approval cover both. Do
+not write `quality` inside `source.yaml`: the loader refuses it.
+
+| `on_fail` | What happens |
+|---|---|
+| `reject` | The record is set aside as `quality_<id>` and blocks its batch, as a defect does. Never list it as non-blocking. |
+| `withhold` | The value stays on the record, but no matching rule uses it (`provenance.quality.withheld`). |
+| `flag` | Only counted. |
+
+Checks:
+
+| Test | Args | Passes when |
+|---|---|---|
+| `present@1` | | the value is filled |
+| `in_set@1` | `values` | the value is empty or one of `values` |
+| `pattern@1` | `regex` | the value is empty or matches all of `regex` |
+| `lei_check_digit@1` | | the value is an LEI whose check digits pass (mod 97) |
+| `placeholder@1` | `values` | the value, letters and digits only, is not one of `values` and not all zeros |
+| `registered_agent_address@1` | `markers` | no marker is in the address's street lines |
+| `in_reference@1` | `table`, `sha256`; `key` (optional, the dotted path to the keys) | the value is empty or a key of `rules/reference/<table>.yaml`; the file must equal its pinned `sha256` |
+
+Fixes (each keeps the original under `provenance.quality.fixes`):
+
+| Fix | Args | What it does |
+|---|---|---|
+| `blank_values@1` | `field`, `values` | a value in `values` becomes empty, so it reads as unknown |
+| `name_state_marker@1` | `name`, `target` | SEC's US state tag at the end of a name (`/DE`) fills an empty `target` |
+| `standardize_address@1` | `field`, `into` | writes a matching copy of the address to `into` (`matching.<name>`): USPS street words, upper case, a 5-digit ZIP. The address MDM shows is not changed |
+
+A fix that corrects a value (`blank_values@1`, `name_state_marker@1`) changes
+the field MDM shows and merges on; the original stays on the record. A test
+or fix not in these tables is new code: log it for a ticket.
 
 ## Worked examples
 
