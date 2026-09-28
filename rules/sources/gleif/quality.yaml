@@ -1,0 +1,38 @@
+# Data quality for GLEIF Level 1 (company mastering ticket 22). The LEI check
+# digit is already enforced where the record is read (`identifier_formats:
+# lei`), so no check repeats it here.
+version: gleif-quality-v1
+quality:
+  gleif.level1.v1:
+    fixes:
+    - id: standard_address
+      fix: standardize_address@1
+      args:
+        field: fields.address
+        into: matching.address
+    checks:
+    - id: name_present
+      test: present@1
+      value: fields.name
+      on_fail: reject
+    # The legal address is often a registered agent's, shared by thousands of
+    # unrelated entities (1209 Orange St: 43,650 LEIs, research 21).
+    - id: address_not_registered_agent
+      test: registered_agent_address@1
+      value: matching.address
+      on_fail: withhold
+      args:
+        markers:
+        - C/O
+        - CARE OF
+        - CORPORATION TRUST
+        - 1209 ORANGE
+        - 251 LITTLE FALLS
+        - 2711 CENTERVILLE
+        - CORPORATION SERVICE
+        - REGISTERED AGENT
+        - CT CORPORATION
+        - 1521 CONCORD PIKE
+        - NATIONAL REGISTERED AGENTS
+        - COGENCY GLOBAL
+        - INCORP SERVICES

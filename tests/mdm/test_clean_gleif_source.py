@@ -103,6 +103,7 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
         "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
         "Entity": {
             "EntityCategory": {"$": "GENERAL"},
+            "LegalName": {"$": "Example Inc."},
             "LegalJurisdiction": {"$": "US-CA"},
             "LegalAddress": {
                 "FirstAddressLine": {"$": "One Main Street"},
@@ -145,8 +146,8 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     assert evidence["fields"]["gleif_registration_status"]["value"] == "LAPSED"
     # GLEIF's legal name now fills the shared `name` field, SEC first where both
     # supply one (operator, 2026-09-24; supersedes keeping GLEIF names apart).
-    # This record carries none, so it is unknown rather than absent.
-    assert evidence["fields"]["name"] == {"op": "unknown"}
+    # A record with none is set aside by the feed's quality rule (ticket 22).
+    assert evidence["fields"]["name"] == {"op": "value", "value": "Example Inc."}
     record["Entity"]["EntityCategory"]["$"] = "BRANCH"
     kind, evidence = record_evidence(record, **kwargs)
     assert kind == "deferred"
@@ -328,6 +329,7 @@ def test_a_corrected_reading_of_one_gleif_publication_is_a_second_assertion():
         "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
         "Entity": {
             "EntityCategory": {"$": "GENERAL"},
+            "LegalName": {"$": "Example Inc."},
             "LegalJurisdiction": {"$": "US-CA"},
         },
         "Registration": {

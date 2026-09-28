@@ -263,6 +263,13 @@ def register_dataset(
     ]
     if any(f is not None and f not in FORMATS for f in formats):
         raise ValueError("Unknown format in Dataset Contract")
+    if "quality" in body:
+        from .quality import QualityError, check_quality
+
+        try:
+            check_quality(body["quality"])
+        except QualityError as exc:
+            raise ValueError(str(exc)) from exc
     if rules_authority is None:
         raise Conflict("Dataset requires approved frozen Rules source authority")
     from edgar_warehouse.change_journal.authority import registration_authority

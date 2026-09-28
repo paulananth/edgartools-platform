@@ -188,6 +188,9 @@ class Rules:
         row = self.version(kind, name, version)
         # Digest-stable, not byte-stable: comments and YAML key order are
         # authoring metadata and are intentionally absent from canonical JSON.
+        if kind == "source" and path.name == "source.yaml":
+            files.write_source(json.loads(row["body"]), path.parent)
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(files.dumps(json.loads(row["body"])), encoding="utf-8")
 
@@ -196,7 +199,8 @@ class Rules:
         result = []
         for kind, folder, filename in (("source", "sources", "source.yaml"), ("pipeline", "pipelines", "pipeline.yaml")):
             for path in sorted((root / folder).glob(f"*/{filename}")):
-                result.append(self.save(kind, path.parent.name, version, files.load(path)))
+                body = files.load_source(path) if kind == "source" else files.load(path)
+                result.append(self.save(kind, path.parent.name, version, body))
         if (root / "merge/policy.yaml").exists():
             result.append(self.save("merge", "platform", version, files.policy(root)))
         return result

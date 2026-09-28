@@ -327,6 +327,15 @@ def normalize(
         provenance["matching"] = {
             name: value(row, path) for name, path in mapping["matching"].items()
         }
+    if contract.get("quality"):
+        # Ticket 22: the feed's fixes and checks, on the mapped values, before
+        # the record's fingerprint. Inside the hashed body, so the record says
+        # which quality version fixed or withheld what.
+        from .quality import apply
+
+        provenance["quality"] = apply(
+            contract["quality"], fields, provenance.get("matching")
+        )
     if labelled is not None:
         # Inside the hashed body, so the record explains what labelled it with
         # no lookup elsewhere. Absent means the contract's own table decided,

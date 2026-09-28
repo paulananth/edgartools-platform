@@ -33,6 +33,7 @@ from .names import (
     postal_codes_agree,
 )
 from .primitives import NORMALIZERS
+from .quality import withheld
 from .store import Conflict, rows
 
 FAMILY = "name_binding"
@@ -57,7 +58,13 @@ def _matching(record: dict) -> dict:
 
 
 def _read(record: dict, path: str):
-    """A rule's declared path: `matching.<name>` or a field name. Data, never code."""
+    """A rule's declared path: `matching.<name>` or a field name. Data, never code.
+
+    A value the feed's quality rule withheld is not there to match on
+    (ticket 22).
+    """
+    if withheld(record, path if path.startswith("matching.") else f"fields.{path}"):
+        return None
     if path.startswith("matching."):
         return _matching(record).get(path.removeprefix("matching."))
     return _value(record, path)

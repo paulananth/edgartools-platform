@@ -26,6 +26,18 @@ WITH_PLACE_CODES = {
     "policy": "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
     "name_matching_active": "ad70680ac2cbeb04da821038436ccd0c5eff8bfa74f96e29cc205bdd0cd8db80",
 }
+# Company mastering ticket 22 added each feed's quality rule to its contract:
+# a new mapping version. Without its `quality` the contract is the one above.
+WITH_QUALITY = {
+    "contract": "131452e314d1cc892b7bb895235ea60fcd180b55d86b668bde6e2823978d1c28",
+    "level1": "58aa14d8a69d06c2ebdd52ea555d5f9bc972bb16c846cc44fdba1e9ead9c4cfd",
+}
+
+
+def _without_quality(contract: dict) -> dict:
+    return {k: v for k, v in contract.items() if k != "quality"}
+
+
 GLEIF_BEFORE = {
     "level1": "0978006ab17593a7f66b5e5b8a6110ff7890aca53f1544b1758bd14dcd8480ef",
     "relationships": "a5a253a8c697bfaf9980bfc995caba260b10b182a103772b61849a7480859136",
@@ -40,7 +52,8 @@ def test_the_company_configuration_is_unchanged():
     assert digest({k: v for k, v in company_source.POLICY.items() if k != "reference"}) == (
         BEFORE["policy"]
     )
-    assert digest(company_source.CONTRACT) == BEFORE["contract"]
+    assert digest(_without_quality(company_source.CONTRACT)) == BEFORE["contract"]
+    assert digest(company_source.CONTRACT) == WITH_QUALITY["contract"]
     assert digest(company_source.FIELDS) == BEFORE["fields"]
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
@@ -54,7 +67,9 @@ def test_the_company_configuration_is_unchanged():
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
-    assert digest(gleif_source.dataset_contract(member)) == GLEIF_BEFORE[member]
+    contract = gleif_source.dataset_contract(member)
+    assert digest(_without_quality(contract)) == GLEIF_BEFORE[member]
+    assert digest(contract) == WITH_QUALITY.get(member, GLEIF_BEFORE[member])
 
 
 def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():

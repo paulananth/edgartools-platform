@@ -117,8 +117,53 @@ def dumps(value: Any) -> str:
 
 
 def source(name: str, root: Path | None = None) -> dict:
-    """One source's file: `rules/sources/<name>/source.yaml`."""
-    return load((root or ROOT) / "sources" / name / "source.yaml")
+    """One source's document: `rules/sources/<name>/source.yaml`, with its
+    `quality.yaml` beside it when there is one."""
+    return load_source((root or ROOT) / "sources" / name / "source.yaml")
+
+
+def load_source(path: Path) -> dict:
+    """A source's Rules document. The feed's quality rule (company mastering
+    ticket 22) is its own file and version label, and rides in each Dataset
+    Contract it names as `quality`, so one approval and one digest cover the
+    mapping and the checks that run with it, as `policy()` does for kinds."""
+    body = load(path)
+    quality_path = path.parent / "quality.yaml"
+    if not quality_path.exists():
+        return body
+    quality = load(quality_path)
+    if not isinstance(quality, dict) or set(quality) != {"version", "quality"} or not isinstance(quality["quality"], dict):
+        raise RulesFileError(f"{quality_path}: holds version and quality only")
+    for code, block in quality["quality"].items():
+        contract = ((body.get("mdm") or {}).get(code) or {}).get("contract")
+        if not isinstance(contract, dict):
+            raise RulesFileError(f"{quality_path}: {code} is not a Dataset Contract in source.yaml")
+        if "quality" in contract:
+            raise RulesFileError(f"{path}: write quality in quality.yaml, not in the contract")
+        contract["quality"] = {"version": quality["version"], **block}
+    return body
+
+
+def write_source(body: dict, folder: Path) -> None:
+    """The reverse of `load_source`: the quality blocks go back to quality.yaml."""
+    import copy
+
+    body = copy.deepcopy(body)
+    blocks, versions = {}, set()
+    for code, entry in (body.get("mdm") or {}).items():
+        block = (entry.get("contract") or {}).pop("quality", None)
+        if block is not None:
+            versions.add(block.pop("version", None))
+            blocks[code] = block
+    if len(versions) > 1:
+        raise RulesFileError("One source's contracts carry one quality version")
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "source.yaml").write_text(dumps(body), encoding="utf-8")
+    quality_path = folder / "quality.yaml"
+    if blocks:
+        quality_path.write_text(dumps({"version": versions.pop(), "quality": blocks}), encoding="utf-8")
+    elif quality_path.exists():
+        raise RulesFileError(f"{quality_path} is absent from this version; use an empty export folder")
 
 
 def pipeline(name: str, root: Path | None = None) -> dict:

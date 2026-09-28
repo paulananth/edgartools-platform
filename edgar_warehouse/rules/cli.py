@@ -38,7 +38,8 @@ def _handle(args):
             kind = "source" if args.source else "pipeline" if args.pipeline else "merge"
             operation = args.rules_command
             if operation == "save":
-                result = rules.save(kind, name, args.version, files.load(Path(args.file)))
+                path = Path(args.file)
+                result = rules.save(kind, name, args.version, files.load_source(path) if kind == "source" else files.load(path))
             elif operation == "status":
                 with rules_engine.connect() as conn:
                     result = [dict(row) for row in conn.execute(text("SELECT kind,name,version,digest,status,proved_at,approved_by,approved_at FROM rules.rule_version WHERE kind=:k AND name=:n ORDER BY created_at"), {"k": kind, "n": name}).mappings()]
