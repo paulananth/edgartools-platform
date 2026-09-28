@@ -2,7 +2,7 @@
 
 Type: research, then build
 Status: in progress
-Blocked by: ticket 22 (data quality before merge)
+Blocked by: nothing. Ticket 22 (data quality) merged 2026-09-28 09:50 ET (#742).
 
 Operator ruling, 2026-09-27, after the research and three measured designs:
 "need data quality checks before merge, dq will be a seperate rule, finally
@@ -68,3 +68,16 @@ record, through GLEIF's other names (Canon, Hitachi, Sony, Nokia).
   SEC Illinois, GLEIF Delaware).
 - P5 to P7 have few labelled pairs (49, 181, 66), all drawn from today's
   binds; each pass needs its own draw.
+
+## Decided with ticket 22 (operator, 2026-09-28)
+
+- **Addresses:** a pass compares the address the quality rule left fit:
+  GLEIF's headquarters address first (`matching.headquarters_address`),
+  else its legal address (`matching.address`); SEC's business address
+  (`matching.address`). A withheld address is never compared.
+- **Over-shared address threshold: 25** ("25, yes", 09:50 ET). An address
+  (standardized street, 5-digit postcode, country) that more than 25
+  entities use is not compared by any pass: 3,604 addresses, 271,352 GLEIF
+  entities, on the ticket 08 inputs
+  ([ticket 22 proof](../research/22-quality-proving-run.json)). It is a
+  check across records, so it sits with the Company merge rules.
