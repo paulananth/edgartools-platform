@@ -220,6 +220,21 @@ A fix that corrects a value (`blank_values@1`, `name_state_marker@1`) changes
 the field MDM shows and merges on; the original stays on the record. A test
 or fix not in these tables is new code: log it for a ticket.
 
+## Mapping Documents
+
+`edgar-warehouse rules mapdoc write|diff|check [--only <source or kind>]`
+works from the rules files alone, with no database.
+
+| Workbook | Sheets |
+|---|---|
+| `rules/sources/<source>/MAPPING.xlsx` (only a source with an `mdm` section) | Source, Fields (MDM field or matching only), Identifiers, Critical data elements (a `present@1` check with `on_fail: exception`), Data quality, Who wins, Notes |
+| `rules/merge/kinds/<kind>.xlsx` | Kind, Preferred sources, Who wins each field, Classification, Matching rules (each condition in plain words), Notes |
+
+Every row names its rules path. A list longer than 12 values shows as a
+count. Critical data elements are the checks with `on_fail: exception`. Notes (Note, About, Who, When) is kept on `write`. A new workbook
+starts it with the comments in its rules files. `diff` prints each changed
+cell, and `check` fails on any.
+
 ## Worked examples
 
 Every file under `rules/sources/` is a worked example. Read them all before

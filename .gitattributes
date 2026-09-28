@@ -7,3 +7,4 @@
 * text=auto eol=lf
 
 *.sh text eol=lf
+*.xlsx binary

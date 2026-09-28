@@ -163,8 +163,12 @@ The part of a Source Contract that tells Clean MDM what a source's records are: 
 _Avoid_: Mastering Policy (sameness and survivorship live there, not here), field-alias map as a separate document
 
 **Mapping Document**:
-The readable table, generated from a Source Contract, that traces every source path through its transforms to a silver column and on to an MDM kind and field, or marks it evidence only or custom.
-_Avoid_: A hand-written mapping spreadsheet, a document that can drift from what runs
+The spreadsheet, first generated from a source's rules, that shows people every source field and the MDM field it fills, its identifiers, its critical data elements, its data quality checks and which source wins each field. Stewards change it; each change becomes the rules only through a reviewed, approved rules version, and a check holds it equal to the rules it was generated from.
+_Avoid_: A document that can drift from what runs, a second place the rules live, an edit that acts without an approved rules version
+
+**Data Catalog**:
+The published list of every source, dataset and MDM field, with the sources that fill each field in priority order, kept in the catalog server and published one way from the rules.
+_Avoid_: A place to author rules, a catalog that differs from what runs
 
 **Rules Database**:
 The database that holds every version of every Source Contract and Mastering Policy with its lifecycle state (draft, proven, active, retired), proof and approval, and where Proving Runs execute; an active version is handed to Clean MDM, which production reads.
