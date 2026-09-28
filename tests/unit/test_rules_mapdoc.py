@@ -114,12 +114,12 @@ def test_the_sheets_say_what_the_rules_say():
             "mdm.sec.submissions.company.v1.contract.adapter.identifiers.cik"] in sec["Identifiers"]
     assert [row[1] for row in sec["Critical data elements"][1:]] == ["name"]
     assert ["company", "name", "sec.submissions.company.v1, gleif.level1.v1", "sec.submissions.company.v1",
-            "merge/kinds/company.yaml defaults.sources"] in sec["Who wins"]
+            "Kind default", "merge/kinds/company.yaml defaults.sources"] in sec["Who wins"]
     kind = found["company"]
     assert [row[1] for row in kind["Matching rules"][1:]] == ["sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
     assert "The SEC company is not already linked to another LEI" in kind["Matching rules"][1][5]
-    assert ["jurisdiction", "gleif.level1.v1", "gleif.level1.v1", "merge/kinds/company.yaml defaults.sources"] in (
-        kind["Who wins each field"])
+    assert ["jurisdiction", "gleif.level1.v1", "gleif.level1.v1", "Kind default",
+            "merge/kinds/company.yaml defaults.sources"] in kind["Who wins each field"]
     assert len(kind["Classification"]) == 15  # the 14 steps of sec-company-candidate
 
 
@@ -150,3 +150,29 @@ def test_only_selects_by_source_or_kind_name(capsys):
     args = Namespace(root=str(files.ROOT), action="check")
     assert _mapdoc(Namespace(**vars(args), only="kinds")) == 2
     assert _mapdoc(Namespace(**vars(args), only="gleif")) == 0
+
+
+def test_a_field_with_its_own_rule_shows_its_own_winner(rules_copy):
+    """Rules skill ticket 12: the merge engine takes a rule per field
+    (`fields.<name>`), so the workbook shows it, and a steward's change to
+    it is reported."""
+    kind_file = rules_copy / "merge" / "kinds" / "company.yaml"
+    body = files.load(kind_file)
+    body["fields"] = {"address": {"sources": ["gleif.level1.v1", "sec.submissions.company.v1"]}}
+    kind_file.write_text(files.dumps(body), encoding="utf-8")
+    found = _write_all(rules_copy)
+    by_name = {name: sheets for name, sheets, _ in found.values()}
+    assert ["address", "gleif.level1.v1, sec.submissions.company.v1", "gleif.level1.v1", "Its own rule",
+            "merge/kinds/company.yaml fields.address"] in by_name["company"]["Who wins each field"]
+    assert ["name", "sec.submissions.company.v1, gleif.level1.v1", "sec.submissions.company.v1", "Kind default",
+            "merge/kinds/company.yaml defaults.sources"] in by_name["company"]["Who wins each field"]
+    assert ["company", "address", "gleif.level1.v1, sec.submissions.company.v1", "gleif.level1.v1",
+            "Its own rule", "merge/kinds/company.yaml fields.address"] in by_name["gleif"]["Who wins"]
+    path = rules_copy / "merge" / "kinds" / "company.xlsx"
+    rows = found[path][1]["Who wins each field"]
+    row = next(i for i, r in enumerate(rows) if r[0] == "address") + 1
+    _edit(path, lambda book: book["Who wins each field"].cell(row, 3, "sec.submissions.company.v1"))
+    assert mapdoc.differences(path, found[path][1]) == [
+        f'Who wins each field row {row} (address), Winner: rules say "gleif.level1.v1", '
+        'workbook says "sec.submissions.company.v1"'
+    ]
