@@ -1,0 +1,67 @@
+{
+ "against_today": {
+  "BIND jurisdiction | cascade binds | same LEI": 2853,
+  "BIND jurisdiction | cascade leaves | -": 2,
+  "BIND postal | cascade binds | same LEI": 195,
+  "defer | cascade binds | -": 456,
+  "defer | cascade leaves | -": 59,
+  "no GLEIF record with this name | cascade binds | -": 80,
+  "no GLEIF record with this name | cascade leaves | -": 2769
+ },
+ "bound_companies": 3584,
+ "companies": 6414,
+ "labels_by_pass": {
+  "P1 name + street + city + postcode | different": 1,
+  "P1 name + street + city + postcode | same": 854,
+  "P1 name + street + city + postcode | unresolved": 16,
+  "P2 name + street + postcode | same": 67,
+  "P3 name + street + city | same": 12,
+  "P4 name + postcode | same": 260,
+  "P4 name + postcode | unresolved": 7,
+  "P5 name + city | same": 49,
+  "P6 name + country | same": 181,
+  "P7 name alone | same": 66
+ },
+ "left": {
+  "name alone, one GLEIF entity, no address agrees": 4,
+  "name alone, several GLEIF entities or SEC filers": 37,
+  "name names no eligible GLEIF entity": 2789
+ },
+ "passes": {
+  "P1 name + street + city + postcode": {
+   "ambiguous_companies": 18,
+   "bound_all_filers": 4529,
+   "bound_companies": 1463
+  },
+  "P2 name + street + postcode": {
+   "ambiguous_companies": 18,
+   "bound_all_filers": 270,
+   "bound_companies": 90
+  },
+  "P3 name + street + city": {
+   "ambiguous_companies": 19,
+   "bound_all_filers": 321,
+   "bound_companies": 109
+  },
+  "P4 name + postcode": {
+   "ambiguous_companies": 23,
+   "bound_all_filers": 1482,
+   "bound_companies": 424
+  },
+  "P5 name + city": {
+   "ambiguous_companies": 25,
+   "bound_all_filers": 739,
+   "bound_companies": 281
+  },
+  "P6 name + country": {
+   "ambiguous_companies": 37,
+   "bound_all_filers": 2844,
+   "bound_companies": 1036
+  },
+  "P7 name alone": {
+   "ambiguous_companies": 41,
+   "bound_all_filers": 551,
+   "bound_companies": 181
+  }
+ }
+}
