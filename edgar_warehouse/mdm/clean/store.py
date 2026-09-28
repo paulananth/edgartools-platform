@@ -263,6 +263,18 @@ def register_dataset(
     ]
     if any(f is not None and f not in FORMATS for f in formats):
         raise ValueError("Unknown format in Dataset Contract")
+    if "quality" in body:
+        from .quality import QualityError, check_quality, exception_reasons
+
+        try:
+            check_quality(body["quality"])
+        except QualityError as exc:
+            raise ValueError(str(exc)) from exc
+        # A data quality exception sets its record aside and never stops the
+        # run (operator, 2026-09-28), so its reason must be non-blocking.
+        missing = exception_reasons(body["quality"]) - set(reasons)
+        if missing:
+            raise ValueError(f"List the quality exceptions as nonblocking_deferred_reasons: {sorted(missing)}")
     if rules_authority is None:
         raise Conflict("Dataset requires approved frozen Rules source authority")
     from edgar_warehouse.change_journal.authority import registration_authority

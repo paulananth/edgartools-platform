@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+from collections import Counter
 from functools import partial
 from pathlib import Path
 from uuid import UUID
@@ -17,6 +18,7 @@ from .adapters import UnsupportedRecord, normalize
 from .bookkeeping import RunCoordinator
 from .evidence import deferred_record
 from .merge import MergeStage
+from .quality import counts as quality_counts
 from .store import Conflict, Store, current_reading
 
 
@@ -306,6 +308,7 @@ def execute_manifest(
             native_consumption=native_scope,
         )
     prerequisites = set()
+    quality: Counter = Counter()
     for batch in manifest["batches"]:
         if batch["batch_id"] in observed:
             prerequisites.add(batch["batch_id"])
@@ -327,6 +330,7 @@ def execute_manifest(
             )
             assertions, deferred = found["assertions"], found["deferred"]
             occurrences = found["occurrences"]
+        batch_quality = quality_counts(assertions, deferred)
         cost = (
             0
             if batch["batch_id"] in retained
@@ -380,11 +384,14 @@ def execute_manifest(
         prerequisites.add(batch["batch_id"])
         if not result["duplicate"]:
             handled += cost
+            quality.update(batch_quality)
     if preview:
         return {"preview": True, "commits": [], "records_processed": 0}
     return {
         "commits": committed,
         "records_processed": handled,
+        # What the data quality rule did to this run's records, per fix and check.
+        **({"quality": dict(sorted(quality.items()))} if quality else {}),
         **coordinator.reconcile(run_id),
     }
 

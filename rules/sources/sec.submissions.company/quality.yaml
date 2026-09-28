@@ -1,0 +1,76 @@
+# Data quality for SEC company submissions (company mastering ticket 22).
+# Fixes run first, then checks, on each record before the merge. A fix keeps
+# the original on the record; `withhold` keeps a value but no matching rule
+# uses it; `exception` sets the record aside without stopping the run; `flag` only counts.
+version: sec-company-quality-v1
+quality:
+  sec.submissions.company.v1:
+    fixes:
+    # SEC writes "DC" for companies that are not incorporated there (Applied
+    # Materials, Shell). The proving run lists every one for the operator.
+    - id: dc_state_is_empty
+      fix: blank_values@1
+      args:
+        field: fields.state_of_incorporation
+        values:
+        - DC
+    # Operator, 2026-09-27: "fix /DE". SEC's state tag fills an empty state.
+    - id: state_from_name_tag
+      fix: name_state_marker@1
+      args:
+        name: fields.name
+        target: fields.state_of_incorporation
+    - id: standard_address
+      fix: standardize_address@1
+      args:
+        field: fields.address
+        into: matching.address
+    checks:
+    # A critical data element. A record without it never merges and never
+    # stops the run: it waits as an open exception, to be fixed or ignored
+    # (operator, 2026-09-28).
+    - id: name_present
+      test: present@1
+      value: fields.name
+      on_fail: exception
+    - id: address_not_registered_agent
+      test: registered_agent_address@1
+      value: matching.address
+      on_fail: withhold
+      # Named agent services only. A bare "C/O" is most often the company's
+      # own office ("C/O LOGITECH INC"; proving run, 2026-09-28).
+      args:
+        markers:
+        - CORPORATION TRUST
+        - 1209 ORANGE
+        - 251 LITTLE FALLS
+        - 2711 CENTERVILLE
+        - CORPORATION SERVICE
+        - REGISTERED AGENT
+        - CT CORPORATION
+        - C T CORPORATION
+        - 1521 CONCORD PIKE
+        - NATIONAL REGISTERED AGENTS
+        - COGENCY GLOBAL
+        - INCORP SERVICES
+    - id: street_not_placeholder
+      test: placeholder@1
+      value: matching.address.street
+      on_fail: withhold
+      args:
+        values:
+        - NA
+        - NONE
+        - "NULL"
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: state_code_known
+      test: in_reference@1
+      value: fields.state_of_incorporation
+      on_fail: flag
+      args:
+        table: sec-place-codes
+        sha256: 5a5a504286180523272d74fbbdc35078bb636bd4343309637041970c3e803a12
+        key: codes

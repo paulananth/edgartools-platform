@@ -85,6 +85,10 @@ mdm:
       effective_time: unknown; last_synced_at is observation time only
       semantics: patch
       completeness: explicit bounded Company sample; no retirement by absence
+      # A data quality exception (quality.yaml) never stops the run (operator,
+      # 2026-09-28).
+      nonblocking_deferred_reasons:
+      - quality_name_present
       adapter:
         version: sec-company-landing-v6
         retain_deferred: true

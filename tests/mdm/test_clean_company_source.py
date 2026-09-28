@@ -374,7 +374,7 @@ class TestTheCompanyRule:
         fields = normalize(
             source_row(
                 1306965,
-                state_of_incorporation="DC",
+                state_of_incorporation="E9",
                 last_synced_at="2026-01-01T00:00:00+00:00",
             ),
             source_code=SOURCE_CODE,
@@ -386,7 +386,7 @@ class TestTheCompanyRule:
                 "member": "m",
             },
         )["fields"]
-        assert fields["state_of_incorporation"] == {"op": "value", "value": "DC"}
+        assert fields["state_of_incorporation"] == {"op": "value", "value": "E9"}
         assert "jurisdiction" not in fields
 
     def test_blank_text_is_unknown_not_a_value(self):
@@ -713,6 +713,8 @@ class TestMatchingEvidenceIsPinned:
             "business_postal_code": "95014",
             "business_country": "US",
             "name_census": {"census": "c" * 64, "key": "APPLE INC"},
+            # The quality rule's standard address, a matching copy (ticket 22).
+            "address": {"postcode": "95014", "country": "US"},
         }
         # Matching evidence grants no field a value.
         assert "business_postal_code" not in body["fields"]

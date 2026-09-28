@@ -103,6 +103,7 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
         "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
         "Entity": {
             "EntityCategory": {"$": "GENERAL"},
+            "LegalName": {"$": "Example Inc."},
             "LegalJurisdiction": {"$": "US-CA"},
             "LegalAddress": {
                 "FirstAddressLine": {"$": "One Main Street"},
@@ -145,8 +146,8 @@ def test_native_company_fields_use_governed_mapping_and_other_kinds_retain_evide
     assert evidence["fields"]["gleif_registration_status"]["value"] == "LAPSED"
     # GLEIF's legal name now fills the shared `name` field, SEC first where both
     # supply one (operator, 2026-09-24; supersedes keeping GLEIF names apart).
-    # This record carries none, so it is unknown rather than absent.
-    assert evidence["fields"]["name"] == {"op": "unknown"}
+    # A record with none is a data quality exception (ticket 22).
+    assert evidence["fields"]["name"] == {"op": "value", "value": "Example Inc."}
     record["Entity"]["EntityCategory"]["$"] = "BRANCH"
     kind, evidence = record_evidence(record, **kwargs)
     assert kind == "deferred"
@@ -328,6 +329,7 @@ def test_a_corrected_reading_of_one_gleif_publication_is_a_second_assertion():
         "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
         "Entity": {
             "EntityCategory": {"$": "GENERAL"},
+            "LegalName": {"$": "Example Inc."},
             "LegalJurisdiction": {"$": "US-CA"},
         },
         "Registration": {
@@ -430,3 +432,45 @@ def test_a_gleif_record_outside_the_company_scope_still_carries_its_kind(
     assert kind == "deferred"
     assert evidence["reason"] == "outside_approved_company_scope"
     assert evidence.get("probable_kind") == probable
+
+
+def test_an_agent_legal_address_is_withheld_and_the_headquarters_address_is_kept():
+    """Ticket 22: GLEIF gives two addresses. The legal one is often a registered
+    agent's; the headquarters one is then the company's own, fit to match on."""
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
+    from edgar_warehouse.mdm.clean.matching import _read
+
+    record = {
+        "LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+        "Entity": {
+            "EntityCategory": {"$": "GENERAL"},
+            "LegalName": {"$": "Example Inc."},
+            "LegalAddress": {
+                "FirstAddressLine": {"$": "C/O The Corporation Trust Company"},
+                "AdditionalAddressLine": [{"$": "1209 Orange Street"}],
+                "City": {"$": "Wilmington"},
+                "PostalCode": {"$": "19801"},
+                "Country": {"$": "US"},
+            },
+            "HeadquartersAddress": {
+                "FirstAddressLine": {"$": "One Main Street"},
+                "AdditionalAddressLine": [{"$": "Suite 700"}],
+                "City": {"$": "Cupertino"},
+                "PostalCode": {"$": "95014-2083"},
+                "Country": {"$": "US"},
+            },
+        },
+        "Registration": {"LastUpdateDate": {"$": "2026-09-10T00:00:00Z"}},
+    }
+    kind, evidence = record_evidence(
+        record, member="level1", contract=dataset_contract("level1"), source_code="gleif.level1.v1",
+        eligible_leis={"HWUPKR0MPOU8FGXBT394"}, ordinal=0,
+        publication={"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64, "member": "level1"},
+    )
+    assert kind == "assertion"
+    assert evidence["fields"]["address"]["value"]["street"] == "C/O The Corporation Trust Company"
+    assert _read(evidence, "matching.address") is None
+    assert _read(evidence, "matching.headquarters_address") == {
+        "street": "ONE MAIN ST", "city": "CUPERTINO", "postcode": "95014", "country": "US",
+    }
+    assert evidence["provenance"]["matching"]["headquarters_postal_code"] == "95014-2083"

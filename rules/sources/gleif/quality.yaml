@@ -1,0 +1,96 @@
+# Data quality for GLEIF Level 1 (company mastering ticket 22). The LEI check
+# digit is already enforced where the record is read (`identifier_formats:
+# lei`), so no check repeats it here.
+version: gleif-quality-v1
+quality:
+  gleif.level1.v1:
+    fixes:
+    - id: standard_address
+      fix: standardize_address@1
+      args:
+        field: fields.address
+        into: matching.address
+    # The headquarters address is checked on its own: when the legal address
+    # is an agent's, the headquarters address is often the company's own.
+    - id: standard_headquarters_address
+      fix: standardize_address@1
+      args:
+        field: matching.headquarters_address
+        into: matching.headquarters_address
+    checks:
+    # A critical data element. A record without it never merges and never
+    # stops the run: it waits as an open exception, to be fixed or ignored
+    # (operator, 2026-09-28).
+    - id: name_present
+      test: present@1
+      value: fields.name
+      on_fail: exception
+    # The legal address is often a registered agent's, shared by thousands of
+    # unrelated entities (1209 Orange St: 43,650 LEIs, research 21).
+    - id: address_not_registered_agent
+      test: registered_agent_address@1
+      value: matching.address
+      on_fail: withhold
+      # Named agent services only. A bare "C/O" is most often the company's
+      # own office ("C/O LOGITECH INC"; proving run, 2026-09-28).
+      args:
+        markers:
+        - CORPORATION TRUST
+        - 1209 ORANGE
+        - 251 LITTLE FALLS
+        - 2711 CENTERVILLE
+        - CORPORATION SERVICE
+        - REGISTERED AGENT
+        - CT CORPORATION
+        - C T CORPORATION
+        - 1521 CONCORD PIKE
+        - NATIONAL REGISTERED AGENTS
+        - COGENCY GLOBAL
+        - INCORP SERVICES
+    # "N/A" as a street: 4,144 Finnish entities share it (proving run,
+    # 2026-09-28).
+    - id: street_not_placeholder
+      test: placeholder@1
+      value: matching.address.street
+      on_fail: withhold
+      args:
+        values:
+        - NA
+        - NONE
+        - "NULL"
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    # The same checks on the headquarters address.
+    - id: headquarters_not_registered_agent
+      test: registered_agent_address@1
+      value: matching.headquarters_address
+      on_fail: withhold
+      args:
+        markers:
+        - CORPORATION TRUST
+        - 1209 ORANGE
+        - 251 LITTLE FALLS
+        - 2711 CENTERVILLE
+        - CORPORATION SERVICE
+        - REGISTERED AGENT
+        - CT CORPORATION
+        - C T CORPORATION
+        - 1521 CONCORD PIKE
+        - NATIONAL REGISTERED AGENTS
+        - COGENCY GLOBAL
+        - INCORP SERVICES
+    - id: headquarters_street_not_placeholder
+      test: placeholder@1
+      value: matching.headquarters_address.street
+      on_fail: withhold
+      args:
+        values:
+        - NA
+        - NONE
+        - "NULL"
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE

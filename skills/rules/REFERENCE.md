@@ -64,6 +64,7 @@ The reason codes the code raises today:
 | Outside the approved scope | `outside_approved_company_scope` | yes |
 | A kind MDM does not take yet | `unsupported_identity_kind` | yes |
 | A valid reporting exception | `reported_parent_exception` | yes |
+| A data quality exception: a critical data element is missing | `quality_<id>` | yes, always (operator, 2026-09-28) |
 | Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | yes (operator, 2026-09-27: "never stop the run") |
 | A relationship type not mapped yet | `unsupported_relationship_type` | yes (operator, 2026-09-27); each run reports a count by type, so a new type is seen |
 | The policy has not activated the verdict | `classification_not_activated` | no: it means the policy is wrong |
@@ -142,7 +143,7 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
 | `provenance` | `name: path` kept with each record. Only values that stay the same across captures (the source's own record); capture hashes, run ids and sync times stay beside the record. |
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
-| `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. |
+| `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. A value may also be a whole address, written as `fields.address` is (`components:`), for example GLEIF's headquarters address beside the legal address MDM shows. Data quality fixes and checks can read it (`matching.<name>`). |
 | `retain_deferred` | `true`: keep a record MDM cannot take yet, with its reason. |
 | `native_member` | For a source parsed by native code, the member this contract maps. |
 
@@ -159,9 +160,65 @@ A relationship record becomes a link only once a matching rule joins its
 record to the kind's records.
 
 Not expressible yet, so log them: a publication-level contract (a reader's
-list of approved identifiers, or the files that make one release), a
-source placeholder that means "none", a kind taken from a record in another
-file.
+list of approved identifiers, or the files that make one release), a kind
+taken from a record in another file. A source placeholder that means "none"
+is now a data quality fix (`blank_values@1`, below).
+
+## Data quality
+
+`rules/sources/<source>/quality.yaml` holds the checks and fixes run on each
+record after the mapping and before the merge
+(`edgar_warehouse/mdm/clean/quality.py`):
+
+```yaml
+version: <quality version name>       # e.g. acme-firm-quality-v1; a change is a new name
+quality:
+  <source_code>:                      # a Dataset Contract of this source
+    fixes:                            # run first, in order
+    - id: <lower_case_id>
+      fix: <fix>@<n>
+      args: {...}
+    checks:                           # run after the fixes, on the fixed values
+    - id: <lower_case_id>
+      test: <test>@<n>
+      value: <path>                   # fields.<name>, fields.address.<part> or matching.<name>
+      on_fail: exception | withhold | flag
+      args: {...}
+```
+
+The loader puts each entry into its contract as `contract.quality` (with the
+file's `version`), so the contract's digest and one approval cover both. Do
+not write `quality` inside `source.yaml`: the loader refuses it.
+
+| `on_fail` | What happens |
+|---|---|
+| `exception` | For a missing critical data element. The record is set aside as `quality_<id>`: it never merges and never stops the run, and waits as an open exception until it is fixed or ignored. List `quality_<id>` in the contract's `nonblocking_deferred_reasons`; registration refuses the contract otherwise. |
+| `withhold` | The value stays on the record, but no matching rule uses it (`provenance.quality.withheld`). |
+| `flag` | Only counted. |
+
+Checks:
+
+| Test | Args | Passes when |
+|---|---|---|
+| `present@1` | | the value is filled |
+| `in_set@1` | `values` | the value is empty or one of `values` |
+| `pattern@1` | `regex` | the value is empty or matches all of `regex` |
+| `lei_check_digit@1` | | the value is an LEI whose check digits pass (mod 97) |
+| `placeholder@1` | `values` | the value, letters and digits only, is not one of `values` and not all zeros |
+| `registered_agent_address@1` | `markers` | no marker is in the address's street lines |
+| `in_reference@1` | `table`, `sha256`; `key` (optional, the dotted path to the keys) | the value is empty or a key of `rules/reference/<table>.yaml`; the file must equal its pinned `sha256` |
+
+Fixes (each keeps the original under `provenance.quality.fixes`):
+
+| Fix | Args | What it does |
+|---|---|---|
+| `blank_values@1` | `field`, `values` | a value in `values` becomes empty, so it reads as unknown |
+| `name_state_marker@1` | `name`, `target` | SEC's US state tag at the end of a name (`/DE`) fills an empty `target` |
+| `standardize_address@1` | `field`, `into` | writes a matching copy of the address to `into` (`matching.<name>`): upper case, USPS street words, no suite or floor, a 5-digit ZIP. The address MDM shows is not changed; it counts as a fix only when the copy differs |
+
+A fix that corrects a value (`blank_values@1`, `name_state_marker@1`) changes
+the field MDM shows and merges on; the original stays on the record. A test
+or fix not in these tables is new code: log it for a ticket.
 
 ## Worked examples
 
