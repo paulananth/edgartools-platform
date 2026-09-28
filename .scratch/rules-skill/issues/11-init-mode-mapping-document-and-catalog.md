@@ -105,8 +105,7 @@ A **data catalog** lists every source, dataset and MDM field in one place.
   read as a formula; `diff` by row position; `--only` matching folder
   names), a per-field "Who wins" sheet, conditions in plain words, every
   exception check listed as critical, byte-stable workbooks.
-- [ ] OpenMetadata on Colima; publish the catalog (every source, including
-  those that feed no MDM kind, every dataset and MDM field): a separate PR,
-  after this one. A per-field winner cannot be written in the rules yet
-  (ranks are per kind): a ticket if stewards need it.
-- [ ] Three-axis review, PR, CI; merge on the operator's word.
+- [x] OpenMetadata on Colima; publish the catalog: moved to ticket 13
+  (`13-publish-the-data-catalog.md`). The per-field winner was already
+  possible in the rules; ticket 12 corrected that claim.
+- [x] Three-axis review, PR, CI; merged as #743.

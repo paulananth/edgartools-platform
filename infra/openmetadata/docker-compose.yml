@@ -1,0 +1,97 @@
+# The Data Catalog server on a laptop (Colima): OpenMetadata 2.0.2, its
+# Postgres and its search, from the release's docker-compose-postgres.yml,
+# trimmed to what a catalog published from the rules needs. No ingestion
+# (Airflow) container: nothing is ingested, `edgar-warehouse rules catalog
+# publish` writes the catalog. Only the server's port reaches the host, on
+# 127.0.0.1, so it clashes with no local Postgres.
+#
+#   docker compose -f infra/openmetadata/docker-compose.yml up -d
+#   open http://localhost:8585   (admin@open-metadata.org / admin)
+name: edgartools-catalog
+
+x-server-env: &server-env
+  OPENMETADATA_CLUSTER_NAME: openmetadata
+  SERVER_PORT: 8585
+  SERVER_ADMIN_PORT: 8586
+  LOG_LEVEL: INFO
+  DB_DRIVER_CLASS: org.postgresql.Driver
+  DB_SCHEME: postgresql
+  DB_PARAMS: allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+  DB_USER: openmetadata_user
+  DB_USER_PASSWORD: openmetadata_password
+  DB_HOST: postgresql
+  DB_PORT: 5432
+  OM_DATABASE: openmetadata_db
+  ELASTICSEARCH_HOST: elasticsearch
+  ELASTICSEARCH_PORT: 9200
+  ELASTICSEARCH_SCHEME: http
+  SEARCH_TYPE: elasticsearch
+  PIPELINE_SERVICE_CLIENT_ENABLED: "false"
+  SERVER_HOST_API_URL: http://openmetadata-server:8585/api
+  OPENMETADATA_HEAP_OPTS: -Xmx1G -Xms1G
+
+services:
+  postgresql:
+    image: docker.getcollate.io/openmetadata/postgresql:2.0.2
+    restart: unless-stopped
+    command: "--work_mem=10MB"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: psql -U postgres -tAc 'select 1' -d openmetadata_db
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1024m -Xmx1024m
+      - xpack.security.enabled=false
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: "curl -s http://localhost:9200/_cluster/health?pretty | grep status | grep -qE 'green|yellow' || exit 1"
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 600s  # slow to start on a laptop VM
+
+  execute-migrate-all:
+    image: docker.getcollate.io/openmetadata/server:2.0.2
+    command: "./bootstrap/openmetadata-ops.sh migrate"
+    environment: *server-env
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+
+  openmetadata-server:
+    image: docker.getcollate.io/openmetadata/server:2.0.2
+    restart: unless-stopped
+    environment: *server-env
+    ports:
+      - "127.0.0.1:8585:8585"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+      execute-migrate-all:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8586/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 600s
+
+volumes:
+  db-data:
+  es-data:
