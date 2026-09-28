@@ -19,8 +19,8 @@
 #
 # After start, databases on the same instance:
 #   export MDM_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/mdm"
-#   export BOOKKEEPING_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/bookkeeping"
-#   export CHANGE_LEDGER_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/change_ledger"
+#   export BOOKKEEPING_CLEAN_DATABASE_URL="postgresql://bookkeeping_clean_runtime:<password>@127.0.0.1:5432/bookkeeping_clean"
+#   export CHANGE_JOURNAL_DATABASE_URL="postgresql://change_journal_runtime:<password>@127.0.0.1:5432/change_journal_clean"
 #   export SILVER_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/silver"
 #
 # Creating the container only creates `mdm`. Provision the others with:
@@ -35,8 +35,8 @@ IMAGE="postgres:16-alpine"
 USER_NAME="postgres"
 PASSWORD="test"
 DATABASE="mdm"
-BOOKKEEPING_DATABASE="bookkeeping"
-CHANGE_LEDGER_DATABASE="change_ledger"
+BOOKKEEPING_DATABASE="bookkeeping_clean"
+CHANGE_JOURNAL_DATABASE="change_journal_clean"
 SILVER_DATABASE="silver"
 BIND="127.0.0.1:5432"
 
@@ -90,8 +90,8 @@ print_status() {
     log "image:     $IMAGE"
     log "bind:      $BIND"
     log "mdm:            postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${DATABASE}"
-    log "bookkeeping:    postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${BOOKKEEPING_DATABASE}"
-    log "change_ledger:  postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${CHANGE_LEDGER_DATABASE}"
+    log "bookkeeping:    postgresql://bookkeeping_clean_runtime:<password>@${BIND}/${BOOKKEEPING_DATABASE}"
+    log "change_journal:  postgresql://change_journal_runtime:<password>@${BIND}/${CHANGE_JOURNAL_DATABASE}"
     log "silver:         postgresql://${USER_NAME}:${PASSWORD}@${BIND}/${SILVER_DATABASE}"
     if [[ "$state" == "running" ]]; then
         version="$(

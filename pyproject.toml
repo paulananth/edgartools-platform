@@ -88,6 +88,7 @@ include = [
   "edgar_warehouse/mdm/migrations/*.sql",
   "edgar_warehouse/bookkeeping/clean/migrations/*.sql",
   "edgar_warehouse/rules/migrations/*.sql",
+  "edgar_warehouse/change_journal/migrations/*.sql",
   "rules/**/*.yaml",
 ]
 

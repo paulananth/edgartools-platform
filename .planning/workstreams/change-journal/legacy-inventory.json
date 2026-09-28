@@ -1,0 +1,1032 @@
+[
+  {
+    "table": "public.source_observation_cursor",
+    "model": "SourceObservationCursor",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/ledger.py",
+        "lines": [
+          19,
+          672,
+          679,
+          680,
+          682,
+          683
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          31,
+          32
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          103
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          33
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 59,
+        "sql": "CREATE TABLE IF NOT EXISTS source_observation_cursor ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 617,
+        "sql": "REVOKE INSERT, UPDATE, DELETE ON source_observation_cursor FROM PUBLIC;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 625,
+        "sql": "GRANT SELECT, INSERT, UPDATE ON source_observation_cursor"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 787,
+        "sql": "ALTER TABLE source_observation_cursor OWNER TO edgartools_acquisition_owner;"
+      }
+    ]
+  },
+  {
+    "table": "public.source_fetch_decision",
+    "model": "SourceFetchDecisionRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/capture_parity.py",
+        "lines": [
+          321,
+          401
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/ledger.py",
+        "lines": [
+          16,
+          182,
+          183,
+          199,
+          280,
+          281,
+          494,
+          537,
+          539,
+          540,
+          548,
+          624,
+          807
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          45,
+          46,
+          147,
+          216,
+          275
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/processing.py",
+        "lines": [
+          61,
+          679
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/revisions.py",
+        "lines": [
+          58,
+          147
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/clean/source_publications.py",
+        "lines": [
+          95
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/runtime.py",
+        "lines": [
+          426,
+          560
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/pipeline.py",
+        "lines": [
+          3075
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          101
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          34
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 67,
+        "sql": "CREATE TABLE IF NOT EXISTS source_fetch_decision ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 618,
+        "sql": "REVOKE INSERT, UPDATE, DELETE ON source_fetch_decision FROM PUBLIC;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 628,
+        "sql": "GRANT SELECT, INSERT ON source_fetch_decision"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 634,
+        "sql": "GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 788,
+        "sql": "ALTER TABLE source_fetch_decision OWNER TO edgartools_acquisition_owner;"
+      }
+    ]
+  },
+  {
+    "table": "public.source_fetch_work",
+    "model": "SourceFetchWorkRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/capture_parity.py",
+        "lines": [
+          322,
+          399
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/ledger.py",
+        "lines": [
+          18,
+          192,
+          223,
+          269,
+          288,
+          327,
+          346,
+          348,
+          349,
+          350,
+          352,
+          353,
+          355,
+          457,
+          459,
+          460,
+          461,
+          462,
+          463,
+          495,
+          537,
+          541,
+          544,
+          545,
+          546,
+          624
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          142,
+          143
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/processing.py",
+        "lines": [
+          62,
+          682
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/revisions.py",
+        "lines": [
+          59,
+          148
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/runtime.py",
+        "lines": [
+          591,
+          606
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          100
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          35
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 132,
+        "sql": "CREATE TABLE IF NOT EXISTS source_fetch_work ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 619,
+        "sql": "REVOKE INSERT, UPDATE, DELETE ON source_fetch_work FROM PUBLIC;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 630,
+        "sql": "GRANT SELECT, INSERT ON source_fetch_work"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 634,
+        "sql": "GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 789,
+        "sql": "ALTER TABLE source_fetch_work OWNER TO edgartools_acquisition_owner;"
+      }
+    ]
+  },
+  {
+    "table": "public.source_fetch_transition",
+    "model": "SourceFetchTransitionRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/ledger.py",
+        "lines": [
+          17,
+          248,
+          372,
+          482,
+          508,
+          517,
+          518,
+          519
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          209,
+          210
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/clean/source_publications.py",
+        "lines": [
+          96
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          99
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          36
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 173,
+        "sql": "CREATE TABLE IF NOT EXISTS source_fetch_transition ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 620,
+        "sql": "REVOKE INSERT, UPDATE, DELETE ON source_fetch_transition FROM PUBLIC;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 632,
+        "sql": "GRANT SELECT ON source_fetch_transition"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 634,
+        "sql": "GRANT SELECT ON source_fetch_decision, source_fetch_work, source_fetch_transition"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 670,
+        "sql": "REVOKE EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 676,
+        "sql": "GRANT EXECUTE ON FUNCTION record_initial_source_fetch_transition(UUID, TEXT)"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 790,
+        "sql": "ALTER TABLE source_fetch_transition OWNER TO edgartools_acquisition_owner;"
+      }
+    ]
+  },
+  {
+    "table": "public.source_revision",
+    "model": "SourceRevisionRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/conflict.py",
+        "lines": [
+          19,
+          242
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          248,
+          269,
+          278,
+          352,
+          377,
+          619,
+          642
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/processing.py",
+        "lines": [
+          64,
+          224,
+          283,
+          286,
+          288,
+          289,
+          290,
+          293,
+          684,
+          685
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/revisions.py",
+        "lines": [
+          60,
+          166,
+          211,
+          212,
+          256,
+          270,
+          321,
+          322,
+          323,
+          324,
+          325,
+          326,
+          380,
+          394,
+          434,
+          435,
+          436,
+          444,
+          456,
+          458,
+          460,
+          461,
+          462,
+          464,
+          469
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/clean/source_publications.py",
+        "lines": [
+          103,
+          275
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/runtime.py",
+        "lines": [
+          498
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          106
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          37
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 207,
+        "sql": "CREATE TABLE IF NOT EXISTS source_revision ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 621,
+        "sql": "REVOKE INSERT, UPDATE, DELETE ON source_revision FROM PUBLIC;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 640,
+        "sql": "GRANT SELECT ON source_revision"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 643,
+        "sql": "GRANT SELECT, INSERT ON source_revision TO edgartools_acquisition_processor;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 791,
+        "sql": "ALTER TABLE source_revision OWNER TO edgartools_acquisition_owner;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/015_source_evidence_conflict.sql",
+        "line": 8,
+        "sql": "-- gets the operational GRANTs, same as it already does for source_revision."
+      }
+    ]
+  },
+  {
+    "table": "public.source_processing_decision",
+    "model": "SourceProcessingDecisionRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          345,
+          371,
+          428,
+          459
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/processing.py",
+        "lines": [
+          34,
+          63,
+          251,
+          299,
+          300,
+          333,
+          334,
+          422,
+          423,
+          458,
+          688,
+          708,
+          709,
+          760
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          102
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          38
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 262,
+        "sql": "CREATE TABLE IF NOT EXISTS source_processing_decision ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 622,
+        "sql": "REVOKE INSERT, UPDATE, DELETE ON source_processing_decision FROM PUBLIC;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 655,
+        "sql": "GRANT SELECT ON source_processing_decision, source_expected_producer"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 658,
+        "sql": "GRANT SELECT, INSERT ON source_processing_decision, source_expected_producer"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 660,
+        "sql": "GRANT SELECT ON source_processing_decision, source_expected_producer"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 662,
+        "sql": "GRANT UPDATE (silver_outcome, settled_at) ON source_processing_decision"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 792,
+        "sql": "ALTER TABLE source_processing_decision OWNER TO edgartools_acquisition_owner;"
+      }
+    ]
+  },
+  {
+    "table": "public.source_expected_producer",
+    "model": "SourceExpectedProducerRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          355,
+          424,
+          452
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/processing.py",
+        "lines": [
+          60,
+          263,
+          341,
+          342,
+          390,
+          391,
+          393,
+          441,
+          443,
+          445,
+          462,
+          463,
+          718,
+          720,
+          726,
+          728,
+          730,
+          761
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          98
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          39
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 297,
+        "sql": "CREATE TABLE IF NOT EXISTS source_expected_producer ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 623,
+        "sql": "REVOKE INSERT, UPDATE, DELETE ON source_expected_producer FROM PUBLIC;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 655,
+        "sql": "GRANT SELECT ON source_processing_decision, source_expected_producer"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 658,
+        "sql": "GRANT SELECT, INSERT ON source_processing_decision, source_expected_producer"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 660,
+        "sql": "GRANT SELECT ON source_processing_decision, source_expected_producer"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/013_acquisition_ledger.sql",
+        "line": 793,
+        "sql": "ALTER TABLE source_expected_producer OWNER TO edgartools_acquisition_owner;"
+      }
+    ]
+  },
+  {
+    "table": "public.source_registry_version",
+    "model": "SourceRegistryVersionRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          500,
+          513,
+          574
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/registry_ledger.py",
+        "lines": [
+          33,
+          60,
+          153,
+          222,
+          316,
+          318,
+          348,
+          428,
+          430,
+          431
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/clean/store.py",
+        "lines": [
+          285
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/runtime.py",
+        "lines": [
+          468
+        ]
+      },
+      {
+        "path": "edgar_warehouse/rules/db.py",
+        "lines": [
+          157
+        ]
+      },
+      {
+        "path": "infra/scripts/bootstrap-source-family-registry.sh",
+        "lines": [
+          28
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          105
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          40
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 49,
+        "sql": "CREATE TABLE IF NOT EXISTS source_registry_version ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 100,
+        "sql": "GRANT SELECT, INSERT, UPDATE ON source_registry_version, source_registry_coverage"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 103,
+        "sql": "ALTER TABLE source_registry_version OWNER TO edgartools_acquisition_registry_owner;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 113,
+        "sql": "REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 135,
+        "sql": "REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage"
+      }
+    ]
+  },
+  {
+    "table": "public.source_registry_coverage",
+    "model": "SourceRegistryCoverageRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          554,
+          570
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/registry_ledger.py",
+        "lines": [
+          59,
+          135,
+          153,
+          207,
+          210,
+          211,
+          229,
+          237,
+          277,
+          315,
+          319,
+          320,
+          353,
+          354,
+          421,
+          422
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/clean/store.py",
+        "lines": [
+          285
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          104
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          41
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 77,
+        "sql": "CREATE TABLE IF NOT EXISTS source_registry_coverage ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 100,
+        "sql": "GRANT SELECT, INSERT, UPDATE ON source_registry_version, source_registry_coverage"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 104,
+        "sql": "ALTER TABLE source_registry_coverage OWNER TO edgartools_acquisition_registry_owner;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 113,
+        "sql": "REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/014_source_registry.sql",
+        "line": 135,
+        "sql": "REVOKE ALL PRIVILEGES ON source_registry_version, source_registry_coverage"
+      }
+    ]
+  },
+  {
+    "table": "public.source_evidence_conflict",
+    "model": "SourceEvidenceConflictRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/conflict.py",
+        "lines": [
+          46,
+          79,
+          126,
+          127,
+          133,
+          157,
+          158,
+          159,
+          219,
+          220
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          607,
+          628,
+          668,
+          678
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/revisions.py",
+        "lines": [
+          347
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/runtime.py",
+        "lines": [
+          517
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          96
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          42
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/015_source_evidence_conflict.sql",
+        "line": 28,
+        "sql": "CREATE TABLE IF NOT EXISTS source_evidence_conflict ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/015_source_evidence_conflict.sql",
+        "line": 64,
+        "sql": "GRANT SELECT ON source_evidence_conflict TO"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/015_source_evidence_conflict.sql",
+        "line": 68,
+        "sql": "ALTER TABLE source_evidence_conflict OWNER TO edgartools_acquisition_owner;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/015_source_evidence_conflict.sql",
+        "line": 73,
+        "sql": "REVOKE ALL PRIVILEGES ON source_evidence_conflict FROM application;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/015_source_evidence_conflict.sql",
+        "line": 90,
+        "sql": "REVOKE ALL PRIVILEGES ON source_evidence_conflict FROM snowflake_write;"
+      }
+    ]
+  },
+  {
+    "table": "public.source_evidence_import",
+    "model": "SourceEvidenceImportRecord",
+    "callers": [
+      {
+        "path": "edgar_warehouse/acquisition/evidence_import.py",
+        "lines": [
+          35,
+          64,
+          122,
+          123,
+          124,
+          151,
+          152,
+          153,
+          159
+        ]
+      },
+      {
+        "path": "edgar_warehouse/acquisition/models.py",
+        "lines": [
+          664,
+          682
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/runtime.py",
+        "lines": [
+          545,
+          566
+        ]
+      },
+      {
+        "path": "infra/scripts/provision-local-postgres-stores.sh",
+        "lines": [
+          97
+        ]
+      },
+      {
+        "path": "infra/scripts/provision_change_ledger_schema.py",
+        "lines": [
+          43
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/017_source_exclusion_and_evidence_import.sql",
+        "line": 88,
+        "sql": "CREATE TABLE IF NOT EXISTS source_evidence_import ("
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/017_source_exclusion_and_evidence_import.sql",
+        "line": 108,
+        "sql": "GRANT SELECT, INSERT ON source_evidence_import TO edgartools_acquisition_operator;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/017_source_exclusion_and_evidence_import.sql",
+        "line": 109,
+        "sql": "GRANT SELECT ON source_evidence_import TO"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/017_source_exclusion_and_evidence_import.sql",
+        "line": 113,
+        "sql": "ALTER TABLE source_evidence_import OWNER TO edgartools_acquisition_owner;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/017_source_exclusion_and_evidence_import.sql",
+        "line": 118,
+        "sql": "REVOKE ALL PRIVILEGES ON source_evidence_import FROM application;"
+      },
+      {
+        "path": "edgar_warehouse/mdm/migrations/017_source_exclusion_and_evidence_import.sql",
+        "line": 130,
+        "sql": "REVOKE ALL PRIVILEGES ON source_evidence_import FROM snowflake_write;"
+      }
+    ]
+  },
+  {
+    "table": "bookkeeping_mirror.event",
+    "model": "ChangeLedger",
+    "callers": [
+      {
+        "path": "edgar_warehouse/bookkeeping/clean/destinations.py",
+        "lines": [
+          66
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/bookkeeping/clean/migrations/ledger.sql",
+        "line": 4,
+        "sql": "CREATE TABLE bookkeeping_mirror.event ("
+      }
+    ]
+  },
+  {
+    "table": "mdm_mirror.event",
+    "model": "JournalMirror",
+    "callers": [
+      {
+        "path": "edgar_warehouse/mdm/clean/cli.py",
+        "lines": [
+          20,
+          501
+        ]
+      },
+      {
+        "path": "edgar_warehouse/mdm/clean/publication.py",
+        "lines": [
+          91,
+          111
+        ]
+      }
+    ],
+    "grants": [
+      {
+        "path": "edgar_warehouse/mdm/migrations/024_clean_mdm_mirror.sql",
+        "line": 6,
+        "sql": "CREATE TABLE mdm_mirror.event ("
+      }
+    ]
+  }
+]

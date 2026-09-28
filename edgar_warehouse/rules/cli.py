@@ -59,27 +59,25 @@ def _handle(args):
                 result = {"proven": name, "version": args.version, "proof": args.proof_uri}
             elif operation == "activate":
                 mdm_owner = create_engine(os.environ["RULES_MDM_ACTIVATION_DATABASE_URL"]) if os.environ.get("RULES_MDM_ACTIVATION_DATABASE_URL") else None
-                registry = create_engine(os.environ["CHANGE_LEDGER_DATABASE_URL"]) if os.environ.get("CHANGE_LEDGER_DATABASE_URL") else None
                 try:
-                    rules.activate(kind, name, args.version, mdm_engine=mdm_owner, registry_engine=registry)
+                    rules.activate(kind, name, args.version, mdm_engine=mdm_owner)
                 finally:
                     if mdm_owner is not None:
                         mdm_owner.dispose()
-                    if registry is not None:
-                        registry.dispose()
                 result = {"active": name, "version": args.version}
             else:
                 from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
-                from edgar_warehouse.bookkeeping.clean.destinations import ChangeLedger
+                from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
                 from edgar_warehouse.bookkeeping.clean.runner import run
                 from edgar_warehouse.bookkeeping.clean.config import Blocked
 
                 book = configured_bookkeeping()
-                ledger_engine = create_engine(os.environ["CHANGE_LEDGER_DATABASE_URL"])
+                ledger_engine = journal_engine()
                 try:
                     if args.resume_run_id:
                         existing = book._run(args.resume_run_id)["submission"]
-                        if (existing["kind"], existing["name"], existing["target"]) != (kind, name, args.target):
+                        if ((existing["kind"], existing["name"], existing["target"]) != (kind, name, args.target)
+                                or args.feed is not None and args.feed != existing["scope"].get("feed")):
                             raise Blocked("Resume selection differs from the original run")
                         if args.input_manifest or args.input_sha256:
                             raise Blocked("Resume uses its frozen input reference; do not supply new inputs")
@@ -90,11 +88,13 @@ def _handle(args):
                             raise Blocked("Submission requires an exact input manifest URI and hash")
                         ref = rules.resolve(kind, name, root=os.environ["BOOKKEEPING_MANIFEST_ROOT"], artifacts=book.artifacts)
                         run_id = book.start(rules_ref=ref, inputs_ref={"uri": args.input_manifest, "sha256": args.input_sha256},
-                                            target=args.target, scope={"kind": kind, "name": name, "target": args.target})
+                                            target=args.target, scope={"kind": kind, "name": name, "source": name,
+                                                                     "feed": args.feed, "target": args.target} if args.feed else
+                                                                    {"kind": kind, "name": name, "target": args.target})
                     # Preserve machine-readable result stdout, and make the
                     # durable root recoverable if execution/acknowledgement fails.
                     print(f"Bookkeeping run: {run_id}", file=sys.stderr, flush=True)
-                    result = run(book, run_id, ChangeLedger(ledger_engine), limit=args.limit)
+                    result = run(book, run_id, ChangeJournal(ledger_engine), limit=args.limit)
                 finally:
                     ledger_engine.dispose()
                     book.close()
@@ -133,6 +133,7 @@ def register(subparsers):
             command.add_argument("--proof-sha256", required=True)
         elif operation == "run":
             command.add_argument("--target", required=True)
+            command.add_argument("--feed", help="Exact acquisition feed identity")
             command.add_argument("--input-manifest")
             command.add_argument("--input-sha256")
             command.add_argument("--resume-run-id")

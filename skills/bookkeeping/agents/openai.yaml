@@ -1,4 +1,4 @@
 interface:
   display_name: "Bookkeeping"
-  short_description: "Plan, validate and deploy a source and feed"
-  default_prompt: "Use $bookkeeping plan --source <source> --feed <feed> to prepare a configured pipeline plan."
+  short_description: "Initialize or migrate control, or run a source and feed"
+  default_prompt: "Use $bookkeeping init or migrate for the fresh store, or plan, validate or deploy with --source and --feed."

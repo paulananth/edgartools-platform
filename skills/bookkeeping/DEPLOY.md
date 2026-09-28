@@ -10,7 +10,7 @@ unsupported required stage is a blocker, not a reason to drop that stage.
 
 Supply connection URLs through the environment without printing credentials:
 `BOOKKEEPING_CLEAN_DATABASE_URL`, `RULES_DATABASE_URL`,
-`BOOKKEEPING_MANIFEST_ROOT` and `CHANGE_LEDGER_DATABASE_URL`; MDM work also needs
+`BOOKKEEPING_MANIFEST_ROOT` and `CHANGE_JOURNAL_DATABASE_URL`; MDM work also needs
 `MDM_DATABASE_URL`. Activation/registration connections and provisioning are
 described in [the specification](../../docs/specs/configured-bookkeeping.md).
 Legacy `BOOKKEEPING_DATABASE_URL` and old run ids are not fallbacks.
@@ -30,13 +30,13 @@ Submit the selected source/feed's manifest with a bounded invocation:
 
 ```bash
 uv run --extra mdm --extra s3 edgar-warehouse rules run \
-  --source "$RULES_SOURCE_NAME" --target "$BOOKKEEPING_TARGET" \
+  --source "$RULES_SOURCE_NAME" --feed "$SOURCE_FEED" --target "$BOOKKEEPING_TARGET" \
   --input-manifest "$INPUT_MANIFEST_URI" --input-sha256 "$INPUT_MANIFEST_SHA256" \
   --limit 100
 ```
 
-Feed is bound by the validated frozen worklist and source-input dataset/
-publication identities; it is not a CLI `--feed` option. Keep the durable run
+Feed is bound by the validated frozen worklist, source-input dataset/
+publication identities and the explicit Rules runner `--feed` option. Keep the durable run
 id printed on stderr. For explicit platform jobs use their existing
 `--pipeline` selection while retaining the source/feed binding in the plan
 and inputs; never silently replace a source-owned mapping with a platform job.

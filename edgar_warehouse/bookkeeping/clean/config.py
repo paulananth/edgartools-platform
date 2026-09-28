@@ -182,6 +182,14 @@ def worklist(manifest: dict, config: dict) -> list[dict]:
                 resources = sorted(set(p.format_map(unit["keys"]) for p in step["leases"]))
             except KeyError as exc:
                 raise Blocked(f"Missing configured key: {exc}") from exc
+            cursor = unit["cursor"]
+            checkpoint = cursor.get("resource_checkpoint") if isinstance(cursor, dict) else None
+            if checkpoint is not None:
+                if (not isinstance(checkpoint, dict) or set(checkpoint) != {"resource", "revision", "position"}
+                        or checkpoint["resource"] not in resources
+                        or type(checkpoint["revision"]) is not int or checkpoint["revision"] < 0
+                        or type(checkpoint["position"]) is not int or checkpoint["position"] < -1):
+                    raise Blocked("Resource checkpoint must pin leased resource, revision and prior position")
             if (step["name"], key) in identities:
                 raise Blocked("Duplicate work-unit identity")
             identities.add((step["name"], key))

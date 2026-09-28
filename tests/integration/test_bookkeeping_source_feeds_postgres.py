@@ -14,7 +14,6 @@ from uuid import uuid4
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean import capabilities
 from edgar_warehouse.bookkeeping.clean.config import digest
@@ -22,8 +21,8 @@ from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.runner import Authority
 from edgar_warehouse.cli import main
 from edgar_warehouse.mdm.clean.gleif_source import inspect_archive
+from edgar_warehouse.mdm.clean.store import migrate
 from edgar_warehouse.rules.files import load
-from tests.integration.test_clean_mdm_postgres import initialize_database
 from tests.integration.test_configured_bookkeeping_postgres import databases, expire
 from tests.mdm.test_clean_gleif_source import archive_bytes, metadata
 
@@ -63,13 +62,7 @@ def test_existing_source_feed_capture_cli_and_lost_ack(databases, tmp_path, monk
     binding = resolve_feed(ROOT / "rules", source, feed)
     assert [d["code"] for d in binding["datasets"]] == [code]
     body = load(ROOT / "rules/sources" / source / "source.yaml")
-    db = initialize_database(databases.destination_admin, databases.mdm)
-    with databases.destination_admin.begin() as conn:
-        for family in {entry["contract"]["family"] for entry in body["mdm"].values()}:
-            conn.execute(text("""INSERT INTO source_registry_coverage
-                (version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
-                VALUES(:v,:f,'carry_forward','fixture','fixture','fixture','2026-01-01')"""),
-                {"v": db.registry, "f": family})
+    migrate(databases.destination_admin, application_role="clean_application")
     book = Bookkeeping(databases.runtime, capabilities.standard_registry())
     raw = captured_sample(tmp_path, feed)
     units = []
@@ -86,17 +79,32 @@ def test_existing_source_feed_capture_cli_and_lost_ack(databases, tmp_path, monk
     version = "sandbox-" + uuid4().hex
     saved = databases.rules.save("source", source, version, body)
     assert saved["digest"] == binding["rules_digest"]
-    databases.rules.prove("source", source, version, {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    # Exact approved scope for every declared feed. These sandbox attestations
+    # qualify immutable sample bytes only; they do not assert provider or MDM
+    # output completeness. Activation uses Rules, never the legacy registry.
+    baselines = {}
+    for declared_feed, policy in body["acquisition"]["feeds"].items():
+        sample = captured_sample(tmp_path, declared_feed)
+        member = book.artifacts.put_bytes((tmp_path / ("baseline-" + declared_feed)).as_uri(), sample)
+        assert book.artifacts.verified(member) == sample
+        baseline = book.artifacts.put((tmp_path / "baselines").as_uri(), {
+            "version": 1, "source": source, "feed": declared_feed, "members": [member],
+        })
+        baselines[declared_feed] = {
+            "manifest": baseline,
+            "counts": {producer: {"expected": 1, "verified": 1} for producer in policy["required_producers"]},
+            "checks": {"immutable_artifact_fixture_only": True},
+        }
+    databases.rules.prove("source", source, version, {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": baselines})
     databases.approver.approve("source", source, version, saved["digest"])
-    databases.rules.activate("source", source, version, mdm_engine=databases.destination_admin,
-                             registry_engine=databases.destination_admin)
+    databases.rules.activate("source", source, version, mdm_engine=databases.destination_admin)
     for key, engine in [("RULES_DATABASE_URL", databases.rules.engine),
                         ("BOOKKEEPING_CLEAN_DATABASE_URL", databases.runtime),
-                        ("CHANGE_LEDGER_DATABASE_URL", databases.ledger.engine)]:
+                        ("CHANGE_JOURNAL_DATABASE_URL", databases.ledger.engine)]:
         monkeypatch.setenv(key, engine.url.render_as_string(hide_password=False))
     monkeypatch.setenv("BOOKKEEPING_MANIFEST_ROOT", (tmp_path / "exports").as_uri())
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
-    command = ["rules", "run", "--source", source, "--target", "capture"]
+    command = ["rules", "run", "--source", source, "--feed", feed, "--target", "capture"]
     assert main(command + ["--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"], "--limit", "1"]) == 3
     result = json.loads(capsys.readouterr().out)
     rid = result["run"]["run_id"]

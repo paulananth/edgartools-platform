@@ -16,7 +16,7 @@ def get_engine(url: str | None = None):
     return create_engine(url or os.environ["BOOKKEEPING_CLEAN_DATABASE_URL"], pool_pre_ping=True)
 
 
-def migrate(engine, *, runtime_role: str) -> dict:
+def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     if engine.dialect.name != "postgresql":
         raise Blocked("Bookkeeping requires PostgreSQL 16")
     quote = engine.dialect.identifier_preparer.quote
@@ -32,6 +32,10 @@ def migrate(engine, *, runtime_role: str) -> dict:
         conn.execute(text("SELECT pg_advisory_xact_lock(730501)"))
         exists = conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='bookkeeping')"))
         saved = conn.scalar(text("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='bookkeeping'"))
+        if existing_only and not exists:
+            raise Blocked(
+                "Bookkeeping is not initialized; run bookkeeping init first"
+            )
         if exists and not saved:
             raise Blocked("Existing untracked schema; refusing to adopt it")
         checksums = json.loads(saved) if saved else {}
@@ -57,6 +61,8 @@ def migrate(engine, *, runtime_role: str) -> dict:
             "heartbeat(uuid,text,text,uuid,jsonb,integer)", "finish(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid)",
             "wait_work(uuid,text,text,text,uuid,jsonb)", "record_checks(uuid,jsonb)",
             "resume_run(uuid)", "block_run(uuid,text)", "delivery(uuid,text)",
+            "finish_resource(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid,text,bigint,bigint)",
+            "authorize_request(uuid,text,text,uuid,jsonb,uuid,jsonb)",
         ):
             conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION bookkeeping.{signature} TO {runtime}")
         if conn.scalar(text("SELECT has_schema_privilege(:r,'bookkeeping','CREATE') OR EXISTS(SELECT 1 FROM pg_tables WHERE schemaname='bookkeeping' AND has_table_privilege(:r,format('%I.%I',schemaname,tablename),'INSERT,UPDATE,DELETE,TRUNCATE'))"), {"r": runtime_role}):

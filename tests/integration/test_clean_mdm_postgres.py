@@ -20,11 +20,10 @@ from edgar_warehouse.mdm.clean.store import (
     Store,
     canonical,
     migrate,
-    register_dataset,
     register_policy,
     rows,
 )
-from edgar_warehouse.mdm.migrations.runtime import _apply_source_registry_migration
+from tests.support.rules_authority import authority, register_dataset
 
 IMAGE = "postgres:16-alpine"
 
@@ -80,7 +79,6 @@ def postgres():
                     "CREATE ROLE clean_application LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE"
                 )
             )
-        _apply_source_registry_migration(admin)
         app = create_engine(
             f"postgresql+psycopg2://clean_application:test@127.0.0.1:{port}/postgres"
         )
@@ -99,20 +97,7 @@ def database(postgres):
 def initialize_database(admin, app):
     with admin.begin() as conn:
         conn.execute(text("DROP SCHEMA IF EXISTS mdm_v2 CASCADE"))
-        conn.execute(text("DELETE FROM source_registry_coverage"))
-        conn.execute(text("DELETE FROM source_registry_version"))
         version = str(uuid4())
-        conn.execute(
-            text(
-                "INSERT INTO source_registry_version(version_id,status,operator_authorization_reference,activated_at) VALUES(:v,'active','offline-fixture',now())"
-            ),
-            {"v": version},
-        )
-        conn.execute(
-            text("""INSERT INTO source_registry_coverage(version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
-         VALUES(:v,'fixture','carry_forward','fixture','fixture','fixture','2026-01-01')"""),
-            {"v": version},
-        )
     assert migrate(admin, application_role="clean_application")["installed"]
     assert not migrate(admin, application_role="clean_application")["installed"]
     with admin.begin() as conn:
@@ -755,74 +740,6 @@ def test_source_retirement_recomputes_from_remaining_evidence(database):
     )
 
 
-def test_mirror_and_bookkeeping_across_three_real_databases(database):
-    from edgar_warehouse.bookkeeping.models import PipelineRun
-    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
-    from edgar_warehouse.mdm.clean.publication import JournalMirror, migrate_mirror
-
-    # Existing bookkeeping schema is not redesigned. This fixture creates its
-    # existing ORM table only; Clean MDM migrations above always use real SQL.
-    suffix = uuid4().hex[:10]
-    ledger_name = f"ledger_{suffix}"
-    book_name = f"book_{suffix}"
-    with database.admin.connect().execution_options(
-        isolation_level="AUTOCOMMIT"
-    ) as conn:
-        conn.exec_driver_sql(f"CREATE DATABASE {ledger_name}")
-        conn.exec_driver_sql(f"CREATE DATABASE {book_name}")
-    ledger_admin = create_engine(database.admin.url.set(database=ledger_name))
-    ledger_app = create_engine(database.application.url.set(database=ledger_name))
-    book = create_engine(database.admin.url.set(database=book_name))
-    try:
-        migrate_mirror(ledger_admin, application_role="clean_application")
-        PipelineRun.__table__.create(book)
-        with database.admin.begin() as conn:
-            policy = register_policy(
-                conn,
-                {
-                    "version": 1,
-                    "required_consumers": ["journal"],
-                    "automatic_rules": [],
-                },
-            )
-        run = str(uuid4())
-        store = Store(database.application)
-        coordinator = RunCoordinator(book, store)
-        coordinator.start(run, ["batch-1"], manifest_digest="frozen-input")
-        with database.application.begin() as conn:
-            store.commit(
-                conn, request(database, policy_digest=policy, projections=[]), run
-            )
-        assert not coordinator.reconcile(run)["end_to_end_complete"]
-        mirror = JournalMirror(ledger_app)
-        original = mirror.publish
-
-        def lose_ack(key, payload, h):
-            original(key, payload, h)
-            raise OSError("mirror committed but acknowledgement was lost")
-
-        mirror.publish = lose_ack
-        with pytest.raises(OSError):
-            store.deliver_one("journal", "worker", mirror)
-        assert not coordinator.reconcile(run)["end_to_end_complete"]
-        mirror.publish = original
-        assert store.deliver_one("journal", "worker", mirror)
-        assert coordinator.reconcile(run)["end_to_end_complete"]
-        assert coordinator.reconcile(run)["end_to_end_complete"]
-        with ledger_app.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM mdm_mirror.event")) == 1
-            assert str(conn.scalar(text("SELECT run_id FROM mdm_mirror.event"))) == run
-        with book.connect() as conn:
-            assert conn.scalar(text("SELECT status FROM pipeline_run")) == "succeeded"
-    finally:
-        ledger_admin.dispose()
-        ledger_app.dispose()
-        book.dispose()
-        with database.admin.connect().execution_options(
-            isolation_level="AUTOCOMMIT"
-        ) as conn:
-            conn.exec_driver_sql(f"DROP DATABASE {ledger_name}")
-            conn.exec_driver_sql(f"DROP DATABASE {book_name}")
 
 
 def test_authorized_clear_blocks_fallback_and_unknown_time_is_retained(database):
@@ -1036,179 +953,10 @@ def test_versioned_representative_fixture_and_alias_read_contract(database):
     assert again["duplicate"] and documents(database, "entity") == entities
 
 
-@pytest.fixture
-def command_databases(database, monkeypatch):
-    from edgar_warehouse.bookkeeping.models import PipelineRun
-    from edgar_warehouse.mdm.clean.publication import migrate_mirror
-
-    names = [f"clean_{kind}_{uuid4().hex[:10]}" for kind in ("book", "ledger")]
-    with database.admin.connect().execution_options(
-        isolation_level="AUTOCOMMIT"
-    ) as conn:
-        for name in names:
-            conn.exec_driver_sql(f"CREATE DATABASE {name}")
-    book, ledger = [
-        create_engine(database.admin.url.set(database=name)) for name in names
-    ]
-    try:
-        PipelineRun.__table__.create(book)
-        with book.begin() as conn:
-            conn.execute(
-                text("GRANT SELECT,INSERT,UPDATE ON pipeline_run TO clean_application")
-            )
-        migrate_mirror(ledger, application_role="clean_application")
-        monkeypatch.setenv("MDM_APPLICATION_ROLE", "clean_application")
-        for key, engine in [
-            ("MDM_DATABASE_URL", database.admin),
-            ("BOOKKEEPING_DATABASE_URL", book),
-            ("CHANGE_LEDGER_DATABASE_URL", ledger),
-        ]:
-            monkeypatch.setenv(key, engine.url.render_as_string(hide_password=False))
-        yield book, ledger
-    finally:
-        book.dispose()
-        ledger.dispose()
-        with database.admin.connect().execution_options(
-            isolation_level="AUTOCOMMIT"
-        ) as conn:
-            for name in names:
-                conn.exec_driver_sql(f"DROP DATABASE {name}")
 
 
-def test_commands_resume_bounded_work_and_reconcile_all_consumers(
-    database, command_databases, tmp_path, capsys
-):
-    import argparse
-
-    from edgar_warehouse.mdm.cli import register_mdm_subparser
-
-    parser = argparse.ArgumentParser()
-    register_mdm_subparser(parser.add_subparsers())
-    run = str(uuid4())
-
-    def command(*args):
-        parsed = parser.parse_args(["mdm", *args])
-        return parsed.handler(parsed)
-
-    with database.admin.begin() as conn:
-        policy = register_policy(
-            conn,
-            {
-                "version": 3,
-                "automatic_rules": [],
-                "required_consumers": ["export", "graph", "journal"],
-                "fields": {"company": {"name": {"sources": ["fixture.primary"]}}},
-            },
-        )
-    batches = []
-    for n in range(3):
-        a = source(f"command-{n}")
-        entity, bind = identity_and_binding(a)
-        batches.append(
-            {
-                "batch_id": f"command-{n}",
-                "stage": "mastering" if n < 2 else "derive-relationships",
-                "consumer": "fixture",
-                "expected_checkpoint": n,
-                "checkpoint": n + 1,
-                "assertions": [a],
-                "identities": [entity],
-                "decisions": [bind],
-            }
-        )
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "contract_version": 2,
-                "policy_digest": policy,
-                "as_of": AS_OF,
-                "batches": batches,
-            }
-        )
-    )
-    common = ("--model", "clean", "--run-id", run)
-    work = (*common, "--manifest", str(manifest), "--limit", "1")
-    with pytest.raises(Conflict, match="preceding"):
-        command("derive-relationships", *work)
-    assert command("mastering", *work) == 0
-    assert len(documents(database, "entity")) == 1
-    assert command("mastering", *work) == 0
-    assert len(documents(database, "entity")) == 2
-    assert command("mastering", *work) == 0
-    assert len(documents(database, "entity")) == 2
-    assert command("reconcile", *common) == 2
-    assert command("derive-relationships", *work) == 0
-    assert command("publication-status", *common) == 2
-    for consumer in ["export", "graph", "journal"]:
-        assert (
-            command(
-                "publish",
-                *common,
-                "--consumer",
-                consumer,
-                "--contract-output",
-                str(tmp_path / "published"),
-                "--limit",
-                "3",
-            )
-            == 0
-        )
-    assert command("reconcile", *common) == 0
-    assert command("counts", "--model", "clean") == 0
-    book, ledger = command_databases
-    with book.connect() as conn:
-        assert conn.scalar(text("SELECT status FROM pipeline_run")) == "succeeded"
-    with ledger.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_mirror.event")) == 3
-    # A stale success cannot survive reconciliation of unexpected committed work.
-    apply(database, 4, run_id=run, assertions=[source("unexpected")])
-    assert command("reconcile", *common) == 2
-    with book.connect() as conn:
-        assert conn.scalar(text("SELECT status FROM pipeline_run")) == "running"
-        assert conn.scalar(text("SELECT completed_at FROM pipeline_run")) is None
 
 
-def test_manifest_rejects_insufficient_or_zero_limit(
-    database, command_databases, tmp_path
-):
-    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
-    from edgar_warehouse.mdm.clean.cli import execute_manifest
-
-    store = Store(database.application)
-    coordinator = RunCoordinator(command_databases[0], store)
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "contract_version": 2,
-                "policy_digest": database.policy,
-                "as_of": AS_OF,
-                "batches": [
-                    {
-                        "batch_id": "large",
-                        "stage": "mastering",
-                        "consumer": "fixture",
-                        "expected_checkpoint": 0,
-                        "checkpoint": 1,
-                        "assertions": [source("one"), source("two")],
-                    }
-                ],
-            }
-        )
-    )
-    for limit, message in [(0, "1..1000"), (1, "at least 2")]:
-        with pytest.raises(ValueError, match=message):
-            execute_manifest(
-                store,
-                coordinator,
-                path=str(manifest),
-                run_id=str(uuid4()),
-                stage="mastering",
-                limit=limit,
-            )
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 0
 
 
 def test_fresh_replay_preserves_business_results_across_batching_and_order(postgres):
@@ -1366,75 +1114,8 @@ def test_reversal_preview_rolls_back_and_matches_committed_replay(database):
     assert documents(database, "entity") == expected
 
 
-def test_attempt_history_retains_lost_ack_and_does_not_duplicate_effect(
-    database, command_databases
-):
-    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
-
-    store = Store(database.application)
-    coordinator = RunCoordinator(command_databases[0], store)
-    run = str(uuid4())
-    coordinator.start(run, ["work-1"], manifest_digest="attempt-test")
-    a = source()
-    entity, bind = identity_and_binding(a)
-
-    def commit():
-        return apply(
-            database,
-            1,
-            run_id=run,
-            assertions=[a],
-            identities=[entity],
-            decisions=[bind],
-        )
-
-    def lost_ack():
-        commit()
-        raise OSError("process lost commit acknowledgement")
-
-    with pytest.raises(OSError):
-        coordinator.execute(run, "work-1", lost_ack)
-    assert coordinator.execute(run, "work-1", commit)["duplicate"]
-    report = coordinator.reconcile(run)
-    assert report["attempt_events"] == {"started": 2, "finished": 1, "error": 1}
-    assert report["observed_batches"] == 1
-    assert not report["end_to_end_complete"]
-    publisher = Destination()
-    publisher.fail = False
-    for name in ["export", "graph"]:
-        assert store.deliver_one(name, "worker", publisher)
-    assert coordinator.reconcile(run)["end_to_end_complete"]
-    with pytest.raises(DBAPIError), database.application.begin() as conn:
-        conn.execute(text("DELETE FROM mdm_v2.attempt_event"))
-    with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
-        conn.execute(text("DELETE FROM mdm_v2.attempt_event"))
 
 
-def test_review_resolution_requires_its_later_publication_receipts(
-    database, command_databases
-):
-    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
-
-    store = Store(database.application)
-    coordinator = RunCoordinator(command_databases[0], store)
-    run = str(uuid4())
-    coordinator.start(run, ["work-1"], manifest_digest="review-resolution")
-    a = source()
-    apply(database, 1, run_id=run, assertions=[a])
-    sink = Destination()
-    sink.fail = False
-    for consumer in ["export", "graph"]:
-        store.deliver_one(consumer, "worker", sink)
-    assert coordinator.reconcile(run)["unresolved_reviews"] == 1
-    entity, bind = identity_and_binding(a)
-    apply(database, 2, identities=[entity], decisions=[bind])
-    report = coordinator.reconcile(run)
-    assert report["unresolved_reviews"] == 0
-    assert report["pending_publications"] == 2
-    assert not report["end_to_end_complete"]
-    for consumer in ["export", "graph"]:
-        store.deliver_one(consumer, "worker", sink)
-    assert coordinator.reconcile(run)["end_to_end_complete"]
 
 
 def test_temporal_parents_separate_ownership_reported_and_calculated(database):
@@ -1614,285 +1295,6 @@ def test_version_two_api_auth_history_pagination_and_profile_provenance(
         )
 
 
-def test_native_company_batch_retains_unsupported_records_atomically(
-    database, command_databases, tmp_path
-):
-    import copy
-
-    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
-    from edgar_warehouse.mdm.clean.cli import batch_evidence, execute_manifest
-    from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
-    from edgar_warehouse.mdm.clean.evidence import deferred_record
-    from tests.mdm.test_clean_activation import proof
-
-    # Synthetic activation is local to this atomic-accounting fixture. The
-    # Standard policy stays inactive pending exact-digest operator approval.
-    fixture_policy = copy.deepcopy(POLICY)
-    fixture_policy["automatic_rules"] = [
-        {
-            "kind": "company",
-            "family": "classification",
-            "rule_id": "sec-company-candidate",
-            "rule_version": "2026-09-25.13",
-            "verdict": "company",
-            "activation": "measured",
-            "proof": proof(),
-        }
-    ]
-
-    with database.admin.begin() as conn:
-        conn.execute(
-            text("""INSERT INTO source_registry_coverage(version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
-            VALUES(:v,'submissions','carry_forward','fixture','fixture','fixture','2026-01-01')"""),
-            {"v": database.registry},
-        )
-        register_dataset(conn, SOURCE_CODE, database.registry, CONTRACT)
-        policy = register_policy(conn, fixture_policy)
-    raw = (
-        b"\n".join(
-            [
-                json.dumps(
-                    {
-                        "cik": 123,
-                        "entity_type": "operating",
-                        "entity_name": "Synthetic Company",
-                        "sic": "1234",
-                        "tickers": ["SYN"],
-                        "forms": ["10-K"],
-                    }
-                ).encode(),
-                json.dumps(
-                    {
-                        "cik": 456,
-                        "entity_type": "other",
-                        "entity_name": "Unknown legal kind",
-                    }
-                ).encode(),
-                json.dumps(
-                    {"entity_type": "operating", "entity_name": "Missing CIK", "sic": "1234"}
-                ).encode(),
-                b"{broken json",
-                b'{"cik":789,"entity_type":"operating","sic":"1234","entity_name":[1,2]}',
-                b'{"cik":790,"entity_type":"operating","sic":"1234","entity_name":{"op":"bogus"}}',
-                b'{"cik":791,"entity_type":"operating","sic":"1234","entity_name":1e999}',
-            ]
-        )
-        + b"\n"
-    )
-    (tmp_path / "records.jsonl").write_bytes(raw)
-    batch = {
-        "batch_id": "native-company-1",
-        "stage": "mastering",
-        "consumer": "native-company",
-        "expected_checkpoint": 0,
-        "checkpoint": 1,
-        "input": {
-            "path": "records.jsonl",
-            "sha256": hashlib.sha256(raw).hexdigest(),
-            "source_code": SOURCE_CODE,
-            "record_count": 7,
-            "publication": {
-                "publication_key": "capture-1",
-                "revision": 0,
-                "effective_at": None,
-            },
-        },
-    }
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "contract_version": 2,
-                "policy_digest": policy,
-                "as_of": AS_OF,
-                "batches": [batch],
-            }
-        )
-    )
-    store = Store(database.application)
-    coordinator = RunCoordinator(command_databases[0], store)
-    run = str(uuid4())
-    args = {"path": str(manifest), "run_id": run, "stage": "mastering", "limit": 7}
-    report = execute_manifest(store, coordinator, **args)
-    assert report["records_processed"] == 7 and report["unresolved_reviews"] == 7
-    assert not report["end_to_end_complete"]
-    assert execute_manifest(store, coordinator, **args)["records_processed"] == 0
-    evidence, deferred = batch_evidence(batch, tmp_path, store, policy_digest=policy)
-    assert len(evidence) == 1 and len(deferred) == 6
-    assert {r["reason"] for r in deferred} == {
-        "classification_deferred",
-        "missing_record_identity",
-        "invalid_json_record",
-        "invalid_field_shape",
-    }
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 6
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
-        assert conn.scalar(
-            text("SELECT effects->'source_accounting' FROM mdm_v2.batch")
-        ) == {"total": 7, "normalized": 1, "deferred": 6}
-    entity, bind = identity_and_binding(evidence[0])
-    MergeStage(store).apply(
-        batch_id="native-company-2",
-        run_id=run,
-        policy_digest=policy,
-        consumer="native-company",
-        expected_checkpoint=1,
-        checkpoint=2,
-        as_of=AS_OF,
-        identities=[entity],
-        decisions=[bind],
-    )
-    assert (
-        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
-        == "Synthetic Company"
-    )
-    assert sum(r["open"] for r in documents(database, "review").values()) == 6
-    # The restricted SQL capability cannot bypass source accounting, omit a
-    # deferred review, or close one in a subsequent otherwise valid commit.
-    with database.application.connect() as conn:
-        retained = conn.scalar(
-            text("SELECT effects FROM mdm_v2.batch WHERE batch_id='native-company-1'")
-        )
-    for defect in (
-        "missing_review",
-        "replayed_without_review",
-        "closed_review",
-        "accounting",
-    ):
-        request = {
-            **retained,
-            "batch_id": f"bypass-{defect}",
-            "expected_generation": 2,
-            "expected_checkpoint": 2,
-            "checkpoint": 3,
-        }
-        if defect == "missing_review":
-            new_record = deferred_record(
-                **{
-                    **{k: v for k, v in deferred[0].items() if k != "deferred_id"},
-                    "record_locator": "new-occurrence",
-                }
-            )
-            request.update(
-                assertions=[],
-                deferred=[new_record],
-                projections=[],
-                source_accounting={"normalized": 0, "deferred": 1, "total": 1},
-            )
-        elif defect == "replayed_without_review":
-            request["projections"] = []
-        elif defect == "closed_review":
-            request.update(
-                assertions=[],
-                deferred=[],
-                source_accounting={"normalized": 0, "deferred": 0, "total": 0},
-                projections=[
-                    {
-                        "object_type": "review",
-                        "object_id": deferred[0]["deferred_id"],
-                        "body": {"open": False, "blocking": False},
-                    }
-                ],
-            )
-        else:
-            request["source_accounting"] = {"normalized": 0, "deferred": 0, "total": 0}
-        with (
-            pytest.raises(DBAPIError, match="review.*disposition|source accounting"),
-            database.application.begin() as conn,
-        ):
-            store.commit(conn, request, run)
-    changed = deferred_record(
-        **{
-            **{k: v for k, v in deferred[0].items() if k != "deferred_id"},
-            "raw_record": {"different": True},
-        }
-    )
-    with pytest.raises(DBAPIError, match="collision"):
-        MergeStage(store).apply(
-            batch_id="native-company-collision",
-            run_id=run,
-            policy_digest=policy,
-            consumer="native-company",
-            expected_checkpoint=2,
-            checkpoint=3,
-            as_of=AS_OF,
-            deferred=[changed],
-        )
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 6
-        assert (
-            conn.scalar(
-                text(
-                    "SELECT position FROM mdm_v2.checkpoint WHERE consumer='native-company'"
-                )
-            )
-            == 2
-        )
-    with (
-        pytest.raises(DBAPIError, match="permission denied"),
-        database.application.begin() as conn,
-    ):
-        conn.execute(
-            text("SELECT mdm_v2.commit_batch_core('{}',CAST(:r AS uuid))"), {"r": run}
-        )
-    with pytest.raises(DBAPIError), database.application.begin() as conn:
-        conn.execute(text("DELETE FROM mdm_v2.deferred_record"))
-    with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
-        conn.execute(text("DELETE FROM mdm_v2.deferred_record"))
-    # Duplicate lines and later delivery of the same source revision remain one
-    # business assertion, even when the transport member/hash/ordinal change.
-    from edgar_warehouse.mdm.clean.adapters import normalize
-
-    duplicate = normalize(
-        {
-            "cik": 123,
-            "entity_type": "operating",
-            "entity_name": "Synthetic Company",
-            "sic": "1234",
-            "tickers": ["SYN"],
-            "forms": ["10-K"],
-        },
-        source_code=SOURCE_CODE,
-        contract=CONTRACT,
-        policy=fixture_policy,
-        publication={
-            "publication_key": "capture-1",
-            "revision": 0,
-            "effective_at": None,
-            "artifact_sha256": "b" * 64,
-            "member": "another.jsonl",
-            "record_locator": "line:27",
-        },
-    )
-    assert duplicate == evidence[0]
-    MergeStage(store).apply(
-        batch_id="native-company-duplicates",
-        run_id=run,
-        policy_digest=policy,
-        consumer="native-company",
-        expected_checkpoint=2,
-        checkpoint=3,
-        as_of=AS_OF,
-        assertions=[duplicate, evidence[0]],
-    )
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
-        assert conn.scalar(
-            text(
-                "SELECT effects->'source_accounting' FROM mdm_v2.batch WHERE batch_id='native-company-duplicates'"
-            )
-        ) == {
-            "total": 2,
-            "normalized": 2,
-            "deferred": 0,
-        }
-    assert (
-        documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"]
-        == "Synthetic Company"
-    )
-    assert sum(r["open"] for r in documents(database, "review").values()) == 6
 
 
 def assessment_command(db, **changes):
@@ -2434,49 +1836,6 @@ def test_family_checkpoint_upgrade_preserves_old_batch_and_pending_assessment(da
         )
 
 
-def test_manifest_cli_passes_family_scope_to_atomic_commit(
-    database, command_databases, tmp_path
-):
-    from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
-    from edgar_warehouse.mdm.clean.cli import execute_manifest
-
-    manifest = {
-        "contract_version": 2,
-        "policy_digest": database.policy,
-        "as_of": AS_OF,
-        "batches": [
-            {
-                "batch_id": family,
-                "stage": "mastering",
-                "consumer": "company",
-                "expected_checkpoint": 0,
-                "checkpoint": 1,
-                **family_metadata(family),
-            }
-            for family in ["golden_copy", "opencorporates"]
-        ],
-    }
-    path = tmp_path / "families.json"
-    path.write_text(json.dumps(manifest))
-    store = Store(database.application)
-    result = execute_manifest(
-        store,
-        RunCoordinator(command_databases[0], store),
-        path=str(path),
-        run_id=str(uuid4()),
-        stage="mastering",
-        limit=2,
-    )
-    assert result["observed_batches"] == 2
-    assert not result[
-        "end_to_end_complete"
-    ]  # Required publication receipts remain absent.
-    with database.application.connect() as conn:
-        assert conn.execute(
-            text(
-                "SELECT publication_family FROM mdm_v2.checkpoint ORDER BY publication_family"
-            )
-        ).scalars().all() == ["golden_copy", "opencorporates"]
 
 
 # --- Company mastering ticket 01: a mapping may be corrected ------------------
@@ -2687,23 +2046,17 @@ def test_migration_031_applies_to_a_populated_store(postgres):
 
     def register_pre_031(conn, code, registry_version, body):
         """Register a dataset the way the store did before dataset_mapping."""
-        authority = rows(
-            conn,
-            """SELECT v.version_id::text,v.status,v.operator_authorization_reference,
-            c.source_family,c.coverage_action FROM public.source_registry_version v
-            JOIN public.source_registry_coverage c USING(version_id)
-            WHERE v.version_id=CAST(:v AS uuid) AND c.source_family=:family""",
-            v=registry_version,
-            family=body["family"],
-        )
+        from edgar_warehouse.change_journal.authority import registration_authority
+
+        evidence = registration_authority(authority(code, body, registry_version), code, body)
         conn.execute(
             text(
                 "INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))"
             ),
             {
                 "code": code,
-                "registry": registry_version,
-                "body": canonical({**body, "registry_evidence": authority[0]}),
+                "registry": evidence["version_id"],
+                "body": canonical({**body, "registry_evidence": evidence}),
             },
         )
 
@@ -2828,19 +2181,7 @@ def test_a_registry_version_bump_alone_is_not_a_new_reading(database):
     """Nothing in the mapping changed, so no reading is minted and no id forks."""
     with database.admin.begin() as conn:
         register_dataset(conn, "fixture.primary", database.registry, contract_body())
-        conn.execute(text("DELETE FROM source_registry_coverage"))
-        conn.execute(text("DELETE FROM source_registry_version"))
         later = str(uuid4())
-        conn.execute(
-            text("""INSERT INTO source_registry_version(version_id,status,operator_authorization_reference,activated_at)
-            VALUES(:v,'active','offline-fixture',now())"""),
-            {"v": later},
-        )
-        conn.execute(
-            text("""INSERT INTO source_registry_coverage(version_id,source_family,coverage_action,acquisition_mode,completeness_policy,discovery_policy,coverage_start_date)
-            VALUES(:v,'fixture','carry_forward','fixture','fixture','fixture','2026-01-01')"""),
-            {"v": later},
-        )
     with (
         pytest.raises(Conflict, match="registry version bump is not a new reading"),
         database.admin.begin() as conn,

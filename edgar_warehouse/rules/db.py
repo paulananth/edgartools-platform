@@ -25,8 +25,8 @@ def get_engine(url=None):
 def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "rules_approver"):
     if approver_role != "rules_approver":
         raise ValueError("Approval membership must be rules_approver")
-    source = (Path(__file__).parent / "migrations" / "001_rule_version.sql").read_text()
-    checksum = hashlib.sha256(source.encode()).hexdigest()
+    paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
+    base_checksum = hashlib.sha256(paths[0].read_bytes()).hexdigest()
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
         if conn.scalar(text("SELECT current_database()")) != "rules" or int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
@@ -39,11 +39,26 @@ def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "ru
         conn.execute(text("SELECT pg_advisory_xact_lock(730503)"))
         exists = conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='rules')"))
         prior = conn.scalar(text("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='rules'"))
-        if exists and prior != checksum:
-            raise Blocked("Rules migration checksum differs; refusing to adopt a competing schema")
-        if not exists:
-            conn.execute(text(source))
-            conn.exec_driver_sql(f"COMMENT ON SCHEMA rules IS '{checksum}'")
+        if exists and not prior:
+            raise Blocked("Refusing to adopt an untracked Rules schema")
+        # Version 1 stored its single checksum directly in the schema comment.
+        try:
+            checksums = {paths[0].name: prior} if prior == base_checksum else json.loads(prior) if prior else {}
+        except ValueError as exc:
+            raise Blocked("Rules migration checksum differs") from exc
+        if not isinstance(checksums, dict) or set(checksums) - {p.name for p in paths}:
+            raise Blocked("Rules migration history differs from this build")
+        for path in paths:
+            source = path.read_text()
+            checksum = hashlib.sha256(source.encode()).hexdigest()
+            if path.name in checksums:
+                if checksums[path.name] != checksum:
+                    raise Blocked("Rules migration checksum differs")
+            else:
+                conn.execute(text(source))
+                checksums[path.name] = checksum
+        comment = canonical(checksums).replace("'", "''")
+        conn.exec_driver_sql(f"COMMENT ON SCHEMA rules IS '{comment}'")
         agent = quote(agent_role)
         conn.exec_driver_sql(f"REVOKE ALL ON ALL TABLES IN SCHEMA rules FROM PUBLIC,{agent},rules_approver")
         conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA rules TO {agent},rules_approver")
@@ -53,7 +68,7 @@ def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "ru
         conn.exec_driver_sql("GRANT UPDATE(approved_by,approved_at) ON rules.rule_version TO rules_approver")
         if conn.scalar(text("SELECT has_schema_privilege(:r,'rules','CREATE') OR has_column_privilege(:r,'rules.rule_version','approved_by','INSERT,UPDATE') OR has_column_privilege(:r,'rules.rule_version','approved_at','INSERT,UPDATE')"), {"r": agent_role}):
             raise Blocked("Rules agent inherits approval privileges or schema ownership")
-    return checksum
+    return checksums
 
 
 class Rules:
@@ -64,6 +79,9 @@ class Rules:
         if (kind not in ("source", "merge", "pipeline") or not isinstance(name, str) or not isinstance(version, str)
                 or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", version)):
             raise Blocked("A supported document kind, name and version are required")
+        if "acquisition" in body:
+            from edgar_warehouse.change_journal.authority import acquisition
+            acquisition(body)
         with self.engine.begin() as conn:
             conn.execute(text("INSERT INTO rules.rule_version(kind,name,version,body,digest) VALUES(:k,:n,:v,:b,:d) ON CONFLICT DO NOTHING"),
                          {"k": kind, "n": name, "v": version, "b": canonical(body), "d": digest(body)})
@@ -84,6 +102,11 @@ class Rules:
             return self._version(conn, kind, name, version)
 
     def prove(self, kind, name, version, proof):
+        row = self.version(kind, name, version)
+        body = json.loads(row["body"])
+        if "acquisition" in body:
+            from edgar_warehouse.change_journal.authority import validation_proof
+            validation_proof(body, proof, artifacts=Artifacts())
         with self.engine.begin() as conn:
             conn.execute(text("UPDATE rules.rule_version SET status='proven',proof=CAST(:p AS jsonb),batch_hash=:h WHERE kind=:k AND name=:n AND version=:v"),
                          {"p": canonical(proof), "h": proof["batch_hash"], "k": kind, "n": name, "v": version})
@@ -95,7 +118,7 @@ class Rules:
                 raise Blocked("Approval digest differs from the selected version")
             conn.execute(text("UPDATE rules.rule_version SET approved_by=session_user,approved_at=clock_timestamp() WHERE kind=:k AND name=:n AND version=:v"), {"k": kind, "n": name, "v": version})
 
-    def activate(self, kind, name, version, *, mdm_engine=None, registry_engine=None):
+    def activate(self, kind, name, version, *, mdm_engine=None):
         with self.engine.begin() as conn:
             # Serializes lifecycle changes for this document, not every source.
             conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k,0))"), {"k": f"{kind}:{name}"})
@@ -105,13 +128,18 @@ class Rules:
             if selected["status"] != "proven":
                 raise Blocked("Only a proven version can activate")
             body = json.loads(selected["body"])
+            if "acquisition" in body:
+                from edgar_warehouse.change_journal.authority import validation_proof
+                validation_proof(body, selected["proof"], artifacts=Artifacts())
             requires_handoff = kind == "merge" or (kind == "source" and "mdm" in body)
             receipts = None
             if requires_handoff:
                 if not selected["approved_by"]:
                     raise Blocked("MDM handoff requires approval of this Rules version")
-                if mdm_engine is None or (kind == "source" and registry_engine is None):
-                    raise Blocked("MDM activation requires explicit governance and registry connections")
+                if mdm_engine is None:
+                    raise Blocked("MDM activation requires an explicit destination connection")
+                if kind == "source" and "acquisition" not in body:
+                    raise Blocked("Source MDM activation requires approved acquisition authority")
                 from edgar_warehouse.mdm.clean.store import register_policy, register_dataset, current_reading
                 receipts = {"rules_digest": selected["digest"], "datasets": {}}
                 # First commit the idempotent MDM handoff. If the Rules status
@@ -119,20 +147,16 @@ class Rules:
                 with mdm_engine.begin() as destination:
                     if kind == "merge":
                         receipts["policy_digest"] = register_policy(destination, body)
-                    else:
-                        with registry_engine.connect() as authority:
-                            registry_version = authority.scalar(text("SELECT version_id::text FROM public.source_registry_version WHERE status='active'"))
-                            if not registry_version:
-                                raise Blocked("No active acquisition registry for MDM registration")
-                            for code, entry in body["mdm"].items():
-                                existing = destination.execute(text("SELECT mapping_version,body FROM mdm_v2.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
-                                # A registry refresh or Bookkeeping change is
-                                # not a new source mapping. Compare the actual
-                                # mapping before asking the registrar to add it.
-                                if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
-                                    register_dataset(destination, code, registry_version, entry["contract"], registry_connection=authority)
-                                reading = current_reading(destination, code)
-                                receipts["datasets"][code] = {"mapping_version": reading[0], "digest": digest(reading[1])}
+                    elif "acquisition" in body:
+                        from edgar_warehouse.change_journal.authority import registration_authority
+                        selected_export = self.envelope(selected)
+                        for code, entry in body["mdm"].items():
+                            registration_authority(selected_export, code, entry["contract"])
+                            existing = destination.execute(text("SELECT mapping_version,body FROM mdm_v2.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
+                            if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
+                                register_dataset(destination, code, entry["contract"], rules_authority=selected_export)
+                            reading = current_reading(destination, code)
+                            receipts["datasets"][code] = {"mapping_version": reading[0], "digest": digest(reading[1])}
             conn.execute(text("UPDATE rules.rule_version SET status='retired' WHERE kind=:k AND name=:n AND status='active'"), {"k": kind, "n": name})
             conn.execute(text("UPDATE rules.rule_version SET status='active',clean_mdm=CAST(:receipt AS jsonb) WHERE kind=:k AND name=:n AND version=:v"), {"k": kind, "n": name, "v": version, "receipt": canonical(receipts)})
 

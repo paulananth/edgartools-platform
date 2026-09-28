@@ -1,0 +1,43 @@
+source: sec.filings
+bronze:
+  family: filing_artifact
+acquisition:
+  version: 1
+  feeds:
+    filings:
+      family: filing_artifact
+      datasets: []
+      scope:
+      - cik
+      - accession
+      - filename
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: text
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://www.sec.gov/Archives/
+bookkeeping:
+  version: 1
+  targets:
+    capture:
+      steps:
+      - name: capture
+        operation: provider.capture
+        requires: []
+        key: '{candidate_id}'
+        leases:
+        - source:{source}:{feed}:{cik}:{accession}:{filename}
+        checks:
+        - input.hash
+        - output.receipt
+      checks:
+      - manifest.hash
+      - work.accounting
+      - journal.delivered

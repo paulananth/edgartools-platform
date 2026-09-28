@@ -1,0 +1,43 @@
+source: sec.company-facts
+bronze:
+  family: company_facts
+acquisition:
+  version: 1
+  feeds:
+    company_facts:
+      family: company_facts
+      datasets: []
+      scope:
+      - cik
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: json
+        required:
+        - cik
+        - facts
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://data.sec.gov/api/xbrl/companyfacts/
+bookkeeping:
+  version: 1
+  targets:
+    capture:
+      steps:
+      - name: capture
+        operation: provider.capture
+        requires: []
+        key: '{candidate_id}'
+        leases:
+        - source:{source}:{feed}:{cik}
+        checks:
+        - input.hash
+        - output.receipt
+      checks:
+      - manifest.hash
+      - work.accounting
+      - journal.delivered

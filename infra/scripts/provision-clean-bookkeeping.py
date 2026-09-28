@@ -4,7 +4,8 @@
 Run with uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py.
 BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL names the admin connection (postgres DB),
 BOOKKEEPING_CLEAN_RUNTIME_PASSWORD supplies the new runtime login's password.
-Optional --rules also uses RULES_AGENT_PASSWORD. No versions are activated.
+Optional --rules uses RULES_AGENT_PASSWORD; --journal uses
+CHANGE_JOURNAL_RUNTIME_PASSWORD. No versions are activated.
 """
 from __future__ import annotations
 
@@ -18,13 +19,16 @@ from sqlalchemy.engine import make_url
 from edgar_warehouse.bookkeeping.clean.database import migrate
 from edgar_warehouse.bookkeeping.clean.config import Blocked
 from edgar_warehouse.rules.db import migrate as migrate_rules
+from edgar_warehouse.change_journal.database import migrate as migrate_journal
 
 
-def provision(admin_url: str, *, rules: bool = False):
+def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
     admin = create_engine(admin_url, hide_parameters=True)
     requested = [("bookkeeping_clean", "bookkeeping_clean_owner", "bookkeeping_clean_runtime", "BOOKKEEPING_CLEAN_RUNTIME_PASSWORD")]
     if rules:
         requested.append(("rules", "rules_owner", "rules_agent", "RULES_AGENT_PASSWORD"))
+    if journal:
+        requested.append(("change_journal_clean", "change_journal_owner", "change_journal_runtime", "CHANGE_JOURNAL_RUNTIME_PASSWORD"))
     quote = admin.dialect.identifier_preparer.quote
     result = {}
     try:
@@ -61,7 +65,11 @@ def provision(admin_url: str, *, rules: bool = False):
                 connection.commit()
 
             try:
-                result[database] = migrate(engine, runtime_role=runtime) if database == "bookkeeping_clean" else migrate_rules(engine, agent_role=runtime)
+                if database == "rules":
+                    result[database] = migrate_rules(engine, agent_role=runtime)
+                else:
+                    migration = migrate_journal if database == "change_journal_clean" else migrate
+                    result[database] = migration(engine, runtime_role=runtime)
             finally:
                 engine.dispose()
     finally:
@@ -72,8 +80,9 @@ def provision(admin_url: str, *, rules: bool = False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rules", action="store_true", help="Also create the one-table Rules store, without activating any version")
+    parser.add_argument("--journal", action="store_true", help="Also create the empty shared Change Journal")
     args = parser.parse_args()
-    result = provision(os.environ["BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL"], rules=args.rules)
+    result = provision(os.environ["BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL"], rules=args.rules, journal=args.journal)
     print(json.dumps(result, sort_keys=True))
 
 

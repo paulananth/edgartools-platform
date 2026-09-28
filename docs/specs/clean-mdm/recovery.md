@@ -1,5 +1,10 @@
 # Change Journal, Bookkeeping, and recovery
 
+The ownership description below is the historical legacy-stack contract.
+Fresh configured work follows [the shared Change Journal contract](../change-journal.md),
+with Rules authority and Bookkeeping control; keep original-stack runs and
+pending deliveries on the legacy stack until the feed qualifies for cutover.
+
 Status: local atomic commit, attempts, publication recovery and Bookkeeping
 reconciliation are implemented. Hosted consumers, complete source disposition
 accounting and staged large-generation recovery remain acceptance requirements.
