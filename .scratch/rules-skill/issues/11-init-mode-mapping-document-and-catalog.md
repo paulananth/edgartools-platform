@@ -27,10 +27,17 @@ A **data catalog** lists every source, dataset and MDM field in one place.
 
 ## Decided
 
-- **Two separate things** (operator, 2026-09-28 08:18 ET, asked which one
-  people edit after conversion): the mapping document is written at
-  onboarding for review and kept by hand beside the rules; the rules files
-  stay what runs. Known cost: the document can drift from the rules.
+- 08:18 ET, asked which one people edit after conversion: "Two separate
+  things" (a document kept by hand beside the rules).
+- 09:57 ET, superseding it, shown that `CONTEXT.md` and the Source Contract
+  spec define the Mapping Document as generated, never hand-edited:
+  "Initially, machine-generated must be able to edit and update by stewards
+  in an easily understandable way for humans research and provide a
+  sustainable format". So the init mode generates the document; stewards
+  then edit and update it in a format people read easily, and the rules
+  follow from it. The format is researched first
+  ([research 11](../research/11-mapping-document-format.md)).
+  `CONTEXT.md`'s "Do not edit by hand" changes with the chosen format.
 
 ## Open
 
