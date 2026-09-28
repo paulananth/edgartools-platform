@@ -240,6 +240,31 @@ count. Critical data elements are the checks with `on_fail: exception`. Notes (N
 starts it with the comments in its rules files. `diff` prints each changed
 cell, and `check` fails on any.
 
+## The Data Catalog
+
+`edgar-warehouse rules catalog plan|publish [--root <rules>]` works from
+the rules files alone. `plan` prints the catalog as JSON; `publish` makes
+the OpenMetadata catalog equal to it, with `OPENMETADATA_URL` and
+`OPENMETADATA_TOKEN` (a bot's token: Settings > Bots). It is one database
+service, `edgartools-rules`:
+
+| Database | Schema | Tables | Columns |
+|---|---|---|---|
+| `sources` | one per source | one per feed, one per Dataset Contract | a feed: the keys naming a captured file; a dataset: each source path it reads, with its use (identifier, record key, MDM field, matching only, kind) |
+| `mdm` | `clean` | one per kind | each MDM field: the datasets that fill it, first wins, the winner and the rule |
+
+Lineage runs from a feed to the datasets that read its files, and from a
+dataset to its kind, column by column (an address's parts all feed one
+field; matching-only paths feed none). A dataset's critical data elements
+are in its description. The service description carries a sha256 of every
+rules file, so a reader can tell which rules it shows. `publish` creates or
+updates what the rules name and hard-deletes, inside `edgartools-rules`
+only, the tables, schemas and lineage they no longer name; publishing the
+same rules again changes nothing.
+
+A catalog server on a laptop: `docker compose -f
+infra/openmetadata/docker-compose.yml up -d`, then http://localhost:8585.
+
 ## Worked examples
 
 Every file under `rules/sources/` is a worked example. Read them all before

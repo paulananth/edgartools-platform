@@ -120,7 +120,7 @@ def _kind_of(adapter: dict) -> str:
     return _text((adapter.get("classification") or {}).get("kind"))
 
 
-def _winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], list[str]]]]:
+def winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], list[str]]]]:
     """kind -> MDM field -> (the datasets that fill it, first wins; the sheet
     row: those datasets, the winner, which rule orders them, its path), as
     the merge engine picks a winner
@@ -169,7 +169,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
     wins = [["Kind", "MDM field", "Filled by, first wins", "Winner", "Rule", "Rules path"]]
     from edgar_warehouse.mdm.clean.activation import NAMESPACES  # the identifiers that join records
 
-    winners = _winners(policy, root)
+    by_kind = winners(policy, root)
     for code, entry in (body.get("mdm") or {}).items():
         contract = entry.get("contract") or {}
         adapter = contract.get("adapter") or {}
@@ -209,7 +209,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
             if check.get("on_fail") == "exception":  # a critical data element
                 critical.append([code, _text(check.get("value")).removeprefix("fields."), words, fails,
                                  f"quality.{code}.checks[{i}]"])
-        for kind, by_field in winners.items():
+        for kind, by_field in by_kind.items():
             for field, (sources, row) in by_field.items():
                 if code in sources:
                     wins.append([kind, field, *row])
@@ -224,7 +224,7 @@ def _conditions(items: list[dict]) -> str:
 
 
 def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict[str, list[list[str]]]:
-    """`by_field`: this kind's rows from `_winners`."""
+    """`by_field`: this kind's rows from `winners`."""
     preferred = [["Rank (1 wins)", "Dataset", "Rules path"]]
     for i, code in enumerate((rules.get("defaults") or {}).get("sources") or []):
         preferred.append([str(i + 1), _text(code), f"merge/kinds/{kind}.yaml defaults.sources[{i}]"])
@@ -283,7 +283,7 @@ def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[
     source or kind it describes, its sheets, and the rules files behind it."""
     root = root or files.ROOT
     policy = files.policy(root)
-    winners = _winners(policy, root)
+    by_kind = winners(policy, root)
     found: dict[Path, tuple] = {}
     for path in sorted((root / "sources").glob("*/source.yaml")):
         body = files.load_source(path)
@@ -293,7 +293,7 @@ def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[
                 name, _source_sheets(name, body, policy, root), [path, path.parent / "quality.yaml"])
     for kind, rules in sorted((policy.get("kinds") or {}).items()):
         yaml = root / "merge" / "kinds" / f"{kind}.yaml"
-        found[yaml.with_suffix(".xlsx")] = (kind, _kind_sheets(kind, rules, winners.get(kind, {})), [yaml])
+        found[yaml.with_suffix(".xlsx")] = (kind, _kind_sheets(kind, rules, by_kind.get(kind, {})), [yaml])
     return found
 
 

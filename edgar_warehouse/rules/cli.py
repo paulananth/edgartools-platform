@@ -129,6 +129,23 @@ def _mapdoc(args):
     return 1 if args.action == "check" and any(changed.values()) else 0
 
 
+def _catalog(args):
+    """The Data Catalog, from the rules files alone: `plan` prints what would
+    be published; `publish` makes the OpenMetadata catalog equal to it."""
+    from . import catalog
+
+    plan = catalog.plan(Path(args.root))
+    if args.action == "plan":
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        return 0
+    url, token = os.environ.get("OPENMETADATA_URL"), os.environ.get("OPENMETADATA_TOKEN")
+    if not url or not token:
+        print("Set OPENMETADATA_URL and OPENMETADATA_TOKEN (a bot's token: Settings > Bots)", file=sys.stderr)
+        return 2
+    print(json.dumps(catalog.publish(plan, catalog.connect(url, token)), indent=2, sort_keys=True))
+    return 0
+
+
 def register(subparsers):
     parser = subparsers.add_parser("rules", help="Versioned Rules files, approvals and configured run submission")
     commands = parser.add_subparsers(dest="rules_command", required=True)
@@ -150,6 +167,12 @@ def register(subparsers):
     mapping.add_argument("--only", help="One source (its folder name) or kind")
     mapping.add_argument("--root", default=str(files.ROOT))
     mapping.set_defaults(handler=_mapdoc)
+    catalog = commands.add_parser(
+        "catalog", help="The Data Catalog (OpenMetadata), published one way from the rules files")
+    catalog.add_argument("action", choices=("plan", "publish"),
+                         help="plan: print the catalog the rules describe; publish: make OpenMetadata equal to it")
+    catalog.add_argument("--root", default=str(files.ROOT))
+    catalog.set_defaults(handler=_catalog)
     for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):
         command = commands.add_parser(operation)
         _selection(command)

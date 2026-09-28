@@ -23,6 +23,9 @@ People edit the files and review them in PRs:
   the stewards' own and is kept when the workbook is regenerated. A
   steward's change becomes rules only through you (see "A steward changed a
   Mapping Document"), and CI fails when a workbook differs from its rules.
+- The Data Catalog in OpenMetadata: every source, feed, dataset and MDM
+  field, published one way from these files by
+  `edgar-warehouse rules catalog publish`. Nobody edits rules in it.
 
 The files already in `rules/sources/` are worked examples. The contract
 language is in [REFERENCE.md](REFERENCE.md).
@@ -65,6 +68,10 @@ language is in [REFERENCE.md](REFERENCE.md).
 - **Keep the Mapping Documents equal to the rules.** After any change to a
   rules file, run `edgar-warehouse rules mapdoc write` and commit the
   workbooks with the change; `rules mapdoc check` (and CI) fails otherwise.
+  Once the change is merged, run `edgar-warehouse rules catalog publish` so
+  the Data Catalog shows it (it needs `OPENMETADATA_URL` and
+  `OPENMETADATA_TOKEN`; never print the token). If no catalog server is
+  reachable, say so; do not skip it silently.
 - **Keep a log** at `<your scratchpad>/rules-log.md`. Record:
   - every question you asked, with the answer;
   - every command this skill names that did not exist;
