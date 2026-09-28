@@ -108,34 +108,43 @@ companies (the classification rule).
 | Address withheld: a registered agent's | 7, all real agents (1209 Orange St, 251 Little Falls Dr, 2711 Centerville Rd) |
 | Exception: no name | 0 |
 
-GLEIF (`gleif-quality-v1`), GENERAL entities, as its contract maps them:
+GLEIF (`gleif-quality-v1`), GENERAL entities, as its contract maps them.
+GLEIF gives two addresses (operator, 2026-09-28: "we have multiple
+addresses in lei feed"): the legal address, which MDM shows, and the
+headquarters address, now also kept for matching
+(`matching.headquarters_address`). Each is fixed and checked on its own.
+84% of LEIs give the same address twice.
 
-| What | Records |
-|---|---:|
-| Records | 3,043,262 |
-| Address copy differs from the source's (not only in case) | 1,876,914 |
-| Address withheld: a registered agent's | 124,852 |
-| Street withheld: a placeholder ("N/A", "n.a.") | 5,398 |
-| Exception: no name | 0 |
+| What | Legal address | Headquarters address |
+|---|---:|---:|
+| Records | 3,043,262 | |
+| Copy differs from the source's (not only in case) | 1,876,914 | 1,881,276 |
+| Withheld: a registered agent's | 124,852 | 16,860 |
+| Withheld: a placeholder street ("N/A", "n.a.") | 5,398 | 4,462 |
+| Exception: no name | 0 | |
+
+The address a match can use, headquarters first, else legal:
+headquarters 3,000,424 (98.6%), legal 6,254, none 36,584.
 
 The first run showed three wrong rules, fixed before this one: a bare
 "C/O" marker withheld companies' own offices ("C/O LOGITECH INC"); GLEIF
 had no placeholder check (4,144 Finnish "N/A" streets); letters outside
 A-Z were dropped, so Greek streets read as "0" and "FLATBUSH" lost "FL".
 
-Over-shared addresses (Q8), counting only addresses left fit to match:
+Over-shared addresses (Q8), on the address a match uses:
 
 | Threshold | Addresses | Entities withheld |
 |---|---:|---:|
-| more than 10 | 10,294 | 358,743 |
-| more than 25 | 2,963 | 245,770 |
-| more than 100 | 463 | 135,641 |
+| more than 10 | 12,128 | 403,384 |
+| more than 25 | 3,604 | 271,352 |
+| more than 100 | 496 | 133,289 |
 
 No SEC address is shared by more than 10 filers. The largest are corporate
-service providers without a named-agent marker: C/O Rathbone Investment
-Management (5,686), C/O Maples Corporate Services (4,136), C/O Capitol
-Services (3,091), Vistra Corporate Services Centre (2,187). The operator
-picks the threshold.
+service providers (C/O Rathbone Investment Management: 5,685; Vistra
+Corporate Services Centre: 2,701; PO Box 309, Cayman: 1,811) and the real
+headquarters of large groups with many legal entities (200 West St, New
+York: 3,452; 650 Newport Center Dr: 1,953; 30 Hudson Yards: 1,709). The
+operator picks the threshold.
 
 ## What this ticket leaves to others
 

@@ -31,14 +31,18 @@ WITH_PLACE_CODES = {
 # both the contract is the one above.
 WITH_QUALITY = {
     "contract": "37b6634c515a6f0747c06ab1ab09e7b2cba87ce61fc2ad54eb73838d1dc84dcc",
-    "level1": "192a37322ea77407a08cbb931b6e4f67cbbc6d90e91c06dba0022f8ce2c32f0c",
+    "level1": "fb4a2d7d3529d02c38829d4c44c1d67756ea505479fcccca7a7e99d7e215f28e",
 }
 
 
 def _without_quality(contract: dict) -> dict:
+    """The contract without what ticket 22 added: its `quality`, its exception
+    reasons, and GLEIF's headquarters address in matching."""
     body = {k: v for k, v in contract.items() if k != "quality"}
     reasons = [r for r in body.get("nonblocking_deferred_reasons", []) if not r.startswith("quality_")]
     body.pop("nonblocking_deferred_reasons", None)
+    matching = {k: v for k, v in body["adapter"].get("matching", {}).items() if k != "headquarters_address"}
+    body["adapter"] = {**body["adapter"], **({"matching": matching} if "matching" in body["adapter"] else {})}
     return {**body, **({"nonblocking_deferred_reasons": reasons} if reasons else {})}
 
 

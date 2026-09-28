@@ -324,8 +324,11 @@ def normalize(
     if mapping.get("matching"):
         # What a matching rule compares, kept with the record and out of its
         # fields, so reading it grants no field a value (ticket 08).
+        # A value is one path, or an address's components, as `fields.address`
+        # reads them (GLEIF's headquarters address: ticket 22).
         provenance["matching"] = {
-            name: value(row, path) for name, path in mapping["matching"].items()
+            name: value(row, path) if isinstance(path, str) else mapped_field(row, "address", path)
+            for name, path in mapping["matching"].items()
         }
     if contract.get("quality"):
         # Ticket 22: the feed's fixes and checks, on the mapped values, before

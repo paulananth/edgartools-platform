@@ -143,7 +143,7 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
 | `provenance` | `name: path` kept with each record. Only values that stay the same across captures (the source's own record); capture hashes, run ids and sync times stay beside the record. |
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
-| `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. |
+| `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. A value may also be a whole address, written as `fields.address` is (`components:`), for example GLEIF's headquarters address beside the legal address MDM shows. Data quality fixes and checks can read it (`matching.<name>`). |
 | `retain_deferred` | `true`: keep a record MDM cannot take yet, with its reason. |
 | `native_member` | For a source parsed by native code, the member this contract maps. |
 

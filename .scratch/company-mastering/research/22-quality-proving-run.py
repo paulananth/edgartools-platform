@@ -72,14 +72,18 @@ def sec_row(f: dict) -> dict:
     }
 
 
-def gleif_fields(e: dict) -> dict:
-    a = e.get("legal") or {}
+def gleif_address(a: dict | None) -> dict | None:
+    a = a or {}
     lines = a.get("lines") or []
     address = {k: v for k, v in {
         "street": lines[0] if lines else None, "street2": "\n".join(lines[1:]) or None,
         "city": a.get("city"), "region": a.get("region"), "postcode": a.get("postal"), "country": a.get("country"),
     }.items() if v}
-    return {"name": e.get("legal_name") or None, "address": address or None}
+    return address or None
+
+
+def gleif_fields(e: dict) -> dict:
+    return {"name": e.get("legal_name") or None, "address": gleif_address(e.get("legal"))}
 
 
 class Tally:
@@ -105,10 +109,16 @@ class Tally:
             self.counts[f"flagged:{flag}"] += 1
             self.example(f"flagged:{flag}", {"key": key, "name": name,
                                              "state_of_incorporation": fields.get("state_of_incorporation")})
-        std = matching.get("address") or {}
-        if std.get("street") and not withheld({"provenance": {"quality": q}}, "matching.address"):
-            where = (std["street"].split("\n")[0], (std.get("postcode") or "")[:5], std.get("country") or "")
-            self.shared[where].add(key)
+        # The address a match uses: the headquarters address when it is fit
+        # (GLEIF), else the legal or business address when that is fit.
+        record = {"provenance": {"quality": q}}
+        for name in ("headquarters_address", "address"):
+            std = matching.get(name) or {}
+            if std.get("street") and not withheld(record, f"matching.{name}"):
+                where = (std["street"].split("\n")[0], (std.get("postcode") or "")[:5], std.get("country") or "")
+                self.shared[where].add(key)
+                self.counts[f"matches_on:{name}"] += 1
+                break
 
 
 def sec(path: str) -> Tally:
@@ -141,7 +151,9 @@ def gleif(path: str, block: dict) -> Tally:
         e = json.loads(line)
         if e.get("category") != "GENERAL":
             continue
-        fields, matching = gleif_fields(e), {}
+        fields = gleif_fields(e)
+        hq = gleif_address(e.get("hq"))
+        matching = {"headquarters_address": hq} if hq else {}
         address = fields.get("address")
         try:
             q = apply(block, fields, matching)

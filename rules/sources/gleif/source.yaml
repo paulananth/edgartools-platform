@@ -185,6 +185,18 @@ mdm:
         matching:
           headquarters_postal_code: Entity.HeadquartersAddress.PostalCode.$
           headquarters_country: Entity.HeadquartersAddress.Country.$
+          # The whole headquarters address, for matching only (ticket 22): the
+          # legal address is often a registered agent's, and the headquarters
+          # address then is the company's own (108,392 of 124,830 such LEIs).
+          headquarters_address:
+            components:
+              street: Entity.HeadquartersAddress.FirstAddressLine.$
+              street2:
+                lines: Entity.HeadquartersAddress.AdditionalAddressLine
+              city: Entity.HeadquartersAddress.City.$
+              region: Entity.HeadquartersAddress.Region.$
+              postcode: Entity.HeadquartersAddress.PostalCode.$
+              country: Entity.HeadquartersAddress.Country.$
   gleif.relationships.v1:
     contract:
       provider: GLEIF
