@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
-    mdm = subparsers.add_parser("mdm", help="MDM pipeline, review, export operations")
+    mdm = subparsers.add_parser("mdm", help="MDM connectivity, migration, counts, and preparation")
     mdm_sub = mdm.add_subparsers(dest="mdm_command", required=True)
 
     migrate = mdm_sub.add_parser("migrate", help="Create/upgrade MDM schema and seed reference data")
@@ -72,23 +72,12 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     check = mdm_sub.add_parser("check-connectivity", help="Check MDM SQL connectivity")
     check.set_defaults(handler=_logged_handler("check-connectivity", _handle_check_connectivity))
 
-    # Ticket 44 (change-propagation map): detect drift on Ticket 30's
-    # application/snowflake_write fence over the acquisition-ledger/registry
-    # tables. Exits non-zero on any finding so a scheduled invocation's own
-    # execution-failure alarm doubles as a signal, on top of the specific
-    # mdm_fence_check_result log event a CloudWatch Logs metric filter reads.
-    check_fence = mdm_sub.add_parser(
-        "check-fence",
-        help="Detect privilege drift on the acquisition-ledger/registry fence (Ticket 44)",
-    )
-    check_fence.set_defaults(handler=_logged_handler("check-fence", _handle_check_fence))
-
     # manages-fund-duplicate-rows map, Ticket 03: alert if a MANAGES_FUND
     # relationship_id ever gets a *new* duplicate active-row group again,
     # after Ticket 01 found the known 140,907-group backlog was a one-time
     # historical event from now-dead code, not an ongoing bug. Exits
-    # non-zero on any new-group finding, same "execution-failure alarm
-    # doubles as a signal" convention as check-fence.
+    # non-zero on any new-group finding so a scheduled invocation can signal
+    # an error through its execution status.
     check_manages_fund_duplicates = mdm_sub.add_parser(
         "check-manages-fund-duplicates",
         help=(
@@ -1691,49 +1680,6 @@ def _handle_check_connectivity(args) -> int:
     payload = {"sql": check_connectivity(get_engine())}
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
-
-
-def _handle_check_fence(args) -> int:
-    from edgar_warehouse.mdm.database import get_engine
-    from edgar_warehouse.mdm.fence_monitor import check_ledger_fence
-
-    result = check_ledger_fence(get_engine())
-
-    for leak in result.leaks:
-        emit_mdm_event(
-            "mdm_fence_leak_detected",
-            role=leak.role,
-            table=leak.table,
-            privilege=leak.privilege,
-        )
-    for gap in result.access_gaps:
-        emit_mdm_event(
-            "mdm_fence_access_gap_detected",
-            table=gap.table,
-            role=gap.role,
-        )
-    emit_mdm_event(
-        "mdm_fence_check_result",
-        fenced_table_count=len(result.fenced_tables),
-        owner_role_count=len(result.owner_roles),
-        leak_count=len(result.leaks),
-        access_gap_count=len(result.access_gaps),
-    )
-
-    payload = {
-        "fenced_tables": list(result.fenced_tables),
-        "owner_roles": list(result.owner_roles),
-        "leaks": [
-            {"role": leak.role, "table": leak.table, "privilege": leak.privilege}
-            for leak in result.leaks
-        ],
-        "access_gaps": [
-            {"table": gap.table, "role": gap.role} for gap in result.access_gaps
-        ],
-        "is_clean": result.is_clean,
-    }
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0 if result.is_clean else 1
 
 
 def _handle_check_manages_fund_duplicates(args) -> int:

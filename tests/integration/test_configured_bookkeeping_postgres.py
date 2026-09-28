@@ -100,8 +100,6 @@ def databases():
         with destination_admin.begin() as conn:
             conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
             conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
-        from edgar_warehouse.mdm.migrations.runtime import _apply_source_registry_migration
-        _apply_source_registry_migration(destination_admin)
         migrate_guard(destination_admin, runtime_role="clean_application")
         yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
                         ChangeJournal(engine("change_journal_clean", "ledger_runtime")), ledger_admin,
@@ -119,6 +117,19 @@ def config(steps=1, *, seconds=120, zero=False, resource="output:{destination}")
         "steps": [{"name": f"s{i}", "operation": "artifact.copy", "requires": [] if i==0 else [f"s{i-1}"],
                    "key": "{id}", "leases": [resource], "checks": ["input.hash", "output.receipt"]} for i in range(steps)],
         "checks": ["manifest.hash", "work.accounting", "journal.delivered"]}}}}
+
+
+def approved_acquisition(body, name, contracts, manifest):
+    """Attach a bounded fixture feed to an MDM Rules source document."""
+    body["source"] = name
+    body["acquisition"] = {"version": 1, "feeds": {"fixture": {
+        "family": "fixture", "datasets": list(contracts), "scope": ["fixture"],
+        "capabilities": {"capture": "provider.capture", "fetch": "http.conditional"},
+        "completeness": {"format": "json", "required": [], "allow_empty": True, "max_bytes": 1024},
+        "required_producers": ["fixture"], "url_prefixes": ["https://fixture.invalid/"],
+    }}}
+    return {"fixture": {"manifest": manifest, "counts": {"fixture": {"expected": 0, "verified": 0}},
+                        "checks": {"fixture": True}}}
 
 
 def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None):
@@ -639,7 +650,6 @@ def mdm_submission(databases, tmp_path):
         contract = conn.scalar(text("SELECT body FROM mdm_v2.dataset_mapping WHERE source_code='fixture.primary' ORDER BY mapping_version DESC LIMIT 1"))
     body["mdm"] = {"fixture.primary": {"contract": {k: v for k, v in contract.items() if k != "registry_evidence"}}}
     name = "mdm-" + uuid4().hex
-    saved = databases.rules.save("source", name, "1", body)
     payload = {"version": 1, "command": {"batch_id": "mdm-" + uuid4().hex,
         "consumer": "fixture", "expected_checkpoint": 0, "checkpoint": 1,
         "policy_digest": db.policy, "as_of": AS_OF,
@@ -648,11 +658,13 @@ def mdm_submission(databases, tmp_path):
             "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", payload),
             "output": (tmp_path / "mdm-receipt.json").as_uri(), "cursor": {"offset": 0}}
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": [unit]})
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
+    saved = databases.rules.save("source", name, "1", body)
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
     databases.approver.approve("source", name, "1", saved["digest"])
-    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin, registry_engine=databases.destination_admin)
+    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
-    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"prepared_batch": payload["command"]["batch_id"]})
+    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture", "prepared_batch": payload["command"]["batch_id"]})
     return book, rid, payload
 
 
@@ -712,12 +724,13 @@ def test_stage_manifest_chains_prepared_mdm_and_separate_publication_intents(dat
     name = "staged-mdm-" + uuid4().hex
     # The source document owns dataset registration; this is a source pipeline
     # with multiple stages, not a platform job without a dataset contract.
+    acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
     saved = databases.rules.save("source", name, "1", body)
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
     databases.approver.approve("source", name, "1", saved["digest"])
-    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin, registry_engine=databases.destination_admin)
+    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
-    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={})
+    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture"})
     state = run(book, rid, databases.ledger, limit=2)
     assert state["counts"]["verified"] == 2 and state["run"]["state"] == "waiting"
     assert not state["run"]["checks"]["mdm.publication"]
@@ -737,9 +750,9 @@ def test_retired_rules_resume_original_export_and_reading(databases, tmp_path):
     body = json.loads(row["body"])
     body["bookkeeping"]["targets"]["mdm"]["lease_seconds"] = 180
     saved = databases.rules.save("source", original["name"], "2", body)
-    databases.rules.prove("source", original["name"], "2", {"digest": saved["digest"], "batch_hash": original["inputs"]["sha256"], "passed": True})
+    databases.rules.prove("source", original["name"], "2", {"digest": saved["digest"], "batch_hash": original["inputs"]["sha256"], "passed": True, "acquisition": approved_acquisition(body, original["name"], body["mdm"], original["inputs"])})
     databases.approver.approve("source", original["name"], "2", saved["digest"])
-    databases.rules.activate("source", original["name"], "2", mdm_engine=databases.destination_admin, registry_engine=databases.destination_admin)
+    databases.rules.activate("source", original["name"], "2", mdm_engine=databases.destination_admin)
     assert databases.rules.version("source", original["name"], "1")["status"] == "retired"
     assert book._frozen(rid)[1]["lease_seconds"] == 120
     book.resume(rid)
@@ -772,7 +785,8 @@ def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases
     from edgar_warehouse.bookkeeping.clean.mdm_capabilities import register_mdm
     from edgar_warehouse.mdm.clean.adapters import normalize
     from edgar_warehouse.mdm.clean.publication import LocalContractSink
-    from edgar_warehouse.mdm.clean.store import register_dataset, register_policy, Store
+    from edgar_warehouse.mdm.clean.store import register_policy, Store
+    from tests.support.rules_authority import register_dataset
     db = initialize_database(databases.destination_admin, databases.mdm)
     code = "unseen.company.v1"
     contract = {"provider": "fixture", "family": "fixture", "schema_version": "1",
@@ -807,12 +821,13 @@ def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases
             "output": (tmp_path / "receipt.json").as_uri(), "cursor": 0}
     inputs = book.artifacts.put(tmp_path.as_uri(), {"version": 1, "units": [unit]})
     name = "unseen-" + uuid4().hex
+    acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
     saved = databases.rules.save("source", name, "1", body)
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
     databases.approver.approve("source", name, "1", saved["digest"])
-    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin, registry_engine=databases.destination_admin)
+    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri())
-    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={})
+    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture"})
     claim = book.claim(rid, "s0", "0")
     capability = registry.operations["mdm.ingest"]
     receipt = capability.execute(book, book.item(claim), Authority(claim))
@@ -850,7 +865,7 @@ def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases
         bad_unit = {**unit, "input": book.artifacts.put(tmp_path.as_uri(), bad),
                     "output": (tmp_path / f"{problem}-receipt.json").as_uri()}
         bad_inputs = book.artifacts.put(tmp_path.as_uri(), {"version": 1, "units": [bad_unit]})
-        bad_run = book.start(rules_ref=rules, inputs_ref=bad_inputs, target="mdm", scope={})
+        bad_run = book.start(rules_ref=rules, inputs_ref=bad_inputs, target="mdm", scope={"source": name, "feed": "fixture"})
         with pytest.raises(Blocked):
             run(book, bad_run, databases.ledger)
         assert book.status(bad_run)["run"]["state"] == "blocked"

@@ -118,7 +118,7 @@ class Rules:
                 raise Blocked("Approval digest differs from the selected version")
             conn.execute(text("UPDATE rules.rule_version SET approved_by=session_user,approved_at=clock_timestamp() WHERE kind=:k AND name=:n AND version=:v"), {"k": kind, "n": name, "v": version})
 
-    def activate(self, kind, name, version, *, mdm_engine=None, registry_engine=None):
+    def activate(self, kind, name, version, *, mdm_engine=None):
         with self.engine.begin() as conn:
             # Serializes lifecycle changes for this document, not every source.
             conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k,0))"), {"k": f"{kind}:{name}"})
@@ -136,8 +136,10 @@ class Rules:
             if requires_handoff:
                 if not selected["approved_by"]:
                     raise Blocked("MDM handoff requires approval of this Rules version")
-                if mdm_engine is None or (kind == "source" and "acquisition" not in body and registry_engine is None):
-                    raise Blocked("MDM activation requires explicit governance and registry connections")
+                if mdm_engine is None:
+                    raise Blocked("MDM activation requires an explicit destination connection")
+                if kind == "source" and "acquisition" not in body:
+                    raise Blocked("Source MDM activation requires approved acquisition authority")
                 from edgar_warehouse.mdm.clean.store import register_policy, register_dataset, current_reading
                 receipts = {"rules_digest": selected["digest"], "datasets": {}}
                 # First commit the idempotent MDM handoff. If the Rules status
@@ -152,23 +154,9 @@ class Rules:
                             registration_authority(selected_export, code, entry["contract"])
                             existing = destination.execute(text("SELECT mapping_version,body FROM mdm_v2.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
                             if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
-                                register_dataset(destination, code, None, entry["contract"], rules_authority=selected_export)
+                                register_dataset(destination, code, entry["contract"], rules_authority=selected_export)
                             reading = current_reading(destination, code)
                             receipts["datasets"][code] = {"mapping_version": reading[0], "digest": digest(reading[1])}
-                    else:
-                        with registry_engine.connect() as authority:
-                            registry_version = authority.scalar(text("SELECT version_id::text FROM public.source_registry_version WHERE status='active'"))
-                            if not registry_version:
-                                raise Blocked("No active acquisition registry for MDM registration")
-                            for code, entry in body["mdm"].items():
-                                existing = destination.execute(text("SELECT mapping_version,body FROM mdm_v2.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
-                                # A registry refresh or Bookkeeping change is
-                                # not a new source mapping. Compare the actual
-                                # mapping before asking the registrar to add it.
-                                if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
-                                    register_dataset(destination, code, registry_version, entry["contract"], registry_connection=authority)
-                                reading = current_reading(destination, code)
-                                receipts["datasets"][code] = {"mapping_version": reading[0], "digest": digest(reading[1])}
             conn.execute(text("UPDATE rules.rule_version SET status='retired' WHERE kind=:k AND name=:n AND status='active'"), {"k": kind, "n": name})
             conn.execute(text("UPDATE rules.rule_version SET status='active',clean_mdm=CAST(:receipt AS jsonb) WHERE kind=:k AND name=:n AND version=:v"), {"k": kind, "n": name, "v": version, "receipt": canonical(receipts)})
 

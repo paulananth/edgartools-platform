@@ -1,8 +1,7 @@
 """Real-Postgres integration coverage for manages-fund-duplicate-rows
 Ticket 03's monitor.
 
-Same rationale as ``test_fence_monitor_postgres.py``'s docstring: this
-check's whole job is grouping/comparing real ``JSONB``/date columns across
+This check groups and compares real ``JSONB``/date columns across
 rows, which SQLite cannot model faithfully enough to prove anything about
 the actual query.
 """

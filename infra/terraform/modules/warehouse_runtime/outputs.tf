@@ -43,11 +43,6 @@ output "mdm_postgres_dsn_secret_arn" {
   value       = aws_secretsmanager_secret.mdm_postgres_dsn.arn
 }
 
-output "bookkeeping_postgres_dsn_secret_arn" {
-  description = "Secrets Manager ARN for the operator-populated bookkeeping store Postgres DSN."
-  value       = aws_secretsmanager_secret.bookkeeping_postgres_dsn.arn
-}
-
 output "mdm_snowflake_secret_arn" {
   description = "Secrets Manager ARN for operator-populated MDM Snowflake connection details."
   value       = aws_secretsmanager_secret.mdm_snowflake.arn

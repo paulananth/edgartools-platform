@@ -58,37 +58,6 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         applied_files.append(filename)
 
     monkeypatch.setattr(migrations, "_apply_sql_file", _record_apply)
-    monkeypatch.setattr(
-        migrations,
-        "_apply_acquisition_ledger_migration",
-        lambda engine: (_record_apply(engine, "013_acquisition_ledger.sql"), True)[1],
-    )
-    monkeypatch.setattr(
-        migrations,
-        "_apply_source_registry_migration",
-        lambda engine: (_record_apply(engine, "014_source_registry.sql"), True)[1],
-    )
-    monkeypatch.setattr(
-        migrations,
-        "_apply_source_evidence_conflict_migration",
-        lambda engine: (_record_apply(engine, "015_source_evidence_conflict.sql"), True)[1],
-    )
-    monkeypatch.setattr(
-        migrations,
-        "_apply_exclusion_and_evidence_import_migration",
-        lambda engine: (
-            _record_apply(engine, "017_source_exclusion_and_evidence_import.sql"),
-            True,
-        )[1],
-    )
-    monkeypatch.setattr(
-        migrations,
-        "_apply_source_fetch_validators_migration",
-        lambda engine: (
-            _record_apply(engine, "018_source_fetch_validators.sql"),
-            True,
-        )[1],
-    )
     monkeypatch.setattr(migrations, "count_tables", lambda _engine: {})
     monkeypatch.setattr(migrations, "_seed_entity_types", lambda _session: None)
 
@@ -107,12 +76,7 @@ def test_postgres_migrate_routes_to_postgres_schema(monkeypatch) -> None:
         "010_release_relationship_sources.sql",
         "011_source_ref_content_hash.sql",
         "012_dedupe_and_constrain_attribute_stage.sql",
-        "013_acquisition_ledger.sql",
-        "014_source_registry.sql",
-        "015_source_evidence_conflict.sql",
         "016_serialize_graph_generation.sql",
-        "017_source_exclusion_and_evidence_import.sql",
-        "018_source_fetch_validators.sql",
         "019_mdm_run_identity.sql",
         "020_mdm_pipeline_lease.sql",
         "021_relationship_derivation_checkpoint.sql",

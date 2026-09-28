@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 
 from edgar_warehouse.runtime import run_command
 
@@ -590,7 +589,7 @@ def _handle_resolve_snowflake_env(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="edgar-warehouse",
-        description="Warehouse operations for SEC EDGAR bronze, silver, and gold layers.",
+        description="Configured Rules, Bookkeeping, Change Journal, and MDM operations.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -1794,8 +1793,7 @@ def build_parser() -> argparse.ArgumentParser:
         "resolve-snowflake-env",
         help="Resolve Snowflake connection settings for a named connection and print "
              "'export KEY=VALUE' shell lines (DBT_SNOWFLAKE_*, TF_VAR_snowflake_password). "
-             "Reuses the same resolution chain as `mdm publish`/`mdm publish-relationships`: individual "
-             "MDM_SNOWFLAKE_*/DBT_SNOWFLAKE_* env vars first, then the "
+             "Resolves individual MDM_SNOWFLAKE_*/DBT_SNOWFLAKE_* env vars first, then the "
              "MDM_SNOWFLAKE_SECRET_JSON/DBT_SNOWFLAKE_SECRET_JSON blob, then SnowCLI's "
              "~/.snowflake/connections.toml. Output is shell code meant for eval \"$(...)\" -- "
              "never print it directly to a terminal a human will read.",
@@ -1824,12 +1822,58 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def _runtime_parser() -> argparse.ArgumentParser:
+    """Expose only commands backed by active stores to the executable CLI."""
     parser = build_parser()
+    subparsers = next(
+        action for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    active = {"rules", "bookkeeping", "change-journal", "mdm", "resolve-snowflake-env"}
+    for name in tuple(subparsers.choices):
+        if name not in active:
+            del subparsers.choices[name]
+    subparsers._choices_actions[:] = [
+        action for action in subparsers._choices_actions if action.dest in active
+    ]
+    if "mdm" in subparsers.choices:
+        mdm = subparsers.choices["mdm"]
+        mdm_commands = next(
+            action for action in mdm._actions
+            if isinstance(action, argparse._SubParsersAction)
+        )
+        allowed_mdm = {
+            "migrate", "check-connectivity", "counts",
+            "prepare-clean-company", "name-census",
+        }
+        for name in tuple(mdm_commands.choices):
+            if name not in allowed_mdm:
+                del mdm_commands.choices[name]
+        mdm_commands._choices_actions[:] = [
+            action for action in mdm_commands._choices_actions
+            if action.dest in allowed_mdm
+        ]
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _runtime_parser()
     args = parser.parse_args(argv)
-    if os.environ.get("CHANGE_JOURNAL_DATABASE_URL") and args.command not in {"rules", "bookkeeping", "change-journal"}:
+    if args.command not in {"rules", "bookkeeping", "change-journal", "mdm", "resolve-snowflake-env"}:
         parser.error(
-            "Fresh Change Journal runtime requires configured Rules/Bookkeeping commands. "
-            "Legacy commands must run on their original stack until their feed qualifies."
+            "Legacy warehouse commands are retired. Configure the source/feed "
+            "through Rules and submit work through Bookkeeping."
+        )
+    if args.command == "mdm" and args.mdm_command not in {
+        "migrate",
+        "check-connectivity",
+        "counts",
+        "prepare-clean-company",
+        "name-census",
+    }:
+        parser.error(
+            "This MDM command depends on retired control tables and is disabled "
+            "until its configured Bookkeeping path qualifies."
         )
     return args.handler(args)

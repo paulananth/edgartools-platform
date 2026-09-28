@@ -116,8 +116,30 @@ def test_fresh_runtime_cannot_open_legacy_acquisition_or_fall_back_to_mdm(
     )
     monkeypatch.setenv("CHANGE_LEDGER_DATABASE_URL", "postgresql://legacy/legacy")
     monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://legacy/mdm")
-    with pytest.raises(WarehouseRuntimeError, match="original stack"):
+    with pytest.raises(RuntimeError, match="retired"):
         get_engine(legacy_url)
+
+
+def test_retired_control_connections_refuse_explicit_urls_without_fresh_env(monkeypatch):
+    from edgar_warehouse.acquisition.database import get_engine as acquisition_engine
+    from edgar_warehouse.bookkeeping.database import get_engine as bookkeeping_engine
+
+    monkeypatch.delenv("CHANGE_JOURNAL_DATABASE_URL", raising=False)
+    for factory in (acquisition_engine, bookkeeping_engine):
+        with pytest.raises(RuntimeError, match="retired"):
+            factory("sqlite:///:memory:")
+
+
+def test_runnable_cli_does_not_expose_retired_commands():
+    from edgar_warehouse.cli import _runtime_parser
+
+    parser = _runtime_parser()
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args(["capture-filing-artifact"])
+    assert error.value.code == 2
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args(["mdm", "mastering"])
+    assert error.value.code == 2
 
 
 def test_fresh_runtime_refuses_legacy_cli_before_dispatch(monkeypatch):

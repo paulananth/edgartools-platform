@@ -231,17 +231,11 @@ def register_policy(conn: Connection, body: dict) -> str:
 def register_dataset(
     conn: Connection,
     code: str,
-    registry_version: str | None,
     body: dict,
     *,
-    registry_connection: Connection | None = None,
     rules_authority: dict | None = None,
 ) -> None:
-    """Pin metadata from existing registry authority; do not create a new registry.
-
-    Deployment can read CHANGE_LEDGER_DATABASE_URL and write MDM_DATABASE_URL.
-    The immutable attestation is a replay input, not another activation switch.
-    """
+    """Pin a dataset to an approved, frozen Rules source version."""
     reasons = body.get("nonblocking_deferred_reasons", [])
     if (
         not isinstance(reasons, list)
@@ -269,34 +263,16 @@ def register_dataset(
     ]
     if any(f is not None and f not in FORMATS for f in formats):
         raise ValueError("Unknown format in Dataset Contract")
-    registry_connection = (
-        registry_connection if registry_connection is not None else conn
-    )
-    if rules_authority is not None:
-        from edgar_warehouse.change_journal.authority import registration_authority
-        evidence = registration_authority(rules_authority, code, body)
-        registry_version = evidence["version_id"]
-        authority = [evidence]
-    else:
-        authority = rows(
-            registry_connection,
-            """SELECT v.version_id::text,v.status,
-      v.operator_authorization_reference,c.source_family,c.coverage_action
-      FROM public.source_registry_version v JOIN public.source_registry_coverage c USING(version_id)
-      WHERE v.version_id=CAST(:v AS uuid) AND c.source_family=:family""",
-            v=registry_version,
-            family=body["family"],
-        )
-    if (
-        len(authority) != 1
-        or authority[0]["status"] != "active"
-        or authority[0]["coverage_action"] == "remove"
-    ):
-        raise Conflict("Dataset requires active acquisition registry coverage")
+    if rules_authority is None:
+        raise Conflict("Dataset requires approved frozen Rules source authority")
+    from edgar_warehouse.change_journal.authority import registration_authority
+
+    evidence = registration_authority(rules_authority, code, body)
+    authority_version = evidence["version_id"]
     # Pin the authority after the comparison below, not before: a registry
     # version bump is not a mapping change, and must not mint a reading that
     # would fork every later assertion id for a mapping nobody corrected.
-    pinned = {**body, "registry_evidence": authority[0]}
+    pinned = {**body, "registry_evidence": evidence}
     current = rows(
         conn,
         """SELECT body,registry_version::text,mapping_version FROM mdm_v2.dataset_mapping
@@ -305,7 +281,7 @@ def register_dataset(
     )
     if current:
         stored = current[0]["body"]
-        if stored == pinned and current[0]["registry_version"] == registry_version:
+        if stored == pinned and current[0]["registry_version"] == authority_version:
             return
         if _mapping_of(stored) == _mapping_of(pinned):
             raise Conflict(
@@ -319,7 +295,7 @@ def register_dataset(
                 "code": code,
                 "version": current[0]["mapping_version"] + 1,
                 "body": canonical(pinned),
-                "registry": str(UUID(registry_version)),
+                "registry": str(UUID(authority_version)),
             },
         )
         return
@@ -332,7 +308,7 @@ def register_dataset(
             text(statement),
             {
                 "code": code,
-                "registry": str(UUID(registry_version)),
+                "registry": str(UUID(authority_version)),
                 "body": canonical(pinned),
             },
         )
