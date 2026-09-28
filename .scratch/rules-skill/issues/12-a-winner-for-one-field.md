@@ -35,4 +35,8 @@ change as a ticket.
   what a field's own rule may change.
 - [x] A test: a per-field rule shows in the workbook, and `diff` reports a
   steward's change to it (`test_rules_mapdoc.py`, 14 passed).
-- [ ] Review, PR, CI; merge on the operator's word.
+- [x] Three-axis review (2026-09-28): no bugs. Fixed: a field rule with no
+  order of its own says its order is the kind default; the skill says a
+  source left out of a field's order is ignored for that field, and that
+  a source not in the kind's ranks needs the operator's ruling.
+- [ ] PR #744, CI; merge on the operator's word.

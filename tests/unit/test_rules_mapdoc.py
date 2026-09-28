@@ -176,3 +176,15 @@ def test_a_field_with_its_own_rule_shows_its_own_winner(rules_copy):
         f'Who wins each field row {row} (address), Winner: rules say "gleif.level1.v1", '
         'workbook says "sec.submissions.company.v1"'
     ]
+
+
+def test_a_field_rule_without_its_own_order_says_the_order_is_the_default(rules_copy):
+    kind_file = rules_copy / "merge" / "kinds" / "company.yaml"
+    body = files.load(kind_file)
+    body["fields"] = {"name": {"max_age_days": 400}}
+    kind_file.write_text(files.dumps(body), encoding="utf-8")
+    sheets = {name: s for name, s, _ in mapdoc.documents(rules_copy).values()}["company"]
+    assert ["name", "sec.submissions.company.v1, gleif.level1.v1", "sec.submissions.company.v1",
+            "Its own rule (max_age_days: 400), order from the kind default",
+            "merge/kinds/company.yaml fields.name; merge/kinds/company.yaml defaults.sources"] in (
+        sheets["Who wins each field"])

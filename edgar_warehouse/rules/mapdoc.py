@@ -147,6 +147,9 @@ def _winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], l
                 extra = {k: v for k, v in own[field].items() if k != "sources"}
                 which = "Its own rule" + (f" ({_text(extra)})" if extra else "")
                 at = f"merge/kinds/{kind}.yaml fields.{field}"
+                if "sources" not in own[field]:  # its order is still the kind's
+                    which += ", order from the kind default"
+                    at += f"; merge/kinds/{kind}.yaml defaults.sources"
             else:
                 which, at = "Kind default", f"merge/kinds/{kind}.yaml defaults.sources"
             found[kind][field] = (sources, [_text(sources), sources[0] if sources else "", which, at])

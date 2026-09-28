@@ -372,8 +372,12 @@ pull request:
    - one field's winner changed ("Who wins each field"): a rule for that
      field in the kind file, `fields.<name>.sources`, in the new order. It
      takes the kind's `defaults` and changes only what it says; every other
-     field keeps the default. It is a merge rules change: show which
-     records' winners move, and the steward who made it approves it.
+     field keeps the default. A source left out of that list is ignored for
+     that field: its values never win or conflict, so say so. A source not
+     in the kind's `defaults.sources` is adding a source to the kind: that
+     needs the operator's ruling, not the steward's. Otherwise it is a
+     merge rules change: show which records' winners move, and the steward
+     who made it approves it.
 3. Run the dry run (step 8) and show what the change does, with counts and
    up to 10 examples. A change to "Preferred sources" or "Matching rules"
    moves which source wins or which records join: show those records.
