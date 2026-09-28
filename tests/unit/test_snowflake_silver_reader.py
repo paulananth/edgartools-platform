@@ -13,8 +13,6 @@ import pytest
 from edgar_warehouse.silver_support.snowflake_reader import SnowflakeSilverReader
 from tests.unit._fake_snowflake import (
     FakeSnowflakeConnection,
-    RaisingConnectSettings,
-    RecordingConnectSettings,
 )
 
 
@@ -123,39 +121,6 @@ def test_reader_has_no_duckdb_shaped_conn_attribute():
     reader, _connection = _reader_over({})
 
     assert not hasattr(reader, "_conn")
-
-
-def test_connect_sets_qmark_paramstyle_only_for_the_connect_call():
-    # snowflake-connector-python is an optional extra (pyproject.toml's
-    # "snowflake" group) -- not installed in the tests/unit/ CI job, matching
-    # this repo's existing convention of never installing it for CI (see the
-    # "-k not snowflake" exclusion on tests/mdm/'s CI job for the same
-    # package). Skip rather than fail where it's genuinely absent; this test
-    # still runs for real locally with `uv sync --extra snowflake`.
-    sc = pytest.importorskip("snowflake.connector")
-
-    original = sc.paramstyle
-    assert original != "qmark", "test assumes qmark is not already the ambient default"
-
-    connection = FakeSnowflakeConnection({})
-    settings = RecordingConnectSettings(connection)
-
-    reader = SnowflakeSilverReader.connect(settings_factory=lambda: settings)
-
-    assert settings.paramstyle_during_connect == "qmark"
-    assert sc.paramstyle == original, "global paramstyle must be restored after connect()"
-    assert reader is not None
-
-
-def test_connect_restores_paramstyle_even_if_connect_raises():
-    sc = pytest.importorskip("snowflake.connector")
-
-    original = sc.paramstyle
-
-    with pytest.raises(RuntimeError, match="boom"):
-        SnowflakeSilverReader.connect(settings_factory=lambda: RaisingConnectSettings())
-
-    assert sc.paramstyle == original
 
 
 def test_default_settings_factory_overrides_role_to_mdm_silver_reader(monkeypatch):

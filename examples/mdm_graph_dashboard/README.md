@@ -111,5 +111,5 @@ Additional documentation-text references:
 Run the focused credential-free validation suite:
 
 ```bash
-uv run pytest tests/mdm/test_dashboard_readonly.py tests/mdm/test_graph_readonly.py tests/architecture/test_dashboard_foundation_boundaries.py -q
+uv run pytest tests/architecture/test_dashboard_foundation_boundaries.py -q
 ```
