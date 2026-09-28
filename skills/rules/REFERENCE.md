@@ -64,6 +64,7 @@ The reason codes the code raises today:
 | Outside the approved scope | `outside_approved_company_scope` | yes |
 | A kind MDM does not take yet | `unsupported_identity_kind` | yes |
 | A valid reporting exception | `reported_parent_exception` | yes |
+| A data quality exception: a critical data element is missing | `quality_<id>` | yes, always (operator, 2026-09-28) |
 | Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | yes (operator, 2026-09-27: "never stop the run") |
 | A relationship type not mapped yet | `unsupported_relationship_type` | yes (operator, 2026-09-27); each run reports a count by type, so a new type is seen |
 | The policy has not activated the verdict | `classification_not_activated` | no: it means the policy is wrong |
@@ -181,7 +182,7 @@ quality:
     - id: <lower_case_id>
       test: <test>@<n>
       value: <path>                   # fields.<name>, fields.address.<part> or matching.<name>
-      on_fail: reject | withhold | flag
+      on_fail: exception | withhold | flag
       args: {...}
 ```
 
@@ -191,7 +192,7 @@ not write `quality` inside `source.yaml`: the loader refuses it.
 
 | `on_fail` | What happens |
 |---|---|
-| `reject` | The record is set aside as `quality_<id>` and blocks its batch, as a defect does. Never list it as non-blocking. |
+| `exception` | For a missing critical data element. The record is set aside as `quality_<id>`: it never merges and never stops the run, and waits as an open exception until it is fixed or ignored. List `quality_<id>` in the contract's `nonblocking_deferred_reasons`; registration refuses the contract otherwise. |
 | `withhold` | The value stays on the record, but no matching rule uses it (`provenance.quality.withheld`). |
 | `flag` | Only counted. |
 
@@ -213,7 +214,7 @@ Fixes (each keeps the original under `provenance.quality.fixes`):
 |---|---|---|
 | `blank_values@1` | `field`, `values` | a value in `values` becomes empty, so it reads as unknown |
 | `name_state_marker@1` | `name`, `target` | SEC's US state tag at the end of a name (`/DE`) fills an empty `target` |
-| `standardize_address@1` | `field`, `into` | writes a matching copy of the address to `into` (`matching.<name>`): USPS street words, upper case, a 5-digit ZIP. The address MDM shows is not changed |
+| `standardize_address@1` | `field`, `into` | writes a matching copy of the address to `into` (`matching.<name>`): upper case, USPS street words, no suite or floor, a 5-digit ZIP. The address MDM shows is not changed; it counts as a fix only when the copy differs |
 
 A fix that corrects a value (`blank_values@1`, `name_state_marker@1`) changes
 the field MDM shows and merges on; the original stays on the record. A test

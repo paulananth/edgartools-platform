@@ -116,10 +116,13 @@ mdm:
   gleif.level1.v1:
     contract:
       provider: GLEIF
+      # quality_name_present: a data quality exception never stops the run
+      # (operator, 2026-09-28).
       nonblocking_deferred_reasons:
       - outside_approved_company_scope
       - unsupported_identity_kind
       - reported_parent_exception
+      - quality_name_present
       family: gleif
       schema_version: gleif-native-record-v1
       publication_families:

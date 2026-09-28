@@ -39,7 +39,7 @@ def _handle(args):
             operation = args.rules_command
             if operation == "save":
                 path = Path(args.file)
-                result = rules.save(kind, name, args.version, files.load_source(path) if kind == "source" else files.load(path))
+                result = rules.save(kind, name, args.version, files.LAYOUT[kind][0](path))
             elif operation == "status":
                 with rules_engine.connect() as conn:
                     result = [dict(row) for row in conn.execute(text("SELECT kind,name,version,digest,status,proved_at,approved_by,approved_at FROM rules.rule_version WHERE kind=:k AND name=:n ORDER BY created_at"), {"k": kind, "n": name}).mappings()]
@@ -124,9 +124,11 @@ def register(subparsers):
         if operation not in ("status", "run"):
             command.add_argument("--version", required=True)
         if operation == "save":
-            command.add_argument("file")
+            command.add_argument("file", help="The document's main file: <source>/source.yaml, "
+                                 "<pipeline>/pipeline.yaml or merge/policy.yaml; the files beside it come too")
         elif operation == "export":
-            command.add_argument("--output", required=True)
+            command.add_argument("--output", required=True,
+                                 help="The main file to write, as for save; the files beside it are written too")
         elif operation == "approve":
             command.add_argument("--digest", required=True)
         elif operation == "record-proof":

@@ -333,9 +333,10 @@ def normalize(
         # which quality version fixed or withheld what.
         from .quality import apply
 
-        provenance["quality"] = apply(
-            contract["quality"], fields, provenance.get("matching")
-        )
+        matching = provenance.get("matching") or {}
+        provenance["quality"] = apply(contract["quality"], fields, matching)
+        if matching:
+            provenance["matching"] = matching
     if labelled is not None:
         # Inside the hashed body, so the record explains what labelled it with
         # no lookup elsewhere. Absent means the contract's own table decided,

@@ -1,0 +1,1146 @@
+{
+ "gleif": {
+  "counts": {
+   "fixed:standard_address": 1876914,
+   "records": 3043262,
+   "withheld:matching.address": 124852,
+   "withheld:matching.address.street": 5398
+  },
+  "examples": {
+   "fixed:standard_address": [
+    {
+     "key": "004L5FPTUREIWK9T2N63",
+     "name": "Hutchin Hill Capital, LP",
+     "now": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postcode": "19808",
+      "region": "US-DE",
+      "street": "C/O CORPORATION SERVICE COMPANY",
+      "street2": "251 LITTLE FALLS DR"
+     },
+     "original": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postcode": "19808",
+      "region": "US-DE",
+      "street": "C/O CORPORATION SERVICE COMPANY",
+      "street2": "251 LITTLE FALLS DRIVE"
+     }
+    },
+    {
+     "key": "00W0SLGGVF0QQ5Q36N03",
+     "name": "GE Pacific-3 Holdings, Inc.",
+     "now": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postcode": "19801",
+      "region": "US-DE",
+      "street": "C/O THE CORPORATION TRUST COMPANY",
+      "street2": "CORPORATION TRUST CENTER\n1209 ORANGE ST"
+     },
+     "original": {
+      "city": "Wilmington",
+      "country": "US",
+      "postcode": "19801",
+      "region": "US-DE",
+      "street": "C/O The Corporation Trust Company",
+      "street2": "Corporation Trust Center\n1209 Orange Street"
+     }
+    },
+    {
+     "key": "00X5RQKJQQJFFX0WPA53",
+     "name": "The Greater Morristown Young Men's Christian Association, Inc.",
+     "now": {
+      "city": "CEDAR KNOLLS",
+      "country": "US",
+      "postcode": "07927",
+      "region": "US-NJ",
+      "street": "79 HORSEHILL RD"
+     },
+     "original": {
+      "city": "Cedar Knolls",
+      "country": "US",
+      "postcode": "07927-2003",
+      "region": "US-NJ",
+      "street": "79 Horsehill Road"
+     }
+    },
+    {
+     "key": "010CMKZ3VON21WF2ZD45",
+     "name": "GE AVIATION CZECH S.R.O.",
+     "now": {
+      "city": "PRAGUE",
+      "country": "CZ",
+      "postcode": "199 02",
+      "region": "CZ-10",
+      "street": "BERANOVYCH 65 PRAHA 9"
+     },
+     "original": {
+      "city": "PRAGUE",
+      "country": "CZ",
+      "postcode": "199 02",
+      "region": "CZ-10",
+      "street": "BERANOV\u00ddCH 65 PRAHA 9"
+     }
+    },
+    {
+     "key": "010PWNH4K3BLIC3I7R03",
+     "name": "GESTION PLACEMENTS DESJARDINS INC.",
+     "now": {
+      "city": "MONTREAL",
+      "country": "CA",
+      "postcode": "H5B 1E4",
+      "region": "CA-QC",
+      "street": "27E-2 COMPLEXE DESJARDINS TOUR EST"
+     },
+     "original": {
+      "city": "Montreal",
+      "country": "CA",
+      "postcode": "H5B 1E4",
+      "region": "CA-QC",
+      "street": "27e-2 Complexe Desjardins, Tour Est"
+     }
+    },
+    {
+     "key": "01ERPZV3DOLNXY2MLB90",
+     "name": "Libertyville Bank & Trust Company, National Association",
+     "now": {
+      "city": "LIBERTYVILLE",
+      "country": "US",
+      "postcode": "60048",
+      "region": "US-IL",
+      "street": "507 N MILWAUKEE AVE"
+     },
+     "original": {
+      "city": "Libertyville",
+      "country": "US",
+      "postcode": "60048",
+      "region": "US-IL",
+      "street": "507 North Milwaukee Avenue"
+     }
+    },
+    {
+     "key": "01KWVG908KE7RKPTNP46",
+     "name": "HomeStreet Bank",
+     "now": {
+      "city": "SEATTLE",
+      "country": "US",
+      "postcode": "98101",
+      "region": "US-WA",
+      "street": "601 UNION ST"
+     },
+     "original": {
+      "city": "Seattle",
+      "country": "US",
+      "postcode": "98101",
+      "region": "US-WA",
+      "street": "601 Union Street",
+      "street2": "Suite 2000"
+     }
+    },
+    {
+     "key": "01TRDHWDCL69YP41S025",
+     "name": "RGA INTERNATIONAL REINSURANCE COMPANY DESIGNATED ACTIVITY COMPANY",
+     "now": {
+      "city": "DUBLIN",
+      "country": "IE",
+      "postcode": "D18 X5T1",
+      "region": "IE-D",
+      "street": "BLOCK C",
+      "street2": "CENTRAL PARK\nLEOPARDSTOWN\nDUBLIN 18"
+     },
+     "original": {
+      "city": "DUBLIN",
+      "country": "IE",
+      "postcode": "D18 X5T1",
+      "region": "IE-D",
+      "street": "3RD FLOOR, BLOCK C",
+      "street2": "CENTRAL PARK\nLEOPARDSTOWN\nDUBLIN 18"
+     }
+    },
+    {
+     "key": "01TTJC0QULHOS23G7C64",
+     "name": "AG Net Lease Realty Fund, L.P.",
+     "now": {
+      "city": "DOVER",
+      "country": "US",
+      "postcode": "19904",
+      "region": "US-DE",
+      "street": "C/O COGENCY GLOBAL INC",
+      "street2": "850 NEW BURTON RD"
+     },
+     "original": {
+      "city": "Dover",
+      "country": "US",
+      "postcode": "19904",
+      "region": "US-DE",
+      "street": "c/o Cogency Global Inc.",
+      "street2": "850 New Burton Road\nSuite 201"
+     }
+    },
+    {
+     "key": "01ZT0X0MQPY4FB7X6597",
+     "name": "Stirling Bossier, L.L.C.",
+     "now": {
+      "city": "COVINGTON",
+      "country": "US",
+      "postcode": "70433",
+      "region": "US-LA",
+      "street": "C/O GERALD E SONGY",
+      "street2": "109 NORTHPARK BLVD"
+     },
+     "original": {
+      "city": "Covington",
+      "country": "US",
+      "postcode": "70433",
+      "region": "US-LA",
+      "street": "C/O Gerald E. Songy",
+      "street2": "109 Northpark Boulevard\nSuite 300"
+     }
+    }
+   ],
+   "withheld:matching.address": [
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postcode": "19808",
+      "region": "US-DE",
+      "street": "C/O CORPORATION SERVICE COMPANY",
+      "street2": "251 LITTLE FALLS DRIVE"
+     },
+     "key": "004L5FPTUREIWK9T2N63",
+     "name": "Hutchin Hill Capital, LP"
+    },
+    {
+     "address": {
+      "city": "Wilmington",
+      "country": "US",
+      "postcode": "19801",
+      "region": "US-DE",
+      "street": "C/O The Corporation Trust Company",
+      "street2": "Corporation Trust Center\n1209 Orange St"
+     },
+     "key": "00GBW0Z2GYIER7DHDS71",
+     "name": "ARISTEIA CAPITAL, L.L.C."
+    },
+    {
+     "address": {
+      "city": "Wilmington",
+      "country": "US",
+      "postcode": "19801",
+      "region": "US-DE",
+      "street": "C/O The Corporation Trust Company",
+      "street2": "Corporation Trust Center\n1209 Orange Street"
+     },
+     "key": "00W0SLGGVF0QQ5Q36N03",
+     "name": "GE Pacific-3 Holdings, Inc."
+    },
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postcode": "19801",
+      "region": "US-DE",
+      "street": "C/O THE CORPORATION TRUST COMPANY",
+      "street2": "CORPORATION TRUST CENTER\n1209 ORANGE ST"
+     },
+     "key": "016DGCW2COM8YUBURB67",
+     "name": "MEDI-PHYSICS, INC."
+    },
+    {
+     "address": {
+      "city": "Dover",
+      "country": "US",
+      "postcode": "19904",
+      "region": "US-DE",
+      "street": "c/o Cogency Global Inc.",
+      "street2": "850 New Burton Road\nSuite 201"
+     },
+     "key": "01TTJC0QULHOS23G7C64",
+     "name": "AG Net Lease Realty Fund, L.P."
+    },
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postcode": "19808",
+      "region": "US-DE",
+      "street": "C/O CORPORATION SERVICE COMPANY",
+      "street2": "251 LITTLE FALLS DRIVE"
+     },
+     "key": "023Z0O828G80MF0V6P05",
+     "name": "MERCED PARTNERS LIMITED PARTNERSHIP"
+    },
+    {
+     "address": {
+      "city": "Wilmington",
+      "country": "US",
+      "postcode": "19801",
+      "region": "US-DE",
+      "street": "C/O The Corporation Trust Company",
+      "street2": "Corporation Trust Center\n1209 Orange Street"
+     },
+     "key": "02CBKVAOND0BEIOF0V84",
+     "name": "City National Corporation"
+    },
+    {
+     "address": {
+      "city": "PHOENIX",
+      "country": "US",
+      "postcode": "85012",
+      "region": "US-AZ",
+      "street": "C/O C T CORPORATION SYSTEM",
+      "street2": "3800 NORTH CENTRAL AVENUE\nSUITE 460"
+     },
+     "key": "02JFKI50Z1PQKZJVHI20",
+     "name": "DRYDEN ARIZONA REINSURANCE TERM COMPANY"
+    },
+    {
+     "address": {
+      "city": "DOVER",
+      "country": "US",
+      "postcode": "19904",
+      "region": "US-DE",
+      "street": "C/O COGENCY GLOBAL INC.",
+      "street2": "850 NEW BURTON ROAD\nSUITE 201"
+     },
+     "key": "02Q37D0NZ4LRWNCY0996",
+     "name": "AVENUE CAPITAL MANAGEMENT II, L.P."
+    },
+    {
+     "address": {
+      "city": "Raleigh",
+      "country": "US",
+      "postcode": "27608",
+      "region": "US-NC",
+      "street": "C/O Corporation Service Company",
+      "street2": "2626 Glenwood Avenue\nSuite 550"
+     },
+     "key": "02S2RPPVO9RP4NEU2740",
+     "name": "Reynolds American Inc."
+    }
+   ],
+   "withheld:matching.address.street": [
+    {
+     "address": {
+      "city": "Fyli",
+      "country": "GR",
+      "postcode": "13351",
+      "region": "GR-I",
+      "street": "n.a."
+     },
+     "key": "213800G2CN7HGH3JL176",
+     "name": "\u0391\u039a\u039c\u03a9\u039d \u0392\u0399\u039f\u039c\u0397\u03a7\u0391\u039d\u0399\u039a\u0397 \u039a\u0391\u0399 \u0395\u039c\u03a0\u039f\u03a1\u0399\u039a\u0397 \u0391\u039d\u03a9\u039d\u03a5\u039c\u0397 \u0395\u03a4\u0391\u0399\u03a1\u0395\u0399\u0391"
+    },
+    {
+     "address": {
+      "city": "N/A",
+      "country": "FI",
+      "street": "N/A"
+     },
+     "key": "213800RU44J47CE6F808",
+     "name": "Containerships Oy"
+    },
+    {
+     "address": {
+      "city": "Vaduz",
+      "country": "LI",
+      "postcode": "9490",
+      "region": "LI-11",
+      "street": "n.a."
+     },
+     "key": "254900DODKO2JR96NA76",
+     "name": "Bl\u00fctenmeer Stiftung"
+    },
+    {
+     "address": {
+      "city": "Abu Dhabi",
+      "country": "AE",
+      "region": "AE-AZ",
+      "street": "0, 25th Floor",
+      "street2": "Al Sarab Tower\nAdgm Square\nAl Maryah Island"
+     },
+     "key": "254900OEH0FKCU205217",
+     "name": "ADNOC TRADING LTD"
+    },
+    {
+     "address": {
+      "city": "N/A",
+      "country": "FI",
+      "street": "N/A"
+     },
+     "key": "254900PNB5XUGTU26W02",
+     "name": "VSJ Holding Oy"
+    },
+    {
+     "address": {
+      "city": "Vaduz",
+      "country": "LI",
+      "postcode": "9490",
+      "region": "LI-11",
+      "street": "n.a."
+     },
+     "key": "254900UFTEQCFXZYU819",
+     "name": "RMS Ventures AG"
+    },
+    {
+     "address": {
+      "city": "N/A",
+      "country": "FI",
+      "street": "N/A"
+     },
+     "key": "254900XBL8FQX73N8375",
+     "name": "Heksa Kiinteist\u00f6t Oy"
+    },
+    {
+     "address": {
+      "city": "Vaduz",
+      "country": "LI",
+      "postcode": "9490",
+      "region": "LI-11",
+      "street": "n.a."
+     },
+     "key": "254900XQXN7WDO3Q9161",
+     "name": "Senseo Ventures GmbH"
+    },
+    {
+     "address": {
+      "city": "N/A",
+      "country": "FI",
+      "street": "N/A"
+     },
+     "key": "254900XYMT01B079ZI90",
+     "name": "Accunia Oy"
+    },
+    {
+     "address": {
+      "city": "N/A",
+      "country": "FI",
+      "street": "N/A"
+     },
+     "key": "32NS9TYHYT8DWJXS6C21",
+     "name": "A-Vakuutus Oy"
+    }
+   ]
+  },
+  "over_shared": {
+   "more than 10": {
+    "addresses": 10276,
+    "entities withheld": 358409,
+    "largest": [
+     [
+      5686,
+      "C/O RATHBONE INVESTMENT MANAGEMENT LIMITED / L3 1N / GB"
+     ],
+     [
+      4133,
+      "C/O MAPLES CORPORATE SERVICES LIMITED / KY1-1 / KY"
+     ],
+     [
+      3091,
+      "C/O CAPITOL SERVICES INC / 19901 / US"
+     ],
+     [
+      2614,
+      "TRINITY QUAY / BS2 0 / GB"
+     ],
+     [
+      2279,
+      "C/O MAPLES FIDUCIARY SERVICES DELAWARE INC / 19807 / US"
+     ],
+     [
+      2187,
+      "VISTRA CORPORATE SERVICES CENTRE / VG111 / VG"
+     ],
+     [
+      2045,
+      "C/O WALKERS CORPORATE LIMITED / KY1-9 / KY"
+     ],
+     [
+      1870,
+      "ONE NEXUS WAY / KY1-9 / KY"
+     ],
+     [
+      1538,
+      "C/O PARACORP INCORPORATED / 19934 / US"
+     ],
+     [
+      1497,
+      "C/O VISTRA BVI LIMITED / VG111 / VG"
+     ]
+    ]
+   },
+   "more than 100": {
+    "addresses": 463,
+    "entities withheld": 135608,
+    "largest": [
+     [
+      5686,
+      "C/O RATHBONE INVESTMENT MANAGEMENT LIMITED / L3 1N / GB"
+     ],
+     [
+      4133,
+      "C/O MAPLES CORPORATE SERVICES LIMITED / KY1-1 / KY"
+     ],
+     [
+      3091,
+      "C/O CAPITOL SERVICES INC / 19901 / US"
+     ],
+     [
+      2614,
+      "TRINITY QUAY / BS2 0 / GB"
+     ],
+     [
+      2279,
+      "C/O MAPLES FIDUCIARY SERVICES DELAWARE INC / 19807 / US"
+     ],
+     [
+      2187,
+      "VISTRA CORPORATE SERVICES CENTRE / VG111 / VG"
+     ],
+     [
+      2045,
+      "C/O WALKERS CORPORATE LIMITED / KY1-9 / KY"
+     ],
+     [
+      1870,
+      "ONE NEXUS WAY / KY1-9 / KY"
+     ],
+     [
+      1538,
+      "C/O PARACORP INCORPORATED / 19934 / US"
+     ],
+     [
+      1497,
+      "C/O VISTRA BVI LIMITED / VG111 / VG"
+     ]
+    ]
+   },
+   "more than 25": {
+    "addresses": 2962,
+    "entities withheld": 245674,
+    "largest": [
+     [
+      5686,
+      "C/O RATHBONE INVESTMENT MANAGEMENT LIMITED / L3 1N / GB"
+     ],
+     [
+      4133,
+      "C/O MAPLES CORPORATE SERVICES LIMITED / KY1-1 / KY"
+     ],
+     [
+      3091,
+      "C/O CAPITOL SERVICES INC / 19901 / US"
+     ],
+     [
+      2614,
+      "TRINITY QUAY / BS2 0 / GB"
+     ],
+     [
+      2279,
+      "C/O MAPLES FIDUCIARY SERVICES DELAWARE INC / 19807 / US"
+     ],
+     [
+      2187,
+      "VISTRA CORPORATE SERVICES CENTRE / VG111 / VG"
+     ],
+     [
+      2045,
+      "C/O WALKERS CORPORATE LIMITED / KY1-9 / KY"
+     ],
+     [
+      1870,
+      "ONE NEXUS WAY / KY1-9 / KY"
+     ],
+     [
+      1538,
+      "C/O PARACORP INCORPORATED / 19934 / US"
+     ],
+     [
+      1497,
+      "C/O VISTRA BVI LIMITED / VG111 / VG"
+     ]
+    ]
+   }
+  },
+  "version": "gleif-quality-v1"
+ },
+ "inputs": {
+  "gleif": {
+   "path": "/Users/aneenaananth/.local/share/edgartools/clean-mdm/research/cm08-gleif-all.jsonl",
+   "sha256": "e4e6fe8aba15459ca361e09f0079c314f30825ee8c5831c2b4a4df83afdb1d9f"
+  },
+  "sec_scan": {
+   "path": "/private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/cm08-sec-scan.jsonl",
+   "sha256": "bdf379bfdebefdb8a87207b2fbd87ffd24c70a5912adb0143cf198ab2b9dc0d1"
+  }
+ },
+ "over_shared_across_both": {
+  "more than 10": {
+   "addresses": 10294,
+   "entities withheld": 358743,
+   "largest": [
+    [
+     5686,
+     "C/O RATHBONE INVESTMENT MANAGEMENT LIMITED / L3 1N / GB"
+    ],
+    [
+     4136,
+     "C/O MAPLES CORPORATE SERVICES LIMITED / KY1-1 / KY"
+    ],
+    [
+     3091,
+     "C/O CAPITOL SERVICES INC / 19901 / US"
+    ],
+    [
+     2614,
+     "TRINITY QUAY / BS2 0 / GB"
+    ],
+    [
+     2279,
+     "C/O MAPLES FIDUCIARY SERVICES DELAWARE INC / 19807 / US"
+    ],
+    [
+     2187,
+     "VISTRA CORPORATE SERVICES CENTRE / VG111 / VG"
+    ],
+    [
+     2045,
+     "C/O WALKERS CORPORATE LIMITED / KY1-9 / KY"
+    ],
+    [
+     1870,
+     "ONE NEXUS WAY / KY1-9 / KY"
+    ],
+    [
+     1538,
+     "C/O PARACORP INCORPORATED / 19934 / US"
+    ],
+    [
+     1497,
+     "C/O VISTRA BVI LIMITED / VG111 / VG"
+    ]
+   ]
+  },
+  "more than 100": {
+   "addresses": 463,
+   "entities withheld": 135641,
+   "largest": [
+    [
+     5686,
+     "C/O RATHBONE INVESTMENT MANAGEMENT LIMITED / L3 1N / GB"
+    ],
+    [
+     4136,
+     "C/O MAPLES CORPORATE SERVICES LIMITED / KY1-1 / KY"
+    ],
+    [
+     3091,
+     "C/O CAPITOL SERVICES INC / 19901 / US"
+    ],
+    [
+     2614,
+     "TRINITY QUAY / BS2 0 / GB"
+    ],
+    [
+     2279,
+     "C/O MAPLES FIDUCIARY SERVICES DELAWARE INC / 19807 / US"
+    ],
+    [
+     2187,
+     "VISTRA CORPORATE SERVICES CENTRE / VG111 / VG"
+    ],
+    [
+     2045,
+     "C/O WALKERS CORPORATE LIMITED / KY1-9 / KY"
+    ],
+    [
+     1870,
+     "ONE NEXUS WAY / KY1-9 / KY"
+    ],
+    [
+     1538,
+     "C/O PARACORP INCORPORATED / 19934 / US"
+    ],
+    [
+     1497,
+     "C/O VISTRA BVI LIMITED / VG111 / VG"
+    ]
+   ]
+  },
+  "more than 25": {
+   "addresses": 2963,
+   "entities withheld": 245770,
+   "largest": [
+    [
+     5686,
+     "C/O RATHBONE INVESTMENT MANAGEMENT LIMITED / L3 1N / GB"
+    ],
+    [
+     4136,
+     "C/O MAPLES CORPORATE SERVICES LIMITED / KY1-1 / KY"
+    ],
+    [
+     3091,
+     "C/O CAPITOL SERVICES INC / 19901 / US"
+    ],
+    [
+     2614,
+     "TRINITY QUAY / BS2 0 / GB"
+    ],
+    [
+     2279,
+     "C/O MAPLES FIDUCIARY SERVICES DELAWARE INC / 19807 / US"
+    ],
+    [
+     2187,
+     "VISTRA CORPORATE SERVICES CENTRE / VG111 / VG"
+    ],
+    [
+     2045,
+     "C/O WALKERS CORPORATE LIMITED / KY1-9 / KY"
+    ],
+    [
+     1870,
+     "ONE NEXUS WAY / KY1-9 / KY"
+    ],
+    [
+     1538,
+     "C/O PARACORP INCORPORATED / 19934 / US"
+    ],
+    [
+     1497,
+     "C/O VISTRA BVI LIMITED / VG111 / VG"
+    ]
+   ]
+  }
+ },
+ "sec": {
+  "counts": {
+   "deferred:classification_deferred": 70753,
+   "fixed:dc_state_is_empty": 3,
+   "fixed:standard_address": 4799,
+   "fixed:state_from_name_tag": 11,
+   "records": 5477,
+   "withheld:matching.address": 7
+  },
+  "examples": {
+   "deferred:classification_deferred": [
+    {
+     "key": 1000097,
+     "name": "KINGDON CAPITAL MANAGEMENT, L.L.C."
+    },
+    {
+     "key": 1002425,
+     "name": "TEMPRA TECHNOLOGY INC"
+    },
+    {
+     "key": 1000177,
+     "name": "NORDIC AMERICAN TANKERS Ltd"
+    },
+    {
+     "key": 1000377,
+     "name": "Vibra Energia S.A./ADR"
+    },
+    {
+     "key": 1000264,
+     "name": "ALGER ASSOCIATES INC"
+    },
+    {
+     "key": 1002667,
+     "name": "Tax-Managed Growth Portfolio"
+    },
+    {
+     "key": 1000184,
+     "name": "SAP SE"
+    },
+    {
+     "key": 1000249,
+     "name": "FIRST EAGLE VARIABLE FUNDS"
+    },
+    {
+     "key": 1000742,
+     "name": "SANDLER CAPITAL MANAGEMENT"
+    },
+    {
+     "key": 1001391,
+     "name": "DAVIDSON CHARLES E"
+    }
+   ],
+   "fixed:dc_state_is_empty": [
+    {
+     "key": 1710366,
+     "name": "Core Natural Resources, Inc.",
+     "now": null,
+     "original": "DC"
+    },
+    {
+     "key": 6951,
+     "name": "APPLIED MATERIALS INC /DE",
+     "now": "DE",
+     "original": "DC"
+    },
+    {
+     "key": 70502,
+     "name": "NATIONAL RURAL UTILITIES COOPERATIVE FINANCE CORP /DC/",
+     "now": "DC",
+     "original": "DC"
+    }
+   ],
+   "fixed:standard_address": [
+    {
+     "key": 100122,
+     "name": "TUCSON ELECTRIC POWER CO",
+     "now": {
+      "city": "TUCSON",
+      "country": "US",
+      "postcode": "85701",
+      "region": "AZ",
+      "street": "88 E BROADWAY"
+     },
+     "original": {
+      "city": "TUCSON",
+      "country": "US",
+      "postcode": "85701",
+      "region": "AZ",
+      "street": "88 EAST BROADWAY"
+     }
+    },
+    {
+     "key": 1001115,
+     "name": "GEOSPACE TECHNOLOGIES CORP",
+     "now": {
+      "city": "HOUSTON",
+      "country": "US",
+      "postcode": "77040",
+      "region": "TX",
+      "street": "7007 PINEMONT DR"
+     },
+     "original": {
+      "city": "HOUSTON",
+      "country": "US",
+      "postcode": "77040",
+      "region": "TX",
+      "street": "7007 PINEMONT DR."
+     }
+    },
+    {
+     "key": 1001601,
+     "name": "MGT CAPITAL INVESTMENTS, INC.",
+     "now": {
+      "city": "MELBOURNE",
+      "country": "US",
+      "postcode": "32935",
+      "region": "FL",
+      "street": "540 MONTREAL AVE"
+     },
+     "original": {
+      "city": "MELBOURNE",
+      "country": "US",
+      "postcode": "32935",
+      "region": "FL",
+      "street": "540 MONTREAL AVE",
+      "street2": "SUITE 133"
+     }
+    },
+    {
+     "key": 1001233,
+     "name": "SANGAMO THERAPEUTICS, INC",
+     "now": {
+      "city": "RICHMOND",
+      "country": "US",
+      "postcode": "94084",
+      "region": "CA",
+      "street": "501 CANAL BLVD"
+     },
+     "original": {
+      "city": "RICHMOND",
+      "country": "US",
+      "postcode": "94084",
+      "region": "CA",
+      "street": "501 CANAL BLVD."
+     }
+    },
+    {
+     "key": 1001171,
+     "name": "BROADWAY FINANCIAL CORP \\DE\\",
+     "now": {
+      "city": "LOS ANGELES",
+      "country": "US",
+      "postcode": "90036",
+      "region": "CA",
+      "street": "5055 WILSHIRE BLVD"
+     },
+     "original": {
+      "city": "LOS ANGELES",
+      "country": "US",
+      "postcode": "90036",
+      "region": "CA",
+      "street": "5055 WILSHIRE BLVD STE 500"
+     }
+    },
+    {
+     "key": 1000623,
+     "name": "Mativ Holdings, Inc.",
+     "now": {
+      "city": "ALPHARETTA",
+      "country": "US",
+      "postcode": "30009",
+      "region": "GA",
+      "street": "100 KIMBALL PL"
+     },
+     "original": {
+      "city": "ALPHARETTA",
+      "country": "US",
+      "postcode": "30009",
+      "region": "GA",
+      "street": "100 KIMBALL PLACE",
+      "street2": "SUITE 600"
+     }
+    },
+    {
+     "key": 1001385,
+     "name": "NWPX Infrastructure, Inc.",
+     "now": {
+      "city": "VANCOUVER",
+      "country": "US",
+      "postcode": "98684",
+      "region": "WA",
+      "street": "201 NE PARK PLAZA DR"
+     },
+     "original": {
+      "city": "VANCOUVER",
+      "country": "US",
+      "postcode": "98684",
+      "region": "WA",
+      "street": "201 NE PARK PLAZA DRIVE",
+      "street2": "SUITE 100"
+     }
+    },
+    {
+     "key": 1001316,
+     "name": "TG THERAPEUTICS, INC.",
+     "now": {
+      "city": "NEW YORK",
+      "country": "US",
+      "postcode": "10014",
+      "region": "NY",
+      "street": "2 GANSEVOORT ST"
+     },
+     "original": {
+      "city": "NEW YORK",
+      "country": "US",
+      "postcode": "10014",
+      "region": "NY",
+      "street": "2 GANSEVOORT STREET, 9TH FLOOR"
+     }
+    },
+    {
+     "key": 1002047,
+     "name": "NetApp, Inc.",
+     "now": {
+      "city": "SAN JOSE",
+      "country": "US",
+      "postcode": "95128",
+      "region": "CA",
+      "street": "3060 OLSEN DR"
+     },
+     "original": {
+      "city": "SAN JOSE",
+      "country": "US",
+      "postcode": "95128",
+      "region": "CA",
+      "street": "3060 OLSEN DRIVE"
+     }
+    },
+    {
+     "key": 1001614,
+     "name": "Riley Exploration Permian, Inc.",
+     "now": {
+      "city": "OKLAHOMA CITY",
+      "country": "US",
+      "postcode": "73104",
+      "region": "OK",
+      "street": "29 E RENO AVE"
+     },
+     "original": {
+      "city": "OKLAHOMA CITY",
+      "country": "US",
+      "postcode": "73104",
+      "region": "OK",
+      "street": "29 E. RENO AVENUE",
+      "street2": "SUITE 500"
+     }
+    }
+   ],
+   "fixed:state_from_name_tag": [
+    {
+     "key": 1068148,
+     "name": "PARK OHIO INDUSTRIES INC/OH",
+     "now": "OH",
+     "original": null
+    },
+    {
+     "key": 1077428,
+     "name": "TEXAS CAPITAL BANCSHARES INC/TX",
+     "now": "TX",
+     "original": null
+    },
+    {
+     "key": 1091667,
+     "name": "CHARTER COMMUNICATIONS, INC. /MO/",
+     "now": "MO",
+     "original": null
+    },
+    {
+     "key": 1133421,
+     "name": "NORTHROP GRUMMAN CORP /DE/",
+     "now": "DE",
+     "original": null
+    },
+    {
+     "key": 1758057,
+     "name": "Luminar Technologies, Inc./DE",
+     "now": "DE",
+     "original": null
+    },
+    {
+     "key": 1835385,
+     "name": "Marathon Bancorp, Inc. /MD/",
+     "now": "MD",
+     "original": null
+    },
+    {
+     "key": 1841408,
+     "name": "Dave Inc./DE",
+     "now": "DE",
+     "original": null
+    },
+    {
+     "key": 2013745,
+     "name": "Calumet, Inc. /DE",
+     "now": "DE",
+     "original": null
+    },
+    {
+     "key": 6951,
+     "name": "APPLIED MATERIALS INC /DE",
+     "now": "DE",
+     "original": null
+    },
+    {
+     "key": 70502,
+     "name": "NATIONAL RURAL UTILITIES COOPERATIVE FINANCE CORP /DC/",
+     "now": "DC",
+     "original": null
+    }
+   ],
+   "withheld:matching.address": [
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postal_code": "19803",
+      "region": "DE",
+      "street": "1521 CONCORD PIKE",
+      "street2": "SUITE 301 PMB 221"
+     },
+     "key": 1412408,
+     "name": "Phreesia, Inc."
+    },
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postal_code": "19808",
+      "region": "DE",
+      "street": "2711 CENTERVILLE ROAD",
+      "street2": "SUITE 400"
+     },
+     "key": 1420800,
+     "name": "Enovis CORP"
+    },
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postal_code": "19801",
+      "region": "DE",
+      "street": "1209 ORANGE STREET",
+      "street2": null
+     },
+     "key": 1834488,
+     "name": "N-able, Inc."
+    },
+    {
+     "address": {
+      "city": "SHERIDAN",
+      "country": "US",
+      "postal_code": "82801",
+      "region": "WY",
+      "street": "C/O REGISTERED AGENTS INC.",
+      "street2": "30 N. GOULD ST. STE R"
+     },
+     "key": 1941360,
+     "name": "Neolara Corp."
+    },
+    {
+     "address": {
+      "city": "AUSTIN",
+      "country": "US",
+      "postal_code": "78701-3218",
+      "region": "TX",
+      "street": "CORPORATION SERVICE COMPANY",
+      "street2": "211 EAST 7TH STREET, SUITE 620"
+     },
+     "key": 2070457,
+     "name": "Twenty One Capital, Inc."
+    },
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postal_code": "19808",
+      "region": "DE",
+      "street": "251 LITTLE FALLS DRIVE",
+      "street2": null
+     },
+     "key": 2088896,
+     "name": "X-Energy, Inc."
+    },
+    {
+     "address": {
+      "city": "WILMINGTON",
+      "country": "US",
+      "postal_code": "19808",
+      "region": "DE",
+      "street": "251 LITTLE FALLS DRIVE",
+      "street2": null
+     },
+     "key": 2092446,
+     "name": "Avalanche Treasury Corp"
+    }
+   ]
+  },
+  "over_shared": {
+   "more than 10": {
+    "addresses": 0,
+    "entities withheld": 0,
+    "largest": []
+   },
+   "more than 100": {
+    "addresses": 0,
+    "entities withheld": 0,
+    "largest": []
+   },
+   "more than 25": {
+    "addresses": 0,
+    "entities withheld": 0,
+    "largest": []
+   }
+  },
+  "version": "sec-company-quality-v1"
+ }
+}

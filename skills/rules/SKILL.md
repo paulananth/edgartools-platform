@@ -194,8 +194,12 @@ language is in [REFERENCE.md](REFERENCE.md).
      (`blank_values@1`), so the field reads as unknown;
    - an address that is a registered agent's or a placeholder: a check that
      withholds it from matching (`withhold`); it stays on the record;
-   - a value MDM cannot use at all (no name): a check that rejects the
-     record (`reject`). A rejected record blocks its batch, as a defect does;
+   - a critical data element missing (no name): a check that makes the
+     record an exception (`exception`). It never merges and never stops the
+     run; it waits, open, until someone fixes or ignores it. List its reason
+     (`quality_<id>`) in the contract's `nonblocking_deferred_reasons`:
+     registration refuses the contract otherwise. Keep critical data elements
+     few (operator, 2026-09-28);
    - anything else worth watching: a check that only counts (`flag`).
 
    Every check and fix reads the record *after* the mapping (`fields.<name>`
@@ -211,7 +215,7 @@ language is in [REFERENCE.md](REFERENCE.md).
    - whether a new MDM field or kind is wanted;
    - each identifier the source carries (see the hard rules);
    - the source code's name, when the repo does not already fix it;
-   - each check's `on_fail` (reject, withhold or flag) and each fix, with
+   - each check's `on_fail` (exception, withhold or flag) and each fix, with
      its count from step 5 and two or three examples.
 
    Do not ask:
@@ -287,7 +291,7 @@ language is in [REFERENCE.md](REFERENCE.md).
 
    `normalize` runs the contract's quality checks and fixes too. Each record
    it returns shows what they did under `provenance.quality` (the fixes with
-   their original values, the withheld paths, the flags); a rejected record
+   their original values, the withheld paths, the flags); a record that fails an `exception` check
    raises `UnsupportedRecord("quality_<id>")`. Give the operator the counts
    per check and fix (`edgar_warehouse.mdm.clean.quality.counts(records,
    deferred)`) and up to 10 examples of each: that is the proof they approve

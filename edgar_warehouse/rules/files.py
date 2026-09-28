@@ -135,6 +135,8 @@ def load_source(path: Path) -> dict:
     if not isinstance(quality, dict) or set(quality) != {"version", "quality"} or not isinstance(quality["quality"], dict):
         raise RulesFileError(f"{quality_path}: holds version and quality only")
     for code, block in quality["quality"].items():
+        if not isinstance(block, dict):
+            raise RulesFileError(f"{quality_path}: {code} holds fixes and checks")
         contract = ((body.get("mdm") or {}).get(code) or {}).get("contract")
         if not isinstance(contract, dict):
             raise RulesFileError(f"{quality_path}: {code} is not a Dataset Contract in source.yaml")
@@ -155,15 +157,16 @@ def write_source(body: dict, folder: Path) -> None:
         if block is not None:
             versions.add(block.pop("version", None))
             blocks[code] = block
-    if len(versions) > 1:
-        raise RulesFileError("One source's contracts carry one quality version")
+    # Refuse before writing anything, so a refused export leaves no half.
+    if blocks and (len(versions) != 1 or not isinstance(next(iter(versions)), str)):
+        raise RulesFileError("One source's contracts carry one named quality version")
+    quality_path = folder / "quality.yaml"
+    if not blocks and quality_path.exists():
+        raise RulesFileError(f"{quality_path} is absent from this version; use an empty export folder")
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "source.yaml").write_text(dumps(body), encoding="utf-8")
-    quality_path = folder / "quality.yaml"
     if blocks:
         quality_path.write_text(dumps({"version": versions.pop(), "quality": blocks}), encoding="utf-8")
-    elif quality_path.exists():
-        raise RulesFileError(f"{quality_path} is absent from this version; use an empty export folder")
 
 
 def pipeline(name: str, root: Path | None = None) -> dict:
@@ -214,3 +217,21 @@ def pending_proofs(root: Path | None = None) -> dict:
 def reference(name: str, root: Path | None = None) -> dict:
     """A reference table rules and readers share: `reference/<name>.yaml`."""
     return load((root or ROOT) / "reference" / f"{name}.yaml")
+
+
+def _write_plain(body: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dumps(body), encoding="utf-8")
+
+
+# How each Rules document kind is read from, and written back to, its
+# authoring files, given the path of its main file (`<source>/source.yaml`,
+# `<pipeline>/pipeline.yaml`, `merge/policy.yaml`). Every reader and writer
+# of documents uses this table, so a kind whose layout splits (merge into
+# kinds and reference tables; source into source and quality) changes here
+# only.
+LAYOUT = {
+    "source": (load_source, lambda body, path: write_source(body, path.parent)),
+    "pipeline": (load, _write_plain),
+    "merge": (lambda path: policy(path.parents[1]), lambda body, path: write_policy(body, path.parents[1])),
+}

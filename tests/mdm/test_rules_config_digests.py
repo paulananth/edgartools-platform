@@ -26,16 +26,20 @@ WITH_PLACE_CODES = {
     "policy": "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
     "name_matching_active": "ad70680ac2cbeb04da821038436ccd0c5eff8bfa74f96e29cc205bdd0cd8db80",
 }
-# Company mastering ticket 22 added each feed's quality rule to its contract:
-# a new mapping version. Without its `quality` the contract is the one above.
+# Company mastering ticket 22 added each feed's quality rule to its contract,
+# with its exceptions listed as non-blocking: a new mapping version. Without
+# both the contract is the one above.
 WITH_QUALITY = {
-    "contract": "131452e314d1cc892b7bb895235ea60fcd180b55d86b668bde6e2823978d1c28",
-    "level1": "58aa14d8a69d06c2ebdd52ea555d5f9bc972bb16c846cc44fdba1e9ead9c4cfd",
+    "contract": "37b6634c515a6f0747c06ab1ab09e7b2cba87ce61fc2ad54eb73838d1dc84dcc",
+    "level1": "192a37322ea77407a08cbb931b6e4f67cbbc6d90e91c06dba0022f8ce2c32f0c",
 }
 
 
 def _without_quality(contract: dict) -> dict:
-    return {k: v for k, v in contract.items() if k != "quality"}
+    body = {k: v for k, v in contract.items() if k != "quality"}
+    reasons = [r for r in body.get("nonblocking_deferred_reasons", []) if not r.startswith("quality_")]
+    body.pop("nonblocking_deferred_reasons", None)
+    return {**body, **({"nonblocking_deferred_reasons": reasons} if reasons else {})}
 
 
 GLEIF_BEFORE = {

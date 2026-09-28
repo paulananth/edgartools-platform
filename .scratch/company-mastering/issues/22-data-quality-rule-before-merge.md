@@ -27,6 +27,7 @@ do not adopt the tool.
    sources (over-shared addresses) sits with the kind's merge rules.
 3. **Checks:** value present, in a set, in a reference file, pattern, LEI
    check digit, placeholder, registered-agent address. On failure: `reject`
+   (since 2026-09-28: `exception`, below)
    (set aside, blocks, as a defect), `withhold` (kept, never used to match),
    `flag` (counted). Defects block from day one.
 4. **Fixes:** SEC name state marker to state of incorporation; an invalid
@@ -77,12 +78,103 @@ readers call (`cli.batch_input`, the native GLEIF reader, Bookkeeping's
 `source_input`); checks and fixes are a fixed table of functions, as the
 matching tests are.
 
+## Operator ruling, 2026-09-28 (recorded 08:13 ET): exceptions, not stops
+
+"A record with no name is set aside and stops the run ... Do not stop make
+few critical data elements if it is missing mark it so it never tries to
+merge it becomes an exception that needs to be fixed or ignored".
+
+So `on_fail: reject` became `exception`: the record is set aside as
+`quality_<id>`, never merges, and never stops the run (the contract lists
+the reason as non-blocking; registration refuses a contract that does not).
+It is an open review item. The one critical data element today is the name,
+for SEC and GLEIF. Closing an exception ("fixed or ignored") has no command
+yet: a follow-up ticket.
+
+## Proof (2026-09-28 08:31 ET)
+
+Inputs: all 76,230 SEC filers (`cm08-sec-scan.jsonl`, `bdf379bf…c0d1`) and
+the 2026-09-11 GLEIF Golden Copy (`cm08-gleif-all.jsonl`, `e4e6fe8a…d9f`).
+
+SEC (`sec-company-quality-v1`), through the production `normalize`: 5,477
+filers reach the quality rule; 70,753 are held back earlier as not
+companies (the classification rule).
+
+| What | Records |
+|---|---:|
+| "DC" state emptied | 3 (Applied Materials becomes DE from its "/DE" tag; National Rural Utilities stays DC from its "/DC/" tag; Core Natural Resources becomes unknown) |
+| State filled from the name tag | 11 (Park Ohio: OH; Northrop Grumman: DE; Charter: MO) |
+| Address copy differs from the source's | 4,799 |
+| Address withheld: a registered agent's | 7, all real agents (1209 Orange St, 251 Little Falls Dr, 2711 Centerville Rd) |
+| Exception: no name | 0 |
+
+GLEIF (`gleif-quality-v1`), GENERAL entities, as its contract maps them:
+
+| What | Records |
+|---|---:|
+| Records | 3,043,262 |
+| Address copy differs from the source's (not only in case) | 1,876,914 |
+| Address withheld: a registered agent's | 124,852 |
+| Street withheld: a placeholder ("N/A", "n.a.") | 5,398 |
+| Exception: no name | 0 |
+
+The first run showed three wrong rules, fixed before this one: a bare
+"C/O" marker withheld companies' own offices ("C/O LOGITECH INC"); GLEIF
+had no placeholder check (4,144 Finnish "N/A" streets); letters outside
+A-Z were dropped, so Greek streets read as "0" and "FLATBUSH" lost "FL".
+
+Over-shared addresses (Q8), counting only addresses left fit to match:
+
+| Threshold | Addresses | Entities withheld |
+|---|---:|---:|
+| more than 10 | 10,294 | 358,743 |
+| more than 25 | 2,963 | 245,770 |
+| more than 100 | 463 | 135,641 |
+
+No SEC address is shared by more than 10 filers. The largest are corporate
+service providers without a named-agent marker: C/O Rathbone Investment
+Management (5,686), C/O Maples Corporate Services (4,136), C/O Capitol
+Services (3,091), Vistra Corporate Services Centre (2,187). The operator
+picks the threshold.
+
+## What this ticket leaves to others
+
+- **Withhold takes effect with ticket 21.** Today's two matching rules read
+  `matching.business_postal_code` and the GLEIF headquarters postcode, not
+  the address the quality rule withholds, so an agent's ZIP still counts in
+  them. Left on purpose: withholding it now removes about 961 of today's
+  3,050 merges (ticket 21's veto measurement), a matching change the
+  operator decides with ticket 21's passes, which read `matching.address`.
+- **The over-shared address check** (Q2, Q8) waits for the operator's
+  threshold; it then goes in the Company merge rules.
+- **Silver** (Q5): there is no Clean silver writer yet; it reads the same
+  fixed values when it is built.
+- **"Unique"** (the plan's list, not Q3's): not built; the record key already
+  refuses duplicates.
+
+## Three-axis review (2026-09-28 07:50 ET), what changed
+
+- Standards and Spec: a withheld street now withholds the whole address too;
+  a contract with no `matching` block keeps the address copy; the address
+  copy counts as a fix only when it differs, with the source address as the
+  original, and leaves out the suite and floor (the plan's "suite
+  removed"); `write_source` refuses before it writes; the LEI test reuses
+  the identifier check (`adapters._lei`); the args a fix corrects sit in
+  its `FIXES` entry.
+- GoF: each Rules document kind's read and write is one entry in
+  `files.LAYOUT`, used by `save`, `export`, `migrate` both ways. This also
+  fixes `rules save --merge` and `export --merge`, which read and wrote
+  `merge/policy.yaml` alone, without its kind files and reference tables.
+- Proving script: SEC records now go through the production `normalize`
+  with the reader's landing-row shape; GLEIF is rebuilt as its contract maps
+  it; over-shared addresses are counted per source and across both.
+
 ## Checklist (times ET)
 
 - [x] `/gof-refactor-reviewer` on the Merge Stage and the rules loader.
 - [x] The file format and its loader (`files.load_source`/`write_source`);
   no Rules Database kind (change 1 above).
-- [x] The quality step in `normalize`: fixes, then reject, withhold, flag
+- [x] The quality step in `normalize`: fixes, then exception, withhold, flag
   (`edgar_warehouse/mdm/clean/quality.py`); matching skips withheld values.
 - [x] `rules/sources/sec.submissions.company/quality.yaml` and
   `rules/sources/gleif/quality.yaml`, the first checks and fixes.
@@ -90,6 +182,8 @@ matching tests are.
   result and in the Bookkeeping MDM receipt) (2026-09-28 07:38 ET).
 - [x] The Rules skill: step 5 "Quality", the quality mode, REFERENCE.md
   "Data quality" (07:30 ET).
-- [ ] Proving run on the ticket 08 inputs: counts and examples per check and
-  fix; over-shared address counts at 10, 25 and 100 (Q8).
+- [x] Proving run on the ticket 08 inputs (2026-09-28 08:31 ET):
+  [`22-quality-proving-run.py`](../research/22-quality-proving-run.py), result
+  [`22-quality-proving-run.json`](../research/22-quality-proving-run.json)
+  (counts, up to 10 examples each, input sha256s). Below.
 - [ ] Full suite, three-axis review, PR, CI; merge on the operator's word.

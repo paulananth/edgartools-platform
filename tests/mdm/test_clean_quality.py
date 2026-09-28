@@ -81,10 +81,11 @@ class TestTheSecQualityRule:
         assert _read(found, "matching.address") is None
         assert found["fields"]["address"]["value"]["street"].startswith("C/O")
 
-    def test_a_record_with_no_name_is_rejected_and_blocks(self):
+    def test_a_record_with_no_name_is_an_exception_that_never_stops_the_run(self):
         with pytest.raises(UnsupportedRecord) as caught:
             read(sec(name=""))
         assert caught.value.reason == "quality_name_present"
+        assert "quality_name_present" in CONTRACT["nonblocking_deferred_reasons"]
 
 
 def block(**changes):
@@ -107,7 +108,7 @@ class TestTheBlock:
             ({"version": ""}, "names its version"),
             ({"extra": 1}, "version, fixes and checks only"),
             ({"checks": [{"id": "x", "test": "nope@1", "value": "fields.a", "on_fail": "flag"}]}, "unknown test"),
-            ({"checks": [{"id": "x", "test": "present@1", "value": "fields.a", "on_fail": "drop"}]}, "reject, withhold or flag"),
+            ({"checks": [{"id": "x", "test": "present@1", "value": "fields.a", "on_fail": "drop"}]}, "exception, withhold or flag"),
             ({"checks": [{"id": "x", "test": "present@1", "value": "row.a", "on_fail": "flag"}]}, "reads fields"),
             ({"checks": [{"id": "x", "test": "in_set@1", "value": "fields.a", "on_fail": "flag"}]}, "needs args"),
             ({"fixes": [{"id": "street_known", "fix": "blank_values@1", "args": {"field": "fields.a", "values": []}}]}, "used twice"),
@@ -147,7 +148,7 @@ class TestTheBlock:
             "fixed:dc_state_is_empty": 2,
             "fixed:standard_address": 2,
             "fixed:state_from_name_tag": 1,
-            "rejected:name_present": 1,
+            "exception:name_present": 1,
             "withheld:matching.address": 1,
         }
 
@@ -217,3 +218,87 @@ class TestTheRunReport:
                                       path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
         assert result["quality"] == {"fixed:dc_state_is_empty": 1, "fixed:standard_address": 1,
                                      "fixed:state_from_name_tag": 1}
+
+
+class TestTheReviewFixes:
+    def test_a_withheld_street_withholds_the_whole_address_but_not_its_postcode(self):
+        record = {"provenance": {"quality": {"withheld": ["matching.address.street"]}}}
+        assert quality.withheld(record, "matching.address")
+        assert quality.withheld(record, "matching.address.street")
+        assert not quality.withheld(record, "matching.address.postcode")
+
+    def test_the_matching_copy_leaves_out_the_suite(self):
+        block_ = block(fixes=[{"id": "standard_address", "fix": "standardize_address@1",
+                               "args": {"field": "fields.address", "into": "matching.address"}}], checks=[])
+        matching: dict = {}
+        found = quality.apply(block_, {"address": {"street": "100 Main Street Suite 200", "street2": "Floor 3"}},
+                              matching)
+        assert matching["address"] == {"street": "100 MAIN ST"}
+        assert found["fixes"]["standard_address"]["original"]["street"] == "100 Main Street Suite 200"
+
+    def test_an_address_already_standard_is_copied_but_not_counted_as_fixed(self):
+        block_ = block(fixes=[{"id": "standard_address", "fix": "standardize_address@1",
+                               "args": {"field": "fields.address", "into": "matching.address"}}], checks=[])
+        matching: dict = {}
+        found = quality.apply(block_, {"address": {"street": "1 MAIN ST", "postcode": "10001"}}, matching)
+        assert matching["address"] == {"street": "1 MAIN ST", "postcode": "10001"}
+        assert "fixes" not in found
+
+    def test_a_contract_without_matching_still_gets_the_matching_copy(self):
+        contract = copy.deepcopy(CONTRACT)
+        contract["adapter"].pop("matching", None)
+        found = read(sec(), contract=contract)
+        assert found["provenance"]["matching"]["address"]["street"] == "3050 BOWERS AVE"
+
+    def test_a_refused_export_writes_nothing(self, tmp_path):
+        body = copy.deepcopy(files.source("sec.submissions.company"))
+        body["mdm"]["sec.submissions.company.v1"]["contract"]["quality"].pop("version")
+        with pytest.raises(files.RulesFileError, match="named quality version"):
+            files.write_source(body, tmp_path)
+        assert not list(tmp_path.iterdir())
+
+    @pytest.mark.parametrize("kind", ["source", "merge"])
+    def test_each_kind_reads_and_writes_its_whole_layout(self, kind, tmp_path):
+        read_, write = files.LAYOUT[kind]
+        main = {"source": files.ROOT / "sources" / "gleif" / "source.yaml",
+                "merge": files.ROOT / "merge" / "policy.yaml"}[kind]
+        body = read_(main)
+        out = tmp_path / main.relative_to(files.ROOT)
+        write(body, out)
+        assert read_(out) == body
+
+
+class TestExceptions:
+    def test_registration_refuses_an_exception_that_could_stop_the_run(self):
+        from edgar_warehouse.mdm.clean.store import register_dataset
+
+        contract = copy.deepcopy(CONTRACT)
+        contract["nonblocking_deferred_reasons"] = []
+        with pytest.raises(ValueError, match="quality_name_present"):
+            register_dataset(None, SOURCE_CODE, contract)
+
+    def test_every_repo_exception_is_non_blocking(self):
+        for name in ("sec.submissions.company", "gleif"):
+            for entry in files.source(name)["mdm"].values():
+                if "quality" in entry["contract"]:
+                    assert quality.exception_reasons(entry["contract"]["quality"]) <= set(
+                        entry["contract"].get("nonblocking_deferred_reasons", [])
+                    )
+
+    def test_a_street_in_another_script_is_kept_not_read_as_a_placeholder(self):
+        assert quality._standard_line("ΣΑΡΑΚΗΝΟΙ 0") == "ΣΑΡΑΚΗΝΟΙ 0"
+        assert quality._placeholder("ΣΑΡΑΚΗΝΟΙ 0", {"values": ["NA"]})
+
+
+@pytest.mark.parametrize(
+    ("line", "standard"),
+    [
+        ("1 Flatbush Avenue", "1 FLATBUSH AVE"),
+        ("200 Aptos Street Suite 5", "200 APTOS ST"),
+        ("2 Gansevoort Street, 9th Floor", "2 GANSEVOORT ST"),
+        ("10 Main St # 12", "10 MAIN ST"),
+        ("Unit 4, 7 Roomy Road", "7 ROOMY RD"),
+    ],
+)
+def test_a_suite_is_left_out_but_a_street_that_starts_like_one_is_kept(line, standard):
+    assert quality._standard_line(line) == standard

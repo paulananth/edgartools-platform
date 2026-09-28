@@ -9,9 +9,13 @@ Dataset Contract as `quality`) holds fixes and checks, all data:
   exception: it is a matching copy (`matching.<name>`), and the address MDM
   shows stays as the source wrote it;
 - a **check** tests one value. When it fails, `on_fail` says what happens:
-  `reject` sets the record aside with the reason `quality_<id>`, which blocks
-  as any defect does; `withhold` keeps the value but no matching rule may use
-  it (`provenance.quality.withheld`); `flag` only counts it.
+  `exception` sets the record aside with the reason `quality_<id>`: it never
+  merges, it never stops the run (the contract lists the reason as
+  non-blocking), and it waits as an open exception until it is fixed or
+  ignored (operator, 2026-09-28: "Do not stop ... it becomes an exception
+  that needs to be fixed or ignored"); `withhold` keeps the value but no
+  matching rule may use it (`provenance.quality.withheld`); `flag` only
+  counts it.
 
 Fixes run first, so checks see the corrected values. The tests and fixes are a
 fixed, versioned list, as matching tests are: a new one is new code.
@@ -22,10 +26,11 @@ from __future__ import annotations
 import functools
 import hashlib
 import re
+import unicodedata
 from collections import Counter
 from typing import Any
 
-ON_FAIL = frozenset({"reject", "withhold", "flag"})
+ON_FAIL = frozenset({"exception", "withhold", "flag"})
 _ID = re.compile(r"[a-z][a-z0-9_]*")
 
 
@@ -78,18 +83,20 @@ def _pattern(value, args) -> bool:
 
 
 def _lei_check_digit(value, _args) -> bool:
-    text = str(value or "").strip().upper()
-    if not re.fullmatch(r"[0-9A-Z]{18}[0-9]{2}", text):
+    from .adapters import UnsupportedRecord, _lei
+
+    try:
+        _lei(str(value or "").strip().upper())
+    except UnsupportedRecord:
         return False
-    digits = "".join(str(int(c, 36)) for c in text)
-    return int(digits) % 97 == 1
+    return True
 
 
 def _placeholder(value, args) -> bool:
     """Passes unless the value is a placeholder: "N/A", "NONE", "0000"."""
     if value is None:
         return True
-    text = re.sub(r"[^A-Z0-9]", "", str(value).upper())
+    text = re.sub(r"[\W_]", "", str(value).upper())
     return not (text in args["values"] or (text and set(text) == {"0"}))
 
 
@@ -168,24 +175,41 @@ def _name_state_marker(record, args) -> list[str]:
     return [target]
 
 
+# A secondary unit ("SUITE 100", "FL 5", "# 12") says where inside a building,
+# not which building: the matching copy leaves it out.
+_UNIT = re.compile(
+    r"(?:^|\s)(?:(?:(?:STE|FL|UNIT|RM|APT)\b|#)\s*[A-Z0-9-]+|\d+(?:ST|ND|RD|TH)\s+FL)\b"
+)
+
 _WORDS = {
     "STREET": "ST", "AVENUE": "AVE", "ROAD": "RD", "DRIVE": "DR", "BOULEVARD": "BLVD",
     "LANE": "LN", "PLACE": "PL", "COURT": "CT", "PARKWAY": "PKWY", "HIGHWAY": "HWY",
-    "SUITE": "STE", "FLOOR": "FL", "NORTH": "N", "SOUTH": "S", "EAST": "E", "WEST": "W",
+    "SUITE": "STE", "FLOOR": "FL", "ROOM": "RM", "NORTH": "N", "SOUTH": "S", "EAST": "E",
+    "WEST": "W",
 }
 
 
 def _standard_line(text: str) -> str:
-    words = re.sub(r"[^A-Z0-9#/& -]+", " ", text.upper()).split()
-    return " ".join(_WORDS.get(w, w) for w in words)
+    # Accents folded, not dropped: "BERANOVÝCH" is "BERANOVYCH". Letters of
+    # any script stay: a Greek street is not a placeholder.
+    plain = "".join(
+        c for c in unicodedata.normalize("NFKD", text.upper()) if not unicodedata.combining(c)
+    )
+    words = re.sub(r"[^\w#/& -]+|_", " ", plain).split()
+    line = " ".join(_WORDS.get(w, w) for w in words)
+    return " ".join(_UNIT.sub(" ", line).split())
 
 
 def _standardize_address(record, args) -> list[str]:
-    """A matching copy of an address: street words as USPS Publication 28
-    abbreviates them, upper case, and a US ZIP+4 cut to five digits.
+    """A matching copy of an address: upper case, street words as USPS
+    Publication 28 abbreviates them, the suite or floor left out, and a US
+    ZIP+4 cut to five digits.
 
     It goes to `matching.<into>`, never over the address MDM shows: a
     standardized address is a key to compare, not a better value to display.
+    The copy is always written, so a matching rule reads one place; it is
+    reported as a fix, with the source's address as the original, only when
+    it differs from that address other than in case.
     """
     address = _get(record, args["field"])
     if not isinstance(address, dict):
@@ -193,18 +217,27 @@ def _standardize_address(record, args) -> list[str]:
     fixed = dict(address)
     for part in ("street", "street2", "city"):
         if isinstance(fixed.get(part), str):
-            fixed[part] = "\n".join(_standard_line(line) for line in fixed[part].split("\n"))
+            lines = (_standard_line(line) for line in fixed[part].split("\n"))
+            fixed[part] = "\n".join(line for line in lines if line) or None
+            if fixed[part] is None:
+                del fixed[part]
     postcode = fixed.get("postcode")
     if isinstance(postcode, str) and re.fullmatch(r"\d{5}-?\d{4}", postcode.strip()):
         fixed["postcode"] = postcode.strip()[:5]
     _set(record, args["into"], fixed)
-    return [args["into"]]
+    upper = {k: v.upper() if isinstance(v, str) else v for k, v in address.items()}
+    return [args["into"]] if fixed != upper else []
 
 
+# The args that name a path, which `check_quality` checks.
+_PATH_ARGS = ("field", "target", "into", "name")
+
+# fix: (function, required args, the arg naming the value it corrects, kept
+# on the record as the original).
 FIXES = {
-    "blank_values@1": (_blank_values, {"field", "values"}),
-    "name_state_marker@1": (_name_state_marker, {"name", "target"}),
-    "standardize_address@1": (_standardize_address, {"field", "into"}),
+    "blank_values@1": (_blank_values, {"field", "values"}, "field"),
+    "name_state_marker@1": (_name_state_marker, {"name", "target"}, "target"),
+    "standardize_address@1": (_standardize_address, {"field", "into"}, "field"),
 }
 
 
@@ -231,10 +264,10 @@ def check_quality(block: Any) -> None:
             args = item.get("args") or {}
             if not isinstance(args, dict) or not required <= set(args):
                 raise QualityError(f"Quality {item['id']} needs args {sorted(required)}")
-            paths = [v for k, v in args.items() if k in {"field", "target", "name", "into"}]
+            paths = [v for k, v in args.items() if k in _PATH_ARGS]
             if kind == "checks":
                 if item.get("on_fail") not in ON_FAIL:
-                    raise QualityError(f"Check {item['id']} says reject, withhold or flag")
+                    raise QualityError(f"Check {item['id']} says exception, withhold or flag")
                 paths.append(item.get("value"))
             if not all(_path_ok(p) for p in paths):
                 raise QualityError(f"Quality {item['id']} reads fields.<name> or matching.<name>")
@@ -243,21 +276,22 @@ def check_quality(block: Any) -> None:
 def apply(block: dict, fields: dict, matching: dict | None) -> dict:
     """Run one record's fixes, then its checks. Returns `provenance.quality`.
 
-    Raises `UnsupportedRecord("quality_<id>")` for a rejecting check.
+    Raises `UnsupportedRecord("quality_<id>")` for a failed `exception` check.
     """
     from .adapters import UnsupportedRecord
 
     record = {"fields": fields, "matching": matching if matching is not None else {}}
     result: dict = {"version": block["version"]}
     for item in block.get("fixes") or []:
-        before = {p: _copy(_get(record, p)) for p in _fix_paths(item)}
-        changed = FIXES[item["fix"]][0](record, item.get("args") or {})
-        for path in changed:
-            result.setdefault("fixes", {})[item["id"]] = {"path": path, "original": before.get(path)}
+        args = item.get("args") or {}
+        fix, _, corrects = FIXES[item["fix"]]
+        original = _copy(_get(record, args[corrects]))
+        for path in fix(record, args):
+            result.setdefault("fixes", {})[item["id"]] = {"path": path, "original": original}
     for item in block.get("checks") or []:
         if CHECKS[item["test"]][0](_get(record, item["value"]), item.get("args") or {}):
             continue
-        if item["on_fail"] == "reject":
+        if item["on_fail"] == "exception":
             raise UnsupportedRecord(f"quality_{item['id']}", {"quality": {"check": item["id"], "version": block["version"]}})
         key = "withheld" if item["on_fail"] == "withhold" else "flags"
         entry = item["value"] if key == "withheld" else item["id"]
@@ -266,19 +300,19 @@ def apply(block: dict, fields: dict, matching: dict | None) -> dict:
     return result
 
 
-def _fix_paths(item: dict) -> list[str]:
-    args = item.get("args") or {}
-    return [args[k] for k in ("field", "target", "into") if k in args]
-
-
 def _copy(value):
     return dict(value) if isinstance(value, dict) else value
 
 
 def withheld(record: dict, path: str) -> bool:
-    """Whether a matching rule may not use `path` on this stored record."""
+    """Whether a matching rule may not use `path` on this stored record: the
+    path is withheld, lies inside a withheld value, or holds one (a whole
+    address whose street is a placeholder)."""
     quality = (record.get("provenance") or {}).get("quality") or {}
-    return any(path == w or path.startswith(w + ".") for w in quality.get("withheld") or [])
+    return any(
+        path == w or path.startswith(w + ".") or w.startswith(path + ".")
+        for w in quality.get("withheld") or []
+    )
 
 
 def counts(assertions: list[dict], deferred: list[dict]) -> dict:
@@ -294,5 +328,11 @@ def counts(assertions: list[dict], deferred: list[dict]) -> dict:
             tally[f"flagged:{flag}"] += 1
     for d in deferred:
         if str(d.get("reason", "")).startswith("quality_"):
-            tally[f"rejected:{d['reason'].removeprefix('quality_')}"] += 1
+            tally[f"exception:{d['reason'].removeprefix('quality_')}"] += 1
     return dict(sorted(tally.items()))
+
+
+def exception_reasons(block: dict) -> set[str]:
+    """The reasons this block's `exception` checks set records aside with:
+    each must be non-blocking in its Dataset Contract."""
+    return {f"quality_{c['id']}" for c in block.get("checks") or [] if c.get("on_fail") == "exception"}
