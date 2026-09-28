@@ -23,7 +23,6 @@ DEFAULT_TEST_SNOW_CONNECTION = "snowconn"
 
 NEO4J_INSTALL_STAGE_TITLE = "Snowflake: Neo4j Native App install"
 GRANTS_STAGE_TITLE = "Snowflake Postgres / graph prerequisites"
-BOOKKEEPING_POSTGRES_STAGE_TITLE = "Snowflake Postgres: bookkeeping provisioning"
 
 # Wayfinder install-sh-provision-deploy-data map, Ticket 01/02: build_stages()
 # is being physically resequenced into four ordered phases -- provision,
@@ -39,11 +38,10 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Snowflake: native-pull foundation",
     "Snowflake: fundamentals load wrapper",
     GRANTS_STAGE_TITLE,
-    BOOKKEEPING_POSTGRES_STAGE_TITLE,
     "Snowflake: installer role",
     "Snowflake: MDM mirror + graph schema",
     "AWS: ECR image publish",
-    "AWS: ECS task definitions and Step Functions",
+    "AWS: ECS task definitions",
     "Snowflake: MDM export targets",
     "Snowflake: MDM export deployer read",
     "Snowflake: silver-landing schema + ingest",
@@ -51,12 +49,7 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Snowflake: loader role ownership",
     "Snowflake: loader read grants on silver",
     "Snowflake: Streamlit dashboard",
-    "AWS/silver: seed-universe (full/unscoped)",
-    "AWS: one_click_data_refresh",
-    "Snowflake: standalone gold-refresh",
-    "MDM + graph: connectivity, migrations, sync, verification",
-    "MDM + graph: AWS MDM E2E/status checks",
-    "Data: bounded smoke only",
+    "MDM: clean migration and connectivity",
 ]
 
 
@@ -390,7 +383,7 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "AWS: passive infrastructure" in out
     assert "AWS: access roles/policies" in out
     assert "AWS: ECR image publish" in out
-    assert "AWS: ECS task definitions and Step Functions" in out
+    assert "AWS: ECS task definitions" in out
     assert "CloudWatch logs" in out
     assert "Secrets Manager containers" in out
     assert "Snowflake: native-pull foundation" in out
@@ -401,8 +394,8 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "bootstrap-prod-mdm.sh" in out
     assert "mdm_post_restore.sql" not in out
     assert "-D database=EDGARTOOLS_DEV" in out
-    assert "Data: bounded smoke only" in out
-    assert "bootstrap-next --limit 100" in out
+    assert "Data: bounded smoke only" not in out
+    assert "bootstrap-next --limit 100" not in out
     assert "Current install notes and issues:" in out
     assert "batch_size" in out
     assert "shard-manifest.json" in out
@@ -453,19 +446,6 @@ def test_prod_apply_rejects_wrong_aws_account_before_any_stage(tmp_path: Path) -
     assert "terraform apply" not in calls
 
 
-def test_bronze_seed_stage_uses_pr95_batchsilver_progress_contract(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-
-    result = run_wizard("plan", "--workspace", str(workspace))
-
-    out = result.stdout
-    assert "PR95" in out
-    assert "bulk-upsert" in out
-    assert "executionCounts.succeeded" in out
-    assert "executionCounts.failed" in out
-    assert "executionCounts.total" in out
-    assert "itemCounts" not in out
-    assert "7-10 minutes per batch" not in out
 
 
 def test_doctor_init_plan_do_not_call_state_changing_commands(tmp_path: Path) -> None:
@@ -487,7 +467,7 @@ def test_doctor_init_plan_do_not_call_state_changing_commands(tmp_path: Path) ->
     assert "dbt run" not in calls
     assert "docker build" not in calls
     assert "sts get-caller-identity" in calls
-    assert "s3api head-object" in calls
+    assert "s3api head-object" not in calls
     assert "snow connection test --connection snowconn" in calls
     assert (workspace / "state.json").is_file()
     assert (workspace / "reports").is_dir()
@@ -783,7 +763,7 @@ def test_snowflake_delegates_get_env_name_and_aws_delegates_keep_env(
     assert "deploy-snowflake-stack.sh --env-name prod" in combined
     assert "bootstrap-prod-mdm.sh --env-name prod" in combined
     assert "deploy-aws-application.sh --env prod" in combined
-    assert "run-aws-mdm-e2e.sh --env prod" in combined
+    assert "run-aws-mdm-e2e.sh --env prod" not in combined
 
 
 # ---------------------------------------------------------------------------
@@ -846,9 +826,8 @@ def test_stages_run_in_provision_deploy_early_data_late_data_order(
     provision{TF state, Neo4j, passive infra, access roles, native-pull
     foundation, Postgres/graph prereqs} -> deploy{ECR publish, ECS task defs,
     MDM export targets, dbt gold, loader role ownership, Streamlit dashboard}
-    -> early-data{seed-universe} -> late-data{one_click_data_refresh,
-    standalone gold-refresh, MDM+graph connectivity/sync/verify, MDM+graph
-    E2E checks, bounded smoke}.
+    -> Clean MDM connectivity and migration. Source data stages remain
+    disabled until their Rules/feed baseline qualifies.
     """
     assert _plan_stage_titles(tmp_path) == PROVISION_DEPLOY_DATA_STAGE_ORDER
 
@@ -871,16 +850,10 @@ def test_neo4j_install_stage_delegates_to_the_script(tmp_path: Path) -> None:
     )
 
 
-def test_bookkeeping_postgres_stage_delegates_to_the_script_and_reuses_mdm_instance(
+def test_plan_omits_legacy_bookkeeping_provisioning(
     tmp_path: Path,
 ) -> None:
-    """DuckDB Retirement Cutover Ticket 04: the bookkeeping store reuses the
-    already-provisioned MDM Postgres instance (shared compute/storage, no new
-    network policy) rather than creating its own -- so this stage's
-    --instance-name must be the exact same mdm_instance_name value the
-    GRANTS_STAGE_TITLE stage above it already computed and used to create
-    that instance, not a second, independently-named one.
-    """
+    """The installer must not recreate the retired Bookkeeping tables."""
     result = run_wizard(
         "plan",
         "--env-name",
@@ -892,7 +865,7 @@ def test_bookkeeping_postgres_stage_delegates_to_the_script_and_reuses_mdm_insta
         explicit_flags=False,
     )
     combined = result.stdout + result.stderr
-    assert "bash infra/scripts/bootstrap-bookkeeping-postgres.sh" in combined
+    assert "bash infra/scripts/bootstrap-bookkeeping-postgres.sh" not in combined
     assert "--instance-name 'EDGARTOOLS_PROD_MDM'" in combined
     assert "--env-name prod" in combined
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -10,6 +11,37 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "infra/scripts/deploy-aws-application.sh"
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        "--configure-daily-incremental-schedule",
+        "--configure-fence-monitor-alarm",
+        "--configure-publication-drain-schedule",
+    ],
+)
+def test_retired_workflow_controls_fail_before_aws_access(option, tmp_path):
+    call_log = tmp_path / "aws-calls"
+    fake_aws = tmp_path / "aws"
+    fake_aws.write_text('#!/bin/sh\nprintf "called\\n" >> "$RETIREMENT_AWS_CALL_LOG"\nexit 99\n')
+    fake_aws.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(SCRIPT), option, "enable"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "RETIREMENT_AWS_CALL_LOG": str(call_log),
+        },
+    )
+    assert result.returncode != 0
+    assert "Legacy workflow schedules and alarms are retired" in result.stderr
+    assert not call_log.exists()
 
 
 @pytest.mark.parametrize(
@@ -68,7 +100,6 @@ LOG_GROUP_NAME='log-group'
 WAREHOUSE_BRONZE_CIK_LIMIT='10'
 MDM_POSTGRES_DSN_SECRET_ARN='legacy-mdm-arn'
 MDM_SNOWFLAKE_SECRET_ARN='snowflake-arn'
-BOOKKEEPING_POSTGRES_DSN_SECRET_ARN='legacy-book-arn'
 """
         + "FRESH_CONTROL_SECRETS_JSON='"
         + json.dumps(secrets)
@@ -82,7 +113,7 @@ BOOKKEEPING_POSTGRES_DSN_SECRET_ARN='legacy-book-arn'
         + profile
         + "\n"
     )
-    result = subprocess.run(["bash", str(driver)], capture_output=True, text=True)
+    result = subprocess.run(["bash", str(driver)], capture_output=True, text=True, check=False)
     if fresh and not provided:
         assert result.returncode != 0 and "requires all three" in result.stderr
         assert not output.exists()
@@ -98,14 +129,13 @@ BOOKKEEPING_POSTGRES_DSN_SECRET_ARN='legacy-book-arn'
         assert {entry["name"]: entry["value"] for entry in container["environment"]}[
             "BOOKKEEPING_MANIFEST_ROOT"
         ].startswith("s3://warehouse/")
-        assert "BOOKKEEPING_DATABASE_URL" not in actual
         assert container["command"] == ["change-journal", "status"]
     else:
         assert not set(names) & set(actual)
-        assert actual["BOOKKEEPING_DATABASE_URL"] == "legacy-book-arn"
         assert container["command"] == (
             ["--help"]
             if function == "write_container_definitions"
             else ["mdm", "--help"]
         )
     assert not any("MIGRATION_DATABASE_URL" in name for name in actual)
+    assert "BOOKKEEPING_DATABASE_URL" not in actual

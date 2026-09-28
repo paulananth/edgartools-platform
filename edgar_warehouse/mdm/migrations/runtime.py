@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,34 +11,6 @@ from sqlalchemy.orm import Session
 
 from edgar_warehouse.mdm import database as db
 
-
-def _log_privileged_rerun_skipped(migration_name: str, owner_role: str) -> None:
-    """Ticket 43 (change-propagation map): a rerun of an already-installed,
-    owner-gated migration silently no-ops (``return False``, no exception)
-    whenever the connecting role lacks membership in the owner role -- true
-    for the standard ``application``-DSN deploy path, by design (the whole
-    point of these owner roles is that ``application`` never gets them
-    ambiently). That silent no-op is indistinguishable from "nothing pending
-    to apply" unless it's logged -- exactly the gap the "MDM Postgres
-    migration-011 schema drift" incident (CLAUDE.md) hit: a stale/wrong-role
-    rerun reported success while never touching the schema it claimed to.
-    Emitting this event doesn't fix the underlying access gap (see Ticket 43
-    for the real privileged path -- bootstrap-prod-mdm.sh's snowflake_admin-
-    driven ``mdm migrate`` call), it just makes the no-op observable.
-    """
-    print(
-        json.dumps(
-            {
-                "event": "mdm_migration_privileged_rerun_skipped",
-                "migration": migration_name,
-                "owner_role": owner_role,
-                "reason": "connecting_role_lacks_owner_membership",
-                "ts": datetime.now(timezone.utc).isoformat(),
-            }
-        ),
-        file=sys.stderr,
-        flush=True,
-    )
 
 MDM_TABLES = [
     "mdm_entity",
@@ -396,12 +365,7 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
         _apply_sql_file(engine, "010_release_relationship_sources.sql")
         _apply_sql_file(engine, "011_source_ref_content_hash.sql")
         _apply_sql_file(engine, "012_dedupe_and_constrain_attribute_stage.sql")
-        _apply_acquisition_ledger_migration(engine)
-        _apply_source_registry_migration(engine)
-        _apply_source_evidence_conflict_migration(engine)
         _apply_sql_file(engine, "016_serialize_graph_generation.sql")
-        _apply_exclusion_and_evidence_import_migration(engine)
-        _apply_source_fetch_validators_migration(engine)
         _apply_sql_file(engine, "019_mdm_run_identity.sql")
         _apply_sql_file(engine, "020_mdm_pipeline_lease.sql")
         _apply_sql_file(engine, "021_relationship_derivation_checkpoint.sql")
@@ -413,222 +377,6 @@ def migrate(engine: Engine, seed: bool = True) -> dict[str, Any]:
             session.commit()
     return {"dialect": dialect, "seeded": seed, "tables": count_tables(engine)}
 
-
-def _apply_acquisition_ledger_migration(engine: Engine) -> bool:
-    """Apply privileged ledger DDL, or preserve it for the runtime application role."""
-    if engine.dialect.name != "postgresql":
-        _apply_sql_file(engine, "013_acquisition_ledger.sql")
-        return True
-
-    statements = _sql_file_statements("013_acquisition_ledger.sql")
-    with engine.begin() as conn:
-        installed = bool(
-            conn.scalar(text("SELECT to_regclass('source_fetch_decision') IS NOT NULL"))
-        )
-        if installed:
-            may_manage = bool(
-                conn.scalar(
-                    text(
-                        "SELECT pg_has_role(current_user, "
-                        "'edgartools_acquisition_owner', 'MEMBER')"
-                    )
-                )
-            )
-            if not may_manage:
-                _log_privileged_rerun_skipped(
-                    "013_acquisition_ledger", "edgartools_acquisition_owner"
-                )
-                return False
-
-        # Role provisioning must run as the deployment principal. All remaining
-        # DDL runs as the dedicated owner in the same transaction so reruns can
-        # manage owner-gated indexes, functions, triggers, and tables.
-        conn.execute(text(statements[0]))
-        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
-        for statement in statements[1:]:
-            conn.execute(text(statement))
-    return True
-
-
-def _apply_source_registry_migration(engine: Engine) -> bool:
-    """Apply privileged registry DDL, or preserve it for the runtime application role.
-
-    Same self-managing shape as :func:`_apply_acquisition_ledger_migration`
-    -- a first install needs CREATEROLE (must run as an admin principal, not
-    the ordinary ``application`` DSN); a rerun by a role that isn't a member
-    of the owner role it created is silently skipped rather than erroring.
-    """
-    if engine.dialect.name != "postgresql":
-        _apply_sql_file(engine, "014_source_registry.sql")
-        return True
-
-    statements = _sql_file_statements("014_source_registry.sql")
-    with engine.begin() as conn:
-        installed = bool(
-            conn.scalar(text("SELECT to_regclass('source_registry_version') IS NOT NULL"))
-        )
-        if installed:
-            may_manage = bool(
-                conn.scalar(
-                    text(
-                        "SELECT pg_has_role(current_user, "
-                        "'edgartools_acquisition_registry_owner', 'MEMBER')"
-                    )
-                )
-            )
-            if not may_manage:
-                _log_privileged_rerun_skipped(
-                    "014_source_registry", "edgartools_acquisition_registry_owner"
-                )
-                return False
-
-        conn.execute(text(statements[0]))
-        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_registry_owner"))
-        for statement in statements[1:]:
-            conn.execute(text(statement))
-    return True
-
-
-def _apply_source_evidence_conflict_migration(engine: Engine) -> bool:
-    """Apply privileged conflict-table DDL, or preserve it for `application`.
-
-    This file provisions no new role at all (013 already created
-    ``edgartools_acquisition_processor`` and granted it the operational
-    GRANTs this table needs) -- but the table is still owned by 013's
-    ``edgartools_acquisition_owner``, same as ``source_revision`` is,
-    because ``CREATE`` on schema ``public`` was only ever granted to the
-    owner role, not to any of the five operational roles. So this mirrors
-    :func:`_apply_acquisition_ledger_migration`'s gate exactly
-    (``edgartools_acquisition_owner`` membership, not
-    ``edgartools_acquisition_processor``) -- confirmed live: an earlier
-    version of this function gated on and ``SET LOCAL ROLE``'d into
-    ``edgartools_acquisition_processor`` directly and failed with
-    ``permission denied for schema public`` on ``CREATE TABLE`` running as
-    ``application``, since ``application`` is a member of the operational
-    roles but never of the owner role.
-    """
-    if engine.dialect.name != "postgresql":
-        _apply_sql_file(engine, "015_source_evidence_conflict.sql")
-        return True
-
-    statements = _sql_file_statements("015_source_evidence_conflict.sql")
-    with engine.begin() as conn:
-        installed = bool(
-            conn.scalar(text("SELECT to_regclass('source_evidence_conflict') IS NOT NULL"))
-        )
-        if installed:
-            may_manage = bool(
-                conn.scalar(
-                    text(
-                        "SELECT pg_has_role(current_user, "
-                        "'edgartools_acquisition_owner', 'MEMBER')"
-                    )
-                )
-            )
-            if not may_manage:
-                _log_privileged_rerun_skipped(
-                    "015_source_evidence_conflict", "edgartools_acquisition_owner"
-                )
-                return False
-
-        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
-        for statement in statements:
-            conn.execute(text(statement))
-    return True
-
-
-def _apply_exclusion_and_evidence_import_migration(engine: Engine) -> bool:
-    """Apply privileged exclusion-reason + evidence-import DDL, or preserve
-    it for `application` (Ticket 34).
-
-    Same self-managing shape as :func:`_apply_source_evidence_conflict_migration`
-    -- no new role is provisioned (source_evidence_import's operational
-    GRANTs go to 013's existing edgartools_acquisition_operator role), but
-    the ALTER TABLE and CREATE TABLE both still require
-    edgartools_acquisition_owner, since CREATE/ALTER on schema public was
-    only ever granted to that role.
-    """
-    if engine.dialect.name != "postgresql":
-        _apply_sql_file(engine, "017_source_exclusion_and_evidence_import.sql")
-        return True
-
-    statements = _sql_file_statements("017_source_exclusion_and_evidence_import.sql")
-    with engine.begin() as conn:
-        # to_regclass, not information_schema.columns: the latter is
-        # privilege-filtered (a role only sees columns of tables it has some
-        # grant on), and `application` has zero grants on
-        # source_fetch_decision by design (013's own REVOKE) -- it would
-        # always read back "not installed" even after a real install,
-        # sending every rerun straight at SET LOCAL ROLE instead of the
-        # graceful skip. to_regclass checks relation existence only, not
-        # privilege, so it works for any caller regardless of role.
-        installed = bool(
-            conn.scalar(text("SELECT to_regclass('source_evidence_import') IS NOT NULL"))
-        )
-        if installed:
-            may_manage = bool(
-                conn.scalar(
-                    text(
-                        "SELECT pg_has_role(current_user, "
-                        "'edgartools_acquisition_owner', 'MEMBER')"
-                    )
-                )
-            )
-            if not may_manage:
-                _log_privileged_rerun_skipped(
-                    "017_source_exclusion_and_evidence_import",
-                    "edgartools_acquisition_owner",
-                )
-                return False
-
-        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
-        for statement in statements:
-            conn.execute(text(statement))
-    return True
-
-
-def _apply_source_fetch_validators_migration(engine: Engine) -> bool:
-    """Ticket 28: additive ETag/Last-Modified columns on source_fetch_work."""
-
-    if engine.dialect.name != "postgresql":
-        _apply_sql_file(engine, "018_source_fetch_validators.sql")
-        return True
-
-    statements = _sql_file_statements("018_source_fetch_validators.sql")
-    with engine.begin() as conn:
-        installed = bool(
-            conn.scalar(
-                text(
-                    "SELECT EXISTS ("
-                    "SELECT 1 FROM pg_attribute a "
-                    "JOIN pg_class c ON c.oid = a.attrelid "
-                    "JOIN pg_namespace n ON n.oid = c.relnamespace "
-                    "WHERE c.relname = 'source_fetch_work' "
-                    "AND a.attname = 'captured_etag' "
-                    "AND NOT a.attisdropped)"
-                )
-            )
-        )
-        if installed:
-            may_manage = bool(
-                conn.scalar(
-                    text(
-                        "SELECT pg_has_role(current_user, "
-                        "'edgartools_acquisition_owner', 'MEMBER')"
-                    )
-                )
-            )
-            if not may_manage:
-                _log_privileged_rerun_skipped(
-                    "018_source_fetch_validators",
-                    "edgartools_acquisition_owner",
-                )
-                return False
-
-        conn.execute(text("SET LOCAL ROLE edgartools_acquisition_owner"))
-        for statement in statements:
-            conn.execute(text(statement))
-    return True
 
 
 def check_connectivity(engine: Engine) -> dict[str, Any]:

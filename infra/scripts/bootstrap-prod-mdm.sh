@@ -213,8 +213,8 @@ cur = conn.cursor()
 cur.execute("SELECT 1 FROM pg_roles WHERE rolname = 'application'")
 if cur.fetchone() is None:
     # The first Snowflake Postgres access reset may not have materialized the
-    # runtime login yet. Create its privilege shell before migrations so the
-    # acquisition roles can be granted atomically; RESET ACCESS below supplies
+    # runtime login yet. Create its privilege shell before migrations;
+    # RESET ACCESS below supplies
     # the managed login credential.
     cur.execute("CREATE ROLE application NOLOGIN")
     print("APPLICATION_ROLE_CREATED", file=sys.stderr)
@@ -275,37 +275,8 @@ for stmt in [
     "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO application;",
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO application;",
     "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO application;",
-    # Acquisition history is intentionally excluded from the shared runtime
-    # principal's broad legacy grants above (which only ever reach objects
-    # snowflake_admin owns, so they silently skip every acquisition/registry
-    # object regardless). Runtime code must SET one fenced role to reach them.
-    #
-    # Ticket 47 (change-propagation map): this step used to also re-REVOKE
-    # `application` from a hardcoded list of acquisition/registry
-    # tables/views here, via SET ROLE + REVOKE ALL on this fresh connection,
-    # opened right after the `mdm migrate` subprocess above exits. That was
-    # always fully redundant -- every one of those objects is already
-    # fenced from `application` and `snowflake_write` atomically, inside
-    # the SAME transaction that creates and owns it, by its own owning
-    # migration file (013_acquisition_ledger.sql / 014_source_registry.sql /
-    # 015_source_evidence_conflict.sql /
-    # 017_source_exclusion_and_evidence_import.sql). The redundant copy's
-    # own separate, later connection was also the reproducible (2/2 live)
-    # cause of a permission-denied failure on the newest such object -- full
-    # live evidence, root-cause reasoning, and verification in
-    # 47-bootstrap-prod-mdm-revoke-fails-on-fresh-owner-transfer.md; do not
-    # re-duplicate that narrative here, keep this comment as a pointer.
-    #
-    # Removing this step trades nothing away: `mdm check-fence` (Ticket 44)
-    # is the live monitor for the 11 acquisition/registry *tables* this step
-    # used to also cover (not the 2 views, `source_change_status` and
-    # `source_change_status_detail` -- check-fence's `pg_class` discovery is
-    # table-scoped, `relkind = 'r'` only; those two views rely solely on
-    # 013's own atomic internal REVOKE, with no independent live monitor).
-    # REAPPLY_PY further below already re-runs `mdm migrate` itself (not a
-    # hardcoded REVOKE list) as the true last database-mutating step, which
-    # is what actually re-closes the fence after both RESET ACCESS calls
-    # reopen it.
+    # Acquisition and registry control tables are retired; MDM migration
+    # applies only MDM-owned objects here.
 ]:
     cur.execute(stmt)
 cur.close()
@@ -412,19 +383,9 @@ snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTAN
   | python3 "$APP_PY" \
   | bash "$SCRIPT_DIR/bootstrap-aws-mdm-secrets.sh" "${SECRETS_SCRIPT_ARGS[@]}"
 
-# Ticket 30 (change-propagation map) follow-up, confirmed live 2026-08-26:
-# Snowflake-hosted Postgres re-grants snowflake_write's ambient, platform-
-# managed access to every acquisition-ledger/registry table on EVERY
-# `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` call -- proven for
-# both 'snowflake_admin' and 'application'. Both RESET ACCESS calls above
-# have already silently reopened the REVOKE fencing that `mdm migrate` just
-# applied moments ago. Re-running migrate() now (idempotent, safe, mirrors
-# the "Rotating snowflake_admin access..." step above) re-applies it as the
-# true last database-mutating step in this script, after both rotations --
-# not a redundant safety margin, a required correction. Any future
-# credential rotation of either role will reopen it again until the next
-# `mdm migrate` runs; there is currently no monitoring for this drift.
-log "Re-applying acquisition-ledger/registry REVOKE fencing (both RESET ACCESS calls above silently reopen it)"
+# Re-run the idempotent MDM migration after both Snowflake Postgres access
+# rotations so the final migration state reflects the installed credentials.
+log "Re-applying MDM migration after access rotation"
 snow sql --connection "$SNOW_CONNECTION" --format json -q "ALTER POSTGRES INSTANCE ${INSTANCE_NAME} RESET ACCESS FOR 'snowflake_admin';" 2>/dev/null \
   | DATABASE="$DATABASE" HOST="$HOST" REPO_ROOT="$REPO_ROOT" uv run --project "$REPO_ROOT" --extra mdm-runtime python "$REAPPLY_PY"
 

@@ -17,8 +17,7 @@ from .adapters import UnsupportedRecord, normalize
 from .bookkeeping import RunCoordinator
 from .evidence import deferred_record
 from .merge import MergeStage
-from .publication import JournalMirror, LocalContractSink
-from .store import Conflict, Publisher, Store, current_reading
+from .store import Conflict, Store, current_reading
 
 
 def _reject_json_constant(value):
@@ -407,17 +406,6 @@ def handle(command: str, args) -> int:
         )
         print(json.dumps(report, sort_keys=True))
         return 0
-    if command == "bronze-receipts":
-        from .company_source import write_bronze_receipts
-
-        # Read-only: the run coordinator's own bookkeeping connection.
-        book = engine_from_env("BOOKKEEPING_DATABASE_URL")
-        try:
-            report = write_bronze_receipts(book, run_id=args.run_id, output=args.output)
-        finally:
-            book.dispose()
-        print(json.dumps(report, sort_keys=True))
-        return 0
     if command == "name-census":
         from .company_source import write_name_census
 
@@ -431,101 +419,17 @@ def handle(command: str, args) -> int:
         )
         print(json.dumps(report, sort_keys=True))
         return 0
-    supported = {
-        "mastering",
-        "apply-decisions",
-        "derive-relationships",
-        "publish",
-        "reconcile",
-        "counts",
-        "publication-status",
-    }
-    if command not in supported:
-        raise ValueError(
-            f"{command} is not enabled for Clean MDM; refusing the legacy mutation path"
-        )
-    mdm = engine_from_env("MDM_DATABASE_URL")
-    book = None
-    ledger = None
-    try:
-        store = Store(mdm)
-        if command == "counts":
+    if command == "counts":
+        mdm = engine_from_env("MDM_DATABASE_URL")
+        try:
             with mdm.connect() as conn:
-                report = dict(
-                    conn.execute(
-                        text(
-                            "SELECT object_type,count(*) FROM mdm_v2.projection GROUP BY object_type"
-                        )
-                    ).all()
-                )
-            print(json.dumps(report))
+                report = dict(conn.execute(text(
+                    "SELECT object_type,count(*) FROM mdm_v2.projection GROUP BY object_type"
+                )).all())
+            print(json.dumps(report, sort_keys=True))
             return 0
-        run_id = getattr(args, "run_id", None)
-        if not run_id:
-            raise ValueError("Clean MDM requires the same --run-id for every stage")
-        book = engine_from_env("BOOKKEEPING_DATABASE_URL")
-        coordinator = RunCoordinator(book, store)
-        if command in {"mastering", "derive-relationships", "apply-decisions"}:
-            if not getattr(args, "manifest", None):
-                raise ValueError("Clean MDM requires a pinned --manifest")
-            if (
-                getattr(args, "cik", None)
-                or getattr(args, "entity_type", "all") != "all"
-            ):
-                raise ValueError(
-                    "Clean MDM scope is frozen in the manifest; do not combine it with legacy filters"
-                )
-            verifier = None
-            if "native_source" in read_manifest(args.manifest)[0]:
-                from .source_publications import PublicationVerifier
-
-                ledger = engine_from_env("CHANGE_LEDGER_DATABASE_URL", restricted=False)
-                verifier = PublicationVerifier(
-                    ledger, artifact_reader(os.environ["MDM_SOURCE_ARTIFACT_ROOT"])
-                )
-            report = execute_manifest(
-                store,
-                coordinator,
-                path=args.manifest,
-                run_id=run_id,
-                stage="stewardship" if command == "apply-decisions" else command,
-                limit=100 if getattr(args, "limit", None) is None else args.limit,
-                preview=getattr(args, "dry_run", False),
-                publication_verifier=verifier,
-            )
-        elif command == "publish":
-            consumer = getattr(args, "consumer", None)
-            publisher: Publisher
-            if consumer == "journal":
-                ledger = engine_from_env("CHANGE_LEDGER_DATABASE_URL")
-                publisher = JournalMirror(ledger)
-            elif consumer in {"export", "graph"}:
-                if not getattr(args, "contract_output", None):
-                    raise ValueError("Offline export/graph requires --contract-output")
-                publisher = LocalContractSink(args.contract_output)
-            else:
-                raise ValueError("Choose --consumer journal, export or graph")
-            count = 0
-            limit = 100 if getattr(args, "limit", None) is None else args.limit
-            if not 1 <= limit <= 1000:
-                raise ValueError("Publication limit must be 1..1000 batches")
-            while count < limit and store.deliver_one(
-                consumer, f"cli:{run_id}", publisher
-            ):
-                count += 1
-            report = {"delivered": count, **coordinator.reconcile(run_id)}
-        else:
-            report = coordinator.reconcile(run_id)
-        print(json.dumps(report, sort_keys=True))
-        return (
-            0
-            if command not in {"reconcile", "publication-status"}
-            or report["end_to_end_complete"]
-            else 2
-        )
-    finally:
-        mdm.dispose()
-        if book is not None:
-            book.dispose()
-        if ledger is not None:
-            ledger.dispose()
+        finally:
+            mdm.dispose()
+    raise ValueError(
+        f"{command} depends on retired control tables; submit configured work through Rules and Bookkeeping"
+    )

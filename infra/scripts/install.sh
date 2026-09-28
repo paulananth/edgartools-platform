@@ -553,22 +553,10 @@ run_checks() {
     add_check "local config files" "warn" "missing ignored local config files:${missing_configs}"
   fi
 
-  # Phase 9 finding: infra/aws-<env>-application.json is generated, gitignored,
-  # and never committed (D-10). It does not survive a fresh checkout/worktree
-  # and is the AWS MDM E2E stage's hard precondition (run-aws-mdm-e2e.sh exits 1
-  # before any Step Functions status call if it is missing). Surface its absence
-  # here rather than letting that stage fail with a less obvious error.
+  # The application summary is generated and gitignored. It does not survive
+  # a fresh checkout, but is still needed for the production bucket checks.
   if [[ -f "${REPO_ROOT}/infra/aws-${ENVIRONMENT}-application.json" ]]; then
     add_check "prod application summary" "pass" "infra/aws-${ENVIRONMENT}-application.json present"
-    local warehouse_bucket
-    warehouse_bucket="$(application_manifest_value warehouse_bucket_name 2>/dev/null || true)"
-    if [[ -z "$warehouse_bucket" ]]; then
-      add_check "first-load shard manifest" "warn" "application summary does not expose warehouse_bucket_name; cannot verify silver shard manifest prerequisite"
-    elif command -v aws >/dev/null 2>&1 && aws --profile "$DEPLOYER_PROFILE" --region "$AWS_REGION_NAME" s3api head-object --bucket "$warehouse_bucket" --key "warehouse/silver/sec/shard-manifest.json" >/dev/null 2>&1; then
-      add_check "first-load shard manifest" "pass" "warehouse/silver/sec/shard-manifest.json exists in the selected warehouse bucket"
-    else
-      add_check "first-load shard manifest" "warn" "warehouse/silver/sec/shard-manifest.json is missing or not readable; one_click_data_refresh will use sequential monolith fallback on first-time loads"
-    fi
     if [[ "$ENVIRONMENT" == "prod" ]]; then
       for bucket in bronze_bucket_name warehouse_bucket_name snowflake_export_bucket_name; do
         expected_bucket="edgartools-prod-${bucket%_bucket_name}-${EXPECTED_AWS_ACCOUNT_ID}"
@@ -581,7 +569,7 @@ run_checks() {
       done
     fi
   else
-    add_check "prod application summary" "warn" "infra/aws-${ENVIRONMENT}-application.json missing; regenerate via the 'AWS: ECS task definitions and Step Functions' stage before running the AWS MDM E2E stage"
+    add_check "prod application summary" "warn" "infra/aws-${ENVIRONMENT}-application.json missing; regenerate via the 'AWS: ECS task definitions' stage"
   fi
 
 
@@ -702,11 +690,6 @@ snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename in
 bash infra/scripts/bootstrap-prod-mdm.sh --env-name ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --instance-name ${mdm_instance_name_q} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --name-prefix edgartools-${ENVIRONMENT}"
 
   add_stage \
-    "Snowflake Postgres: bookkeeping provisioning" \
-    "DuckDB Retirement Cutover Ticket 04: provisions the bookkeeping store's Postgres access on the SAME Snowflake Postgres instance the stage above just created for MDM (shared compute/storage, no new network policy/instance) -- reuses this function's own mdm_instance_name value rather than computing a second, independently-named instance. Creates a bookkeeping database and a dedicated bookkeeping_app LOGIN role with its own self-generated password (Snowflake's own docs confirm a Postgres admin role can create fully independent LOGIN roles this way, bypassing the RESET ACCESS mechanism entirely for that role) -- deliberately NOT MDM's application credential, so nothing here couples the two stores' secrets together or requires touching bootstrap-prod-mdm.sh. Must run after 'Snowflake Postgres / graph prerequisites' above (needs the instance to already exist) and does not need to precede or follow the installer-role stage below (independent of it)." \
-    "bash infra/scripts/bootstrap-bookkeeping-postgres.sh --env-name ${ENVIRONMENT} --snow-connection ${SNOW_CONNECTION} --instance-name ${mdm_instance_name_q} --aws-profile ${AWS_PROFILE_NAME} --aws-region ${AWS_REGION_NAME} --name-prefix edgartools-${ENVIRONMENT}"
-
-  add_stage \
     "Snowflake: installer role" \
     "Creates EDGARTOOLS_PROD_INSTALLER (19_installer_role.sql), a dedicated least-privilege role for install.sh's own schema-bootstrap stages, so they stop running as ACCOUNTADMIN by default -- the same 'everything owned by the all-powerful connection role' shape CLAUDE.md already documents for the original Streamlit dashboard. Scope is deliberately surgical, not total (change-propagation map, Ticket 30 follow-up, 2026-08-26): only schema-bootstrap files that are fully self-contained -- create a new schema, populate it, grant only on objects the creating role itself then owns -- were converted to run as this role; currently just 09_mdm_mirror_schema.sql (next stage). Files containing a statement that grants a privilege on an object this role wouldn't own (a database- or account-level grant, CREATE ROLE, or a grant on a pre-existing Terraform/deployer-owned object) stay on ACCOUNTADMIN -- see 19_installer_role.sql's own header for the itemized list, including why 11_silver_landing_schema.sql was deliberately left out: its own header already documents a considered, pre-existing decision against minting a second pipeline-object-owner role, which this new role would otherwise repeat there. Must run after 'Snowflake Postgres / graph prerequisites' above (needs the database to already exist) and before every stage below that references EDGARTOOLS_PROD_INSTALLER." \
     "snow sql --connection ${SNOW_CONNECTION} -f infra/snowflake/sql/bootstrap/19_installer_role.sql"
@@ -728,8 +711,8 @@ snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename in
 AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-images --role mdm --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT} --output-file infra/aws-${ENVIRONMENT}-mdm-image-ref.txt"
 
   add_stage \
-    "AWS: ECS task definitions and Step Functions" \
-    "Registers ECS task definitions (warehouse AND MDM), creates or updates all Step Functions including one_click_data_refresh, and wires application CloudWatch logs from passive outputs. Auto-resolves both image refs from the ECR publish stage's output files; falls back to WAREHOUSE_IMAGE_REF/MDM_IMAGE_REF only if those files are missing (e.g. publish stage skipped). Always passes --mdm-image-ref explicitly and --enable-mdm so the MDM task definitions never silently fall back to the warehouse image." \
+    "AWS: ECS task definitions" \
+    "Registers ECS task definitions for the locally qualified image and wires application CloudWatch logs. Legacy Step Functions remain disabled pending source/feed qualification. Auto-resolves both image refs from the ECR publish stage's output files; falls back to WAREHOUSE_IMAGE_REF/MDM_IMAGE_REF only if those files are missing. Always passes --mdm-image-ref explicitly and --enable-mdm." \
     "warehouse_image_ref_file=\"infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt\"
 mdm_image_ref_file=\"infra/aws-${ENVIRONMENT}-mdm-image-ref.txt\"
 if [[ -s \"\${warehouse_image_ref_file}\" ]]; then
@@ -791,149 +774,14 @@ cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql
     "Uploads the Streamlit dashboard artifacts to the Snowflake dashboard stage." \
     "SNOW_CONNECTION=${snow_q} DASHBOARD_DATABASE=${db_name} bash infra/snowflake/streamlit/deploy.sh"
 
-  # Phase: early-data -- the first real fetch of SEC data into S3/silver.
-  # Runs after the entire deploy phase, not immediately after native-pull
-  # foundation (which sits in provision) as earlier versions of this wizard
-  # had it -- Ticket 02 verified this stage's only hard constraints are that
-  # Snowpipe already exist and that it complete before the late-data phase's
-  # 'mdm seed-universe' call, not literal adjacency to any other stage.
+  # Source data work stays disabled until its Rules/feed baseline qualifies.
   add_stage \
-    "AWS/silver: seed-universe (full/unscoped)" \
-    "Full, unscoped edgar-warehouse seed-universe run -- an AWS/silver-layer concern, not a Snowflake-specific step. Runs in the early-data phase, after the entire deploy phase rather than immediately after native-pull foundation as earlier versions of this wizard had it (install-sh-provision-deploy-data map, Tickets 01/02): the two hard constraints (wayfinder snowflake-account-cutover ticket 06) are that Snowpipe (created by the provision-phase native-pull foundation stage) must already exist -- Ticket 02 confirmed it only needs to exist, not to run immediately afterward -- so this cannot run before native-pull foundation completes; and 'mdm seed-universe' inside the MDM+graph stage below errors ('silver universe empty; warehouse seed-universe must run first') unless this ran first, so it cannot run after that stage either. Ticket 02 additionally verified no deploy-phase stage (ECR publish, ECS task defs, MDM export targets, dbt gold, loader role ownership, Streamlit dashboard) depends on this stage having already run, or vice versa -- dbt gold's own INITIAL refresh against a still-empty EDGARTOOLS_SOURCE self-heals via the dynamic tables' scheduled target_lag refresh once this stage's S3 writes reach Snowpipe, and the standalone gold-refresh stage's gold-verify-live gate below fails closed if that self-heal hasn't caught up by the time it runs. Deliberately unscoped (no --limit, unlike the old bounded call this replaces in the smoke-test stage): --limit truncates which newly-discovered CIKs get queued into bootstrap_pending tracking status after the already-active-CIK filter, silently dropping genuinely-new companies past the first N. WAREHOUSE_RUNTIME_MODE=bronze_capture (not infrastructure_validation, the smoke-test stage's mode) is required here -- infrastructure_validation never calls the real reference-data sync at all, only writes a placeholder manifest. WAREHOUSE_BRONZE_ROOT/WAREHOUSE_STORAGE_ROOT/SERVING_EXPORT_ROOT are set explicitly here (derived from the same edgartools-<env>-{bronze,warehouse,snowflake-export}-<account-id> bucket names the AWS passive-infrastructure stage provisions and deploy-aws-application.sh's manifest confirms) rather than left to ambient shell state -- WarehouseSettings.from_env() (edgar_warehouse/infrastructure/warehouse_settings.py) requires all three unconditionally for every SERVING_EXPORT_COMMANDS member (seed-universe is one), regardless of runtime_mode, so this stage previously failed outright with 'WAREHOUSE_BRONZE_ROOT is required for warehouse commands' unless an operator's shell happened to already export them from an unrelated source. This is a one-time initial-state establishment for a new account, not an ongoing mechanism: ordinary freshness continues afterward via the existing recurring silver-layer cadence (e.g. daily_incremental), independent of which Snowflake account is live." \
-    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=bronze_capture WAREHOUSE_BRONZE_ROOT=\"s3://edgartools-${ENVIRONMENT}-bronze-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/bronze\" WAREHOUSE_STORAGE_ROOT=\"s3://edgartools-${ENVIRONMENT}-warehouse-${EXPECTED_AWS_ACCOUNT_ID}/warehouse\" SERVING_EXPORT_ROOT=\"s3://edgartools-${ENVIRONMENT}-snowflake-export-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/artifacts/snowflake_exports/\" uv run --extra s3 edgar-warehouse seed-universe"
+    "MDM: clean migration and connectivity" \
+    "Checks MDM connectivity and applies clean migrations. Source feeds remain disabled until configured Rules and Bookkeeping qualification." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity
+uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate"
 
-  # Phase: late-data -- full pipeline runs, identity/graph resolution against
-  # real data, and verification. Everything here assumes early-data has
-  # already populated silver.
-  add_stage \
-    "AWS: one_click_data_refresh" \
-    "Starts the one_click_data_refresh Step Function, which discovers CIKs directly from existing S3 bronze (zero new SEC calls) and chains Initialize From Bronze -> Clean and Merge Filings -> Mastering -> Infer Relationships -> Publish Relationships -> Reconcile -> Publish Business Data on ECS. Polls until the execution reaches a terminal state and fails this stage unless it reaches SUCCEEDED. This is the canonical one-click path for cold-starting or recovering an environment's silver/MDM/gold from a bronze snapshot that's already in S3 (e.g. synced in from another environment) -- see CLAUDE.md's phased pipeline table." \
-    "account_id=\"\$(aws --profile ${deployer_q} sts get-caller-identity --query Account --output text)\"
-state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachine:edgartools-${ENVIRONMENT}-one-click-data-refresh\"
-execution_name=\"one-click-data-refresh-\$(date +%s)\"
-execution_arn=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions start-execution --state-machine-arn \"\${state_machine_arn}\" --name \"\${execution_name}\" --input '{\"batch_size\": 100}' --query executionArn --output text)\"
-echo \"Started execution: \${execution_arn}\"
-echo \"This runs Clean and Merge Filings at maxConcurrency=4 against the monolith silver.duckdb fallback (no shard manifest yet) -- only maxConcurrency=2 has been validated end-to-end in prod, so watch closely for monolith write-contention errors on this run. With PR95's merge_filings bulk-upsert optimization in the deployed warehouse image, cached-bronze batches should be materially faster than the old per-row path. If progress looks like the old multi-minute-per-batch behavior, stop and verify the active task definition image was freshly published from a commit that contains PR95.\"
-last_succeeded=-1
-while true; do
-  status=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-execution --execution-arn \"\${execution_arn}\" --query status --output text)\"
-  map_run_arn=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions list-map-runs --execution-arn \"\${execution_arn}\" --query 'mapRuns[0].mapRunArn' --output text 2>/dev/null)\"
-  if [[ -n \"\${map_run_arn}\" && \"\${map_run_arn}\" != \"None\" ]]; then
-    succeeded=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-map-run --map-run-arn \"\${map_run_arn}\" --query executionCounts.succeeded --output text 2>/dev/null || echo -1)\"
-    failed=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-map-run --map-run-arn \"\${map_run_arn}\" --query executionCounts.failed --output text 2>/dev/null || echo 0)\"
-    total=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-map-run --map-run-arn \"\${map_run_arn}\" --query executionCounts.total --output text 2>/dev/null || echo '?')\"
-    if [[ \"\${succeeded}\" != \"\${last_succeeded}\" ]]; then
-      echo \"Status: \${status} -- Clean and Merge Filings \${succeeded}/\${total} succeeded, \${failed} failed\"
-      last_succeeded=\"\${succeeded}\"
-    fi
-  else
-    echo \"Status: \${status}\"
-  fi
-  case \"\${status}\" in
-    SUCCEEDED) break ;;
-    FAILED|ABORTED|TIMED_OUT)
-      echo \"Execution did not succeed: \${status}. Inspect via: aws stepfunctions get-execution-history --execution-arn \${execution_arn}\" >&2
-      echo \"If only Clean and Merge Filings succeeded and a later stage (Mastering etc.) failed, and you intend to redeploy a fix before retrying: do NOT redrive this execution -- AWS Step Functions pins a redriven execution to the task-definition revision that was active when it last reached that state, not whatever you redeploy afterward. Start a fresh execution instead so it binds to the current state machine definition.\" >&2
-      exit 1
-      ;;
-    *) sleep 60 ;;
-  esac
-done
-echo \"one_click_data_refresh SUCCEEDED. Do not treat this alone as Blocker 4 / hosted-graph-E2E PASS -- separately confirm via CloudWatch logs that zero sec_pull_started events occurred during Clean and Merge Filings.\""
 
-  add_stage \
-    "Snowflake: standalone gold-refresh" \
-    "Explicitly triggers the dedicated edgartools-${ENVIRONMENT}-gold-refresh Step Function, polls to a terminal state, then runs gold-verify-live -- a direct-Snowflake row-count check across every EDGARTOOLS_GOLD dynamic table that fails this stage (non-zero exit) if any expected table is empty (wayfinder snowflake-env-provisioning ticket 06 / snowflake-account-cutover ticket 06). This replaces a manual echo reminder to check row counts by hand with an automated, fail-closed gate -- appended here rather than as a separate final stage so an empty gold layer is caught before the MDM+graph stages below spend time on identity resolution/graph sync against it. The one_click_data_refresh stage above runs a Publish Business Data (gold-refresh) step internally, but that is not a substitute for this: found 2026-07-26 in prod that the standalone gold-refresh state machine had ZERO executions ever (install.sh never called it directly), and separately that Snowflake's REFRESH_AFTER_LOAD stored procedure only refreshes a hardcoded table allowlist -- several newer gold tables (EXECUTIVE_RECORDS, EARNINGS_RELEASES, INSTITUTIONAL_HOLDINGS, ACCOUNTING_FLAGS, FINANCIAL_FACTS, FINANCIAL_DERIVED, FINANCIAL_FACTORS) were missing from that list and so never refreshed past their empty initialize=ON_CREATE run, even though their EDGARTOOLS_SOURCE data was current. Both gaps are fixed (04_refresh_wrapper.sql updated and reapplied to prod), but this stage exists so a stale gold layer surfaces as an explicit, auditable install step instead of silently depending on a side effect of the combined pipeline. The retry loop below also fires SNOWFLAKE_RUN_MANIFEST_TASK manually on every attempt (not just polls passively) -- found live 2026-08-22 that its schedule was widened to 360 MINUTE (ecs-cost-sizing credit-consumption finding, CLAUDE.md) after this stage's 20-attempt/60s retry budget was written, so a purely passive wait can never fall inside a 6-hour window on any single install.sh run; manually firing the task each attempt decouples this stage from that schedule without changing it (EXECUTE TASK on a task whose stream has no data yet is a harmless no-op SKIPPED run, so this is safe to call even before Snowpipe has ingested the manifest). Full timeline: CLAUDE.md's 'SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap' 5-whys section." \
-    "account_id=\"\$(aws --profile ${deployer_q} sts get-caller-identity --query Account --output text)\"
-state_machine_arn=\"arn:aws:states:${AWS_REGION_NAME}:\${account_id}:stateMachine:edgartools-${ENVIRONMENT}-gold-refresh\"
-execution_name=\"gold-refresh-\$(date +%s)\"
-execution_arn=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions start-execution --state-machine-arn \"\${state_machine_arn}\" --name \"\${execution_name}\" --input '{}' --query executionArn --output text)\"
-echo \"Started execution: \${execution_arn}\"
-while true; do
-  status=\"\$(aws --profile ${deployer_q} --region ${AWS_REGION_NAME} stepfunctions describe-execution --execution-arn \"\${execution_arn}\" --query status --output text)\"
-  echo \"Status: \${status}\"
-  case \"\${status}\" in
-    SUCCEEDED) break ;;
-    FAILED|ABORTED|TIMED_OUT)
-      echo \"gold-refresh did not succeed: \${status}. Inspect via: aws stepfunctions get-execution-history --execution-arn \${execution_arn}\" >&2
-      exit 1
-      ;;
-    *) sleep 30 ;;
-  esac
-done
-echo \"gold-refresh SUCCEEDED. Snowflake ingestion of the export manifest (Snowpipe + SNOWFLAKE_RUN_MANIFEST_TASK + REFRESH_AFTER_LOAD) is asynchronous from here -- polling gold-verify-live itself rather than sleeping a fixed duration, since REFRESH_AFTER_LOAD refreshes 21 dynamic tables sequentially (up to 900s each per its own timeout) and some (e.g. sec_thirteenf_holding, multi-million rows) are genuinely slow.\"
-verify_attempts=20
-verify_delay=60
-previous_empty_tables=\"\"
-for ((attempt=1; attempt<=verify_attempts; attempt++)); do
-  # SNOWFLAKE_RUN_MANIFEST_TASK's own schedule is 360 MINUTE (widened for
-  # credit economy, ecs-cost-sizing finding, CLAUDE.md) -- far longer than
-  # this loop's budget, so passively waiting on it can never reliably land
-  # inside a single install.sh run. Fire it manually every attempt instead;
-  # a call with nothing yet in the manifest stream just SKIPs harmlessly.
-  snow sql --connection ${SNOW_CONNECTION} -q \"EXECUTE TASK EDGARTOOLS_GOLD.SNOWFLAKE_RUN_MANIFEST_TASK\" >/dev/null 2>&1 || true
-  verify_output=\"\$(uv run --extra snowflake edgar-warehouse gold-verify-live)\"
-  verify_exit=\$?
-  echo \"\$verify_output\"
-  if [[ \"\${verify_exit}\" -eq 0 ]]; then
-    break
-  fi
-  # Live incident (2026-08-22): this loop used to retry all 20 attempts
-  # (~20 minutes) unconditionally even when the exact same tables were
-  # empty on every single check -- pointless for tables with no upstream
-  # data at all (task #35's fundamentals backfill not yet run, ADV
-  # disclosure parser not yet built, etc.; CLAUDE.md's ticket-08 list),
-  # since no amount of waiting for REFRESH_AFTER_LOAD makes those refresh
-  # into existence. Track the empty-table set attempt-to-attempt and stop
-  # early, instead of burning the rest of the budget, once it stabilizes
-  # (unchanged across two consecutive checks) -- that is the signal
-  # REFRESH_AFTER_LOAD has already finished catching up and any remaining
-  # gap is a real upstream data gap, not a slow-in-progress refresh.
-  current_empty_tables=\"\$(printf '%s' \"\$verify_output\" | python3 -c 'import json, sys
-try:
-    payload = json.load(sys.stdin)
-    print(\",\".join(sorted(payload.get(\"empty_tables\", []))))
-except Exception:
-    sys.exit(1)
-')\"
-  parse_ok=\$?
-  if [[ \"\${parse_ok}\" -eq 0 && -n \"\${previous_empty_tables}\" && \"\${current_empty_tables}\" == \"\${previous_empty_tables}\" ]]; then
-    echo \"gold-verify-live: the same empty table(s) (\${current_empty_tables}) showed up unchanged on two consecutive checks -- REFRESH_AFTER_LOAD has already settled, so waiting longer within this run cannot help. Stopping early after \${attempt} attempts instead of the full \${verify_attempts} (~\$((verify_attempts * verify_delay / 60)) min budget). If these tables should have real data, that is a genuine upstream gap (see CLAUDE.md's ticket-08 empty-gold-tables list / task #35's fundamentals backfill), not a slow refresh -- fix the root cause and re-run this stage, don't just retry it again.\" >&2
-    exit 1
-  fi
-  if [[ \"\${parse_ok}\" -eq 0 ]]; then
-    previous_empty_tables=\"\${current_empty_tables}\"
-  fi
-  if [[ \"\${attempt}\" -eq \"\${verify_attempts}\" ]]; then
-    echo \"gold-verify-live still failing after \${verify_attempts} attempts (~\$((verify_attempts * verify_delay / 60)) minutes) -- treating as a real failure, not a slow refresh. Check TASK_HISTORY for SNOWFLAKE_RUN_MANIFEST_TASK (SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(TASK_NAME => 'SNOWFLAKE_RUN_MANIFEST_TASK')) ORDER BY SCHEDULED_TIME DESC) for a real error (e.g. a missing OPERATE/SELECT grant on an upstream table) before assuming this is just a slow refresh.\" >&2
-    exit 1
-  fi
-  echo \"gold-verify-live attempt \${attempt}/\${verify_attempts} not yet passing -- empty-table set still changing (refresh may be in progress), retrying in \${verify_delay}s.\" >&2
-  sleep \"\${verify_delay}\"
-done"
-
-  add_stage \
-    "MDM + graph: connectivity, migrations, sync, verification" \
-    "Grants the hosted Neo4j Graph Analytics app against the selected database, then runs bounded MDM connectivity, migrations, graph sync, and graph verification commands. The grants line runs first here (moved from the 'Snowflake Postgres / graph prerequisites' stage above, wayfinder ticket 01) because it targets {{ database }}.NEO4J_GRAPH_MIGRATION. Corrected: this comment previously assumed 'mdm publish-relationships' below creates that schema itself; it can't on a fresh account -- CREATE SCHEMA IF NOT EXISTS evaluates the CREATE SCHEMA privilege before checking existence, so the loader role needs that grant first. The 'Snowflake: MDM mirror + graph schema' stage above now creates NEO4J_GRAPH_MIGRATION (and grants the loader role CREATE SCHEMA ON DATABASE) before this stage runs, so 'mdm publish-relationships' here always finds the schema already present; this stage's own grants line remains for its own idempotent re-application, and 'mdm reconcile' at the end of this stage still needs it applied to run its Native App checks. Ticket 32 item 3: the registry bootstrap line right after 'mdm migrate' opens and activates the first Source Family Registry version for filing_artifact (idempotent, skips if one is already active) -- migration 014 (applied by 'mdm migrate' just above) creates the tables this needs, and drive-filing-discovery-for-date/capture-filing-artifact both hard-require an active version to run at all, so this has to land before any later Step Functions execution that calls them, not just before this stage's own later commands." \
-    "snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql -D database=${db_name}
-uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity
-uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate
-bash infra/scripts/bootstrap-source-family-registry.sh
-uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm seed-universe --tracking-status bootstrap_pending
-uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm mastering --entity-type all --limit 100
-uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm publish-relationships --limit 100
-uv run --extra snowflake edgar-warehouse mdm reconcile"
-
-  add_stage \
-    "MDM + graph: AWS MDM E2E/status checks" \
-    "Checks Step Functions status and runs bounded AWS-only MDM E2E verification." \
-    "bash infra/scripts/run-aws-mdm-e2e.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-region ${AWS_REGION_NAME} --status-only
-bash infra/scripts/run-aws-mdm-e2e.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-region ${AWS_REGION_NAME} --mdm-run-limit 5 --graph-limit 100"
-
-  add_stage \
-    "Data: bounded smoke only" \
-    "Runs a bounded smoke command only; unbounded bootstrap is not part of the default install path. The seed-universe smoke call that used to run here is gone (wayfinder snowflake-account-cutover ticket 06): the new unscoped 'AWS/silver: seed-universe' stage above already seeds the real universe, and re-running it here in infrastructure_validation mode would only write a second, pointless placeholder manifest. Live incident (2026-08-23): this stage's command previously omitted WAREHOUSE_BRONZE_ROOT/WAREHOUSE_STORAGE_ROOT/SERVING_EXPORT_ROOT and failed outright with 'WAREHOUSE_BRONZE_ROOT is required for warehouse commands' -- WarehouseSettings.from_env() requires all three unconditionally for every SERVING_EXPORT_COMMANDS member (bootstrap-next is one, same as seed-universe), regardless of runtime_mode. The 'AWS/silver: seed-universe' stage above already documented and fixed this exact gap for itself; this stage was missed. Fixed the same way here: set explicitly from the same edgartools-<env>-{bronze,warehouse,snowflake-export}-<account-id> bucket-naming convention, rather than left to ambient shell state. While fixing this, found a second, deeper bug in the exact pattern being copied: the seed-universe stage's own WAREHOUSE_BRONZE_ROOT/WAREHOUSE_STORAGE_ROOT/SERVING_EXPORT_ROOT values spliced the shell_quote()-wrapped \${expected_account_q} (single-quoted, e.g. \"'690839588395'\") into an already-double-quoted string -- bash does not treat a single-quote character as a quoting operator inside double quotes, so the resulting env var value would contain the literal quote characters (verified: WAREHOUSE_BRONZE_ROOT would resolve to \"s3://edgartools-prod-bronze-'690839588395'/warehouse/bronze\", an invalid S3 URI) rather than being stripped. Never caught before because every prior run of the seed-universe stage in this account went through the AWS Step Functions execution (a separate code path -- deploy-aws-application.sh's task definition JSON sets these env vars directly, no shell quoting involved), never through install.sh's own local CLI stage. Fixed both this stage and the seed-universe stage above to interpolate the raw \${EXPECTED_AWS_ACCOUNT_ID} directly instead of the quote-wrapped \${expected_account_q} -- safe because it's already validated to be exactly 12 digits (line ~1129) before build_stages ever runs, so no shell metacharacters are possible and no quoting is needed in this double-quoted context." \
-    "EDGAR_IDENTITY=\"\${EDGAR_IDENTITY:?set EDGAR_IDENTITY with contact email}\" WAREHOUSE_ENVIRONMENT=${ENVIRONMENT} WAREHOUSE_RUNTIME_MODE=infrastructure_validation WAREHOUSE_BRONZE_ROOT=\"s3://edgartools-${ENVIRONMENT}-bronze-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/bronze\" WAREHOUSE_STORAGE_ROOT=\"s3://edgartools-${ENVIRONMENT}-warehouse-${EXPECTED_AWS_ACCOUNT_ID}/warehouse\" SERVING_EXPORT_ROOT=\"s3://edgartools-${ENVIRONMENT}-snowflake-export-${EXPECTED_AWS_ACCOUNT_ID}/warehouse/artifacts/snowflake_exports/\" uv run --extra s3 edgar-warehouse bootstrap-next --limit 100"
 }
 
 print_command_block() {
@@ -1131,8 +979,7 @@ generate_report() {
   echo "- Run doctor until fail statuses are resolved."
   echo "- Create missing ignored Terraform backend and tfvars files from the templates staged under ${WORKSPACE}/setup/${ENVIRONMENT}/."
   echo "- WAREHOUSE_IMAGE_REF is auto-resolved from the ECR image publish stage's output file; only set it manually if that stage was skipped."
-  echo "- For first-time copied-bronze loads, expect one_click_data_refresh's Clean and Merge Filings stage to run sequentially through monolith fallback until silver shard metadata is published."
-  echo "- Keep data smoke bounded; do not run unbounded bootstrap from the wizard default path."
+  echo "- Source/feed work remains disabled until its approved Rules version and verified baseline manifest qualify."
 }
 
 run_report() {

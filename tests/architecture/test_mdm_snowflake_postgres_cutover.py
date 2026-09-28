@@ -63,75 +63,6 @@ def test_deploy_script_bucket_discovery_does_not_capture_head_bucket_output() ->
     assert 'aws_cli s3api head-bucket --bucket "$suffixed" >/dev/null 2>&1' in text
 
 
-def test_bronze_seed_state_machine_defaults_and_stringifies_batch_size() -> None:
-    text = _read(DEPLOY_SCRIPT)
-
-    assert '"StartAt": "ResumeFromRunIdPresenceCheck"' in text
-    assert '"Default": "BatchSizeCheck"' in text
-    assert '"BatchSizeDefault": batch_size_default' in text
-    assert '"ResultPath": "$.batch_size"' in text
-    assert (
-        "States.Array('seed-bronze-batches', '--run-id', $$.Execution.Name, "
-        "'--batch-size', States.Format('{}', $.batch_size))"
-    ) in text
-    assert "'--batch-size', $.batch_size" not in text
-
-
-def test_bronze_seed_state_machine_runs_batch_silver_with_bounded_parallelism() -> None:
-    text = _read(DEPLOY_SCRIPT)
-
-    assert '"MaxConcurrency": 20' in text
-    assert "First-load recovery from cached bronze. Raised 4->20 2026-08-08" in text
-    assert "30 vCPU Fargate quota" in text
-    assert "680/680 Clean and Merge Filings batches with 0 failures" in text
-    assert "sequential bootstrap-batch uses bronze SHA256 cache" in text
-
-
-def test_cached_bronze_batch_silver_skips_artifact_fetch_and_parser_pipeline() -> None:
-    text = _read(DEPLOY_SCRIPT)
-    # silver_mdm_gold (whose BatchSilver, now "Clean and Merge Filings",
-    # reprocessing Map used this same command shape, minus
-    # --resume-ledger-run-id) was retired outright by state-machine-
-    # consolidation ticket 09 (2026-09-05: zero executions ever) -- this
-    # test now covers one_click_data_refresh's own Clean and Merge Filings
-    # only, since that machine's default path was confirmed NOT dead
-    # (install.sh's documented cold-start/recovery procedure depends on it)
-    # and deferred, untouched.
-
-    # one_click_data_refresh's own Clean and Merge Filings -- ticket 02 threads
-    # --resume-ledger-run-id through so a resumed run's done markers land
-    # under the original run's namespace, not this fresh execution's own.
-    one_click_data_refresh_expected = (
-        "States.Array('bootstrap-batch', '--cik-list', $.cik_list, "
-        "'--artifact-policy', 'skip', '--parser-policy', 'skip', "
-        "'--run-id', $$.Execution.Name, "
-        "'--resume-ledger-run-id', $.resume_from_run_id)"
-    )
-    assert text.count(one_click_data_refresh_expected) == 1
-
-
-def test_bronze_seed_state_machine_supports_resume_from_run_id() -> None:
-    """pipeline-resumability ticket 02: automatic resume for Clean and Merge Filings + Mastering."""
-    text = _read(DEPLOY_SCRIPT)
-
-    assert '"StartAt": "ResumeFromRunIdPresenceCheck"' in text
-    assert '"ResumeFromRunIdPresenceCheck": resume_from_run_id_presence_check' in text
-    assert '"ResumeFromRunIdDefault": resume_from_run_id_default' in text
-    assert '"ResumeFromRunIdCheck": resume_from_run_id_check' in text
-    assert '"ComputeRemainingBatches": compute_remaining_batches' in text
-    assert (
-        "States.Array('compute-remaining-batches', '--resume-ledger-run-id', "
-        "$.resume_from_run_id, '--run-id', $$.Execution.Name)"
-    ) in text
-    assert "compute_remaining_batches.pop(\"Retry\", None)" in text
-    assert '"resume_from_run_id.$": "$.resume_from_run_id"' in text
-    assert (
-        "States.Array('mdm', 'mastering', '--entity-type', 'all', "
-        "'--run-id', $$.Execution.Name, "
-        "'--resume-ledger-run-id', $.resume_from_run_id)"
-    ) in text
-
-
 def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tasks() -> None:
     text = _read(DEPLOY_SCRIPT)
 
@@ -139,33 +70,23 @@ def test_deploy_script_still_injects_mdm_database_url_into_warehouse_and_mdm_tas
     assert '{"name": "MDM_DATABASE_URL", "valueFrom": mdm_database_secret_arn}' in text
 
 
-def test_deploy_script_conditionally_injects_bookkeeping_database_url_into_warehouse_task() -> None:
-    """BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover, Ticket 04) is
-    optional -- unlike MDM_SNOWFLAKE_SECRET_ARN, nothing depends on it
-    unconditionally yet, so it must not be hard-required the way that one
-    is, or deploys would break before any bookkeeping caller exists.
-    """
+def test_deploy_script_does_not_inject_retired_bookkeeping_connection() -> None:
     text = _read(DEPLOY_SCRIPT)
-
-    assert '{"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn}' in text
-    # Original task families keep the optional legacy connection. Separate
-    # journal task families use only their clean Bookkeeping connection.
-    assert "if bookkeeping_postgres_dsn_secret_arn and not fresh:" in text
-    assert 'is_empty "$BOOKKEEPING_POSTGRES_DSN_SECRET_ARN" && fail' not in text
+    assert "BOOKKEEPING_DATABASE_URL" not in text
 
 
-def test_bookkeeping_postgres_dsn_secret_resolves_by_name() -> None:
+def test_deploy_script_does_not_resolve_retired_bookkeeping_secret() -> None:
     text = _read(DEPLOY_SCRIPT)
+    assert 'secret_arn_by_name "${NAME_PREFIX}/bookkeeping/postgres_dsn"' not in text
 
-    assert 'secret_arn_by_name "${NAME_PREFIX}/bookkeeping/postgres_dsn"' in text
 
-
-def test_runtime_module_owns_bookkeeping_secret_output() -> None:
+def test_runtime_module_retires_bookkeeping_secret_without_deleting_archive() -> None:
     main = _read(REPO_ROOT / "infra" / "terraform" / "modules" / "warehouse_runtime" / "main.tf")
     outputs = _read(REPO_ROOT / "infra" / "terraform" / "modules" / "warehouse_runtime" / "outputs.tf")
 
-    assert 'resource "aws_secretsmanager_secret" "bookkeeping_postgres_dsn"' in main
-    assert 'output "bookkeeping_postgres_dsn_secret_arn"' in outputs
+    assert 'from = aws_secretsmanager_secret.bookkeeping_postgres_dsn' in main
+    assert 'destroy = false' in main
+    assert 'output "bookkeeping_postgres_dsn_secret_arn"' not in outputs
 
 
 def test_terraform_moves_mdm_secret_containers_to_runtime_module() -> None:

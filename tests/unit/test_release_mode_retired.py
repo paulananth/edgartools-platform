@@ -11,7 +11,6 @@ Step Functions path, `reconcile-relationship-release`, and every
 from __future__ import annotations
 
 import inspect
-from pathlib import Path
 
 import pytest
 
@@ -72,17 +71,3 @@ def test_release_parameters_are_gone_from_capture_and_fundamentals() -> None:
         (fundamentals_ingest.run_bootstrap_thirteenf, {"release_mode", "candidate_accessions"}),
     ):
         assert removed.isdisjoint(inspect.signature(function).parameters), function.__name__
-
-
-def test_one_click_data_refresh_has_no_strict_release_path(tmp_path: Path) -> None:
-    from tests.architecture.test_mdm_pipeline_machine_tails import _generate
-
-    definition = _generate("write_one_click_data_refresh_definition", tmp_path, "one_click")
-
-    assert definition["StartAt"] == "ResumeFromRunIdPresenceCheck"
-    leftovers = sorted(
-        name
-        for name in definition["States"]
-        if "strict" in name.lower() or name in {"ReleaseModeCheck", "ReconcileRelationshipRelease"}
-    )
-    assert leftovers == []

@@ -78,156 +78,15 @@ Options:
   --mdm-postgres-dsn-secret-arn <arn>
                                     Secrets Manager ARN injected as MDM_DATABASE_URL.
   --mdm-snowflake-secret-arn <arn>  Secrets Manager ARN injected as MDM_SNOWFLAKE_SECRET_JSON.
-  --bookkeeping-postgres-dsn-secret-arn <arn>
-                                    Secrets Manager ARN injected as BOOKKEEPING_DATABASE_URL on the
-                                    warehouse profile. Default: resolved by name
-                                    (<prefix>/bookkeeping/postgres_dsn), same as the MDM DSN.
   --bookkeeping-clean-postgres-dsn-secret-arn <arn>
   --rules-postgres-dsn-secret-arn <arn>
   --change-journal-postgres-dsn-secret-arn <arn>
                                     Explicit runtime secrets for fresh configured work. Supply all
                                     three together. No legacy or MDM fallback; migration URLs are
-                                    never injected. Registers separate journal task families;
-                                    existing workflows retain their original connections/commands.
-                                    Connection wiring does not cut over a feed.
-  --mdm-run-limit <n>               Default limit for mdm mastering state machine. Default: 0 (unbounded); a positive value bounds it.
-  --mdm-graph-limit <n>             Default limit for mdm graph backfill/sync. Default: 200; 0 means no default limit.
-  --mdm-seed-universe-tracking-status <status>
-                                    tracking_status baked into mdm_seed_universe state machine. Default: bootstrap_pending.
-  --mdm-graph-rule-version <v>      Default rule_version baked into generation_build state machine. Default: v1.
-  --mdm-graph-schema-version <v>    Default schema_version baked into generation_build state machine. Default: v1.
-  --mdm-generation-partition-concurrency <n>
-                                    MaxConcurrency for generation_build's BuildPartitions Distributed Map. Default: 8.
+                                    never injected. Registers separate journal task families.
+                                    Workflow registration remains disabled until each feed
+                                    qualifies with an approved Rules baseline.
   --output-file <path>              Write deployment summary JSON.
-  --configure-daily-incremental-schedule <enable|disable>
-                                    Off-by-default operator control (release-readiness
-                                    ticket 45/49) for edgartools-<env>-daily-incremental's
-                                    recurring trigger: creates/updates (enable) or removes
-                                    (disable) two EventBridge rules -- Daily Identity
-                                    Refresh Mon-Sat 12:00 UTC (refresh_mode=daily) and
-                                    Identity Backstop Sweep Sun 12:00 UTC
-                                    (refresh_mode=backstop). Never runs as a side effect of
-                                    an ordinary deploy; run this flag alone, as
-                                    sec_platform_deployer, after an explicit operator go.
-                                    Exits immediately after configuring -- does not build
-                                    images, register task definitions, or touch state
-                                    machines.
-  --daily-incremental-scheduler-role-arn <arn>
-                                    IAM role ARN EventBridge assumes to start
-                                    edgartools-<env>-daily-incremental. Required with
-                                    --configure-daily-incremental-schedule enable. Source:
-                                    infra/terraform/access/aws/accounts/<env> output
-                                    daily_incremental_scheduler_role_arn.
-  --configure-daily-incremental-alarms <enable|disable>
-                                    Explicitly create/update or remove the 18-hour
-                                    timeout alarm AND the application-level execution-
-                                    failure alarm (AWS/States ExecutionsFailed --
-                                    release-readiness ticket 81; covers States.TaskFailed
-                                    and similar non-timeout failures the timeout alarm
-                                    does not see). Per-deferral SNS delivery is part of
-                                    the deployed state machine. This standalone action
-                                    never deploys workloads or enables schedules.
-  --operator-alert-topic-arn <arn>  Confirmed operator SNS topic used by both alarms.
-                                    Required when enabling alarms.
-  --configure-mdm-entity-backfill-alarm <enable|disable>
-                                    Explicitly create/update or remove the mdm-ahead-of-silver
-                                    stuck-NULL alarm (mdm-ahead-of-silver map, ticket 05):
-                                    fires when BackfillMdmEntityIds's own
-                                    mdm_entity_backfill_completed log event reports a nonzero
-                                    remaining_null_count for 2 consecutive daily periods
-                                    (~48h at daily_incremental's cadence), OR when the metric
-                                    never showed up at all (sweep didn't run --
-                                    treat-missing-data=breaching). Same SNS topic as
-                                    --configure-daily-incremental-alarms. This standalone
-                                    action never deploys workloads or enables schedules.
-  --configure-fence-monitor-schedule <enable|disable>
-                                    Off-by-default operator control (Ticket 44, change-
-                                    propagation map) for the recurring `mdm check-fence`
-                                    drift check split from Ticket 30's own live incident:
-                                    creates/updates (enable) or removes (disable) one
-                                    EventBridge rule invoking edgartools-<env>-mdm-utility
-                                    with {"mode": "mdm_check_fence"} every 4 hours. Never
-                                    runs as a side effect of an ordinary deploy; run this
-                                    flag alone, after an explicit operator go. Exits
-                                    immediately after configuring.
-  --fence-monitor-scheduler-role-arn <arn>
-                                    IAM role ARN EventBridge assumes to start
-                                    edgartools-<env>-mdm-utility for the fence-monitor
-                                    schedule. Required with --configure-fence-monitor-schedule
-                                    enable. Source: infra/terraform/access/aws/accounts/<env>
-                                    output fence_monitor_scheduler_role_arn.
-  --configure-fence-monitor-alarm <enable|disable>
-                                    Explicitly create/update or remove the two fence-monitor
-                                    alarms (Ticket 44): one on mdm_fence_check_result's
-                                    leak_count, one on its access_gap_count, both firing on
-                                    any nonzero value OR on the check never having run at all
-                                    (treat-missing-data=breaching). Same SNS topic as
-                                    --configure-daily-incremental-alarms. This standalone
-                                    action never deploys workloads or enables schedules.
-  --configure-publication-drain-schedule <enable|disable>
-                                    Off-by-default operator control (Ticket 36, change-
-                                    propagation map) for the scheduled consumer side of the
-                                    MDM->graph publication outbox: creates/updates (enable) or
-                                    removes (disable) one EventBridge rule invoking
-                                    edgartools-<env>-mdm-utility with
-                                    {"mode": "mdm_publication_drain"} every 5 minutes (matches
-                                    publication.py's own WARNING_AGE_SECONDS=300 freshness SLO
-                                    -- draining slower than the warning threshold would trip
-                                    the SLO on a healthy queue by construction). Never runs as
-                                    a side effect of an ordinary deploy; run this flag alone,
-                                    after an explicit operator go, once `mdm mastering` (the
-                                    producer -- MDMPipeline.run_all) is confirmed enqueuing
-                                    real requests. Exits immediately after configuring.
-  --publication-drain-scheduler-role-arn <arn>
-                                    IAM role ARN EventBridge assumes to start
-                                    edgartools-<env>-mdm-utility for the publication-drain
-                                    schedule. Required with
-                                    --configure-publication-drain-schedule enable. Same role
-                                    shape as --fence-monitor-scheduler-role-arn (EventBridge ->
-                                    StartExecution on this one state machine).
-  --configure-reconciliation-backstop-schedule <enable|disable>
-                                    Off-by-default operator control (Ticket 50, change-
-                                    propagation map) for the monthly MDM Reconciliation
-                                    Backstop: creates/updates (enable) or removes (disable) one
-                                    EventBridge rule invoking edgartools-<env>-mdm-utility with
-                                    {"mode": "mdm_reconciliation_backstop"} on the 1st of every
-                                    month. A deferred run (the shared mdm_resolution lease held
-                                    by ordinary `mdm mastering` or another backstop attempt) is
-                                    not an error -- it retries next month. Never runs as a side
-                                    effect of an ordinary deploy; run this flag alone, after an
-                                    explicit operator go. Exits immediately after configuring.
-  --reconciliation-backstop-scheduler-role-arn <arn>
-                                    IAM role ARN EventBridge assumes to start
-                                    edgartools-<env>-mdm-utility for the reconciliation-backstop
-                                    schedule. Required with
-                                    --configure-reconciliation-backstop-schedule enable. Same
-                                    role shape as --publication-drain-scheduler-role-arn
-                                    (EventBridge -> StartExecution on this one state machine).
-  --configure-manages-fund-duplicate-monitor-schedule <enable|disable>
-                                    Off-by-default operator control (manages-fund-duplicate-
-                                    rows map, Ticket 03) for the recurring `mdm check-manages-
-                                    fund-duplicates` check: creates/updates (enable) or removes
-                                    (disable) one EventBridge rule invoking
-                                    edgartools-<env>-mdm-utility with
-                                    {"mode": "mdm_check_manages_fund_duplicates"} once daily.
-                                    Never runs as a side effect of an ordinary deploy; run this
-                                    flag alone, after an explicit operator go. Exits
-                                    immediately after configuring.
-  --manages-fund-duplicate-monitor-scheduler-role-arn <arn>
-                                    IAM role ARN EventBridge assumes to start
-                                    edgartools-<env>-mdm-utility for the manages-fund-
-                                    duplicate-monitor schedule. Required with
-                                    --configure-manages-fund-duplicate-monitor-schedule enable.
-                                    Same role shape as --fence-monitor-scheduler-role-arn
-                                    (EventBridge -> StartExecution on this one state machine).
-  --configure-manages-fund-duplicate-monitor-alarm <enable|disable>
-                                    Explicitly create/update or remove the manages-fund-
-                                    duplicate-monitor alarm on mdm_manages_fund_duplicate_
-                                    check_result's new_duplicate_group_count, firing on any
-                                    nonzero value OR on the check never having run at all
-                                    (treat-missing-data=breaching). Same SNS topic as
-                                    --configure-daily-incremental-alarms. This standalone
-                                    action never deploys workloads or enables schedules.
   -h, --help                        Show this help.
 USAGE
 }
@@ -306,7 +165,6 @@ MDM_DATABASE_SOURCE=""
 MDM_ECR_REPOSITORY_URL=""
 MDM_POSTGRES_DSN_SECRET_ARN=""
 MDM_SNOWFLAKE_SECRET_ARN=""
-BOOKKEEPING_POSTGRES_DSN_SECRET_ARN=""
 BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN=""
 RULES_POSTGRES_DSN_SECRET_ARN=""
 CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN=""
@@ -385,7 +243,6 @@ while [[ $# -gt 0 ]]; do
     --mdm-ecr-repository-url) MDM_ECR_REPOSITORY_URL="${2:?}"; shift 2 ;;
     --mdm-postgres-dsn-secret-arn) MDM_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --mdm-snowflake-secret-arn) MDM_SNOWFLAKE_SECRET_ARN="${2:?}"; shift 2 ;;
-    --bookkeeping-postgres-dsn-secret-arn) BOOKKEEPING_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --bookkeeping-clean-postgres-dsn-secret-arn) BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --rules-postgres-dsn-secret-arn) RULES_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
     --change-journal-postgres-dsn-secret-arn) CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN="${2:?}"; shift 2 ;;
@@ -397,6 +254,7 @@ while [[ $# -gt 0 ]]; do
     --mdm-generation-partition-concurrency) MDM_GENERATION_PARTITION_CONCURRENCY="${2:?}"; shift 2 ;;
     --runner-role-name-prefix) RUNNER_ROLE_NAME_PREFIX="${2:?}"; shift 2 ;;
     --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
+    --configure-*) fail "Legacy workflow schedules and alarms are retired; affected feeds remain disabled" ;;
     --configure-daily-incremental-schedule) CONFIGURE_DAILY_INCREMENTAL_SCHEDULE="${2:?}"; shift 2 ;;
     --daily-incremental-scheduler-role-arn) DAILY_INCREMENTAL_SCHEDULER_ROLE_ARN="${2:?}"; shift 2 ;;
     --configure-daily-incremental-alarms) CONFIGURE_DAILY_INCREMENTAL_ALARMS="${2:?}"; shift 2 ;;
@@ -1245,12 +1103,6 @@ MDM_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$MDM_POSTGRES_DSN_SECRET_ARN" \
 MDM_SNOWFLAKE_SECRET_ARN="$(first_nonempty "$MDM_SNOWFLAKE_SECRET_ARN" \
   "$(manifest_value mdm.secrets.snowflake)" \
   "$(secret_arn_by_name "${NAME_PREFIX}/mdm/snowflake")")"
-# Bookkeeping store (DuckDB Retirement Cutover, Ticket 04) -- a dedicated
-# bookkeeping_app Postgres credential, not MDM's application role, so it
-# resolves independently rather than falling back to any MDM ARN.
-BOOKKEEPING_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$BOOKKEEPING_POSTGRES_DSN_SECRET_ARN" \
-  "$(manifest_value bookkeeping.secrets.postgres_dsn)" \
-  "$(secret_arn_by_name "${NAME_PREFIX}/bookkeeping/postgres_dsn")")"
 BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$BOOKKEEPING_CLEAN_POSTGRES_DSN_SECRET_ARN" "$(manifest_value fresh_control.secrets.BOOKKEEPING_CLEAN_DATABASE_URL)")"
 RULES_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$RULES_POSTGRES_DSN_SECRET_ARN" "$(manifest_value fresh_control.secrets.RULES_DATABASE_URL)")"
 CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN="$(first_nonempty "$CHANGE_JOURNAL_POSTGRES_DSN_SECRET_ARN" "$(manifest_value fresh_control.secrets.CHANGE_JOURNAL_DATABASE_URL)")"
@@ -1639,15 +1491,11 @@ write_container_definitions() {
   # profile -- it needs a direct Snowflake connection
   # (edgar_warehouse/mdm_entity_backfill.py's SnowflakeConnectionSettings.from_env())
   # the same way `mdm publish`/`mdm publish-relationships` do on the MDM profile.
-  # BOOKKEEPING_POSTGRES_DSN_SECRET_ARN may also be empty (deliberately not
-  # hard-required, unlike MDM_SNOWFLAKE_SECRET_ARN, until a caller-repointing
-  # ticket actually depends on it -- provisioning ahead of any consumer
-  # shouldn't break every deploy run before that secret exists).
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$WAREHOUSE_RUNTIME_MODE" "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" \
     "$SNOWFLAKE_EXPORT_BUCKET_NAME" "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" \
     "$WAREHOUSE_BRONZE_CIK_LIMIT" "${MDM_POSTGRES_DSN_SECRET_ARN:-}" "${MDM_SNOWFLAKE_SECRET_ARN:-}" \
-    "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" "${FRESH_CONTROL_SECRETS_JSON:-[]}" <<'PY'
+    "${FRESH_CONTROL_SECRETS_JSON:-[]}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1667,7 +1515,6 @@ import sys
     bronze_cik_limit,
     mdm_postgres_dsn_secret_arn,
     mdm_snowflake_secret_arn,
-    bookkeeping_postgres_dsn_secret_arn,
     fresh_control_secrets_json,
 ) = sys.argv[1:]
 
@@ -1714,12 +1561,6 @@ if mdm_postgres_dsn_secret_arn:
 # `mdm publish-relationships`.
 if mdm_snowflake_secret_arn:
     secrets.append({"name": "MDM_SNOWFLAKE_SECRET_JSON", "valueFrom": mdm_snowflake_secret_arn})
-# BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover, Ticket 04): a dedicated
-# bookkeeping_app Postgres credential, injected alongside MDM_DATABASE_URL
-# since both point at operational stores on the same shared Snowflake
-# Postgres instance. Optional until a caller-repointing ticket depends on it.
-if bookkeeping_postgres_dsn_secret_arn and not fresh:
-    secrets.append({"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn})
 
 container_definitions = [{
     "name": "edgar-warehouse",
@@ -1769,7 +1610,7 @@ write_mdm_container_definitions() {
   MSYS_NO_PATHCONV=1 python3 - "$(win_path "$output_file")" "$profile" "$MDM_IMAGE_REF" "$AWS_REGION_NAME" "$ENVIRONMENT" \
     "$BRONZE_BUCKET_NAME" "$WAREHOUSE_BUCKET_NAME" "$MDM_POSTGRES_DSN_SECRET_ARN" \
     "$MDM_SNOWFLAKE_SECRET_ARN" \
-    "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" "${BOOKKEEPING_POSTGRES_DSN_SECRET_ARN:-}" "${FRESH_CONTROL_SECRETS_JSON:-[]}" <<'PY'
+    "$EDGAR_IDENTITY_SECRET_ARN" "$LOG_GROUP_NAME" "${FRESH_CONTROL_SECRETS_JSON:-[]}" <<'PY'
 import json
 import pathlib
 import sys
@@ -1786,7 +1627,6 @@ import sys
     snowflake_secret_arn,
     edgar_secret_arn,
     log_group_name,
-    bookkeeping_postgres_dsn_secret_arn,
     fresh_control_secrets_json,
 ) = sys.argv[1:]
 
@@ -1810,16 +1650,6 @@ if fresh and not json.loads(fresh_control_secrets_json):
 if fresh:
     mdm_secrets.extend(json.loads(fresh_control_secrets_json))
     environment_values.append({"name": "BOOKKEEPING_MANIFEST_ROOT", "value": f"s3://{warehouse_bucket}/warehouse/artifacts/bookkeeping_manifests/"})
-# BOOKKEEPING_DATABASE_URL (DuckDB Retirement Cutover Ticket 15): added for
-# `mdm build-relationship-release-manifest`, which silver-merge-engine-migration
-# Ticket 11 deleted with release mode. Still injected (optional, same as the
-# warehouse profile's own injection above) when the ARN is provisioned;
-# whether another MDM command needs it is unchecked, and removing it would
-# change the MDM task definitions on the next deploy.
-if bookkeeping_postgres_dsn_secret_arn and not fresh:
-    mdm_secrets.append(
-        {"name": "BOOKKEEPING_DATABASE_URL", "valueFrom": bookkeeping_postgres_dsn_secret_arn}
-    )
 
 container_definitions = [{
     "name": "edgar-warehouse",
@@ -5456,320 +5286,11 @@ write_logging_configuration "$LOGGING_CONFIGURATION_FILE" "$STEP_FUNCTIONS_LOG_G
 CONTAINER_INSIGHTS_LOG_GROUP_NAME="/aws/ecs/containerinsights/${CLUSTER_NAME}/performance"
 ensure_log_group "$CONTAINER_INSIGHTS_LOG_GROUP_NAME" "$OPERATIONAL_FORENSICS_LOG_RETENTION_DAYS" >/dev/null
 
+# Legacy workflow commands require retired control tables. The local-qualified
+# application only registers fresh task families; feed promotion needs a
+# separate approved Rules version and source-owned baseline manifest.
 WORKFLOW_ARNS_FILE="$(json_file workflow-arns)"
-printf '{\n' > "$WORKFLOW_ARNS_FILE"
-first_workflow=true
-
-# seed_universe removed from this loop (state-machine-consolidation
-# wayfinder map, ticket 07) -- merged with mdm_seed_universe into the
-# single "seed" machine (write_seed_definition), registered in the
-# DEPLOY_MDM block below since it now needs the MDM machine's ARN.
-# bootstrap_full, load_daily_form_index_for_date, and catch_up_daily_form_index
-# removed from this loop (state-machine-consolidation wayfinder map, ticket 09,
-# 2026-09-05) -- their standalone Step Functions wrappers had zero (or, for
-# load_daily_form_index_for_date, near-zero dry-run-only) executions ever;
-# their underlying CLI commands remain valid for direct/manual ECS invocation.
-for workflow in targeted_resync gold_refresh; do
-  profile="$(workflow_profile "$workflow")"
-  task_definition_arn="$(task_definition_for_profile "$profile")"
-  command_expression="$(workflow_command_expression "$workflow")"
-  cik_command_expression="$(workflow_cik_command_expression "$workflow")"
-  definition_file="$(json_file "sfn-${workflow}")"
-  # sec_fetch_active cross-command lease (release-readiness ticket 84):
-  # targeted_resync is the sole remaining SEC-fetching command in this loop
-  # (CLAUDE.md's Phased Pipeline scope); gold_refresh doesn't call SEC at
-  # meaningful volume and stays unwrapped. (bootstrap_full was this lease's
-  # other member until its standalone machine was retired, ticket 09.)
-  wrap_with_sec_fetch_lease=""
-  if [[ "$workflow" == "targeted_resync" ]]; then
-    wrap_with_sec_fetch_lease="true"
-  fi
-  write_single_workflow_definition "$definition_file" "$task_definition_arn" "$command_expression" "$cik_command_expression" \
-    "$BRONZE_BUCKET_NAME" "$wrap_with_sec_fetch_lease"
-  state_machine_arn="$(upsert_state_machine "$workflow" "$definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  if [[ "$first_workflow" == "true" ]]; then
-    first_workflow=false
-  else
-    printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  fi
-  python3 - "$workflow" "$state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json
-import sys
-
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-done
-
-if [[ "$DEPLOY_MDM" == "true" ]]; then
-  # mdm: the single MDM machine (state-machine-consolidation wayfinder map,
-  # ticket 07). Deployed first in this block since load_history and
-  # daily_incremental below both need its ARN to build their own
-  # states:startExecution.sync:2 Task states.
-  mdm_definition_file="$(json_file sfn-mdm)"
-  write_mdm_definition "$mdm_definition_file" \
-    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_MEDIUM_ARN"
-  mdm_state_machine_arn="$(upsert_state_machine mdm "$mdm_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "mdm" "$mdm_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
-  # load_history: the recommended way to load 100+ companies.
-  # Chains seed → parallel bronze+silver batches → MDM → gold-refresh once.
-  phased_definition_file="$(json_file sfn-load-history)"
-  write_load_history_definition "$phased_definition_file" \
-    "$TASK_DEF_SMALL_ARN" "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "$mdm_state_machine_arn"
-  phased_state_machine_arn="$(upsert_state_machine load_history "$phased_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "load_history" "$phased_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
-  # bootstrap (recent-10-filings-per-active-company workflow) retired by
-  # state-machine-consolidation ticket 06 -- zero EventBridge schedule, one
-  # execution ever (a verification run), fully superseded by
-  # daily_incremental's index-driven selection. edgartools-prod-bootstrap
-  # was explicitly deleted from AWS as part of that ticket; this script no
-  # longer registers or updates it.
-
-  # daily_incremental: daily new filings → MDM chain → gold. Same pipeline shape.
-  if is_empty "$OPERATOR_ALERT_TOPIC_ARN"; then
-    fail "--operator-alert-topic-arn is required when deploying daily_incremental with MDM"
-  fi
-  require_confirmed_operator_alert_topic "$OPERATOR_ALERT_TOPIC_ARN"
-  daily_definition_file="$(json_file sfn-daily-incremental)"
-  write_warehouse_mdm_gold_definition "$daily_definition_file" \
-    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN" \
-    "daily_incremental" "$BRONZE_BUCKET_NAME" "$OPERATOR_ALERT_TOPIC_ARN" \
-    "$mdm_state_machine_arn"
-  daily_state_machine_arn="$(upsert_state_machine daily_incremental "$daily_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "daily_incremental" "$daily_state_machine_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
-  # mdm_gold retired (state-machine-consolidation wayfinder map, ticket 07):
-  # it had no head of its own -- just the tail with nothing in front -- so
-  # it became a 100% redundant duplicate of the new single MDM machine
-  # (deployed above as "mdm") the moment that machine existed. Anyone who
-  # wants "just run the MDM tail standalone" runs the mdm machine directly;
-  # zero capability lost. Not yet deleted live in AWS as of this commit --
-  # see the ticket for the rollback-snapshot-then-delete-state-machine
-  # checklist this repo's own precedent (tickets 03/04/05) uses for
-  # retiring a deployed machine.
-
-  # ownership_mdm_gold retired (state-machine-consolidation wayfinder map,
-  # ticket 08, 2026-09-03): user directed deletion after investigation
-  # showed its one live execution ever was a manual operator ABORT (not
-  # a real failure) worked around by the operator manually skipping the
-  # universe-wide parse-ownership-bronze scan -- ParseOwnershipBronze had
-  # no CIK-scoping capability. Rollback snapshot captured before live AWS
-  # deletion:
-  # .scratch/state-machine-consolidation/rollback-snapshots/ownership-mdm-gold-definition-snapshot-2026-09-03.json
-
-  # residual_holds_graph: Ticket 20 residual after EMPLOYED_BY bulk-load —
-  # populate security nodes + IS_INSIDER + HOLDS + COMPANY_HOLDS +
-  # INSTITUTIONAL_HOLDS into MDM and the graph. Does NOT re-run companies
-  # (issuers assumed present). INSTITUTIONAL_HOLDS is a separate step for
-  # OOM safety (same pattern as scripts/ops/sync-relationships.sh).
-  # Heavy stages use mdm-large (8 GiB): mdm-medium 2 GiB OOM'd on MdmSecurities
-  # (prod residual-holds-20260725T221723Z, exit 137).
-  residual_holds_graph_file="$(json_file sfn-residual-holds-graph)"
-  python3 - "$residual_holds_graph_file" "$CLUSTER_ARN" \
-    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_LARGE_ARN" \
-    "edgar-warehouse" "$PUBLIC_SUBNET_IDS_JSON" "$SECURITY_GROUP_IDS_JSON" "$SCRIPT_DIR" <<'PY'
-import json, pathlib, sys
-
-(output_file, cluster_arn,
- mdm_small_arn, mdm_large_arn,
- container_name, subnet_json, security_group_json, script_dir) = sys.argv[1:]
-sys.path.insert(0, script_dir)
-from mdm_tail_helper import wire_mdm_tail
-
-subnets = json.loads(subnet_json)
-security_groups = json.loads(security_group_json)
-
-def ecs_state(task_def_arn, cmd_expr, next_state=None, is_end=False, retry_secs=120):
-    s = {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::ecs:runTask.sync",
-        "Parameters": {
-            "LaunchType": "FARGATE",
-            "Cluster": cluster_arn,
-            "TaskDefinition": task_def_arn,
-            "PropagateTags": "TASK_DEFINITION",
-            "NetworkConfiguration": {"AwsvpcConfiguration": {
-                "AssignPublicIp": "ENABLED",
-                "SecurityGroups": security_groups,
-                "Subnets": subnets,
-            }},
-            "Overrides": {"ContainerOverrides": [{"Name": container_name, "Command.$": cmd_expr}]},
-        },
-        "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": retry_secs,
-                   "BackoffRate": 2.0, "MaxAttempts": 2}],
-    }
-    if is_end:
-        s["End"] = True
-    else:
-        s["Next"] = next_state
-    return s
-
-# Shared generation id for export→sync→verify (candidate publish, then activate
-# is intentionally operator-driven for residual fills).
-definition = {
-    "Comment": (
-        "Handoff residual pipeline: security nodes + IS_INSIDER + HOLDS + "
-        "COMPANY_HOLDS + INSTITUTIONAL_HOLDS into MDM and Snowflake graph. "
-        "Does not re-resolve companies. Does not claim Ticket 20 GO. "
-        "Heavy stages use mdm-large (8 GiB) after prod MdmSecurities OOM on 2 GiB."
-    ),
-    "StartAt": "MdmSecurities",
-    "States": {
-        # MdmPersons ("mdm mastering --entity-type person") removed
-        # (state-machine-consolidation wayfinder map, ticket 08,
-        # 2026-09-03) -- same rationale/accepted gap as
-        # ownership_mdm_gold's identical deletion, see that machine's
-        # comment. This machine's own docstring above already documents
-        # "Does not re-resolve companies" as a deliberate scope choice;
-        # persons carry the same caveat now.
-        "MdmSecurities": ecs_state(
-            mdm_large_arn,
-            "States.Array('mdm', 'mastering', '--entity-type', 'security', '--run-id', $$.Execution.Name)",
-            next_state="MdmIsInsider",
-        ),
-        "MdmIsInsider": ecs_state(
-            mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'IS_INSIDER', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
-            next_state="MdmHolds",
-        ),
-        "MdmHolds": ecs_state(
-            mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'HOLDS', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
-            next_state="MdmCompanyHolds",
-        ),
-        "MdmCompanyHolds": ecs_state(
-            mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'COMPANY_HOLDS', '--target-per-type', '100000', '--run-id', $$.Execution.Name)",
-            next_state="MdmInstitutionalHolds",
-        ),
-        # Separate step + lower default target for OOM safety (13F holding table).
-        "MdmInstitutionalHolds": ecs_state(
-            mdm_large_arn,
-            "States.Array('mdm', 'derive-relationships', '--relationship-type', 'INSTITUTIONAL_HOLDS', '--target-per-type', '50000', '--run-id', $$.Execution.Name)",
-            next_state="Publish",
-            retry_secs=180,
-        ),
-        # Publish-before-Publish Relationships ordering (data-architecture Issue 3) is
-        # enforced by wire_mdm_tail (state-machine-consolidation wayfinder
-        # map, ticket 02) — see infra/scripts/mdm_tail_helper.py. No
-        # "Publish Business Data" (final gold-refresh) state here: this machine does not claim Ticket 20 GO.
-        **wire_mdm_tail(
-            ecs_state(mdm_large_arn, "States.Array('mdm', 'publish')", is_end=True),
-            # Full-graph materialization (not residual types only). A type-filtered
-            # sync produced incomplete candidate gen 69e139b0… (company/person/security
-            # + HOLDS only) while verify without --generation-id checked the *active*
-            # Ticket 20 gen against full MDM — parity failed on IS_INSIDER/HOLDS
-            # (residual-holds-20260725T222735Z). Use Execution.Name as generation_id
-            # so verify scopes the candidate; empty type filters = all MDM types.
-            ecs_state(
-                mdm_large_arn,
-                (
-                    "States.Array("
-                    "'mdm', 'publish-relationships', "
-                    "'--generation-id', $$.Execution.Name"
-                    ")"
-                ),
-                is_end=True,
-                retry_secs=180,
-            ),
-            ecs_state(
-                mdm_small_arn,
-                (
-                    "States.Array("
-                    "'mdm', 'reconcile', '--skip-native-app', "
-                    "'--generation-id', $$.Execution.Name"
-                    ")"
-                ),
-                is_end=True,
-                retry_secs=60,
-            ),
-        ),
-    },
-}
-pathlib.Path(output_file).write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
-PY
-  residual_holds_graph_arn="$(upsert_state_machine residual_holds_graph "$residual_holds_graph_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "residual_holds_graph" "$residual_holds_graph_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
-  # one_click_data_refresh (formerly bronze_seed_silver_gold, renamed
-  # 2026-09-06): one-click cold-start/recovery from an existing bronze
-  # snapshot (e.g. copied in from another environment) through silver → MDM → Neo4j →
-  # Snowflake. Unlike a silver-only reprocess, does not depend on silver already
-  # knowing about the CIKs — discovers them directly from S3 bronze.
-  # (silver_mdm_gold, the dedicated silver-only-reprocess machine, was retired
-  # state-machine-consolidation ticket 09, 2026-09-05: zero executions ever.)
-  one_click_data_refresh_file="$(json_file sfn-one-click-data-refresh)"
-  write_one_click_data_refresh_definition "$one_click_data_refresh_file" \
-    "$TASK_DEF_MEDIUM_ARN" "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN" "$TASK_DEF_LARGE_ARN"
-  one_click_data_refresh_arn="$(upsert_state_machine one_click_data_refresh "$one_click_data_refresh_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "one_click_data_refresh" "$one_click_data_refresh_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
-  # generation_build: parallel immutable graph generation build (07-04, RSYNC-04).
-  # Plan -> bounded-concurrency partition fan-out -> fan-in verify -> activate.
-  # Standalone (not chained into load_history/daily_incremental yet --
-  # 07-05 owns wiring the shared Snowflake activation pointer those pipelines read).
-  generation_build_file="$(json_file sfn-generation-build)"
-  write_generation_build_definition "$generation_build_file" \
-    "$TASK_DEF_MDM_SMALL_ARN" "$TASK_DEF_MDM_MEDIUM_ARN"
-  generation_build_arn="$(upsert_state_machine generation_build "$generation_build_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "generation_build" "$generation_build_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
-  # seed: the single seed machine (state-machine-consolidation wayfinder
-  # map, ticket 07) -- merges the former standalone seed_universe +
-  # mdm_seed_universe machines (ticket 04's "keep both separate" call
-  # reversed per explicit user request). Registered here, after "mdm"
-  # above, since it needs the MDM machine's ARN for its own final
-  # RunMdmChain nested-execution call.
-  seed_mdm_task_definition_arn="$(task_definition_for_mdm_workflow mdm_seed_universe)"
-  seed_definition_file="$(json_file sfn-seed)"
-  write_seed_definition "$seed_definition_file" "$TASK_DEF_MEDIUM_ARN" "$seed_mdm_task_definition_arn" "$mdm_state_machine_arn"
-  seed_arn="$(upsert_state_machine seed "$seed_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "seed" "$seed_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-
-  # mdm_utility: consolidated MDM Utility Machine covering the 7 genuinely-
-  # uniform single-command MDM CLI wrappers (state-machine-consolidation
-  # wayfinder map, ticket 02) -- see write_mdm_utility_definition's own
-  # comment for the full excluded-machines rationale.
-  mdm_utility_definition_file="$(json_file sfn-mdm-utility)"
-  write_mdm_utility_definition "$mdm_utility_definition_file"
-  mdm_utility_arn="$(upsert_state_machine mdm_utility "$mdm_utility_definition_file" "$STEP_FUNCTIONS_ROLE_ARN" "$LOGGING_CONFIGURATION_FILE")"
-  printf ',\n' >> "$WORKFLOW_ARNS_FILE"
-  python3 - "mdm_utility" "$mdm_utility_arn" >> "$WORKFLOW_ARNS_FILE" <<'PY'
-import json, sys
-print(f"  {json.dumps(sys.argv[1])}: {json.dumps(sys.argv[2])}", end="")
-PY
-fi
-printf '\n}\n' >> "$WORKFLOW_ARNS_FILE"
+printf '{}\n' > "$WORKFLOW_ARNS_FILE"
 
 SUMMARY_FILE="$(json_file deployment-summary)"
 # MSYS_NO_PATHCONV=1: same fix as the ensure_log_group call above -- without
