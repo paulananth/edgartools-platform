@@ -17,8 +17,10 @@ This measures them as they will run, with the rulings since:
   of both sources (only unique among what an earlier pass left), the other
   risk the research names.
 
-The passes run in the production function (`edgar_warehouse/mdm/clean/
-cascade.py`, `assign`), so this measures what the engine runs. Each pass
+Every filer and entity is read by the census's own readers
+(`company_source.cascade_filer`, `name_census.cascade_entity`), the passes
+come from the Company rules (`cascade.spec`) and run in the census's own
+function (`cascade.assign`), so this measures what the census will do. Each pass
 takes only the SEC filers and GLEIF entities still unmatched, and binds a
 pair only one to one in that pass. Names are equal with the legal
 form kept, counting GLEIF's other names. The GLEIF entity is GENERAL, ACTIVE,
@@ -38,23 +40,12 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
-from edgar_warehouse.mdm.clean.cascade import Entity, Filer, assign, count_addresses, fit_place
-from edgar_warehouse.mdm.clean.names import edgar_jurisdiction, legal_form_key, sec_legal_form_key
-from edgar_warehouse.mdm.clean.quality import apply
-from edgar_warehouse.rules import files
+from edgar_warehouse.mdm.clean import cascade
+from edgar_warehouse.mdm.clean.company_source import POLICY, business_address, cascade_filer
+from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+from edgar_warehouse.mdm.clean.name_census import cascade_entity
 
 HERE = Path(__file__).parent
-OVER_SHARED = 25
-PASSES = [
-    {"pass": "P1 name + street + city + postcode", "compare": ["street", "city", "postcode"]},
-    {"pass": "P2 name + street + postcode", "compare": ["street", "postcode"]},
-    {"pass": "P3 name + street + city", "compare": ["street", "city"]},
-    {"pass": "P4 name + postcode", "compare": ["postcode"]},
-    {"pass": "P5 name + city", "compare": ["city"]},
-    {"pass": "P6 name + country", "compare": []},
-    {"pass": "P7 name alone", "compare": None},
-]
 
 
 def sha256(path: str) -> str:
@@ -65,68 +56,63 @@ def sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def quality_block(source: str, code: str) -> dict:
-    body = files.load_source(files.ROOT / "sources" / source / "source.yaml")
-    return body["mdm"][code]["contract"].get("quality") or {}
+def sec_row(f: dict) -> tuple[dict, dict | None]:
+    """A scanned filer as the landing writes it: the Company row and its
+    business address row, read by the census's own reader."""
+    b = (f.get("addresses") or {}).get("business")
+    address = business_address({
+        "street1": b.get("street1"), "street2": b.get("street2"), "city": b.get("city"),
+        "state_or_country": b.get("stateOrCountry"), "zip_code": b.get("zipCode"),
+        "country_code": b.get("countryCode")}) if b else None
+    return {"cik": int(f["cik"]), "entity_name": f.get("name") or None,
+            "state_of_incorporation": f.get("stateOfIncorporation") or None}, address
 
 
-def sec_filer(f: dict, block: dict) -> Filer | None:
-    b = (f.get("addresses") or {}).get("business") or {}
-    where = edgar_jurisdiction(b.get("stateOrCountry") or b.get("countryCode"))
-    country = where.split("-")[0] if where else None
-    address = {k: v for k, v in {
-        "street": b.get("street1"), "street2": b.get("street2"), "city": b.get("city"),
-        "region": b.get("stateOrCountry"), "postcode": b.get("zipCode"), "country": country}.items() if v}
-    fields = {"name": f.get("name") or None, "address": address or None,
-              "state_of_incorporation": f.get("stateOfIncorporation") or None}
-    matching: dict = {}
-    try:
-        q = apply(block, fields, matching)
-    except UnsupportedRecord:
-        return None  # an exception never merges
-    return Filer(cik=f["cik"], key=sec_legal_form_key(fields["name"]),
-                 place=fit_place({"provenance": {"quality": q}}, matching, ("address",)),
-                 incorporated=edgar_jurisdiction(fields["state_of_incorporation"]), business_country=country)
-
-
-def gleif_address(a: dict | None) -> dict | None:
-    a = a or {}
-    lines = a.get("lines") or []
-    return {k: v for k, v in {
-        "street": lines[0] if lines else None, "street2": "\n".join(lines[1:]) or None,
-        "city": a.get("city"), "region": a.get("region"), "postcode": a.get("postal"),
-        "country": a.get("country")}.items() if v} or None
-
-
-def gleif_entity(e: dict, block: dict, keys: frozenset) -> Entity | None:
-    fields = {"name": e.get("legal_name") or None, "address": gleif_address(e.get("legal"))}
-    hq = gleif_address(e.get("hq"))
-    matching = {"headquarters_address": hq} if hq else {}
-    try:
-        q = apply(block, fields, matching)
-    except UnsupportedRecord:
-        return None
-    return Entity(lei=e["lei"], keys=keys, place=fit_place({"provenance": {"quality": q}}, matching),
-                  jurisdiction=e.get("jurisdiction"), last_update=e.get("last_update") or "",
-                  eligible=(e.get("entity_status") == "ACTIVE"
-                            and e.get("registration_status") not in ("DUPLICATE", "ANNULLED")))
+def native(e: dict) -> dict:
+    """An extracted GLEIF record back in the Golden Copy's shape, read by the
+    census's own reader. The extract moved a second address line up when the
+    first was empty; that one case compares its street where the census,
+    reading the archive, compares only the country."""
+    def address(a):
+        a = a or {}
+        lines = a.get("lines") or []
+        return {k: v for k, v in {
+            "FirstAddressLine": {"$": lines[0]} if lines else None,
+            "AdditionalAddressLine": [{"$": x} for x in lines[1:]] or None,
+            "City": {"$": a["city"]} if a.get("city") else None,
+            "Region": {"$": a["region"]} if a.get("region") else None,
+            "PostalCode": {"$": a["postal"]} if a.get("postal") else None,
+            "Country": {"$": a["country"]} if a.get("country") else None}.items() if v}
+    return {
+        "LEI": {"$": e["lei"]},
+        "Entity": {
+            "LegalName": {"$": e["legal_name"]},
+            "OtherEntityNames": {"OtherEntityName": [{"$": n, "@type": t} for t, n in e.get("other_names") or []]},
+            "EntityCategory": {"$": e.get("category")},
+            "LegalJurisdiction": {"$": e.get("jurisdiction")},
+            "EntityStatus": {"$": e.get("entity_status")},
+            "LegalAddress": address(e.get("legal")),
+            "HeadquartersAddress": address(e.get("hq")),
+        },
+        "Registration": {"RegistrationStatus": {"$": e.get("registration_status")}},
+    }
 
 
 def main(coverage_path, scan_path, gleif_path, out_path):
     cohort = {json.loads(l)["cik"]: json.loads(l) for l in open(coverage_path)}
-    sec_block = quality_block("sec.submissions.company", "sec.submissions.company.v1")
-    gleif_block = quality_block("gleif", "gleif.level1.v1")
+    spec = cascade.spec(POLICY)
     filers, exceptions = [], Counter()
     for line in open(scan_path):
-        filer = sec_filer(json.loads(line), sec_block)
-        if filer is None:
+        found = cascade_filer(*sec_row(json.loads(line)))
+        if found is None:
             exceptions["sec"] += 1
         else:
-            filers.append(filer)
+            filers.append(found)
     wanted = {f.key for f in filers} - {""}
-    # Over-shared addresses are counted as ticket 22 measured the threshold:
-    # every SEC filer and every GENERAL GLEIF entity. Only GENERAL can bind.
-    counts = count_addresses(f.place for f in filers)
+    inputs = {"spec": spec, "gleif_contract": dataset_contract("level1")}
+    # Over-shared addresses count every SEC filer and every GENERAL GLEIF
+    # entity, as the census does.
+    counts = cascade.count_addresses(f.place for f in filers)
     entities = []
     for n, line in enumerate(open(gleif_path)):
         if n % 500000 == 0:
@@ -134,24 +120,23 @@ def main(coverage_path, scan_path, gleif_path, out_path):
         e = json.loads(line)
         if e.get("category") != "GENERAL":
             continue
-        names = [e["legal_name"]] + [name for _, name in e.get("other_names") or []]
-        keys = frozenset(legal_form_key(name) for name in names) & wanted
-        entity = gleif_entity(e, gleif_block, keys)
+        entity = cascade_entity(native(e), inputs, wanted)
         if entity is None:
             exceptions["gleif"] += 1
             continue
-        counts.update([entity.place.key] if entity.place.key else [])
-        if keys:
+        if entity.place.key:
+            counts[entity.place.key] += 1
+        if entity.keys & wanted:
             entities.append(entity)
-    found = assign(filers, entities, PASSES, address_counts=counts, over_shared=OVER_SHARED)
+    found = cascade.assign(filers, entities, spec["passes"], address_counts=counts, over_shared=spec["over_shared"])
     matched_sec = {cik: (a["lei"], a["pass"], a["flags"]) for cik, a in found.items()}
     result = {}
-    for step in PASSES:
+    for step in spec["passes"]:
         here = [c for c, (_, p, _) in matched_sec.items() if p == step["pass"]]
         strata = Counter(" + ".join(matched_sec[c][2]) or "clean" for c in here if c in cohort)
         result[step["pass"]] = {"bound_all_filers": len(here), "bound_companies": sum(c in cohort for c in here),
                                 "companies_by_stratum": dict(strata)}
-    over = sum(1 for k, v in counts.items() if v > OVER_SHARED)
+    over = sum(1 for k, v in counts.items() if v > spec["over_shared"])
 
     today = Counter()
     for cik, row in cohort.items():
@@ -172,7 +157,7 @@ def main(coverage_path, scan_path, gleif_path, out_path):
     out = {
         "inputs": {name: {"path": p, "sha256": sha256(p)} for name, p in
                    (("coverage", coverage_path), ("sec_scan", scan_path), ("gleif", gleif_path))},
-        "over_shared": {"threshold": OVER_SHARED, "addresses": over},
+        "over_shared": {"threshold": spec["over_shared"], "addresses": over},
         "exceptions_never_bound": dict(exceptions),
         "passes": result,
         "companies": len(cohort),

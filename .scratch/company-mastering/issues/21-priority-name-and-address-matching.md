@@ -35,7 +35,25 @@ This replaces the two jurisdiction and postcode rules of ticket 08, and the
   registry new tests join.
 - [x] Built the passes as rules data and the engine that runs them, switched
   off; measured through the production function (above).
-- [ ] Label a sample per pass; prove each pass at the 95% bar.
+- [x] Three-axis review (2026-09-28). Fixed:
+  - Standards: `normalize` reads fields, relationships, then matching
+    values and quality in its old order, so a record set aside keeps its
+    reason; activating the measured rules still fails closed on a missing
+    proof; the passes together are checked in `check_policy` (distinct, one
+    threshold); the "not unique" flag is renamed to what it counts ("name
+    held by another candidate").
+  - Spec: the census runs the cascade only once a pass is switched on, so
+    until ticket 20 the census and every SEC record are as before; a pair a
+    rule refuses by flag goes to a Steward (`cascade_flagged_pair`), not to
+    a bind; the proof now reads filers and entities through the census's own
+    readers (`cascade_filer`, `cascade_entity`), not a copy.
+  - GoF: leave the structure; the Stage re-check reads the GLEIF place
+    directly.
+- [ ] Draw and label a sample per pass × stratum (clean, incorporation
+  conflicts, name held by another candidate), from the links each pass adds,
+  with an adversarial arm (conflict pairs, shared headquarters) and fresh
+  draws for P5 to P7; prove each cell at the 95% bar (52 correct links at
+  least). A cell short of that stays off; its pairs go to a Steward.
 - [ ] Three-axis review, PR, CI; merge on the operator's word.
 
 ## Measured (2026-09-27 20:00 ET)
@@ -85,7 +103,7 @@ The Company list was rebuilt with a one-line import fix to `12-classify.py`
 (`edgar_warehouse.mdm.policies` is gone; the rules now load from `rules/`).
 That file is pinned by ticket 12's approved proof, so the fix was not kept.
 
-| Pass | Companies | Clean | Incorporation conflicts | Name not unique | Both |
+| Pass | Companies | Clean | Incorporation conflicts | Name held by another candidate | Both |
 |---|---:|---:|---:|---:|---:|
 | P1 name + street + city + postcode | 1,251 | 1,187 | 39 | 24 | 1 |
 | P2 name + street + postcode | 84 | 79 | 2 | 2 | 1 |

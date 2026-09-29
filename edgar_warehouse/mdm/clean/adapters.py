@@ -192,17 +192,10 @@ def classify_record(
     return verdict, labelled
 
 
-def mapped_values(row: dict, contract: dict, *, quality: bool = True) -> tuple[dict, dict, dict | None]:
-    """A row's mapped fields and matching values, after the feed's data
-    quality rule: what `normalize` puts on a record, and what the cascade's
-    census reads for every filer, a Company or not (ticket 21), so the two
-    cannot differ.
-
-    Blank text is unknown, never a value: a source that sends "" has said
-    nothing, and a blank must not win a field or show in the master
-    (operator, 2026-09-24).
-    """
-    mapping = contract["adapter"]
+def _fields(row: dict, mapping: dict) -> dict:
+    """A row's mapped fields. Blank text is unknown, never a value: a source
+    that sends "" has said nothing, and a blank must not win a field or show
+    in the master (operator, 2026-09-24)."""
     fields = {
         name: mapped_field(row, name, spec)
         for name, spec in mapping.get("fields", {}).items()
@@ -214,15 +207,28 @@ def mapped_values(row: dict, contract: dict, *, quality: bool = True) -> tuple[d
         for name, v in fields.items()
     ):
         raise UnsupportedRecord("invalid_field_shape")
-    # What a matching rule compares, kept with the record and out of its
-    # fields, so reading it grants no field a value (ticket 08). A value is
-    # one path, or an address's components, as `fields.address` reads them
-    # (GLEIF's headquarters address: ticket 22).
-    matching = {
+    return fields
+
+
+def _matching_values(row: dict, mapping: dict) -> dict:
+    """What a matching rule compares, kept with the record and out of its
+    fields, so reading it grants no field a value (ticket 08). A value is one
+    path, or an address's components, as `fields.address` reads them
+    (GLEIF's headquarters address: ticket 22)."""
+    return {
         name: value(row, path) if isinstance(path, str) else mapped_field(row, "address", path)
         for name, path in (mapping.get("matching") or {}).items()
     }
-    return fields, matching, _quality(contract, fields, matching) if quality else None
+
+
+def mapped_values(row: dict, contract: dict) -> tuple[dict, dict, dict | None]:
+    """A row's mapped fields and matching values, after the feed's data
+    quality rule: what `normalize` puts on a record, read by the same parts,
+    and what the cascade's census reads for every filer and entity, a Company
+    or not (ticket 21), so the two cannot differ."""
+    fields = _fields(row, contract["adapter"])
+    matching = _matching_values(row, contract["adapter"])
+    return fields, matching, _quality(contract, fields, matching)
 
 
 def _quality(contract: dict, fields: dict, matching: dict) -> dict | None:
@@ -286,7 +292,7 @@ def normalize(
             identifiers[namespace] = format_value(
                 item, mapping.get("identifier_formats", {}).get(namespace)
             )
-    fields, matching, _ = mapped_values(row, contract, quality=False)
+    fields = _fields(row, mapping)
     profiles = []
     for spec in mapping.get("profiles", []):
         registration = value(row, spec["registration"])
@@ -352,8 +358,9 @@ def normalize(
         provenance["source"] = {
             name: value(row, path) for name, path in mapping["provenance"].items()
         }
-    # Quality runs after the relationships, as before, so a record set aside
-    # for another reason keeps that reason.
+    # Matching values and quality are read after the relationships, as
+    # before, so a record set aside for another reason keeps that reason.
+    matching = _matching_values(row, mapping)
     quality = _quality(contract, fields, matching)
     if matching:
         provenance["matching"] = matching

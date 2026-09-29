@@ -20,7 +20,8 @@ by its country only.
 
 Each bound pair carries flags the proof samples as their own strata
 (operator, 2026-09-28): a conflict in place of incorporation ("They both may
-be true"), and a name not unique over both whole sources.
+be true"), and a name another candidate also holds: another SEC filer the
+quality rule left, or another eligible GENERAL GLEIF entity.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ from .store import Conflict
 VERSION = "sec-gleif-cascade-v1"
 TEST = "cascade_pass@1"
 CONFLICT = "incorporation conflicts"
-NOT_UNIQUE = "name not unique over both sources"
+NOT_UNIQUE = "name held by another candidate"
 PARTS = ("street", "city", "postcode")
 
 
@@ -99,13 +100,17 @@ class Entity:
     legal: str = ""  # the legal name's key: the one name the Stage record holds
 
 
-def _value(record: dict, field: str):
+def field_value(record: dict, field: str):
+    """A Stage record's value for one field; None unless it states a value."""
     item = (record.get("fields") or {}).get(field) or {}
     return item.get("value") if item.get("op") == "value" else None
 
 
-def _matching(record: dict) -> dict:
+def matching_values(record: dict) -> dict:
     return (record.get("provenance") or {}).get("matching") or {}
+
+
+_value, _matching = field_value, matching_values
 
 
 def filer_of(record: dict) -> Filer:
@@ -157,6 +162,8 @@ def spec(policy: dict) -> dict:
         if TEST not in tests:
             continue
         args = tests[TEST]
+        if not {"pass", "compare", "over_shared"} <= set(args):
+            raise Conflict(f"Cascade rule {rule.get('rule_id')} must state its pass, parts and threshold")
         passes.append({"pass": args["pass"], "compare": args["compare"], "rule_id": rule["rule_id"]})
         shared.add(args["over_shared"])
         found = tests.get("gleif_entity_eligible@1") or {}

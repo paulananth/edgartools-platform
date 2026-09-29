@@ -10,7 +10,7 @@ import pytest
 
 from edgar_warehouse.mdm.clean import cascade as _cascade
 from edgar_warehouse.mdm.clean.company_source import POLICY as _POLICY
-from edgar_warehouse.mdm.clean.matching import HELD_LEI_TEST, PAIR_TESTS, _passes
+from edgar_warehouse.mdm.clean.matching import HELD_LEI_TEST, PAIR_TESTS, _passes, _refused_by_flag
 from edgar_warehouse.mdm.clean.name_census import VERSION
 from edgar_warehouse.mdm.clean.primitives import REGISTRY
 from edgar_warehouse.mdm.clean.store import Conflict
@@ -151,3 +151,10 @@ def test_a_cascade_pass_needs_the_gleif_legal_name_unless_the_census_matched_ano
     record, other = cascaded(via="other name")
     other["fields"]["name"] = value("APPLE KABUSHIKI KAISHA")
     assert _passes(_pass(1), record, other)
+
+
+def test_a_pair_a_refused_flag_holds_back_goes_to_a_steward():
+    rule = with_args(_pass(1), "cascade_pass@1", refused_flags=[_cascade.CONFLICT])
+    assert _refused_by_flag(rule, *cascaded(flags=[_cascade.CONFLICT]))
+    assert not _refused_by_flag(rule, *cascaded(flags=[_cascade.CONFLICT], sec_street="9 ELSEWHERE RD"))
+    assert not _refused_by_flag(_pass(1), *cascaded(sec_street="9 ELSEWHERE RD"))

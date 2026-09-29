@@ -49,13 +49,7 @@ def active_rules(policy: dict) -> list[tuple[str, dict]]:
     ]
 
 
-def _value(record: dict, field: str):
-    item = (record.get("fields") or {}).get(field) or {}
-    return item.get("value") if item.get("op") == "value" else None
-
-
-def _matching(record: dict) -> dict:
-    return (record.get("provenance") or {}).get("matching") or {}
+_value, _matching = cascade.field_value, cascade.matching_values
 
 
 def _read(record: dict, path: str):
@@ -133,7 +127,11 @@ def _cascade_pass(sec: dict, gleif: dict, args: dict) -> bool:
     Stage rows still say so: the same LEI and last update, the same name key
     (the GLEIF legal name, unless the census matched one of its other names,
     which the Stage record does not hold), no flag the rule refuses, and the
-    pass's address parts agree on the addresses the quality rule left fit."""
+    pass's address parts agree on the addresses the quality rule left fit.
+
+    The over-shared cut is the census's to make: it needs every entity. It
+    leaves a place only its country, so such a pair binds only in a pass that
+    compares no more than the country, where the cut changes nothing here."""
     answer = (_matching(sec).get("name_census") or {}).get("cascade") or {}
     key = _normalizer(args["sec_normalizer"])(_value(sec, "name"))
     gleif_key = _normalizer(args["gleif_normalizer"])(_value(gleif, "name"))
@@ -148,7 +146,7 @@ def _cascade_pass(sec: dict, gleif: dict, args: dict) -> bool:
         and not set(answer.get("flags") or []) & set(args.get("refused_flags") or [])
         and cascade.agrees(
             cascade.filer_of(sec).place,
-            cascade.entity_of(gleif, frozenset(), eligible=True).place,
+            cascade.fit_place(gleif, _matching(gleif)),
             args["compare"],
         )
     )
@@ -214,6 +212,19 @@ def _passes(rule: dict, sec: dict, gleif: dict) -> bool:
         if not PAIR_TESTS[name](sec, gleif, test.get("args") or {}):
             return False
     return True
+
+
+def _refused_by_flag(rule: dict, sec: dict, gleif: dict) -> bool:
+    """A cascade pair that passes every test but carries a flag its rule
+    refuses: it goes to a Steward, not to a bind (operator, 2026-09-28: if a
+    stratum fails its proof, "those pairs go to a Steward for review")."""
+    lenient = []
+    for test in rule["when"]:
+        args = test.get("args") or {}
+        if test["primitive"] == cascade.TEST and args.get("refused_flags"):
+            test = {**test, "args": {**args, "refused_flags": []}}
+        lenient.append(test)
+    return lenient != rule["when"] and _passes({**rule, "when": lenient}, sec, gleif)
 
 
 def _latest(found: list[dict]) -> dict[str, dict]:
@@ -331,8 +342,19 @@ def propose(
             lei = (gleif.get("identifiers") or {}).get("lei")
             for sec in sec_by_lei.get(lei, []):
                 companies = bindings.get(sec["subject"]) or set()
-                if len(companies) == 1 and _passes(rule, sec, gleif):
+                if len(companies) != 1:
+                    continue
+                if _passes(rule, sec, gleif):
                     pairs.append((gleif, sec, next(iter(companies))))
+                elif _refused_by_flag(rule, sec, gleif):
+                    result["reviews"].append(
+                        {
+                            "reason": "cascade_flagged_pair",
+                            "namespace": "lei",
+                            "subject": gleif["subject"],
+                            "assertion_id": gleif["assertion_id"],
+                        }
+                    )
         if not pairs:
             continue
         merged = survivors(conn, {entity for _, _, entity in pairs})

@@ -101,6 +101,11 @@ def check_policy(body: dict) -> None:
                 f"Rule {rule.get('rule_id')} has an unknown family: {family}"
             )
         RULE_CHECKS[family](kind, rule, kinds)
+    # The cascade's passes together: distinct, one threshold, one
+    # eligibility (ticket 21); each pass alone is checked above.
+    from .cascade import spec
+
+    spec(body)
     active = set()
     for entry in body.get("automatic_rules") or []:
         if not isinstance(entry, dict):

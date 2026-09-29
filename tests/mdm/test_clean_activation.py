@@ -833,3 +833,14 @@ def test_a_cascade_pass_must_keep_the_one_lei_veto():
     rule["when"] = [t for t in rule["when"] if t["primitive"] != "holds_no_other_lei@1"]
     with pytest.raises(Conflict, match="one-LEI veto"):
         check_name_binding_rule("company", rule, POLICY["kinds"])
+
+
+def test_two_cascade_passes_with_one_name_are_refused():
+    from edgar_warehouse.mdm.clean.activation import check_policy
+
+    body = copy.deepcopy(POLICY)
+    rules = body["kinds"]["company"]["rules"]
+    second = next(r for r in rules if r["rule_id"] == "sec-gleif-cascade-p2")
+    second["when"][0]["args"]["pass"] = "P1"
+    with pytest.raises(Conflict, match="must be unique"):
+        check_policy(body)

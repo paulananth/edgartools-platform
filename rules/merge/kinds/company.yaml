@@ -299,7 +299,7 @@ rules:
   - primitive: cascade_pass@1
     args:
       pass: P1
-      compare: 
+      compare:
       - street
       - city
       - postcode
@@ -331,7 +331,7 @@ rules:
   - primitive: cascade_pass@1
     args:
       pass: P2
-      compare: 
+      compare:
       - street
       - postcode
       over_shared: 25
@@ -362,7 +362,7 @@ rules:
   - primitive: cascade_pass@1
     args:
       pass: P3
-      compare: 
+      compare:
       - street
       - city
       over_shared: 25
@@ -393,7 +393,7 @@ rules:
   - primitive: cascade_pass@1
     args:
       pass: P4
-      compare: 
+      compare:
       - postcode
       over_shared: 25
       refused_flags: []
@@ -423,7 +423,7 @@ rules:
   - primitive: cascade_pass@1
     args:
       pass: P5
-      compare: 
+      compare:
       - city
       over_shared: 25
       refused_flags: []

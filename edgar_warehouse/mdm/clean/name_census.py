@@ -73,6 +73,27 @@ def sec_keys(filers: Iterable[tuple[str, str | None, list[str]]]) -> dict[str, s
     return held
 
 
+def cascade_entity(row: dict, cascade: dict, wanted: set):
+    """One native Level 1 record as the cascade reads it (ticket 21): through
+    the GLEIF contract and its data quality rule, with its legal and other
+    names; None when it is not GENERAL or the quality rule makes it an
+    exception. The census and the proof (`21-cascade.py`) both read here."""
+    entity = row.get("Entity") or {}
+    lei = _text(row.get("LEI"))
+    if not lei or _text(entity.get("EntityCategory")) != "GENERAL":
+        return None
+    try:
+        fields, matching, quality = mapped_values(row, cascade["gleif_contract"])
+    except UnsupportedRecord:
+        return None
+    names = [_text(entity.get("LegalName")), *_other_names(entity)]
+    return cascaded.entity_of(
+        cascaded.record(lei, fields, matching, quality, {"lei": lei}),
+        frozenset(legal_form_key(n) for n in names) & wanted,
+        eligible=cascaded.eligible(fields, cascade["spec"]),
+    )
+
+
 def build(
     *,
     filers: list[tuple[str, str | None, list[str]]],
@@ -124,21 +145,10 @@ def build(
             other_key = legal_form_key(name)
             if other_key in wanted and other_key != key:
                 other[other_key].add(lei)
-        if passes and _text(entity.get("EntityCategory")) == "GENERAL":
-            try:
-                fields, matching, quality = mapped_values(row, cascade["gleif_contract"])
-            except UnsupportedRecord:
-                return  # a data quality exception never merges
-            names = [_text(entity.get("LegalName")), *_other_names(entity)]
-            keys = frozenset(legal_form_key(n) for n in names) & cascade_wanted
-            found = cascaded.entity_of(
-                cascaded.record(lei, fields, matching, quality, {"lei": lei}),
-                keys,
-                eligible=cascaded.eligible(fields, cascade["spec"]),
-            )
+        if passes and (found := cascade_entity(row, cascade, cascade_wanted)):
             if found.place.key:
                 counts[found.place.key] += 1
-            if keys:
+            if found.keys & cascade_wanted:
                 entities.append(found)
 
     report = inspect_archive(

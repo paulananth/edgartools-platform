@@ -56,7 +56,7 @@ def test_an_earlier_bind_leaves_the_rest_to_a_later_pass_one_to_one():
     elsewhere = _place(street="5 OAK AVE", city="RENO", postcode="89501")
     found = _run([_filer("1"), _filer("2", where=elsewhere)], [_entity("L1"), _entity("L2", where=elsewhere)])
     assert found["1"]["lei"] == "L1" and found["2"]["lei"] == "L2"
-    assert "name not unique over both sources" in found["1"]["flags"]
+    assert "name held by another candidate" in found["1"]["flags"]
 
 
 def test_an_over_shared_address_is_compared_only_by_country():

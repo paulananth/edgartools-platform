@@ -182,7 +182,7 @@ class TestTheCascade:
                           self.native("5493001KJTIIGC8Y1R12", "Apple Inc.", "1 Rue de Paris", country="FR")])
         answer = found["cascade"]["assignments"]["0000320193"]
         assert (answer["lei"], answer["pass"], answer["via"]) == ("HWUPKR0MPOU8FGXBT394", "P1", "legal name")
-        assert answer["flags"] == ["name not unique over both sources"]
+        assert answer["flags"] == ["name held by another candidate"]
         assert [p["pass"] for p in found["cascade"]["passes"]][:2] == ["P1", "P2"]
 
     def test_an_entity_the_rules_find_ineligible_never_binds(self):
@@ -203,4 +203,4 @@ def test_a_record_carries_its_ciks_cascade_answer_inside_its_census_entry():
     carried = _census_evidence(found, row, "d")
     assert carried["key"] == "APPLE INC"
     assert carried["cascade"] == {"census": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
-    assert _census_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")["cascade"] is None
+    assert "cascade" not in _census_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")
