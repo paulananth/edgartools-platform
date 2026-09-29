@@ -266,7 +266,7 @@ def _bindings(conn, subjects: set[str], decisions: list[dict]) -> dict[str, set]
     for d in decisions:
         if d["operation"] == "bind" and d["subject"] in subjects:
             entities[d["subject"]].add(d["entity_id"])
-    released = correction.released(decisions)  # unbound by this batch (ticket 13)
+    released = correction.released(conn, decisions)  # unbound by this batch (ticket 13)
     for subject, entity in bound(conn, subjects).items():
         if subject not in released:
             entities[subject].add(entity)
@@ -365,7 +365,7 @@ def propose(
             continue
         merged = survivors(conn, {entity for _, _, entity in pairs})
         pairs = [(g, s, merged.get(e, e)) for g, s, e in pairs]
-        held = _held_leis(conn, source, {e for _, _, e in pairs}, correction.released(decisions))
+        held = _held_leis(conn, source, {e for _, _, e in pairs}, correction.released(conn, decisions))
         suspended = in_review(conn, {e for _, _, e in pairs})
         targets: dict[str, set] = defaultdict(set)
         for gleif, _sec, entity in pairs:

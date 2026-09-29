@@ -226,7 +226,7 @@ def propose(
     subjects = sorted(latest)
     taken = {d["subject"] for d in decisions if d["operation"] == "bind"}
     # A record whose bind this batch revokes is unbound again (ticket 13).
-    taken.update(set(bound(conn, subjects)) - correction.released(decisions))
+    taken.update(set(bound(conn, subjects)) - correction.released(conn, decisions))
     refused = correction.refused(conn, set(subjects), decisions)
     # (subject, rule, namespace, normalized value) for every rule that applies.
     applicable = []
@@ -248,7 +248,7 @@ def propose(
             applicable.append(
                 (subject, rule, namespace, _normal(policy, namespace, raw), raw)
             )
-    found = holders(conn, policy, wanted, correction.released(decisions))
+    found = holders(conn, policy, wanted, correction.released(conn, decisions))
     # What the store says each value's holders are, before this batch's own
     # bindings join them: the only holdings the Merge Stage can re-check.
     stored = {key: set(held) for key, held in found.items()}

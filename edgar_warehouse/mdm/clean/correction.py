@@ -21,14 +21,33 @@ from .evidence import decision
 from .store import rows
 
 
-def released(decisions: list[dict]) -> set[str]:
-    """The records this batch unbinds: the subjects of its bind revocations."""
-    return {d["subject"] for d in decisions if d["operation"] == "revoke" and d.get("subject")}
+def released(conn, decisions: list[dict]) -> set[str]:
+    """The records this batch unbinds: the subjects of its revocations whose
+    target is a bind, in this batch or stored. A revoked override or
+    quarantine names a subject too, but unbinds nothing."""
+    targets = {d["target"] for d in decisions if d["operation"] == "revoke"}
+    if not targets:
+        return set()
+    binds = {d["decision_id"] for d in decisions if d["operation"] == "bind"}
+    binds.update(
+        r["decision_id"]
+        for r in rows(
+            conn,
+            """SELECT decision_id FROM mdm_v2.decision
+            WHERE operation = 'bind' AND decision_id = ANY(:targets)""",
+            targets=sorted(targets),
+        )
+    )
+    return {
+        d["subject"]
+        for d in decisions
+        if d["operation"] == "revoke" and d["target"] in binds and d.get("subject")
+    }
 
 
 def reconsidered(conn, decisions: list[dict]) -> list[dict]:
     """The released records' current Stage readings, for the rules to see."""
-    subjects = released(decisions)
+    subjects = released(conn, decisions)
     if not subjects:
         return []
     return [

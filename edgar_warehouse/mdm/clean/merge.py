@@ -420,7 +420,7 @@ class MergeStage:
             # Re-assess rather than mint twice, join the wrong Company, or
             # publish a new Company before one already stored.
             if not preview and binding.proposal_is_stale(
-                conn, policy, automatic, correction.released(decisions)
+                conn, policy, automatic, correction.released(conn, decisions)
             ):
                 raise assessment.StaleAssessment(
                     "A rule's proposal no longer holds; re-assess"
