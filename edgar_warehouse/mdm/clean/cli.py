@@ -426,6 +426,36 @@ def handle(command: str, args) -> int:
         )
         print(json.dumps(report, sort_keys=True))
         return 0
+    if command == "correction-batch":
+        from .correction import correction_batch
+
+        mdm = engine_from_env("MDM_DATABASE_URL")
+        try:
+            with mdm.connect() as conn:
+                policy = conn.scalar(
+                    text("SELECT body FROM mdm_v2.policy WHERE digest=:d"),
+                    {"d": args.policy_digest},
+                )
+                if policy is None:
+                    raise ValueError("The policy is not registered")
+                decisions = correction_batch(
+                    conn,
+                    policy,
+                    args.policy_digest,
+                    actor=args.actor,
+                    reason=args.reason,
+                    at=args.at,
+                    limit=args.limit,
+                    quarantine=tuple(args.quarantine or ()),
+                    lift=tuple(args.lift or ()),
+                )
+        finally:
+            mdm.dispose()
+        Path(args.output).write_text(
+            json.dumps({"decisions": decisions}, sort_keys=True, indent=1) + "\n"
+        )
+        print(json.dumps({"decisions": len(decisions), "output": args.output}))
+        return 0
     if command == "counts":
         mdm = engine_from_env("MDM_DATABASE_URL")
         try:

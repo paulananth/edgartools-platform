@@ -65,6 +65,22 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     census.add_argument("--output", required=True)
     census.set_defaults(model="clean", handler=_logged_handler("name-census", _handle_clean_decisions))
 
+    correct = mdm_sub.add_parser(
+        "correction-batch",
+        help="Write the decisions of one correction batch (ticket 13): revoke the links a rule version no "
+        "longer switched on made, quarantine records no rule can decide, lift a quarantine. Run them "
+        "as a stewardship batch through apply-decisions.",
+    )
+    correct.add_argument("--policy-digest", required=True, help="The registered policy the batch runs under")
+    correct.add_argument("--actor", required=True)
+    correct.add_argument("--reason", required=True)
+    correct.add_argument("--at", required=True, help="Decision time, with a timezone")
+    correct.add_argument("--limit", type=int, default=100, help="At most this many stale links revoked")
+    correct.add_argument("--quarantine", action="append", help="A record's subject; repeat for more")
+    correct.add_argument("--lift", action="append", help="A quarantined record's subject; repeat for more")
+    correct.add_argument("--output", required=True)
+    correct.set_defaults(model="clean", handler=_logged_handler("correction-batch", _handle_clean_decisions))
+
     counts = mdm_sub.add_parser("counts", help="Print MDM relational table row counts")
     counts.add_argument("--model", choices=("legacy", "clean"), default=os.environ.get("MDM_MODEL", "legacy"))
     counts.set_defaults(handler=_logged_handler("counts", _handle_counts))

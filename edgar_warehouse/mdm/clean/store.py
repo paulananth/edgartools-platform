@@ -57,6 +57,7 @@ CLEAN_MDM_MIGRATIONS = (
     "038_clean_mdm_stage_record.sql",
     "039_clean_mdm_stage_binding.sql",
     "040_clean_mdm_assessment_safety.sql",
+    "041_clean_mdm_binding_correction.sql",
 )
 
 COMPANY_NAMED_FIELDS = (
@@ -478,7 +479,8 @@ class Store:
                                 raise Conflict("Dated Company identifier column differs from evidence")
                         if (authoritative.get("fields") != fields
                             or authoritative.get("identifiers") != identifiers
-                            or authoritative.get("status") != row["status"]):
+                            or authoritative.get("status") != row["status"]
+                            or bool(authoritative.get("quarantined")) != row["quarantined"]):
                             raise Conflict("Dated Company body differs from named columns")
                 if authoritative != body:
                     raise Conflict("Company publication differs from dated Company authority")

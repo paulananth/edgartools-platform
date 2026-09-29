@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, binding, matching, relationships
+from . import assessment, binding, correction, matching, relationships
 from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
@@ -175,13 +175,27 @@ class MergeStage:
             )
             if policy is None:
                 return binding.nothing()
+            # A record this batch releases (a revoked bind, ticket 13) or
+            # lifts from quarantine is reconsidered by the rules from its
+            # current Stage reading; a quarantined record is left out of
+            # matching. Each is looked up once per batch.
+            decisions = command.get("decisions") or []
+            released = correction.released(conn, decisions)
+            incoming = (command.get("assertions") or []) + correction.readings(
+                conn, released | correction.lifted(conn, decisions)
+            )
+            quarantined = correction.quarantined(
+                conn, {a["subject"] for a in incoming}, decisions
+            )
+            candidates = [a for a in incoming if a["subject"] not in quarantined]
             proposed = binding.propose(
                 conn,
                 policy,
-                assertions=command.get("assertions") or [],
-                decisions=command.get("decisions") or [],
+                assertions=candidates,
+                decisions=decisions,
                 identities=command.get("identities") or [],
                 as_of=command["as_of"],
+                released=released,
             )
             # Identifier proposals first: a record they bind is not name-matched,
             # and an SEC record they bind in this batch holds its Company for
@@ -189,9 +203,10 @@ class MergeStage:
             named = matching.propose(
                 conn,
                 policy,
-                assertions=command.get("assertions") or [],
-                decisions=(command.get("decisions") or []) + proposed["decisions"],
+                assertions=candidates,
+                decisions=decisions + proposed["decisions"],
                 as_of=command["as_of"],
+                released=released,
             )
             for part in ("decisions", "reviews"):
                 proposed[part] += named[part]
@@ -414,7 +429,9 @@ class MergeStage:
             # or published a newer Company of its kind since it was assessed.
             # Re-assess rather than mint twice, join the wrong Company, or
             # publish a new Company before one already stored.
-            if not preview and binding.proposal_is_stale(conn, policy, automatic):
+            if not preview and binding.proposal_is_stale(
+                conn, policy, automatic, correction.released(conn, decisions)
+            ):
                 raise assessment.StaleAssessment(
                     "A rule's proposal no longer holds; re-assess"
                 )
@@ -479,12 +496,15 @@ class MergeStage:
                     for k in d.get("evidence", [])
                 ):
                     raise Conflict("Binding evidence does not describe its subject")
+            correction.check_lifts(all_d, decisions, policy_digest)
             state = replay(list(all_ids.values()), list(all_d.values()), as_of)
             if any(i["entity_id"] not in state.bindings.values() for i in identities):
                 raise Conflict("New identities require an accepted source binding")
             claims = current_claims(
                 list(evidence.values()), as_of, state.retired_sources
             )
+            # The Companies a quarantined record was linked to (ticket 13).
+            flagged = {state.canonical[e] for e in state.quarantined.values()}
             groups = defaultdict(list)
             for subject, entity in state.bindings.items():
                 groups[state.canonical[entity]].append(subject)
@@ -553,6 +573,9 @@ class MergeStage:
                     },
                     "subjects": members,
                 }
+                if entity_id in flagged:
+                    # Only when set: every other Company's body is unchanged.
+                    body["quarantined"] = True
                 if conflicts:
                     # A prior projection depends on delivery order. Quarantine
                     # the current component deterministically; accepted history

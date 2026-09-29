@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from . import cascade
+from . import cascade, correction
 from .activation import activated
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
@@ -261,27 +261,33 @@ def _stored(conn, source: str, lookup: str, values: list[str]) -> list[dict]:
     ]
 
 
-def _bindings(conn, subjects: set[str], decisions: list[dict]) -> dict[str, set]:
+def _bindings(
+    conn, subjects: set[str], decisions: list[dict], released: set[str] = frozenset()
+) -> dict[str, set]:
     entities: dict[str, set] = defaultdict(set)
     for d in decisions:
         if d["operation"] == "bind" and d["subject"] in subjects:
             entities[d["subject"]].add(d["entity_id"])
     for subject, entity in bound(conn, subjects).items():
-        entities[subject].add(entity)
+        if subject not in released:
+            entities[subject].add(entity)
     return entities
 
 
-def _held_leis(conn, source: str, entities: set[str]) -> dict:
-    """The LEIs each Company already holds through its bound GLEIF records."""
+def _held_leis(conn, source: str, entities: set[str], released: set[str] = frozenset()) -> dict:
+    """The LEIs each Company already holds through its bound GLEIF records,
+    not counting a record this batch releases (ticket 13)."""
     held: dict[str, set] = defaultdict(set)
     for r in rows(
         conn,
         """SELECT entity_id::text AS entity_id, reading->'identifiers'->>'lei' AS lei
         FROM mdm_v2.stage_record
         WHERE entity_id = ANY(CAST(:entities AS uuid[])) AND source_code = :source
-          AND reading->'identifiers'->>'lei' IS NOT NULL""",
+          AND reading->'identifiers'->>'lei' IS NOT NULL
+          AND NOT subject = ANY(:released)""",
         entities=sorted(entities),
         source=source,
+        released=sorted(released),
     ):
         held[r["entity_id"]].add(r["lei"])
     return held
@@ -294,6 +300,7 @@ def propose(
     assertions: list[dict],
     decisions: list[dict],
     as_of: str,
+    released: set[str],
 ) -> dict:
     """The bindings the active name-binding rules propose for this batch.
 
@@ -319,6 +326,10 @@ def propose(
         gleif_all = _latest(
             _stored(conn, source, "lei", sorted(lei_of_sec)) + gleif_here
         )
+        # A quarantined record is left out of matching (ticket 13), stored
+        # or delivered: a later batch's SEC record never pairs with it.
+        for subject in correction.quarantined(conn, set(gleif_all), decisions):
+            del gleif_all[subject]
         leis = [(a.get("identifiers") or {}).get("lei") for a in gleif_all.values()]
         sec_all = _latest(
             _stored(
@@ -334,7 +345,8 @@ def propose(
             if lei := lei_of(sec):
                 sec_by_lei[lei].append(sec)
         subjects = set(gleif_all) | set(sec_all)
-        bindings = _bindings(conn, subjects, decisions + result["decisions"])
+        bindings = _bindings(conn, subjects, decisions + result["decisions"], released)
+        refused = correction.refused(conn, set(gleif_all), decisions)
         pairs = []
         for gleif in gleif_all.values():
             if bindings.get(gleif["subject"]):
@@ -359,7 +371,7 @@ def propose(
             continue
         merged = survivors(conn, {entity for _, _, entity in pairs})
         pairs = [(g, s, merged.get(e, e)) for g, s, e in pairs]
-        held = _held_leis(conn, source, {e for _, _, e in pairs})
+        held = _held_leis(conn, source, {e for _, _, e in pairs}, released)
         suspended = in_review(conn, {e for _, _, e in pairs})
         targets: dict[str, set] = defaultdict(set)
         for gleif, _sec, entity in pairs:
@@ -397,6 +409,8 @@ def propose(
             vetoes = any(t["primitive"] == HELD_LEI_TEST for t in rule["when"])
             if vetoes and held[entity] - {lei}:
                 continue
+            if (gleif["subject"], rule["rule_id"], rule["version"]) in refused:
+                continue  # a correction revoked this record's link under this version
             result["decisions"].append(
                 decision(
                     "bind",

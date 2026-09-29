@@ -26,6 +26,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+from . import correction
 from .activation import NAMESPACES, activated, binding_namespaces
 from .evidence import decision, instant
 from .primitives import normalizer
@@ -82,7 +83,7 @@ def active_rules(policy: dict) -> list[tuple[str, dict]]:
     ]
 
 
-def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
+def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] = frozenset()) -> dict:
     """Which Companies hold each identifier value: one bounded query per namespace.
 
     A Company holds a value only through the **latest** version of a bound
@@ -95,7 +96,8 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
     fixed a duplicate does not leave its identifier looking ambiguous.
 
     Keyed by the contract's normalized value, so a stored and an incoming form
-    of one identifier cannot miss each other.
+    of one identifier cannot miss each other. A record whose bind the batch
+    revokes (`released`, ticket 13) holds nothing for it.
     """
     found: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
     for namespace, values in sorted(wanted.items()):
@@ -111,9 +113,11 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]]) -> dict:
             f"""SELECT {path} AS value, s.entity_id::text AS entity_id, i.kind
             FROM mdm_v2.stage_record s
             JOIN mdm_v2.identity i ON i.entity_id = s.entity_id
-            WHERE {path} = ANY(:values) AND s.source_code = ANY(:sources)""",
+            WHERE {path} = ANY(:values) AND s.source_code = ANY(:sources)
+              AND NOT s.subject = ANY(:released)""",
             values=sorted(values),
             sources=_issuers(policy, namespace),
+            released=sorted(released),
         )
         merged = survivors(conn, {r["entity_id"] for r in found_rows})
         for row in found_rows:
@@ -208,8 +212,10 @@ def propose(
     decisions: list[dict],
     identities: list[dict],
     as_of: str,
+    released: set[str],
 ) -> dict:
-    """The bindings and new Companies the active identifier rules propose."""
+    """The bindings and new Companies the active identifier rules propose.
+    `released`: the records this batch unbinds (ticket 13)."""
     rules = active_rules(policy)
     if not rules or not assertions:
         return nothing()
@@ -221,7 +227,9 @@ def propose(
         latest[a["subject"]] = a
     subjects = sorted(latest)
     taken = {d["subject"] for d in decisions if d["operation"] == "bind"}
-    taken.update(bound(conn, subjects))
+    # A record whose bind this batch revokes is unbound again (ticket 13).
+    taken.update(set(bound(conn, subjects)) - released)
+    refused = correction.refused(conn, set(subjects), decisions)
     # (subject, rule, namespace, normalized value) for every rule that applies.
     applicable = []
     wanted: dict[str, set[str]] = defaultdict(set)
@@ -242,7 +250,7 @@ def propose(
             applicable.append(
                 (subject, rule, namespace, _normal(policy, namespace, raw), raw)
             )
-    found = holders(conn, policy, wanted)
+    found = holders(conn, policy, wanted, released)
     # What the store says each value's holders are, before this batch's own
     # bindings join them: the only holdings the Merge Stage can re-check.
     stored = {key: set(held) for key, held in found.items()}
@@ -350,6 +358,8 @@ def propose(
                 )
                 found[key][minted[key]] = record["kind"]
             entity = minted[key]
+        if (subject, rule["rule_id"], rule["version"]) in refused:
+            continue  # a correction revoked this record's link under this version
         result["decisions"].append(
             decision(
                 "bind",
@@ -366,7 +376,7 @@ def propose(
     return result
 
 
-def proposal_is_stale(conn, policy: dict, automatic: dict) -> bool:
+def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = frozenset()) -> bool:
     """Whether a rule's proposal no longer holds, re-checked under the lock.
 
     Run at apply, under the Merge Stage lock, since a concurrent run may have
@@ -386,7 +396,7 @@ def proposal_is_stale(conn, policy: dict, automatic: dict) -> bool:
     wanted: dict[str, set[str]] = defaultdict(set)
     for m in [*mints, *joins]:
         wanted[m["namespace"]].add(m["raw"])
-    found = holders(conn, policy, wanted)
+    found = holders(conn, policy, wanted, released)
 
     def held(m):
         return found.get(
