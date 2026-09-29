@@ -115,3 +115,7 @@ A blocking review left open keeps a run from counting as complete
 - Standards: no violations; the `Extension` shape now fails closed.
 - GoF: leave it; fold the contract digest layers into `policy_layers` when a
   third one arrives.
+- SEC part (5, 6), three axes: correct over all 309 SEC place codes (every
+  US state, DC, territory and Canadian province keeps its region; X1, Z4 and
+  every country code give none). Follow-ups made: a blank code stays no
+  region; tests for a province and X1. GoF: leave it.

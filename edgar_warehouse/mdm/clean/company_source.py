@@ -165,7 +165,7 @@ def business_address(row: dict) -> dict:
         # A region only for a state or province: SEC writes a foreign country
         # in the same field ("P7", the Netherlands), which is the country
         # (ticket 18).
-        "region": row["state_or_country"] if place and "-" in place else None,
+        "region": (row["state_or_country"] or None) if place and "-" in place else None,
         "postal_code": row["zip_code"] or None,
         "country": place.split("-")[0] if place else None,
     }

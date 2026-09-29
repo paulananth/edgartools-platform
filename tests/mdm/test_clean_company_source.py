@@ -924,3 +924,8 @@ def test_a_foreign_business_address_has_a_country_and_no_region():
     assert foreign["region"] is None and foreign["country"] == "NL"
     domestic = business_address(address_row(320193))
     assert domestic["region"] == "CA" and domestic["country"] == "US"
+    ontario = business_address(address_row(1, state_or_country="A6", country=None))
+    assert ontario["region"] == "A6" and ontario["country"] == "CA"
+    # X1: the United States with no state.
+    unstated = business_address(address_row(2, state_or_country="X1", country=None))
+    assert unstated["region"] is None and unstated["country"] == "US"
