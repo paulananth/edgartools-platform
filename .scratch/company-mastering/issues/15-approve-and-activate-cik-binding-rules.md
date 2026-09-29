@@ -1,7 +1,7 @@
 # Approve and activate the CIK binding rules
 
 Type: task
-Status: in progress (Claude, branch `claude/company-mastering-15-activate-cik-rules`)
+Status: approved and switched on in the branch (Claude, `claude/company-mastering-15-activate-cik-rules`); merge on the operator's word
 Blocked by: 04, 05, 06
 Blocks: automatic SEC Company creation and SEC-to-GLEIF name-rule activation
 
@@ -58,8 +58,19 @@ The approval of ticket 08's declared name rules does not activate these.
   an xfail here. The concurrent run and the stale-proposal retry are proven
   on ticket 04's fixture rules (`test_clean_identifier_binding.py`), not on
   the production policy.
-- [ ] Record the operator-approved fingerprint, activation time, full proof, and
+- [x] Record the operator-approved fingerprint, activation time, full proof, and
   resulting active fingerprint before shared registration.
+  - **Approved:** `0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702`,
+    operator, **2026-09-29 07:27 ET** ("approved"), after the brief below.
+  - **Switched on:** the contract's `approved_by`, `approved_at`
+    (`2026-09-29T11:27:26Z`) and `reason` filled, and one `deterministic`
+    activation for `company-cik` in `merge/policy.yaml`. Nothing else changed.
+  - **Active fingerprint:** `15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6`.
+    Peeling the approval gives back `0d4d5cb0…0702`, then `8bdc2f68…555d`,
+    `3520e890…1e17` and `983352e8…4049` (`tests/mdm/policy_layers.py`).
+  - **Full proof:** ticket 05 (the Proving Run), this ticket's PG16 suite on
+    the approved policy, and ticket 04's fixture suite.
+  - Not yet registered anywhere shared; that follows the merge.
 
 ## Found (2026-09-29 06:57 ET, Claude)
 

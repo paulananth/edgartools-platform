@@ -46,6 +46,12 @@ WITH_CIK = {
 }
 
 
+# The operator approved 0d4d5cb0...0702 on 2026-09-29 07:27 ET (ticket 15): the
+# contract's stamps are filled and the rule is switched on.
+WITH_CIK_APPROVAL = {
+    "policy": "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6",
+    "name_matching_active": "86a7a9e3f9bd9e2bd428331442f031f2b4736f55ee3f890c329de0c05f21acde",
+}
 
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
@@ -77,7 +83,7 @@ GLEIF_BEFORE = {
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    layered = (WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(company_source.POLICY) == [pins["policy"] for pins in layered]
     assert digest(_without_quality(company_source.CONTRACT)) == BEFORE["contract"]
     assert digest(company_source.CONTRACT) == WITH_QUALITY["contract"]
@@ -85,7 +91,7 @@ def test_the_company_configuration_is_unchanged():
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
     assert digest(company_source.NAME_PROOFS) == BEFORE["name_proofs"]
-    assert digest(company_source.name_matching_policy(active=False)) == WITH_CIK["policy"]
+    assert digest(company_source.name_matching_policy(active=False)) == WITH_CIK_APPROVAL["policy"]
     active = company_source.name_matching_policy(active=True)
     assert policy_layers.digests(active) == [pins["name_matching_active"] for pins in layered]
 

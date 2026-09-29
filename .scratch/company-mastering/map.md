@@ -142,6 +142,11 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   deterministic rules per namespace** — applied to every automatic verdict it
   made a rule accepted at 99.9% suspend itself about nine times in ten.
 
+- [The CIK matching rule is switched on](issues/15-approve-and-activate-cik-binding-rules.md)
+  (operator, 2026-09-29 07:27 ET): approved `0d4d5cb0…0702`; the active policy
+  is `15e07b30…b6d6`. A Company in review gains no record by a rule; only an
+  identifier's issuer counts toward its conflict.
+
 ## Added tickets
 
 - [Ticket 09 handoff to Claude](issues/09-handover-to-claude.md) records PR #714,

@@ -16,6 +16,17 @@ def _copy(policy: dict) -> dict:
     return json.loads(canonical(policy))
 
 
+def without_cik_approval(policy: dict) -> dict:
+    """Company mastering ticket 15: the operator's approval of the CIK
+    matching rule, its contract's three stamps and its activation."""
+    body = _copy(policy)
+    body["kinds"]["company"]["identifiers"]["cik"]["verification"].update(
+        approved_by=None, approved_at=None, reason=None
+    )
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r["rule_id"] != "company-cik"]
+    return body
+
+
 def without_cik(policy: dict) -> dict:
     """Company mastering ticket 15: the CIK matching rule and its Identifier
     Contract."""
@@ -39,7 +50,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_cik, without_cascade, without_place_codes]
+LAYERS = [without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:

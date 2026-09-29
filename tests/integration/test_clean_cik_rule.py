@@ -2,10 +2,9 @@
 ticket 15).
 
 Ticket 04 proved the mechanics on fixture rules. These tests run the
-production Mastering Policy (`company_source.POLICY`) as the operator's
-approval would change it and nothing else: the Identifier Contract's three
-approval fields filled and one `deterministic` activation for `company-cik`.
-The stamps here are a fixture, not the approval.
+production Mastering Policy (`company_source.POLICY`), which carries the
+operator's approval (2026-09-29 07:27 ET): the Identifier Contract's three
+stamps and one `deterministic` activation for `company-cik`.
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ from edgar_warehouse.mdm.clean.activation import check_policy
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
+from tests.mdm import policy_layers
 
 postgres = core.postgres
 database = core.database
@@ -31,25 +31,9 @@ APPLE, MICROSOFT = "0000320193", "0000789019"
 
 
 def approved() -> dict:
-    """The production policy with only what an approval adds."""
-    body = copy.deepcopy(company_source.POLICY)
-    body["kinds"]["company"]["identifiers"]["cik"]["verification"].update(
-        approved_by="operator",
-        approved_at="2026-09-29T12:00:00Z",
-        reason="fixture approval: ticket 15 PG16 proof, not the operator's",
-    )
-    body["automatic_rules"].append(
-        {
-            "kind": "company",
-            "family": "binding",
-            "rule_id": "company-cik",
-            "rule_version": "2026-09-24",
-            "verdict": "bind",
-            "activation": "deterministic",
-        }
-    )
-    check_policy(body)
-    return body
+    """The production policy, which carries the operator's approval."""
+    check_policy(company_source.POLICY)
+    return company_source.POLICY
 
 
 def register(database, body) -> str:
@@ -97,8 +81,8 @@ def operations(database):
         return sorted(conn.execute(text("SELECT operation FROM mdm_v2.decision")).scalars())
 
 
-def test_the_committed_policy_matches_nothing_until_approved(database):
-    policy = register(database, company_source.POLICY)
+def test_without_the_approval_the_policy_matches_nothing(database):
+    policy = register(database, policy_layers.without_cik_approval(company_source.POLICY))
     load(database, policy, "b1", sec(APPLE))
     assert companies(database) == {}
     assert operations(database) == []
