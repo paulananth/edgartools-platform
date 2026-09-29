@@ -210,6 +210,26 @@ rules:
   - step: "11"
     verdict: deferred
     otherwise: true
+# The CIK matching rule (company mastering tickets 04 and 15): an SEC record the
+# classification rule accepts joins the one Company that holds its CIK, or
+# creates it when none does. Only SEC's own record creates a Company from a CIK.
+# It activates on its verified Identifier Contract (below), not on a measured
+# bar; the operator approved it on 2026-09-29 07:27 ET (ticket 15).
+- rule_id: company-cik
+  version: "2026-09-24"
+  family: binding
+  source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cik
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cik
 - rule_id: sec-gleif-name-jurisdiction
   version: 2026-09-25.1
   family: name_binding
@@ -631,6 +651,33 @@ lists:
   - D/A
   bdc_election:
   - N-54A
+# Identifier Contracts (ticket 04, Q14): what a Company's identifier claim
+# rests on. The CIK contract's verification corpus is ticket 05's Proving Run
+# manifest (research/05-manifest.json, 7,000 CIKs). The operator approved it on
+# 2026-09-29 07:27 ET (ticket 15). The tolerance line is the spec's sec.cik row.
+identifiers:
+  cik:
+    authority: SEC/EDGAR
+    sources:
+    - sec.submissions.company.v1
+    normalizer: normalize_identifier@sec-cik-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    verification:
+      corpus_sha256: 3607ae6c80216e90d8decbe827c8688ec3c608d232be868d58c8d231585360cc
+      approved_by: operator
+      approved_at: "2026-09-29T11:27:26Z"
+      reason: "ticket 15: approved policy digest 0d4d5cb0...0702; ticket 05 Proving Run, 6,414
+        of 6,414 Companies by their CIK, 0 controls, no CIK on two Companies, a second pass
+        changed nothing"
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
 bars:
   classification:
     min_precision: 0.95

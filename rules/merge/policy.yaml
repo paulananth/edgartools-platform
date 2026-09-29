@@ -53,3 +53,14 @@ automatic_rules:
     approved_at: "2026-09-25T17:09:33Z"
     reason: 'ticket 12 Proving Run, SEC Company classification, the Account hold-back: bronze-only
       hand review, each Company step clears 0.95, 0 adversarial violations'
+# Company mastering ticket 15, the CIK matching rule: activates on its verified
+# Identifier Contract (kinds/company.yaml, identifiers.cik), not a measured bar.
+# The operator approved the switched-off policy digest
+# 0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702 on
+# 2026-09-29 07:27 ET; the contract carries that approval.
+- kind: company
+  family: binding
+  rule_id: company-cik
+  rule_version: "2026-09-24"
+  verdict: bind
+  activation: deterministic

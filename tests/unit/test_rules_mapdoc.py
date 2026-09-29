@@ -117,9 +117,11 @@ def test_the_sheets_say_what_the_rules_say():
             "Kind default", "merge/kinds/company.yaml defaults.sources"] in sec["Who wins"]
     kind = found["company"]
     assert [row[1] for row in kind["Matching rules"][1:]] == [
-        "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", *(f"sec-gleif-cascade-p{n}" for n in range(1, 8))]
-    assert "the name alone" in kind["Matching rules"][9][5] and "the country, street" in kind["Matching rules"][3][5]
-    assert "The SEC company is not already linked to another LEI" in kind["Matching rules"][1][5]
+        "company-cik", "sec-gleif-name-jurisdiction", "sec-gleif-name-postal",
+        *(f"sec-gleif-cascade-p{n}" for n in range(1, 8))]
+    assert "Exactly one Company holds that CIK" in kind["Matching rules"][1][5]
+    assert "the name alone" in kind["Matching rules"][10][5] and "the country, street" in kind["Matching rules"][4][5]
+    assert "The SEC company is not already linked to another LEI" in kind["Matching rules"][2][5]
     assert ["jurisdiction", "gleif.level1.v1", "gleif.level1.v1", "Kind default",
             "merge/kinds/company.yaml defaults.sources"] in kind["Who wins each field"]
     assert len(kind["Classification"]) == 15  # the 14 steps of sec-company-candidate

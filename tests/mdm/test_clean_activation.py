@@ -30,7 +30,8 @@ from edgar_warehouse.mdm.clean.activation import (
 from edgar_warehouse.mdm.clean.classification import fired
 from edgar_warehouse.mdm.clean.company_source import APPROVED_ACTIVATION, POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
-from edgar_warehouse.mdm.clean.store import Conflict, canonical, digest
+from edgar_warehouse.mdm.clean.store import Conflict, digest
+from tests.mdm import policy_layers
 
 RULE = {
     "rule_id": "sec-company",
@@ -59,16 +60,17 @@ BAR = {
 }
 
 
-def _without_cascade(policy: dict) -> dict:
-    """The policy without the cascade's passes, which company mastering
-    ticket 21 declared switched off: what the operator approved."""
-    body = json.loads(canonical(policy))
-    body["kinds"]["company"]["rules"] = [
-        r for r in body["kinds"]["company"]["rules"]
-        if not r["rule_id"].startswith("sec-gleif-cascade-")
-    ]
-    return body
 
+
+# The operator switched on the CIK matching rule on 2026-09-29 (ticket 15).
+CIK_ACTIVATION = {
+    "kind": "company",
+    "family": "binding",
+    "rule_id": "company-cik",
+    "rule_version": "2026-09-24",
+    "verdict": "bind",
+    "activation": "deterministic",
+}
 
 def proof(n=3000, correct=3000, confidence=0.95, **changes):
     if "lower_bound" not in changes and 0 <= correct <= n:
@@ -525,13 +527,13 @@ class TestTheCompanyPolicy:
         assert PROOF["adversarial"]["violations"] == 0
         assert PROOF["approved_at"] == "2026-09-25T17:09:33Z"
         assert PROOF["approved_by"] == "operator"
-        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
+        # Ticket 15 switched on the CIK matching rule beside it.
+        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert APPROVED_ACTIVATION["proof"] is PROOF
-        pending = _without_cascade(POLICY)
-        pending["automatic_rules"] = []
         # The pending policy the operator approved, before rules skill ticket
         # 08 added the SEC place-code table to the body.
-        pending.pop("reference")
+        pending = policy_layers.peel(POLICY)
+        pending["automatic_rules"] = []
         assert digest(pending) == (
             "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
         )
@@ -541,19 +543,16 @@ class TestTheCompanyPolicy:
         # `983352e8...` (2026-09-25 15:21 ET); ticket 12's approval was
         # `35250dad...`. Rules skill ticket 08 added the SEC place-code table
         # to the body and changed nothing else.
-        # Company mastering ticket 21 declared the cascade's passes, switched
-        # off; without them the policy is unchanged.
-        assert digest(POLICY) == (
-            "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d"
-        )
-        declared = _without_cascade(POLICY)
-        assert digest(declared) == (
-            "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17"
-        )
-        without_table = {k: v for k, v in declared.items() if k != "reference"}
-        assert digest(without_table) == (
-            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
-        )
+        # Company mastering ticket 21 declared the cascade's passes, and
+        # ticket 15 the CIK matching rule, all switched off; without them the
+        # policy is unchanged.
+        assert policy_layers.digests(POLICY) == [
+            "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6",
+            "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702",
+            "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d",
+            "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
+            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
+        ]
 
     def test_the_proof_files_match_the_pinned_hashes(self):
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
@@ -760,10 +759,11 @@ class TestTheNameMatchingRules:
         assert declared == [NAME_STATE, NAME_POSTCODE]
         assert POLICY["kinds"]["company"]["bars"]["name_binding"] == COMPANY_BAR
 
-    def test_no_matching_rule_is_active(self):
+    def test_no_name_matching_rule_is_active(self):
         from edgar_warehouse.mdm.clean.company_source import name_matching_policy
 
-        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
+        # The classification rule, and the CIK matching rule (ticket 15).
+        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert digest(name_matching_policy(active=False)) == digest(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):
@@ -772,7 +772,9 @@ class TestTheNameMatchingRules:
         with pytest.raises(Conflict, match="lacks its approval"):
             check_policy(name_matching_policy(active=True))
         approved = name_matching_policy(active=True)
-        for entry in approved["automatic_rules"][1:]:
+        for entry in approved["automatic_rules"]:
+            if entry["family"] != "name_binding":
+                continue
             entry["proof"] = {
                 **entry["proof"],
                 "approved_by": "operator",
