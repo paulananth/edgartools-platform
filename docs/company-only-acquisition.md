@@ -56,8 +56,8 @@ local qualification only; it performs no AWS deployment or merge.
 
 `tests/integration/test_company_only_postgres.py` uses restricted PostgreSQL
 16 roles and two Company fixtures. It verifies a conditional 304, two page
-captures (including an empty page), exact landed filing keys, two MDM entity
-projections, all Journal receipts, zero pending deliveries and publication
+captures (including an empty page), exact landed filing keys, two current MDM
+Company rows, all Journal receipts, zero pending deliveries and publication
 backlog, and refusal to resume after destination Parquet corruption.
 `test_generated_bookkeeping_postgres.py` verifies atomic child insertion,
 idempotent replay, changed-child rejection, stale lease rejection and unsealed

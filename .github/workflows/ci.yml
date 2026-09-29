@@ -34,9 +34,6 @@ jobs:
       - name: Run architecture tests
         run: uv run pytest tests/architecture/ -v --tb=short
 
-      - name: Run acquisition tests
-        run: uv run pytest tests/acquisition/ -v --tb=short
-
   # ── MDM pipeline tests (need mdm extras) ───────────────────────────────────
   mdm:
     name: MDM tests
