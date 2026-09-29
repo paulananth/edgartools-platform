@@ -1,7 +1,7 @@
 # Correct an incorrect Company link
 
 Type: task
-Status: built (Claude, branch `claude/company-mastering-13-correct-a-link`); review, PR, merge on the operator's word
+Status: built, reviewed, both readings confirmed (PR #748); merge on the operator's word
 Blocked by: 09, 10
 Blocks: activation of the SEC-to-GLEIF name matching rules
 
@@ -70,13 +70,14 @@ dropping evidence or allowing automatic matching.
      owns a Company here (operator, 2026-09-24: an unlinked GLEIF record
      waits), so the flag goes on the Company it was linked to: readers see
      that Company has a link no rule could decide. The SEC record keeps its
-     own Company.
+     own Company. **Operator, 2026-09-29 10:06 ET: yes.**
    - **What lifts it.** "Only an operator-approved rule change": a lifting
      revocation must name a policy other than the one the quarantine was
      made under (`correction.check_lifts`); the same policy is refused. The
      quarantine and the lift each name the policy of the batch that carries
      them, which the Merge Stage runs only once registered.
    - The Stage row stays, unbound; the journal decision is its mark.
+     **Operator, 2026-09-29 10:07 ET: yes.**
 
 ## The operator's command
 
