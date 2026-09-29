@@ -845,7 +845,7 @@ def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases
     with databases.mdm.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
         assert conn.scalar(text("SELECT mapping_version FROM mdm_v2.assertion WHERE source_code=:c"), {"c": code}) == 1
-        assert conn.scalar(text("SELECT body->'fields'->'name'->>'value' FROM mdm_v2.projection WHERE object_type='entity'")) == record["name"]
+        assert conn.scalar(text("SELECT body->'fields'->'name'->>'value' FROM mdm_v2.current_entity")) == record["name"]
     for consumer in ("export", "graph"):
         assert Store(databases.mdm).deliver_one(consumer, "offline", LocalContractSink(tmp_path / consumer))
     assert book.finalize(rid)["run"]["state"] == "complete"
