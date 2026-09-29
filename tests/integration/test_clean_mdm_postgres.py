@@ -58,6 +58,7 @@ def postgres():
         "POSTGRES_PASSWORD=test",
         IMAGE,
     )
+    port = None
     try:
         port = docker("port", name, "5432/tcp").rsplit(":", 1)[1]
         admin = create_engine(
@@ -87,11 +88,53 @@ def postgres():
         admin.dispose()
     finally:
         docker("stop", name)
+        # The next module's container may be given the same port.
+        if port:
+            _templates.pop(int(port), None)
+
+
+# Each module's first test migrates a template database once (checking a
+# second migration installs nothing); every test then gets its own copy of
+# it, which Postgres makes in well under a second. Migrating per test cost
+# about 3.4 seconds each (company mastering ticket 23).
+TEMPLATE = "clean_template"
+_templates: dict[int, tuple[str, str]] = {}
+
+
+def _template(admin, app) -> tuple[str, str]:
+    port = admin.url.port
+    if port not in _templates:
+        with admin.execution_options(isolation_level="AUTOCOMMIT").connect() as conn:
+            conn.execute(text(f"CREATE DATABASE {TEMPLATE}"))
+        admin_t = create_engine(admin.url.set(database=TEMPLATE))
+        app_t = create_engine(app.url.set(database=TEMPLATE))
+        try:
+            built = initialize_database(admin_t, app_t)
+        finally:
+            # A template is copied only while nobody is connected to it.
+            admin_t.dispose()
+            app_t.dispose()
+        _templates[port] = (built.policy, built.registry)
+    return _templates[port]
 
 
 @pytest.fixture
 def database(postgres):
-    return initialize_database(*postgres)
+    admin, app = postgres
+    policy, registry = _template(admin, app)
+    name = f"clean_{uuid4().hex[:12]}"
+    server = admin.execution_options(isolation_level="AUTOCOMMIT")
+    with server.connect() as conn:
+        conn.execute(text(f"CREATE DATABASE {name} TEMPLATE {TEMPLATE}"))
+    admin_db = create_engine(admin.url.set(database=name))
+    app_db = create_engine(app.url.set(database=name))
+    try:
+        yield Database(admin_db, app_db, policy, registry)
+    finally:
+        admin_db.dispose()
+        app_db.dispose()
+        with server.connect() as conn:
+            conn.execute(text(f"DROP DATABASE {name} WITH (FORCE)"))
 
 
 def initialize_database(admin, app):
