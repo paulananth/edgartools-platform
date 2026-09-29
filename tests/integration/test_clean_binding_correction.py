@@ -18,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean import correction
+from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Conflict, Store
 from tests.integration import test_clean_mdm_postgres as core
@@ -69,7 +70,7 @@ def stage_entity(database, subject):
 def versions(database, entity):
     with database.application.connect() as conn:
         return [dict(r) for r in conn.execute(text(
-            "SELECT lei, jurisdiction, valid_to IS NULL AS current FROM mdm_v2.company "
+            "SELECT lei, jurisdiction, quarantined, valid_to IS NULL AS current FROM mdm_v2.company "
             "WHERE entity_id=CAST(:e AS uuid) ORDER BY from_generation"), {"e": entity}).mappings()]
 
 
@@ -160,3 +161,137 @@ def test_a_bind_revoked_twice_is_refused(database):
             batch_id="twice", run_id=str(uuid4()), policy_digest=fixed, consumer="load",
             expected_checkpoint=3, checkpoint=4, as_of="2026-09-20T00:00:00+00:00", decisions=[second],
         )
+
+
+# Quarantine (operator, 2026-09-24): a record the rules cannot decide is left
+# out of matching; the Company it was linked to is flagged for readers; only
+# an operator-approved rule change lifts it.
+def hold(revocation, policy, at=AT):
+    return decision("quarantine", actor="operator", reason="no approved rule can decide this link",
+                    at=at, subject=revocation["subject"], entity_id=revocation["entity_id"],
+                    evidence=revocation["evidence"], policy=policy)
+
+
+def lift(quarantine, policy, at):
+    return decision("revoke", actor="operator", reason="the rules were corrected", at=at,
+                    target=quarantine["decision_id"], subject=quarantine["subject"], policy=policy)
+
+
+def apply(database, policy, batch, checkpoint, decisions, at):
+    return MergeStage(Store(database.application)).apply(
+        batch_id=batch, run_id=str(uuid4()), policy_digest=policy, consumer="load",
+        expected_checkpoint=checkpoint - 1, checkpoint=checkpoint, as_of=at, decisions=decisions,
+    )
+
+
+def from_gleif(company) -> set[str]:
+    """The fields whose winner or a conflict is GLEIF's assertion."""
+    evidence = gleif()["assertion_id"]
+    return {
+        name
+        for name, field in company["fields"].items()
+        if evidence in {e["assertion_id"] for e in [field.get("winner") or {}, *field.get("conflicts", [])] if e}
+    }
+
+
+def renewed(database):
+    """An approved new version of both name rules: they would bind again."""
+    return name_policy(database, names=[{**r, "version": "2026-09-30.1"} for r in (STATE_RULE, POSTCODE_RULE)])
+
+
+def test_a_quarantined_record_waits_even_under_an_active_rule(database):
+    _wrong, entity = linked(database)
+    (before,) = companies(database)
+    assert "jurisdiction" in from_gleif(before)
+    fixed = renewed(database)
+    # The revocation and the quarantine in one batch: nothing rebinds.
+    with database.application.connect() as conn:
+        (stale,) = correction.stale_bindings(conn, policy_body(database, fixed), limit=10)
+        revocation = correction.revocation(conn, stale, policy_digest=fixed, actor="operator",
+                                           reason="the rule cannot tell parent from subsidiary", at=AT)
+    apply(database, fixed, "correct", 3, [revocation, hold(revocation, fixed)], AT)
+    assert stage_entity(database, gleif()["subject"]) is None
+    (company,) = companies(database)
+    assert company["identifiers"] == {"cik": [APPLE_CIK]} and company["quarantined"] is True
+    # GLEIF's values leave the Company, with their provenance.
+    assert from_gleif(company) == set() and "jurisdiction" not in company["fields"]
+    assert [v["quarantined"] for v in versions(database, entity)] == [False, False, True]
+    # The record arrives again under the active rule: it still waits.
+    load(database, fixed, "gleif-again", gleif(), checkpoint=4)
+    assert stage_entity(database, gleif()["subject"]) is None
+
+
+def test_a_quarantine_in_its_own_batch_opens_a_dated_row_and_publishes(database):
+    _wrong, entity = linked(database)
+    fixed = name_policy(database, active=False)
+    (revocation,) = correct(database, fixed, "correct", 3)
+    apply(database, fixed, "hold", 4, [hold(revocation, fixed, at="2026-09-20T00:00:00+00:00")],
+          "2026-09-20T00:00:00+00:00")
+    assert [v["quarantined"] for v in versions(database, entity)] == [False, False, False, True]
+    # Publication survives a lost acknowledgement and carries the flag.
+    store = Store(database.application)
+    export = core.Destination()
+    with pytest.raises(OSError):
+        while store.deliver_one("export", "worker", export):
+            pass
+    while store.deliver_one("export", "worker", export):
+        pass
+    delivered = [o for payload, _ in export.objects.values() for o in payload["objects"]
+                 if o["object_type"] == "entity" and o["object_id"] == entity]
+    assert delivered[-1]["body"]["quarantined"] is True
+
+
+def test_only_a_rule_change_lifts_a_quarantine(database):
+    _wrong, entity = linked(database)
+    fixed = name_policy(database, active=False)
+    (revocation,) = correct(database, fixed, "correct", 3)
+    held = hold(revocation, fixed)
+    apply(database, fixed, "hold", 4, [held], "2026-09-20T00:00:00+00:00")
+    later = "2026-09-21T00:00:00+00:00"
+    with pytest.raises(Conflict, match="Only an approved rule change"):
+        apply(database, fixed, "lift", 5, [lift(held, fixed, later)], later)
+    # A new approved version of the rules lifts it, and in the same batch the
+    # rules reconsider the record: it binds again.
+    corrected = renewed(database)
+    apply(database, corrected, "lift", 5, [lift(held, corrected, later)], later)
+    (company,) = companies(database)
+    assert "quarantined" not in company
+    assert company["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
+    assert stage_entity(database, gleif()["subject"]) == entity
+    assert [v["quarantined"] for v in versions(database, entity)][-2:] == [True, False]
+
+
+def test_a_record_still_bound_cannot_be_quarantined(database):
+    _wrong, entity = linked(database)
+    fixed = name_policy(database, active=False)
+    with database.application.connect() as conn:
+        (stale,) = correction.stale_bindings(conn, policy_body(database, fixed), limit=10)
+    held = decision("quarantine", actor="operator", reason="held", at=AT,
+                    subject=stale["subject"], entity_id=entity, evidence=stale["evidence"], policy=fixed)
+    with pytest.raises(Conflict, match="Revoke the record's bind"):
+        apply(database, fixed, "hold", 3, [held], AT)
+
+
+def test_migration_041_applies_to_a_populated_store(postgres):
+    """CLAUDE.md: over real rows, in production's order. A store at 040 holds
+    a Company with a wrong link; after 041 its journal is intact, the link is
+    revoked and the record quarantined."""
+    from unittest import mock
+
+    import edgar_warehouse.mdm.clean.store as store_module
+
+    admin, app = postgres
+    through_040 = tuple(n for n in store_module.CLEAN_MDM_MIGRATIONS if n < "041")
+    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_040):
+        database = core.initialize_database(admin, app)
+        _wrong, entity = linked(database)
+    with database.application.connect() as conn:
+        journal = conn.scalar(text("SELECT count(*) FROM mdm_v2.decision"))
+    core.migrate(admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.decision")) == journal
+    fixed = name_policy(database, active=False)
+    (revocation,) = correct(database, fixed, "correct", 3)
+    apply(database, fixed, "hold", 4, [hold(revocation, fixed, at="2026-09-20T00:00:00+00:00")],
+          "2026-09-20T00:00:00+00:00")
+    assert [v["quarantined"] for v in versions(database, entity)][-1] is True

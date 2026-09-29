@@ -18,36 +18,73 @@ from __future__ import annotations
 
 from .activation import activated
 from .evidence import decision
-from .store import rows
+from .store import Conflict, rows
 
 
-def released(conn, decisions: list[dict]) -> set[str]:
-    """The records this batch unbinds: the subjects of its revocations whose
-    target is a bind, in this batch or stored. A revoked override or
-    quarantine names a subject too, but unbinds nothing."""
+def _revoking(conn, decisions: list[dict], operation: str) -> set[str]:
+    """The subjects of this batch's revocations whose target, in this batch
+    or stored, is a decision of `operation`."""
     targets = {d["target"] for d in decisions if d["operation"] == "revoke"}
     if not targets:
         return set()
-    binds = {d["decision_id"] for d in decisions if d["operation"] == "bind"}
-    binds.update(
+    found = {d["decision_id"] for d in decisions if d["operation"] == operation}
+    found.update(
         r["decision_id"]
         for r in rows(
             conn,
             """SELECT decision_id FROM mdm_v2.decision
-            WHERE operation = 'bind' AND decision_id = ANY(:targets)""",
+            WHERE operation = :operation AND decision_id = ANY(:targets)""",
+            operation=operation,
             targets=sorted(targets),
         )
     )
     return {
         d["subject"]
         for d in decisions
-        if d["operation"] == "revoke" and d["target"] in binds and d.get("subject")
+        if d["operation"] == "revoke" and d["target"] in found and d.get("subject")
     }
 
 
+def released(conn, decisions: list[dict]) -> set[str]:
+    """The records this batch unbinds: the subjects of its revocations whose
+    target is a bind. A revoked override or quarantine names a subject too,
+    but unbinds nothing."""
+    return _revoking(conn, decisions, "bind")
+
+
+def quarantined(conn, decisions: list[dict]) -> set[str]:
+    """The records left out of matching after this batch: every quarantine,
+    stored or in this batch, that no revocation lifts."""
+    lifted = {d["target"] for d in decisions if d["operation"] == "revoke"}
+    held = {d["decision_id"]: d["subject"] for d in decisions if d["operation"] == "quarantine"}
+    held.update(
+        (r["decision_id"], r["subject"])
+        for r in rows(
+            conn,
+            """SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm_v2.decision q
+            WHERE q.operation = 'quarantine'
+              AND NOT EXISTS (SELECT 1 FROM mdm_v2.decision v
+                              WHERE v.operation = 'revoke' AND v.body->>'target' = q.decision_id)""",
+        )
+    )
+    return {subject for key, subject in held.items() if key not in lifted}
+
+
+def check_lifts(journal: dict[str, dict], decisions: list[dict]) -> None:
+    """Only an operator-approved rule change lifts a quarantine (operator,
+    2026-09-24): the lifting revocation names a policy other than the one
+    the quarantine was made under."""
+    for d in decisions:
+        target = journal.get(d.get("target")) if d["operation"] == "revoke" else None
+        if target and target["operation"] == "quarantine":
+            if not d.get("policy") or d["policy"] == target.get("policy"):
+                raise Conflict("Only an approved rule change lifts a quarantine")
+
+
 def reconsidered(conn, decisions: list[dict]) -> list[dict]:
-    """The released records' current Stage readings, for the rules to see."""
-    subjects = released(conn, decisions)
+    """The released and lifted records' current Stage readings, for the rules
+    to see."""
+    subjects = released(conn, decisions) | _revoking(conn, decisions, "quarantine")
     if not subjects:
         return []
     return [

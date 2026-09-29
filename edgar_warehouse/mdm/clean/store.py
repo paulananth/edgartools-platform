@@ -479,7 +479,8 @@ class Store:
                                 raise Conflict("Dated Company identifier column differs from evidence")
                         if (authoritative.get("fields") != fields
                             or authoritative.get("identifiers") != identifiers
-                            or authoritative.get("status") != row["status"]):
+                            or authoritative.get("status") != row["status"]
+                            or bool(authoritative.get("quarantined")) != row["quarantined"]):
                             raise Conflict("Dated Company body differs from named columns")
                 if authoritative != body:
                     raise Conflict("Company publication differs from dated Company authority")

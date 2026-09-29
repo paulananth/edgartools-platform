@@ -72,3 +72,37 @@ def test_a_bind_is_revoked_once_only():
     again = revoke(wrong, at="2026-05-01T00:00:00+00:00")
     with pytest.raises(Conflict, match="already revoked"):
         replay(IDENTITIES, [wrong, revoke(wrong), again], AS_OF)
+
+
+def quarantine(target, at="2026-03-15T00:00:00+00:00"):
+    return decision("quarantine", actor="operator", reason="no rule can decide this link", at=at,
+                    subject=target["subject"], entity_id=target["entity_id"], evidence=["a1"])
+
+
+def test_a_quarantined_record_is_unbound_and_its_company_named():
+    wrong = bind(GLEIF, AAON)
+    state = replay(IDENTITIES, [bind(SEC, AAON), wrong, revoke(wrong), quarantine(wrong)], AS_OF)
+    assert state.bindings == {SEC: AAON}
+    assert state.quarantined == {GLEIF: AAON}
+
+
+def test_a_record_still_bound_cannot_be_quarantined():
+    wrong = bind(GLEIF, AAON)
+    with pytest.raises(Conflict, match="Revoke the record's bind"):
+        replay(IDENTITIES, [wrong, quarantine(wrong)], AS_OF)
+    # Nor while bound, though the revocation comes later.
+    with pytest.raises(Conflict, match="Revoke the record's bind"):
+        replay(IDENTITIES, [wrong, quarantine(wrong, at="2026-02-15T00:00:00+00:00"), revoke(wrong)], AS_OF)
+
+
+def test_a_quarantined_record_never_binds_until_lifted():
+    wrong = bind(GLEIF, AAON)
+    held = quarantine(wrong)
+    during = bind(GLEIF, OTHER, at="2026-04-01T00:00:00+00:00")
+    with pytest.raises(Conflict, match="left out of matching"):
+        replay(IDENTITIES, [wrong, revoke(wrong), held, during], AS_OF)
+    lift = decision("revoke", actor="operator", reason="rule corrected", at="2026-05-01T00:00:00+00:00",
+                    target=held["decision_id"], subject=GLEIF)
+    after = bind(GLEIF, OTHER, at="2026-06-01T00:00:00+00:00")
+    state = replay(IDENTITIES, [wrong, revoke(wrong), held, lift, after], AS_OF)
+    assert state.quarantined == {} and state.bindings == {GLEIF: OTHER}

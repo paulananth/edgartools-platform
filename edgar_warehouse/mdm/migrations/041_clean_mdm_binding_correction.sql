@@ -12,6 +12,23 @@
 -- refused: the correction was made on a stale view. The same revocation
 -- delivered again is a duplicate batch and changes nothing.
 
+-- Quarantine (operator, 2026-09-24): a record the rules cannot decide is
+-- left out of matching and the Company it was linked to is flagged. It is a
+-- journal decision of its own; the Stage row stays, unbound. 023 wrote the
+-- operation CHECK inline, so its generated name is looked up, not guessed.
+DO $$
+DECLARE found text;
+BEGIN
+    SELECT conname INTO found FROM pg_constraint
+      WHERE conrelid = 'mdm_v2.decision'::regclass AND contype = 'c'
+        AND pg_get_constraintdef(oid) LIKE '%operation%';
+    IF found IS NULL THEN RAISE EXCEPTION 'No operation check on mdm_v2.decision'; END IF;
+    EXECUTE format('ALTER TABLE mdm_v2.decision DROP CONSTRAINT %I', found);
+END;
+$$;
+ALTER TABLE mdm_v2.decision ADD CONSTRAINT decision_operation_check CHECK (operation IN (
+    'bind','merge','reverse','override','revoke','exclude','retire_source','quarantine'));
+
 CREATE FUNCTION mdm_v2.release_binding(d jsonb)
 RETURNS void LANGUAGE plpgsql SET search_path=pg_catalog,mdm_v2 AS $$
 DECLARE

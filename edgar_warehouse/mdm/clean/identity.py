@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .evidence import instant
 from .store import Conflict
@@ -15,6 +15,9 @@ class IdentityState:
     exclusions: list[tuple[str, str]]
     overrides: list[dict]
     retired_sources: set[str]
+    # A record the rules could not decide (ticket 13): subject -> the Company
+    # it was linked to, which readers see flagged. Left out of matching.
+    quarantined: dict[str, str] = field(default_factory=dict)
 
 
 def replay(identities: list[dict], decisions: list[dict], as_of: str) -> IdentityState:
@@ -33,6 +36,7 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
     )
     by_id = {d["decision_id"]: d for d in ordered}
     revoked = set()
+    revoked_at: dict[str, object] = {}
     # A revoked bind (ticket 13): its subject, and when it was bound and
     # unbound. Between the two the subject is still bound there.
     unbound: dict[str, list[tuple]] = {}
@@ -44,7 +48,7 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
             expected = (
                 {"merge"}
                 if d["operation"] == "reverse"
-                else {"override", "exclude", "reverse", "bind"}
+                else {"override", "exclude", "reverse", "bind", "quarantine"}
             )
             if target["operation"] not in expected:
                 raise Conflict("Invalid reversal/revocation target")
@@ -59,6 +63,15 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
                     (instant(target["at"]), instant(d["at"]), str(target["entity_id"]))
                 )
             revoked.add(d["target"])
+            revoked_at[d["target"]] = instant(d["at"])
+    # A quarantine holds from its time until its lifting revocation, if any.
+    held: dict[str, list[tuple]] = {}
+    for d in ordered:
+        if d["operation"] == "quarantine":
+            held.setdefault(d["subject"], []).append(
+                (instant(d["at"]), revoked_at.get(d["decision_id"]))
+            )
+    quarantined = {}
 
     def root(key):
         if key not in parent:
@@ -96,6 +109,11 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
                 raise Conflict(
                     "Moving an established source binding requires a correction contract"
                 )
+            if any(
+                start <= instant(d["at"]) and (end is None or instant(d["at"]) < end)
+                for start, end in held.get(subject, [])
+            ):
+                raise Conflict("A quarantined record is left out of matching")
             if not d.get("evidence"):
                 raise Conflict("Binding requires source assertion evidence")
             bindings[subject] = entity
@@ -139,6 +157,18 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
             if d.get("expires_at") and instant(d["expires_at"]) <= clock:
                 continue
             overrides.append(d)
+        elif op == "quarantine":
+            subject = d.get("subject")
+            if not subject or not d.get("entity_id"):
+                raise Conflict("A quarantine names its record and the Company it was linked to")
+            root(str(d["entity_id"]))
+            at = instant(d["at"])
+            if subject in bindings or any(
+                bound_at <= at < unbound_at for bound_at, unbound_at, _ in unbound.get(subject, [])
+            ):
+                raise Conflict("Revoke the record's bind before quarantining it")
+            if key not in revoked:
+                quarantined[subject] = str(d["entity_id"])
         elif op == "retire_source":
             if not d.get("evidence"):
                 raise Conflict("Retirement requires evidence")
@@ -149,4 +179,4 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
     for left, right in exclusions:
         if root(left) == root(right):
             raise Conflict("Match Exclusion blocks consolidation")
-    return IdentityState(canonical, bindings, exclusions, overrides, retired)
+    return IdentityState(canonical, bindings, exclusions, overrides, retired, quarantined)
