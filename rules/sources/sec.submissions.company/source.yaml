@@ -90,7 +90,7 @@ mdm:
       nonblocking_deferred_reasons:
       - quality_name_present
       adapter:
-        version: sec-company-landing-v6
+        version: sec-company-landing-v7
         retain_deferred: true
         source_record_provenance: true
         field_shape: nullable_text

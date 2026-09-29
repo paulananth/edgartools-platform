@@ -113,7 +113,11 @@ def _catalog_tickers(landing: dict, parquet: pq.ParquetFile) -> dict[int, list[s
             listed.setdefault(int(row["cik"]), []).append(
                 (row["source_rank"], row["ticker"])
             )
-    return {cik: [t for _, t in sorted(pairs)] for cik, pairs in listed.items()}
+    # One catalog run lands both SEC ticker lists: each ticker once (ticket 18).
+    return {
+        cik: list(dict.fromkeys(t for _, t in sorted(pairs)))
+        for cik, pairs in listed.items()
+    }
 
 
 def _filed_forms(landing: dict, parquet: pq.ParquetFile) -> dict[int, list[str]]:
@@ -158,7 +162,10 @@ def business_address(row: dict) -> dict:
         "street": row["street1"] or None,
         "street2": row["street2"] or None,
         "city": row["city"] or None,
-        "region": row["state_or_country"] or None,
+        # A region only for a state or province: SEC writes a foreign country
+        # in the same field ("P7", the Netherlands), which is the country
+        # (ticket 18).
+        "region": (row["state_or_country"] or None) if place and "-" in place else None,
         "postal_code": row["zip_code"] or None,
         "country": place.split("-")[0] if place else None,
     }

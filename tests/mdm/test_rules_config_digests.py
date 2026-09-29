@@ -80,13 +80,21 @@ GLEIF_BEFORE = {
 }
 
 
+SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9be4"
+
+
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
     layered = (WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(company_source.POLICY) == [pins["policy"] for pins in layered]
-    assert digest(_without_quality(company_source.CONTRACT)) == BEFORE["contract"]
-    assert digest(company_source.CONTRACT) == WITH_QUALITY["contract"]
+    # Ticket 18 made the SEC reading v7 (a region only for a state or
+    # province; each ticker once); with v6 the contract is the one before.
+    assert digest(company_source.CONTRACT) == SEC_READING_V7
+    v6 = {**company_source.CONTRACT, "adapter": {**company_source.CONTRACT["adapter"],
+                                                  "version": "sec-company-landing-v6"}}
+    assert digest(v6) == WITH_QUALITY["contract"]
+    assert digest(_without_quality(v6)) == BEFORE["contract"]
     assert digest(company_source.FIELDS) == BEFORE["fields"]
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]

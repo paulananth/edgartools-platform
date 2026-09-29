@@ -17,6 +17,7 @@ from edgar_warehouse.mdm.clean.company_source import (
     POLICY,
     SOURCE_CODE,
     bronze_receipts,
+    business_address,
     prepare_company_bundle,
     write_bronze_receipts,
     write_name_census,
@@ -445,6 +446,16 @@ class TestTickersComeFromTheCatalog:
         )
         rows = self.records({**args, "limit": 2})
         assert [r["tickers"] for r in rows] == [["BRKA", "BRKB"], []]
+
+    def test_a_ticker_in_both_catalog_lists_is_listed_once(self, tmp_path):
+        """Ticket 18, finding 6: one catalog run lands both SEC ticker lists."""
+        args = landing(
+            tmp_path,
+            [source_row(320193)],
+            [ticker_row(320193, "AAPL", source_rank=1), ticker_row(320193, "AAPL", source_rank=7)],
+        )
+        (row,) = self.records({**args, "limit": 1})
+        assert row["tickers"] == ["AAPL"]
 
     def test_the_catalog_member_is_pinned_in_every_record_and_the_key(self, tmp_path):
         args = landing(tmp_path, [source_row(123)], [ticker_row(123, "AAPL")])
@@ -903,3 +914,18 @@ class TestEachRecordNamesItsBronzeObject:
         for run in ("failed", "missing"):
             with pytest.raises(Conflict, match="did not succeed"):
                 write_bronze_receipts(book, run_id=run, output=str(tmp_path / "f.json"))
+
+
+def test_a_foreign_business_address_has_a_country_and_no_region():
+    """Ticket 18, finding 5: SEC writes a country in `stateOrCountry` ("P7",
+    the Netherlands); it is the country, not a region."""
+    foreign = business_address(address_row(937966, state_or_country="P7", city="Veldhoven",
+                                           zip_code="5504 DR", country=None))
+    assert foreign["region"] is None and foreign["country"] == "NL"
+    domestic = business_address(address_row(320193))
+    assert domestic["region"] == "CA" and domestic["country"] == "US"
+    ontario = business_address(address_row(1, state_or_country="A6", country=None))
+    assert ontario["region"] == "A6" and ontario["country"] == "CA"
+    # X1: the United States with no state.
+    unstated = business_address(address_row(2, state_or_country="X1", country=None))
+    assert unstated["region"] is None and unstated["country"] == "US"
