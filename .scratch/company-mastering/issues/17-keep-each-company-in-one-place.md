@@ -1,7 +1,7 @@
 # Keep each Company in one place
 
 Type: task
-Status: claimed (Claude, branch `claude/company-mastering-17-company-one-place`, 2026-09-26 13:10 ET)
+Status: built and reviewed; PR (Claude, branch `claude/company-mastering-17-company-one-place`)
 Blocked by: none
 Blocks: Phase 2 of the Proving Run (ticket 05) at whole-population scale
 
@@ -55,7 +55,7 @@ loop copies the growing array on each append.
     assessment stored before the migration would be assessed again.
     **Not so in the result:** the view's rows equal what `projection` held,
     so the snapshot is byte-identical and such an assessment still applies
-    (proved by `test_migration_041_applies_to_a_populated_store`).
+    (proved by `test_migration_042_applies_to_a_populated_store`).
   - Not changed: review reads in `bookkeeping.py`.
 - [x] Find every reader of Company rows in `projection`, in Python and SQL
   (2026-09-26 14:09 ET; verified by a repo search and by the Spec and GoF
@@ -91,10 +91,10 @@ loop copies the growing array on each append.
     assessment tests also change evidence, so they could not show this).
     Red on main's code (2026-09-26 14:36 ET): the snapshot was identical
     before and after the change, because it read `projection`;
-  - 041 applies to a populated store (below);
-  - 041 refuses to remove a Company in `projection` that differs from the
+  - 042 applies to a populated store (below);
+  - 042 refuses to remove a Company in `projection` that differs from the
     Company table, and changes nothing (added after review, 14:28 ET).
-- [x] One new migration, `041_clean_mdm_company_one_place.sql`, restates each
+- [x] One new migration, `042_clean_mdm_company_one_place.sql`, restates each
   changed SQL function whole (2026-09-26 14:09 ET; verified by the Standards
   review against 023 + 028 + 029 + 031, 14:24 ET):
   - `commit_batch_core` sends a Company entity to
@@ -111,15 +111,15 @@ loop copies the growing array on each append.
   body in one `INSERT` (037, `record_company_projection`).
 - [x] Prove it on PostgreSQL 16 (2026-09-26 14:49 ET):
   - [x] a store populated at 040, then migrated
-    (`test_migration_041_applies_to_a_populated_store`, 2026-09-26 14:30 ET).
+    (`test_migration_042_applies_to_a_populated_store`, 2026-09-26 14:30 ET).
     Companies read back unchanged. The stored assessment covers Apple's
     existing Company, its snapshot still matches, and it applies.
   - [x] the full Clean suite: **200 passed** (2026-09-26 14:48 ET, 17 min,
     on the code with the review fixes). First run (14:03 ET, 23 min):
     8 failures. Seven tests fill a store built at an older migration with
-    today's code, which reads `current_entity` before 041 exists. Fix: the
+    today's code, which reads `current_entity` before 042 exists. Fix: the
     shared test helper gives such a store a stand-in view over `projection`,
-    and 041 uses `CREATE OR REPLACE VIEW` to replace it. The eighth counted
+    and 042 uses `CREATE OR REPLACE VIEW` to replace it. The eighth counted
     views and now includes `current_entity`.
   - [x] ticket 05's chunk 1 again, for the new timing (2026-09-26 14:49 ET,
     same 966 records, same bundle, same candidate policy, harness from the
@@ -130,11 +130,24 @@ loop copies the growing array on each append.
     Largest database cost now: `commit_batch_core`, 9.9 s in total over both
     passes; `company_payload_from_table` no longer exists.
 - [x] Three-axis `/code-review` (Standards, Spec, GoF), 2026-09-26 14:26 ET.
-  Fixed: the 041 header named the wrong migrations; the Company spec line
-  (`company-completion.md`); the untested 041 check; the dead `consumer.py`
+  Fixed: the 042 header named the wrong migrations; the Company spec line
+  (`company-completion.md`); the untested 042 check; the dead `consumer.py`
   branch; the private-method assertion; the stale-assessment test. Kept, with
   reasons in the PR: `CREATE OR REPLACE VIEW` for the test stand-in; the
   alias object built in three places (now pinned by tests).
+- [x] Rebased onto main (2026-09-29): ticket 13 took migration 041, so this
+  one is **042**; every reference renumbered. Ticket 13's migration changes
+  only `release_binding` and `keep_stage`, not the functions 042 restates.
+  Conflicts: the migration list (both kept), the counts report (main's
+  `handle`, with this ticket's `current_entity` read), and the delivery-time
+  rebuild (removed, as here; ticket 13's quarantined check went with it, and
+  037 still writes the column from the same body). Ticket 13's PG16 tests
+  pass on this branch (22 with this ticket's).
+- [x] Timed again on synthetic data (2026-09-29, `research/17_batch_timing.py`;
+  ticket 05's bundles are gone): one batch of 960 new Companies takes
+  **10.1 to 10.8 s** here against **37.3 to 42.3 s** on main; a revision of
+  all 960 takes **4.1 to 4.2 s** against **16.9 to 17.6 s**.
+- [x] Full suite on the rebased branch (2026-09-29): 3,111 passed, 1 xfailed, in 7:27.
 - [ ] PR and CI.
 
 ## Noted, not in scope
