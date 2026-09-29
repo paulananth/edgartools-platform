@@ -34,14 +34,10 @@ settles them; ask only when the choice changes the intended work.
 
 Resolve `source` to an existing Rules document, accepting a provider name only
 when the repository identifies its source document unambiguously. Resolve
-`feed` from source-owned descriptors: the bronze/contract family, publication
-family, native member or registered dataset code. For example,
-`--source sec.submissions.company --feed submissions` resolves that source's
-submissions family; `--source gleif --feed level1` selects its native level1
-member and `gleif.level1.v1` dataset. A family containing several datasets
-must name the exact included members in the plan. Ambiguous or unknown feeds
-require clarification; a feed is neither a Bookkeeping target nor a guessed
-alias. Read documents through `edgar_warehouse.rules.files`.
+`feed` only from an active `acquisition.feeds` declaration. The sole active
+acquisition binding is `--source sec.submissions.company --feed submissions`.
+GLEIF retains MDM contracts but has no active acquisition feed. Read documents
+through `edgar_warehouse.rules.files`.
 
 Resolve the binding deterministically before every feed-scoped mode:
 
@@ -64,12 +60,23 @@ Recover a run only after its retained manifest proves the same source/feed.
 Confirm live commands with `edgar-warehouse bookkeeping --help` and
 `edgar-warehouse rules run --help` under the `uv run` prefix. Read
 `edgar_warehouse/bookkeeping/clean/cli.py` for runtime bindings. Current
-operations are `artifact.copy`, `provider.capture`, `source.evidence`,
-`mdm.ingest`, `mdm.merge` and `mdm.publish`.
-Artifact copying uses available bytes, not a provider fetch or parser. Export
-and graph use offline contract sinks; hosted adapters and full legacy caller
-migration remain unfinished. Report unsupported capabilities as gaps rather
-than substituting a legacy run.
+Company operations are `provider.capture`, `company.expand`, `source.evidence`,
+`company.silver`, `company.prepare`, `mdm.ingest`, `company.publish_expand`, and
+`mdm.publish`. Prepare a bounded Company scope without requesting SEC or
+starting a run. Pin ticker, Name Census, reviewed bindings and a timezone-aware
+`as_of` in the support manifest:
+
+```bash
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping prepare \
+  --source sec.submissions.company --feed submissions \
+  --scope-manifest <URI> --scope-sha256 <SHA256> \
+  --support-manifest <URI> --support-sha256 <SHA256> --output-root <file-URI>
+```
+
+Submit the returned manifest through `rules run --source
+sec.submissions.company --feed submissions --target company`. Generated page,
+ingest, and publication work joins its parent completion in the same root run.
+Local file evidence qualifies the Company bundle; AWS feeds remain disabled.
 
 ## Init and migrate modes
 

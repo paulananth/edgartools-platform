@@ -31,6 +31,7 @@ def acquisition(document: dict) -> dict:
                 "scope",
                 "capabilities",
                 "completeness",
+                "page_completeness",
                 "required_producers",
                 "url_prefixes",
                 "authorizations",
@@ -83,6 +84,15 @@ def acquisition(document: dict) -> dict:
             raise Blocked(
                 "Feed completeness requires supported format, required members, empty policy and size bound"
             )
+        page = value.get("page_completeness")
+        if page is not None and (
+            not isinstance(page, dict) or set(page) != set(completeness)
+            or page["format"] != "json" or not isinstance(page["required"], list)
+            or not all(isinstance(k, str) and k for k in page["required"])
+            or type(page["allow_empty"]) is not bool
+            or type(page["max_bytes"]) is not int or not 1 <= page["max_bytes"] <= 1024**3
+        ):
+            raise Blocked("Invalid pagination completeness contract")
         if any(not prefix.startswith("https://") for prefix in value["url_prefixes"]):
             raise Blocked("Provider requests require approved HTTPS URL prefixes")
         if not isinstance(value.get("authorizations", []), list):

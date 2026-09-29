@@ -956,7 +956,7 @@ def test_source_configs_use_same_control_contract():
     registry = standard_registry()
     from edgar_warehouse.change_journal.capture import register_capture
     register_capture(registry, None)
-    for name in ("gleif", "sec.submissions.company"):
+    for name in ("sec.submissions.company",):
         selected = validate(source(name), "capture", registry)
         assert selected["lease_seconds"] == 120 and selected["heartbeat_seconds"] == 30
 

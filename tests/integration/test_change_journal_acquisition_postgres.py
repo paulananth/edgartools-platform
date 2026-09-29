@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
-import zipfile
 from copy import deepcopy
 from uuid import uuid4
 
@@ -170,26 +168,10 @@ def capture_run(
     "feed,payload,required",
     [
         (
-            "filings",
-            b'{"accession":"0000320193-26-000001","form":"4"}',
-            ["accession", "form"],
-        ),
-        (
             "submissions",
             b'{"cik":"0000320193","filings":{"recent":{"accessionNumber":[]}}}',
             ["cik", "filings.recent.accessionNumber"],
         ),
-        (
-            "company_facts",
-            b'{"cik":320193,"facts":{"us-gaap":{"Assets":{}}}}',
-            ["cik", "facts.us-gaap"],
-        ),
-        (
-            "reference_catalogs",
-            b'{"0":{"cik_str":320193,"ticker":"AAPL"}}',
-            ["0.ticker"],
-        ),
-        ("adv_feeds", b'{"firms":[{"crd":1,"name":"Fixture"}]}', ["firms"]),
         ("unseen.calendar", b'{"days":["2026-01-01"]}', ["days"]),
     ],
 )
@@ -222,37 +204,6 @@ def test_bounded_family_capture_uses_configuration_only(
     assert result_receipt["event"]["event_type"] == "fetch.outcome"
     assert receipt["evidence"] in result_receipt["event"]["evidence"]
     assert len(databases.ledger.list(run_id=rid)) == 2
-
-
-@pytest.mark.parametrize(
-    "feed,tag",
-    [
-        ("gleif.level1", "LEIData"),
-        ("gleif.relationships", "RelationshipData"),
-        ("gleif.reporting_exceptions", "ReportingExceptions"),
-    ],
-)
-def test_gleif_zip_completeness_without_source_dispatch(
-    databases, tmp_path, monkeypatch, feed, tag
-):
-    raw = io.BytesIO()
-    with zipfile.ZipFile(raw, "w") as archive:
-        archive.writestr(
-            "member.xml",
-            f"<{tag}><Header><RecordCount>1</RecordCount></Header><Records><Record/></Records></{tag}>",
-        )
-    book, rid, _, calls, _, _ = capture_run(
-        databases,
-        tmp_path,
-        monkeypatch,
-        feed=feed,
-        payload=raw.getvalue(),
-        declared=definition("zip", ["member.xml"]),
-    )
-    assert (
-        run(book, rid, databases.ledger)["run"]["state"] == "complete"
-        and len(calls) == 1
-    )
 
 
 def test_conditional_unchanged_links_verified_bytes(databases, tmp_path, monkeypatch):
@@ -420,59 +371,6 @@ def test_resource_checkpoint_hole_and_takeover_are_atomic(databases, tmp_path):
     with pytest.raises(DBAPIError):
         book.heartbeat(first)
     assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
-
-
-@pytest.mark.parametrize(
-    "source,feed,payload",
-    [
-        (
-            "sec.submissions.company",
-            "submissions",
-            b'{"cik":"0000320193","filings":{}}',
-        ),
-        ("sec.company-facts", "company_facts", b'{"cik":320193,"facts":{}}'),
-        (
-            "sec.reference-catalogs",
-            "reference_catalog",
-            b'{"0":{"cik_str":320193,"ticker":"AAPL"}}',
-        ),
-        (
-            "sec.filings",
-            "filings",
-            b"<ownershipDocument><documentType>4</documentType></ownershipDocument>",
-        ),
-        ("sec.adv", "adv_filing", b"<ADV><Name>Fixture Adviser</Name></ADV>"),
-        ("sec.adv", "firm_roster", b"CRD,Name\n1,Fixture Adviser\n"),
-    ],
-)
-def test_current_rules_capture_policy_on_bounded_provider_bytes(
-    databases, tmp_path, monkeypatch, source, feed, payload
-):
-    from edgar_warehouse.rules.files import source as source_document
-
-    declared = deepcopy(source_document(source)["acquisition"]["feeds"][feed])
-    # Use the real selected transport capability with an injected bounded
-    # response; capture still invokes the same authorization callback.
-    selected_transport = declared["capabilities"]["fetch"]
-    calls = []
-
-    def transport(url, identity, *, before_request, **kwargs):
-        before_request()
-        calls.append(url)
-        return ConditionalSecResponse(False, payload, None, None)
-
-    book, rid, _, _, _, _ = capture_run(
-        databases, tmp_path, monkeypatch, feed=feed, declared=declared
-    )
-    registry = standard_registry()
-    register_capture(
-        registry, databases.ledger, fetchers={selected_transport: transport}
-    )
-    book.registry = registry
-    assert (
-        run(book, rid, databases.ledger)["run"]["state"] == "complete"
-        and len(calls) == 1
-    )
 
 
 @pytest.mark.parametrize(

@@ -17,6 +17,10 @@ def configured_bookkeeping():
         register_capture(book.registry, ChangeJournal(journal))
     from edgar_warehouse.change_journal.source_evidence import register_source_evidence
     register_source_evidence(book.registry)
+    from .company import register_company_expansion, register_company_silver, register_company_mdm_preparation
+    register_company_expansion(book.registry)
+    register_company_silver(book.registry)
+    register_company_mdm_preparation(book.registry)
     if os.environ.get("MDM_DATABASE_URL"):
         from sqlalchemy import create_engine
         from urllib.parse import unquote, urlparse
@@ -56,7 +60,16 @@ def _handle(args):
     from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
     from .runner import run
     operation = args.bookkeeping_command
-    if operation in {"init", "migrate"}:
+    if operation == "prepare":
+        from .company import FEED, SOURCE, prepare_company
+        from .config import Blocked
+        if (args.source, args.feed) != (SOURCE, FEED):
+            raise Blocked("Only SEC Company submissions preparation is active")
+        result = prepare_company(
+            scope_ref={"uri": args.scope_manifest, "sha256": args.scope_sha256},
+            support_ref={"uri": args.support_manifest, "sha256": args.support_sha256},
+            output_root=args.output_root)
+    elif operation in {"init", "migrate"}:
         owner = create_engine(os.environ["BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL"])
         try:
             result = migrate(
@@ -101,6 +114,11 @@ def register(subparsers):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.set_defaults(handler=_handle)
+    prepare = commands.add_parser("prepare", help="Pin a bounded Company input without requesting SEC or starting a run")
+    for name in ("source", "feed", "scope-manifest", "scope-sha256", "support-manifest",
+                 "support-sha256", "output-root"):
+        prepare.add_argument("--" + name, required=True)
+    prepare.set_defaults(handler=_handle)
     listing = commands.add_parser("runs", help="Find runs after a lost submission acknowledgement")
     listing.add_argument("--state", choices=("running", "waiting", "blocked", "complete"))
     listing.add_argument("--limit", type=int, default=100)

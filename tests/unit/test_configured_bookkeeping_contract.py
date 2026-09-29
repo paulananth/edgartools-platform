@@ -12,7 +12,7 @@ from edgar_warehouse.rules.files import source, pipeline
 @pytest.mark.parametrize("edit", ["unknown", "cycle", "bad_key", "empty_lease", "duration", "unknown_check", "unknown_op",
                                  "checks_map", "duplicate_checks", "final_checks_map", "broken_template"])
 def test_invalid_configuration(edit):
-    body = deepcopy(source("gleif"))
+    body = deepcopy(source("sec.submissions.company"))
     target = body["bookkeeping"]["targets"]["capture"]
     step = target["steps"][0]
     if edit == "unknown":
@@ -43,7 +43,7 @@ def test_invalid_configuration(edit):
 
 
 def test_manifest_duplicates_missing_references_and_template_fields():
-    selected = validate(source("gleif"), "capture", standard_registry())
+    selected = validate(source("sec.submissions.company"), "capture", standard_registry())
     unit = {"keys": {"artifact_id": "one", "destination": "s3://bucket/key"},
             "input": {"uri": "s3://bucket/source", "sha256": "a"*64}, "output": "s3://bucket/key", "cursor": 0}
     for units in ([unit, unit], [{**unit, "keys": {}}], [{**unit, "input": {"uri": "missing-hash"}}], [{**unit, "business_rows": []}]):
@@ -91,7 +91,7 @@ def test_cli_commands_remain_available_and_resume_is_bounded():
 
 
 def stage_manifest():
-    selected = validate(source("gleif"), "capture", standard_registry())
+    selected = validate(source("sec.submissions.company"), "capture", standard_registry())
     selected["steps"] = [
         {**selected["steps"][0], "name": "capture", "requires": [], "key": "{artifact_id}"},
         {**selected["steps"][0], "name": "parse", "requires": ["capture"], "key": "{artifact_id}"},

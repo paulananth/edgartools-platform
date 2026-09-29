@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from .artifacts import Artifacts
-from .config import Blocked, Registry, canonical, digest, validate, worklist, reference
+from .config import Blocked, Registry, canonical, digest, validate, worklist, generated_worklist, reference
 
 
 @dataclass(frozen=True)
@@ -72,8 +72,39 @@ class Bookkeeping:
                 raise Blocked("Processing versions changed; start a new run")
             manifest = self.artifacts.json(submission["inputs"])
             items = worklist(manifest, config)
-            if len(items) != run["expected_count"] or digest(items) != submission["worklist_hash"]:
+            if digest(items) != submission["worklist_hash"]:
                 raise Blocked("Frozen work accounting changed")
+            with self.engine.connect() as conn:
+                stored = _rows(conn, "SELECT step,unit_key,ordinal,resources,unit,receipt,state,generated_count FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid)", r=run_id)
+            expected = {(entry["step"], entry["key"]): entry for entry in items}
+            for row in stored:
+                cursor = row["unit"].get("cursor")
+                marker = cursor.get("generated_step") if isinstance(cursor, dict) else None
+                if marker is None or row["state"] != "verified":
+                    continue
+                if row["generated_count"] is None:
+                    raise Blocked("Expansion completed without sealing generated scope")
+                receipt = row["receipt"]
+                if not isinstance(receipt, dict):
+                    raise Blocked("Verified expansion has no immutable receipt")
+                expansion = self.artifacts.json({"uri": receipt["uri"], "sha256": receipt["sha256"]})
+                parent = {"step": row["step"], "key": row["unit_key"], "generated_step": marker,
+                          "ordinal_base": cursor.get("ordinal_base")}
+                for child in generated_worklist(expansion, config, parent):
+                    identity = (child["step"], child["key"])
+                    if identity in expected:
+                        raise Blocked("Generated work repeats frozen or earlier work")
+                    expected[identity] = child
+                    items.append(child)
+                if len(expansion["children"]) != row["generated_count"]:
+                    raise Blocked("Sealed expansion count differs from immutable children")
+            if len(expected) != run["expected_count"] or len(stored) != len(expected):
+                raise Blocked("Generated work accounting changed")
+            for row in stored:
+                item = expected.get((row["step"], row["unit_key"]))
+                if (item is None or row["ordinal"] != item["ordinal"]
+                        or row["resources"] != item["resources"] or row["unit"] != item["unit"]):
+                    raise Blocked("Stored work differs from frozen or generated manifest")
             return run, config, manifest, items
         except (Blocked, KeyError, TypeError) as exc:
             self._call("SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)", r=run_id, m=str(exc))
@@ -94,6 +125,8 @@ class Bookkeeping:
             raise Blocked("Submission requires a proven active Rules export")
         reference({"uri": rules_ref["uri"], "sha256": proof.get("batch_hash")})
         config = validate(export["body"], target, self.registry)
+        if scope.get("feed") and "acquisition" not in export["body"]:
+            raise Blocked("Retired acquisition feed cannot be submitted")
         if "acquisition" in export["body"]:
             from edgar_warehouse.change_journal.authority import frozen_authority
             selected = frozen_authority(export, scope.get("feed"), artifacts=self.artifacts)
@@ -231,7 +264,15 @@ class Bookkeeping:
                           p=canonical(claim.proof), v=canonical(receipt), c=canonical(checks), e=event_id)
         cursor = item["unit"]["cursor"]
         checkpoint = cursor.get("resource_checkpoint") if isinstance(cursor, dict) else None
-        if checkpoint is not None:
+        generated_step = cursor.get("generated_step") if isinstance(cursor, dict) else None
+        if generated_step is not None:
+            expansion = self.artifacts.json({"uri": receipt["uri"], "sha256": receipt["sha256"]})
+            children = generated_worklist(expansion, config, {"step": claim.step, "key": claim.key,
+                                                              "generated_step": generated_step,
+                                                              "ordinal_base": cursor.get("ordinal_base")})
+            self._call("SELECT bookkeeping.finish_expand(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),CAST(:children AS jsonb),:child_step)",
+                       **parameters, children=canonical(children), child_step=generated_step)
+        elif checkpoint is not None:
             self._call("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:resource,:revision,:position)",
                        **parameters, **checkpoint)
         else:

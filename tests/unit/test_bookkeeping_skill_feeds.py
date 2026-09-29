@@ -13,9 +13,6 @@ ROOT = Path(__file__).resolve().parents[2] / "rules"
 resolve_feed = run_path(str(ROOT.parent / "skills/bookkeeping/scripts/resolve_feed.py"))["resolve_feed"]
 PAIRS = [
     ("sec.submissions.company", "submissions", "sec.submissions.company.v1"),
-    ("gleif", "level1", "gleif.level1.v1"),
-    ("gleif", "relationships", "gleif.relationships.v1"),
-    ("gleif", "reporting_exceptions", "gleif.reporting_exceptions.v1"),
 ]
 
 
@@ -27,28 +24,31 @@ def test_existing_feed_and_dataset_resolve_same_scope(source, feed, code):
     assert resolve_feed(ROOT, source, code)["datasets"] == selected["datasets"]
 
 
-def test_provider_and_publication_family_preserve_explicit_members():
+def test_only_declared_company_acquisition_resolves():
     assert resolve_feed(ROOT, "SEC", "submissions")["source"] == "sec.submissions.company"
-    selected = resolve_feed(ROOT, "GLEIF", "golden_copy")
-    assert {d["member"] for d in selected["datasets"]} == {"level1", "relationships", "reporting_exceptions"}
+    with pytest.raises(ValueError):
+        resolve_feed(ROOT, "GLEIF", "level1")
 
 
 @pytest.mark.parametrize("source,feed", [("", "level1"), ("gleif", ""), ("unknown", "level1"),
                                          ("gleif", "capture"), ("gleif", "submissions"),
-                                         ("sec.submissions.company", "level1")])
+                                         ("sec.submissions.company", "level1"),
+                                         ("sec.adv", "adv_bulk"), ("sec.filings", "filing_artifact"),
+                                         ("sec.company-facts", "company_facts")])
 def test_missing_unknown_or_cross_source_selections_fail(source, feed):
     with pytest.raises(ValueError):
         resolve_feed(ROOT, source, feed)
 
 
-def test_unseen_source_is_configuration_only_and_provider_ambiguity_fails(tmp_path):
+def test_unseen_mdm_source_is_not_an_acquisition_feed(tmp_path):
     for name in ["new-feed", "second-feed"]:
         path = tmp_path / "sources" / name / "source.yaml"
         path.parent.mkdir(parents=True)
         path.write_text(dumps({"source": name, "bronze": {"family": "new-family"},
                               "mdm": {f"{name}.v1": {"contract": {"provider": "NewProvider",
                               "family": "new-family", "adapter": {"native_member": "new-member"}}}}}))
-    assert resolve_feed(tmp_path, "new-feed", "new-member")["datasets"][0]["code"] == "new-feed.v1"
+    with pytest.raises(ValueError):
+        resolve_feed(tmp_path, "new-feed", "new-member")
     with pytest.raises(ValueError, match="exactly one"):
         resolve_feed(tmp_path, "NewProvider", "new-family")
 

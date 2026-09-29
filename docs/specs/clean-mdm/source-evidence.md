@@ -1,5 +1,11 @@
 # Source registry and evidence contract
 
+Current acquisition boundary (2026-09-29):
+`sec.submissions.company/submissions` is the sole active feed, controlled by
+Rules, fresh Bookkeeping and Change Journal. See
+[the local Company route](../../company-only-acquisition.md). The registry-ledger
+extension discussed below is historical design context, not an active caller.
+
 Status: dataset metadata pinned to the existing acquisition authority and a
 configuration-selected JSONL adapter are implemented. The bounded native SEC
 Company adapter and immutable deferred records are implemented; reviewed
@@ -8,7 +14,7 @@ remain integration work. See [state of the build](state-of-build.md).
 
 ## Extend the existing authority
 
-The active acquisition registry already governs source-family coverage and
+The former acquisition registry governed source-family coverage and
 activation (`edgar_warehouse/acquisition/registry_ledger.py` and migration
 `014_source_registry.sql`). Extend that versioned authority with dataset and
 publication metadata; do not introduce a competing activation registry.

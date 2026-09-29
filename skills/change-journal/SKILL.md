@@ -13,6 +13,12 @@ Bookkeeping descriptor resolver before dependent work. Read the
 [contract](../../docs/specs/change-journal.md). The old Change Ledger is a
 separate legacy archive; do not redirect its backlog to this store.
 
+`sec.submissions.company/submissions` is the sole active acquisition feed.
+The `company` target emits committed fetch authorization before each main or
+pagination provider request, then source revision, Silver producer and MDM
+receipts in one root run. GLEIF remains an MDM mapping source without an
+acquisition feed. Do not resolve or submit retired SEC/GLEIF acquisition feeds.
+
 Use `uv run --extra mdm --extra s3` from the intended repository worktree.
 Resolve the skill's physical path so relative links refer to that checkout.
 Feed-scoped modes use the same descriptor resolution as Bookkeeping:

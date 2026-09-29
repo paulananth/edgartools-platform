@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from datetime import date
 from pathlib import Path
 import sys
 import time
@@ -105,54 +104,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
         handler=_logged_handler(
             "check-manages-fund-duplicates", _handle_check_manages_fund_duplicates
         )
-    )
-
-    # Ticket 20: version and activate the Acquisition Universe.
-    reg_open = mdm_sub.add_parser(
-        "registry-open-draft",
-        help="Open a draft Source Family Registry version from a coverage JSON file",
-    )
-    reg_open.add_argument(
-        "--coverage",
-        required=True,
-        help="Path to a JSON file: a list of coverage change objects "
-        "(source_family, coverage_action, in_scope_forms, acquisition_mode, "
-        "completeness_policy, discovery_policy, required_producers, "
-        "coverage_start_date, coverage_end_date, catchup_required_through_date)",
-    )
-    reg_open.add_argument("--operator-authorization-reference", required=True)
-    reg_open.set_defaults(
-        handler=_logged_handler("registry-open-draft", _handle_registry_open_draft)
-    )
-
-    reg_activate = mdm_sub.add_parser(
-        "registry-activate", help="Activate a draft Source Family Registry version"
-    )
-    reg_activate.add_argument("version_id")
-    reg_activate.set_defaults(
-        handler=_logged_handler("registry-activate", _handle_registry_activate)
-    )
-
-    reg_status = mdm_sub.add_parser(
-        "registry-status", help="Show the currently active Source Family Registry version"
-    )
-    reg_status.set_defaults(
-        handler=_logged_handler("registry-status", _handle_registry_status)
-    )
-
-    # Ticket 32 item 3: the missing piece a bootstrap sequence needs --
-    # record_catchup_progress previously had no CLI surface, only a direct
-    # Python-API call duplicated inline in two test fixtures.
-    reg_catchup = mdm_sub.add_parser(
-        "registry-record-catchup",
-        help="Record catch-up progress for a draft/blocked registry version's 'add' rows",
-    )
-    reg_catchup.add_argument("source_family")
-    reg_catchup.add_argument(
-        "--through-date", required=True, help="ISO date (YYYY-MM-DD) verified caught up through"
-    )
-    reg_catchup.set_defaults(
-        handler=_logged_handler("registry-record-catchup", _handle_registry_record_catchup)
     )
 
     # mastering (mdm-stage-renaming ticket 01: was "run")
@@ -1731,112 +1682,6 @@ def _handle_check_manages_fund_duplicates(args) -> int:
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0 if result.is_clean else 1
-
-
-def _coverage_spec_from_dict(raw: dict) -> Any:
-    from edgar_warehouse.acquisition.registry_ledger import CoverageSpec
-
-    def _date(value):
-        return date.fromisoformat(value) if value else None
-
-    return CoverageSpec(
-        source_family=raw["source_family"],
-        coverage_action=raw["coverage_action"],
-        in_scope_forms=tuple(raw.get("in_scope_forms", ())),
-        acquisition_mode=raw.get("acquisition_mode", ""),
-        completeness_policy=raw.get("completeness_policy", ""),
-        discovery_policy=raw.get("discovery_policy", ""),
-        required_producers=tuple(raw.get("required_producers", ())),
-        coverage_start_date=_date(raw.get("coverage_start_date")),
-        coverage_end_date=_date(raw.get("coverage_end_date")),
-        catchup_required_through_date=_date(raw.get("catchup_required_through_date")),
-    )
-
-
-def _registry_version_payload(version) -> dict[str, Any]:
-    return {
-        "version_id": version.version_id,
-        "status": version.status,
-        "blocker": version.blocker,
-        "next_action": version.next_action,
-        "coverage": [
-            {
-                "source_family": c.source_family,
-                "coverage_action": c.coverage_action,
-                "in_scope_forms": list(c.in_scope_forms),
-                "coverage_start_date": c.coverage_start_date.isoformat()
-                if c.coverage_start_date
-                else None,
-                "coverage_end_date": c.coverage_end_date.isoformat()
-                if c.coverage_end_date
-                else None,
-                "catchup_required_through_date": c.catchup_required_through_date.isoformat()
-                if c.catchup_required_through_date
-                else None,
-                "catchup_verified_through_date": c.catchup_verified_through_date.isoformat()
-                if c.catchup_verified_through_date
-                else None,
-            }
-            for c in version.coverage
-        ],
-    }
-
-
-def _handle_registry_open_draft(args) -> int:
-    from edgar_warehouse.acquisition.registry_ledger import SourceRegistryLedger
-    from edgar_warehouse.mdm.database import get_engine
-
-    raw_specs = json.loads(Path(args.coverage).read_text(encoding="utf-8"))
-    specs = [_coverage_spec_from_dict(raw) for raw in raw_specs]
-    ledger = SourceRegistryLedger(get_engine())
-    version = ledger.open_draft(
-        specs, operator_authorization_reference=args.operator_authorization_reference
-    )
-    print(json.dumps(_registry_version_payload(version), indent=2, sort_keys=True))
-    return 0
-
-
-def _handle_registry_activate(args) -> int:
-    from edgar_warehouse.acquisition.registry_ledger import SourceRegistryLedger
-    from edgar_warehouse.mdm.database import get_engine
-
-    ledger = SourceRegistryLedger(get_engine())
-    version = ledger.activate(args.version_id)
-    print(json.dumps(_registry_version_payload(version), indent=2, sort_keys=True))
-    return 0 if version.status == "active" else 1
-
-
-def _handle_registry_record_catchup(args) -> int:
-    from edgar_warehouse.acquisition.registry_ledger import SourceRegistryLedger
-    from edgar_warehouse.mdm.database import get_engine
-
-    ledger = SourceRegistryLedger(get_engine())
-    verified_through_date = date.fromisoformat(args.through_date)
-    ledger.record_catchup_progress(args.source_family, verified_through_date)
-    print(
-        json.dumps(
-            {
-                "source_family": args.source_family,
-                "catchup_verified_through_date": args.through_date,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
-    return 0
-
-
-def _handle_registry_status(args) -> int:
-    from edgar_warehouse.acquisition.registry_ledger import SourceRegistryLedger
-    from edgar_warehouse.mdm.database import get_engine
-
-    ledger = SourceRegistryLedger(get_engine())
-    version = ledger.get_active_registry()
-    if version is None:
-        print(json.dumps({"active": None}, indent=2, sort_keys=True))
-        return 1
-    print(json.dumps({"active": _registry_version_payload(version)}, indent=2, sort_keys=True))
-    return 0
 
 
 def _handle_sync_graph(args) -> int:
