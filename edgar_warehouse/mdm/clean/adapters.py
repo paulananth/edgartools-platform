@@ -192,6 +192,50 @@ def classify_record(
     return verdict, labelled
 
 
+def mapped_values(row: dict, contract: dict, *, quality: bool = True) -> tuple[dict, dict, dict | None]:
+    """A row's mapped fields and matching values, after the feed's data
+    quality rule: what `normalize` puts on a record, and what the cascade's
+    census reads for every filer, a Company or not (ticket 21), so the two
+    cannot differ.
+
+    Blank text is unknown, never a value: a source that sends "" has said
+    nothing, and a blank must not win a field or show in the master
+    (operator, 2026-09-24).
+    """
+    mapping = contract["adapter"]
+    fields = {
+        name: mapped_field(row, name, spec)
+        for name, spec in mapping.get("fields", {}).items()
+    }
+    if mapping.get("field_shape") == "nullable_text" and any(
+        v is not None
+        and not isinstance(v, str)
+        and not (name == "address" and isinstance(v, dict))
+        for name, v in fields.items()
+    ):
+        raise UnsupportedRecord("invalid_field_shape")
+    # What a matching rule compares, kept with the record and out of its
+    # fields, so reading it grants no field a value (ticket 08). A value is
+    # one path, or an address's components, as `fields.address` reads them
+    # (GLEIF's headquarters address: ticket 22).
+    matching = {
+        name: value(row, path) if isinstance(path, str) else mapped_field(row, "address", path)
+        for name, path in (mapping.get("matching") or {}).items()
+    }
+    return fields, matching, _quality(contract, fields, matching) if quality else None
+
+
+def _quality(contract: dict, fields: dict, matching: dict) -> dict | None:
+    """Ticket 22: the feed's fixes and checks, on the mapped values, before
+    the record's fingerprint. Inside the hashed body, so the record says
+    which quality version fixed or withheld what."""
+    if not contract.get("quality"):
+        return None
+    from .quality import apply
+
+    return apply(contract["quality"], fields, matching)
+
+
 def normalize(
     row: dict,
     *,
@@ -242,20 +286,7 @@ def normalize(
             identifiers[namespace] = format_value(
                 item, mapping.get("identifier_formats", {}).get(namespace)
             )
-    # Blank text is unknown, never a value: a source that sends "" has said
-    # nothing, and a blank must not win a field or show in the master
-    # (operator, 2026-09-24).
-    fields = {
-        name: mapped_field(row, name, spec)
-        for name, spec in mapping.get("fields", {}).items()
-    }
-    if mapping.get("field_shape") == "nullable_text" and any(
-        v is not None
-        and not isinstance(v, str)
-        and not (name == "address" and isinstance(v, dict))
-        for name, v in fields.items()
-    ):
-        raise UnsupportedRecord("invalid_field_shape")
+    fields, matching, _ = mapped_values(row, contract, quality=False)
     profiles = []
     for spec in mapping.get("profiles", []):
         registration = value(row, spec["registration"])
@@ -321,25 +352,13 @@ def normalize(
         provenance["source"] = {
             name: value(row, path) for name, path in mapping["provenance"].items()
         }
-    if mapping.get("matching"):
-        # What a matching rule compares, kept with the record and out of its
-        # fields, so reading it grants no field a value (ticket 08).
-        # A value is one path, or an address's components, as `fields.address`
-        # reads them (GLEIF's headquarters address: ticket 22).
-        provenance["matching"] = {
-            name: value(row, path) if isinstance(path, str) else mapped_field(row, "address", path)
-            for name, path in mapping["matching"].items()
-        }
-    if contract.get("quality"):
-        # Ticket 22: the feed's fixes and checks, on the mapped values, before
-        # the record's fingerprint. Inside the hashed body, so the record says
-        # which quality version fixed or withheld what.
-        from .quality import apply
-
-        matching = provenance.get("matching") or {}
-        provenance["quality"] = apply(contract["quality"], fields, matching)
-        if matching:
-            provenance["matching"] = matching
+    # Quality runs after the relationships, as before, so a record set aside
+    # for another reason keeps that reason.
+    quality = _quality(contract, fields, matching)
+    if matching:
+        provenance["matching"] = matching
+    if quality is not None:
+        provenance["quality"] = quality
     if labelled is not None:
         # Inside the hashed body, so the record explains what labelled it with
         # no lookup elsewhere. Absent means the contract's own table decided,

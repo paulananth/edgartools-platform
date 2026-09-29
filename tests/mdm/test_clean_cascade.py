@@ -26,7 +26,7 @@ def _filer(cik, key="ACME INC", where=None, incorporated="US-DE"):
 
 def _entity(lei, keys=("ACME INC",), where=None, eligible=True, jurisdiction="US-DE"):
     return Entity(lei=lei, keys=frozenset(keys), place=where or _place(), jurisdiction=jurisdiction,
-                  eligible=eligible, last_update="2026-09-01")
+                  eligible=eligible, last_update="2026-09-01", legal=keys[0])
 
 
 def _run(filers, entities, counts=None):
@@ -35,7 +35,8 @@ def _run(filers, entities, counts=None):
 
 def test_the_strictest_agreeing_pass_binds_and_records_itself():
     found = _run([_filer("1")], [_entity("L1")])
-    assert found == {"1": {"lei": "L1", "last_update": "2026-09-01", "pass": "P1", "flags": []}}
+    assert found == {"1": {"lei": "L1", "last_update": "2026-09-01", "pass": "P1", "flags": [],
+                           "key": "ACME INC", "via": "legal name"}}
 
 
 def test_a_later_pass_takes_what_an_earlier_one_left():
@@ -80,7 +81,7 @@ def test_the_headquarters_address_comes_before_the_legal_address():
 
 def test_a_gleif_other_name_matches():
     found = _run([_filer("1", key="CANON INC")], [_entity("L1", keys=("CANON KABUSHIKI KAISHA", "CANON INC"))])
-    assert found["1"]["lei"] == "L1"
+    assert found["1"]["lei"] == "L1" and found["1"]["via"] == "other name"
 
 
 def test_an_ineligible_entity_never_binds():
@@ -96,3 +97,44 @@ def test_name_alone_binds_only_one_to_one():
     abroad = place({"country": "GB"})
     found = _run([_filer("1", where=abroad)], [_entity("L1")])
     assert found["1"]["pass"] == "P7"
+
+
+def _record(fields, matching, withheld=(), **extra):
+    return {"fields": {k: {"op": "value", "value": v} for k, v in fields.items()},
+            "provenance": {"matching": matching, "quality": {"withheld": list(withheld)}}, **extra}
+
+
+def test_a_filer_is_read_from_the_record_the_stage_holds():
+    from edgar_warehouse.mdm.clean.cascade import filer_of
+
+    sec = _record({"name": "Acme Inc /DE/", "state_of_incorporation": "DE"},
+                  {"address": HQ, "business_country": "US"}, record_key="0000000001")
+    f = filer_of(sec)
+    assert (f.cik, f.key, f.incorporated, f.business_country) == ("0000000001", "ACME INC", "US-DE", "US")
+    assert f.place == _place()
+
+
+def test_an_entity_is_read_from_the_record_the_stage_holds_headquarters_first():
+    from edgar_warehouse.mdm.clean.cascade import entity_of
+
+    gleif = _record({"name": "ACME INC", "jurisdiction": "US-DE", "gleif_last_update": "2026-09-01"},
+                    {"headquarters_address": HQ, "address": {**HQ, "street": "1209 ORANGE ST"}},
+                    withheld=["matching.address"], identifiers={"lei": "L1"})
+    e = entity_of(gleif, frozenset({"ACME INC"}), eligible=True)
+    assert (e.lei, e.jurisdiction, e.last_update, e.eligible, e.legal) == ("L1", "US-DE", "2026-09-01", True, "ACME INC")
+    assert e.place == _place()
+
+
+def test_the_passes_come_from_the_company_rules_in_order():
+    from edgar_warehouse.mdm.clean.cascade import spec
+
+    def rule(n, compare):
+        return {"rule_id": f"p{n}", "when": [
+            {"primitive": "cascade_pass@1", "args": {"pass": f"P{n}", "compare": compare, "over_shared": 25}},
+            {"primitive": "gleif_entity_eligible@1", "args": {"entity_statuses": ["ACTIVE"],
+                                                              "refused_registration_statuses": ["ANNULLED"]}}]}
+
+    policy = {"kinds": {"company": {"rules": [rule(1, ["street"]), {"rule_id": "other", "when": []}, rule(2, None)]}}}
+    found = spec(policy)
+    assert [p["pass"] for p in found["passes"]] == ["P1", "P2"] and found["over_shared"] == 25
+    assert found["entity_statuses"] == ["ACTIVE"]

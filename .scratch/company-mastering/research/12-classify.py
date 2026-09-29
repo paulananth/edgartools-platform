@@ -34,7 +34,7 @@ from pathlib import Path
 
 from edgar_warehouse.mdm.clean.activation import wilson_lower_bound
 from edgar_warehouse.mdm.clean.classification import fired
-from edgar_warehouse.rules import files  # the Company rules, now in rules/
+from edgar_warehouse.mdm.policies import load_kinds
 
 
 def _no_network(*args, **kwargs):
@@ -170,7 +170,7 @@ def row(record: dict) -> dict:
 
 
 def rule() -> tuple[dict, dict]:
-    block = files.policy()["kinds"]["company"]
+    block = load_kinds()["company"]
     (candidate,) = [
         r for r in block["rules"] if r["rule_id"] == "sec-company-candidate"
     ]

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from . import cascade
 from .activation import activated
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
@@ -96,6 +97,19 @@ def _census_lei(record: dict) -> str | None:
     return leis[0][0] if leis else None
 
 
+def _cascade_lei(record: dict) -> str | None:
+    """The LEI the census's cascade assigned this record's CIK (ticket 21)."""
+    return ((_matching(record).get("name_census") or {}).get("cascade") or {}).get("lei")
+
+
+def _pair_lei(rule: dict):
+    """How a rule finds the GLEIF record for an SEC one: a cascade pass reads
+    the cascade's answer, the other rules the census entry."""
+    if any(t["primitive"] == cascade.TEST for t in rule["when"]):
+        return _cascade_lei, "cascade_lei"
+    return _census_lei, "census_lei"
+
+
 def _census_match(sec: dict, gleif: dict, args: dict) -> bool:
     entry = _matching(sec).get("name_census") or {}
     lei = (gleif.get("identifiers") or {}).get("lei")
@@ -111,6 +125,32 @@ def _census_match(sec: dict, gleif: dict, args: dict) -> bool:
         and entry.get("key")
         == key
         == _normalizer(args["gleif_normalizer"])(_value(gleif, "name"))
+    )
+
+
+def _cascade_pass(sec: dict, gleif: dict, args: dict) -> bool:
+    """The census's cascade bound this pair in this pass (ticket 21), and the
+    Stage rows still say so: the same LEI and last update, the same name key
+    (the GLEIF legal name, unless the census matched one of its other names,
+    which the Stage record does not hold), no flag the rule refuses, and the
+    pass's address parts agree on the addresses the quality rule left fit."""
+    answer = (_matching(sec).get("name_census") or {}).get("cascade") or {}
+    key = _normalizer(args["sec_normalizer"])(_value(sec, "name"))
+    gleif_key = _normalizer(args["gleif_normalizer"])(_value(gleif, "name"))
+    return (
+        answer.get("version") == cascade.VERSION
+        and answer.get("pass") == args["pass"]
+        and answer.get("lei") == (gleif.get("identifiers") or {}).get("lei")
+        and answer.get("last_update") == (_value(gleif, "gleif_last_update") or "")
+        and bool(key)
+        and answer.get("key") == key
+        and (gleif_key == key or answer.get("via") == "other name")
+        and not set(answer.get("flags") or []) & set(args.get("refused_flags") or [])
+        and cascade.agrees(
+            cascade.filer_of(sec).place,
+            cascade.entity_of(gleif, frozenset(), eligible=True).place,
+            args["compare"],
+        )
     )
 
 
@@ -160,6 +200,7 @@ PAIR_TESTS = {
     "jurisdiction_agrees@1": _jurisdiction_agrees,
     "jurisdictions_do_not_conflict@1": _no_conflict,
     "postal_agrees@1": _postal_agrees,
+    cascade.TEST: _cascade_pass,
 }
 
 
@@ -188,6 +229,7 @@ def _latest(found: list[dict]) -> dict[str, dict]:
 _LOOKUPS = {
     "lei": "reading->'identifiers'->>'lei'",
     "census_lei": "reading->'provenance'->'matching'->'name_census'->'leis'->0->>0",
+    "cascade_lei": "reading->'provenance'->'matching'->'name_census'->'cascade'->>'lei'",
 }
 
 
@@ -260,8 +302,9 @@ def propose(
             if a["source_code"] == source and a["kind"] == rule["applies_to_verdict"]
         ]
         sec_here = [a for a in batch.values() if a["source_code"] == holder]
+        lei_of, lookup = _pair_lei(rule)
         # Each side of a pair: from this batch, or the latest stored version.
-        lei_of_sec = {_census_lei(a) for a in sec_here} - {None}
+        lei_of_sec = {lei_of(a) for a in sec_here} - {None}
         gleif_all = _latest(
             _stored(conn, source, "lei", sorted(lei_of_sec)) + gleif_here
         )
@@ -270,14 +313,14 @@ def propose(
             _stored(
                 conn,
                 holder,
-                "census_lei",
+                lookup,
                 [lei for lei in leis if lei],
             )
             + sec_here
         )
         sec_by_lei = defaultdict(list)
         for sec in sec_all.values():
-            if lei := _census_lei(sec):
+            if lei := lei_of(sec):
                 sec_by_lei[lei].append(sec)
         subjects = set(gleif_all) | set(sec_all)
         bindings = _bindings(conn, subjects, decisions + result["decisions"])

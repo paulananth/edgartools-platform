@@ -7,6 +7,8 @@ register different rules: the live Company policy is `983352e8…4049`.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from edgar_warehouse.mdm.clean import company_source, gleif_source
@@ -26,6 +28,22 @@ WITH_PLACE_CODES = {
     "policy": "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
     "name_matching_active": "ad70680ac2cbeb04da821038436ccd0c5eff8bfa74f96e29cc205bdd0cd8db80",
 }
+# Company mastering ticket 21 declared the cascade's seven passes, switched
+# off; without them the policy is the one above, so the approved rules are
+# unchanged (operator, 2026-09-28: they stay until ticket 20).
+WITH_CASCADE = {
+    "policy": "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d",
+    "name_matching_active": "8bec2b784b140257223fb8faf592290f679c06c223e0803c69adfb2080045583",
+}
+
+
+def _without_cascade(policy: dict) -> dict:
+    body = json.loads(canonical(policy))
+    rules = body["kinds"]["company"]["rules"]
+    body["kinds"]["company"]["rules"] = [r for r in rules if not r["rule_id"].startswith("sec-gleif-cascade-")]
+    return body
+
+
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
 # both the contract is the one above.
@@ -56,21 +74,20 @@ GLEIF_BEFORE = {
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    assert digest(company_source.POLICY) == WITH_PLACE_CODES["policy"]
-    assert digest({k: v for k, v in company_source.POLICY.items() if k != "reference"}) == (
-        BEFORE["policy"]
-    )
+    assert digest(company_source.POLICY) == WITH_CASCADE["policy"]
+    policy = _without_cascade(company_source.POLICY)
+    assert digest(policy) == WITH_PLACE_CODES["policy"]
+    assert digest({k: v for k, v in policy.items() if k != "reference"}) == BEFORE["policy"]
     assert digest(_without_quality(company_source.CONTRACT)) == BEFORE["contract"]
     assert digest(company_source.CONTRACT) == WITH_QUALITY["contract"]
     assert digest(company_source.FIELDS) == BEFORE["fields"]
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
     assert digest(company_source.NAME_PROOFS) == BEFORE["name_proofs"]
-    assert digest(company_source.name_matching_policy(active=False)) == WITH_PLACE_CODES["policy"]
-    assert (
-        digest(company_source.name_matching_policy(active=True))
-        == WITH_PLACE_CODES["name_matching_active"]
-    )
+    assert digest(company_source.name_matching_policy(active=False)) == WITH_CASCADE["policy"]
+    active = company_source.name_matching_policy(active=True)
+    assert digest(active) == WITH_CASCADE["name_matching_active"]
+    assert digest(_without_cascade(active)) == WITH_PLACE_CODES["name_matching_active"]
 
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))

@@ -27,10 +27,15 @@ This replaces the two jurisdiction and postcode rules of ticket 08, and the
 - [x] Measure a pass ladder on the ticket 08 inputs (20:00 ET):
   [`21-tiers.py`](../research/21-tiers.py), result
   [`21-tiers.json`](../research/21-tiers.json).
-- [ ] Read the research note; settle the pass ladder and its safeguards.
-- [ ] Put the result and the one open question (below) to the operator.
+- [x] Read the research note; settle the pass ladder and its safeguards
+  (operator rulings 2026-09-28: no veto, the proof decides; the approved
+  rules stay until ticket 20).
+- [x] Put the result and the open question to the operator.
+- [x] `/gof-refactor-reviewer`: leave the structure; `PAIR_TESTS` is the
+  registry new tests join.
+- [x] Built the passes as rules data and the engine that runs them, switched
+  off; measured through the production function (above).
 - [ ] Label a sample per pass; prove each pass at the 95% bar.
-- [ ] `/gof-refactor-reviewer`, then build the passes as rules data.
 - [ ] Three-axis review, PR, CI; merge on the operator's word.
 
 ## Measured (2026-09-27 20:00 ET)
@@ -58,6 +63,74 @@ agent's address gives only its country.
 Today's two rules bind 3,050. The passes keep 3,048 of them, with the same
 LEI, and add 536: 456 that wait today, and 80 that today find no GLEIF
 record, through GLEIF's other names (Canon, Hitachi, Sony, Nokia).
+
+## Measured with the quality rule, through the production function (2026-09-28 21:09 ET)
+
+[`21-cascade.py`](../research/21-cascade.py) runs the passes through
+`edgar_warehouse/mdm/clean/cascade.py` (`assign`), the function the Name
+Census runs, so the numbers are what the engine would do. Result:
+[`21-cascade.json`](../research/21-cascade.json), pairs in
+`21-cascade.bound.jsonl`.
+
+Inputs, rebuilt 2026-09-28 from S3 bronze (the originals were in a cleared
+scratchpad; zero SEC requests), under
+`~/.local/share/edgartools/clean-mdm/research/rebuilt-2026-09-28/`:
+- `cm08-sec-scan.jsonl`: 76,230 filers, sha256 `030245b4…` (the original
+  `bdf379bf…` is gone; newer bronze has landed since);
+- `cm08-companies.jsonl`: **byte-identical** to the original, `2a57faa7…d3731`;
+- `cm08-coverage.jsonl`: **byte-identical** to `cm08-coverage-2.jsonl`,
+  `97e5d118…`, so "against today" compares as before;
+- the ticker catalog, `836140c5…`, as ticket 12 pinned.
+The Company list was rebuilt with a one-line import fix to `12-classify.py`
+(`edgar_warehouse.mdm.policies` is gone; the rules now load from `rules/`).
+That file is pinned by ticket 12's approved proof, so the fix was not kept.
+
+| Pass | Companies | Clean | Incorporation conflicts | Name not unique | Both |
+|---|---:|---:|---:|---:|---:|
+| P1 name + street + city + postcode | 1,251 | 1,187 | 39 | 24 | 1 |
+| P2 name + street + postcode | 84 | 79 | 2 | 2 | 1 |
+| P3 name + street + city | 101 | 94 | 1 | 5 | 1 |
+| P4 name + postcode | 441 | 410 | 22 | 9 | 0 |
+| P5 name + city | 242 | 224 | 12 | 6 | 0 |
+| P6 name + country | 1,230 | 1,159 | 58 | 9 | 4 |
+| P7 name alone | 235 | 221 | 14 | 0 | 0 |
+| **All** | **3,584** | **3,374** | **148** | **55** | **7** |
+
+- 3,801 addresses are over-shared (more than 25 entities), so they're compared by country only.
+- Against today's two rules, the cascade keeps 3,048 of their 3,050 binds, all with the same LEI; it binds none to a different LEI and leaves 2.
+- It adds 536 Companies:
+  - 456 that wait today;
+  - 80 with no GLEIF record of their legal name, found through GLEIF's other names.
+- Ticket 08's labels, where a labelled pair falls in a pass:
+  - P1: 747 same, 1 different (AAON), 13 unresolved;
+  - P2: 65 same;
+  - P3: 10 same;
+  - P4: 263 same, 8 unresolved;
+  - P5: 38 same;
+  - P6: 285 same, 2 unresolved;
+  - P7: 81 same.
+
+  These were drawn from today's binds, not from what each pass adds, so they are not the proof.
+
+## Built (switched off)
+
+- `cascade.py`: the passes (`assign`), the fit address, the readers of a
+  Stage record (`filer_of`, `entity_of`), the passes read from the rules
+  (`spec`).
+- The Name Census runs the cascade over both whole sources when the Company
+  rules declare passes, and pins the SEC address member it read; each SEC
+  record carries its CIK's answer inside its census entry
+  (`matching.name_census.cascade`), so the SEC contract is unchanged.
+- `adapters.mapped_values`: the part of `normalize` that maps fields and
+  matching values and applies quality, which the census reads every filer
+  and entity through, so the two cannot differ.
+- `cascade_pass@1`: the Merge Stage re-checks a pair on its own rows (the
+  same LEI, last update, name key, no refused flag, the pass's address parts
+  agree). A pass rule is checked for exactly one pass, eligibility and the
+  one-LEI veto.
+- `rules/merge/kinds/company.yaml`: seven rules `sec-gleif-cascade-p1..p7`,
+  declared, not switched on. Without them the policy digest is the approved
+  one (`3520e890…`; `983352e8…4049` without the place-code table).
 
 ## Open
 

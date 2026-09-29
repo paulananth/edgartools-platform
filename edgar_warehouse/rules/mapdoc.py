@@ -69,6 +69,10 @@ CONDITION_WORDS = {
     "evidence_present@1": "The record has {document}",
     "name_census_match@1": "The names are equal, legal form kept, and exactly one SEC filer and one GLEIF "
                            "entity carry that name",
+    "cascade_pass@1": "Pass {pass}: the names are equal, legal form kept (GLEIF's other names count), and, "
+                      "of what earlier passes left, exactly one SEC company and one GLEIF entity agree on "
+                      "{compare}. An address more than {over_shared} entities share counts by its country only. "
+                      "Refused flags: {refused_flags}",
     "gleif_entity_eligible@1": "The GLEIF entity is {categories}, {entity_statuses}, and not "
                                "{refused_registration_statuses}",
     "holds_no_other_lei@1": "The SEC company is not already linked to another LEI",
@@ -226,8 +230,20 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
 
 # --- a kind's workbook --------------------------------------------------------------
 
+def _compare(parts: list | None) -> str:
+    """A cascade pass's address parts in words: none listed is the country
+    alone; none at all is the name alone."""
+    if parts is None:
+        return "the name alone"
+    return "the country" + "".join(f", {p}" for p in parts)
+
+
 def _conditions(items: list[dict]) -> str:
-    return "; and ".join(words(CONDITION_WORDS, w.get("primitive"), w.get("args") or {}) for w in items)
+    def args(w: dict) -> dict:
+        found = w.get("args") or {}
+        return {**found, "compare": _compare(found.get("compare"))} if w.get("primitive") == "cascade_pass@1" else found
+
+    return "; and ".join(words(CONDITION_WORDS, w.get("primitive"), args(w)) for w in items)
 
 
 def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict[str, list[list[str]]]:
