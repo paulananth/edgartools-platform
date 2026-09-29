@@ -1,0 +1,113 @@
+{
+ "against_today": {
+  "BIND jurisdiction | cascade binds | same LEI": 2853,
+  "BIND jurisdiction | cascade leaves | -": 2,
+  "BIND postal | cascade binds | same LEI": 195,
+  "defer | cascade binds | -": 456,
+  "defer | cascade leaves | -": 59,
+  "no GLEIF record with this name | cascade binds | -": 80,
+  "no GLEIF record with this name | cascade leaves | -": 2769
+ },
+ "bound_companies": 3584,
+ "companies": 6414,
+ "exceptions_never_bound": {},
+ "inputs": {
+  "coverage": {
+   "path": "/Users/aneenaananth/.local/share/edgartools/clean-mdm/research/rebuilt-2026-09-28/cm08-coverage.jsonl",
+   "sha256": "97e5d11824dc146f5446d3482c2a5214137a98bb18ec85c9674ca27e6a966509"
+  },
+  "gleif": {
+   "path": "/Users/aneenaananth/.local/share/edgartools/clean-mdm/research/cm08-gleif-all.jsonl",
+   "sha256": "e4e6fe8aba15459ca361e09f0079c314f30825ee8c5831c2b4a4df83afdb1d9f"
+  },
+  "sec_scan": {
+   "path": "/Users/aneenaananth/.local/share/edgartools/clean-mdm/research/rebuilt-2026-09-28/cm08-sec-scan.jsonl",
+   "sha256": "030245b47abe2d9dda725422a5cf471a76d46056b5904ea0faf5b8187831bfa5"
+  }
+ },
+ "labels_by_pass": {
+  "P1 name + street + city + postcode | different": 1,
+  "P1 name + street + city + postcode | same": 747,
+  "P1 name + street + city + postcode | unresolved": 13,
+  "P2 name + street + postcode | same": 65,
+  "P3 name + street + city | same": 10,
+  "P4 name + postcode | same": 263,
+  "P4 name + postcode | unresolved": 8,
+  "P5 name + city | same": 38,
+  "P6 name + country | same": 285,
+  "P6 name + country | unresolved": 2,
+  "P7 name alone | same": 81
+ },
+ "over_shared": {
+  "addresses": 3801,
+  "threshold": 25
+ },
+ "passes": {
+  "P1 name + street + city + postcode": {
+   "bound_all_filers": 2955,
+   "bound_companies": 1251,
+   "companies_by_stratum": {
+    "clean": 1187,
+    "incorporation conflicts": 39,
+    "incorporation conflicts + name not unique over both sources": 1,
+    "name not unique over both sources": 24
+   }
+  },
+  "P2 name + street + postcode": {
+   "bound_all_filers": 196,
+   "bound_companies": 84,
+   "companies_by_stratum": {
+    "clean": 79,
+    "incorporation conflicts": 2,
+    "incorporation conflicts + name not unique over both sources": 1,
+    "name not unique over both sources": 2
+   }
+  },
+  "P3 name + street + city": {
+   "bound_all_filers": 236,
+   "bound_companies": 101,
+   "companies_by_stratum": {
+    "clean": 94,
+    "incorporation conflicts": 1,
+    "incorporation conflicts + name not unique over both sources": 1,
+    "name not unique over both sources": 5
+   }
+  },
+  "P4 name + postcode": {
+   "bound_all_filers": 1170,
+   "bound_companies": 441,
+   "companies_by_stratum": {
+    "clean": 410,
+    "incorporation conflicts": 22,
+    "name not unique over both sources": 9
+   }
+  },
+  "P5 name + city": {
+   "bound_all_filers": 542,
+   "bound_companies": 242,
+   "companies_by_stratum": {
+    "clean": 224,
+    "incorporation conflicts": 12,
+    "name not unique over both sources": 6
+   }
+  },
+  "P6 name + country": {
+   "bound_all_filers": 4909,
+   "bound_companies": 1230,
+   "companies_by_stratum": {
+    "clean": 1159,
+    "incorporation conflicts": 58,
+    "incorporation conflicts + name not unique over both sources": 4,
+    "name not unique over both sources": 9
+   }
+  },
+  "P7 name alone": {
+   "bound_all_filers": 716,
+   "bound_companies": 235,
+   "companies_by_stratum": {
+    "clean": 221,
+    "incorporation conflicts": 14
+   }
+  }
+ }
+}

@@ -238,6 +238,8 @@ REGISTRY = MappingProxyType(
                 "jurisdiction_agrees@1",
                 "jurisdictions_do_not_conflict@1",
                 "postal_agrees@1",
+                # Ticket 21: one pass of the cascade the census ran.
+                "cascade_pass@1",
             )
         },
         "evidence_present@1": Primitive(_evidence_present, "classification"),

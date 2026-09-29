@@ -146,3 +146,61 @@ class TestWhatARecordCarries:
     def test_a_name_the_census_does_not_hold_has_no_entry(self):
         doc = census([APPLE], [])
         assert entry(doc, "SOMEONE ELSE INC", census_digest="x") is None
+
+
+class TestTheCascade:
+    """Ticket 21: the census runs the cascade over both whole sources."""
+
+    def native(self, lei, legal, street, country="US", status="ACTIVE"):
+        address = {"FirstAddressLine": {"$": street}, "City": {"$": "CUPERTINO"},
+                   "PostalCode": {"$": "95014"}, "Country": {"$": country}}
+        record = gleif(lei, legal)
+        record["Entity"].update({"LegalAddress": address, "HeadquartersAddress": address,
+                                 "LegalJurisdiction": {"$": "US-CA"}, "EntityStatus": {"$": status}})
+        record["Registration"]["RegistrationStatus"] = {"$": "ISSUED"}
+        return record
+
+    def run(self, records):
+        from edgar_warehouse.mdm.clean import cascade
+        from edgar_warehouse.mdm.clean.company_source import POLICY
+        from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+
+        filer = cascade.Filer(cik="0000320193", key="APPLE INC",
+                              place=cascade.place({"street": "1 APPLE PARK WAY", "city": "CUPERTINO",
+                                                   "postcode": "95014", "country": "US"}),
+                              incorporated="US-CA", business_country="US")
+        raw = archive(records)
+        return build(
+            filers=[APPLE], sec_population={"capture_run_id": "run-1", "filers": 1},
+            gleif_archive=io.BytesIO(raw), gleif_metadata=metadata(len(records)),
+            gleif_sha256=hashlib.sha256(raw).hexdigest(),
+            cascade={"spec": cascade.spec(POLICY), "filers": [filer], "gleif_contract": dataset_contract("level1")},
+        )
+
+    def test_the_entity_at_the_filers_address_binds_in_the_first_pass(self):
+        found = self.run([self.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way"),
+                          self.native("5493001KJTIIGC8Y1R12", "Apple Inc.", "1 Rue de Paris", country="FR")])
+        answer = found["cascade"]["assignments"]["0000320193"]
+        assert (answer["lei"], answer["pass"], answer["via"]) == ("HWUPKR0MPOU8FGXBT394", "P1", "legal name")
+        assert answer["flags"] == ["name held by another candidate"]
+        assert [p["pass"] for p in found["cascade"]["passes"]][:2] == ["P1", "P2"]
+
+    def test_an_entity_the_rules_find_ineligible_never_binds(self):
+        found = self.run([self.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way", status="INACTIVE")])
+        assert found["cascade"]["assignments"] == {}
+
+    def test_without_passes_the_census_is_as_before(self):
+        assert "cascade" not in census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
+
+
+def test_a_record_carries_its_ciks_cascade_answer_inside_its_census_entry():
+    from edgar_warehouse.mdm.clean.company_source import _census_evidence
+
+    found = census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
+    row = {"cik": 320193, "entity_name": "APPLE INC"}
+    assert "cascade" not in _census_evidence(found, row, "d")  # no passes: as before
+    found["cascade"] = {"version": "sec-gleif-cascade-v1", "assignments": {"0000320193": {"lei": "L", "pass": "P1"}}}
+    carried = _census_evidence(found, row, "d")
+    assert carried["key"] == "APPLE INC"
+    assert carried["cascade"] == {"census": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
+    assert "cascade" not in _census_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")

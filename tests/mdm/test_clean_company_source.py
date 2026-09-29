@@ -686,6 +686,22 @@ class TestMatchingEvidenceIsPinned:
         record = json.loads((Path(args["output"]) / "records.jsonl").read_text())
         assert record["business_address"] is None
 
+    def test_the_census_runs_no_cascade_while_every_pass_is_off(self, tmp_path):
+        # Ticket 21: the passes are declared, switched off; the census and
+        # every record it feeds stay as before until one is switched on.
+        args = landing(tmp_path, [source_row(123)])
+        census = json.loads(Path(args["name_census"]).read_text())
+        assert "cascade" not in census and "address_member_sha256" not in census["sec"]
+
+    def test_a_filer_is_read_for_the_cascade_through_the_sec_contract(self):
+        from edgar_warehouse.mdm.clean.company_source import business_address, cascade_filer
+
+        row = {**source_row(320193, entity_name="APPLE INC"), "state_of_incorporation": "CA"}
+        found = cascade_filer(row, business_address(address_row(320193)))
+        assert (found.cik, found.key, found.incorporated) == ("0000320193", "APPLE INC", "US-CA")
+        assert found.place.country == "US" and found.place.street
+        assert cascade_filer({**row, "entity_name": None}, None) is None  # an exception never merges
+
     def test_a_census_of_another_capture_is_refused(self, tmp_path):
         args = landing(tmp_path, [source_row(123)])
         other = landing(tmp_path / "other", [source_row(123), source_row(456)])

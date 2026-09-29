@@ -23,7 +23,7 @@ import pyarrow.parquet as pq
 from edgar_warehouse.rules import files as rules_files
 
 from .evidence import instant
-from .matching import FAMILY
+from .matching import FAMILY, active_rules
 from .name_census import entry as census_entry
 from .names import edgar_jurisdiction
 from .store import Conflict, canonical, digest
@@ -147,18 +147,21 @@ def _business_addresses(landing: dict, parquet: pq.ParquetFile) -> dict[int, dic
                 raise Conflict("Address row belongs to a different capture run")
             if row["cik"] is None or row["address_type"] != "business":
                 continue
-            place = edgar_jurisdiction(
-                row["state_or_country"] or row.get("country_code")
-            )
-            found[int(row["cik"])] = {
-                "street": row["street1"] or None,
-                "street2": row["street2"] or None,
-                "city": row["city"] or None,
-                "region": row["state_or_country"] or None,
-                "postal_code": row["zip_code"] or None,
-                "country": place.split("-")[0] if place else None,
-            }
+            found[int(row["cik"])] = business_address(row)
     return found
+
+
+def business_address(row: dict) -> dict:
+    """One landed business address as the Company record carries it."""
+    place = edgar_jurisdiction(row["state_or_country"] or row.get("country_code"))
+    return {
+        "street": row["street1"] or None,
+        "street2": row["street2"] or None,
+        "city": row["city"] or None,
+        "region": row["state_or_country"] or None,
+        "postal_code": row["zip_code"] or None,
+        "country": place.split("-")[0] if place else None,
+    }
 
 
 @dataclass(frozen=True)
@@ -296,6 +299,21 @@ def _read_receipts(path: str, run_id: str) -> tuple[bytes, dict[str, str]]:
     return raw, {r["sha256"]: r["object"] for r in body["receipts"]}
 
 
+def _census_evidence(census: dict, row: dict, census_hash: str) -> dict | None:
+    """What the census says of one SEC record: its name's entry and, when
+    the census ran the cascade (ticket 21), the answer for its CIK. Both are
+    one pinned document, so the record carries them as one value."""
+    from . import cascade
+
+    found = census_entry(census, row["entity_name"], census_digest=census_hash)
+    if "cascade" not in census:
+        return found
+    answer = cascade.entry(census, f"{int(row['cik']):010d}", census_digest=census_hash)
+    if answer is None:
+        return found  # no answer for this CIK: the record is as before
+    return {**(found or {}), "cascade": answer}
+
+
 def prepare_company_bundle(
     *,
     landing_root: str,
@@ -406,9 +424,7 @@ def prepare_company_bundle(
                 {
                     **row,
                     **{e.field: e.by_cik.get(int(row["cik"]), e.empty) for e in pinned},
-                    "name_census": census_entry(
-                        census, row["entity_name"], census_digest=census_hash
-                    ),
+                    "name_census": _census_evidence(census, row, census_hash),
                     "_origin": {
                         "member": member["relative_path"],
                         "sha256": raw_hash,
@@ -593,6 +609,48 @@ def census_filers(
     return filers, population
 
 
+_ADDRESS_COLUMNS = {
+    "cik", "address_type", "street1", "street2", "city", "zip_code", "state_or_country", "last_sync_run_id",
+}
+
+
+def cascade_filers(*, landing_root: str, landing_manifest: str) -> tuple[list, dict]:
+    """Every SEC filer in one capture as the cascade reads it (ticket 21):
+    the row with its business address, through the SEC contract and its data
+    quality rule, as `normalize` reads a Company record. Every filer counts,
+    a Company or not: each can hold a name another would match. A filer the
+    quality rule makes an exception never merges and is left out.
+    """
+    root = Path(landing_root).resolve()
+    landing, _ = _read_manifest(root, landing_manifest)
+    _, _, company = _read_member(root, landing, "sec_company", {"cik", "entity_name", "last_sync_run_id"})
+    _, address_raw, addresses = _read_member(root, landing, "sec_company_address", _ADDRESS_COLUMNS)
+    business = _business_addresses(landing, addresses)
+    filers = []
+    for batch in company.iter_batches(batch_size=10_000):
+        for row in batch.to_pylist():
+            if row["last_sync_run_id"] != landing["run_id"]:
+                raise Conflict("Company row belongs to a different capture run")
+            if found := cascade_filer(row, business.get(int(row["cik"]))):
+                filers.append(found)
+    return filers, {"address_member_sha256": hashlib.sha256(address_raw).hexdigest()}
+
+
+def cascade_filer(row: dict, business: dict | None):
+    """One landed Company row and its business address as the cascade reads
+    it, through the SEC contract and its data quality rule; None when the
+    quality rule makes it an exception, which never merges. The census and
+    the proof (`21-cascade.py`) both read filers here."""
+    from . import cascade
+    from .adapters import UnsupportedRecord, mapped_values
+
+    try:
+        fields, matching, quality = mapped_values({**row, "business_address": business}, CONTRACT)
+    except UnsupportedRecord:
+        return None
+    return cascade.filer_of(cascade.record(f"{int(row['cik']):010d}", fields, matching, quality))
+
+
 def write_name_census(
     *,
     landing_root: str,
@@ -606,11 +664,27 @@ def write_name_census(
 
     An existing census is never overwritten with different content.
     """
+    from . import cascade as cascaded
+    from .gleif_source import dataset_contract
     from .name_census import build
 
     filers, population = census_filers(
         landing_root=landing_root, landing_manifest=landing_manifest
     )
+    # The cascade's passes (ticket 21), from the Company rules. The census
+    # runs them only once one is switched on (ticket 20); until then it and
+    # every record it feeds are as before. It runs every declared pass, in
+    # order: an earlier pass's answer never depends on a later one.
+    spec = cascaded.spec(POLICY)
+    cascade = None
+    if spec["passes"] and any(
+        t["primitive"] == cascaded.TEST for _, rule in active_rules(POLICY) for t in rule["when"]
+    ):
+        cascade_population, pinned = cascade_filers(
+            landing_root=landing_root, landing_manifest=landing_manifest
+        )
+        population = {**population, **pinned}
+        cascade = {"spec": spec, "filers": cascade_population, "gleif_contract": dataset_contract("level1")}
     metadata = json.loads(Path(gleif_metadata).read_text())
     with Path(gleif_archive).open("rb") as archive:
         census = build(
@@ -619,6 +693,7 @@ def write_name_census(
             gleif_archive=archive,
             gleif_metadata=metadata,
             gleif_sha256=gleif_sha256,
+            cascade=cascade,
         )
     data = (canonical(census) + "\n").encode()
     target = Path(output).resolve()
@@ -647,6 +722,12 @@ def write_name_census(
 NAME_PROOFS = rules_files.pending_proofs()
 
 
+def _is_cascade_pass(rule: dict) -> bool:
+    from .cascade import TEST
+
+    return any(t["primitive"] == TEST for t in rule["when"])
+
+
 def name_matching_policy(*, active: bool) -> dict:
     """The live Company policy, with its matching rules' activations if `active`.
 
@@ -669,7 +750,9 @@ def name_matching_policy(*, active: bool) -> dict:
                     "proof": NAME_PROOFS[rule["rule_id"]],
                 }
                 for rule in body["kinds"]["company"]["rules"]
-                if rule["family"] == FAMILY
+                # A cascade pass waits for its own proof (ticket 21); every
+                # other matching rule must have one, or this fails closed.
+                if rule["family"] == FAMILY and not _is_cascade_pass(rule)
             ),
         ]
     return body

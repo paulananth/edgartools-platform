@@ -101,6 +101,11 @@ def check_policy(body: dict) -> None:
                 f"Rule {rule.get('rule_id')} has an unknown family: {family}"
             )
         RULE_CHECKS[family](kind, rule, kinds)
+    # The cascade's passes together: distinct, one threshold, one
+    # eligibility (ticket 21); each pass alone is checked above.
+    from .cascade import spec
+
+    spec(body)
     active = set()
     for entry in body.get("automatic_rules") or []:
         if not isinstance(entry, dict):
@@ -484,11 +489,39 @@ def check_name_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
                 f"Name binding rule {rule_id} calls {test}, which is not a name "
                 "binding test"
             )
+    if "cascade_pass@1" in tests:
+        _check_cascade_pass(rule_id, rule, tests)
+        return
     if "name_census_match@1" not in tests or not NAME_BINDING_PLACE_TESTS & set(tests):
         raise Conflict(
             f"Name binding rule {rule_id} must rest on the Name Census and a place "
             "test, never the name alone"
         )
+
+
+def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
+    """One pass of the cascade (ticket 21). It rests on the census's answer,
+    one to one over both whole sources, not on a Stage's scope; the pass
+    states which address parts it compares, down to the name alone, as the
+    operator ruled (2026-09-27), and each pass is proven on its own."""
+    from .cascade import CONFLICT, NOT_UNIQUE, PARTS
+
+    if "name_census_match@1" in tests or tests.count("cascade_pass@1") != 1:
+        raise Conflict(f"Cascade rule {rule_id} is exactly one pass and no other name rule")
+    if not {"gleif_entity_eligible@1", "holds_no_other_lei@1"} <= set(tests):
+        raise Conflict(f"Cascade rule {rule_id} must test eligibility and the one-LEI veto")
+    args = next(t.get("args") or {} for t in rule["when"] if t.get("primitive") == "cascade_pass@1")
+    compare = args.get("compare")
+    if (
+        not isinstance(args.get("pass"), str)
+        or not (compare is None or (isinstance(compare, list) and set(compare) <= set(PARTS)))
+        or type(args.get("over_shared")) is not int
+        or args["over_shared"] < 1
+        or args.get("sec_normalizer") not in NORMALIZERS
+        or args.get("gleif_normalizer") not in NORMALIZERS
+        or not set(args.get("refused_flags") or []) <= {CONFLICT, NOT_UNIQUE}
+    ):
+        raise Conflict(f"Cascade rule {rule_id} has invalid pass arguments")
 
 
 RULE_CHECKS = {

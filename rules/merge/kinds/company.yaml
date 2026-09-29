@@ -277,6 +277,227 @@ rules:
       sec_country: matching.business_country
       gleif_code: matching.headquarters_postal_code
       gleif_country: matching.headquarters_country
+# The cascade (company mastering ticket 21; operator, 2026-09-27: "name and
+# address first ... then reduce the fields gradually"). One rule per pass, in
+# order; the Name Census runs the passes once over both whole sources, one to
+# one over what earlier passes left, on the addresses the quality rule leaves
+# fit (headquarters first; one more than 25 entities share is compared by
+# country only: ticket 22, "25, yes"). No jurisdiction test: a conflict in
+# place of incorporation is flagged, and the proof decides (2026-09-28).
+# Declared, not switched on: each pass needs its own proof and the
+# operator's approval (ticket 20). The two rules above stay until then.
+- rule_id: sec-gleif-cascade-p1
+  version: 2026-09-28.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: P1
+      compare:
+      - street
+      - city
+      - postcode
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+- rule_id: sec-gleif-cascade-p2
+  version: 2026-09-28.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: P2
+      compare:
+      - street
+      - postcode
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+- rule_id: sec-gleif-cascade-p3
+  version: 2026-09-28.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: P3
+      compare:
+      - street
+      - city
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+- rule_id: sec-gleif-cascade-p4
+  version: 2026-09-28.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: P4
+      compare:
+      - postcode
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+- rule_id: sec-gleif-cascade-p5
+  version: 2026-09-28.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: P5
+      compare:
+      - city
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+- rule_id: sec-gleif-cascade-p6
+  version: 2026-09-28.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: P6
+      compare: []
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
+- rule_id: sec-gleif-cascade-p7
+  version: 2026-09-28.1
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: P7
+      compare: null
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
 normalizers:
   conformed: normalize_text@edgar-conformed-v1
 lists:
