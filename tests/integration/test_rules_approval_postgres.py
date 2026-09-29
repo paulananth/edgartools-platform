@@ -18,7 +18,9 @@ from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.bookkeeping.clean.config import Blocked
 from edgar_warehouse.rules import db as rules_db
-from edgar_warehouse.rules.db import Rules, migrate, proof_holds
+from edgar_warehouse.change_journal.authority import proof_holds
+from edgar_warehouse.rules.db import Rules, migrate
+from tests.support.rules_approval import approve
 
 BATCH = "a" * 64
 
@@ -126,16 +128,14 @@ def test_rows_approved_the_old_way_survive_003(pg, populated):
     assert row(pg, populated["proven"]["name"])["status"] == "proven"
     assert row(pg, populated["draft"]["name"])["proof"] is None
     # A version proven before 003 is approved the new way, on its evidence.
-    approved = pg["agent"].approve("pipeline", populated["proven"]["name"], by="Operator", words="approved")
+    approved = approve(pg["agent"], "pipeline", populated["proven"]["name"], "1", by="Operator")
     assert approved["approval_recorded_by"] == "rules_agent"
 
 
 def test_no_approval_without_test_evidence(pg, populated):
     name = populated["draft"]["name"]
-    with pytest.raises(Blocked, match="test evidence"):
-        pg["agent"].approve("pipeline", name, by="Operator", words="approved")
     with pytest.raises(Blocked, match="No approval without test evidence"):
-        pg["agent"].approve("pipeline", name, "1", by="Operator", words="approved")
+        pg["agent"].approve("pipeline", name, "1", evidence="0" * 64, by="Operator", words="approved")
     with pytest.raises(DBAPIError, match="No approval without test evidence"), pg["agent"].engine.begin() as conn:
         conn.execute(text("UPDATE rules.rule_version SET approved_by='Operator',approved_words='approved' "
                           "WHERE name=:n"), {"n": name})
@@ -149,8 +149,10 @@ def test_approval_by_saying_so_records_name_words_evidence_and_login(pg, populat
         conn.execute(text("UPDATE rules.rule_version SET approved_by='Operator',approved_words=' ' WHERE name=:n"),
                      {"n": saved["name"]})
     with pytest.raises(DBAPIError, match="nothing to overrule"):
-        agent.approve("pipeline", saved["name"], by="Operator", words="approved", overrule="no need")
-    approved = agent.approve("pipeline", saved["name"], by="Operator", words="Yes, approve the fixture source")
+        approve(agent, "pipeline", saved["name"], "1", overrule="no need")
+    with pytest.raises(Blocked, match="differs from the one shown"):
+        agent.approve("pipeline", saved["name"], "1", evidence="0" * 64, by="Operator", words="approved")
+    approved = approve(agent, "pipeline", saved["name"], "1", by="Operator", words="Yes, approve the fixture source")
     assert (approved["approved_by"], approved["approved_words"], approved["approval_recorded_by"]) == (
         "Operator", "Yes, approve the fixture source", "rules_agent")
     with agent.engine.connect() as conn:
@@ -179,12 +181,17 @@ def test_a_failing_run_is_kept_and_approved_only_with_an_overrule(pg, populated)
     assert row(pg, saved["name"])["proof"]["note"] == "second run"
     with pytest.raises(Blocked, match="Only a proven version"):
         agent.activate("pipeline", saved["name"], "1")
+    shown = [p for p in agent.pending() if p["name"] == saved["name"]][0]["evidence_hash"]
+    agent.prove("pipeline", saved["name"], "1", proof(saved, passed=False, note="third run"))
+    with pytest.raises(Blocked, match="differs from the one shown"):  # not the run the operator read
+        agent.approve("pipeline", saved["name"], "1", evidence=shown, by="Operator", words="approved",
+                      overrule="read it")
     with pytest.raises(Blocked, match="overrule reason"):
-        agent.approve("pipeline", saved["name"], by="Operator", words="approved")
+        approve(agent, "pipeline", saved["name"], "1", by="Operator")
     with pytest.raises(DBAPIError, match="overrule reason"), agent.engine.begin() as conn:
         conn.execute(text("UPDATE rules.rule_version SET approved_by='Operator',approved_words='approved' "
                           "WHERE name=:n"), {"n": saved["name"]})
-    approved = agent.approve("pipeline", saved["name"], by="Operator", words="approve it anyway",
+    approved = approve(agent, "pipeline", saved["name"], "1", by="Operator", words="approve it anyway",
                              overrule="9 of 10 is enough for a fixture")
     assert (approved["status"], approved["approval_overrule"]) == ("proven", "9 of 10 is enough for a fixture")
     agent.activate("pipeline", saved["name"], "1")
@@ -198,7 +205,7 @@ def test_pending_lists_evidence_and_changes_from_the_active_version(pg, populate
     name = f"pending-{uuid4().hex[:8]}"
     first = agent.save("pipeline", name, "1", pipeline())
     agent.prove("pipeline", name, "1", proof(first))
-    agent.approve("pipeline", name, by="Operator", words="approved")
+    approve(agent, "pipeline", name, "1", by="Operator")
     agent.activate("pipeline", name, "1")
     second = agent.save("pipeline", name, "2", pipeline(change=1))
     agent.prove("pipeline", name, "2", proof(second, evidence={"counts": {"changed": 1}, "examples": ["one"]},
@@ -206,7 +213,26 @@ def test_pending_lists_evidence_and_changes_from_the_active_version(pg, populate
     listed = [p for p in agent.pending() if p["name"] == name]
     assert listed == [{"kind": "pipeline", "name": name, "version": "2", "passed": True,
                        "evidence": {"counts": {"changed": 1}, "examples": ["one"]}, "note": "one value changes",
-                       "proved_at": listed[0]["proved_at"], "changes": ["changed change: 0 -> 1"]}]
-    assert agent.approve("pipeline", name, by="Operator", words="approved")["version"] == "2"
+                       "proved_at": listed[0]["proved_at"], "evidence_hash": listed[0]["evidence_hash"],
+                       "changes": ["changed change: 0 -> 1"]}]
+    assert approve(agent, "pipeline", name, "2", by="Operator")["version"] == "2"
+    assert len(listed[0]["evidence_hash"]) == 64
     assert not [p for p in agent.pending() if p["name"] == name]
     json.dumps(agent.pending(), default=str)
+
+
+def test_a_source_that_could_not_be_read_is_kept_but_never_overruled(pg, populated):
+    agent = pg["agent"]
+    name = f"unread-{uuid4().hex[:8]}"
+    body = {"source": name, "acquisition": {"version": 1, "feeds": {"fixture": {
+        "family": "fixture", "datasets": ["fixture.v1"], "scope": ["fixture"],
+        "capabilities": {"capture": "provider.capture", "fetch": "http.conditional"},
+        "completeness": {"format": "json", "required": [], "allow_empty": True, "max_bytes": 1024},
+        "required_producers": ["capture"], "url_prefixes": ["https://fixture.invalid/"]}}}}
+    saved = agent.save("source", name, "1", body)
+    unread = {"fixture": {"manifest": {"uri": "file:///fixture/manifest.json", "sha256": "0" * 64},
+                          "counts": {"capture": {"expected": 3, "verified": 1}}, "checks": {"complete": False}}}
+    agent.prove("source", name, "1", proof(saved, passed=False, acquisition=unread, note="2 of 3 files missing"))
+    with pytest.raises(DBAPIError, match="acquisition"):
+        approve(agent, "source", name, "1", by="Operator", overrule="read what there is")
+    assert agent.version("source", name, "1")["approved_by"] is None

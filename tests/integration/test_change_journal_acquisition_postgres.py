@@ -23,6 +23,7 @@ from tests.integration.test_configured_bookkeeping_postgres import (
     expire,
     submit,
 )
+from tests.support.rules_approval import approve
 
 
 def definition(format="json", required=None):
@@ -150,7 +151,7 @@ def capture_run(
         databases.rules.prove("source", name, "1", proof)
         with pytest.raises(DBAPIError):
             databases.rules.activate("source", name, "1")
-        databases.approver.approve("source", name, "1", by="operator", words="approved")
+        approve(databases.approver, "source", name, "1")
         databases.rules.activate("source", name, "1")
         rules_ref = databases.rules.resolve(
             "source", name, root=tmp_path.as_uri() + "/rules"

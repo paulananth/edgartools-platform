@@ -69,3 +69,6 @@ def test_the_command_switches_one_rule_on(root, capsys):
     assert RULE in capsys.readouterr().out
     assert args.handler(args) == 1
     assert "already switched on" in capsys.readouterr().err
+    wrong = parser.parse_args(["rules", "approve", "--merge", "platform", "--rule", RULE, "--version", "2",
+                               "--by", "Operator", "--words", "yes", "--root", str(root)])
+    assert wrong.handler(wrong) == 2

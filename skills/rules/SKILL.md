@@ -374,13 +374,18 @@ the merge rules by saying so. Nobody types a digest, a login or an address.
    showed. A version with no test run is not listed and cannot be approved:
    run it first (step 10).
 3. Wait for their words. Record only an approval they gave for that version:
-   `rules approve --source <name> --by "<their name>" --words "<their exact
-   words>"` (`--merge <name>` for merge rules; `--version <v>` to name one
-   other than the newest waiting). The database keeps the name, the words,
-   the time, the evidence it rests on and your login beside them.
+   `rules approve --source <name> --version <v> --evidence <evidence_hash>
+   --by "<their name>" --words "<their exact words>"` (`--merge <name>` for
+   merge rules), with the version and `evidence_hash` that `rules pending`
+   showed; you pass these, the operator never types them. It refuses a test
+   run recorded since you showed it: show the new one and ask again. The
+   database keeps the name, the words, the time, the evidence it rests on
+   and your login beside them.
 4. A failing test run is approved only when they overrule it, with their
    reason: ask for it, then add `--overrule "<their reason>"`. Recommend
-   against an overrule you think is wrong, once, and say why.
+   against an overrule you think is wrong, once, and say why. A source whose
+   files could not be read (its acquisition checks failed) is never
+   overruled: the approval is refused.
 5. Then activate (step 10) and tell them it is in effect.
 
 **One merge rule.** A matching rule declared in `rules/merge/kinds/` with its
@@ -390,7 +395,8 @@ were right, the adversarial pairs), then wait for their words, and run
 `rules approve --merge platform --rule <rule_id> --by "<their name>" --words
 "<their exact words>"`. It adds the rule to `merge/policy.yaml` with its proof
 and their approval, keeping the file's comments, and refuses a rule with no
-proof or one short of its kind's bar. The merge rules that carry it are a new
+proof or one short of its kind's bar (a single rule is not overruled
+here: log it for a ticket). The merge rules that carry it are a new
 merge version: save it, record its test run, and record the same words on it
 when `rules pending` shows it changes only that rule; then activate.
 

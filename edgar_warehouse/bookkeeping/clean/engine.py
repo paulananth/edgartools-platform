@@ -119,7 +119,7 @@ class Bookkeeping:
         reference(inputs_ref)
         export = self.artifacts.json(rules_ref)
         proof = export.get("proof")
-        from edgar_warehouse.rules.db import proof_holds
+        from edgar_warehouse.change_journal.authority import proof_holds
 
         if (export.get("status") != "active" or not isinstance(proof, dict) or not proof_holds(export)
                 or digest(export["body"]) != export.get("digest")):

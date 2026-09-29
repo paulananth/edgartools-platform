@@ -123,11 +123,28 @@ approver login goes away with this ticket.
 5. **First use:** the GLEIF and SEC source versions of ticket 18. Ticket 20's
    labelling stays out of this ticket.
 
+## Review (2026-09-29 19:30 ET)
+
+Three-axis review of 7a38359c. Fixed: the approval names the version and the
+evidence `rules pending` showed, and is refused if a run was recorded since
+(what the operator approves is what they read); a failing run of a source is
+kept even when its files could not be read, and is never overruled (the
+acquisition trigger refuses it at proven); `--rule` takes only `--merge
+platform` and refuses `--version`, `--evidence` and `--overrule`;
+`proof_holds` sits beside `validation_proof`; the "waiting" condition is
+written once; a weakened test split back. Kept on purpose: the Python
+refusals beside the trigger (plain-words errors; the trigger is the
+authority); the `rules_approver` role (rows approved the old way name its
+members; nothing needs it now); a switched-on rule's proof stays in
+`pending-proofs.yaml` as measured, and `policy.yaml` carries its approval.
+Left for a ticket: overruling a single merge rule short of its bar; a
+command that writes a source's proof from a pinned capture (step 1).
+
 ## Checklist
 
-- [ ] Step 1 by hand; record each stop here.
-- [ ] `/gof-refactor-reviewer` before code.
-- [ ] Migration 003 and its PG16 tests (populated table).
-- [ ] `rules pending`, `rules approve` without a digest, `--rule`.
-- [ ] The skill's Approve mode; SKILL.md and memory changed on purpose.
+- [x] Step 1 by hand; record each stop here (19:05 ET).
+- [x] `/gof-refactor-reviewer` before code: add as-is.
+- [x] Migration 003 and its PG16 tests (populated table).
+- [x] `rules pending`, `rules approve` without a digest, `--rule`.
+- [x] The skill's Approve mode; SKILL.md and memory changed on purpose.
 - [ ] Three-axis `/code-review`, PR, CI; merge on the operator's word.

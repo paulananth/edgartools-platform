@@ -1,5 +1,5 @@
 """`rules pending` says what a version changes, value by value, naming rules."""
-from edgar_warehouse.rules.db import changes
+from edgar_warehouse.rules.db import version_changes as changes
 
 
 def test_changes_name_values_and_rules():

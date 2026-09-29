@@ -17,12 +17,14 @@ def _selection(parser):
 
 
 def _approve_rule(args):
-    """One merge rule, switched on in the files on the operator's words; the
-    merge version that carries it is then saved, proved and approved."""
+    """One merge rule, switched on in the files on the operator's words. It
+    only edits `merge/policy.yaml`: the merge version that carries it is a
+    separate save, test run and approval (the rules skill's Approve steps)."""
     from datetime import datetime, timezone
 
-    if not args.merge:
-        print("--rule approves one merge rule: select it with --merge", file=sys.stderr)
+    if args.merge != "platform" or args.version or args.evidence or args.overrule:
+        print("--rule switches one rule of the platform merge rules on: use --merge platform, without "
+              "--version, --evidence or --overrule (a rule short of its bar is not overruled here)", file=sys.stderr)
         return 2
     at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
@@ -72,7 +74,12 @@ def _handle(args):
                 rules.to_file(kind, name, args.version, Path(args.output))
                 result = {"path": args.output, "digest": rules.version(kind, name, args.version)["digest"]}
             elif operation == "approve":
-                row = rules.approve(kind, name, args.version, by=args.by, words=args.words, overrule=args.overrule)
+                from edgar_warehouse.bookkeeping.clean.config import Blocked
+
+                if not args.version or not args.evidence:
+                    raise Blocked("Approval names the version and the evidence hash `rules pending` showed")
+                row = rules.approve(kind, name, args.version, evidence=args.evidence, by=args.by,
+                                    words=args.words, overrule=args.overrule)
                 result = {key: row[key] for key in ("kind", "name", "version", "status", "approved_by", "approved_at",
                                                     "approved_words", "approval_overrule", "approval_evidence")}
             elif operation == "record-proof":
@@ -210,7 +217,7 @@ def register(subparsers):
         command = commands.add_parser(operation)
         _selection(command)
         if operation == "approve":
-            command.add_argument("--version", help="Default: the version with the newest test run waiting")
+            command.add_argument("--version", help="The version `rules pending` showed (not with --rule)")
         elif operation not in ("status", "run"):
             command.add_argument("--version", required=True)
         if operation == "save":
@@ -223,6 +230,7 @@ def register(subparsers):
             command.add_argument("--by", required=True, help="Who approved: the operator's or steward's name")
             command.add_argument("--words", required=True, help="Their exact words of approval")
             command.add_argument("--overrule", help="Their reason, when approving a failing test run")
+            command.add_argument("--evidence", help="The evidence_hash `rules pending` showed for it")
             command.add_argument("--rule", help="Switch one merge rule on, in the files, on its proof")
             command.add_argument("--root", default=str(files.ROOT), help="The rules folder (--rule only)")
         elif operation == "record-proof":
