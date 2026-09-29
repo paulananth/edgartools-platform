@@ -52,23 +52,11 @@ def approved() -> dict:
     return body
 
 
-# The registry pins each dataset a record comes from; its reading is the
-# fixture's, since the subject here is the rule, not the SEC or GLEIF reading.
-READING = {
-    "provider": "test",
-    "family": "fixture",
-    "publication_families": ["golden_copy", "opencorporates"],
-    "schema_version": "1",
-    "record_key": "key",
-    "publication_key": "version",
-    "effective_time": "effective_at",
-    "semantics": "patch",
-}
-
-
 def register(database, body) -> str:
+    # The registry pins each dataset a record comes from. Its reading is the
+    # fixture's: the subject here is the rule, not the SEC or GLEIF reading.
     for code in (SEC, GLEIF):
-        core.register_reading(database, code, READING)
+        core.register_reading(database, code, core.contract_body())
     with database.admin.begin() as conn:
         return register_policy(conn, copy.deepcopy(body))
 
@@ -130,6 +118,32 @@ def test_each_cik_is_one_company_and_a_rerun_changes_nothing(database):
     assert operations(database) == ["bind", "bind"]
 
 
+def test_a_cik_never_lands_on_two_companies(database):
+    # Two records carrying one CIK, in one batch and in the next: one Company.
+    policy = register(database, approved())
+    load(database, policy, "b1", sec(APPLE), sec(APPLE, key="0000000001"))
+    load(database, policy, "b2", sec(APPLE, key="0000000002"), checkpoint=2)
+    (only,) = companies(database).values()
+    assert only["identifiers"] == {"cik": [APPLE]} and len(only["subjects"]) == 3
+
+
+def test_a_company_whose_records_disagree_waits_and_gains_no_record(database):
+    # Conflicting identifiers: its members name two CIKs, so the Company waits
+    # in review, and a record carrying either CIK waits in the Stage
+    # (operator, 2026-09-29, question 1).
+    policy = register(database, approved())
+    load(database, policy, "b1", sec(APPLE), sec(APPLE, key="0000000001"))
+    load(database, policy, "b2", sec(MICROSOFT, revision=2, key="0000000001"), checkpoint=2)
+    (held,) = companies(database).values()
+    assert held["status"] == "review"
+    assert held["identifiers"] == {"cik": [APPLE, MICROSOFT]}
+    load(database, policy, "b3", sec(MICROSOFT, name="Microsoft Corp"), checkpoint=3)
+    assert list(companies(database)) == [held["entity_id"]]
+    assert len(companies(database)[held["entity_id"]]["subjects"]) == 2
+    reviews = [r for r in core.documents(database, "review").values() if r.get("open")]
+    assert "suspended_identifier" in {r["reason"] for r in reviews}
+
+
 def test_reordered_delivery_ends_in_the_same_company(database):
     policy = register(database, approved())
     load(database, policy, "b1", sec(APPLE, revision=2, name="Apple Inc"))
@@ -167,6 +181,6 @@ def test_the_cik_rule_never_consolidates_and_never_name_matches(database):
         fields={"name": "Apple Inc."},
         identifiers={"lei": "HWUPKR0MPOU8FGXBT394"},
     )
-    load(database, policy, "b1", sec(APPLE), sec(MICROSOFT), gleif)
+    load(database, policy, "b1", sec(APPLE), sec(MICROSOFT, name="Apple Inc."), gleif)
     assert len(companies(database)) == 2
     assert operations(database) == ["bind", "bind"]

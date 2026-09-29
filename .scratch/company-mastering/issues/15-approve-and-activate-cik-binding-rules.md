@@ -40,16 +40,24 @@ The approval of ticket 08's declared name rules does not activate these.
   (`research/05-candidate-policy.json`). The verification block is the corpus
   hash only (ticket 05's manifest, `3607ae6c…60cc`, re-hashed today); its
   counts stay in the ticket, so they do not move the digest. The Mapping
-  Document words the rule.
+  Document words the rule. Two differences from ticket 05's body, neither a
+  change in behaviour: the rule sits second in `rules` (the candidate put it
+  last; binding rules are selected by family, not order), and the policy
+  version stays `sec-company-local-v2` (the candidate named its own,
+  `company-2026-09-26.cik-matching-rule`).
 - [x] Verify CIK uniqueness, conflicting or stale identifiers, duplicate and
   reordered delivery, idempotent retry, and no unapproved consolidation on
   PostgreSQL 16, on the production policy with only the approval's changes
   (`tests/integration/test_clean_cik_rule.py`): the committed policy matches
-  nothing; one Company per CIK; a redelivered batch returns its first result;
-  a new revision creates nothing; reordered delivery ends in one Company; two
+  nothing; three records carrying one CIK, across two batches, make one
+  Company; a Company whose records name two CIKs waits in review and gains no
+  record (question 1); a redelivered batch returns its first result; a new
+  revision creates nothing; reordered delivery ends in one Company; two
   filers with one name stay two Companies; a GLEIF record with the name waits.
-  Ticket 04's fixture suite covers the concurrent run and the stale-proposal
-  retry.
+  A *stale* identifier (one record's CIK changing) is the gap under Found,
+  an xfail here. The concurrent run and the stale-proposal retry are proven
+  on ticket 04's fixture rules (`test_clean_identifier_binding.py`), not on
+  the production policy.
 - [ ] Record the operator-approved fingerprint, activation time, full proof, and
   resulting active fingerprint before shared registration.
 

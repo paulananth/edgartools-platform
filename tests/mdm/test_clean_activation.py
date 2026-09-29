@@ -30,7 +30,8 @@ from edgar_warehouse.mdm.clean.activation import (
 from edgar_warehouse.mdm.clean.classification import fired
 from edgar_warehouse.mdm.clean.company_source import APPROVED_ACTIVATION, POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
-from edgar_warehouse.mdm.clean.store import Conflict, canonical, digest
+from edgar_warehouse.mdm.clean.store import Conflict, digest
+from tests.mdm import policy_layers
 
 RULE = {
     "rule_id": "sec-company",
@@ -59,25 +60,6 @@ BAR = {
 }
 
 
-def _without_cascade(policy: dict) -> dict:
-    """The policy without the cascade's passes, which company mastering
-    ticket 21 declared switched off: what the operator approved."""
-    body = json.loads(canonical(policy))
-    body["kinds"]["company"]["rules"] = [
-        r for r in body["kinds"]["company"]["rules"]
-        if not r["rule_id"].startswith("sec-gleif-cascade-")
-    ]
-    return body
-
-
-def _without_cik(policy: dict) -> dict:
-    """The policy without the CIK matching rule and its Identifier Contract,
-    which company mastering ticket 15 declared switched off."""
-    body = json.loads(canonical(policy))
-    company = body["kinds"]["company"]
-    company["rules"] = [r for r in company["rules"] if r["rule_id"] != "company-cik"]
-    company.pop("identifiers")
-    return body
 
 
 def proof(n=3000, correct=3000, confidence=0.95, **changes):
@@ -537,11 +519,10 @@ class TestTheCompanyPolicy:
         assert PROOF["approved_by"] == "operator"
         assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
         assert APPROVED_ACTIVATION["proof"] is PROOF
-        pending = _without_cascade(_without_cik(POLICY))
-        pending["automatic_rules"] = []
         # The pending policy the operator approved, before rules skill ticket
         # 08 added the SEC place-code table to the body.
-        pending.pop("reference")
+        pending = policy_layers.peel(POLICY)
+        pending["automatic_rules"] = []
         assert digest(pending) == (
             "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
         )
@@ -554,20 +535,12 @@ class TestTheCompanyPolicy:
         # Company mastering ticket 21 declared the cascade's passes, and
         # ticket 15 the CIK matching rule, all switched off; without them the
         # policy is unchanged.
-        assert digest(POLICY) == (
-            "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702"
-        )
-        assert digest(_without_cik(POLICY)) == (
-            "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d"
-        )
-        declared = _without_cascade(_without_cik(POLICY))
-        assert digest(declared) == (
-            "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17"
-        )
-        without_table = {k: v for k, v in declared.items() if k != "reference"}
-        assert digest(without_table) == (
-            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
-        )
+        assert policy_layers.digests(POLICY) == [
+            "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702",
+            "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d",
+            "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
+            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
+        ]
 
     def test_the_proof_files_match_the_pinned_hashes(self):
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"

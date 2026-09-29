@@ -7,13 +7,13 @@ register different rules: the live Company policy is `983352e8…4049`.
 
 from __future__ import annotations
 
-import json
 
 import pytest
 
 from edgar_warehouse.mdm.clean import company_source, gleif_source
 from edgar_warehouse.mdm.clean.store import canonical, digest
 from edgar_warehouse.rules import files
+from tests.mdm import policy_layers
 
 BEFORE = {
     "policy": "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
@@ -37,12 +37,6 @@ WITH_CASCADE = {
 }
 
 
-def _without_cascade(policy: dict) -> dict:
-    body = json.loads(canonical(policy))
-    rules = body["kinds"]["company"]["rules"]
-    body["kinds"]["company"]["rules"] = [r for r in rules if not r["rule_id"].startswith("sec-gleif-cascade-")]
-    return body
-
 
 # Company mastering ticket 15 declared the CIK matching rule and its Identifier
 # Contract, switched off; without them the policy is the one above.
@@ -51,13 +45,6 @@ WITH_CIK = {
     "name_matching_active": "34f7174cc9cb5b8390e8afc592e2487d0b1e488544f6d908641acd252e598a24",
 }
 
-
-def _without_cik(policy: dict) -> dict:
-    body = json.loads(canonical(policy))
-    company = body["kinds"]["company"]
-    company["rules"] = [r for r in company["rules"] if r["rule_id"] != "company-cik"]
-    company.pop("identifiers")
-    return body
 
 
 # Company mastering ticket 22 added each feed's quality rule to its contract,
@@ -90,11 +77,8 @@ GLEIF_BEFORE = {
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    assert digest(company_source.POLICY) == WITH_CIK["policy"]
-    assert digest(_without_cik(company_source.POLICY)) == WITH_CASCADE["policy"]
-    policy = _without_cascade(_without_cik(company_source.POLICY))
-    assert digest(policy) == WITH_PLACE_CODES["policy"]
-    assert digest({k: v for k, v in policy.items() if k != "reference"}) == BEFORE["policy"]
+    layered = (WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    assert policy_layers.digests(company_source.POLICY) == [pins["policy"] for pins in layered]
     assert digest(_without_quality(company_source.CONTRACT)) == BEFORE["contract"]
     assert digest(company_source.CONTRACT) == WITH_QUALITY["contract"]
     assert digest(company_source.FIELDS) == BEFORE["fields"]
@@ -103,9 +87,7 @@ def test_the_company_configuration_is_unchanged():
     assert digest(company_source.NAME_PROOFS) == BEFORE["name_proofs"]
     assert digest(company_source.name_matching_policy(active=False)) == WITH_CIK["policy"]
     active = company_source.name_matching_policy(active=True)
-    assert digest(active) == WITH_CIK["name_matching_active"]
-    assert digest(_without_cik(active)) == WITH_CASCADE["name_matching_active"]
-    assert digest(_without_cascade(_without_cik(active))) == WITH_PLACE_CODES["name_matching_active"]
+    assert policy_layers.digests(active) == [pins["name_matching_active"] for pins in layered]
 
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
