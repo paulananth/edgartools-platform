@@ -1,7 +1,7 @@
 # Correct an incorrect Company link
 
 Type: task
-Status: in progress (Claude, branch `claude/company-mastering-13-correct-a-link`)
+Status: built (Claude, branch `claude/company-mastering-13-correct-a-link`); review, PR, merge on the operator's word
 Blocked by: 09, 10
 Blocks: activation of the SEC-to-GLEIF name matching rules
 
@@ -55,16 +55,44 @@ dropping evidence or allowing automatic matching.
    longer switched on. A correction batch revokes them; in the same
    transaction the active rules re-propose those records, so each binds
    again under an approved version, to the same or another Company, or waits.
-5. **Quarantine** (its own slice): an operator decision in the journal; the
-   records are left out of matching, their Companies flagged; only a
-   revocation lifts it.
+5. **Quarantine** (built 2026-09-29): a `quarantine` decision in the journal
+   names the record and the Company it was linked to. The record must be
+   unbound first (its bind revoked, in the same batch or before); while it is
+   held no rule proposes it and replay refuses any bind of it; the Company
+   carries `quarantined: true` (the dated row's column, 037). A `revoke` of
+   the quarantine lifts it, and the lifted record is reconsidered by the
+   rules in the same batch.
+
+   Two readings of the 09:31 ruling, written down for the operator:
+   - **Which Company is flagged.** The ruling says each quarantined record
+     "stays its own Company with a `quarantined` flag". A GLEIF record never
+     owns a Company here (operator, 2026-09-24: an unlinked GLEIF record
+     waits), so the flag goes on the Company it was linked to: readers see
+     that Company has a link no rule could decide. The SEC record keeps its
+     own Company.
+   - **What lifts it.** "Only an operator-approved rule change": a lifting
+     revocation must name a policy other than the one the quarantine was
+     made under (`correction.check_lifts`); the same policy is refused.
+   - The Stage row stays, unbound; the journal decision is its mark.
 
 ## Checklist
 
-- [ ] Preserve the old decision, its source and bronze-object references, policy
-  version, and the correction decision in the journal.
-- [ ] Prove split and quarantine on PostgreSQL 16 with dated Company rows, aliases,
-  field provenance, duplicate delivery, and publication retry.
-- [ ] Reassessment is bounded, idempotent, and blocks a stale or conflicting link.
-- [ ] Do not switch on the declared name matching rules until this is implemented
-  and separately approved.
+- [x] Preserve the old decision, its source and bronze-object references, policy
+  version, and the correction decision in the journal. The bind stays; the
+  revocation carries its target, subject, Company, rule and version,
+  evidence, the Stage row's bronze object and the policy in force.
+- [x] Prove split and quarantine on PostgreSQL 16 with dated Company rows, aliases,
+  field provenance, duplicate delivery, and publication retry
+  (`tests/integration/test_clean_binding_correction.py`, 11 tests): dated
+  rows close and open on revoke, quarantine and lift; GLEIF's values and
+  their provenance leave the Company; a correction delivered twice changes
+  nothing; a quarantine publishes through a lost acknowledgement; migration
+  041 on a populated store. Aliases: a merge's reversal was already proven
+  (`test_merge_alias_reversal_preserves_later_evidence_and_exclusion`); a
+  bind makes no alias.
+- [x] Reassessment is bounded (`stale_bindings`' limit), idempotent (a
+  rerun finds nothing; a redelivered batch is a duplicate), and blocks a
+  stale or conflicting link (the same rule version never relinks the pair;
+  a bind is revoked once only; a revocation names the bind it revokes).
+- [x] Do not switch on the declared name matching rules until this is implemented
+  and separately approved. None is on; ticket 20 brings their approval.
