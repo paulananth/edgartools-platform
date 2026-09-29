@@ -1,7 +1,7 @@
 # Source data findings from the rules skill trials
 
 Type: task
-Status: triaged (operator, 2026-09-29); GLEIF fixes on `claude/company-mastering-18-gleif-blocking`; the SEC fixes (5, 6) next
+Status: triaged (operator, 2026-09-29); GLEIF fixes (1, 3) and SEC fixes (5, 6) built
 Blocked by: none
 
 ## Why
@@ -92,6 +92,20 @@ A blocking review left open keeps a run from counting as complete
   blocking disposition.
 - Activation: the changed GLEIF source document needs the operator's
   `rules approve` in the Rules Database (the rules skill never approves).
+
+## Built (SEC, 5 and 6)
+
+- `company_source.business_address`: a region only when SEC's code names a
+  state or province (its place has a subdivision, `US-CA`, `CA-ON`); a
+  foreign country code (`P7`) is the country only.
+- `company_source._catalog_tickers`: each ticker once, in rank order.
+- The SEC reading is `sec-company-landing-v7`, a new mapping version, so it
+  applies to new batches; the v7 contract digest is pinned, v6 peelable.
+  Neither change touches matching (the cascade compares street, city,
+  postcode and country) or classification (it asks only whether a filer has
+  a ticker).
+- Activation: the changed SEC source document needs the operator's
+  `rules approve`, like GLEIF's.
 
 ## Review (2026-09-29, three axes)
 
