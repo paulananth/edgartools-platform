@@ -1,7 +1,7 @@
 # Investigate matching on an LEI below the name rules
 
 Type: research
-Status: resolved (2026-09-26 20:00 ET); a decision is waiting on the operator
+Status: closed (operator decision, 2026-09-29 13:30 ET)
 Blocked by: none
 
 ## Question
@@ -57,3 +57,19 @@ name rules?
   conflict check can flag disagreement;
 - reach the 4 missed Companies by improving the name rules;
 - look again when the Fund kind starts.
+
+## Decided (operator, 2026-09-29 13:30 ET: "Yes")
+
+Checked before the ask, the same day: the cascade (ticket 21, built and
+switched off) already reaches 3 of the 4 Companies SEC's LEI reached, each
+with exactly the LEI SEC states: CB Financial Services (P6), Forum Markets
+(P6), Nexxen International (P5). Only Innate Pharma SA is still missed: the
+legal form `SA` makes the names differ.
+
+- **No LEI matching rule.**
+- **SEC's LEI stays a lookup value only** (as decided 2026-09-26). When the
+  loader carries it, it is also compared with the matched LEI, so a
+  disagreement goes to review.
+- **Innate Pharma** is left to the name rules or a Steward.
+- **Revisit with the Fund kind:** GLEIF's records naming a CIK
+  (`RA000665`) point mostly at funds.

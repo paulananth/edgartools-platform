@@ -197,8 +197,10 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 - [Investigate matching on an LEI below the name rules](issues/19-lei-matching-at-lower-priority.md)
   (2026-09-26): SEC's own LEI reaches 4 Companies the name rules miss and
   GLEIF's CIK route reaches 4 poor targets. Neither can meet the 95% bar on
-  today's data (7 and 10 pairs; 52 needed). Recommended: no LEI rule now, a
-  conflict check later, and fix the name rules' misses. Awaiting the operator.
+  today's data (7 and 10 pairs; 52 needed). **Decided (operator, 2026-09-29
+  13:30 ET): no LEI rule**; SEC's LEI stays lookup-only, compared with the
+  matched LEI once the loader carries it; the cascade already reaches 3 of
+  the 4; revisit with the Fund kind.
 
 ## Not yet specified
 
