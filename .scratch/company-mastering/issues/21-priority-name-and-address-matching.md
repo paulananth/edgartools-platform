@@ -84,6 +84,18 @@ whose places of incorporation conflict goes through the passes like any
 other and is its own labelled stratum. If that stratum clears the 95% bar
 it binds; if not, those pairs go to a Steward for review.
 
+## Decided: the approved rules stay until ticket 20 (operator, 2026-09-28 20:27 ET)
+
+The two matching rules in use (Name-and-state, Postcode) carry the approved
+fingerprint `983352e8…4049`. Asked whether this ticket may leave them in
+place, the passes added switched off, the operator answered "Yes". Ticket 20
+swaps them in one step, on the passes' proof and a new approval.
+
+Design (advisor review, 2026-09-28): the cascade is decided once, over both
+whole sources, by one production function a new Name Census version carries
+per CIK (the LEI, its pass, its flags); the Merge Stage re-checks the pair
+on its own rows. The proof calls the same function, so it measures what runs.
+
 ## Decided with ticket 22 (operator, 2026-09-28)
 
 - **Addresses:** a pass compares the address the quality rule left fit:
