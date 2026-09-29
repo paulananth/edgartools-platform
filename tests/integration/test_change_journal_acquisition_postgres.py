@@ -150,7 +150,7 @@ def capture_run(
         databases.rules.prove("source", name, "1", proof)
         with pytest.raises(DBAPIError):
             databases.rules.activate("source", name, "1")
-        databases.approver.approve("source", name, "1", saved["digest"])
+        databases.approver.approve("source", name, "1", by="operator", words="approved")
         databases.rules.activate("source", name, "1")
         rules_ref = databases.rules.resolve(
             "source", name, root=tmp_path.as_uri() + "/rules"

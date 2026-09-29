@@ -16,9 +16,31 @@ def _selection(parser):
     choice.add_argument("--merge")
 
 
+def _approve_rule(args):
+    """One merge rule, switched on in the files on the operator's words; the
+    merge version that carries it is then saved, proved and approved."""
+    from datetime import datetime, timezone
+
+    if not args.merge:
+        print("--rule approves one merge rule: select it with --merge", file=sys.stderr)
+        return 2
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        entry = files.approve_rule(args.rule, by=args.by, words=args.words, at=at, root=Path(args.root))
+    except ValueError as error:  # the refusal and its reason, not a traceback
+        print(f"Not approved: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps({"switched_on": entry["rule_id"], "rule_version": entry["rule_version"],
+                      "approved_by": args.by, "approved_at": at, "file": str(Path(args.root) / "merge" / "policy.yaml")},
+                     indent=2, sort_keys=True))
+    return 0
+
+
 def _handle(args):
     from sqlalchemy import create_engine, text
     from .db import Rules, get_engine, migrate
+    if args.rules_command == "approve" and args.rule:
+        return _approve_rule(args)
     if args.rules_command == "init":
         owner = create_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
         try:
@@ -34,6 +56,9 @@ def _handle(args):
                 result = method(Path(args.root), args.version)
                 print(json.dumps(result, default=str, indent=2, sort_keys=True))
                 return 0
+            if args.rules_command == "pending":
+                print(json.dumps(rules.pending(), default=str, indent=2, sort_keys=True))
+                return 0
             name = args.source or args.pipeline or args.merge
             kind = "source" if args.source else "pipeline" if args.pipeline else "merge"
             operation = args.rules_command
@@ -47,8 +72,9 @@ def _handle(args):
                 rules.to_file(kind, name, args.version, Path(args.output))
                 result = {"path": args.output, "digest": rules.version(kind, name, args.version)["digest"]}
             elif operation == "approve":
-                rules.approve(kind, name, args.version, args.digest)
-                result = {"approved": args.digest}
+                row = rules.approve(kind, name, args.version, by=args.by, words=args.words, overrule=args.overrule)
+                result = {key: row[key] for key in ("kind", "name", "version", "status", "approved_by", "approved_at",
+                                                    "approved_words", "approval_overrule", "approval_evidence")}
             elif operation == "record-proof":
                 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
                 from edgar_warehouse.bookkeeping.clean.config import Blocked
@@ -178,10 +204,14 @@ def register(subparsers):
                          help="plan: print the catalog the rules describe; publish: make OpenMetadata equal to it")
     catalog.add_argument("--root", default=str(files.ROOT))
     catalog.set_defaults(handler=_catalog)
+    pending = commands.add_parser("pending", help="Versions with a test run and no approval yet: evidence and changes")
+    pending.set_defaults(handler=_handle)
     for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):
         command = commands.add_parser(operation)
         _selection(command)
-        if operation not in ("status", "run"):
+        if operation == "approve":
+            command.add_argument("--version", help="Default: the version with the newest test run waiting")
+        elif operation not in ("status", "run"):
             command.add_argument("--version", required=True)
         if operation == "save":
             command.add_argument("file", help="The document's main file: <source>/source.yaml, "
@@ -190,7 +220,11 @@ def register(subparsers):
             command.add_argument("--output", required=True,
                                  help="The main file to write, as for save; the files beside it are written too")
         elif operation == "approve":
-            command.add_argument("--digest", required=True)
+            command.add_argument("--by", required=True, help="Who approved: the operator's or steward's name")
+            command.add_argument("--words", required=True, help="Their exact words of approval")
+            command.add_argument("--overrule", help="Their reason, when approving a failing test run")
+            command.add_argument("--rule", help="Switch one merge rule on, in the files, on its proof")
+            command.add_argument("--root", default=str(files.ROOT), help="The rules folder (--rule only)")
         elif operation == "record-proof":
             command.add_argument("--proof-uri", required=True)
             command.add_argument("--proof-sha256", required=True)

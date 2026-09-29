@@ -119,8 +119,9 @@ class Bookkeeping:
         reference(inputs_ref)
         export = self.artifacts.json(rules_ref)
         proof = export.get("proof")
-        if (export.get("status") != "active" or not isinstance(proof, dict)
-                or proof.get("passed") is not True or proof.get("digest") != export.get("digest")
+        from edgar_warehouse.rules.db import proof_holds
+
+        if (export.get("status") != "active" or not isinstance(proof, dict) or not proof_holds(export)
                 or digest(export["body"]) != export.get("digest")):
             raise Blocked("Submission requires a proven active Rules export")
         reference({"uri": rules_ref["uri"], "sha256": proof.get("batch_hash")})

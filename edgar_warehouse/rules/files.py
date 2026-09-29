@@ -214,6 +214,41 @@ def pending_proofs(root: Path | None = None) -> dict:
     return load((root or ROOT) / "merge" / "pending-proofs.yaml")
 
 
+def approve_rule(rule_id: str, *, by: str, words: str, at: str, root: Path | None = None) -> dict:
+    """Switch one declared merge rule on, on the operator's words: its proof in
+    `pending-proofs.yaml` goes into `policy.yaml` with the approval stamped on
+    it. Appended as text, so the policy's comments stay. No proof, no approval;
+    a proof that falls short of its kind's bar is refused with the reason."""
+    from edgar_warehouse.mdm.clean.activation import check_policy
+
+    root = root or ROOT
+    if not by.strip() or not words.strip():
+        raise RulesFileError("An approval names who approved and holds their exact words")
+    proof = pending_proofs(root).get(rule_id)
+    if not isinstance(proof, dict):
+        raise RulesFileError(f"No test evidence for rule {rule_id}: it has no proof in merge/pending-proofs.yaml")
+    body = policy(root)
+    declared = [(kind, rule) for kind, rules in body["kinds"].items()
+                for rule in rules.get("rules") or [] if rule.get("rule_id") == rule_id]
+    if len(declared) != 1:
+        raise RulesFileError(f"Rule {rule_id} is declared {len(declared)} times in merge/kinds")
+    if any(entry.get("rule_id") == rule_id for entry in body.get("automatic_rules") or []):
+        raise RulesFileError(f"Rule {rule_id} is already switched on")
+    kind, rule = declared[0]
+    entry = {"kind": kind, "family": rule["family"], "rule_id": rule_id, "rule_version": rule["version"],
+             "verdict": rule["emits"][0], "activation": "measured",
+             "proof": {**proof, "approved_by": by, "approved_at": at, "approved_words": words}}
+    check_policy({**body, "automatic_rules": [*(body.get("automatic_rules") or []), entry]})
+    path = root / "merge" / "policy.yaml"
+    text = path.read_text(encoding="utf-8")
+    note = f"# {rule_id}: switched on by {by}, {at}, in their words: {words}".replace("\n", " ")
+    path.write_text(text.rstrip("\n") + "\n" + note + "\n" + dumps([entry]), encoding="utf-8")
+    if (load(path).get("automatic_rules") or [])[-1] != entry:
+        path.write_text(text, encoding="utf-8")
+        raise RulesFileError("policy.yaml did not take the entry as written; left unchanged")
+    return entry
+
+
 def reference(name: str, root: Path | None = None) -> dict:
     """A reference table rules and readers share: `reference/<name>.yaml`."""
     return load((root or ROOT) / "reference" / f"{name}.yaml")

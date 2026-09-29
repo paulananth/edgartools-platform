@@ -113,7 +113,9 @@ def frozen_authority(export: dict, feed: str, *, artifacts=None) -> dict:
     ):
         raise Blocked("A frozen proven Rules source envelope is required")
     proof, approval = export.get("proof") or {}, export.get("approval") or {}
-    if proof.get("passed") is not True or proof.get("digest") != export["digest"]:
+    from edgar_warehouse.rules.db import proof_holds
+
+    if not proof_holds(export):
         raise Blocked("Acquisition requires verified Rules proof")
     validation_proof(export["body"], proof, artifacts=artifacts)
     if (

@@ -60,10 +60,13 @@ engine, proof runner and skill commands, rather than implement another store.
 
 Files remain the authoring surface. `Rules.save` stores canonical JSON and
 its SHA-256 as an immutable draft. Proof pins the body digest and input batch
-hash. A person's own approver login approves versions feeding MDM. Status
-only moves draft → proven → active → retired. One active version per kind
-and name is enforced by a partial unique index. The agent cannot insert or
-update approval columns.
+hash, and says whether the run passed; a failing run stays a draft with its
+evidence. Versions feeding MDM need a person's approval, which the agent
+records in that person's name with their exact words, the evidence it rests
+on and the recording login (rules skill ticket 14): never without a recorded
+test run, and for a failing one only with the person's overrule reason.
+Status only moves draft → proven → active → retired. One active version per
+kind and name is enforced by a partial unique index.
 
 Activation of source mappings and merge policies requires explicit MDM
 governance connections and approval. The idempotent MDM handoff commits
@@ -232,8 +235,9 @@ see [Change Journal](change-journal.md) for their transaction/recovery contract.
 ```bash
 edgar-warehouse rules save --source gleif --version <new-version> rules/sources/gleif/source.yaml
 edgar-warehouse rules record-proof --source gleif --version <new-version> --proof-uri <URI> --proof-sha256 <SHA256>
-# Approval uses the person's own Rules login and exact saved digest.
-edgar-warehouse rules approve --source gleif --version <new-version> --digest <SHA256>
+edgar-warehouse rules pending
+# Only on the person's own words, for the version they read.
+edgar-warehouse rules approve --source gleif --by "<name>" --words "<their exact words>"
 edgar-warehouse rules activate --source gleif --version <new-version>
 edgar-warehouse rules run --source gleif --target mdm --input-manifest <URI> --input-sha256 <SHA256> --limit 100
 edgar-warehouse rules run --source gleif --target mdm --resume-run-id <UUID> --limit 100

@@ -201,7 +201,7 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
             },
         }
         databases.rules.prove("source", name, "1", proof)
-        databases.approver.approve("source", name, "1", saved["digest"])
+        databases.approver.approve("source", name, "1", by="operator", words="approved")
         databases.rules.activate("source", name, "1", mdm_engine=owner)
         with owner.connect() as conn:
             assert not conn.scalar(
@@ -267,7 +267,7 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
         changed["bookkeeping"]["targets"]["mdm"]["retry"] = {"attempts": 2}
         newer = databases.rules.save("source", name, "2", changed)
         databases.rules.prove("source", name, "2", {**proof, "digest": newer["digest"]})
-        databases.approver.approve("source", name, "2", newer["digest"])
+        databases.approver.approve("source", name, "2", by="operator", words="approved")
         databases.rules.activate("source", name, "2", mdm_engine=owner)
         with owner.connect() as conn:
             assert (

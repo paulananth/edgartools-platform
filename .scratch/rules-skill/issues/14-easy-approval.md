@@ -46,7 +46,7 @@ ticket 20's approval
 - Plain words cannot live in YAML comments (`files.py` drops them on export)
   or as new fields in rule bodies (that moves every approved digest).
 
-## Step 1, by hand (2026-09-29 19:20 ET)
+## Step 1, by hand (2026-09-29 19:05 ET)
 
 On a throwaway PostgreSQL 16 with the real roles (`rules_agent`,
 `rules_approver`, an `operator` login in it, `clean_application`), not the
