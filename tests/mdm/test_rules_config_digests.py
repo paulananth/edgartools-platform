@@ -44,6 +44,22 @@ def _without_cascade(policy: dict) -> dict:
     return body
 
 
+# Company mastering ticket 15 declared the CIK matching rule and its Identifier
+# Contract, switched off; without them the policy is the one above.
+WITH_CIK = {
+    "policy": "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702",
+    "name_matching_active": "34f7174cc9cb5b8390e8afc592e2487d0b1e488544f6d908641acd252e598a24",
+}
+
+
+def _without_cik(policy: dict) -> dict:
+    body = json.loads(canonical(policy))
+    company = body["kinds"]["company"]
+    company["rules"] = [r for r in company["rules"] if r["rule_id"] != "company-cik"]
+    company.pop("identifiers")
+    return body
+
+
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
 # both the contract is the one above.
@@ -74,8 +90,9 @@ GLEIF_BEFORE = {
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    assert digest(company_source.POLICY) == WITH_CASCADE["policy"]
-    policy = _without_cascade(company_source.POLICY)
+    assert digest(company_source.POLICY) == WITH_CIK["policy"]
+    assert digest(_without_cik(company_source.POLICY)) == WITH_CASCADE["policy"]
+    policy = _without_cascade(_without_cik(company_source.POLICY))
     assert digest(policy) == WITH_PLACE_CODES["policy"]
     assert digest({k: v for k, v in policy.items() if k != "reference"}) == BEFORE["policy"]
     assert digest(_without_quality(company_source.CONTRACT)) == BEFORE["contract"]
@@ -84,10 +101,11 @@ def test_the_company_configuration_is_unchanged():
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
     assert digest(company_source.NAME_PROOFS) == BEFORE["name_proofs"]
-    assert digest(company_source.name_matching_policy(active=False)) == WITH_CASCADE["policy"]
+    assert digest(company_source.name_matching_policy(active=False)) == WITH_CIK["policy"]
     active = company_source.name_matching_policy(active=True)
-    assert digest(active) == WITH_CASCADE["name_matching_active"]
-    assert digest(_without_cascade(active)) == WITH_PLACE_CODES["name_matching_active"]
+    assert digest(active) == WITH_CIK["name_matching_active"]
+    assert digest(_without_cik(active)) == WITH_CASCADE["name_matching_active"]
+    assert digest(_without_cascade(_without_cik(active))) == WITH_PLACE_CODES["name_matching_active"]
 
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))

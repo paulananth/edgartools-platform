@@ -79,6 +79,9 @@ CONDITION_WORDS = {
     "jurisdiction_agrees@1": "SEC's {sec_field} names the same place as GLEIF's {gleif_field}",
     "jurisdictions_do_not_conflict@1": "SEC's {sec_field} and GLEIF's {gleif_field} do not name different places",
     "postal_agrees@1": "SEC's business postcode equals GLEIF's headquarters postcode, in the same country",
+    "identifier_match@1": "The record's {namespace} is the one a Company holds",
+    "identifier_cardinality@1": "Exactly one Company holds that {namespace}, or none (a miss does what "
+                                "the rule says)",
 }
 
 

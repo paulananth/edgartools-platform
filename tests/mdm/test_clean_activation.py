@@ -70,6 +70,16 @@ def _without_cascade(policy: dict) -> dict:
     return body
 
 
+def _without_cik(policy: dict) -> dict:
+    """The policy without the CIK matching rule and its Identifier Contract,
+    which company mastering ticket 15 declared switched off."""
+    body = json.loads(canonical(policy))
+    company = body["kinds"]["company"]
+    company["rules"] = [r for r in company["rules"] if r["rule_id"] != "company-cik"]
+    company.pop("identifiers")
+    return body
+
+
 def proof(n=3000, correct=3000, confidence=0.95, **changes):
     if "lower_bound" not in changes and 0 <= correct <= n:
         # Rounded down: a stated bound may never exceed its sample.
@@ -527,7 +537,7 @@ class TestTheCompanyPolicy:
         assert PROOF["approved_by"] == "operator"
         assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION]
         assert APPROVED_ACTIVATION["proof"] is PROOF
-        pending = _without_cascade(POLICY)
+        pending = _without_cascade(_without_cik(POLICY))
         pending["automatic_rules"] = []
         # The pending policy the operator approved, before rules skill ticket
         # 08 added the SEC place-code table to the body.
@@ -541,12 +551,16 @@ class TestTheCompanyPolicy:
         # `983352e8...` (2026-09-25 15:21 ET); ticket 12's approval was
         # `35250dad...`. Rules skill ticket 08 added the SEC place-code table
         # to the body and changed nothing else.
-        # Company mastering ticket 21 declared the cascade's passes, switched
-        # off; without them the policy is unchanged.
+        # Company mastering ticket 21 declared the cascade's passes, and
+        # ticket 15 the CIK matching rule, all switched off; without them the
+        # policy is unchanged.
         assert digest(POLICY) == (
+            "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702"
+        )
+        assert digest(_without_cik(POLICY)) == (
             "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d"
         )
-        declared = _without_cascade(POLICY)
+        declared = _without_cascade(_without_cik(POLICY))
         assert digest(declared) == (
             "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17"
         )

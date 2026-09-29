@@ -192,6 +192,11 @@ exact digest.** This map carries execution, not only decisions (see Notes).
 
 ## Not yet specified
 
+- **A bound record whose identifier changes.** The Merge Stage re-keys its
+  Company silently, and another record holding the new value then joins it
+  (ticket 15, Found). Q9's "rebuild from remaining trusted evidence" for an
+  identifier contradiction. Unreachable through today's SEC reading, and a
+  test pins that.
 - **Which cohort the Proving Run uses.** The 1,000-row research cohort and its
   308 adjudicated links exist, but they are not independent truth. Company Q3
   wants a frozen CIK manifest. Sharpens once the policy executes.
