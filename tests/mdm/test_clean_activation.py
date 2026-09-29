@@ -807,3 +807,29 @@ class TestTheNameMatchingRules:
         assert len(arms) == proof_body["adversarial"]["n"]
         assert sum(r["final"] != "same" for r in arms) == 0
         assert wilson_lower_bound(proof_body["correct"], proof_body["n"], 0.95) >= 0.95
+
+
+@pytest.mark.parametrize("changes", [
+    {"compare": ["street", "county"]},
+    {"over_shared": 0},
+    {"refused_flags": ["anything"]},
+    {"pass": None},
+])
+def test_a_cascade_pass_with_invalid_arguments_is_refused(changes):
+    from edgar_warehouse.mdm.clean.activation import check_name_binding_rule
+
+    rule = copy.deepcopy(next(r for r in POLICY["kinds"]["company"]["rules"]
+                              if r["rule_id"] == "sec-gleif-cascade-p1"))
+    rule["when"][0]["args"] = {**rule["when"][0]["args"], **changes}
+    with pytest.raises(Conflict, match="invalid pass arguments"):
+        check_name_binding_rule("company", rule, POLICY["kinds"])
+
+
+def test_a_cascade_pass_must_keep_the_one_lei_veto():
+    from edgar_warehouse.mdm.clean.activation import check_name_binding_rule
+
+    rule = copy.deepcopy(next(r for r in POLICY["kinds"]["company"]["rules"]
+                              if r["rule_id"] == "sec-gleif-cascade-p7"))
+    rule["when"] = [t for t in rule["when"] if t["primitive"] != "holds_no_other_lei@1"]
+    with pytest.raises(Conflict, match="one-LEI veto"):
+        check_name_binding_rule("company", rule, POLICY["kinds"])

@@ -8,6 +8,8 @@ import copy
 
 import pytest
 
+from edgar_warehouse.mdm.clean import cascade as _cascade
+from edgar_warehouse.mdm.clean.company_source import POLICY as _POLICY
 from edgar_warehouse.mdm.clean.matching import HELD_LEI_TEST, PAIR_TESTS, _passes
 from edgar_warehouse.mdm.clean.name_census import VERSION
 from edgar_warehouse.mdm.clean.primitives import REGISTRY
@@ -105,3 +107,47 @@ def test_a_matching_path_is_read_from_the_rule():
 def test_an_argument_the_test_cannot_honour_is_refused(primitive, changes, reason):
     with pytest.raises(Conflict, match=reason):
         _passes(with_args(NAME_STATE, primitive, **changes), sec(), gleif())
+
+
+# Ticket 21: a cascade pass re-checks the census's answer on the Stage rows.
+HQ = {"street": "1 APPLE PARK WAY", "city": "CUPERTINO", "postcode": "95014", "country": "US"}
+
+
+def _pass(n):
+    return next(r for r in _POLICY["kinds"]["company"]["rules"] if r["rule_id"] == f"sec-gleif-cascade-p{n}")
+
+
+def cascaded(pass_="P1", flags=(), sec_street="1 APPLE PARK WAY", via="legal name"):
+    record = sec()
+    record["provenance"]["matching"]["address"] = {**HQ, "street": sec_street}
+    record["provenance"]["matching"]["name_census"]["cascade"] = {
+        "version": _cascade.VERSION, "lei": "HWUPKR0MPOU8FGXBT394", "last_update": "2026-09-01T00:00:00Z",
+        "pass": pass_, "flags": list(flags), "key": "APPLE INC", "via": via}
+    other = gleif()
+    other["provenance"]["matching"]["headquarters_address"] = HQ
+    return record, other
+
+
+def test_a_cascade_pass_binds_the_pair_the_census_named_in_that_pass():
+    assert _passes(_pass(1), *cascaded())
+    assert not _passes(_pass(2), *cascaded())  # the census named P1
+
+
+def test_a_cascade_pass_rechecks_the_address_on_the_stage_rows():
+    assert not _passes(_pass(1), *cascaded(sec_street="9 ELSEWHERE RD"))
+    assert _passes(_pass(7), *cascaded(pass_="P7", sec_street="9 ELSEWHERE RD"))
+
+
+def test_a_cascade_pass_refuses_a_flag_its_rule_refuses():
+    pair = cascaded(flags=[_cascade.CONFLICT])
+    assert _passes(_pass(1), *pair)
+    assert not _passes(with_args(_pass(1), "cascade_pass@1", refused_flags=[_cascade.CONFLICT]), *pair)
+
+
+def test_a_cascade_pass_needs_the_gleif_legal_name_unless_the_census_matched_another():
+    record, other = cascaded()
+    other["fields"]["name"] = value("APPLE KABUSHIKI KAISHA")
+    assert not _passes(_pass(1), record, other)
+    record, other = cascaded(via="other name")
+    other["fields"]["name"] = value("APPLE KABUSHIKI KAISHA")
+    assert _passes(_pass(1), record, other)
