@@ -26,82 +26,82 @@
   }
  },
  "labels_by_pass": {
-  "P1 name + street + city + postcode | different": 1,
-  "P1 name + street + city + postcode | same": 747,
-  "P1 name + street + city + postcode | unresolved": 13,
-  "P2 name + street + postcode | same": 65,
-  "P3 name + street + city | same": 10,
-  "P4 name + postcode | same": 263,
-  "P4 name + postcode | unresolved": 8,
-  "P5 name + city | same": 38,
-  "P6 name + country | same": 285,
-  "P6 name + country | unresolved": 2,
-  "P7 name alone | same": 81
+  "P1 | different": 1,
+  "P1 | same": 747,
+  "P1 | unresolved": 13,
+  "P2 | same": 65,
+  "P3 | same": 10,
+  "P4 | same": 263,
+  "P4 | unresolved": 8,
+  "P5 | same": 38,
+  "P6 | same": 285,
+  "P6 | unresolved": 2,
+  "P7 | same": 81
  },
  "over_shared": {
   "addresses": 3801,
   "threshold": 25
  },
  "passes": {
-  "P1 name + street + city + postcode": {
+  "P1": {
    "bound_all_filers": 2955,
    "bound_companies": 1251,
    "companies_by_stratum": {
     "clean": 1187,
     "incorporation conflicts": 39,
-    "incorporation conflicts + name not unique over both sources": 1,
-    "name not unique over both sources": 24
+    "incorporation conflicts + name held by another candidate": 1,
+    "name held by another candidate": 24
    }
   },
-  "P2 name + street + postcode": {
+  "P2": {
    "bound_all_filers": 196,
    "bound_companies": 84,
    "companies_by_stratum": {
     "clean": 79,
     "incorporation conflicts": 2,
-    "incorporation conflicts + name not unique over both sources": 1,
-    "name not unique over both sources": 2
+    "incorporation conflicts + name held by another candidate": 1,
+    "name held by another candidate": 2
    }
   },
-  "P3 name + street + city": {
+  "P3": {
    "bound_all_filers": 236,
    "bound_companies": 101,
    "companies_by_stratum": {
     "clean": 94,
     "incorporation conflicts": 1,
-    "incorporation conflicts + name not unique over both sources": 1,
-    "name not unique over both sources": 5
+    "incorporation conflicts + name held by another candidate": 1,
+    "name held by another candidate": 5
    }
   },
-  "P4 name + postcode": {
+  "P4": {
    "bound_all_filers": 1170,
    "bound_companies": 441,
    "companies_by_stratum": {
     "clean": 410,
     "incorporation conflicts": 22,
-    "name not unique over both sources": 9
+    "name held by another candidate": 9
    }
   },
-  "P5 name + city": {
+  "P5": {
    "bound_all_filers": 542,
    "bound_companies": 242,
    "companies_by_stratum": {
     "clean": 224,
     "incorporation conflicts": 12,
-    "name not unique over both sources": 6
+    "name held by another candidate": 6
    }
   },
-  "P6 name + country": {
+  "P6": {
    "bound_all_filers": 4909,
    "bound_companies": 1230,
    "companies_by_stratum": {
     "clean": 1159,
     "incorporation conflicts": 58,
-    "incorporation conflicts + name not unique over both sources": 4,
-    "name not unique over both sources": 9
+    "incorporation conflicts + name held by another candidate": 4,
+    "name held by another candidate": 9
    }
   },
-  "P7 name alone": {
+  "P7": {
    "bound_all_filers": 716,
    "bound_companies": 235,
    "companies_by_stratum": {

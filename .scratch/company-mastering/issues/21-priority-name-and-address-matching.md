@@ -130,6 +130,12 @@ That file is pinned by ticket 12's approved proof, so the fix was not kept.
 
   These were drawn from today's binds, not from what each pass adds, so they are not the proof.
 
+Re-run through the census's own readers (`cascade_filer`,
+`cascade_entity`, the passes from the Company rules), 2026-09-28 23:41 ET: the same
+3,584 pairs, each with the same LEI and pass, and the same counts per pass
+and stratum as above. The proof and the census read alike. Merged as #746
+(`163ac301`, 2026-09-28 22:14 ET).
+
 ## Built (switched off)
 
 - `cascade.py`: the passes (`assign`), the fit address, the readers of a
