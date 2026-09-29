@@ -381,6 +381,18 @@ def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
     raise ValueError("Unknown native GLEIF member")
 
 
+def _refuse_deletion(row: dict) -> None:
+    """GLEIF flags a deletion in delta files only; in a full file the field is
+    present and empty on 4% of reporting exceptions (ticket 18). A flag with a
+    value on one of our Companies' records is never read as a live record; it
+    blocks until someone decides. Checked after scope, so a delta's deletions
+    of every other LEI stay out of scope and never block."""
+    extension = row.get("Extension")
+    flag = extension.get("gleif:Deletion") if isinstance(extension, dict) else extension
+    if flag is not None:
+        raise UnsupportedRecord("gleif_deletion_flag")
+
+
 def record_evidence(
     row: dict,
     *,
@@ -415,6 +427,7 @@ def record_evidence(
                 raise UnsupportedRecord("unsupported_relationship_endpoint")
             if start not in eligible_leis or end not in eligible_leis:
                 raise UnsupportedRecord("outside_approved_company_scope")
+            _refuse_deletion(row)
             periods = value(row, "Relationship.RelationshipPeriods.RelationshipPeriod")
             periods = periods if isinstance(periods, list) else [periods]
             periods = [
@@ -456,6 +469,7 @@ def record_evidence(
                     if "kind_field" in contract["adapter"]
                     else None,
                 )
+            _refuse_deletion(row)
             effective = value(row, "Registration.LastUpdateDate.$")
             if member == "level1":
                 category = value(row, "Entity.EntityCategory.$")

@@ -1,7 +1,7 @@
 # Source data findings from the rules skill trials
 
 Type: task
-Status: open, needs triage (none is fixed here)
+Status: triaged (operator, 2026-09-29); GLEIF fixes on `claude/company-mastering-18-gleif-blocking`; the SEC fixes (5, 6) next
 Blocked by: none
 
 ## Why
@@ -57,3 +57,47 @@ to a Company.
 The two agent logs are on branch `claude/rules-07-skill`:
 `.scratch/rules-skill/trials/round-1/sec/rules-log.md` and
 `.scratch/rules-skill/trials/round-1/gleif/rules-log.md`.
+
+## Triage (Claude, checked against main and the data on 2026-09-29; the operator agreed)
+
+A blocking review left open keeps a run from counting as complete
+(`bookkeeping.py`, `unresolved`), which is why findings 2b and 3 were first.
+
+| # | Finding | Checked | Decision |
+|---|---|---|---|
+| 1 | `gleif:Deletion` on reporting exceptions | 257,509 records, every value `null`, the only field in `Extension`. GLEIF's Golden Copy spec v2.2 (p. 8): "Delta Files … contain the record to be deleted with an added deletion flag in the Extension field"; a deleted record leaves the full file | **Accept.** Guard: a record whose flag holds a value is refused and blocks, so a delta's deletion is never read as live (`native_consumption` accepts delta releases) |
+| 2a | `EntityStatus` `"NULL"` | still true | **Accept:** the matching rules refuse it |
+| 2b | `RelationshipStatus` `"NULL"` blocks | 345 records; scope is tested before status, and **0** have both ends in scope, even over the 3,584 LEIs the cascade would bind | **Nothing to fix:** the triage overstated it; they are already set aside as out of scope, non-blocking |
+| 3 | LEI check digit before scope | still true: 356 invalid LEIs deferred as `invalid_lei` / `invalid_lei_checksum`, which block | **Fix, by the contract:** both reasons non-blocking in all three GLEIF contracts. The Company scope passes the `lei` format when a release is validated (`validate_release`), so an invalid LEI can never be ours; this gives what "scope first" would, with no change to the reading (`gleif-native-record-v1`) |
+| 4 | ICONIQ … GP, Ltd. dropped as a person | still true | **Keep as fog** (the capture filter, ticket 05) for the SEC capture work |
+| 5 | Region `P7` on ASML's address | still true (`business_address` keeps SEC's code) | **Fix:** a region only for a state or province |
+| 6 | Every ticker twice | still true (`_catalog_tickers`) | **Fix:** each ticker once, with 5 |
+
+## Built (GLEIF, 1 and 3)
+
+- `rules/sources/gleif/source.yaml`: `invalid_lei`, `invalid_lei_checksum`
+  non-blocking in the three contracts; new contract digests pinned with
+  the earlier ones peelable (`test_rules_config_digests.py`).
+- `gleif_source.record_evidence`: the deletion guard (`_refuse_deletion`,
+  reason `gleif_deletion_flag`, blocking), checked **after** scope, on
+  Level 1, relationship and reporting-exception records alike. A delta
+  deletes records of every LEI; only one of our Companies' records may
+  block, or no delta run could complete (found in review). An `Extension`
+  that is not an object fails closed. It changes no reading of the full
+  file: its 257,509 flags are all empty.
+- Tests: an invalid LEI is non-blocking; an empty flag reads as before; a
+  flag with a value is refused and blocks for our Companies' records, and
+  stays out of scope for any other, for all three members.
+- Applies to new batches only: reviews left open by earlier runs keep their
+  blocking disposition.
+- Activation: the changed GLEIF source document needs the operator's
+  `rules approve` in the Rules Database (the rules skill never approves).
+
+## Review (2026-09-29, three axes)
+
+- Spec: the guard first ran before scope, which would have blocked every
+  delta run on deletions of other LEIs; now after scope. Latent, noted: a
+  `"NULL"` relationship status still blocks once both ends are ours (0 today).
+- Standards: no violations; the `Extension` shape now fails closed.
+- GoF: leave it; fold the contract digest layers into `policy_layers` when a
+  third one arrives.
