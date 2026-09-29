@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, binding, matching, relationships
+from . import assessment, binding, correction, matching, relationships
 from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
@@ -175,10 +175,15 @@ class MergeStage:
             )
             if policy is None:
                 return binding.nothing()
+            # A record this batch releases (a revoked bind, ticket 13) is
+            # reconsidered by the rules from its current Stage reading.
+            candidates = (command.get("assertions") or []) + correction.reconsidered(
+                conn, command.get("decisions") or []
+            )
             proposed = binding.propose(
                 conn,
                 policy,
-                assertions=command.get("assertions") or [],
+                assertions=candidates,
                 decisions=command.get("decisions") or [],
                 identities=command.get("identities") or [],
                 as_of=command["as_of"],
@@ -189,7 +194,7 @@ class MergeStage:
             named = matching.propose(
                 conn,
                 policy,
-                assertions=command.get("assertions") or [],
+                assertions=candidates,
                 decisions=(command.get("decisions") or []) + proposed["decisions"],
                 as_of=command["as_of"],
             )
@@ -414,7 +419,9 @@ class MergeStage:
             # or published a newer Company of its kind since it was assessed.
             # Re-assess rather than mint twice, join the wrong Company, or
             # publish a new Company before one already stored.
-            if not preview and binding.proposal_is_stale(conn, policy, automatic):
+            if not preview and binding.proposal_is_stale(
+                conn, policy, automatic, correction.released(decisions)
+            ):
                 raise assessment.StaleAssessment(
                     "A rule's proposal no longer holds; re-assess"
                 )

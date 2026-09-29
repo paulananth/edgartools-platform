@@ -33,6 +33,9 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
     )
     by_id = {d["decision_id"]: d for d in ordered}
     revoked = set()
+    # A revoked bind (ticket 13): its subject, and when it was bound and
+    # unbound. Between the two the subject is still bound there.
+    unbound: dict[str, list[tuple]] = {}
     for d in ordered:
         if d["operation"] in {"reverse", "revoke"}:
             target = by_id.get(d.get("target"))
@@ -41,10 +44,20 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
             expected = (
                 {"merge"}
                 if d["operation"] == "reverse"
-                else {"override", "exclude", "reverse"}
+                else {"override", "exclude", "reverse", "bind"}
             )
             if target["operation"] not in expected:
                 raise Conflict("Invalid reversal/revocation target")
+            if target["operation"] == "bind":
+                if d["target"] in revoked:
+                    # Once only: a second revocation would unbind whatever
+                    # the record was bound to since (ticket 13).
+                    raise Conflict("This bind is already revoked")
+                if (d.get("subject"), d.get("entity_id")) != (target["subject"], target["entity_id"]):
+                    raise Conflict("A revocation names the bind it revokes: its subject and entity")
+                unbound.setdefault(target["subject"], []).append(
+                    (instant(target["at"]), instant(d["at"]), str(target["entity_id"]))
+                )
             revoked.add(d["target"])
 
     def root(key):
@@ -70,6 +83,15 @@ def replay(identities: list[dict], decisions: list[dict], as_of: str) -> Identit
             subject = d["subject"]
             entity = str(d["entity_id"])
             root(entity)
+            if key in revoked:
+                continue  # corrected: the subject is unbound (ticket 13)
+            if any(
+                bound_at <= instant(d["at"]) < unbound_at and other != entity
+                for bound_at, unbound_at, other in unbound.get(subject, [])
+            ):
+                raise Conflict(
+                    "Moving an established source binding requires a correction contract"
+                )
             if subject in bindings and bindings[subject] != entity:
                 raise Conflict(
                     "Moving an established source binding requires a correction contract"
