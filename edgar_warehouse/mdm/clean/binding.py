@@ -152,9 +152,8 @@ def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
         r["object_id"]: r["canonical_id"]
         for r in rows(
             conn,
-            """SELECT object_id, body->>'canonical_id' AS canonical_id
-            FROM mdm_v2.projection WHERE object_type='entity' AND object_id=ANY(:ids)
-            AND body->>'canonical_id' IS NOT NULL""",
+            """SELECT object_id, canonical_id FROM mdm_v2.current_entity
+            WHERE object_id=ANY(:ids) AND canonical_id IS NOT NULL""",
             ids=sorted(entity_ids),
         )
     }
@@ -174,9 +173,8 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
         r["object_id"]
         for r in rows(
             conn,
-            """SELECT object_id FROM mdm_v2.projection
-            WHERE object_type='entity' AND object_id=ANY(:ids)
-              AND body->>'status'='review'""",
+            """SELECT object_id FROM mdm_v2.current_entity
+            WHERE object_id=ANY(:ids) AND status='review'""",
             ids=sorted(entity_ids),
         )
     }

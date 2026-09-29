@@ -461,7 +461,9 @@ def handle(command: str, args) -> int:
         try:
             with mdm.connect() as conn:
                 report = dict(conn.execute(text(
-                    "SELECT object_type,count(*) FROM mdm_v2.projection GROUP BY object_type"
+                    "SELECT 'entity',count(*) FROM mdm_v2.current_entity "
+                    "UNION ALL SELECT object_type,count(*) FROM mdm_v2.projection "
+                    "WHERE object_type<>'entity' GROUP BY object_type"
                 )).all())
             print(json.dumps(report, sort_keys=True))
             return 0

@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
+from edgar_warehouse.mdm.clean import store as store_module
 from edgar_warehouse.mdm.clean.store import (
     Conflict,
     Store,
@@ -137,12 +138,38 @@ def database(postgres):
             conn.execute(text(f"DROP DATABASE {name} WITH (FORCE)"))
 
 
+COMPANY_ONE_PLACE = "042_clean_mdm_company_one_place.sql"
+
+
+def install_pre_042_reads(admin) -> None:
+    """Let today's code fill a store built at an older migration.
+
+    Today's code reads current entities through `mdm_v2.current_entity`, which
+    042 creates. Before 042 every entity was read from `projection`, so this
+    stand-in reads projection only. 042 replaces it with the real view.
+    """
+    with admin.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE VIEW mdm_v2.current_entity AS "
+                "SELECT object_id, body->>'kind' AS kind, body->>'status' AS status, "
+                "body->>'canonical_id' AS canonical_id, body "
+                "FROM mdm_v2.projection WHERE object_type = 'entity'"
+            )
+        )
+        conn.execute(text("GRANT SELECT ON mdm_v2.current_entity TO clean_application"))
+
+
 def initialize_database(admin, app):
     with admin.begin() as conn:
         conn.execute(text("DROP SCHEMA IF EXISTS mdm_v2 CASCADE"))
         version = str(uuid4())
     assert migrate(admin, application_role="clean_application")["installed"]
     assert not migrate(admin, application_role="clean_application")["installed"]
+    # A test that stops the store before 042 still fills it with today's
+    # code, which reads current_entity (install_pre_042_reads).
+    if COMPANY_ONE_PLACE not in store_module.CLEAN_MDM_MIGRATIONS:
+        install_pre_042_reads(admin)
     with admin.begin() as conn:
         policy = register_policy(
             conn,
@@ -432,16 +459,15 @@ def apply(db, n, **kw):
 
 
 def documents(db, kind):
+    """Current objects of one type. Entities come from `current_entity`,
+    which holds the Companies (ticket 17); the rest from `projection`."""
+    query = (
+        "SELECT object_id,body FROM mdm_v2.current_entity"
+        if kind == "entity"
+        else "SELECT object_id,body FROM mdm_v2.projection WHERE object_type=:kind"
+    )
     with db.application.connect() as conn:
-        return {
-            r[0]: r[1]
-            for r in conn.execute(
-                text(
-                    "SELECT object_id,body FROM mdm_v2.projection WHERE object_type=:kind"
-                ),
-                {"kind": kind},
-            )
-        }
+        return {r[0]: r[1] for r in conn.execute(text(query), {"kind": kind})}
 
 
 def test_reviewed_binding_and_disabled_automatic_matching(database):
@@ -1853,6 +1879,7 @@ def test_family_checkpoint_upgrade_preserves_old_batch_and_pending_assessment(da
                     f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO clean_application"
                 )
             )
+    install_pre_042_reads(database.admin)
     store = Store(database.application)
     old_request = request(database)
     run = str(uuid4())
@@ -2072,8 +2099,6 @@ def test_migration_031_applies_to_a_populated_store(postgres):
     evidence under migrations 023-030, then applies 031 over it.
     """
     from unittest import mock
-
-    import edgar_warehouse.mdm.clean.store as store_module
 
     admin, app = postgres
     # Everything up to but not including 031, by position rather than by name.
