@@ -404,6 +404,12 @@ def record_evidence(
         raise Conflict("Native GLEIF records do not support classification rules")
     raw = row
     try:
+        # GLEIF flags a deletion in delta files only; in a full file the field
+        # is present and empty on 4% of reporting exceptions (ticket 18). A
+        # flag with a value is never read as a live record.
+        for holder in (row, row.get("RelationshipRecord") or {}):
+            if (holder.get("Extension") or {}).get("gleif:Deletion") is not None:
+                raise UnsupportedRecord("gleif_deletion_flag")
         if member == "relationships":
             row = row.get("RelationshipRecord", {})
             start = format_value(value(row, "Relationship.StartNode.NodeID.$"), "lei")

@@ -117,11 +117,16 @@ mdm:
     contract:
       provider: GLEIF
       # quality_name_present: a data quality exception never stops the run
-      # (operator, 2026-09-28).
+      # (operator, 2026-09-28). invalid_lei, invalid_lei_checksum: an LEI
+      # that fails its format can never be one of our Companies (the Company
+      # scope is checked when a release is validated), so it never stops the
+      # run (ticket 18, operator 2026-09-29; the same for all three members).
       nonblocking_deferred_reasons:
       - outside_approved_company_scope
       - unsupported_identity_kind
       - reported_parent_exception
+      - invalid_lei
+      - invalid_lei_checksum
       - quality_name_present
       family: gleif
       schema_version: gleif-native-record-v1
@@ -204,6 +209,8 @@ mdm:
       - outside_approved_company_scope
       - unsupported_identity_kind
       - reported_parent_exception
+      - invalid_lei
+      - invalid_lei_checksum
       family: gleif
       schema_version: gleif-native-record-v1
       publication_families:
@@ -247,6 +254,8 @@ mdm:
       - outside_approved_company_scope
       - unsupported_identity_kind
       - reported_parent_exception
+      - invalid_lei
+      - invalid_lei_checksum
       family: gleif
       schema_version: gleif-native-record-v1
       publication_families:

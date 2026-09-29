@@ -96,18 +96,34 @@ def test_the_company_configuration_is_unchanged():
     assert policy_layers.digests(active) == [pins["name_matching_active"] for pins in layered]
 
 
+# Company mastering ticket 18 listed an invalid LEI as non-blocking in each
+# GLEIF contract; without those two reasons each contract is the one above.
+WITH_INVALID_LEI = {
+    "level1": "74b8b1f4c10bd53b591d17456cb3c33b124d2444ab1245c77ebea8d21a8f11bc",
+    "relationships": "586cbbce96744b978bd88a5c9b7842ec50871c30ca0f7d3a42a1989e6b891ccf",
+    "reporting_exceptions": "f376c348866eb2dc3720d127ad3e55310a222678ed6eba4374315b66ff92808d",
+}
+
+
+def _without_invalid_lei(contract: dict) -> dict:
+    reasons = [r for r in contract["nonblocking_deferred_reasons"] if r not in {"invalid_lei", "invalid_lei_checksum"}]
+    return {**contract, "nonblocking_deferred_reasons": reasons}
+
+
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
     contract = gleif_source.dataset_contract(member)
-    assert digest(_without_quality(contract)) == GLEIF_BEFORE[member]
-    assert digest(contract) == WITH_QUALITY.get(member, GLEIF_BEFORE[member])
+    assert digest(contract) == WITH_INVALID_LEI[member]
+    earlier = _without_invalid_lei(contract)
+    assert digest(earlier) == WITH_QUALITY.get(member, GLEIF_BEFORE[member])
+    assert digest(_without_quality(earlier)) == GLEIF_BEFORE[member]
 
 
 def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
     contract = gleif_source.dataset_contract("relationships", level1_source="x.level1")
     assert [r["target_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     # A fresh copy each call: the substitution never leaks into the next caller.
-    assert digest(gleif_source.dataset_contract("relationships")) == GLEIF_BEFORE["relationships"]
+    assert digest(gleif_source.dataset_contract("relationships")) == WITH_INVALID_LEI["relationships"]
 
 
 def test_an_unknown_gleif_member_is_refused():
