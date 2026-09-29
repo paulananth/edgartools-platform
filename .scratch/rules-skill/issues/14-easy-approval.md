@@ -21,6 +21,10 @@ ticket 20's approval
   and the time; Claude never records an approval without those words. This
   replaces "Never approve … Never run it yourself" in `skills/rules/SKILL.md`
   and the separate approver login.
+- "both i want to complete company master" (2026-09-29, asked whether to
+  switch on the two proven name rules now or wait for the cascade): switch on
+  the two proven name rules first (3,050 of 6,414), then the cascade passes
+  (ticket 20) as each is proven. Both go through this ticket's approval.
 
 ## Found (2026-09-29 18:15 ET)
 
@@ -41,6 +45,46 @@ ticket 20's approval
   on the operator's word). Approving one rule reuses them: no second store.
 - Plain words cannot live in YAML comments (`files.py` drops them on export)
   or as new fields in rule bodies (that moves every approved digest).
+
+## Step 1, by hand (2026-09-29 19:20 ET)
+
+On a throwaway PostgreSQL 16 with the real roles (`rules_agent`,
+`rules_approver`, an `operator` login in it, `clean_application`), not the
+operator's database: the merged `gleif` and `sec.submissions.company` source
+files and `merge/policy.yaml` went through save, record-proof, approve and
+activate. Script: the session scratchpad `step1_walk.py`. Every stop:
+
+- **Save** as `rules_agent`: works for both sources and the merge rules.
+- **A proof without acquisition evidence** is refused for both sources
+  ("Rules proof must qualify every declared acquisition feed"): a source that
+  declares feeds needs, per feed, a manifest (uri and sha256), the count of
+  each required producer (expected = verified) and checks that are all true.
+- **A failing proof** (`passed: false`) cannot be recorded at all: `prove`
+  sets `proven`, and the trigger refuses a failing one. Nothing keeps the
+  evidence of a failed run.
+- **Nothing produces a real proof.** The acquisition evidence above was built
+  by hand. `skills/bookkeeping/DEPLOY.md` names "the evaluator's real
+  exact-digest proof", but no code writes one, and the proof has no place for
+  the counts and examples the operator reads (skill step 8). This ticket adds
+  `proof.evidence` (counts and examples) and shows it; a command that writes
+  the whole proof from a pinned capture is the next step before first use.
+- **Approval before a proof** is refused by the trigger (only a `proven`
+  version). Good: this is the "no evidence, no approval" rule already.
+- **Approval as `rules_agent`**: no privilege on `approved_by`.
+- **Activation without approval**: refused ("MDM handoff requires approval").
+- **Activation without an MDM login**: refused; it needs the MDM owner's
+  login. `clean_application` has no INSERT on `mdm_v2.dataset`.
+- **Activation with the MDM owner**: works; a fresh MDM gets reading 1 of
+  each GLEIF member and of `sec.submissions.company.v1`. It asks for no
+  change-ledger login: `CHANGE_LEDGER_DATABASE_URL` is for the run, not for
+  activation.
+- **The merge rules** save, prove (the whole-document proof; its per-rule
+  proofs are checked by `check_policy` at registration), approve and
+  activate.
+
+So the logins the real path needs: `rules_agent` (Rules Database) and the
+Clean MDM owner (`RULES_MDM_ACTIVATION_DATABASE_URL`). The operator's own
+approver login goes away with this ticket.
 
 ## Design
 
