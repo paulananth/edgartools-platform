@@ -17,11 +17,14 @@ from __future__ import annotations
 from unittest import mock
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 import edgar_warehouse.mdm.clean.store as store_module
+from edgar_warehouse.mdm.clean.consumer import ContractReader
 from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store
+from edgar_warehouse.mdm.clean.store import Store, canonical
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_identifier_binding import (
     APPLE_CIK,
@@ -119,6 +122,9 @@ def test_a_merged_away_company_is_only_an_alias_row(database):
         }
     )
     assert current[survivor]["fields"]["name"]["value"] == "First"
+    # The as-of read builds the same alias object from company_alias.
+    page = ContractReader(database.application).snapshot_page("entity", generation=2)
+    assert {i["object_id"]: i["body"] for i in page["items"]}[merged] == current[merged]
 
 
 def test_a_person_stays_in_projection(database):
@@ -139,6 +145,37 @@ def test_a_person_stays_in_projection(database):
         )
     assert kinds == ["person"]
     assert core.documents(database, "entity") == computed(database, "work-1")
+
+
+def test_a_company_change_alone_changes_the_assessment_snapshot(database):
+    """The snapshot reads each Company from the Company table.
+
+    Only the Company row changes: no assertion, decision or identity in the
+    scope does. Before 042 the snapshot read projection and missed it.
+    """
+    a = core.source("a")
+    identity, bind = core.identity_and_binding(a)
+    core.apply(database, 1, assertions=[a], identities=[identity], decisions=[bind])
+    person = core.source("p", kind="person", fields={"name": "Jane Roe"})
+    other, bind_other = core.identity_and_binding(person)
+    core.apply(
+        database, 2, assertions=[person], identities=[other], decisions=[bind_other]
+    )
+    scope = canonical({"keys": [identity["entity_id"]], "sources": []})
+    snapshot = text("SELECT mdm_v2.assessment_snapshot(CAST(:s AS jsonb))")
+    with database.admin.begin() as conn:
+        before = conn.scalar(snapshot, {"s": scope})
+        body = conn.scalar(
+            text("SELECT body FROM mdm_v2.company WHERE valid_to IS NULL")
+        )
+        body["fields"]["name"]["value"] = "Renamed"
+        conn.execute(
+            text(
+                "SELECT mdm_v2.record_company_projection(CAST(:b AS jsonb),'work-2',now())"
+            ),
+            {"b": canonical(body)},
+        )
+        assert conn.scalar(snapshot, {"s": scope}) != before
 
 
 def test_the_company_copy_steps_are_gone(database):
@@ -166,7 +203,6 @@ def test_the_company_copy_steps_are_gone(database):
             .all()
         )
     assert triggers == [] and functions == []
-    assert not hasattr(Store, "_company_output_from_table")
 
 
 def test_a_publication_carries_the_objects_the_merge_stage_computed(database):
@@ -205,11 +241,20 @@ def test_migration_042_applies_to_a_populated_store(postgres):
         identity, bind = core.identity_and_binding(person)
         core.apply(db, 3, assertions=[person], identities=[identity], decisions=[bind])
         stage = MergeStage(Store(db.application))
-        late = _command(policy, "late", record("m", cik="0000789019"))
+        # A second record with Apple's CIK: its scope holds Apple's Company.
+        late = _command(policy, "late", record("m", cik=APPLE_CIK))
         prepared = stage.assess(**late, automatic=stage.propose(**late))
         before = core.documents(db, "entity")
         held = companies_in_projection(db)
         assert len(held) == 3  # the CIK rule's Company, the survivor, the alias
+        with db.application.connect() as conn:
+            keys = conn.scalar(
+                text(
+                    "SELECT body->'scope'->'keys' FROM mdm_v2.assessment WHERE assessment_id=:a"
+                ),
+                {"a": prepared["assessment_id"]},
+            )
+        assert set(keys) & set(held)
     core.migrate(admin, application_role="clean_application")
     assert companies_in_projection(db) == {}
     assert core.documents(db, "entity") == before
@@ -225,6 +270,45 @@ def test_migration_042_applies_to_a_populated_store(postgres):
     MergeStage(Store(db.application)).apply_assessment(
         prepared["assessment_id"], run_id=str(uuid4())
     )
-    assert (
-        sum(v["kind"] == "company" for v in core.documents(db, "entity").values()) == 4
-    )
+    companies = [
+        v for v in core.documents(db, "entity").values() if v["kind"] == "company"
+    ]
+    # The late record joins Apple's Company: no fourth Company. Records held:
+    # the alias none, the steward survivor its own and the merged one, Apple
+    # both of its records.
+    assert len(companies) == 3
+    assert sorted(len(c.get("subjects", [])) for c in companies) == [0, 2, 2]
+
+
+def test_migration_042_refuses_a_company_that_differs_from_the_company_table(postgres):
+    """042 deletes Company rows from projection only after checking each one.
+
+    A store at 040 whose projection Company no longer matches its open Company
+    row makes 042 stop. Migrations apply in one transaction, so nothing is
+    deleted and 042 is not recorded.
+    """
+    admin, app = postgres
+    names = list(store_module.CLEAN_MDM_MIGRATIONS)
+    through_041 = tuple(n for n in names if n < "042")
+    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_041):
+        db = core.initialize_database(admin, app)
+        a = core.source("a")
+        identity, bind = core.identity_and_binding(a)
+        core.apply(db, 1, assertions=[a], identities=[identity], decisions=[bind])
+    # Drift the copy trigger never saw: triggers are off for this one edit.
+    with admin.begin() as conn:
+        conn.execute(text("SET LOCAL session_replication_role = replica"))
+        conn.execute(
+            text(
+                "UPDATE mdm_v2.projection SET body=jsonb_set(body,'{status}','\"review\"') "
+                "WHERE object_type='entity' AND body->>'kind'='company'"
+            )
+        )
+    held = companies_in_projection(db)
+    with pytest.raises(DBAPIError, match="differs from the Company table"):
+        core.migrate(admin, application_role="clean_application")
+    assert companies_in_projection(db) == held
+    with admin.connect() as conn:
+        assert not conn.scalar(
+            text("SELECT count(*) FROM mdm_v2.migration WHERE name LIKE '042%'")
+        )

@@ -57,31 +57,46 @@ loop copies the growing array on each append.
     so the snapshot is byte-identical and such an assessment still applies
     (proved by `test_migration_041_applies_to_a_populated_store`).
   - Not changed: review reads in `bookkeeping.py`.
-- [x] Find every reader of Company rows in `projection`, in Python and SQL.
-  Each one now reads `mdm_v2.current_entity`:
+- [x] Find every reader of Company rows in `projection`, in Python and SQL
+  (2026-09-26 14:09 ET; verified by a repo search and by the Spec and GoF
+  reviews, 14:25 ET). Each one now reads `mdm_v2.current_entity`:
   - `binding.py`: the survivor and in-review checks;
   - `merge.py`: the "before" state kept with an assessment;
   - `cli.py`: the counts report;
   - `assessment_snapshot`, the hash of the scope;
   - the tests' `documents(..., "entity")`.
-  - `consumer.py` needs no change. `entity()` always resolves a generation,
-    so a Company is read from the Company table at that generation
-    (`_company_at`). Its `projection` branch for `generation is None` is
-    never reached from `entity()`.
-- [x] Tests first (PostgreSQL 16), in `test_clean_company_one_place.py`.
-  Each one failed on the code before this ticket:
+  - `consumer.py` reads a Company at a generation from the Company table
+    (`_company_at`, `snapshot_page`), which a view of the current state
+    cannot serve. Its `_object` had a `projection` branch for
+    `generation is None` that `entity()` never reaches; it would have missed
+    every Company, so it is deleted (review, 14:27 ET).
+  - Not switched: `.scratch/source-contract/prototype/engine/merge_harness.py`
+    reads all of `projection`. It is a throwaway prototype, not on any
+    production or Proving Run path.
+- [x] Tests first (PostgreSQL 16), in `test_clean_company_one_place.py`
+  (2026-09-26 14:09 ET). On the code before this ticket, four failed (the
+  commit, alias, copy-steps and migration tests) and two passed by design
+  (the Person and publication tests, which pin behaviour that must not
+  change). All pass now:
   - a commit writes no Company to `projection`, and the Company table holds
     the body the Merge Stage computed;
-  - a merged-away Company is only an alias row;
+  - a merged-away Company is only an alias row, and the as-of read builds
+    the same alias object (added after review, 14:28 ET);
   - a Person stays in `projection`;
   - the copy steps are gone;
   - a publication carries the objects the Merge Stage computed
     (characterization: true before and after);
-  - 041 applies to a populated store (below).
-  - A stale assessment is still refused when a Company in its scope changes:
-    covered by the existing assessment tests, which now read the view.
+  - a Company change alone changes the assessment snapshot, so a stale
+    assessment is refused (added after review, 14:28 ET: the existing
+    assessment tests also change evidence, so they could not show this).
+    Red on main's code (2026-09-26 14:36 ET): the snapshot was identical
+    before and after the change, because it read `projection`;
+  - 041 applies to a populated store (below);
+  - 041 refuses to remove a Company in `projection` that differs from the
+    Company table, and changes nothing (added after review, 14:28 ET).
 - [x] One new migration, `041_clean_mdm_company_one_place.sql`, restates each
-  changed SQL function whole:
+  changed SQL function whole (2026-09-26 14:09 ET; verified by the Standards
+  review against 023 + 028 + 029 + 031, 14:24 ET):
   - `commit_batch_core` sends a Company entity to
     `record_company_projection` (037) and everything else to `projection`;
   - `assessment_snapshot` reads entities from `current_entity`;
@@ -89,21 +104,38 @@ loop copies the growing array on each append.
     `publish_company_authority`, and `company_payload_from_table`;
   - on a populated store, each Company row in `projection` is checked
     against the Company table, then removed.
-- [x] Removed `Store._company_output_from_table`. Delivery sends the stored
-  payload. With it went the delivery-time check of the named columns against
-  the selected fields, and its two tests; the named columns are written from
-  the same body in one function (037).
-- [ ] Prove it on PostgreSQL 16:
-  - [x] a store populated at 040, then migrated (Companies unchanged, the
-    stored snapshot still matches, the assessment applies);
-  - [ ] the full Clean suite. First run (2026-09-26 14:03 ET): 8 failures.
-    Seven tests fill a store built at an older migration with today's code,
-    which reads `current_entity` before 041 exists. Fix: the shared test
-    helper gives such a store a stand-in view over `projection`, and 041
-    uses `CREATE OR REPLACE VIEW` to replace it. The eighth counted views
-    and now includes `current_entity`;
-  - [ ] ticket 05's chunk 1 again, for the new timing.
-- [ ] Three-axis `/code-review` (Standards, Spec, GoF), then PR and CI.
+- [x] Removed `Store._company_output_from_table` (2026-09-26 14:09 ET;
+  verified by the publication test). Delivery sends the stored payload. With
+  it went the delivery-time check of the named columns against the selected
+  fields, and its two tests. The named columns are written from the same
+  body in one `INSERT` (037, `record_company_projection`).
+- [x] Prove it on PostgreSQL 16 (2026-09-26 14:49 ET):
+  - [x] a store populated at 040, then migrated
+    (`test_migration_041_applies_to_a_populated_store`, 2026-09-26 14:30 ET).
+    Companies read back unchanged. The stored assessment covers Apple's
+    existing Company, its snapshot still matches, and it applies.
+  - [x] the full Clean suite: **200 passed** (2026-09-26 14:48 ET, 17 min,
+    on the code with the review fixes). First run (14:03 ET, 23 min):
+    8 failures. Seven tests fill a store built at an older migration with
+    today's code, which reads `current_entity` before 041 exists. Fix: the
+    shared test helper gives such a store a stand-in view over `projection`,
+    and 041 uses `CREATE OR REPLACE VIEW` to replace it. The eighth counted
+    views and now includes `current_entity`.
+  - [x] ticket 05's chunk 1 again, for the new timing (2026-09-26 14:49 ET,
+    same 966 records, same bundle, same candidate policy, harness from the
+    ticket 05 branch, not committed here): **24.0 s**, against 395.6 s and
+    564.9 s for the two earlier runs of the same chunk. Every outcome is
+    identical to the earlier run: 919 Companies, 919 bindings, 47 deferred
+    reviews, no CIK on two Companies, and the second pass changed nothing.
+    Largest database cost now: `commit_batch_core`, 9.9 s in total over both
+    passes; `company_payload_from_table` no longer exists.
+- [x] Three-axis `/code-review` (Standards, Spec, GoF), 2026-09-26 14:26 ET.
+  Fixed: the 041 header named the wrong migrations; the Company spec line
+  (`company-completion.md`); the untested 041 check; the dead `consumer.py`
+  branch; the private-method assertion; the stale-assessment test. Kept, with
+  reasons in the PR: `CREATE OR REPLACE VIEW` for the test stand-in; the
+  alias object built in three places (now pinned by tests).
+- [ ] PR and CI.
 
 ## Noted, not in scope
 

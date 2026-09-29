@@ -24,7 +24,8 @@
 --   the Company table, then removed.
 --
 -- commit_batch_core and assessment_snapshot are restated whole from the live
--- catalog, because 029, 031, 038 and 039 edited them as text. Each change is
+-- catalog, because earlier migrations edited them as text: 029 and 031 edited
+-- commit_batch_core, and 029 edited assessment_snapshot. Each change is
 -- marked "042".
 
 DROP TRIGGER project_company_version ON mdm_v2.projection;

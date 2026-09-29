@@ -17,8 +17,11 @@ committed Company version, with a half-open interval recording when MDM made
 the decision. Source effective time remains in field evidence. It carries
 named CIK/LEI and identifying columns, all other selected fields and
 identifiers, and whole structured addresses selected by Company source
-priority. Alias routing lives in `mdm_v2.company_alias`; engine projections
-remain working state. This local table does not activate the declared SEC-to-
+priority. Alias routing lives in `mdm_v2.company_alias`. The Merge Stage
+writes a Company only to these two tables; `mdm_v2.projection` holds the
+other kinds, relationships and reviews, and `mdm_v2.current_entity` reads
+every current entity from both (migration 042, company mastering ticket 17).
+This local table does not activate the declared SEC-to-
 GLEIF name rules or complete the milestone below.
 
 A governed Company can retain SEC and GLEIF records under one immutable

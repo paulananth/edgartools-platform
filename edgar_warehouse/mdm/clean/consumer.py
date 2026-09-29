@@ -44,13 +44,6 @@ class ContractReader:
 
     @staticmethod
     def _object(conn, kind, key, generation):
-        if generation is None:
-            return conn.scalar(
-                text(
-                    "SELECT body FROM mdm_v2.projection WHERE object_type=:t AND object_id=:id"
-                ),
-                {"t": kind, "id": key},
-            )
         return conn.scalar(
             text("""SELECT item->'body' FROM mdm_v2.batch b,
           jsonb_array_elements(b.effects->'projections') item

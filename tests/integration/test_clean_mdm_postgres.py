@@ -166,6 +166,8 @@ def initialize_database(admin, app):
         version = str(uuid4())
     assert migrate(admin, application_role="clean_application")["installed"]
     assert not migrate(admin, application_role="clean_application")["installed"]
+    # A test that stops the store before 042 still fills it with today's
+    # code, which reads current_entity (install_pre_042_reads).
     if COMPANY_ONE_PLACE not in store_module.CLEAN_MDM_MIGRATIONS:
         install_pre_042_reads(admin)
     with admin.begin() as conn:
