@@ -505,7 +505,7 @@ def test_an_invalid_lei_never_blocks_a_run():
     validated), so it is set aside without blocking."""
     from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
 
-    _, result, contract = _repex(lei="HWUPKR0MPOU8FGXBT395")
+    _, result, _ = _repex(lei="HWUPKR0MPOU8FGXBT395")
     assert result["reason"] == "invalid_lei_checksum"
     for member in ("level1", "relationships", "reporting_exceptions"):
         reasons = dataset_contract(member)["nonblocking_deferred_reasons"]
@@ -521,7 +521,38 @@ def test_an_empty_deletion_field_in_a_full_file_is_read_as_usual():
 
 
 def test_a_deletion_flag_with_a_value_is_refused_and_blocks():
-    """A delta file's deletion is never read as a live record."""
+    """A delta file's deletion of one of our Companies' records is never read
+    as a live record."""
     _, result, contract = _repex(Extension={"gleif:Deletion": "true"})
     assert result["reason"] == "gleif_deletion_flag"
     assert "gleif_deletion_flag" not in contract["nonblocking_deferred_reasons"]
+    # An Extension that is not an object fails closed, never crashes.
+    _, result, _ = _repex(Extension="unexpected")
+    assert result["reason"] == "gleif_deletion_flag"
+
+
+def test_a_deletion_outside_our_companies_stays_out_of_scope():
+    """A delta deletes records of every LEI; only ours may block."""
+    _, result, _ = _repex(lei="5493001KJTIIGC8Y1R12", Extension={"gleif:Deletion": "true"})
+    assert result["reason"] == "outside_approved_company_scope"
+
+
+@pytest.mark.parametrize("in_scope", [True, False])
+def test_a_deletion_flag_on_level1_and_relationships(in_scope):
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
+
+    ours, other = "HWUPKR0MPOU8FGXBT394", "5493001KJTIIGC8Y1R12"
+    scope = {ours, other} if in_scope else {"529900T8BM49AURSDO55"}
+    publication = {"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64}
+    level1 = {"LEI": {"$": ours}, "Entity": {"EntityCategory": {"$": "GENERAL"}},
+              "Extension": {"gleif:Deletion": "true"}}
+    relationship = {"RelationshipRecord": {
+        "Relationship": {"StartNode": {"NodeID": {"$": ours}, "NodeIDType": {"$": "LEI"}},
+                         "EndNode": {"NodeID": {"$": other}, "NodeIDType": {"$": "LEI"}}},
+        "Extension": {"gleif:Deletion": "true"}}}
+    expected = "gleif_deletion_flag" if in_scope else "outside_approved_company_scope"
+    for member, row in (("level1", level1), ("relationships", relationship)):
+        _, result = record_evidence(
+            row, member=member, contract=dataset_contract(member), source_code=f"gleif.{member}.v1",
+            eligible_leis=scope, ordinal=0, publication={**publication, "member": member})
+        assert result["reason"] == expected, member

@@ -78,12 +78,26 @@ A blocking review left open keeps a run from counting as complete
 - `rules/sources/gleif/source.yaml`: `invalid_lei`, `invalid_lei_checksum`
   non-blocking in the three contracts; new contract digests pinned with
   the earlier ones peelable (`test_rules_config_digests.py`).
-- `gleif_source.record_evidence`: the deletion guard (`gleif_deletion_flag`,
-  blocking). It changes no existing reading: no consumed record carries a
-  flag with a value.
+- `gleif_source.record_evidence`: the deletion guard (`_refuse_deletion`,
+  reason `gleif_deletion_flag`, blocking), checked **after** scope, on
+  Level 1, relationship and reporting-exception records alike. A delta
+  deletes records of every LEI; only one of our Companies' records may
+  block, or no delta run could complete (found in review). An `Extension`
+  that is not an object fails closed. It changes no reading of the full
+  file: its 257,509 flags are all empty.
 - Tests: an invalid LEI is non-blocking; an empty flag reads as before; a
-  flag with a value is refused and blocks.
+  flag with a value is refused and blocks for our Companies' records, and
+  stays out of scope for any other, for all three members.
 - Applies to new batches only: reviews left open by earlier runs keep their
   blocking disposition.
 - Activation: the changed GLEIF source document needs the operator's
   `rules approve` in the Rules Database (the rules skill never approves).
+
+## Review (2026-09-29, three axes)
+
+- Spec: the guard first ran before scope, which would have blocked every
+  delta run on deletions of other LEIs; now after scope. Latent, noted: a
+  `"NULL"` relationship status still blocks once both ends are ours (0 today).
+- Standards: no violations; the `Extension` shape now fails closed.
+- GoF: leave it; fold the contract digest layers into `policy_layers` when a
+  third one arrives.
