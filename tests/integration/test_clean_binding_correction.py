@@ -49,11 +49,8 @@ def correct(database, policy, batch, checkpoint, *, extra=()):
     body = policy_body(database, policy)
     with database.application.connect() as conn:
         stale = correction.stale_bindings(conn, body, limit=100)
-        revocations = [
-            correction.revocation(conn, b, policy_digest=policy, actor="operator",
-                                  reason=f"rule {b['rule_id']}@{b['rule_version']} is no longer switched on", at=AT)
-            for b in stale
-        ]
+        revocations = correction.revocations(conn, stale, policy_digest=policy, actor="operator",
+                                             reason="the rule's version is no longer switched on", at=AT)
     decisions = revocations + list(extra)
     MergeStage(Store(database.application)).apply(
         batch_id=batch, run_id=str(uuid4()), policy_digest=policy, consumer="load",
@@ -154,8 +151,8 @@ def test_a_bind_revoked_twice_is_refused(database):
     with database.application.connect() as conn:
         (bind,) = [r[0] for r in conn.execute(text(
             "SELECT body FROM mdm_v2.decision WHERE decision_id=:d"), {"d": first["target"]})]
-        second = correction.revocation(conn, bind, policy_digest=fixed, actor="operator",
-                                       reason="revoked again", at="2026-09-20T00:00:00+00:00")
+        (second,) = correction.revocations(conn, [bind], policy_digest=fixed, actor="operator",
+                                           reason="revoked again", at="2026-09-20T00:00:00+00:00")
     with pytest.raises((Conflict, DBAPIError), match="already revoked"):
         MergeStage(Store(database.application)).apply(
             batch_id="twice", run_id=str(uuid4()), policy_digest=fixed, consumer="load",
@@ -207,8 +204,8 @@ def test_a_quarantined_record_waits_even_under_an_active_rule(database):
     # The revocation and the quarantine in one batch: nothing rebinds.
     with database.application.connect() as conn:
         (stale,) = correction.stale_bindings(conn, policy_body(database, fixed), limit=10)
-        revocation = correction.revocation(conn, stale, policy_digest=fixed, actor="operator",
-                                           reason="the rule cannot tell parent from subsidiary", at=AT)
+        (revocation,) = correction.revocations(conn, [stale], policy_digest=fixed, actor="operator",
+                                               reason="the rule cannot tell parent from subsidiary", at=AT)
     apply(database, fixed, "correct", 3, [revocation, hold(revocation, fixed)], AT)
     assert stage_entity(database, gleif()["subject"]) is None
     (company,) = companies(database)
@@ -217,8 +214,13 @@ def test_a_quarantined_record_waits_even_under_an_active_rule(database):
     assert from_gleif(company) == set() and "jurisdiction" not in company["fields"]
     assert [v["quarantined"] for v in versions(database, entity)] == [False, False, True]
     # The record arrives again under the active rule: it still waits.
-    load(database, fixed, "gleif-again", gleif(), checkpoint=4)
+    MergeStage(Store(database.application)).apply(
+        batch_id="gleif-again", run_id=str(uuid4()), policy_digest=fixed, consumer="load",
+        expected_checkpoint=3, checkpoint=4, as_of="2026-09-20T00:00:00+00:00", assertions=[gleif()],
+    )
     assert stage_entity(database, gleif()["subject"]) is None
+    (company,) = companies(database)
+    assert company["quarantined"] is True
 
 
 def test_a_quarantine_in_its_own_batch_opens_a_dated_row_and_publishes(database):
@@ -295,3 +297,58 @@ def test_migration_041_applies_to_a_populated_store(postgres):
     apply(database, fixed, "hold", 4, [hold(revocation, fixed, at="2026-09-20T00:00:00+00:00")],
           "2026-09-20T00:00:00+00:00")
     assert [v["quarantined"] for v in versions(database, entity)][-1] is True
+
+
+def test_a_later_sec_batch_never_pairs_with_a_quarantined_record(database):
+    # The quarantined GLEIF record is stored; the SEC record carrying its LEI
+    # arrives again under an active rule. It stays out, and the batch commits.
+    _wrong, _entity = linked(database)
+    fixed = renewed(database)
+    with database.application.connect() as conn:
+        decisions = correction.correction_batch(
+            conn, policy_body(database, fixed), fixed, actor="operator", reason="parent or subsidiary",
+            at=AT, limit=10, quarantine=(gleif()["subject"],))
+    assert [d["operation"] for d in decisions] == ["revoke", "quarantine"]
+    apply(database, fixed, "correct", 3, decisions, AT)
+    later = "2026-09-20T00:00:00+00:00"  # after the quarantine
+    MergeStage(Store(database.application)).apply(
+        batch_id="sec-again", run_id=str(uuid4()), policy_digest=fixed, consumer="load",
+        expected_checkpoint=3, checkpoint=4, as_of=later, assertions=[sec()],
+    )
+    assert stage_entity(database, gleif()["subject"]) is None
+    (company,) = companies(database)
+    assert company["quarantined"] is True
+
+
+def test_a_lift_or_quarantine_names_the_batch_policy(database):
+    _wrong, _entity = linked(database)
+    fixed = name_policy(database, active=False)
+    (revocation,) = correct(database, fixed, "correct", 3)
+    later = "2026-09-20T00:00:00+00:00"
+    with pytest.raises(Conflict, match="names the policy it is made under"):
+        apply(database, fixed, "hold", 4, [hold(revocation, "another policy", at=later)], later)
+    held = hold(revocation, fixed, at=later)
+    apply(database, fixed, "hold", 4, [held], later)
+    corrected = renewed(database)
+    lifted_at = "2026-09-21T00:00:00+00:00"
+    with pytest.raises(Conflict, match="Only an approved rule change"):
+        apply(database, corrected, "lift", 5, [lift(held, "a policy never registered", lifted_at)], lifted_at)
+
+
+def test_a_correction_batch_lifts_a_quarantine(database):
+    _wrong, entity = linked(database)
+    fixed = name_policy(database, active=False)
+    with database.application.connect() as conn:
+        held = correction.correction_batch(
+            conn, policy_body(database, fixed), fixed, actor="operator", reason="undecided",
+            at=AT, limit=10, quarantine=(gleif()["subject"],))
+    apply(database, fixed, "hold", 3, held, AT)
+    corrected = renewed(database)
+    later = "2026-09-21T00:00:00+00:00"
+    with database.application.connect() as conn:
+        lifts = correction.correction_batch(
+            conn, policy_body(database, corrected), corrected, actor="operator", reason="rules corrected",
+            at=later, limit=10, lift=(gleif()["subject"],))
+    assert [d["operation"] for d in lifts] == ["revoke"]
+    apply(database, corrected, "lift", 4, lifts, later)
+    assert stage_entity(database, gleif()["subject"]) == entity

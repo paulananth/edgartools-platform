@@ -17,12 +17,12 @@
 -- journal decision of its own; the Stage row stays, unbound. 023 wrote the
 -- operation CHECK inline, so its generated name is looked up, not guessed.
 DO $$
-DECLARE found text;
+DECLARE found text; n integer;
 BEGIN
-    SELECT conname INTO found FROM pg_constraint
+    SELECT count(*), min(conname) INTO n, found FROM pg_constraint
       WHERE conrelid = 'mdm_v2.decision'::regclass AND contype = 'c'
         AND pg_get_constraintdef(oid) LIKE '%operation%';
-    IF found IS NULL THEN RAISE EXCEPTION 'No operation check on mdm_v2.decision'; END IF;
+    IF n <> 1 THEN RAISE EXCEPTION 'Expected one operation check on mdm_v2.decision, found %', n; END IF;
     EXECUTE format('ALTER TABLE mdm_v2.decision DROP CONSTRAINT %I', found);
 END;
 $$;

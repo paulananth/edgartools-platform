@@ -49,8 +49,9 @@ dropping evidence or allowing automatic matching.
 2. **The Stage follows.** Migration 041: a revocation clears the Stage row's
    `entity_id` in the same transaction, before the batch's binds, so the
    record can bind again.
-3. **Never the same wrong link again.** A rule never proposes a pair a
-   revocation named, under the version it named.
+3. **Never the same wrong link again.** A rule never proposes a record again
+   under the version a revocation named, to any Company: keyed by record,
+   rule and version, so a later merge of the Company cannot bring it back.
 4. **Rerun, bounded.** `stale_bindings`: the binds whose rule version is no
    longer switched on. A correction batch revokes them; in the same
    transaction the active rules re-propose those records, so each binds
@@ -72,8 +73,33 @@ dropping evidence or allowing automatic matching.
      own Company.
    - **What lifts it.** "Only an operator-approved rule change": a lifting
      revocation must name a policy other than the one the quarantine was
-     made under (`correction.check_lifts`); the same policy is refused.
+     made under (`correction.check_lifts`); the same policy is refused. The
+     quarantine and the lift each name the policy of the batch that carries
+     them, which the Merge Stage runs only once registered.
    - The Stage row stays, unbound; the journal decision is its mark.
+
+## The operator's command
+
+`edgar-warehouse mdm correction-batch --policy-digest … --actor … --reason …
+--at … [--limit N] [--quarantine SUBJECT]… [--lift SUBJECT]… --output FILE`
+writes one correction batch's decisions (`correction.correction_batch`): it
+revokes every standing link a rule version no longer switched on made, and
+any link of a record named for quarantine; quarantines those records; lifts
+the named quarantines. They run as a stewardship batch through
+`apply-decisions`.
+
+## Review (2026-09-29, three axes)
+
+- Spec: a stored quarantined record was still paired by name matching when
+  its SEC record came again (fixed: filtered in `matching.propose`, PG16
+  test); the lift check now ties both policies to the batch's own; the
+  operator had no command (added above); the relink guard missed a merged
+  Company (now keyed without it).
+- Standards: the quarantine lookup is bounded to the batch's records; the
+  released records are computed once per batch; `stale_bindings` filters
+  and limits in SQL; revocations are built in one query; 041 refuses unless
+  exactly one operation check exists.
+- GoF: leave the structure.
 
 ## Checklist
 
@@ -83,11 +109,12 @@ dropping evidence or allowing automatic matching.
   evidence, the Stage row's bronze object and the policy in force.
 - [x] Prove split and quarantine on PostgreSQL 16 with dated Company rows, aliases,
   field provenance, duplicate delivery, and publication retry
-  (`tests/integration/test_clean_binding_correction.py`, 11 tests): dated
+  (`tests/integration/test_clean_binding_correction.py`, 14 tests): dated
   rows close and open on revoke, quarantine and lift; GLEIF's values and
   their provenance leave the Company; a correction delivered twice changes
-  nothing; a quarantine publishes through a lost acknowledgement; migration
-  041 on a populated store. Aliases: a merge's reversal was already proven
+  nothing; a quarantine publishes through a lost acknowledgement; a later SEC
+  batch never pairs with a quarantined record; the correction command's
+  batch quarantines and lifts; migration 041 on a populated store. Aliases: a merge's reversal was already proven
   (`test_merge_alias_reversal_preserves_later_evidence_and_exclusion`); a
   bind makes no alias.
 - [x] Reassessment is bounded (`stale_bindings`' limit), idempotent (a

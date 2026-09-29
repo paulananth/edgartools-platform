@@ -212,8 +212,10 @@ def propose(
     decisions: list[dict],
     identities: list[dict],
     as_of: str,
+    released: set[str],
 ) -> dict:
-    """The bindings and new Companies the active identifier rules propose."""
+    """The bindings and new Companies the active identifier rules propose.
+    `released`: the records this batch unbinds (ticket 13)."""
     rules = active_rules(policy)
     if not rules or not assertions:
         return nothing()
@@ -226,7 +228,7 @@ def propose(
     subjects = sorted(latest)
     taken = {d["subject"] for d in decisions if d["operation"] == "bind"}
     # A record whose bind this batch revokes is unbound again (ticket 13).
-    taken.update(set(bound(conn, subjects)) - correction.released(conn, decisions))
+    taken.update(set(bound(conn, subjects)) - released)
     refused = correction.refused(conn, set(subjects), decisions)
     # (subject, rule, namespace, normalized value) for every rule that applies.
     applicable = []
@@ -248,7 +250,7 @@ def propose(
             applicable.append(
                 (subject, rule, namespace, _normal(policy, namespace, raw), raw)
             )
-    found = holders(conn, policy, wanted, correction.released(conn, decisions))
+    found = holders(conn, policy, wanted, released)
     # What the store says each value's holders are, before this batch's own
     # bindings join them: the only holdings the Merge Stage can re-check.
     stored = {key: set(held) for key, held in found.items()}
@@ -356,8 +358,8 @@ def propose(
                 )
                 found[key][minted[key]] = record["kind"]
             entity = minted[key]
-        if (subject, entity, rule["rule_id"], rule["version"]) in refused:
-            continue  # a correction revoked this very link under this version
+        if (subject, rule["rule_id"], rule["version"]) in refused:
+            continue  # a correction revoked this record's link under this version
         result["decisions"].append(
             decision(
                 "bind",

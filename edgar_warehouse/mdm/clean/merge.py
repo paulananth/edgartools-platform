@@ -175,24 +175,27 @@ class MergeStage:
             )
             if policy is None:
                 return binding.nothing()
-            # A record this batch releases (a revoked bind, ticket 13) is
-            # reconsidered by the rules from its current Stage reading; a
-            # quarantined record is left out of matching.
+            # A record this batch releases (a revoked bind, ticket 13) or
+            # lifts from quarantine is reconsidered by the rules from its
+            # current Stage reading; a quarantined record is left out of
+            # matching. Each is looked up once per batch.
             decisions = command.get("decisions") or []
-            held = correction.quarantined(conn, decisions)
-            candidates = [
-                a
-                for a in (command.get("assertions") or [])
-                + correction.reconsidered(conn, decisions)
-                if a["subject"] not in held
-            ]
+            released = correction.released(conn, decisions)
+            incoming = (command.get("assertions") or []) + correction.readings(
+                conn, released | correction.lifted(conn, decisions)
+            )
+            quarantined = correction.quarantined(
+                conn, {a["subject"] for a in incoming}, decisions
+            )
+            candidates = [a for a in incoming if a["subject"] not in quarantined]
             proposed = binding.propose(
                 conn,
                 policy,
                 assertions=candidates,
-                decisions=command.get("decisions") or [],
+                decisions=decisions,
                 identities=command.get("identities") or [],
                 as_of=command["as_of"],
+                released=released,
             )
             # Identifier proposals first: a record they bind is not name-matched,
             # and an SEC record they bind in this batch holds its Company for
@@ -201,8 +204,9 @@ class MergeStage:
                 conn,
                 policy,
                 assertions=candidates,
-                decisions=(command.get("decisions") or []) + proposed["decisions"],
+                decisions=decisions + proposed["decisions"],
                 as_of=command["as_of"],
+                released=released,
             )
             for part in ("decisions", "reviews"):
                 proposed[part] += named[part]
@@ -492,7 +496,7 @@ class MergeStage:
                     for k in d.get("evidence", [])
                 ):
                     raise Conflict("Binding evidence does not describe its subject")
-            correction.check_lifts(all_d, decisions)
+            correction.check_lifts(all_d, decisions, policy_digest)
             state = replay(list(all_ids.values()), list(all_d.values()), as_of)
             if any(i["entity_id"] not in state.bindings.values() for i in identities):
                 raise Conflict("New identities require an accepted source binding")
