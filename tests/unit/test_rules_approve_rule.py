@@ -17,7 +17,15 @@ AT = "2026-09-29T23:30:00Z"
 
 @pytest.fixture
 def root(tmp_path):
+    """A copy of the rules before the name rules were switched on (company
+    mastering ticket 25): `approve_rule` appended them, with a comment first."""
     shutil.copytree(files.ROOT, tmp_path / "rules")
+    path = tmp_path / "rules" / "merge" / "policy.yaml"
+    text = path.read_text()
+    marker = f"# {RULE}: switched on by"
+    if marker in text:
+        path.write_text(text[:text.index(marker)])
+    assert not any(e["rule_id"] == RULE for e in files.policy(tmp_path / "rules")["automatic_rules"])
     return tmp_path / "rules"
 
 
