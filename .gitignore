@@ -12,6 +12,7 @@ venv/
 env/
 pip-wheel-metadata/
 .pytest_cache/
+.testmondata*
 .mypy_cache/
 .ruff_cache/
 *.pyo

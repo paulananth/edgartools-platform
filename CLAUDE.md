@@ -479,6 +479,14 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   schema-drift failures against the local test-Postgres instance, and the `fastapi` import-collection
   errors in `tests/mdm/test_api.py`, `test_temporal_graph_queries.py` and `test_runtime_ops.py`, are
   pre-existing and unrelated to any current change. "Green except these" is the normal baseline.
+- **Locally, run the tests a change can affect; CI runs everything** (operator, 2026-09-29, after a
+  16-minute integration run). `pytest-testmon` records which code each test executes and re-runs only
+  the tests touching changed Python: `TESTMON_DATAFILE=~/.cache/edgartools/testmondata uv run pytest
+  --testmon <folders>` (one shared record for every worktree; a test never recorded always runs; it needs pytest's cache,
+  so never add `-p no:cacheprovider`).
+  It cannot see non-Python inputs: after a change to a migration `.sql`, a rules `.yaml` or another
+  data file, also run that area's test files by name. The full suite runs in CI on every PR, and
+  nothing merges until it is green.
 
 ## Known open items
 
