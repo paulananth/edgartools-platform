@@ -72,3 +72,13 @@ design. That means:
     test, approve, switch-on.
   - The command `rules migrate` becomes `rules load` / `rules unload`.
   Applied in slice 4.
+- Legacy scope (2026-09-30). Asked how far slice 2 should go, the operator
+  chose **"Everything not reachable"**: delete every module the enabled
+  commands cannot reach. That is 214 files and about 57,500 lines, plus
+  their tests, and includes the warehouse orchestrator, parsers, serving
+  exports, explore and market. A parser needed later (e.g. ownership for
+  Person) is re-added through Data Onboarding. The AWS deploy script and
+  dbt gold are rebuilt afterwards. Slices:
+  - 2a: CLI entry points and legacy MDM;
+  - 2b: the rest of the unreachable code and its tests;
+  - 2c: deploy scripts, installers, dbt.
