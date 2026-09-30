@@ -9,7 +9,7 @@ from edgar_warehouse.application.commands import COMMAND_REGISTRY
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.application import warehouse_orchestrator
 from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
-from edgar_warehouse.cli import _runtime_parser, build_parser
+from edgar_warehouse.cli import _runtime_parser, build_parser, main
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -42,7 +42,8 @@ def test_retired_feeds_have_no_source_declaration_or_command():
     for name in ("drive-submissions-discovery", "drive-company-facts-discovery",
                  "drive-reference-catalog-discovery", "drive-adv-bulk-dataset-discovery",
                  "bootstrap-full", "daily-incremental", "bootstrap-fundamentals",
-                 "seed-universe", "fetch-adv-bulk", "fetch-firm-roster"):
+                 "seed-universe", "fetch-adv-bulk", "fetch-firm-roster",
+                 "parse-adv-bronze", "seed-bronze-batches"):
         assert acquisition_command_registration(name) is None
         assert name not in COMMAND_REGISTRY
         assert name not in _runtime_parser().format_help()
@@ -50,6 +51,8 @@ def test_retired_feeds_have_no_source_declaration_or_command():
             run_command(name, None)
         with pytest.raises(WarehouseRuntimeError, match="Unsupported warehouse command"):
             warehouse_orchestrator.run_command(name, None)
+        with pytest.raises(SystemExit, match="2"):
+            main([name])
     for name in ("registry-open-draft", "registry-activate", "registry-status",
                  "registry-record-catchup"):
         with pytest.raises(SystemExit):
