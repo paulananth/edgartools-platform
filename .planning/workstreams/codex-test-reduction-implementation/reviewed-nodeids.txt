@@ -1,0 +1,367 @@
+tests/application/test_release_evidence.py::TestCandidateId::test_candidate_id_format
+tests/application/test_release_evidence.py::TestCandidateId::test_candidate_id_uses_first_12_hex_chars_only
+tests/application/test_release_evidence.py::TestCandidateId::test_rejects_noncanonical_full_commit_sha[abc123]
+tests/application/test_release_evidence.py::TestCandidateId::test_rejects_noncanonical_full_commit_sha[a/../../../outside]
+tests/application/test_release_evidence.py::TestCandidateId::test_rejects_noncanonical_full_commit_sha[gggggggggggggggggggggggggggggggggggggggg]
+tests/application/test_release_evidence.py::TestBuildManifestDeterminism::test_identical_inputs_produce_byte_identical_output
+tests/application/test_release_evidence.py::TestBuildManifestDeterminism::test_schema_version_and_candidate_id_present
+tests/application/test_release_evidence.py::TestBuildManifestDeterminism::test_image_digests_carry_no_registry_or_account
+tests/application/test_release_evidence.py::TestBuildManifestDeterminism::test_starts_with_no_gates_no_attestations_null_disposition
+tests/application/test_release_evidence.py::TestBuildManifestDeterminism::test_rejects_malformed_image_digest
+tests/application/test_release_evidence.py::TestSanitizer::test_flags_each_secret_class[account id 690839588395 is active]
+tests/application/test_release_evidence.py::TestSanitizer::test_flags_each_secret_class[arn:aws:iam::690839588395:role/EdgarToolsProdLoader]
+tests/application/test_release_evidence.py::TestSanitizer::test_flags_each_secret_class[690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-prod-warehouse]
+tests/application/test_release_evidence.py::TestSanitizer::test_flags_each_secret_class[postgresql://mdm_admin:hunter2@edgartools-prod-mdm.example/mdm]
+tests/application/test_release_evidence.py::TestSanitizer::test_flags_each_secret_class[snowflake://release_user:password@org-account/database]
+tests/application/test_release_evidence.py::TestSanitizer::test_flags_each_secret_class[account_locator: XCPCLKF-KB19989]
+tests/application/test_release_evidence.py::TestSanitizer::test_flags_each_secret_class[account_locator: xcpclkf-kb19989]
+tests/application/test_release_evidence.py::TestSanitizer::test_clean_content_has_no_findings
+tests/application/test_release_evidence.py::TestAddGate::test_appends_sanitized_gate_record
+tests/application/test_release_evidence.py::TestAddGate::test_malformed_existing_manifest_is_rejected_cleanly[gates]
+tests/application/test_release_evidence.py::TestAddGate::test_malformed_existing_manifest_is_rejected_cleanly[candidate_id]
+tests/application/test_release_evidence.py::TestAddGate::test_nul_in_new_gate_evidence_path_is_rejected_cleanly
+tests/application/test_release_evidence.py::TestAddGate::test_invalid_new_gate_metadata_is_rejected_cleanly[gate_name-]
+tests/application/test_release_evidence.py::TestAddGate::test_invalid_new_gate_metadata_is_rejected_cleanly[media_type-None]
+tests/application/test_release_evidence.py::TestAddGate::test_invalid_new_gate_metadata_is_rejected_cleanly[capture_tool-value2]
+tests/application/test_release_evidence.py::TestAddGate::test_invalid_new_gate_metadata_is_rejected_cleanly[capture_tool_version-value3]
+tests/application/test_release_evidence.py::TestAddGate::test_live_evidence_window_is_fixed_at_24h_not_operator_configurable
+tests/application/test_release_evidence.py::TestAddGate::test_rejects_naive_non_utc_capture_timestamp
+tests/application/test_release_evidence.py::TestAddGate::test_rejects_capture_before_candidate_identity_freeze
+tests/application/test_release_evidence.py::TestAddGate::test_rejects_gate_whose_evidence_contains_a_secret
+tests/application/test_release_evidence.py::TestAddGate::test_rejects_evidence_path_outside_candidates_own_evidence_dir
+tests/application/test_release_evidence.py::TestAddGate::test_rejects_traversal_hidden_beneath_candidate_evidence_prefix
+tests/application/test_release_evidence.py::TestAddGate::test_rejects_duplicate_gate_name
+tests/application/test_release_evidence.py::TestAddGate::test_rejects_invalid_status
+tests/application/test_release_evidence.py::TestValidateManifest::test_clean_manifest_validates_ok
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_missing_evidence_file
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_digest_drift_when_file_mutated_after_recording
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_stale_evidence_past_24h_window
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_secret_reintroduced_after_gate_was_added
+tests/application/test_release_evidence.py::TestValidateManifest::test_rejects_traversal_during_validation_even_when_target_exists
+tests/application/test_release_evidence.py::TestValidateManifest::test_rejects_extended_or_future_evidence_window
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_evidence_captured_before_candidate_identity_freeze
+tests/application/test_release_evidence.py::TestValidateManifest::test_naive_gate_timestamps_return_findings_instead_of_crashing
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_missing_required_top_level_field
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_invalid_source_branch[None]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_invalid_source_branch[]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_invalid_source_branch[source_branch2]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_invalid_source_branch[source_branch3]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_disposition_returns_finding_instead_of_crashing[disposition0]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_disposition_returns_finding_instead_of_crashing[disposition1]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_disposition_returns_finding_instead_of_crashing[7]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_gate_status_returns_finding_instead_of_crashing[status0]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_gate_status_returns_finding_instead_of_crashing[status1]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_gate_status_returns_finding_instead_of_crashing[7]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_gate_status_returns_finding_instead_of_crashing[]
+tests/application/test_release_evidence.py::TestValidateManifest::test_non_path_gate_evidence_returns_finding_instead_of_passing_or_crashing[123]
+tests/application/test_release_evidence.py::TestValidateManifest::test_non_path_gate_evidence_returns_finding_instead_of_passing_or_crashing[evidence_path1]
+tests/application/test_release_evidence.py::TestValidateManifest::test_non_path_gate_evidence_returns_finding_instead_of_passing_or_crashing[evidence_path2]
+tests/application/test_release_evidence.py::TestValidateManifest::test_non_path_gate_evidence_returns_finding_instead_of_passing_or_crashing[\x00]
+tests/application/test_release_evidence.py::TestValidateManifest::test_invalid_gate_metadata_fails_closed[gate_name-]
+tests/application/test_release_evidence.py::TestValidateManifest::test_invalid_gate_metadata_fails_closed[media_type-None]
+tests/application/test_release_evidence.py::TestValidateManifest::test_invalid_gate_metadata_fails_closed[capture_tool-value2]
+tests/application/test_release_evidence.py::TestValidateManifest::test_invalid_gate_metadata_fails_closed[capture_tool_version-value3]
+tests/application/test_release_evidence.py::TestValidateManifest::test_duplicate_gate_names_fail_closed
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_container_types_return_structured_findings[release_data_watermark-None]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_container_types_return_structured_findings[release_data_watermark-malformed_value1]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_container_types_return_structured_findings[gates-malformed_value2]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_container_types_return_structured_findings[attestations-not-an-array]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_container_types_return_structured_findings[addendum_references-malformed_value4]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_nested_objects_fail_closed[snowflake_export]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_nested_objects_fail_closed[hosted_graph]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_tampered_frozen_identity_fields[schema_version-999-invalid_schema_version]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_tampered_frozen_identity_fields[lifecycle_status-editable-invalid_lifecycle_status]
+tests/application/test_release_evidence.py::TestValidateManifest::test_candidate_date_must_match_identity_freeze_date
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_tampered_gate_fields[status-None-invalid_gate_status]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_tampered_gate_fields[evidence_sha256-None-invalid_evidence_digest]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_tampered_gate_fields[sanitization-None-invalid_sanitization]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_secret_embedded_in_manifest_metadata
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_incomplete_gate_missing_field
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_invalid_disposition_value
+tests/application/test_release_evidence.py::TestValidateManifest::test_accepts_every_valid_disposition_value[go]
+tests/application/test_release_evidence.py::TestValidateManifest::test_accepts_every_valid_disposition_value[no_go]
+tests/application/test_release_evidence.py::TestValidateManifest::test_accepts_every_valid_disposition_value[superseded]
+tests/application/test_release_evidence.py::TestValidateManifest::test_accepts_every_valid_disposition_value[None]
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_incomplete_attestation_record
+tests/application/test_release_evidence.py::TestValidateManifest::test_accepts_complete_attestation_record
+tests/application/test_release_evidence.py::TestValidateManifest::test_rejects_attestation_not_bound_to_candidate_and_watermark
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_attestation_before_candidate_identity_freeze
+tests/application/test_release_evidence.py::TestValidateManifest::test_reserved_final_state_fields_require_null_or_valid_shape[release_owner_attestation-value0]
+tests/application/test_release_evidence.py::TestValidateManifest::test_reserved_final_state_fields_require_null_or_valid_shape[release_seal-7]
+tests/application/test_release_evidence.py::TestValidateManifest::test_reserved_final_state_fields_require_null_or_valid_shape[release_seal-]
+tests/application/test_release_evidence.py::TestValidateManifest::test_final_no_go_requires_release_seal
+tests/application/test_release_evidence.py::TestValidateManifest::test_fabricated_go_without_human_approval_fails_closed
+tests/application/test_release_evidence.py::TestValidateManifest::test_go_with_unhashable_attestation_digest_returns_structured_findings
+tests/application/test_release_evidence.py::TestValidateManifest::test_go_remains_fail_closed_until_go_packet_and_seal_verification_exist
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_watermark_missing_required_subfield
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_watermark_nested_snowflake_export_missing_subfield
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path0-value0]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path1-not-a-digest]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path2-value2]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path3-2026-99-99]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path4-]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path5-None]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path6-value6]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path7-]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path8-tomorrow]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path9-value9]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path10-]
+tests/application/test_release_evidence.py::TestValidateManifest::test_malformed_watermark_scalars_fail_closed[path11-value11]
+tests/application/test_release_evidence.py::TestValidateManifest::test_symlinked_candidate_evidence_root_fails_closed
+tests/application/test_release_evidence.py::TestValidateManifest::test_flags_candidate_id_directory_mismatch
+tests/application/test_release_evidence.py::TestValidateManifest::test_never_writes_attestation_or_disposition
+tests/application/test_release_evidence.py::TestValidationFindingShape::test_finding_is_serializable
+tests/application/test_release_evidence.py::TestIdentityFreezeGuard::test_add_gate_after_manual_disposition_is_rejected
+tests/mdm/test_clean_activation.py::TestTheArithmetic::test_a_perfect_sample_reproduces_the_spec_example
+tests/mdm/test_clean_activation.py::TestTheArithmetic::test_the_spec_example_passes_the_check_as_written
+tests/mdm/test_clean_activation.py::TestTheArithmetic::test_a_bound_rounded_up_past_its_sample_is_refused
+tests/mdm/test_clean_activation.py::TestTheArithmetic::test_a_perfect_sample_of_3000_clears_the_company_bar
+tests/mdm/test_clean_activation.py::TestTheArithmetic::test_a_perfect_sample_of_1000_does_not
+tests/mdm/test_clean_activation.py::TestADeclaredRuleIsWellFormed::test_a_policy_declaring_rules_without_activating_them_passes
+tests/mdm/test_clean_activation.py::TestADeclaredRuleIsWellFormed::test_an_unknown_primitive_is_refused_at_registration
+tests/mdm/test_clean_activation.py::TestADeclaredRuleIsWellFormed::test_a_rule_without_exactly_one_catch_all_is_refused
+tests/mdm/test_clean_activation.py::TestADeclaredRuleIsWellFormed::test_a_step_naming_an_undeclared_verdict_is_refused
+tests/mdm/test_clean_activation.py::TestADeclaredRuleIsWellFormed::test_a_catch_all_written_as_an_empty_when_is_refused
+tests/mdm/test_clean_activation.py::TestADeclaredRuleIsWellFormed::test_two_rules_sharing_an_id_and_version_in_one_body_are_refused
+tests/mdm/test_clean_activation.py::TestADeclaredRuleIsWellFormed::test_a_malformed_binding_rule_is_refused
+tests/mdm/test_clean_activation.py::TestARuleVersionNamesOneSetOfSteps::test_the_same_rule_registered_twice_is_not_a_conflict
+tests/mdm/test_clean_activation.py::TestARuleVersionNamesOneSetOfSteps::test_different_steps_under_one_version_are_refused
+tests/mdm/test_clean_activation.py::TestARuleVersionNamesOneSetOfSteps::test_a_new_version_is_free
+tests/mdm/test_clean_activation.py::TestARuleVersionNamesOneSetOfSteps::test_a_body_with_no_kinds_block_holds_no_rules
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_a_measured_activation_that_clears_the_bar_passes
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_nothing_is_active_without_an_entry
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_entry_for_another_rule_version_does_not_activate_this_one
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes0-absent]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes1-2026-09-23]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes2-person]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes3-deferred]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes4-deterministic]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes5-binding]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes6-fund]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes7-below the company bar]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes8-does not reproduce]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes9-confidence]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes10-method]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes11-adversarial]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes12-cohort]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes13-approval]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_an_activation_that_does_not_hold_is_refused[changes14-sample]
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_a_bar_the_document_lowers_below_the_accepted_one_is_refused
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_company_classification_acts_at_95_percent
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_a_company_proof_below_95_percent_is_refused
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_lowering_classification_never_lowers_consolidation
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_a_kind_with_no_bar_for_the_family_cannot_activate
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_one_verdict_is_activated_once
+tests/mdm/test_clean_activation.py::TestAnActivationCarriesItsProof::test_a_legacy_string_entry_is_refused
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_verified_contract_activates_the_rule
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_malformed_rule_is_refused[changes0-on_no_match]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_malformed_rule_is_refused[changes1-exactly bind]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_malformed_rule_is_refused[changes2-sits in kind company]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_malformed_rule_is_refused[changes3-not a binding test]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_malformed_rule_is_refused[changes4-exactly one namespace]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_malformed_rule_is_refused[changes5-does not match an identifier]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_rule_that_creates_companies_must_name_its_source
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_only_the_identifier_issuer_may_create_companies
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_rule_that_creates_companies_needs_its_kinds_contract
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_rule_that_only_joins_may_come_from_any_source
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_no_contract_means_no_activation
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_an_incomplete_contract_is_refused[changes0-authority]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_an_incomplete_contract_is_refused[changes1-issuing source]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_an_incomplete_contract_is_refused[changes2-normalizer]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_an_incomplete_contract_is_refused[changes3-forward claim]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_an_incomplete_contract_is_refused[changes4-compatibility]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_an_incomplete_contract_is_refused[changes5-not verified]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_an_incomplete_contract_is_refused[changes6-tolerance]
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_deterministic_activation_of_a_classification_rule_is_refused
+tests/mdm/test_clean_activation.py::TestAnIdentifierRule::test_a_binding_rule_cannot_be_measured_into_activity_here
+tests/mdm/test_clean_activation.py::TestTheCompanyPolicy::test_the_approved_rule_activates_only_its_company_verdict
+tests/mdm/test_clean_activation.py::TestTheCompanyPolicy::test_the_policy_is_the_active_digest
+tests/mdm/test_clean_activation.py::TestTheCompanyPolicy::test_the_proof_files_match_the_pinned_hashes
+tests/mdm/test_clean_activation.py::TestTheCompanyPolicy::test_the_account_hold_back_re_scores_from_frozen_labels
+tests/mdm/test_clean_activation.py::TestEachStepClearsTheBar::test_a_failing_step_cannot_hide_behind_a_passing_one
+tests/mdm/test_clean_activation.py::TestEachStepClearsTheBar::test_a_step_with_no_sample_of_its_own_is_refused
+tests/mdm/test_clean_activation.py::TestEachStepClearsTheBar::test_the_measured_sec_rule_clears_the_bar_at_every_company_step
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_the_frozen_rules_are_well_formed_and_activate_at_95[rule0]
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_the_frozen_rules_are_well_formed_and_activate_at_95[rule1]
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_bar_below_95_is_refused
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_proof_below_the_bar_is_refused
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_malformed_rule_is_refused[changes0-never creates a Company]
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_malformed_rule_is_refused[changes1-exactly bind]
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_malformed_rule_is_refused[changes2-holds the Company]
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_malformed_rule_is_refused[changes3-never the name alone]
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_malformed_rule_is_refused[changes4-not a name binding test]
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_a_kind_verdict_cannot_be_measured_for_a_name_binding
+tests/mdm/test_clean_activation.py::TestANameBindingRule::test_identifier_binding_still_activates_only_deterministically
+tests/mdm/test_clean_activation.py::TestTheNameMatchingRules::test_the_declared_rules_are_the_measured_rules_unchanged
+tests/mdm/test_clean_activation.py::TestTheNameMatchingRules::test_both_name_matching_rules_are_on_by_the_operators_approval
+tests/mdm/test_clean_activation.py::TestTheNameMatchingRules::test_an_activation_needs_the_operators_approval
+tests/mdm/test_clean_activation.py::TestTheNameMatchingRules::test_the_proof_files_match_and_re_score[sec-gleif-name-jurisdiction]
+tests/mdm/test_clean_activation.py::TestTheNameMatchingRules::test_the_proof_files_match_and_re_score[sec-gleif-name-postal]
+tests/mdm/test_clean_activation.py::test_a_cascade_pass_with_invalid_arguments_is_refused[changes0]
+tests/mdm/test_clean_activation.py::test_a_cascade_pass_with_invalid_arguments_is_refused[changes1]
+tests/mdm/test_clean_activation.py::test_a_cascade_pass_with_invalid_arguments_is_refused[changes2]
+tests/mdm/test_clean_activation.py::test_a_cascade_pass_with_invalid_arguments_is_refused[changes3]
+tests/mdm/test_clean_activation.py::test_a_cascade_pass_must_keep_the_one_lei_veto
+tests/mdm/test_clean_activation.py::test_two_cascade_passes_with_one_name_are_refused
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_title_row_does_not_become_a_name
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_multi_line_title_reassembles
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_footnote_marker_is_stripped
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_other_reference_markers_are_stripped[Robert Smith*]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_other_reference_markers_are_stripped[Robert Smith (2)]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_other_reference_markers_are_stripped[Robert Smith\u2020]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_other_reference_markers_are_stripped[Robert Smith, (3)]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_former_prefix_line_is_not_a_name
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_fragment_before_any_name_is_dropped
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_next_executive_resets_the_carry_forward
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_single_token_cell_is_not_a_name
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_plain_table_is_unchanged
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_compensation_values_survive_repair
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_name_and_title_share_one_cell
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_a_surname_that_starts_a_title_defers_to_title_text
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_no_space_between_name_and_title
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_surnames_containing_title_letters_are_not_split[Marco Franco]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_surnames_containing_title_letters_are_not_split[Sarah Whitehead]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_surnames_containing_title_letters_are_not_split[Rocco Greco]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_surnames_containing_title_letters_are_not_split[Bianca Blanco]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_surnames_containing_title_letters_are_not_split[Alan Chairwell]
+tests/unit/test_proxy_fundamentals.py::TestNameRepair::test_position_only_cells_are_never_names
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[Jeff Zhu(1)-Jeff Zhu]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[Aman Narang (4)-Aman Narang]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[Travis D. Stice(7)-Travis D. Stice]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[JOHN J. CHADWICK(5)-JOHN J. CHADWICK]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[Kodwo Ghartey-Tagoe(1)-Kodwo Ghartey-Tagoe]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[R. Bryan Riggsbee (\u2078)-R. Bryan Riggsbee]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[R. Bryan Riggsbee\u2078-R. Bryan Riggsbee]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[Jason Dies(1)Interim-Jason Dies]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[Stephanie Williams (10)VP and-Stephanie Williams]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_footnote_markers_are_stripped_wherever_they_sit[Jeffrey H. Duncan (5) V.P., Manufacturing & Engineering-Jeffrey H. Duncan]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Chi-Foon Chan Co--Chi-Foon Chan]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[TED SARANDOS co--TED SARANDOS]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Aart J. de Geus Co--Aart J. de Geus]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Aart J. de GeusCo--Aart J. de Geus]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Lori Bisson --Lori Bisson]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Emiliano Kargieman --Emiliano Kargieman]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Walter Klemp - Executive Chair (8)-Walter Klemp]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Mitchell B. Goldsteen - Executive Chairman-Mitchell B. Goldsteen]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_trailing_title_fragments_start_the_title[Ariel Porat - Former-Ariel Porat]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_cut_fragment_becomes_title_text
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Max P. Bowman, VP/-Max P. Bowman]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Charles J. Hardin, VP/Sales-Charles J. Hardin]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Jack B. Self, VP/Operations-Jack B. Self]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Gordon D. Wichman VP-Gordon D. Wichman]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[John F. Quanci VP-John F. Quanci]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Geoffrey Davies VP &-Geoffrey Davies]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Geoffrey DaviesVP &-Geoffrey Davies]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Richard J. WehrleVP &-Richard J. Wehrle]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Jane Q. Doe SEVP and-Jane Q. Doe]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Jeffrey H. Duncan V.P.-Manufacturing & Engineering-Jeffrey H. Duncan]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_spellings_open_a_title[Jeffrey H. Duncan V.P. - Manufacturing & Engineering-Jeffrey H. Duncan]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_only_cells_are_never_names[VP/Sales]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_only_cells_are_never_names[1st VP/]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_only_cells_are_never_names[Jr., VP/]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_only_cells_are_never_names[SEVP and]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_vp_only_cells_are_never_names[VP of Processing]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_names_the_new_rules_must_not_cut[Chi-Foon Chan]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_names_the_new_rules_must_not_cut[Jean-Luc Picard]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_names_the_new_rules_must_not_cut[Mary-Kate Olsen]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_names_the_new_rules_must_not_cut[Vipul Shah]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_names_the_new_rules_must_not_cut[Sevpal Singh]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_names_the_new_rules_must_not_cut[Coco Deveaux]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_names_the_new_rules_must_not_cut[Marco Vitti]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_parenthesised_nickname_or_initial_is_not_a_footnote_marker[Robert (Bob) Smith]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_parenthesised_nickname_or_initial_is_not_a_footnote_marker[Robert (B) Smith]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_lowercase_letter_marker_is_stripped
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_surname_ending_in_co_is_not_cut[Anthony Franco-]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_surname_ending_in_co_is_not_cut[Joseph Marco-]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_flattened_superscript_digit_is_stripped[Brendan Brothers6-Brendan Brothers]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_flattened_superscript_digit_is_stripped[Marianne Lake11-Marianne Lake]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_flattened_superscript_digit_is_stripped[Charles R. Schwab5-Charles R. Schwab]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_flattened_superscript_digit_is_stripped[Walter W. Bettinger II6-Walter W. Bettinger II]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_flattened_superscript_digit_is_stripped[Terry D. Peterson 5-Terry D. Peterson]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_digits_inside_a_position_are_not_markers
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_a_marker_list_is_stripped
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_all_three_residues_in_one_cell
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_the_v_p_entry_is_not_a_wildcard[John SmithVIP]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_the_v_p_entry_is_not_a_wildcard[Ana SilvaVIP]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_the_v_p_entry_is_not_a_wildcard[Raj DeviVAP]
+tests/unit/test_proxy_fundamentals.py::TestTicket26Residues::test_empty_input
+tests/unit/test_proxy_fundamentals.py::TestParseProxyFundamentals::test_rows_carry_the_repaired_name_and_role
+tests/unit/test_proxy_fundamentals.py::TestParseProxyFundamentals::test_unattributable_rows_are_not_emitted
+tests/unit/test_proxy_fundamentals.py::TestParseProxyFundamentals::test_a_non_dataclass_entry_degrades_to_no_records
+tests/unit/test_proxy_fundamentals.py::TestParseProxyFundamentals::test_no_table_returns_empty
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1_0]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[8]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[10]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[010]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[6189]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1e5]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1.0]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[-3_0]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[0x1F]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1_000]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[12:30]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[2026-09-25]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[2026-09-25T17:09:33Z]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[2026-09-25.13]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[yes]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[no]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[on]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[off]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[y]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[n]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[Yes]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[TRUE]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[True0]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[Null]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[null]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[true]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[false]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[~]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[ ]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[.inf]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[.nan]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[a: b]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[#x]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[- x]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly['q']
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly["dq"]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[  lead]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[trail ]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[multi\nline]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[\xe9]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[sec.submissions.company.v1]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[Entity.LegalName.$]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[0]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1_1]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[-3_1]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[600]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1.5]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[0.995511]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[0.9910621278248719]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1e-05]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[1e+16]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[None]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[True1]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[False]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[value55]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[value56]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[value57]
+tests/unit/test_rules_files.py::test_a_value_reads_back_exactly[value58]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: yes-'yes' is ambiguous]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: 010-'010' is ambiguous]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: 2026-09-25-'2026-09-25' is ambiguous]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k:-an empty value is ambiguous]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: ~-'~' is ambiguous]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: .inf-'.inf' is ambiguous]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[a: &x 1\nb: *x-anchors and aliases]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: !!str 1-tags are not allowed]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: !!map {b: 1}-tags are not allowed]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: !!seq [1]-tags are not allowed]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[--- !!map\nk: 1-tags are not allowed]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[k: ! yes-tags are not allowed]
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[a: 1\na: 2-duplicate key 'a']
+tests/unit/test_rules_files.py::test_an_ambiguous_file_is_refused_with_its_line[? [1]\n: 2-a key must be text]
+tests/unit/test_rules_files.py::test_a_second_document_is_refused
+tests/unit/test_rules_files.py::test_a_key_is_always_text
+tests/unit/test_rules_files.py::test_plain_json_literals_are_typed
