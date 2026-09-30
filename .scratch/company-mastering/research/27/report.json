@@ -1,0 +1,418 @@
+{
+ "after_first_pass": {
+  "companies_open": 6414,
+  "decisions": {
+   "bind": 9466
+  },
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "identities": {
+   "company": 6414
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "sec.submissions.company.v1:company": 6414
+  },
+  "waiting": {
+   "sec.submissions.company.v1:classification_deferred": 312
+  }
+ },
+ "after_second_pass": {
+  "companies_open": 6414,
+  "decisions": {
+   "bind": 9466
+  },
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "identities": {
+   "company": 6414
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "sec.submissions.company.v1:company": 6414
+  },
+  "waiting": {
+   "sec.submissions.company.v1:classification_deferred": 312
+  }
+ },
+ "cik_on_two_companies": [],
+ "cohort_leis_named_by_census": 3755,
+ "companies_with_cik_and_lei": 3052,
+ "company_with_two_ciks": 0,
+ "company_with_two_leis": 0,
+ "examples_joined": [
+  {
+   "ciks": [
+    "0001340677"
+   ],
+   "leis": [
+    "52990092RT3UCQ7G3177"
+   ]
+  },
+  {
+   "ciks": [
+    "0001584547"
+   ],
+   "leis": [
+    "529900A39PTXO69SHI03"
+   ]
+  },
+  {
+   "ciks": [
+    "0001794546"
+   ],
+   "leis": [
+    "5299003NUOF1GRY8UX10"
+   ]
+  },
+  {
+   "ciks": [
+    "0001673358"
+   ],
+   "leis": [
+    "529900DO9BYZ7VA3K502"
+   ]
+  },
+  {
+   "ciks": [
+    "0001495153"
+   ],
+   "leis": [
+    "529900DNT8HNJ7RYUO60"
+   ]
+  },
+  {
+   "ciks": [
+    "0000916793"
+   ],
+   "leis": [
+    "529900711TW6GY85XW07"
+   ]
+  },
+  {
+   "ciks": [
+    "0001500881"
+   ],
+   "leis": [
+    "5299007FNX2NVNJM3O59"
+   ]
+  },
+  {
+   "ciks": [
+    "0001579298"
+   ],
+   "leis": [
+    "5299003Z37DVGKKC1W09"
+   ]
+  },
+  {
+   "ciks": [
+    "0001581068"
+   ],
+   "leis": [
+    "5299007UXW6Y0W2EGZ95"
+   ]
+  },
+  {
+   "ciks": [
+    "0001347178"
+   ],
+   "leis": [
+    "529900AY8VOOQBKJ0O70"
+   ]
+  }
+ ],
+ "gleif_assertions": 3716,
+ "gleif_records_read": 3755,
+ "gleif_set_aside": {
+  "unsupported_identity_kind": 39
+ },
+ "named": {
+  "ASML": {
+   "ciks": [
+    "0000937966"
+   ],
+   "leis": [
+    "724500Y6DUVHQD6OXN27"
+   ]
+  },
+  "Apple": {
+   "ciks": [
+    "0000320193"
+   ],
+   "leis": [
+    "HWUPKR0MPOU8FGXBT394"
+   ]
+  },
+  "Microsoft": {
+   "ciks": [
+    "0000789019"
+   ],
+   "leis": [
+    "INR2EJN1ERAN0W5ZP974"
+   ]
+  },
+  "Shell": {
+   "ciks": [
+    "0001306965"
+   ],
+   "leis": [
+    "21380068P1DRHMJ8KU70"
+   ]
+  }
+ },
+ "policy": "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
+ "population": 43338,
+ "second_pass_changed_nothing": true,
+ "ticket": "company mastering 27, Proving Run",
+ "timings": [
+  {
+   "records": 966,
+   "sec": "chunk1",
+   "seconds": 21.7
+  },
+  {
+   "records": 960,
+   "sec": "chunk2",
+   "seconds": 21.5
+  },
+  {
+   "records": 957,
+   "sec": "chunk3",
+   "seconds": 23.8
+  },
+  {
+   "records": 959,
+   "sec": "chunk4",
+   "seconds": 27.9
+  },
+  {
+   "records": 965,
+   "sec": "chunk5",
+   "seconds": 34.5
+  },
+  {
+   "records": 960,
+   "sec": "chunk6",
+   "seconds": 36.0
+  },
+  {
+   "records": 959,
+   "sec": "chunk7",
+   "seconds": 39.2
+  },
+  {
+   "gleif_read": 3755,
+   "seconds": 530.9
+  },
+  {
+   "gleif": "first-1",
+   "seconds": 20.9
+  },
+  {
+   "gleif": "first-2",
+   "seconds": 22.1
+  },
+  {
+   "gleif": "first-3",
+   "seconds": 23.3
+  },
+  {
+   "gleif": "first-4",
+   "seconds": 25.9
+  },
+  {
+   "gleif": "first-5",
+   "seconds": 27.0
+  },
+  {
+   "gleif": "first-6",
+   "seconds": 27.5
+  },
+  {
+   "gleif": "first-7",
+   "seconds": 29.7
+  },
+  {
+   "gleif": "first-8",
+   "seconds": 30.9
+  },
+  {
+   "gleif": "first-9",
+   "seconds": 32.2
+  },
+  {
+   "gleif": "first-10",
+   "seconds": 33.5
+  },
+  {
+   "gleif": "first-11",
+   "seconds": 34.2
+  },
+  {
+   "gleif": "first-12",
+   "seconds": 35.8
+  },
+  {
+   "gleif": "first-13",
+   "seconds": 37.0
+  },
+  {
+   "gleif": "first-14",
+   "seconds": 38.4
+  },
+  {
+   "gleif": "first-15",
+   "seconds": 43.9
+  },
+  {
+   "gleif": "first-16",
+   "seconds": 45.2
+  },
+  {
+   "gleif": "first-17",
+   "seconds": 40.8
+  },
+  {
+   "gleif": "first-18",
+   "seconds": 49.3
+  },
+  {
+   "gleif": "first-19",
+   "seconds": 22.6
+  },
+  {
+   "records": 0,
+   "sec": "chunk1",
+   "seconds": 3.4
+  },
+  {
+   "records": 0,
+   "sec": "chunk2",
+   "seconds": 3.2
+  },
+  {
+   "records": 0,
+   "sec": "chunk3",
+   "seconds": 3.4
+  },
+  {
+   "records": 0,
+   "sec": "chunk4",
+   "seconds": 3.2
+  },
+  {
+   "records": 0,
+   "sec": "chunk5",
+   "seconds": 3.3
+  },
+  {
+   "records": 0,
+   "sec": "chunk6",
+   "seconds": 3.4
+  },
+  {
+   "records": 0,
+   "sec": "chunk7",
+   "seconds": 3.3
+  },
+  {
+   "gleif": "second-1",
+   "seconds": 5.4
+  },
+  {
+   "gleif": "second-2",
+   "seconds": 5.5
+  },
+  {
+   "gleif": "second-3",
+   "seconds": 5.3
+  },
+  {
+   "gleif": "second-4",
+   "seconds": 5.5
+  },
+  {
+   "gleif": "second-5",
+   "seconds": 5.7
+  },
+  {
+   "gleif": "second-6",
+   "seconds": 5.3
+  },
+  {
+   "gleif": "second-7",
+   "seconds": 5.5
+  },
+  {
+   "gleif": "second-8",
+   "seconds": 5.3
+  },
+  {
+   "gleif": "second-9",
+   "seconds": 6.3
+  },
+  {
+   "gleif": "second-10",
+   "seconds": 5.4
+  },
+  {
+   "gleif": "second-11",
+   "seconds": 5.5
+  },
+  {
+   "gleif": "second-12",
+   "seconds": 11.5
+  },
+  {
+   "gleif": "second-13",
+   "seconds": 6.3
+  },
+  {
+   "gleif": "second-14",
+   "seconds": 10.9
+  },
+  {
+   "gleif": "second-15",
+   "seconds": 8.3
+  },
+  {
+   "gleif": "second-16",
+   "seconds": 5.8
+  },
+  {
+   "gleif": "second-17",
+   "seconds": 5.5
+  },
+  {
+   "gleif": "second-18",
+   "seconds": 8.0
+  },
+  {
+   "gleif": "second-19",
+   "seconds": 3.9
+  }
+ ]
+}
