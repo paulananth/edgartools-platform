@@ -367,8 +367,10 @@ def prepare_company_bundle(
     raw_hash = hashlib.sha256(raw).hexdigest()
     census_raw = _read_bounded(Path(name_census).resolve(), 256 * 1024 * 1024)
     census = json.loads(census_raw)
-    if (census.get("sec") or {}).get("capture_run_id") != landing["run_id"] or (
-        census["sec"].get("company_member_sha256") != raw_hash
+    sec = census.get("sec") or {}
+    if not any(
+        capture.get("capture_run_id") == landing["run_id"] and capture.get("company_member_sha256") == raw_hash
+        for capture in sec.get("captures", [sec])
     ):
         raise Conflict("The Name Census did not count this Company capture")
     census_hash = digest(census)
@@ -661,13 +663,19 @@ def cascade_filer(row: dict, business: dict | None):
 def write_name_census(
     *,
     landing_root: str,
-    landing_manifest: str,
+    landing_manifests: list[str],
     gleif_archive: str,
     gleif_metadata: str,
     gleif_sha256: str,
     output: str,
 ) -> dict:
-    """Count one SEC capture and one full GLEIF Golden Copy into a census file.
+    """Count SEC captures and one full GLEIF Golden Copy into a census file.
+
+    A name is unique only if it is unique among all SEC filers (ticket 08), so
+    a census counts every capture it is given: the whole SEC population may be
+    captured in several runs of at most 1,000 filers (ticket 26). A filer in
+    two captures would make its own name look shared, so it is refused. One
+    capture keeps the census exactly as before.
 
     An existing census is never overwritten with different content.
     """
@@ -675,9 +683,16 @@ def write_name_census(
     from .gleif_source import dataset_contract
     from .name_census import build
 
-    filers, population = census_filers(
-        landing_root=landing_root, landing_manifest=landing_manifest
-    )
+    if not landing_manifests:
+        raise Conflict("A Name Census counts at least one SEC capture")
+    filers, captures = [], []
+    for landing_manifest in landing_manifests:
+        counted, capture = census_filers(landing_root=landing_root, landing_manifest=landing_manifest)
+        filers.extend(counted)
+        captures.append(capture)
+    if len(captures) > 1 and len({cik for cik, _, _ in filers}) != len(filers):
+        raise Conflict("A filer is in two of the census's captures")
+    population = captures[0] if len(captures) == 1 else {"captures": captures, "filers": len(filers)}
     # The cascade's passes (ticket 21), from the Company rules. The census
     # runs them only once one is switched on (ticket 20); until then it and
     # every record it feeds are as before. It runs every declared pass, in
@@ -687,8 +702,11 @@ def write_name_census(
     if spec["passes"] and any(
         t["primitive"] == cascaded.TEST for _, rule in active_rules(POLICY) for t in rule["when"]
     ):
+        if len(landing_manifests) != 1:
+            # Ticket 20 extends the cascade's addresses to several captures.
+            raise Conflict("A cascade pass needs a census of one capture")
         cascade_population, pinned = cascade_filers(
-            landing_root=landing_root, landing_manifest=landing_manifest
+            landing_root=landing_root, landing_manifest=landing_manifests[0]
         )
         population = {**population, **pinned}
         cascade = {"spec": spec, "filers": cascade_population, "gleif_contract": dataset_contract("level1")}

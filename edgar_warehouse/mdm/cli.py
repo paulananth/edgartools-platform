@@ -42,7 +42,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare.add_argument("--landing-root", required=True)
     prepare.add_argument("--landing-manifest", required=True)
     prepare.add_argument("--ticker-manifest", required=True, help="Landing manifest of the SEC ticker catalog run (sec_company_ticker)")
-    prepare.add_argument("--name-census", required=True, help="Name Census file counted from this same capture (mdm name-census)")
+    prepare.add_argument("--name-census", required=True, help="Name Census file that counted this capture (mdm name-census)")
     prepare.add_argument("--output", required=True)
     prepare.add_argument("--as-of", required=True)
     prepare.add_argument("--revision", type=int, required=True)
@@ -55,9 +55,11 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     receipts.add_argument("--output", required=True)
     receipts.set_defaults(model="clean", handler=_logged_handler("bronze-receipts", _handle_clean_decisions))
 
-    census = mdm_sub.add_parser("name-census", help="Count one SEC capture and one full GLEIF Golden Copy into a Name Census file")
+    census = mdm_sub.add_parser("name-census", help="Count SEC captures and one full GLEIF Golden Copy into a Name Census file")
     census.add_argument("--landing-root", required=True)
-    census.add_argument("--landing-manifest", required=True, help="Landing manifest of the whole SEC capture (sec_company, sec_company_former_name)")
+    census.add_argument("--landing-manifest", dest="landing_manifests", required=True, action="append",
+                        help="Landing manifest of an SEC capture (sec_company, sec_company_former_name); repeat it "
+                             "for each capture of the population, which together must be every SEC filer")
     census.add_argument("--gleif-archive", required=True, help="GLEIF Level 1 Golden Copy JSON zip (full, never a delta)")
     census.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
     census.add_argument("--gleif-sha256", required=True)
