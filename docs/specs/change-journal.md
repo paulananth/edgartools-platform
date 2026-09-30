@@ -1,5 +1,11 @@
 # Change Journal and Change Propagation
 
+Current acquisition status (2026-09-29):
+`sec.submissions.company/submissions` is the sole active feed. Its locally
+qualified caller is described in [the Company route](../company-only-acquisition.md).
+Other SEC and GLEIF acquisition callers are retired; their historical audit
+stores remain separate.
+
 Change Propagation is the canonical name for diff processing. Historical
 artifacts retain their original paths and terminology. Current ownership is:
 

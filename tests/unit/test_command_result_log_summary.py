@@ -65,7 +65,7 @@ def test_required_forensic_fields_survive_bounding():
     dropped by the summarization -- only `raw_writes` shrinks."""
     raw_writes = [_raw_write(i) for i in range(500)]
     payload = {
-        "command": "bootstrap-next",
+        "command": "gold-refresh",
         "run_id": "run-abc123",
         "runtime_mode": "bronze_capture",
         "status": "ok",
@@ -100,7 +100,7 @@ def test_payload_without_raw_writes_key_is_unchanged():
 def test_run_command_prints_bounded_raw_writes(capsys):
     raw_writes = [_raw_write(i) for i in range(5583)]
     payload = {
-        "command": "bootstrap-next",
+        "command": "gold-refresh",
         "run_id": "run-abc123",
         "status": "ok",
         "raw_writes": raw_writes,
@@ -111,7 +111,7 @@ def test_run_command_prints_bounded_raw_writes(capsys):
         patch.object(warehouse_orchestrator, "_execute_warehouse", return_value=payload),
     ):
         build_ctx.return_value.runtime_mode = "bronze_capture"
-        exit_code = warehouse_orchestrator.run_command("bootstrap-next", Namespace())
+        exit_code = warehouse_orchestrator.run_command("gold-refresh", Namespace())
 
     assert exit_code == 0
     printed = capsys.readouterr().out

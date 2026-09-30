@@ -57,7 +57,7 @@ def resolve_feed(root: Path, source: str, feed: str) -> dict:
                     "publication_families": contract.get("publication_families", []),
                 }
             )
-    if not datasets and feed != bronze_family and declared_feed is None:
+    if declared_feed is None:
         raise ValueError(f"Feed {feed!r} is not declared by source {name!r}")
     return {
         "source": name,

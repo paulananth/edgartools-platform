@@ -272,6 +272,9 @@ def _print_command_result(payload: dict[str, Any]) -> None:
 
 def run_command(command_name: str, args: Any) -> int:
     """Execute a warehouse command and emit a JSON result payload."""
+    if command_name not in {"gold-refresh", "backfill-mdm-entity-ids",
+                            "verify-pipeline-run", "write-run-summary"}:
+        raise WarehouseRuntimeError(f"Unsupported warehouse command: {command_name}")
     arguments = _namespace_to_payload(args)
     runtime_mode = os.environ.get("WAREHOUSE_RUNTIME_MODE", "infrastructure_validation").strip() or "infrastructure_validation"
     try:
@@ -287,52 +290,8 @@ def run_command(command_name: str, args: Any) -> int:
 
 
 def run_seed_universe_command(args: Any) -> int:
-    """Compatibility entry point for explicit MDM universe seeding."""
-    try:
-        from edgar_warehouse.silver_landing_store import _parse_company_ticker_rows
-
-        limit = _resolve_seed_limit(getattr(args, "limit", None))
-        source_label, document = _resolve_seed_document(args)
-        rows = _parse_company_ticker_rows(document)
-        if not rows:
-            raise WarehouseRuntimeError(f"No company ticker rows found in {source_label}")
-        if limit is not None:
-            rows = rows[:limit]
-
-        tracking_status = str(getattr(args, "tracking_status", None) or "active")
-        from edgar_warehouse.mdm.database import get_engine
-        from edgar_warehouse.mdm.universe import bulk_upsert_universe
-        rows_seeded = bulk_upsert_universe(get_engine(), rows, default_status=tracking_status)
-    except WarehouseRuntimeError as exc:
-        print(
-            json.dumps(
-                {
-                    "command": "seed-universe",
-                    "message": str(exc),
-                    "status": "error",
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-        return 2
-
-    print(
-        json.dumps(
-            {
-                "command": "seed-universe",
-                "limit": limit,
-                "rows_seeded": rows_seeded,
-                "run_id": getattr(args, "run_id", None),
-                "source": source_label,
-                "status": "ok",
-                "tracking_status": tracking_status,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
-    return 0
+    """Retired acquisition entry point."""
+    raise WarehouseRuntimeError("Unsupported warehouse command: seed-universe")
 
 
 def _build_warehouse_context(command_name: str) -> WarehouseCommandContext:
@@ -1036,28 +995,7 @@ def _run_filing_artifact_gated_capture(
     business_date: str,
     run_id: str,
 ) -> dict[str, Any]:
-    """Ticket 46: dispatch filing_artifact's gated discovery/capture core
-    in-process, reusing daily-incremental's own already-open Silver
-    store and MDM engine rather than opening a second one.
-
-    Local import breaks the module cycle -- drive_filing_discovery imports
-    _build_warehouse_context/_emit_pipeline_event from this module at its
-    own module level, so importing it back at this module's top level would
-    be circular. Matches this file's existing local-import convention for
-    command-branch-specific dependencies (see e.g. the mdm_entity_backfill/
-    adv_bulk_ingest imports elsewhere in this file).
-
-    Raises on failure -- Ticket 27 made this the scheduled ownership
-    producer, so the caller must fail closed rather than isolate.
-    """
-    from edgar_warehouse.application.workflows.drive_filing_discovery import (
-        run_filing_artifact_gated_capture_for_business_date,
-    )
-
-    outcome = run_filing_artifact_gated_capture_for_business_date(
-        context=context, db=db, bookkeeping=bookkeeping, business_date=business_date, run_id=run_id,
-    )
-    return {"interval_complete": outcome.interval_complete}
+    raise WarehouseRuntimeError("Retired filing acquisition workflow")
 
 
 def _capture_bronze_raw(

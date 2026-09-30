@@ -28,7 +28,7 @@ def run_command(command_name: str, args: Any) -> int:
 
 
 def run_seed_universe_command(args: Any) -> int:
-    return LEGACY_COMMAND_REGISTRY["seed-universe"](args)
+    raise WarehouseRuntimeError("Unsupported warehouse command: seed-universe")
 
 
 _build_warehouse_context = warehouse_orchestrator._build_warehouse_context

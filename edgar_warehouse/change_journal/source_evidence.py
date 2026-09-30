@@ -61,7 +61,7 @@ def scope_proof(book, spec, authority, evidence):
             not isinstance(member, dict)
             or set(member)
             != {"artifact", "format", "count", "key_fields", "business_keys_sha256"}
-            or member["format"] not in {"bytes", "json-array", "ndjson"}
+            or member["format"] not in {"bytes", "page-bytes", "json-array", "ndjson", "parquet"}
             or type(member["count"]) is not int
             or member["count"] < 0
             or not isinstance(member["key_fields"], list)
@@ -77,35 +77,42 @@ def scope_proof(book, spec, authority, evidence):
         if identity in artifacts:
             raise Blocked("Scope inventory repeats an artifact")
         artifacts.add(identity)
-        bound = (
-            authority["configuration"]["completeness"]["max_bytes"]
-            if member["format"] == "bytes"
-            else 16 * 1024**2
-        )
+        if member["format"] == "page-bytes" and "page_completeness" not in authority["configuration"]:
+            raise Blocked("Page member has no approved completeness policy")
+        if member["format"] in {"bytes", "page-bytes"}:
+            policy_key = "page_completeness" if member["format"] == "page-bytes" else "completeness"
+            bound = authority["configuration"][policy_key]["max_bytes"]
+        else:
+            bound = 64 * 1024**2 if member["format"] == "parquet" else 16 * 1024**2
         data = book.artifacts.verified(member["artifact"], max_bytes=bound)
         if member["artifact"] not in spec["evidence"]:
             raise Blocked("Scope inventory uses undeclared member evidence")
-        if member["format"] == "bytes":
+        if member["format"] in {"bytes", "page-bytes"}:
             from .capture import complete
 
+            policy = (authority["configuration"].get("page_completeness")
+                      if member["format"] == "page-bytes" else authority["configuration"]["completeness"])
             if (
                 proof["producer"] != "capture"
                 or member["key_fields"]
-                or not complete(data, authority["configuration"]["completeness"])
+                or policy is None
+                or not complete(data, policy)
             ):
                 raise Blocked("Captured scope member fails approved completeness")
-            member_keys = [[member["artifact"]["sha256"]]]
+            member_keys = ([[member["artifact"]["uri"], member["artifact"]["sha256"]]]
+                           if member["format"] == "page-bytes" else [[member["artifact"]["sha256"]]])
         else:
             if not member["key_fields"]:
                 raise Blocked("Row inventory requires explicit business key fields")
             try:
-                rows = (
-                    json_value(data)
-                    if member["format"] == "json-array"
-                    else [
-                        json_value(line) for line in data.splitlines() if line.strip()
-                    ]
-                )
+                if member["format"] == "parquet":
+                    import pyarrow as pa
+                    import pyarrow.parquet as pq
+                    rows = pq.read_table(pa.BufferReader(data)).to_pylist()
+                elif member["format"] == "json-array":
+                    rows = json_value(data)
+                else:
+                    rows = [json_value(line) for line in data.splitlines() if line.strip()]
                 if not isinstance(rows, list) or any(
                     not isinstance(row, dict) for row in rows
                 ):
@@ -142,7 +149,11 @@ def scope_proof(book, spec, authority, evidence):
 
 def verify_manifest(book, item) -> dict:
     run, _, _, _ = book._frozen(str(item["run_id"]))
-    spec = book.artifacts.json(item["unit"]["input"])
+    if item["unit"].get("cursor", {}).get("company_evidence"):
+        from edgar_warehouse.bookkeeping.clean.company import company_evidence_spec
+        spec = company_evidence_spec(book, item)
+    else:
+        spec = book.artifacts.json(item["unit"]["input"])
     export = book.artifacts.json(run["submission"]["rules"])
     authority = frozen_authority(export, run["submission"]["scope"].get("feed"))
     if (

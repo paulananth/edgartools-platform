@@ -13,13 +13,13 @@ import os
 import zipfile
 from urllib.parse import unquote, urlparse
 
-from edgar_warehouse.acquisition.ledger import (
+from .decisions import (
     DecisionCause,
     DecisionOwnerRole,
     FetchDecisionRequest,
     FetchDisposition,
-    _validate_decision_owner,
-    _validate_terminal_evidence,
+    validate_decision_owner,
+    validate_terminal_evidence,
 )
 from edgar_warehouse.bookkeeping.clean.artifacts import json_value
 from edgar_warehouse.bookkeeping.clean.config import (
@@ -181,16 +181,19 @@ def register_capture(registry, journal, *, fetchers=None):
             or any(item["unit"]["keys"].get(k) != v for k, v in spec["scope"].items())
         ):
             raise Blocked("Capture decision differs from frozen source/feed scope")
-        request = FetchDecisionRequest(
-            **{
-                **spec["request"],
-                "cause": DecisionCause(spec["request"]["cause"]),
-                "owner_role": DecisionOwnerRole(spec["request"]["owner_role"]),
-                "disposition": FetchDisposition(spec["request"]["disposition"]),
-            }
-        )
-        _validate_decision_owner(request)
-        _validate_terminal_evidence(request)
+        try:
+            request = FetchDecisionRequest(
+                **{
+                    **spec["request"],
+                    "cause": DecisionCause(spec["request"]["cause"]),
+                    "owner_role": DecisionOwnerRole(spec["request"]["owner_role"]),
+                    "disposition": FetchDisposition(spec["request"]["disposition"]),
+                }
+            )
+            validate_decision_owner(request)
+            validate_terminal_evidence(request)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise Blocked("Invalid frozen acquisition decision") from exc
         if request.disposition is FetchDisposition.DOWNLOAD_DEFERRED:
             raise Blocked(
                 "Deferred acquisition remains pending; it is not successful zero work"
@@ -203,6 +206,8 @@ def register_capture(registry, journal, *, fetchers=None):
                 "Operator request requires its explicit authorization evidence"
             )
         definition = authority["configuration"]
+        if "page_completeness" in definition and spec["scope"].get("file") != "main":
+            definition = {**definition, "completeness": definition["page_completeness"]}
         if request.source_family != definition["family"] or not _approved_url(
             request.source_url, definition["url_prefixes"]
         ):

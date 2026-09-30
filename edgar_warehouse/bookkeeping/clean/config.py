@@ -196,3 +196,18 @@ def worklist(manifest: dict, config: dict) -> list[dict]:
             items.append({"step": step["name"], "key": key, "ordinal": ordinal,
                           "resources": resources, "unit": unit})
     return items
+
+
+def generated_worklist(manifest: dict, config: dict, parent: dict) -> list[dict]:
+    """Validate one sealed expansion with the same unit/key/lease rules as v2."""
+    if (not isinstance(manifest, dict) or set(manifest) != {"version", "parent", "children"}
+            or manifest["version"] != 1 or manifest["parent"] != parent
+            or not isinstance(manifest["children"], list) or len(manifest["children"]) > 128):
+        raise Blocked("Expansion manifest is unsealed or names another parent")
+    selected = next((step for step in config["steps"] if step["name"] == parent["generated_step"]), None)
+    if (selected is None or parent["step"] not in selected["requires"]
+            or type(parent.get("ordinal_base")) is not int or parent["ordinal_base"] < 0):
+        raise Blocked("Expansion names no configured child step")
+    child_config = {"steps": [{**selected, "requires": []}], "allow_zero_work": True}
+    return [{**item, "ordinal": parent["ordinal_base"] + item["ordinal"]}
+            for item in worklist({"version": 2, "steps": {selected["name"]: manifest["children"]}}, child_config)]

@@ -1,5 +1,11 @@
 # Fresh configured Bookkeeping
 
+Current acquisition status (2026-09-29): only
+`sec.submissions.company/submissions` is active. The local Company caller and
+bounded generated-work migration are described in
+[the Company route](../company-only-acquisition.md). Branch names, feed suites,
+and test counts below record the earlier implementation state.
+
 Core branch: `codex/configured-bookkeeping` (PR #732). Stage work continues on
 `codex/bookkeeping-stage-work`, based on the refreshed core branch. The complete supplied
 plan is the objective. **The current implementation does not yet replace every

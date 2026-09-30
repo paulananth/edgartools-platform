@@ -24,8 +24,7 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     sources = sorted(p.parent.name for p in (files.ROOT / "sources").glob("*/source.yaml"))
     assert [s["name"] for s in plan["schemas"] if s["database"].endswith(".sources")] == sources
     tables = _tables(plan)
-    # a source that feeds no MDM kind is catalogued too, by its feeds
-    assert 'edgartools-rules.sources."sec.adv".adv_bulk' in tables
+    assert 'edgartools-rules.sources."sec.adv".adv_bulk' not in tables
     sec = tables['edgartools-rules.sources."sec.submissions.company"."sec.submissions.company.v1"']
     assert {"cik", "entity_name", "business_address.postal_code", "name_census"} <= {c["name"] for c in sec["columns"]}
     company = tables["edgartools-rules.mdm.clean.company"]
@@ -90,7 +89,7 @@ class _Server:
             return {"data": [{"fullyQualifiedName": "edgartools-rules.sources.gone", "id": "id-gone"}]}
         if method == "GET" and path.startswith("/lineage/table/name/edgartools-rules.mdm.clean.company"):
             company = self.ids["edgartools-rules.mdm.clean.company"]
-            ours = self.ids["edgartools-rules.sources.gleif.relationships"]  # a feed: never a source of company
+            ours = self.ids['edgartools-rules.sources.gleif."gleif.relationships.v1"']
             return {"upstreamEdges": [{"fromEntity": ours, "toEntity": company},
                                       {"fromEntity": "id-other", "toEntity": company}]}
         return {"data": []} if method == "GET" else {}
@@ -102,7 +101,7 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     result = catalog.publish(plan, server)
     deletes = [path for method, path in server.calls if method == "DELETE"]
     company = server.ids["edgartools-rules.mdm.clean.company"]
-    feed = server.ids["edgartools-rules.sources.gleif.relationships"]
+    feed = server.ids['edgartools-rules.sources.gleif."gleif.relationships.v1"']
     assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
     assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1}
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])

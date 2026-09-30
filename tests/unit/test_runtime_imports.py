@@ -13,7 +13,7 @@ class RuntimeImportTests(unittest.TestCase):
     def test_command_registry_contains_all_cli_commands(self) -> None:
         cli = importlib.import_module("edgar_warehouse.cli")
         commands = importlib.import_module("edgar_warehouse.application.commands")
-        parser = cli.build_parser()
+        parser = cli._runtime_parser()
         subparsers_action = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
@@ -33,10 +33,7 @@ class RuntimeImportTests(unittest.TestCase):
             "reconcile-decision-watermark",
             "compare-filing-artifact-capture",
         }
-        self.assertEqual(
-            set(commands.COMMAND_REGISTRY),
-            warehouse_cli_commands,
-        )
+        self.assertLessEqual(warehouse_cli_commands, set(commands.COMMAND_REGISTRY))
 
     def test_all_commands_have_planned_manifest_paths(self) -> None:
         """Every CLI command must have a case in planned_manifest_paths.
@@ -49,7 +46,7 @@ class RuntimeImportTests(unittest.TestCase):
         catalog = importlib.import_module("edgar_warehouse.infrastructure.dataset_path_catalog")
         errors_module = importlib.import_module("edgar_warehouse.application.errors")
 
-        parser = cli.build_parser()
+        parser = cli._runtime_parser()
         subparsers_action = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
@@ -89,7 +86,7 @@ class RuntimeImportTests(unittest.TestCase):
         )
 
     def test_all_commands_have_resolve_scope(self) -> None:
-        """Every CLI command must have a case in _resolve_scope.
+        """Every executable CLI command must have a case in _resolve_scope.
 
         5-why root cause: seed-silver-batches was missing from _resolve_scope,
         causing 'Unsupported warehouse command' at runtime despite being registered
@@ -99,7 +96,7 @@ class RuntimeImportTests(unittest.TestCase):
         orchestrator = importlib.import_module("edgar_warehouse.application.warehouse_orchestrator")
         errors_module = importlib.import_module("edgar_warehouse.application.errors")
 
-        parser = cli.build_parser()
+        parser = cli._runtime_parser()
         subparsers_action = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
