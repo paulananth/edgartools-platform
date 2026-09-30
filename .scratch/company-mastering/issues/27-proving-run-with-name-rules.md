@@ -1,7 +1,7 @@
 # Proving Run of the Company policy with both name rules on
 
 Type: task
-Status: in progress (Claude, branch `claude/company-mastering-27-proving-run`)
+Status: done, in review (Claude, branch `claude/company-mastering-27-proving-run`)
 Blocked by: nothing (tickets 25 and 26 merged)
 Blocks: the operator's approval of the final Company policy fingerprint
 
@@ -12,6 +12,12 @@ Blocks: the operator's approval of the final Company policy fingerprint
   approves the final policy fingerprint.
 - "yes" (2026-09-29) to building one Name Census over the whole SEC
   population and the full GLEIF Golden Copy first (ticket 26).
+- Asked, with the result below in plain words, "Do you approve policy
+  `75bd2b67…33dbe` as the Company master's policy, on this Proving Run?":
+  **"yes"** (recorded 2026-09-30 06:11 ET). The approval covers
+  `75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe`: the
+  SEC Company classification rule, the CIK matching rule and both name
+  matching rules. It activates nothing new.
 
 ## Inputs (all local, zero requests to sec.gov)
 
@@ -48,7 +54,7 @@ Blocks: the operator's approval of the final Company policy fingerprint
       request is capped at 16 MiB and 1,000 GLEIF records came to 43 MB.
 - [x] Report in plain words: Companies with a CIK and an LEI, by rule;
       waiting and review; Apple, Microsoft, Shell and ASML.
-- [ ] The operator approves the final policy fingerprint.
+- [x] The operator approves the final policy fingerprint.
 
 ## Result (`research/27/report.json`)
 
