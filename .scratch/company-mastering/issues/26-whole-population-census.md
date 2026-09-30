@@ -1,7 +1,7 @@
 # Count every SEC filer in one Name Census
 
 Type: task
-Status: in review (Claude, branch `claude/company-mastering-26-whole-population-census`)
+Status: done, merged #759 (2026-09-29)
 Blocked by: nothing
 Blocks: the Proving Run of the completion gate (option A)
 

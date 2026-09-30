@@ -1,7 +1,7 @@
 # Approve and activate the CIK binding rules
 
 Type: task
-Status: approved and switched on in the branch (Claude, `claude/company-mastering-15-activate-cik-rules`); merge on the operator's word
+Status: done, merged #747 (2026-09-29)
 Blocked by: 04, 05, 06
 Blocks: automatic SEC Company creation and SEC-to-GLEIF name-rule activation
 

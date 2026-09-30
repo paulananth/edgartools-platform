@@ -1,7 +1,7 @@
 # Switch the two name matching rules on
 
 Type: task
-Status: in review (Claude, branch `claude/company-mastering-25-name-rules-on`)
+Status: done, merged #758 (2026-09-29)
 Blocked by: nothing
 Blocks: the completion gate's local run (one master per Company with CIK and LEI)
 

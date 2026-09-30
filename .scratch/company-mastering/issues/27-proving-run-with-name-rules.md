@@ -1,7 +1,7 @@
 # Proving Run of the Company policy with both name rules on
 
 Type: task
-Status: done, in review (Claude, branch `claude/company-mastering-27-proving-run`)
+Status: done, merged #762 (2026-09-30)
 Blocked by: nothing (tickets 25 and 26 merged)
 Blocks: the operator's approval of the final Company policy fingerprint
 
