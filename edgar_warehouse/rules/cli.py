@@ -69,7 +69,7 @@ def _handle(args):
                 result = rules.save(kind, name, args.version, files.LAYOUT[kind][0](path))
             elif operation == "status":
                 with rules_engine.connect() as conn:
-                    result = [dict(row) for row in conn.execute(text("SELECT kind,name,version,digest,status,proved_at,approved_by,approved_at FROM rules.rule_version WHERE kind=:k AND name=:n ORDER BY created_at"), {"k": kind, "n": name}).mappings()]
+                    result = [dict(row) for row in conn.execute(text("SELECT kind,name,version,digest,status,proved_at,approved_by,approved_at,approved_words,approval_overrule FROM rules.rule_version WHERE kind=:k AND name=:n ORDER BY created_at"), {"k": kind, "n": name}).mappings()]
             elif operation == "export":
                 rules.to_file(kind, name, args.version, Path(args.output))
                 result = {"path": args.output, "digest": rules.version(kind, name, args.version)["digest"]}

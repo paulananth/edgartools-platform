@@ -163,8 +163,11 @@ class Rules:
                 raise Blocked("The test run differs from the one shown for approval: show it again first")
             if row["proof"]["passed"] is False and not (overrule or "").strip():
                 raise Blocked("The test run failed: approving it needs an overrule reason")
+            # Only an overruled failing run changes the status: it is what
+            # makes that version proven. A passing one is proven already.
+            moves = ",status='proven'" if row["status"] == "draft" else ""
             conn.execute(text("UPDATE rules.rule_version SET approved_by=:by,approved_words=:w,approval_overrule=:o,"
-                              "approved_at=clock_timestamp(),status='proven' WHERE kind=:k AND name=:n AND version=:v"),
+                              f"approved_at=clock_timestamp(){moves} WHERE kind=:k AND name=:n AND version=:v"),
                          {"by": by, "w": words, "o": overrule or None, "k": kind, "n": name, "v": version})
             return self._version(conn, kind, name, version)
 
