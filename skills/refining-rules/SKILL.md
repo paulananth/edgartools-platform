@@ -36,8 +36,10 @@ both in the log.
 - **How to run commands, the environment variables, and the dry run**
   (`test` mode): see data-onboarding's SKILL.md, "How to run commands" and
   "test".
-- **The log:** `<your scratchpad>/refining-log.md`. Record each question and
-  its answer, each missing command, and each guess.
+- **The log:** `.scratch/onboarding/<source>/refining-log.md` on your
+  branch, never a temporary folder. When you follow a data-onboarding step,
+  log it here too. Record each question and its answer, each missing
+  command, and each guess.
 
 ## Two targets: MDM and silver
 
@@ -89,14 +91,53 @@ PR.
 
 For when the operator asks about a live feed's data quality, or a run's
 quality counts look wrong:
-1. Read `rules/sources/<source>/quality.yaml` and the counts of its last
-   runs.
-2. Run the dry run (data-onboarding **test**) on a pinned sample: the files
-   of one capture, named by their sha256. Report the counts per check and
-   fix, with up to 10 examples each.
-3. Pick the check or fix from REFERENCE.md, "Data quality", using the same
-   table as data-onboarding **quality**. Ask the operator about its
-   `on_fail`, with its count and two or three examples.
+1. Read `rules/sources/<source>/quality.yaml`.
+   - The counts of the last runs are in each run's report, if the operator
+     has them.
+   - With no run to read, measure them (step 2).
+2. **Measure on one pinned capture.**
+   - **Pin it:** the capture's `receipts.jsonl` (one line per file: key,
+     sha256, bytes) is its manifest. Its sha256 is the `batch_hash`. Check
+     each file's sha256 against its line. A receipt key such as
+     `warehouse/bronze/submissions/…` maps to `<capture>/bronze/submissions/…`
+     (drop the `warehouse/bronze/` prefix).
+   - **Build the rows the checks read.** Checks read the record after the
+     mapping, so rebuild the reader's rows from the raw files. For SEC
+     submissions, build one row per file from the repo's own loaders:
+     - `stage_company_loader(payload, cik, run_id, sha256, "dry-run")[0]`;
+     - the business address from `stage_address_loader(...)` through
+       `company_source.business_address`;
+     - `forms` from `filings.recent.form`.
+     These are in `edgar_warehouse.loaders.bronze_submission_extractors`
+     and `edgar_warehouse.mdm.clean.company_source`.
+   - **Count two ways, and report both:**
+     - **All filers:** `adapters.mapped_values(row, contract)` returns each
+       record's `quality` block.
+     - **What MDM receives:** `adapters.normalize(...)`, as in
+       data-onboarding **test**. It sets aside records the classification
+       rule rejects before the quality checks run, so its counts are
+       smaller.
+   - **Read the counts carefully:**
+     - A fix counts every record it touched, even when a later fix puts the
+       value back. Report the net change too: records whose final value
+       differs.
+     - A standardising fix (the address one) touches most records. That is
+       expected, not a defect.
+   - A zero count is only meaningful if the check can fire. Feed it one
+     made-up record that should trip it, and label that input.
+   - Report up to 10 examples of each check and fix.
+3. **Decide with the operator.** Pick the check or fix from REFERENCE.md,
+   "Data quality", using the same table as data-onboarding **quality**.
+   - **A check:** ask about its `on_fail` (exception, withhold or flag),
+     with its count and two or three examples.
+   - **A fix:** there is no `on_fail`. Ask whether to keep it, change it or
+     remove it, with its count and examples.
+   - **Judging an existing fix:** remove it in memory only, rerun, and
+     compare record by record. Then say whether any check would still catch
+     those values without it.
+   - **What is "right"** (e.g. a state code) comes from the repo:
+     `rules/reference/sec-place-codes.yaml` and the contract's comments.
+     When the files cannot settle it, say so.
 4. Give `quality.yaml` a new `version` name. The source's contract changes
    with it, so this is a new source version.
 

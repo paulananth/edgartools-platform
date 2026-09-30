@@ -72,6 +72,12 @@ Every step says what differs for each target.
 - Read and write rules files only through `edgar_warehouse.rules.files`
   (`load`, `source`, `dumps`, `write_source`). It refuses YAML that would
   change a value silently (`yes`, `010`, a date).
+- **Where you write.** On your own branch, write straight into the repo's
+  `rules/`; the PR is the review. To draft without touching the repo (a
+  trial, a sandbox), copy `rules/` to a folder and pass that folder:
+  - to Python: `root=<folder>` in `files.source`, `files.mdm_contract` and
+    `files.policy`;
+  - to commands: `--root <folder>` in `rules mapdoc` and `rules catalog`.
 - Environment:
 
   | Variable | Login | Used by |
@@ -81,9 +87,14 @@ Every step says what differs for each target.
   | `RULES_MDM_ACTIVATION_DATABASE_URL` | MDM governance | **switch-on** |
   | `OPENMETADATA_URL`, `OPENMETADATA_TOKEN` | — | catalog publish |
 
+  A command that stops with `KeyError: 'RULES_DATABASE_URL'` means the
+  variable is not set. Ask the operator to set it outside the chat. Never
+  paste it.
+
 ## The log
 
-Keep `<your scratchpad>/onboarding-log.md`. Record:
+Keep `.scratch/onboarding/<source>/onboarding-log.md` on your branch. The
+operator reads it later, so never put it in a temporary folder. Record:
 - every question and its answer;
 - every command this skill names that did not exist;
 - every guess, and each test input you built by hand.
@@ -129,27 +140,38 @@ never unload over the repo's `rules/`.
    extract". Ask: "These look like X. Is that right?"
 2. Search `rules/sources/` and the repo for the provider's and dataset's
    names.
-   - **Its rules file exists:** stop. This is **refining-rules**.
+   - **Its rules file exists, and you are changing what it already maps:**
+     stop. This is **refining-rules**.
+   - **Its files already feed one kind (e.g. SEC submissions → Company), and
+     you are adding another kind from them (e.g. Person):** this is
+     onboarding. It gets its own folder and source code (see "Names").
    - **The repo names it** (a source code, a reader, a rank in the merge
      rules) **but it has no rules file:** carry on here, and keep every name
      the repo uses.
 3. Check registration:
-   `uv run --extra mdm edgar-warehouse rules status --source <name>`. An
-   empty list means it is not registered. If you cannot reach the Rules
-   Database, ask.
+   `uv run --extra mdm edgar-warehouse rules status --source <name>`.
+   - An empty list `[]` means it is not registered.
+   - `KeyError: 'RULES_DATABASE_URL'` means no database is configured. Log
+     it and go on; registration is only needed at **test**.
+   - An error saying `rules.rule_version` does not exist means the Rules
+     Database needs **init**.
 4. **Names.** When the repo does not fix a name, derive it from the names
    it already has, and never invent a new pattern:
    - one folder per source, even when one reader reads several files (GLEIF
      is one folder, `gleif`, for three files);
    - one source code per file or record type, `<source>.<record type>.v1`
      (e.g. `gleif.level1.v1`, `gleif.relationships.v1`);
+   - a second kind from the same files gets its own folder named for the
+     kind, the way the first one is, and its code is `<folder>.v1`. For
+     example, `sec.submissions.company` gives `sec.submissions.person` and
+     `sec.submissions.person.v1`;
    - the capture family the repo already names for these files; if it names
      none, the folder name. Log it either way.
 5. **A new domain.** If the records are a kind with no merge rules yet (no
    `rules/merge/kinds/<kind>.yaml`), say so. The kind must be in `KINDS`
    (`edgar_warehouse/mdm/clean/evidence.py`); a kind that is not there
-   needs the operator's ruling. Check its written requirements, e.g.
-   `docs/specs/person/consumer.md` for Person.
+   needs the operator's ruling. Its written requirements are the
+   requirements: e.g. `docs/specs/person/consumer.md` for Person.
 
 **Output:** a line in the log with the name, the source code(s), the family,
 and whether it is a new domain.
@@ -158,8 +180,9 @@ and whether it is a new domain.
 
 `rules profile` is **not built yet**. Profile by hand, and log the gap:
 1. Write a short script in your scratchpad that streams the files.
-2. Profile a bounded sample first: records from the start, the middle and
-   the end of each file (files are often sorted).
+2. Under about 100 MB, make one full pass. Above that, profile a bounded
+   sample first: records from the start, the middle and the end of each
+   file (files are often sorted).
 3. Make a full pass only for a count that decides something. Time the
    sample first, and say how long the full pass will take before you start
    it.
@@ -198,11 +221,13 @@ for a reader ticket.
 - `docs/specs/clean-mdm/`: start with `source-evidence.md` and
   `company-policy.md`.
 - MDM kinds: `KINDS` in `edgar_warehouse/mdm/clean/evidence.py`.
-- The fields MDM keeps for a kind. For Company, see the fields of the SEC
-  contract (`FIELDS = CONTRACT["adapter"]["fields"]` in
-  `edgar_warehouse/mdm/clean/company_source.py`) and the `company` table
-  (`docs/specs/database-design-review-2026-09-30.md`). Use these names; a
-  new field is a question for the operator.
+- The fields MDM keeps for a kind:
+  - **Company:** the SEC contract's fields
+    (`FIELDS = CONTRACT["adapter"]["fields"]` in
+    `edgar_warehouse/mdm/clean/company_source.py`);
+  - **a kind with no field list in code (e.g. Person):** its consumer spec
+    (`docs/specs/person/consumer.md`, "The Person projection").
+  Use these names; a new field is a question for the operator.
 - `rules/merge/kinds/<kind>.yaml`. It ranks sources per kind
   (`defaults.sources`: the first one listed wins each field), and its
   comments record which value fills a shared field. Read them before you
@@ -218,6 +243,10 @@ for a reader ticket.
 - The source's public documentation on the web, never `sec.gov`: field
   definitions, identifiers, how often it publishes, full files or changes
   only. Third-party pages are hints, not authority.
+  - **For an SEC feed,** all of SEC's own documentation is on `sec.gov`. Use
+    the repo instead: the existing SEC contract and its comments,
+    `docs/specs/`, `rules/reference/sec-place-codes.yaml` and the parsers in
+    `edgar_warehouse/loaders/`.
 
 **Infer, for each record type:**
 - **Kind:** from `KINDS`, or the field or rule that decides it.
@@ -226,7 +255,9 @@ for a reader ticket.
 - **Identifiers:** each namespace and its format.
   - Ask about every identifier the source carries; never drop one silently.
   - Recommend keeping a cross-reference identifier as lookup-only, under its
-    own name (operator, 2026-09-26).
+    own name (operator, 2026-09-26). The contract has no syntax for
+    lookup-only identifiers yet: say so, put it in the Mapping Document's
+    Notes, and log a ticket.
   - Only `cik` and `lei` can join two records into one.
   - An identifier another authority issues is named for who stated it
     (`sec_lei`), never for the issuer.
@@ -263,15 +294,31 @@ starting from its "Defaults".
   field left out, a surprising path.
 - Check it: `files.source('<source>')` must equal what you passed to
   `files.dumps`.
-- Write only `source`, `bronze` and `mdm`. Keep any `bookkeeping` section
-  as it is.
+- Write only `source`, `bronze` and `mdm`. The `acquisition` section (how
+  the platform captures the files) and the `bookkeeping` section (how it
+  runs them) belong to the Bookkeeping skill. Leave them out for a feed
+  onboarded from files already captured, and keep them as they are in an
+  existing file.
 
-**A new domain** also needs `rules/merge/kinds/<kind>.yaml`: its
-`defaults.sources`, its identifiers (Identifier Contracts), and a first
-matching rule on an issued identifier (e.g. `cik` for SEC filers). Copy the
-shape of `rules/merge/kinds/company.yaml`. A matching rule on names is
-never written here: it needs a measured proof, which is **refining-rules**
-work.
+**A new domain** also needs `rules/merge/kinds/<kind>.yaml`. Copy the shape
+of `rules/merge/kinds/company.yaml`, and declare:
+- `defaults.sources`: your source code;
+- **a classification rule**, if the files hold more than one kind (SEC
+  types people and firms alike as `other`). The contract names it under
+  `adapter.classification` (`kind`, `rule_id`, `version`), as the SEC
+  Company contract does. A rule written for another source cannot be
+  reused as it is: the engine refuses a rule whose `source` differs, so
+  port it under a new id, and its proof must be measured again on this
+  source;
+- **a matching rule on an issued identifier** (e.g. `person-cik` on `cik`,
+  shaped like `company-cik`), with its Identifier Contract. Leave out
+  `verification`: it is filled in when the operator approves the contract
+  on its proving corpus;
+- `bars`, from the kind's written requirements.
+
+Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
+that happens only at **approve**. A matching rule on names is never written
+here: it needs a measured proof, which is **refining-rules** work.
 
 **Silver target:** for a feed with a reader, the Bookkeeping skill writes
 the `bookkeeping` section's steps. Hand it the feed's name and the target.
@@ -315,9 +362,13 @@ fix for each from REFERENCE.md, "Data quality":
    through **refining-rules** ("change-mapping"), and repeat until they
    agree it. Only an agreed mapping goes on to **test**.
 3. Check that it matches the rules:
-   `uv run --extra mdm edgar-warehouse rules mapdoc check`. It must pass,
-   and CI fails otherwise. Commit the workbook with the rules.
-4. After the PR is merged, publish to the catalog:
+   `uv run --extra mdm edgar-warehouse rules mapdoc check`. It succeeds
+   silently, with exit 0. A difference fails it, and CI too. Commit the
+   workbook with the rules.
+4. Before the PR, see what would be published:
+   `uv run --extra mdm edgar-warehouse rules catalog plan`. This runs
+   offline.
+5. After the PR is merged, publish to the catalog:
    `uv run --extra mdm edgar-warehouse rules catalog publish`. It needs
    `OPENMETADATA_URL` and `OPENMETADATA_TOKEN`. Never print the token. If
    no catalog server is reachable, say so; do not skip it silently.
@@ -334,13 +385,20 @@ fix for each from REFERENCE.md, "Data quality":
    - **Feed with no reader:** pass records through
      `edgar_warehouse.mdm.clean.adapters.normalize`:
      - `contract=` your contract, `source_code=` your code,
-       `policy=files.policy()`;
+       `policy=files.policy()`. For a new kind whose file is only in your
+       draft folder, use `files.policy(root=<folder>)`;
      - `publication={"artifact_sha256": <sha256 of the sample file>,
        "member": <file name>, "publication_key": "dry-run", "revision": 0}`.
    - Check the kind's merge rules accept the source. A source missing from
-     `defaults.sources` fails its whole batch
-     (`merge.check_company_sources(files.policy(), assertions)` for
-     Company). Adding it is a merge-rule change: log it for the operator.
+     `defaults.sources` fails its whole batch. For Company, run
+     `merge.check_company_sources(files.policy(), assertions)`; for any
+     other kind, check `defaults.sources` by hand. Adding a source to an
+     existing kind is a merge-rule change: log it for the operator.
+   - **A new kind:** records are blocked with `classification_not_activated`
+     until its classification rule is switched on. That is expected: the
+     order below switches it on first. To see what it would do, add the
+     verdict to a copy of the policy in memory only, and label that pass as
+     a test input.
    - Run the reader's tests, if any:
      `uv run --no-sync pytest -q <those files>`.
    - `normalize` runs the quality checks. Each record shows what they did
@@ -348,11 +406,35 @@ fix for each from REFERENCE.md, "Data quality":
      `UnsupportedRecord("quality_<id>")`. Report the counts
      (`edgar_warehouse.mdm.clean.quality.counts(records, deferred)`) and up
      to 10 examples of each.
-2. **A proving run, for anything that matches records.** A Company-scale
-   example is `.scratch/company-mastering/research/27_proving_run.py`: real
-   captured files, a disposable PostgreSQL 16, the Merge Stage, and a
+2. **A proving run, for anything that matches records.** Write it as a
+   pytest file that uses the Clean MDM fixtures, and it gets its own
+   disposable PostgreSQL 16:
+   ```python
+   from tests.integration import test_clean_mdm_postgres as core
+   postgres = core.postgres    # starts a postgres:16 container, removes it after
+   database = core.database    # a migrated MDM database for one test
+   ```
+   Run it with Docker (on macOS, Colima):
+   `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock uv run --no-sync pytest -q -s <file>`.
+   A full example is `.scratch/company-mastering/research/27_proving_run.py`:
+   it registers the datasets and policy, applies the bundles, and runs a
    second pass that must change nothing.
-3. **Save and record the test run:**
+3. **The inputs and the proof.**
+   - **Input manifest:** a JSON list of `{"member", "sha256", "bytes"}`, one
+     entry per captured file, sorted by `member`. Its sha256 is the
+     `batch_hash`. For a bronze capture with a `receipts.jsonl` (one line
+     per file: key, sha256, bytes), use the sha256 of that file.
+   - **Digest, before saving:**
+     `from edgar_warehouse.bookkeeping.clean.config import digest`. Then
+     `digest(files.load_source(Path("rules/sources/<source>/source.yaml")))`
+     for a source, or `digest(files.policy())` for the merge rules. It is
+     what `rules save` will store.
+   - **Proof file:** JSON with `digest`, `batch_hash`, `passed`, `evidence`
+     and `note`. `--proof-uri` is `file://<absolute path>` locally or
+     `s3://…`, and `--proof-sha256` is the file's sha256.
+   - **Version label:** `<source or kind>-<YYYY-MM-DD>.<short change name>`,
+     e.g. `sec.submissions.person-2026-09-30.first`.
+4. **Save and record the test run:**
    ```bash
    uv run --extra mdm edgar-warehouse rules save --source <name> --version <v> rules/sources/<source>/source.yaml
    uv run --extra mdm edgar-warehouse rules record-proof --source <name> --version <v> --proof-uri <uri> --proof-sha256 <sha256>
@@ -365,8 +447,22 @@ fix for each from REFERENCE.md, "Data quality":
    - a one-line `note`.
 
    A failing run is recorded too; it can be replaced until it is approved.
-   For a new kind, save and prove the merge rules the same way, using
-   `--merge <name>`.
+   The merge rules are one document, `platform`, saved whole from
+   `rules/merge/policy.yaml` (the kind files beside it come too):
+   ```bash
+   uv run --extra mdm edgar-warehouse rules save --merge platform --version <v> rules/merge/policy.yaml
+   uv run --extra mdm edgar-warehouse rules record-proof --merge platform --version <v> --proof-uri <uri> --proof-sha256 <sha256>
+   ```
+
+**A new domain: the order of approvals.** Each step needs the one before it:
+1. Measure the classification rule's proof on this source: a labelled
+   sample, at the kind's `bars.classification`. Record it in
+   `rules/merge/pending-proofs.yaml`.
+2. The operator switches on the classification rule, then the identifier
+   matching rule (APPROVE.md, "Switch one declared matching rule on").
+3. Save, prove, approve and activate the merge rules (`--merge platform`).
+4. Then test, approve and activate the source version. Its records now
+   classify and match.
 
 ### approve: the operator decides
 

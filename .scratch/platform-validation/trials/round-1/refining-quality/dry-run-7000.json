@@ -1,0 +1,666 @@
+{
+ "sample": {
+  "documents": 7000,
+  "sha_verified": 7000,
+  "sha_mismatch": [],
+  "batch_hash": "a61bcfc8743fed947e8bb2f9e8da3eff735bc1306ce56cce53f5e4398fff2c24",
+  "read_seconds": 19.8,
+  "total_seconds": 29.6
+ },
+ "quality_version": "sec-company-quality-v1",
+ "all_filers_counts": {
+  "fixed:dc_state_is_empty": 4,
+  "fixed:standard_address": 5882,
+  "fixed:state_from_name_tag": 12,
+  "withheld:matching.address": 9
+ },
+ "mdm_bound": {
+  "assertions": 6414,
+  "deferred_by_reason": {
+   "classification_deferred": 586
+  },
+  "counts": {
+   "fixed:dc_state_is_empty": 4,
+   "fixed:standard_address": 5588,
+   "fixed:state_from_name_tag": 11,
+   "withheld:matching.address": 6
+  }
+ },
+ "without_dc_fix": {
+  "all_filers_counts": {
+   "fixed:standard_address": 5882,
+   "fixed:state_from_name_tag": 10,
+   "withheld:matching.address": 9
+  },
+  "mdm_bound_counts": {
+   "fixed:standard_address": 5588,
+   "fixed:state_from_name_tag": 9,
+   "withheld:matching.address": 6
+  }
+ },
+ "examples": {
+  "fixed:dc_state_is_empty": [
+   {
+    "cik": 1306965,
+    "name": "Shell plc",
+    "original": "DC",
+    "after": null
+   },
+   {
+    "cik": 1710366,
+    "name": "Core Natural Resources, Inc.",
+    "original": "DC",
+    "after": null
+   },
+   {
+    "cik": 6951,
+    "name": "APPLIED MATERIALS INC /DE",
+    "original": "DC",
+    "after": "DE"
+   },
+   {
+    "cik": 70502,
+    "name": "NATIONAL RURAL UTILITIES COOPERATIVE FINANCE CORP /DC/",
+    "original": "DC",
+    "after": "DC"
+   }
+  ],
+  "fixed:standard_address": [
+   {
+    "cik": 1000177,
+    "name": "NORDIC AMERICAN TANKERS Ltd",
+    "original": {
+     "street": "SWAN BUILDING",
+     "street2": "26 VICTORIA STREET",
+     "city": "HAMILTON HM12",
+     "postcode": "00000",
+     "country": "BM"
+    },
+    "after": {
+     "street": "SWAN BUILDING",
+     "street2": "26 VICTORIA ST",
+     "city": "HAMILTON HM12",
+     "postcode": "00000",
+     "country": "BM"
+    }
+   },
+   {
+    "cik": 1000209,
+    "name": "MEDALLION FINANCIAL CORP",
+    "original": {
+     "street": "437 MADISON AVE 38TH FLOOR",
+     "city": "NEW YORK",
+     "region": "NY",
+     "postcode": "10022",
+     "country": "US"
+    },
+    "after": {
+     "street": "437 MADISON AVE",
+     "city": "NEW YORK",
+     "region": "NY",
+     "postcode": "10022",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1000623,
+    "name": "Mativ Holdings, Inc.",
+    "original": {
+     "street": "100 KIMBALL PLACE",
+     "street2": "SUITE 600",
+     "city": "ALPHARETTA",
+     "region": "GA",
+     "postcode": "30009",
+     "country": "US"
+    },
+    "after": {
+     "street": "100 KIMBALL PL",
+     "city": "ALPHARETTA",
+     "region": "GA",
+     "postcode": "30009",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1001085,
+    "name": "BROOKFIELD Corp /ON/",
+    "original": {
+     "street": "BROOKFIELD PLACE, 181 BAY ST, STE 100",
+     "street2": "PO BOX 762",
+     "city": "TORONTO",
+     "region": "A6",
+     "postcode": "M5J2T3",
+     "country": "CA"
+    },
+    "after": {
+     "street": "BROOKFIELD PL 181 BAY ST",
+     "street2": "PO BOX 762",
+     "city": "TORONTO",
+     "region": "A6",
+     "postcode": "M5J2T3",
+     "country": "CA"
+    }
+   },
+   {
+    "cik": 1001115,
+    "name": "GEOSPACE TECHNOLOGIES CORP",
+    "original": {
+     "street": "7007 PINEMONT DR.",
+     "city": "HOUSTON",
+     "region": "TX",
+     "postcode": "77040",
+     "country": "US"
+    },
+    "after": {
+     "street": "7007 PINEMONT DR",
+     "city": "HOUSTON",
+     "region": "TX",
+     "postcode": "77040",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1001171,
+    "name": "BROADWAY FINANCIAL CORP \\DE\\",
+    "original": {
+     "street": "5055 WILSHIRE BLVD STE 500",
+     "city": "LOS ANGELES",
+     "region": "CA",
+     "postcode": "90036",
+     "country": "US"
+    },
+    "after": {
+     "street": "5055 WILSHIRE BLVD",
+     "city": "LOS ANGELES",
+     "region": "CA",
+     "postcode": "90036",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 100122,
+    "name": "TUCSON ELECTRIC POWER CO",
+    "original": {
+     "street": "88 EAST BROADWAY",
+     "city": "TUCSON",
+     "region": "AZ",
+     "postcode": "85701",
+     "country": "US"
+    },
+    "after": {
+     "street": "88 E BROADWAY",
+     "city": "TUCSON",
+     "region": "AZ",
+     "postcode": "85701",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1001233,
+    "name": "SANGAMO THERAPEUTICS, INC",
+    "original": {
+     "street": "501 CANAL BLVD.",
+     "city": "RICHMOND",
+     "region": "CA",
+     "postcode": "94084",
+     "country": "US"
+    },
+    "after": {
+     "street": "501 CANAL BLVD",
+     "city": "RICHMOND",
+     "region": "CA",
+     "postcode": "94084",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1001290,
+    "name": "CREDICORP LTD",
+    "original": {
+     "street": "CLARENDON HOUSE, 2 CHURCH STREET",
+     "street2": "P.O. BOX HM 666,",
+     "city": "HAMILTON",
+     "postcode": "HM CX",
+     "country": "BM"
+    },
+    "after": {
+     "street": "CLARENDON HOUSE 2 CHURCH ST",
+     "street2": "P O BOX HM 666",
+     "city": "HAMILTON",
+     "postcode": "HM CX",
+     "country": "BM"
+    }
+   },
+   {
+    "cik": 1001316,
+    "name": "TG THERAPEUTICS, INC.",
+    "original": {
+     "street": "2 GANSEVOORT STREET, 9TH FLOOR",
+     "city": "NEW YORK",
+     "region": "NY",
+     "postcode": "10014",
+     "country": "US"
+    },
+    "after": {
+     "street": "2 GANSEVOORT ST",
+     "city": "NEW YORK",
+     "region": "NY",
+     "postcode": "10014",
+     "country": "US"
+    }
+   }
+  ],
+  "fixed:state_from_name_tag": [
+   {
+    "cik": 1023582,
+    "name": "OBRIEN JAMES J /KY",
+    "original": null,
+    "after": "KY"
+   },
+   {
+    "cik": 1068148,
+    "name": "PARK OHIO INDUSTRIES INC/OH",
+    "original": null,
+    "after": "OH"
+   },
+   {
+    "cik": 1077428,
+    "name": "TEXAS CAPITAL BANCSHARES INC/TX",
+    "original": null,
+    "after": "TX"
+   },
+   {
+    "cik": 1091667,
+    "name": "CHARTER COMMUNICATIONS, INC. /MO/",
+    "original": null,
+    "after": "MO"
+   },
+   {
+    "cik": 1133421,
+    "name": "NORTHROP GRUMMAN CORP /DE/",
+    "original": null,
+    "after": "DE"
+   },
+   {
+    "cik": 1758057,
+    "name": "Luminar Technologies, Inc./DE",
+    "original": null,
+    "after": "DE"
+   },
+   {
+    "cik": 1835385,
+    "name": "Marathon Bancorp, Inc. /MD/",
+    "original": null,
+    "after": "MD"
+   },
+   {
+    "cik": 1841408,
+    "name": "Dave Inc./DE",
+    "original": null,
+    "after": "DE"
+   },
+   {
+    "cik": 2013745,
+    "name": "Calumet, Inc. /DE",
+    "original": null,
+    "after": "DE"
+   },
+   {
+    "cik": 6951,
+    "name": "APPLIED MATERIALS INC /DE",
+    "original": null,
+    "after": "DE"
+   }
+  ],
+  "withheld:matching.address": [
+   {
+    "cik": 1412408,
+    "name": "Phreesia, Inc.",
+    "address": {
+     "street": "1521 CONCORD PIKE",
+     "street2": "PMB 221",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19803",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1420800,
+    "name": "Enovis CORP",
+    "address": {
+     "street": "2711 CENTERVILLE RD",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19808",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1834488,
+    "name": "N-able, Inc.",
+    "address": {
+     "street": "1209 ORANGE ST",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19801",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 1941360,
+    "name": "Neolara Corp.",
+    "address": {
+     "street": "C/O REGISTERED AGENTS INC",
+     "street2": "30 N GOULD ST",
+     "city": "SHERIDAN",
+     "region": "WY",
+     "postcode": "82801",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 2088896,
+    "name": "X-Energy, Inc.",
+    "address": {
+     "street": "251 LITTLE FALLS DR",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19808",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 2092446,
+    "name": "Avalanche Treasury Corp",
+    "address": {
+     "street": "251 LITTLE FALLS DR",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19808",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 2133144,
+    "name": "Silver Horizon Funding LLC",
+    "address": {
+     "street": "1209 ORANGE ST",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19801",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 2135518,
+    "name": "Elixir Technology Holdings Inc.",
+    "address": {
+     "street": "CORPORATION TRUST CENTER",
+     "street2": "1209 ORANGE ST",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19801",
+     "country": "US"
+    }
+   },
+   {
+    "cik": 2140546,
+    "name": "Fasanara Open Quant Feeder Fund (Del), LP",
+    "address": {
+     "street": "251 LITTLE FALLS DR",
+     "street2": "C/O CORPORATION SERVICE COMPANY",
+     "city": "WILMINGTON",
+     "region": "DE",
+     "postcode": "19808",
+     "country": "US"
+    }
+   }
+  ]
+ },
+ "dc": {
+  "raw_dc_filers": 4,
+  "dc_fixed_in_mdm_bound": 4,
+  "soi_desc": {
+   "DC": 4
+  },
+  "business_state": {
+   "null": 1,
+   "PA": 1,
+   "CA": 1,
+   "VA": 1
+  },
+  "with_fix_state": {
+   "None": 2,
+   "DE": 1,
+   "DC": 1
+  },
+  "records": [
+   {
+    "cik": 1306965,
+    "name": "Shell plc",
+    "soi": "DC",
+    "soi_desc": "DC",
+    "biz_state": null,
+    "mail_state": null,
+    "entity_type": "other",
+    "sic": "1311",
+    "sic_desc": "Crude Petroleum & Natural Gas",
+    "biz_street": "SHELL CENTRE",
+    "with_fix_state": null,
+    "with_fix_quality": {
+     "version": "sec-company-quality-v1",
+     "fixes": {
+      "dc_state_is_empty": {
+       "path": "fields.state_of_incorporation",
+       "original": "DC"
+      },
+      "standard_address": {
+       "path": "matching.address",
+       "original": {
+        "street": "SHELL CENTRE",
+        "street2": "2 YORK ROAD",
+        "city": "LONDON",
+        "postcode": "SE1 7NA",
+        "country": "GB"
+       }
+      }
+     }
+    },
+    "without_fix_state": "DC",
+    "without_fix_flags": null
+   },
+   {
+    "cik": 1710366,
+    "name": "Core Natural Resources, Inc.",
+    "soi": "DC",
+    "soi_desc": "DC",
+    "biz_state": "PA",
+    "mail_state": "PA",
+    "entity_type": "operating",
+    "sic": "1220",
+    "sic_desc": "Silver Ores",
+    "biz_street": "275 TECHNOLOGY DRIVE",
+    "with_fix_state": null,
+    "with_fix_quality": {
+     "version": "sec-company-quality-v1",
+     "fixes": {
+      "dc_state_is_empty": {
+       "path": "fields.state_of_incorporation",
+       "original": "DC"
+      },
+      "standard_address": {
+       "path": "matching.address",
+       "original": {
+        "street": "275 TECHNOLOGY DRIVE",
+        "street2": "SUITE #101",
+        "city": "CANONSBURG",
+        "region": "PA",
+        "postcode": "15317",
+        "country": "US"
+       }
+      }
+     }
+    },
+    "without_fix_state": "DC",
+    "without_fix_flags": null
+   },
+   {
+    "cik": 6951,
+    "name": "APPLIED MATERIALS INC /DE",
+    "soi": "DC",
+    "soi_desc": "DC",
+    "biz_state": "CA",
+    "mail_state": "CA",
+    "entity_type": "operating",
+    "sic": "3674",
+    "sic_desc": "Semiconductors & Related Devices",
+    "biz_street": "3050 BOWERS AVE",
+    "with_fix_state": "DE",
+    "with_fix_quality": {
+     "version": "sec-company-quality-v1",
+     "fixes": {
+      "dc_state_is_empty": {
+       "path": "fields.state_of_incorporation",
+       "original": "DC"
+      },
+      "state_from_name_tag": {
+       "path": "fields.state_of_incorporation",
+       "original": null
+      },
+      "standard_address": {
+       "path": "matching.address",
+       "original": {
+        "street": "3050 BOWERS AVE",
+        "city": "SANTA CLARA",
+        "region": "CA",
+        "postcode": "95054-3299",
+        "country": "US"
+       }
+      }
+     }
+    },
+    "without_fix_state": "DC",
+    "without_fix_flags": null
+   },
+   {
+    "cik": 70502,
+    "name": "NATIONAL RURAL UTILITIES COOPERATIVE FINANCE CORP /DC/",
+    "soi": "DC",
+    "soi_desc": "DC",
+    "biz_state": "VA",
+    "mail_state": "VA",
+    "entity_type": "operating",
+    "sic": "6159",
+    "sic_desc": "Miscellaneous Business Credit Institution",
+    "biz_street": "20701 COOPERATIVE WAY",
+    "with_fix_state": "DC",
+    "with_fix_quality": {
+     "version": "sec-company-quality-v1",
+     "fixes": {
+      "dc_state_is_empty": {
+       "path": "fields.state_of_incorporation",
+       "original": "DC"
+      },
+      "state_from_name_tag": {
+       "path": "fields.state_of_incorporation",
+       "original": null
+      },
+      "standard_address": {
+       "path": "matching.address",
+       "original": {
+        "street": "20701 COOPERATIVE WAY",
+        "city": "DULLES",
+        "region": "VA",
+        "postcode": "20166-6691",
+        "country": "US"
+       }
+      }
+     }
+    },
+    "without_fix_state": "DC",
+    "without_fix_flags": null
+   }
+  ]
+ },
+ "record_diff_mdm_bound_with_vs_without_dc_fix": [
+  {
+   "record_key": "0000006951",
+   "with_fix": {
+    "state_of_incorporation": {
+     "op": "value",
+     "value": "DE"
+    },
+    "quality": {
+     "path": "fields.state_of_incorporation",
+     "original": "DC"
+    }
+   },
+   "without_fix": {
+    "state_of_incorporation": {
+     "op": "value",
+     "value": "DC"
+    },
+    "flags": null
+   }
+  },
+  {
+   "record_key": "0000070502",
+   "with_fix": {
+    "state_of_incorporation": {
+     "op": "value",
+     "value": "DC"
+    },
+    "quality": {
+     "path": "fields.state_of_incorporation",
+     "original": "DC"
+    }
+   },
+   "without_fix": {
+    "state_of_incorporation": {
+     "op": "value",
+     "value": "DC"
+    },
+    "flags": null
+   }
+  },
+  {
+   "record_key": "0001306965",
+   "with_fix": {
+    "state_of_incorporation": {
+     "op": "unknown"
+    },
+    "quality": {
+     "path": "fields.state_of_incorporation",
+     "original": "DC"
+    }
+   },
+   "without_fix": {
+    "state_of_incorporation": {
+     "op": "value",
+     "value": "DC"
+    },
+    "flags": null
+   }
+  },
+  {
+   "record_key": "0001710366",
+   "with_fix": {
+    "state_of_incorporation": {
+     "op": "unknown"
+    },
+    "quality": {
+     "path": "fields.state_of_incorporation",
+     "original": "DC"
+    }
+   },
+   "without_fix": {
+    "state_of_incorporation": {
+     "op": "value",
+     "value": "DC"
+    },
+    "flags": null
+   }
+  }
+ ]
+}
