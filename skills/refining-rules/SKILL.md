@@ -37,7 +37,9 @@ both in the log.
   (`test` mode): see data-onboarding's SKILL.md, "How to run commands" and
   "test".
 - **The log:** `.scratch/onboarding/<source>/refining-log.md` on your
-  branch, never a temporary folder. When you follow a data-onboarding step,
+  branch, never a temporary folder. In a sandbox or trial, keep the log and
+  your draft rules together, as in data-onboarding's "Where you write"
+  (a copy of `rules/`, passed as `root=` / `--root`). When you follow a data-onboarding step,
   log it here too. Record each question and its answer, each missing
   command, and each guess.
 
@@ -98,16 +100,19 @@ quality counts look wrong:
 2. **Measure on one pinned capture.**
    - **Pin it:** the capture's `receipts.jsonl` (one line per file: key,
      sha256, bytes) is its manifest. Its sha256 is the `batch_hash`. Check
-     each file's sha256 against its line. A receipt key such as
-     `warehouse/bronze/submissions/…` maps to `<capture>/bronze/submissions/…`
-     (drop the `warehouse/bronze/` prefix).
+     each file's sha256 against its line. For a file's path, replace the
+     key's leading `warehouse/bronze/` with `<capture>/bronze/`.
    - **Build the rows the checks read.** Checks read the record after the
      mapping, so rebuild the reader's rows from the raw files. For SEC
      submissions, build one row per file from the repo's own loaders:
      - `stage_company_loader(payload, cik, run_id, sha256, "dry-run")[0]`;
      - the business address from `stage_address_loader(...)` through
        `company_source.business_address`;
-     - `forms` from `filings.recent.form`.
+     - `forms` from `filings.recent.form`;
+     - `tickers`: each CIK's tickers from the capture's
+       `bronze/reference/sec/company_tickers_exchange/…/company_tickers_exchange.json`.
+       The Company classification rule reads them, so without them the
+       "what MDM receives" count is wrong.
      These are in `edgar_warehouse.loaders.bronze_submission_extractors`
      and `edgar_warehouse.mdm.clean.company_source`.
    - **Count two ways, and report both:**
@@ -116,13 +121,20 @@ quality counts look wrong:
      - **What MDM receives:** `adapters.normalize(...)`, as in
        data-onboarding **test**. It sets aside records the classification
        rule rejects before the quality checks run, so its counts are
-       smaller.
+       smaller. For a capture with one file per record, pass
+       `publication={"artifact_sha256": <that file's sha256>, "member":
+       <its receipt key>, "publication_key": "dry-run", "revision": 0}`.
+       Collect each `UnsupportedRecord` as `{"reason": exc.args[0]}` and
+       pass that list to `quality.counts(records, deferred)`.
    - **Read the counts carefully:**
      - A fix counts every record it touched, even when a later fix puts the
        value back. Report the net change too: records whose final value
        differs.
      - A standardising fix (the address one) touches most records. That is
        expected, not a defect.
+   - **Time:** a full pass reads every file and takes about 3 minutes per
+     1,000 SEC documents on a laptop. Try 200 first, then say how long the
+     full pass will take. `rules mapdoc write` can take 10 minutes.
    - A zero count is only meaningful if the check can fire. Feed it one
      made-up record that should trip it, and label that input.
    - Report up to 10 examples of each check and fix.
@@ -132,13 +144,22 @@ quality counts look wrong:
      with its count and two or three examples.
    - **A fix:** there is no `on_fail`. Ask whether to keep it, change it or
      remove it, with its count and examples.
+   - **What a check tests exactly:** `present@1` on
+     `fields.address.postcode` also fires when there is no address at all.
+     Say so, with both counts. A check limited to some records (e.g. US
+     addresses only) is a conditional check, which is new code: log it for
+     a ticket.
    - **Judging an existing fix:** remove it in memory only, rerun, and
      compare record by record. Then say whether any check would still catch
      those values without it.
    - **What is "right"** (e.g. a state code) comes from the repo:
      `rules/reference/sec-place-codes.yaml` and the contract's comments.
      When the files cannot settle it, say so.
-4. Give `quality.yaml` a new `version` name. The source's contract changes
+4. **Write the change.** `files.write_source` rewrites `quality.yaml`
+   without its comments. For a small change, edit the file as text instead,
+   keeping the comments, then check that `files.source('<source>')` still
+   loads and holds the new check. Give `quality.yaml` a new `version`
+   name. The source's contract changes
    with it, so this is a new source version.
 
 ### change-matching: add or tune a matching rule

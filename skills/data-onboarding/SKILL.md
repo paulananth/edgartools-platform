@@ -69,9 +69,12 @@ Every step says what differs for each target.
   about half a minute to start; that is not a hang.
 - Never run `python -m edgar_warehouse.cli`. It prints nothing and exits 0,
   so a missing command looks like success.
-- Read and write rules files only through `edgar_warehouse.rules.files`
-  (`load`, `source`, `dumps`, `write_source`). It refuses YAML that would
-  change a value silently (`yes`, `010`, a date).
+- Read rules files only through `edgar_warehouse.rules.files` (`load`,
+  `source`), which refuses YAML that would change a value silently (`yes`,
+  `010`, a date). Write a new file with `files.dumps` or
+  `files.write_source`. Change an existing file as text instead, since those
+  functions drop its comments, which hold decisions. Either way, reload it
+  with `files.source` to check it.
 - **Where you write.** On your own branch, write straight into the repo's
   `rules/`; the PR is the review. To draft without touching the repo (a
   trial, a sandbox), copy `rules/` to a folder and pass that folder:
