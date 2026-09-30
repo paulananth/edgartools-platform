@@ -35,6 +35,29 @@ versions, and the merge version that switches the two name rules on
 - Ticket 22's proving run rebuilt the SEC landing row by hand: a copy of the
   reader, not the reader. A test run must run the production code.
 
+- Checked (advisor, 2026-09-29 21:10 ET):
+  - a run's input need not equal the test's batch: the Bookkeeping start
+    only checks `batch_hash` is a well-formed reference
+    (`engine.py`, `reference(... proof.batch_hash)`), so a test on a pinned
+    sample authorizes runs on other batches;
+  - the SEC reader needs GLEIF: `prepare_company_bundle` requires a Name
+    Census built from the GLEIF archive and refuses one from another
+    capture, so the SEC capture names the GLEIF capture it pairs with;
+  - activation re-reads the test's manifest (`validation_proof` ->
+    `artifacts.verified`, 32 MiB cap): the manifest is a small JSON list of
+    files and sha256s, and it and the test run live under
+    `~/.local/share/edgartools/clean-mdm/`, never a temporary folder.
+- Reuse ticket 05's pinned SEC sample (`research/05-manifest.json`, 7,000
+  bronze keys) and its network block (`05-bundles.sh`), so numbers stay
+  comparable with tickets 05, 17 and 18.
+- "What changes": the operator's Rules Database has no active version yet,
+  so the first comparison is against the previous contract in git (for
+  ticket 18: SEC v6 and the GLEIF contract before #753), named in the
+  evidence.
+- Size: a full Golden Copy is millions of records and Colima has 8 GB (a run
+  was killed for low memory before). First run on 10,000 records, streamed,
+  and tell the operator the projected full time before running it.
+
 ## Design
 
 1. **A pinned capture per source**, kept in
@@ -56,7 +79,7 @@ versions, and the merge version that switches the two name rules on
    - `note`: one line.
    It then records the run (`Rules.prove`). `passed` is false when a record
    fails in a way the contract does not allow, or a file is missing.
-3. **Merge rules:** the whole-policy test of a merge version is its rules'
+3. **Merge rules** (after the sources are tested and approved): the whole-policy test of a merge version is its rules'
    own proofs (`check_policy`) plus a local run of the pinned SEC and GLEIF
    captures through the Merge Stage on a throwaway PG16 (match counts before
    and after, with examples). Built after sources.
