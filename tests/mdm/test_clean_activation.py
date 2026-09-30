@@ -527,8 +527,9 @@ class TestTheCompanyPolicy:
         assert PROOF["adversarial"]["violations"] == 0
         assert PROOF["approved_at"] == "2026-09-25T17:09:33Z"
         assert PROOF["approved_by"] == "operator"
-        # Ticket 15 switched on the CIK matching rule beside it.
-        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
+        # Ticket 15 switched on the CIK matching rule beside it, and ticket 25
+        # the two name matching rules after it.
+        assert POLICY["automatic_rules"][:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert APPROVED_ACTIVATION["proof"] is PROOF
         # The pending policy the operator approved, before rules skill ticket
         # 08 added the SEC place-code table to the body.
@@ -546,7 +547,9 @@ class TestTheCompanyPolicy:
         # Company mastering ticket 21 declared the cascade's passes, and
         # ticket 15 the CIK matching rule, all switched off; without them the
         # policy is unchanged.
+        # Ticket 25 switched the two name matching rules on.
         assert policy_layers.digests(POLICY) == [
+            "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
             "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6",
             "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702",
             "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d",
@@ -759,28 +762,20 @@ class TestTheNameMatchingRules:
         assert declared == [NAME_STATE, NAME_POSTCODE]
         assert POLICY["kinds"]["company"]["bars"]["name_binding"] == COMPANY_BAR
 
-    def test_no_name_matching_rule_is_active(self):
-        from edgar_warehouse.mdm.clean.company_source import name_matching_policy
-
-        # The classification rule, and the CIK matching rule (ticket 15).
-        assert POLICY["automatic_rules"] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
-        assert digest(name_matching_policy(active=False)) == digest(POLICY)
+    def test_both_name_matching_rules_are_on_by_the_operators_approval(self):
+        # The classification rule, the CIK matching rule (ticket 15), and the
+        # two name matching rules (ticket 25, "yes", 2026-09-29 21:04 ET).
+        assert POLICY["automatic_rules"][:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
+        assert [e["rule_id"] for e in POLICY["automatic_rules"][2:]] == [
+            "sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
+        check_policy(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):
-        from edgar_warehouse.mdm.clean.company_source import name_matching_policy
-
+        unapproved = copy.deepcopy(POLICY)
+        for entry in unapproved["automatic_rules"][2:]:
+            entry["proof"] = {**entry["proof"], "approved_by": None}
         with pytest.raises(Conflict, match="lacks its approval"):
-            check_policy(name_matching_policy(active=True))
-        approved = name_matching_policy(active=True)
-        for entry in approved["automatic_rules"]:
-            if entry["family"] != "name_binding":
-                continue
-            entry["proof"] = {
-                **entry["proof"],
-                "approved_by": "operator",
-                "approved_at": "2026-09-25T20:00:00Z",
-            }
-        check_policy(approved)
+            check_policy(unapproved)
 
     @pytest.mark.parametrize(
         "rule_id", ["sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
