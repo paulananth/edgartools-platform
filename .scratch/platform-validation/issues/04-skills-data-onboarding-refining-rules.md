@@ -63,10 +63,38 @@ logs are in `trials/round-1/`.
     files, counting all filers vs what MDM receives, a fix has no
     `on_fail`, and gross vs net counts.
 
+## Cold trials, round 2
+
+The logs are in `trials/round-2/`.
+
+- **Refining Rules** (a new "missing postcode" check, all 7,000 files):
+  - Nothing blocked the trial. The check would flag 403 of the 6,414
+    records MDM receives (659 of all filers).
+  - 7 gaps were fixed: tickers in the row recipe, the receipt path, text
+    edits that keep comments, the publication and deferred shapes, timing,
+    what `present@1` tests, and the sandbox log.
+- **Data Onboarding** (Person feed 1):
+  - It reached **test**. The proving run hung: nothing can be switched on
+    before approval, and the skill did not say how to prove a new domain
+    before that.
+  - Fixed with ticket 05's recipe: a copy of the policy stamped "Proving
+    Run only; not an approval", registered in the disposable database.
+  - Also fixed:
+    - how to bound and clean up a proving run;
+    - the least sample for a classification bar (`n ≥ p·z²/(1−p)`) and the
+      `pending-proofs.yaml` shape;
+    - a step whose verdict is another kind becomes `deferred`;
+    - the `write_source` body shape;
+    - list fields;
+    - `allow_unknown_effective`;
+    - CLI start-up times;
+    - excluding earlier trials from searches.
+
 ## Tickets found (not built here)
 
 - `rules mapdoc` writes "the one a Company holds" in every kind's
-  "Matching rules" sheet. It should name the kind.
+  "Matching rules" sheet, and drops a classification step's "not". It
+  should name the kind and keep the negation.
 - The contract has no syntax for lookup-only identifiers (e.g. `sec_lei`).
 - Rules commands crash with `KeyError: 'RULES_DATABASE_URL'` rather than
   saying the variable is missing.

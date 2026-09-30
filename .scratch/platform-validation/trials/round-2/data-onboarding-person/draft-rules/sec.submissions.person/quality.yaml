@@ -1,0 +1,8 @@
+version: sec-person-quality-v1
+quality:
+  sec.submissions.person.v1:
+    checks:
+    - id: legal_name_present
+      test: present@1
+      value: fields.legal_name
+      on_fail: exception

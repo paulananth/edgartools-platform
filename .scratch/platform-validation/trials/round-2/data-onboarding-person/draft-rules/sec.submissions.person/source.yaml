@@ -1,0 +1,51 @@
+# SEC Person: the MDM mapping of SEC submissions documents for reporting owners
+# (sec.submissions.person.v1). Same captured files as sec.submissions.company; a second
+# kind gets its own folder (data-onboarding, Names). No reader exists: paths are the raw
+# submissions JSON. The acquisition and bookkeeping sections belong to the Bookkeeping skill.
+source: sec.submissions.person
+bronze:
+  family: submissions
+mdm:
+  sec.submissions.person.v1:
+    contract:
+      provider: SEC
+      family: submissions
+      schema_version: sec-submissions-person-json-v1
+      record_key: zero-padded 10-digit CIK of the filer the submissions document describes
+      publication_key: exact captured submissions document (member name and sha256)
+      effective_time: unknown; the document states no effective time
+      semantics: patch
+      completeness: one filer per document; a capture covers the filers listed in its manifest;
+        no retirement by absence
+      # Classification hold-backs never stop the run (operator, 2026-09-27);
+      # a data quality exception never does either (operator, 2026-09-28).
+      nonblocking_deferred_reasons:
+      - classification_deferred
+      - classification_entity_undetermined
+      - quality_legal_name_present
+      adapter:
+        version: sec-submissions-person-json-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        record_key:
+        - cik
+        record_key_format: sec_cik
+        # Rule C-J (Person ticket 03), ported to this source: SEC types people and
+        # firms alike as `other`. Declared in merge/kinds/person.yaml, NOT switched on.
+        classification:
+          kind: person
+          rule_id: sec-person-candidate
+          version: 2026-09-30.1
+        # ASSUMED (trial): only the CIK. `ein` (7/300, 5 are 000000000) and `lei` (1/300)
+        # appear only on entity records; lookup-only identifiers have no syntax yet (ticket).
+        identifiers:
+          cik: cik
+        identifier_formats:
+          cik: sec_cik
+        # `legal_name` per the Person projection (consumer.md). `display_name` is derived
+        # by the policy, never here. `formerNames` (a list, 6/300) would feed `name_variants`
+        # but field_shape is text only: left out, logged. Addresses are never captured into
+        # MDM for reporting owners (consumer.md, The Person projection).
+        fields:
+          legal_name: name

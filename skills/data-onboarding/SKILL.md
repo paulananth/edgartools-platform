@@ -66,7 +66,7 @@ Every step says what differs for each target.
 
 - From the repository root:
   `uv run --extra mdm edgar-warehouse rules <command> …`. The CLI takes
-  about half a minute to start; that is not a hang.
+  from half a minute to three minutes to start; that is not a hang.
 - Never run `python -m edgar_warehouse.cli`. It prints nothing and exits 0,
   so a missing command looks like success.
 - Read rules files only through `edgar_warehouse.rules.files` (`load`,
@@ -81,6 +81,7 @@ Every step says what differs for each target.
   - to Python: `root=<folder>` in `files.source`, `files.mdm_contract` and
     `files.policy`;
   - to commands: `--root <folder>` in `rules mapdoc` and `rules catalog`.
+  In a sandbox or trial, keep the log beside that folder, not in the repo.
 - Environment:
 
   | Variable | Login | Used by |
@@ -142,7 +143,8 @@ never unload over the repo's `rules/`.
    the provider and the dataset, e.g. "ACME company registry, monthly CSV
    extract". Ask: "These look like X. Is that right?"
 2. Search `rules/sources/` and the repo for the provider's and dataset's
-   names.
+   names. Leave out `.scratch/**/trials/`: those are earlier trials, not
+   the repo's decisions.
    - **Its rules file exists, and you are changing what it already maps:**
      stop. This is **refining-rules**.
    - **Its files already feed one kind (e.g. SEC submissions → Company), and
@@ -264,7 +266,9 @@ for a reader ticket.
   - Only `cik` and `lei` can join two records into one.
   - An identifier another authority issues is named for who stated it
     (`sec_lei`), never for the issuer.
-- **Fields:** use the kind's names.
+- **Fields:** use the kind's names. A list-shaped field (e.g. Person's
+  `name_variants[]`) has no contract syntax yet: leave it out, say so, and
+  log a ticket.
 - **Relationships:** type, the other end's key, the source it lives in,
   start and end. List every type the source carries. Label each mapped one's
   `scope` `<Provider> <relationship family>`.
@@ -292,7 +296,11 @@ Do not ask:
 
 **Write** `rules/sources/<source>/source.yaml`, following REFERENCE.md and
 starting from its "Defaults".
-- Write the values with `files.dumps`. Then add short YAML comments by hand,
+- Write the values with `files.dumps`, or both files at once with
+  `files.write_source(body, folder)`. In that body, each contract's quality
+  block sits inside it as `mdm.<code>.contract.quality`, with its own
+  `version`. `write_source` moves it into `quality.yaml`; without it, no
+  `quality.yaml` is written. Then add short YAML comments by hand,
   between keys, wherever a choice needs a reason: an operator's answer, a
   field left out, a surprising path.
 - Check it: `files.source('<source>')` must equal what you passed to
@@ -312,12 +320,16 @@ of `rules/merge/kinds/company.yaml`, and declare:
   Company contract does. A rule written for another source cannot be
   reused as it is: the engine refuses a rule whose `source` differs, so
   port it under a new id, and its proof must be measured again on this
-  source;
+  source. A step whose verdict is another kind (e.g. `company` in a Person
+  rule) becomes `verdict: deferred` with `probable_kind: <that kind>`, as
+  in `rules/merge/kinds/company.yaml`; otherwise it blocks the batch;
 - **a matching rule on an issued identifier** (e.g. `person-cik` on `cik`,
   shaped like `company-cik`), with its Identifier Contract. Leave out
   `verification`: it is filled in when the operator approves the contract
   on its proving corpus;
-- `bars`, from the kind's written requirements.
+- `bars`, from the kind's written requirements;
+- `defaults.allow_unknown_effective: true` if records carry no effective
+  date (as SEC submissions do), as Company does.
 
 Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
 that happens only at **approve**. A matching rule on names is never written
@@ -409,16 +421,30 @@ fix for each from REFERENCE.md, "Data quality":
      `UnsupportedRecord("quality_<id>")`. Report the counts
      (`edgar_warehouse.mdm.clean.quality.counts(records, deferred)`) and up
      to 10 examples of each.
-2. **A proving run, for anything that matches records.** Write it as a
-   pytest file that uses the Clean MDM fixtures, and it gets its own
-   disposable PostgreSQL 16:
+2. **A proving run, for anything that matches records.** For a new domain,
+   nothing is switched on yet. So the run registers a **copy** of the
+   policy, with the new rules added to `automatic_rules` and each stamped
+   `approved_by: proving-run` and `reason: "Proving Run only; not an
+   approval"`, in the disposable database only. The body the operator later
+   approves differs only in those fields. Ticket 05's
+   `.scratch/company-mastering/research/05_proving_run.py`, `candidate()`,
+   does exactly this.
+
+   Write it as a pytest file that uses the Clean MDM fixtures, and it gets
+   its own disposable PostgreSQL 16:
    ```python
    from tests.integration import test_clean_mdm_postgres as core
    postgres = core.postgres    # starts a postgres:16 container, removes it after
    database = core.database    # a migrated MDM database for one test
    ```
-   Run it with Docker (on macOS, Colima):
-   `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock uv run --no-sync pytest -q -s <file>`.
+   Run it with Docker (on macOS, Colima), and bound it:
+   `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock timeout -s KILL 600 uv run --no-sync pytest -q -s <file>`.
+   - **Expect:** under a minute to start the database. A few hundred
+     records should finish in under 5 minutes; ticket 27's 6,726 records
+     took about 25.
+   - **If it hangs or is killed,** its container stays up. List it with
+     `docker ps --filter name=clean-mdm-test-` and remove it with
+     `docker rm -f <name>`. Never touch any other container.
    A full example is `.scratch/company-mastering/research/27_proving_run.py`:
    it registers the datasets and policy, applies the bundles, and runs a
    second pass that must change nothing.
@@ -458,9 +484,20 @@ fix for each from REFERENCE.md, "Data quality":
    ```
 
 **A new domain: the order of approvals.** Each step needs the one before it:
-1. Measure the classification rule's proof on this source: a labelled
-   sample, at the kind's `bars.classification`. Record it in
-   `rules/merge/pending-proofs.yaml`.
+1. Measure the classification rule's proof on this source.
+   - **The sample:** records drawn at random from the files, each labelled
+     by hand against the kind's written definition, e.g. the Person spec's
+     rule. Record who labelled them.
+   - **The bar:** `bars.classification` (`min_precision`,
+     `one_sided_confidence`). With every record correct, the Wilson lower
+     bound is `n / (n + z²)`, so the least sample is
+     `n ≥ p·z² / (1 − p)`. For example, 0.99 at 0.975 confidence
+     (z = 1.96) needs 381; 0.95 at 0.95 (z = 1.645) needs 52.
+   - **Record it** in `rules/merge/pending-proofs.yaml` under the rule's id,
+     in the shape of the entries there: `method`, `one_sided_confidence`,
+     `n`, `correct`, `lower_bound`, `adversarial` (`n`, `violations`),
+     `cohort` (the sha256 of each input and script), `approved_by: null`,
+     `approved_at: null` and a one-line `reason`.
 2. The operator switches on the classification rule, then the identifier
    matching rule (APPROVE.md, "Switch one declared matching rule on").
 3. Save, prove, approve and activate the merge rules (`--merge platform`).
