@@ -46,3 +46,29 @@ design. That means:
 - The one enabled command that runs mastering (review finding 3)
 - GLEIF batches sized by bytes (finding 5); the census and missing
   former names (finding 6)
+
+## Decisions so far
+
+- Table names (2026-09-30). Asked to rename the unclear MDM tables in the
+  rebuild, the operator chose **"Rename all as proposed"**:
+  - `mdm_v2` → `mdm`
+  - `assertion` → `source_reading`
+  - `identity` → `master_entity`
+  - `projection` → `current_record`
+  - `observation` → `run_batch`
+  - `assessment(_event)` → `match_proposal(_event)`
+  - `deferred_record` → `set_aside_record`
+  - `publication(_event)` → `outbox(_event)`
+  - `commit_batch_core` + `commit_batch` → `save_batch`
+  Applied in slice 3.
+- Mode names (2026-09-30). The operator chose **"Adopt as proposed"**:
+  - **Bookkeeping**: init, migrate, plan, validate, run, status, recover. It
+    owns running a feed, and mastering too (`run` with target `mdm`).
+  - **Change Journal**: init, migrate, plan, validate, deploy, status,
+    recover-delivery.
+  - **Data Onboarding**: init, migrate, identify, profile, map, quality,
+    metadata, test, approve, switch-on.
+  - **Refining Rules**: change-mapping, change-quality, change-matching,
+    test, approve, switch-on.
+  - The command `rules migrate` becomes `rules load` / `rules unload`.
+  Applied in slice 4.
