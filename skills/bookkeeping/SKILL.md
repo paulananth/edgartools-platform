@@ -1,9 +1,20 @@
 ---
 name: bookkeeping
-description: Initialize or migrate the fresh Bookkeeping store, or plan, validate and deploy work for a specified source and feed in edgartools-platform. Worklists, leases, checkpoints and recovery belong here; source policy belongs to Rules.
+description: Initialize or migrate the fresh Bookkeeping store, or plan, validate and run a specified source and feed (into silver and MDM), check its status and recover it. Worklists, leases, checkpoints and recovery belong here. What a feed means (its mapping, quality and matching rules) belongs to data-onboarding and refining-rules.
 ---
 
 # Bookkeeping
+
+**Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
+owns running a feed into silver and into MDM. Running mastering (the Merge
+Stage) is the `mdm` target of **run**. Its enabled command path is not built
+yet (database design review, finding 3), so say so if asked.
+
+**Use another skill when:**
+- a feed is new: use **data-onboarding**;
+- a live feed's mapping, quality or matching rules change: use
+  **refining-rules**;
+- recording or recovering journal delivery: use **change-journal**.
 
 Use the shared engine in `edgar_warehouse/bookkeeping/clean/`. It retains
 control references and evidence; source records stay in their owning stores.
@@ -18,13 +29,15 @@ execution checkout contains the fresh engine; another worktree may be older.
 ```text
 $bookkeeping plan --source <source> --feed <feed>
 $bookkeeping validate --source <source> --feed <feed>
-$bookkeeping deploy --source <source> --feed <feed>
+$bookkeeping run --source <source> --feed <feed>
+$bookkeeping status <run-id>
+$bookkeeping recover <run-id>
 $bookkeeping init
 $bookkeeping migrate
 ```
 
 These are **skill arguments**, not warehouse CLI commands. Plan, validate and
-deploy require both source and feed. Init and migrate operate on the whole
+run require both source and feed. Init and migrate operate on the whole
 fresh control store, so they do not take source or feed. Preserve values already
 provided in the conversation; ask for missing source or feed only when a
 feed-scoped mode needs them. Additional inputs are a target/stage range,
@@ -152,15 +165,34 @@ it does not activate live Rules, publish to live destinations or perform AWS
 cutover. This is Bookkeeping validation, not the unfinished Rules Batch Gate
 evaluator, and does not grant a person's MDM approval.
 
-## Deploy mode
+## Run mode
 
-Read [DEPLOY.md](DEPLOY.md). Apply the validated configuration and submit or
+(Named "deploy" before 2026-09-30.) Read [RUN.md](RUN.md). Apply the validated configuration and submit or
 resume its bounded run in the selected environment. Verify that the plan,
 validation evidence and frozen inputs still match the requested source/feed.
-Deploy mode uses the existing Rules lifecycle and Bookkeeping runner; it does
+Run mode uses the existing Rules lifecycle and Bookkeeping runner; it does
 not introduce a new command, store or source callback. Unsupported scope stays
 blocked. Infrastructure rollout belongs here only when explicitly included
 in the user's deployment request and independently qualified.
+
+## Status mode
+
+```bash
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping runs --limit 20
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping status <run-id> --limit 100
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping checks <run-id>
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping leases <run-id> --limit 100
+```
+
+Each needs `BOOKKEEPING_CLEAN_DATABASE_URL` (the runtime login). `status`,
+`checks` and `leases` take the run id; `runs` lists them.
+
+## Recover mode
+
+Read [RECOVERY.md](RECOVERY.md). Resume a run with
+`edgar-warehouse bookkeeping resume <run-id>` (exit 3 means the run is not
+complete yet). Delivery to the Journal of a run's committed events is the
+Change Journal skill's **recover-delivery**.
 
 ## Result
 

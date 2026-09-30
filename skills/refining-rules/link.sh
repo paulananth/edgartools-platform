@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# One repository skill shared by Codex and Claude, as in skills/data-onboarding/link.sh.
+# Link this repo's `refining-rules` skill into the shared skills folder and into
+# Claude's, so Claude, Codex and Grok all load the same copy. Same shape as
+# skills/bookkeeping/link.sh.
 set -euo pipefail
 
 task_home="${HOME}"
@@ -11,8 +13,8 @@ elif [[ $# -ne 0 ]]; then
 fi
 
 skill_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-shared_link="${task_home}/.agents/skills/change-journal"
-claude_link="${task_home}/.claude/skills/change-journal"
+shared_link="${task_home}/.agents/skills/refining-rules"
+claude_link="${task_home}/.claude/skills/refining-rules"
 
 # Validate both destinations before changing either; preserve unrelated paths.
 for link_path in "$shared_link" "$claude_link"; do

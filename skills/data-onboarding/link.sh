@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Link this repo's `rules` skill into the shared skills folder and into
+# Link this repo's `data-onboarding` skill into the shared skills folder and into
 # Claude's, so Claude, Codex and Grok all load the same copy. Same shape as
 # skills/bookkeeping/link.sh.
 set -euo pipefail
@@ -13,8 +13,8 @@ elif [[ $# -ne 0 ]]; then
 fi
 
 skill_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-shared_link="${task_home}/.agents/skills/rules"
-claude_link="${task_home}/.claude/skills/rules"
+shared_link="${task_home}/.agents/skills/data-onboarding"
+claude_link="${task_home}/.claude/skills/data-onboarding"
 
 # Validate both destinations before changing either; preserve unrelated paths.
 for link_path in "$shared_link" "$claude_link"; do

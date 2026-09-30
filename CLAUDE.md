@@ -179,7 +179,7 @@ problem entirely.
 | MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm publish-relationships`/`mdm reconcile` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
 | Operator MDM/graph review dashboard | `examples/mdm_graph_dashboard/` |
 | Clean MDM rules (source mappings, merge rules) | `rules/` (YAML people edit, reviewed in PRs), read by `edgar_warehouse/rules/files.py`; map `.scratch/rules-skill/` |
-| Add or change a Clean MDM source (the `rules` skill) | `skills/rules/SKILL.md` + `REFERENCE.md` (link with `skills/rules/link.sh`); trials and their evidence in `.scratch/rules-skill/trials/` |
+| Onboard a new feed or domain / refine live rules (the `data-onboarding` and `refining-rules` skills) | `skills/data-onboarding/SKILL.md` (+ shared `REFERENCE.md`, `APPROVE.md`) and `skills/refining-rules/SKILL.md`; link each with its `link.sh`; trials and their evidence in `.scratch/rules-skill/trials/` |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
 | Standalone Streamlit dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
 | AWS Terraform (prod) | `infra/terraform/accounts/prod/` |

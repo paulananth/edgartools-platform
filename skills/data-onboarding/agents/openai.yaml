@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Onboarding"
+  short_description: "Bring a new feed or domain into Clean MDM and silver"
+  default_prompt: "Use $data-onboarding to onboard the feed whose captured files are in <folder>."

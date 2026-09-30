@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refining Rules"
+  short_description: "Change a live feed's mapping, data quality or matching rules"
+  default_prompt: "Use $refining-rules to apply the steward's change to <source>'s Mapping Document."

@@ -1,4 +1,4 @@
-# Deploy the validated source and feed
+# Run the validated source and feed
 
 Load the source/feed plan and validation evidence. Check their hashes against
 the intended Rules body, processing versions and frozen manifest; resolve every
@@ -19,7 +19,7 @@ For a new or changed Rules body, write only the planned configuration through
 `edgar_warehouse.rules.files`, save a new version, and record the evaluator's
 real exact-digest proof with `rules record-proof`. That command records proof;
 it does not evaluate a Batch Gate. MDM configurations require the person's
-approval of that exact version, recorded through the Rules skill's Approve
+approval of that exact version, recorded through the Data Onboarding skill's Approve
 steps in their name and words. Honor an approval already given for that
 version; when absent, explain the Rules governance requirement and wait for
 the person's approval. Activate through the existing Rules lifecycle.
