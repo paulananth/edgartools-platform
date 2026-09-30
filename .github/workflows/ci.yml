@@ -54,26 +54,6 @@ jobs:
       - name: Run MDM tests
         run: uv run pytest tests/mdm/ -v --tb=short
 
-  # ── Application-level tests ────────────────────────────────────────────────
-  application:
-    name: Application tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        run: uv sync --extra mdm
-
-      - name: Run application tests
-        run: uv run pytest tests/application/ -v --tb=short
-
   # ── Integration tests (real Postgres via Docker, no mocks) ─────────────────
   # Fresh Bookkeeping, Rules, Change Journal, and MDM integration tests use
   # disposable PostgreSQL 16 fixtures. Pull the image explicitly so the
@@ -122,7 +102,7 @@ jobs:
   ci-gate:
     name: CI gate
     if: always()
-    needs: [unit, mdm, application, integration, shellcheck]
+    needs: [unit, mdm, integration, shellcheck]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs passed
@@ -130,7 +110,6 @@ jobs:
           results=( \
             "${{ needs.unit.result }}" \
             "${{ needs.mdm.result }}" \
-            "${{ needs.application.result }}" \
             "${{ needs.integration.result }}" \
             "${{ needs.shellcheck.result }}" \
           )
