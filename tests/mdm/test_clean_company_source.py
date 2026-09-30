@@ -137,10 +137,13 @@ def gleif_archive(tmp_path, records=()):
     return archive, metadata, hashlib.sha256(raw.getvalue()).hexdigest()
 
 
-def write_run(root, run_id, tables):
-    """One landing run: a parquet member per table and the manifest naming them."""
+def write_run(root, run_id, tables, folder=""):
+    """One landing run: a parquet member per table and the manifest naming them.
+    A second run in the same landing root takes its own `folder`."""
+    if folder:
+        (root / folder).mkdir()
     for table_name, rows in tables.items():
-        pq.write_table(pa.Table.from_pylist(rows), root / f"{table_name}.parquet")
+        pq.write_table(pa.Table.from_pylist(rows), root / folder / f"{table_name}.parquet")
     manifest = root / f"{run_id}.json"
     manifest.write_text(
         json.dumps(
@@ -151,7 +154,7 @@ def write_run(root, run_id, tables):
                 "tables": [
                     {
                         "table_name": table_name,
-                        "relative_path": f"{table_name}.parquet",
+                        "relative_path": f"{folder}/{table_name}.parquet" if folder else f"{table_name}.parquet",
                         "file_count": 1,
                         "row_count": len(rows),
                     }
@@ -189,7 +192,7 @@ def landing(
     census = tmp_path / "name-census.json"
     write_name_census(
         landing_root=str(root),
-        landing_manifest=str(manifest),
+        landing_manifests=[str(manifest)],
         gleif_archive=str(archive),
         gleif_metadata=str(metadata),
         gleif_sha256=sha,
@@ -712,6 +715,37 @@ class TestMatchingEvidenceIsPinned:
         assert (found.cik, found.key, found.incorporated) == ("0000320193", "APPLE INC", "US-CA")
         assert found.place.country == "US" and found.place.street
         assert cascade_filer({**row, "entity_name": None}, None) is None  # an exception never merges
+
+    def test_a_census_counts_every_capture_and_each_capture_uses_it(self, tmp_path):
+        # Ticket 26: the SEC population is captured in runs of at most 1,000
+        # filers, and a name is unique only among all of them.
+        args = landing(tmp_path, [source_row(320193, entity_name="APPLE INC")])
+        root = Path(args["landing_root"])
+        second = write_run(root, "capture-2", {
+            "sec_company": [source_row(789019, entity_name="APPLE INC", last_sync_run_id="capture-2")],
+            "sec_company_filing": [filing_row(999, "10-K", last_sync_run_id="capture-2")],
+            "sec_company_address": [address_row(999, last_sync_run_id="capture-2")],
+            "sec_company_former_name": [former_row(999, "OLD NAME INC", last_sync_run_id="capture-2")],
+        }, folder="two")
+        (tmp_path / "g").mkdir()
+        archive, metadata, sha = gleif_archive(tmp_path / "g", [])
+        census = tmp_path / "whole.json"
+        write_name_census(landing_root=str(root), landing_manifests=[args["landing_manifest"], str(second)],
+                          gleif_archive=str(archive), gleif_metadata=str(metadata), gleif_sha256=sha,
+                          output=str(census))
+        sec = json.loads(census.read_text())["sec"]
+        assert sec["filers"] == 2
+        assert [c["capture_run_id"] for c in sec["captures"]] == ["capture-1", "capture-2"]
+        prepare_company_bundle(**{**args, "name_census": str(census)})
+        record = json.loads((Path(args["output"]) / "records.jsonl").read_text())
+        # The name the other capture's filer also carries is not unique.
+        assert record["name_census"]["ciks"] == ["0000320193", "0000789019"]
+        prepare_company_bundle(**{**args, "landing_manifest": str(second), "name_census": str(census),
+                                  "output": str(tmp_path / "second-bundle")})
+        with pytest.raises(Conflict, match="two of the census's captures"):
+            write_name_census(landing_root=str(root), landing_manifests=[args["landing_manifest"]] * 2,
+                              gleif_archive=str(archive), gleif_metadata=str(metadata), gleif_sha256=sha,
+                              output=str(tmp_path / "twice.json"))
 
     def test_a_census_of_another_capture_is_refused(self, tmp_path):
         args = landing(tmp_path, [source_row(123)])

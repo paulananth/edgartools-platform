@@ -418,7 +418,7 @@ def handle(command: str, args) -> int:
 
         report = write_name_census(
             landing_root=args.landing_root,
-            landing_manifest=args.landing_manifest,
+            landing_manifests=args.landing_manifests,
             gleif_archive=args.gleif_archive,
             gleif_metadata=args.gleif_metadata,
             gleif_sha256=args.gleif_sha256,
