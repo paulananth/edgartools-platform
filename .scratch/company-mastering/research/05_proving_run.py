@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+from edgar_warehouse.mdm.clean.run import RunCoordinator
 from edgar_warehouse.mdm.clean.cli import execute_manifest
 from edgar_warehouse.mdm.clean.company_source import (
     CONTRACT,
@@ -238,7 +238,7 @@ def test_proving_run(database, command_databases, tmp_path):
         conn.execute(text("SELECT pg_stat_reset()"))
 
     store = Store(database.application)
-    coordinator = RunCoordinator(command_databases[0], store)
+    coordinator = RunCoordinator(store)
 
     # Each bundle is applied as soon as it exists (a bundle directory appears
     # whole, by rename), in the order given; the chunks share no CIK, so the

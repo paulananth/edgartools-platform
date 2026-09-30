@@ -455,17 +455,15 @@ Snowflake Postgres cutover and RDS removal runbook:
 docs/aws-mdm-snowflake-postgres-cutover.md
 ```
 
-MDM CLI commands:
+MDM CLI commands (Clean MDM only; the legacy MDM commands are deleted,
+platform validation slice 2a):
 
 ```bash
-edgar-warehouse mdm check-connectivity --neo4j
-edgar-warehouse mdm migrate
-edgar-warehouse mdm seed-universe --tracking-status bootstrap_pending
-edgar-warehouse mdm mastering --entity-type all --limit 100
-edgar-warehouse mdm derive-relationships --target-per-type 100
-edgar-warehouse mdm publish-relationships --limit 100
-edgar-warehouse mdm reconcile
+edgar-warehouse mdm migrate --application-role <runtime-role>
+edgar-warehouse mdm check-connectivity
 edgar-warehouse mdm counts
+edgar-warehouse mdm name-census ...
+edgar-warehouse mdm prepare-clean-company ...
 ```
 
 AWS-only MDM e2e:

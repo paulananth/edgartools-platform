@@ -31,7 +31,7 @@ acquisition history and immutable MDM event mirror. `BOOKKEEPING_DATABASE_URL`
 contains the existing root `pipeline_run`. One UUID identifies the root across
 all three. No transaction is claimed across databases.
 
-Owner migration command: `edgar-warehouse mdm migrate --model clean
+Owner migration command: `edgar-warehouse mdm migrate
 --application-role application`. Migrations 023 and 025–030 are checksummed.
 Migration 027 adds immutable deferred evidence. Migration 028 adds
 [candidate assessments](candidate-assessments.md), durable-before-application
@@ -197,11 +197,11 @@ sha256 of its SEC submissions document, and the capture run recorded where
 it wrote each document (`pipeline_run.raw_writes_json` in bookkeeping). Write
 that run's receipts once, then pass them to the preparation:
 
-```bash
-BOOKKEEPING_DATABASE_URL=... edgar-warehouse mdm bronze-receipts \
-  --run-id "$COMPANY_CAPTURE_RUN_ID" --output "$BRONZE_RECEIPTS_JSON"
-edgar-warehouse mdm prepare-clean-company ... --bronze-receipts "$BRONZE_RECEIPTS_JSON"
-```
+`mdm bronze-receipts`, which read those receipts from the legacy Bookkeeping
+store, is deleted with that store (platform validation slice 2a). A receipts
+file already written can still be passed with `--bronze-receipts`; nothing
+writes a new one until the configured Bookkeeping path records bronze
+receipts.
 
 The receipts must come from the landing's own run, and that run must have
 succeeded; writes with no sha256 (filing attachments, ADV manifests) are left

@@ -89,6 +89,10 @@ class RunCoordinator:
         }
         if native_consumption is not None:
             scope["native_consumption"] = native_consumption
+        existing = self._scope(run_id)
+        if existing is not None and existing != scope:
+            raise Conflict("Root run scope changed")
+        # start_run refuses a changed scope too, for a concurrent start.
         with self.mdm.engine.begin() as conn:
             conn.execute(
                 text("SELECT mdm_v2.start_run(CAST(:run AS uuid),CAST(:scope AS jsonb))"),

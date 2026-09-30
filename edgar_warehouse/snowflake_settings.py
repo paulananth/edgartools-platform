@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, replace
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
 class SnowflakeConnectionSettings:
-    """Reusable Snowflake connector settings for MDM export and graph sync."""
+    """A Snowflake connection, resolved from the environment."""
 
     account: str
     user: str
@@ -45,7 +45,7 @@ class SnowflakeConnectionSettings:
             if not value
         ]
         if missing:
-            raise RuntimeError("Missing Snowflake export setting(s): " + ", ".join(missing))
+            raise RuntimeError("Missing Snowflake setting(s): " + ", ".join(missing))
 
         return cls(
             account=str(account),
@@ -56,47 +56,6 @@ class SnowflakeConnectionSettings:
             warehouse=str(warehouse),
             role=str(role) if role else None,
         )
-
-    def connection_kwargs(self) -> dict[str, str]:
-        kwargs = {
-            "account": self.account,
-            "user": self.user,
-            "password": self.password,
-            "database": self.database,
-            "schema": self.schema,
-            "warehouse": self.warehouse,
-        }
-        if self.role:
-            kwargs["role"] = self.role
-        return kwargs
-
-    def connect(self) -> Any:
-        try:
-            import snowflake.connector  # type: ignore
-        except ImportError as exc:  # pragma: no cover - depends on optional extra
-            raise RuntimeError(
-                "snowflake-connector-python is not installed. Run with the snowflake extra, "
-                "for example: uv run --extra snowflake edgar-warehouse mdm publish ..."
-            ) from exc
-
-        return snowflake.connector.connect(**self.connection_kwargs())
-
-
-def silver_connection_settings() -> SnowflakeConnectionSettings:
-    """Snowflake connection settings scoped to the EDGARTOOLS_SILVER schema.
-
-    Reuses SnowflakeConnectionSettings.from_env()'s env/secret resolution
-    (MDM_SNOWFLAKE_* / DBT_SNOWFLAKE_* / ~/.snowflake/connections.toml) --
-    that dataclass's own default schema is EDGARTOOLS_GOLD (the MDM export
-    target), so this overrides just the schema to the silver landing zone's
-    dbt target (DBT_SILVER_SCHEMA, matching dbt_project.yml's own default).
-    Shared by mdm_entity_backfill.py's sweep and source_dimensional_export.py's Snowflake-
-    silver-reading builders (dbt-gold-silver-rewiring map, Ticket 06) -- both
-    need the identical "read EDGARTOOLS_SILVER directly" connection.
-    """
-    settings = SnowflakeConnectionSettings.from_env()
-    silver_schema = os.environ.get("DBT_SILVER_SCHEMA", "EDGARTOOLS_SILVER")
-    return replace(settings, schema=silver_schema)
 
 
 def _snowflake_secret_payload() -> dict[str, Any]:

@@ -32,7 +32,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare.add_argument("--revision", type=int, required=True)
     prepare.add_argument("--limit", type=int, default=100)
     prepare.add_argument("--bronze-receipts", help="Bronze receipts of this same capture run: each record names its bronze object")
-    prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _handle_clean))
+    prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _clean("prepare_clean_company")))
 
     census = mdm_sub.add_parser("name-census", help="Count SEC captures and one full GLEIF Golden Copy into a Name Census file")
     census.add_argument("--landing-root", required=True)
@@ -43,13 +43,13 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     census.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
     census.add_argument("--gleif-sha256", required=True)
     census.add_argument("--output", required=True)
-    census.set_defaults(handler=_logged_handler("name-census", _handle_clean))
+    census.set_defaults(handler=_logged_handler("name-census", _clean("name_census")))
 
     counts = mdm_sub.add_parser("counts", help="Print Clean MDM entity and record counts")
-    counts.set_defaults(handler=_logged_handler("counts", _handle_clean))
+    counts.set_defaults(handler=_logged_handler("counts", _clean("counts")))
 
     check = mdm_sub.add_parser("check-connectivity", help="Check the Clean MDM database connection and schema")
-    check.set_defaults(handler=_logged_handler("check-connectivity", _handle_clean))
+    check.set_defaults(handler=_logged_handler("check-connectivity", _clean("check_connectivity")))
 
 
 def _handle_migrate(args: argparse.Namespace) -> int:
@@ -65,10 +65,14 @@ def _handle_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_clean(args: argparse.Namespace) -> int:
-    from edgar_warehouse.mdm.clean.cli import handle
+def _clean(name: str) -> Callable[[argparse.Namespace], int]:
+    """The Clean MDM command function, imported when the command runs."""
+    def run(args: argparse.Namespace) -> int:
+        from edgar_warehouse.mdm.clean import cli
 
-    return handle(args.mdm_command, args)
+        return getattr(cli, name)(args)
+
+    return run
 
 
 def _logged_handler(command_name: str, handler: Callable[[argparse.Namespace], int]) -> Callable[[argparse.Namespace], int]:

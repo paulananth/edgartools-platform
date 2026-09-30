@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+from edgar_warehouse.mdm.clean.run import RunCoordinator
 from edgar_warehouse.mdm.clean.cli import execute_manifest
 from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
 from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, inspect_archive, record_evidence

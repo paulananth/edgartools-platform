@@ -62,6 +62,13 @@ CLEAN_MDM_MIGRATIONS = (
     "043_clean_mdm_run.sql",
 )
 
+# Functions the application login runs that a later migration adds, by the
+# migration that adds them.
+FUNCTION_MIGRATION = {
+    "start_run(uuid,jsonb)": "043_clean_mdm_run.sql",
+    "finish_run(uuid,jsonb,boolean)": "043_clean_mdm_run.sql",
+}
+
 
 def migrate(engine: Engine, *, application_role: str) -> dict:
     """Explicit isolated migration with checksum validation, never legacy DDL.
@@ -153,9 +160,10 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "supersede_assessment(text,uuid)",
             "preview_batch(text,uuid)",
         ):
-            # A store migrated only part way (a test of a later migration over
-            # real rows) lacks the functions later migrations add.
-            if conn.scalar(text("SELECT to_regprocedure(:f)"), {"f": f"mdm_v2.{signature}"}) is None:
+            # Only a store deliberately migrated part way (a test of a later
+            # migration over real rows) may lack a function; otherwise a
+            # missing one fails the migration.
+            if FUNCTION_MIGRATION.get(signature, "") not in ("", *CLEAN_MDM_MIGRATIONS):
                 continue
             conn.exec_driver_sql(
                 f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO {runtime}"

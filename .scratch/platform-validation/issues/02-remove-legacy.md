@@ -36,6 +36,28 @@ Status: 2a in review (Claude, branch `claude/remove-legacy-2a-cli-and-mdm`)
 - **Moved.** `SnowflakeConnectionSettings` moved to
   `edgar_warehouse/snowflake_settings.py`.
 
+## Review (three axes)
+
+- **Standards:** two judgement findings, both fixed.
+  - The grant loop skipped any missing function; it now skips only a
+    function whose migration is deliberately not applied
+    (`FUNCTION_MIGRATION`).
+  - Two concurrent reconciles could set a succeeded run back to running.
+    `finish_run` now takes the run's lock, and a succeeded run stays
+    succeeded.
+  - Also: the coordinator module is renamed `mdm/clean/run.py`, and stale
+    text was moved out of the Snowflake settings module.
+- **Spec:** fixed three things.
+  - A changed scope raises `Conflict` again, as before.
+  - Stale docs are corrected (`AGENTS.md`, `local-operations.md`,
+    `evidence.md`).
+  - The 05 Proving Run script uses the new coordinator.
+  Noted rather than changed: a 1 MiB cap on a run's scope, new with 043.
+- **GoF:** each `mdm` command was dispatched twice, and the two lists had
+  drifted (a dead `correction-batch` branch). Each subcommand is now bound
+  to its own function, and `handle()` is gone. Test:
+  `tests/unit/test_mdm_cli_commands.py`.
+
 ## Tests
 
 Local runs, each under 5 minutes:
@@ -56,7 +78,13 @@ Local runs, each under 5 minutes:
   - the rest of `scripts/ops`;
   - `examples/mdm_graph_dashboard`;
   - dbt `mdm_export` sources and gold `company`/`mdm_company`;
-  - the infra Python scripts that import deleted modules (Mongo decision
-    store, snowflake graph, filing text retention).
+  - the infra Python scripts that import deleted modules:
+    `apply-mongo-decision-schema.py`, `smoke-mongo-decision-projection.py`,
+    `generate_mdm_mirror_ddl.py`, `scripts/ops/aws_cost_optimizer.py`,
+    `ecs_sizing_canary.py`, `neo4j-snowflake-migration.py`;
+  - callers of `mdm check-connectivity` and `mdm counts`, whose output is
+    now Clean MDM's (`bootstrap-prod-mdm.sh`, `deploy-aws-application.sh`,
+    `audit-mdm-snowflake-postgres-cutover.py`, `scripts/ops/*sync*.sh`,
+    `docs/aws-mdm-source-to-mdm.md`).
 - **Local databases** are recreated without the legacy tables. A hosted
   database is dropped only on the operator's word.

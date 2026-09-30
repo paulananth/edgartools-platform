@@ -44,7 +44,7 @@ records final checks. The following 2026-09-18 evidence remains historical.
   is required for API acceptance; a run without it failed on missing FastAPI
   and was rerun with the locked extra rather than skipping those tests.
 - Checked local application schema access and Bookkeeping write permissions;
-  the installed console command `mdm counts --model clean` succeeded. Clean
+  the installed console command `mdm counts --model clean` (now `mdm counts`) succeeded. Clean
   master batches remain zero and legacy table counts remain unchanged.
 - `ruff check` passes for the new core and integration suite. The complete
   current entity-pipeline/API/hosted-consumer surface is not yet qualified.

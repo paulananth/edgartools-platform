@@ -30,19 +30,24 @@ BEGIN
 END;
 $$;
 
--- Records a reconciliation. A complete run is succeeded; an incomplete one
--- stays running. The scope never changes.
+-- Records a reconciliation under the run's lock. A complete run becomes
+-- succeeded and stays succeeded: a concurrent reconcile that saw an older,
+-- incomplete view never sets it back. The scope never changes.
 CREATE FUNCTION mdm_v2.finish_run(root_run uuid, body jsonb, complete boolean)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,mdm_v2 AS $$
+DECLARE current_status text;
 BEGIN
     IF root_run IS NULL OR body IS NULL OR jsonb_typeof(body)<>'object' OR complete IS NULL THEN
         RAISE EXCEPTION 'Invalid run report';
     END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended(root_run::text,43));
+    SELECT status INTO current_status FROM mdm_v2.run WHERE run_id=root_run;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Root run was not registered'; END IF;
+    IF current_status='succeeded' THEN RETURN; END IF;
     UPDATE mdm_v2.run SET report=body,
         status=CASE WHEN complete THEN 'succeeded' ELSE 'running' END,
-        completed_at=CASE WHEN complete THEN coalesce(completed_at,now()) ELSE NULL END
+        completed_at=CASE WHEN complete THEN now() ELSE NULL END
     WHERE run_id=root_run;
-    IF NOT FOUND THEN RAISE EXCEPTION 'Root run was not registered'; END IF;
 END;
 $$;
 REVOKE ALL ON FUNCTION mdm_v2.start_run(uuid,jsonb) FROM PUBLIC;

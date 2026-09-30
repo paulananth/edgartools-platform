@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean.bookkeeping import RunCoordinator
+from edgar_warehouse.mdm.clean.run import RunCoordinator
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Conflict, Store
 from tests.integration import test_clean_mdm_postgres as core
@@ -50,7 +50,7 @@ def test_a_run_is_registered_once_and_its_scope_never_changes(database):
     coordinator.start(run_id, ["b1", "b2"], manifest_digest="d" * 64)
     # The same scope again is a no-op; a different one is refused.
     coordinator.start(run_id, ["b2", "b1"], manifest_digest="d" * 64)
-    with pytest.raises(DBAPIError, match="Root run scope changed"):
+    with pytest.raises(Conflict, match="Root run scope changed"):
         coordinator.start(run_id, ["b1"], manifest_digest="d" * 64)
     assert run_row(database, run_id)["status"] == "running"
 
@@ -68,6 +68,21 @@ def test_reconcile_reports_missing_batches_and_keeps_the_run_open(database):
     row = run_row(database, run_id)
     assert row["status"] == "running" and row["completed_at"] is None
     assert row["report"]["missing_batches"] == ["b2"]
+
+
+def test_a_succeeded_run_stays_succeeded(database):
+    # A reconcile that saw an older, incomplete view and commits last never
+    # sets a succeeded run back to running.
+    coordinator = RunCoordinator(Store(database.application))
+    run_id = str(uuid4())
+    coordinator.start(run_id, ["b1"], manifest_digest="d" * 64)
+    with database.application.begin() as conn:
+        for body, complete in (('{"end_to_end_complete": true}', True), ('{"end_to_end_complete": false}', False)):
+            conn.execute(text("SELECT mdm_v2.finish_run(CAST(:r AS uuid),CAST(:b AS jsonb),:c)"),
+                         {"r": run_id, "b": body, "c": complete})
+    row = run_row(database, run_id)
+    assert row["status"] == "succeeded" and row["completed_at"] is not None
+    assert row["report"] == {"end_to_end_complete": True}
 
 
 def test_an_unregistered_run_cannot_be_reconciled(database):
