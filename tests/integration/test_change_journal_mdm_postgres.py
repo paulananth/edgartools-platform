@@ -20,6 +20,7 @@ from edgar_warehouse.mdm.clean.store import Conflict, migrate, register_policy
 from tests.integration.test_change_journal_acquisition_postgres import definition
 from tests.integration.test_clean_mdm_postgres import AS_OF, identity_and_binding
 from tests.integration.test_configured_bookkeeping_postgres import databases
+from tests.support.rules_approval import approve
 
 
 def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_path):
@@ -201,7 +202,7 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
             },
         }
         databases.rules.prove("source", name, "1", proof)
-        databases.approver.approve("source", name, "1", saved["digest"])
+        approve(databases.approver, "source", name, "1")
         databases.rules.activate("source", name, "1", mdm_engine=owner)
         with owner.connect() as conn:
             assert not conn.scalar(
@@ -267,7 +268,7 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
         changed["bookkeeping"]["targets"]["mdm"]["retry"] = {"attempts": 2}
         newer = databases.rules.save("source", name, "2", changed)
         databases.rules.prove("source", name, "2", {**proof, "digest": newer["digest"]})
-        databases.approver.approve("source", name, "2", newer["digest"])
+        approve(databases.approver, "source", name, "2")
         databases.rules.activate("source", name, "2", mdm_engine=owner)
         with owner.connect() as conn:
             assert (

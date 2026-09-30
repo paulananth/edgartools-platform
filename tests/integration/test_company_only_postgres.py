@@ -31,6 +31,7 @@ from edgar_warehouse.mdm.clean.publication import LocalContractSink
 from edgar_warehouse.mdm.clean.store import migrate as migrate_mdm, register_policy
 from edgar_warehouse.rules import files
 from tests.integration.test_configured_bookkeeping_postgres import databases
+from tests.support.rules_approval import approve
 
 
 def _main(cik: int, name: str, pages: list[str]) -> bytes:
@@ -170,7 +171,7 @@ def test_company_route_locally_with_and_without_pagination(databases, tmp_path, 
                                 (("capture", 4), ("sec_company", 2), ("sec_company_filing", 3))},
                      "checks": {"bounded-local": True}}}}
         databases.rules.prove("source", "sec.submissions.company", version, proof)
-        databases.approver.approve("source", "sec.submissions.company", version, saved["digest"])
+        approve(databases.approver, "source", "sec.submissions.company", version)
         databases.rules.activate("source", "sec.submissions.company", version, mdm_engine=owner)
         rules_ref = databases.rules.resolve("source", "sec.submissions.company",
                                             root=tmp_path.as_uri() + "/rules")

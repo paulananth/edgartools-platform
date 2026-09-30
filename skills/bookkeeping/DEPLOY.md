@@ -19,9 +19,10 @@ For a new or changed Rules body, write only the planned configuration through
 `edgar_warehouse.rules.files`, save a new version, and record the evaluator's
 real exact-digest proof with `rules record-proof`. That command records proof;
 it does not evaluate a Batch Gate. MDM configurations require the person's
-exact-digest approval under their own login. Honor an approval already given
-for that digest; when absent, explain the Rules governance requirement and
-wait for the person's approval. Activate through the existing Rules lifecycle.
+approval of that exact version, recorded through the Rules skill's Approve
+steps in their name and words. Honor an approval already given for that
+version; when absent, explain the Rules governance requirement and wait for
+the person's approval. Activate through the existing Rules lifecycle.
 Source documents own MDM dataset registration; platform-owned MDM contracts
 still lack handoff support. An existing approved active version can be reused
 when its exact content matches the validated plan.

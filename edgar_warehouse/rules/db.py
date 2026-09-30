@@ -18,6 +18,13 @@ from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
 from . import files
 
 
+# A version waits for approval once a test run is recorded and until approved.
+WAITING = "proof IS NOT NULL AND approved_by IS NULL AND status IN ('draft','proven')"
+# The evidence an approval rests on; the trigger stores the same expression.
+EVIDENCE_HASH = "encode(sha256(convert_to(proof::text,'UTF8')),'hex')"
+APPROVAL_COLUMNS = "approved_by,approved_at,approved_words,approval_overrule,approval_evidence,approval_recorded_by"
+
+
 def get_engine(url=None):
     return create_engine(url or os.environ["RULES_DATABASE_URL"], pool_pre_ping=True)
 
@@ -65,9 +72,12 @@ def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "ru
         conn.exec_driver_sql(f"GRANT SELECT ON rules.rule_version TO {agent},rules_approver")
         conn.exec_driver_sql(f"GRANT INSERT(kind,name,version,body,digest) ON rules.rule_version TO {agent}")
         conn.exec_driver_sql(f"GRANT UPDATE(status,proof,batch_hash,clean_mdm) ON rules.rule_version TO {agent}")
-        conn.exec_driver_sql("GRANT UPDATE(approved_by,approved_at) ON rules.rule_version TO rules_approver")
-        if conn.scalar(text("SELECT has_schema_privilege(:r,'rules','CREATE') OR has_column_privilege(:r,'rules.rule_version','approved_by','INSERT,UPDATE') OR has_column_privilege(:r,'rules.rule_version','approved_at','INSERT,UPDATE')"), {"r": agent_role}):
-            raise Blocked("Rules agent inherits approval privileges or schema ownership")
+        # The agent records the operator's approval in their name and words
+        # (operator, 2026-09-29, rules skill ticket 14); the trigger refuses
+        # one without test evidence or without those words.
+        conn.exec_driver_sql(f"GRANT UPDATE({APPROVAL_COLUMNS}) ON rules.rule_version TO {agent},rules_approver")
+        if conn.scalar(text("SELECT has_schema_privilege(:r,'rules','CREATE')"), {"r": agent_role}):
+            raise Blocked("Rules agent owns the Rules schema")
     return checksums
 
 
@@ -102,21 +112,64 @@ class Rules:
             return self._version(conn, kind, name, version)
 
     def prove(self, kind, name, version, proof):
+        """Record a test run of this version, passing or not. A passing one
+        makes it proven; a failing one stays a draft with its evidence, which
+        the operator may overrule on approval (and a new run may replace). A
+        source's acquisition evidence is checked when the run passed; an
+        overrule never covers a source that could not be read (the trigger
+        refuses it at proven)."""
+        if type(proof.get("passed")) is not bool:
+            raise Blocked("A proof says whether it passed")
         row = self.version(kind, name, version)
         body = json.loads(row["body"])
-        if "acquisition" in body:
+        if "acquisition" in body and proof["passed"]:
             from edgar_warehouse.change_journal.authority import validation_proof
             validation_proof(body, proof, artifacts=Artifacts())
         with self.engine.begin() as conn:
-            conn.execute(text("UPDATE rules.rule_version SET status='proven',proof=CAST(:p AS jsonb),batch_hash=:h WHERE kind=:k AND name=:n AND version=:v"),
-                         {"p": canonical(proof), "h": proof["batch_hash"], "k": kind, "n": name, "v": version})
+            conn.execute(text("UPDATE rules.rule_version SET status=:s,proof=CAST(:p AS jsonb),batch_hash=:h WHERE kind=:k AND name=:n AND version=:v"),
+                         {"s": "proven" if proof["passed"] else "draft", "p": canonical(proof), "h": proof["batch_hash"],
+                          "k": kind, "n": name, "v": version})
 
-    def approve(self, kind, name, version, expected_digest):
+    def pending(self) -> list[dict]:
+        """Every version with a recorded test run and no approval yet, with its
+        evidence, the hash an approval of it must name, and what it changes
+        from the active version."""
+        with self.engine.connect() as conn:
+            waiting = [dict(r) for r in conn.execute(text(
+                f"SELECT *,{EVIDENCE_HASH} AS evidence_hash FROM rules.rule_version WHERE {WAITING} "
+                "ORDER BY kind,name,proved_at DESC")).mappings()]
+            active = {(r["kind"], r["name"]): json.loads(r["body"]) for r in conn.execute(text(
+                "SELECT kind,name,body FROM rules.rule_version WHERE status='active'")).mappings()}
+        return [{"kind": r["kind"], "name": r["name"], "version": r["version"], "passed": r["proof"]["passed"],
+                 "evidence": r["proof"].get("evidence"), "note": r["proof"].get("note"), "proved_at": r["proved_at"],
+                 "evidence_hash": r["evidence_hash"],
+                 "changes": version_changes(active.get((r["kind"], r["name"])), json.loads(r["body"]))} for r in waiting]
+
+    def approve(self, kind, name, version, *, evidence: str, by: str, words: str, overrule: str | None = None) -> dict:
+        """Record the operator's approval, in their name and exact words, of the
+        version and test run they were shown (`evidence`, the hash `pending`
+        gave). A version or run recorded since is not what they read, so it is
+        refused. No approval without test evidence; a failing run only with an
+        overrule reason."""
         with self.engine.begin() as conn:
-            row = self._version(conn, kind, name, version)
-            if row["digest"] != expected_digest:
-                raise Blocked("Approval digest differs from the selected version")
-            conn.execute(text("UPDATE rules.rule_version SET approved_by=session_user,approved_at=clock_timestamp() WHERE kind=:k AND name=:n AND version=:v"), {"k": kind, "n": name, "v": version})
+            row = conn.execute(text(f"SELECT *,{EVIDENCE_HASH} AS evidence_hash FROM rules.rule_version "
+                                    "WHERE kind=:k AND name=:n AND version=:v FOR UPDATE"),
+                               {"k": kind, "n": name, "v": version}).mappings().first()
+            if row is None:
+                raise Blocked("Unknown Rules version")
+            if row["proof"] is None:
+                raise Blocked("No approval without test evidence: record a test run first")
+            if row["evidence_hash"] != evidence:
+                raise Blocked("The test run differs from the one shown for approval: show it again first")
+            if row["proof"]["passed"] is False and not (overrule or "").strip():
+                raise Blocked("The test run failed: approving it needs an overrule reason")
+            # Only an overruled failing run changes the status: it is what
+            # makes that version proven. A passing one is proven already.
+            moves = ",status='proven'" if row["status"] == "draft" else ""
+            conn.execute(text("UPDATE rules.rule_version SET approved_by=:by,approved_words=:w,approval_overrule=:o,"
+                              f"approved_at=clock_timestamp(){moves} WHERE kind=:k AND name=:n AND version=:v"),
+                         {"by": by, "w": words, "o": overrule or None, "k": kind, "n": name, "v": version})
+            return self._version(conn, kind, name, version)
 
     def activate(self, kind, name, version, *, mdm_engine=None):
         with self.engine.begin() as conn:
@@ -172,6 +225,10 @@ class Rules:
         approval = None
         if row["approved_by"]:
             approval = {"digest": row["digest"], "by": row["approved_by"], "at": row["approved_at"].isoformat()}
+            # Approvals made on evidence carry their words and what they rest on.
+            approval.update({key: row[column] for key, column in (
+                ("words", "approved_words"), ("overrule", "approval_overrule"),
+                ("evidence", "approval_evidence"), ("recorded_by", "approval_recorded_by")) if row.get(column)})
         return {"kind": row["kind"], "name": row["name"], "version": row["version"], "digest": row["digest"],
                 "body": body, "status": row["status"], "proof": row["proof"], "approval": approval,
                 "registration": row["clean_mdm"]}
@@ -213,3 +270,34 @@ class Rules:
                 path = root / folder / row["name"] / filename
             self.to_file(row["kind"], row["name"], version, path)
         return [{"kind": row["kind"], "name": row["name"], "digest": row["digest"]} for row in documents]
+
+
+def version_changes(before: dict | None, after: dict, path: str = "") -> list[str]:
+    """What a version changes from another, one line per changed value, by
+    its place in the document; the skill turns them into plain words."""
+    if before is None and not path:
+        return ["new: nothing of this name is active yet"]
+    if isinstance(before, dict) and isinstance(after, dict):
+        found = []
+        for key in sorted(set(before) | set(after)):
+            where = f"{path}.{key}" if path else key
+            if key not in before:
+                found.append(f"added {where}")
+            elif key not in after:
+                found.append(f"removed {where}")
+            else:
+                found.extend(version_changes(before[key], after[key], where))
+        return found
+    if before == after:
+        return []
+    if isinstance(before, list) and isinstance(after, list):
+        # Rules in a list are named by their rule_id: say which came or went.
+        def named(items):
+            return {i["rule_id"]: i for i in items if isinstance(i, dict) and "rule_id" in i}
+        old, new = named(before), named(after)
+        if len(old) == len(before) and len(new) == len(after):
+            return ([f"added {path}: {key}" for key in new if key not in old]
+                    + [f"removed {path}: {key}" for key in old if key not in new]
+                    + [line for key in new if key in old for line in version_changes(old[key], new[key], f"{path}[{key}]")])
+    shown = [json.dumps(value, default=str) for value in (before, after)]
+    return [f"changed {path}: " + " -> ".join(v if len(v) <= 120 else v[:117] + "..." for v in shown)]

@@ -28,6 +28,7 @@ from edgar_warehouse.change_journal.database import migrate as migrate_journal
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.runner import Authority, run
 from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
+from tests.support.rules_approval import approve
 
 
 @dataclass
@@ -146,7 +147,7 @@ def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=No
     inputs = artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": units})
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
     if body.get("mdm"):
-        databases.approver.approve("source", name, "1", saved["digest"])
+        approve(databases.approver, "source", name, "1")
     databases.rules.activate("source", name, "1")
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
@@ -207,7 +208,7 @@ def test_pipeline_rules_and_approval_authority(databases, tmp_path):
     databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": "a"*64, "passed": True})
     with pytest.raises(DBAPIError):
         databases.rules.activate("pipeline", name, "1")
-    databases.approver.approve("pipeline", name, "1", saved["digest"])
+    approve(databases.approver, "pipeline", name, "1")
     databases.rules.activate("pipeline", name, "1")
     ref = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri())
     export = Artifacts().json(ref)
@@ -269,10 +270,10 @@ def test_two_way_rules_migration_preserves_all_document_digests(databases, tmp_p
 def test_invalid_proof_and_unsafe_document_names_refused(databases):
     name = "invalid-proof-" + uuid4().hex
     saved = databases.rules.save("pipeline", name, "1", config())
-    for proof in ({"digest": saved["digest"], "batch_hash": None, "passed": True},
-                  {"digest": saved["digest"], "batch_hash": "a"*64, "passed": "true"}):
-        with pytest.raises(DBAPIError):
-            databases.rules.prove("pipeline", name, "1", proof)
+    with pytest.raises(DBAPIError):  # the database refuses an unpinned batch
+        databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": None, "passed": True})
+    with pytest.raises(Blocked, match="whether it passed"):
+        databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": "a"*64, "passed": "true"})
     with pytest.raises(Blocked):
         databases.rules.save("pipeline", "../escape", "1", config())
     with pytest.raises(DBAPIError), databases.rules.engine.begin() as conn:
@@ -661,7 +662,7 @@ def mdm_submission(databases, tmp_path):
     acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
     saved = databases.rules.save("source", name, "1", body)
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
-    databases.approver.approve("source", name, "1", saved["digest"])
+    approve(databases.approver, "source", name, "1")
     databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture", "prepared_batch": payload["command"]["batch_id"]})
@@ -727,7 +728,7 @@ def test_stage_manifest_chains_prepared_mdm_and_separate_publication_intents(dat
     acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
     saved = databases.rules.save("source", name, "1", body)
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
-    databases.approver.approve("source", name, "1", saved["digest"])
+    approve(databases.approver, "source", name, "1")
     databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture"})
@@ -751,7 +752,7 @@ def test_retired_rules_resume_original_export_and_reading(databases, tmp_path):
     body["bookkeeping"]["targets"]["mdm"]["lease_seconds"] = 180
     saved = databases.rules.save("source", original["name"], "2", body)
     databases.rules.prove("source", original["name"], "2", {"digest": saved["digest"], "batch_hash": original["inputs"]["sha256"], "passed": True, "acquisition": approved_acquisition(body, original["name"], body["mdm"], original["inputs"])})
-    databases.approver.approve("source", original["name"], "2", saved["digest"])
+    approve(databases.approver, "source", original["name"], "2")
     databases.rules.activate("source", original["name"], "2", mdm_engine=databases.destination_admin)
     assert databases.rules.version("source", original["name"], "1")["status"] == "retired"
     assert book._frozen(rid)[1]["lease_seconds"] == 120
@@ -824,7 +825,7 @@ def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases
     acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
     saved = databases.rules.save("source", name, "1", body)
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
-    databases.approver.approve("source", name, "1", saved["digest"])
+    approve(databases.approver, "source", name, "1")
     databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri())
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture"})

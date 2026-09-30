@@ -113,7 +113,7 @@ def frozen_authority(export: dict, feed: str, *, artifacts=None) -> dict:
     ):
         raise Blocked("A frozen proven Rules source envelope is required")
     proof, approval = export.get("proof") or {}, export.get("approval") or {}
-    if proof.get("passed") is not True or proof.get("digest") != export["digest"]:
+    if not proof_holds(export):
         raise Blocked("Acquisition requires verified Rules proof")
     validation_proof(export["body"], proof, artifacts=artifacts)
     if (
@@ -161,6 +161,16 @@ def registration_authority(export: dict, code: str, contract: dict) -> dict:
         "coverage_action": "add",
         "rules": frozen,
     }
+
+
+def proof_holds(export: dict) -> bool:
+    """A version's test evidence stands: its proof passed, or the operator
+    overruled a failing one when approving this exact version."""
+    proof, approval = export.get("proof") or {}, export.get("approval") or {}
+    if proof.get("digest") != export.get("digest"):
+        return False
+    return proof.get("passed") is True or (
+        proof.get("passed") is False and approval.get("digest") == export.get("digest") and bool(approval.get("overrule")))
 
 
 def validation_proof(body: dict, proof: dict, *, artifacts=None) -> None:

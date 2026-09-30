@@ -14,6 +14,7 @@ from edgar_warehouse.bookkeeping.clean.runner import run
 from edgar_warehouse.change_journal.source_evidence import register_source_evidence
 from tests.integration.test_change_journal_acquisition_postgres import definition
 from tests.integration.test_configured_bookkeeping_postgres import databases
+from tests.support.rules_approval import approve
 
 
 def manifest_run(
@@ -224,7 +225,7 @@ def manifest_run(
             },
         },
     )
-    databases.approver.approve("source", name, "1", saved["digest"])
+    approve(databases.approver, "source", name, "1")
     databases.rules.activate("source", name, "1")
     rules_ref = databases.rules.resolve(
         "source", name, root=tmp_path.as_uri() + "/rules"

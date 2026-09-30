@@ -34,8 +34,14 @@ language is in [REFERENCE.md](REFERENCE.md).
 
 - **Captured files only.** Never fetch the source. Make zero requests to
   `sec.gov`, including its documentation pages.
-- **Never approve.** Anything that feeds MDM needs the operator's approval.
-  Ask for it and wait. Your recommendation is not a decision.
+- **Approve only on the operator's words, and only on test evidence.**
+  Anything that feeds MDM needs the operator's approval (or the steward's,
+  for their own Mapping Document change). They approve by saying so; you
+  record it with `rules approve` under their name and their exact words
+  ("Approve" below). Your recommendation is not a decision, and you never
+  record an approval they did not give. No test run, no approval: the
+  operator may overrule a failing run, never a missing one (operator,
+  2026-09-29).
 - **Never guess an identifier.** Take every CIK, LEI or other key from the
   files.
 - **Read and write rules files only through `edgar_warehouse.rules.files`**
@@ -334,14 +340,15 @@ language is in [REFERENCE.md](REFERENCE.md).
    - `edgar-warehouse rules save --source <name> --version <v> <file>`
      saves the file as a draft;
    - `rules record-proof --source <name> --version <v> --proof-uri <uri>
-     --proof-sha256 <sha256>` records the proof of a passing run;
-   - the operator runs `rules approve --source <name> --version <v>
-     --digest <digest>` with `RULES_DATABASE_URL` set to their own approver
-     login; the database records that login as the approver. For a change a
-     steward made in a Mapping Document, merge priorities included, that
-     steward approves it the same way, under their own login (operator,
-     2026-09-28). Before you ask, say in plain words what the digest is and
-     what it changes. Never run it yourself;
+     --proof-sha256 <sha256>` records a test run, passing or failing. The
+     proof names the version's `digest`, the input `batch_hash` and whether
+     it `passed`; put what the operator reads under `evidence` (the counts
+     and up to 10 examples of step 8) and one line under `note`. A failing
+     run may be replaced by a new one until it is approved;
+   - the operator approves it on its evidence ("Approve" below). For a
+     change a steward made in a Mapping Document, merge priorities
+     included, that steward approves it the same way (operator,
+     2026-09-28);
    - `rules activate --source <name> --version <v>` registers the version
      in Clean MDM. It also needs `RULES_MDM_ACTIVATION_DATABASE_URL` (the
      MDM governance login) and `CHANGE_LEDGER_DATABASE_URL` (the registry);
@@ -352,6 +359,46 @@ language is in [REFERENCE.md](REFERENCE.md).
      first, then silver.
 
    `rules status --source <name>` shows each version's state.
+
+## Approve
+
+The operator (or a steward, for their own change) approves a whole source or
+the merge rules by saying so. Nobody types a digest, a login or an address.
+
+1. Run `edgar-warehouse rules pending`. It lists each version with a test run
+   and no approval yet: whether the run passed, its evidence (counts and up
+   to 10 examples), its note, and `changes`, what it changes from the active
+   version, value by value.
+2. Tell the operator, in plain words and business terms, for each one: what
+   it is (its name, never a digest), what it changes, and what the test run
+   showed. A version with no test run is not listed and cannot be approved:
+   run it first (step 10).
+3. Wait for their words. Record only an approval they gave for that version:
+   `rules approve --source <name> --version <v> --evidence <evidence_hash>
+   --by "<their name>" --words "<their exact words>"` (`--merge <name>` for
+   merge rules), with the version and `evidence_hash` that `rules pending`
+   showed; you pass these, the operator never types them. It refuses a test
+   run recorded since you showed it: show the new one and ask again. The
+   database keeps the name, the words, the time, the evidence it rests on
+   and your login beside them.
+4. A failing test run is approved only when they overrule it, with their
+   reason: ask for it, then add `--overrule "<their reason>"`. Recommend
+   against an overrule you think is wrong, once, and say why. A source whose
+   files could not be read (its acquisition checks failed) is never
+   overruled: the approval is refused.
+5. Then activate (step 10) and tell them it is in effect.
+
+**One merge rule.** A matching rule declared in `rules/merge/kinds/` with its
+proof in `rules/merge/pending-proofs.yaml` is switched on by itself. Say in
+plain words what it joins and what its proof measured (the sample, how many
+were right, the adversarial pairs), then wait for their words, and run
+`rules approve --merge platform --rule <rule_id> --by "<their name>" --words
+"<their exact words>"`. It adds the rule to `merge/policy.yaml` with its proof
+and their approval, keeping the file's comments, and refuses a rule with no
+proof or one short of its kind's bar (a single rule is not overruled
+here: log it for a ticket). The merge rules that carry it are a new
+merge version: save it, record its test run, and record the same words on it
+when `rules pending` shows it changes only that rule; then activate.
 
 ## Change a source or the merge rules
 
@@ -392,7 +439,7 @@ pull request:
    replace the steward's; the steward confirms they say what was meant.
    `rules mapdoc check` must then pass.
 5. Save and prove as in step 10. The steward who made the change approves
-   it under their own login; you never approve.
+   it ("Approve" below); you record their words, never your own.
 
 ## Check or change a feed's data quality
 
@@ -423,7 +470,7 @@ counts look wrong:
   and compare; never export over the repo's `rules/`.
 
 Every other command connects through `RULES_DATABASE_URL`: the agent's
-login, except for `approve`, which the operator runs under their own.
+login (`rules_agent`), `approve` included.
 The CLI takes about half a minute to start; that is not a hang.
 
 ## When a command is missing
