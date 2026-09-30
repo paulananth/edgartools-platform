@@ -53,6 +53,13 @@ WITH_CIK_APPROVAL = {
     "name_matching_active": "86a7a9e3f9bd9e2bd428331442f031f2b4736f55ee3f890c329de0c05f21acde",
 }
 
+# The operator approved switching both name matching rules on ("yes",
+# 2026-09-29 21:04 ET, company mastering ticket 25); without them it is the
+# policy above.
+WITH_NAME_RULES_ON = {
+    "policy": "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
+}
+
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
 # both the contract is the one above.
@@ -86,7 +93,7 @@ SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9b
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    layered = (WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(company_source.POLICY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
@@ -99,9 +106,15 @@ def test_the_company_configuration_is_unchanged():
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
     assert digest(company_source.NAME_PROOFS) == BEFORE["name_proofs"]
-    assert digest(company_source.name_matching_policy(active=False)) == WITH_CIK_APPROVAL["policy"]
-    active = company_source.name_matching_policy(active=True)
-    assert policy_layers.digests(active) == [pins["name_matching_active"] for pins in layered]
+    # Each switched-on name rule carries its measured proof, unchanged, with
+    # the operator's approval added.
+    for entry in company_source.POLICY["automatic_rules"]:
+        if entry["rule_id"] in policy_layers.NAME_RULES:
+            stamped = {"approved_by", "approved_at", "approved_words"}
+            measured = company_source.NAME_PROOFS[entry["rule_id"]]
+            assert {k: v for k, v in entry["proof"].items() if k not in stamped} == {
+                k: v for k, v in measured.items() if k not in stamped}
+            assert (entry["proof"]["approved_by"], entry["proof"]["approved_words"]) == ("operator", "yes")
 
 
 # Company mastering ticket 18 listed an invalid LEI as non-blocking in each

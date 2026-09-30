@@ -16,6 +16,17 @@ def _copy(policy: dict) -> dict:
     return json.loads(canonical(policy))
 
 
+NAME_RULES = ("sec-gleif-name-jurisdiction", "sec-gleif-name-postal")
+
+
+def without_name_rules_on(policy: dict) -> dict:
+    """Company mastering ticket 25: the two name matching rules switched on,
+    on the operator's approval ("yes", 2026-09-29 21:04 ET)."""
+    body = _copy(policy)
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r["rule_id"] not in NAME_RULES]
+    return body
+
+
 def without_cik_approval(policy: dict) -> dict:
     """Company mastering ticket 15: the operator's approval of the CIK
     matching rule, its contract's three stamps and its activation."""
@@ -50,7 +61,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_cik_approval, without_cik, without_cascade, without_place_codes]
+LAYERS = [without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:

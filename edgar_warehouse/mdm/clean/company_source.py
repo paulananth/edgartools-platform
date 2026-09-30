@@ -23,7 +23,7 @@ import pyarrow.parquet as pq
 from edgar_warehouse.rules import files as rules_files
 
 from .evidence import instant
-from .matching import FAMILY, active_rules
+from .matching import active_rules
 from .name_census import entry as census_entry
 from .names import edgar_jurisdiction
 from .store import Conflict, canonical, digest
@@ -723,43 +723,7 @@ def write_name_census(
 
 
 # Ticket 08, the SEC-to-GLEIF matching rules, measured on bronze and the
-# pinned GLEIF Golden Copy and passing: declared in the Company merge rules,
-# inactive. Their proofs carry no approval: switching a rule on is a separate
-# decision (`rules/merge/pending-proofs.yaml`).
+# pinned GLEIF Golden Copy and passing (`rules/merge/pending-proofs.yaml`).
+# Ticket 25 switched both on: `merge/policy.yaml` carries each proof with the
+# operator's approval.
 NAME_PROOFS = rules_files.pending_proofs()
-
-
-def _is_cascade_pass(rule: dict) -> bool:
-    from .cascade import TEST
-
-    return any(t["primitive"] == TEST for t in rule["when"])
-
-
-def name_matching_policy(*, active: bool) -> dict:
-    """The live Company policy, with its matching rules' activations if `active`.
-
-    The rules are declared in `rules/merge/kinds/company.yaml` and inactive. With
-    `active`, it also names their measured activations; those pass the
-    activation check only once the operator's approval fills each proof.
-    """
-    body = json.loads(canonical(POLICY))
-    if active:
-        body["automatic_rules"] = [
-            *body["automatic_rules"],
-            *(
-                {
-                    "kind": "company",
-                    "family": FAMILY,
-                    "rule_id": rule["rule_id"],
-                    "rule_version": rule["version"],
-                    "verdict": "bind",
-                    "activation": "measured",
-                    "proof": NAME_PROOFS[rule["rule_id"]],
-                }
-                for rule in body["kinds"]["company"]["rules"]
-                # A cascade pass waits for its own proof (ticket 21); every
-                # other matching rule must have one, or this fails closed.
-                if rule["family"] == FAMILY and not _is_cascade_pass(rule)
-            ),
-        ]
-    return body
