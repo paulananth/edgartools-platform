@@ -86,7 +86,9 @@ def test_cli_commands_remain_available_and_resume_is_bounded():
     args = parser.parse_args(["rules", "run", "--pipeline", "graph-publication", "--target", "publish", "--resume-run-id", "original"])
     assert args.resume_run_id == "original" and args.limit == 100
     assert parser.parse_args(["bookkeeping", "leases", "original"]).limit == 100
-    assert parser.parse_args(["gold-refresh"]).handler
+    # The legacy warehouse commands are deleted (platform validation slice 2a).
+    with pytest.raises(SystemExit):
+        parser.parse_args(["gold-refresh"])
     assert pipeline("graph-publication")["pipeline"] == "graph-publication"
 
 

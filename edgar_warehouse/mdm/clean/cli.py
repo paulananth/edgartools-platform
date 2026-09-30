@@ -456,6 +456,18 @@ def handle(command: str, args) -> int:
         )
         print(json.dumps({"decisions": len(decisions), "output": args.output}))
         return 0
+    if command == "check-connectivity":
+        mdm = engine_from_env("MDM_DATABASE_URL")
+        try:
+            with mdm.connect() as conn:
+                report = {
+                    "sql": conn.scalar(text("SELECT 1")) == 1,
+                    "migrations": conn.scalar(text("SELECT count(*) FROM mdm_v2.migration")),
+                }
+            print(json.dumps(report, sort_keys=True))
+            return 0
+        finally:
+            mdm.dispose()
     if command == "counts":
         mdm = engine_from_env("MDM_DATABASE_URL")
         try:

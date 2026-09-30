@@ -59,6 +59,7 @@ CLEAN_MDM_MIGRATIONS = (
     "040_clean_mdm_assessment_safety.sql",
     "041_clean_mdm_binding_correction.sql",
     "042_clean_mdm_company_one_place.sql",
+    "043_clean_mdm_run.sql",
 )
 
 
@@ -145,11 +146,17 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "claim_publication(text,text,integer)",
             "finish_publication(text,text,bigint,text,text)",
             "record_attempt(uuid,uuid,text,text,jsonb)",
+            "start_run(uuid,jsonb)",
+            "finish_run(uuid,jsonb,boolean)",
             "assessment_snapshot(jsonb)",
             "record_assessment(text,uuid)",
             "supersede_assessment(text,uuid)",
             "preview_batch(text,uuid)",
         ):
+            # A store migrated only part way (a test of a later migration over
+            # real rows) lacks the functions later migrations add.
+            if conn.scalar(text("SELECT to_regprocedure(:f)"), {"f": f"mdm_v2.{signature}"}) is None:
+                continue
             conn.exec_driver_sql(
                 f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO {runtime}"
             )

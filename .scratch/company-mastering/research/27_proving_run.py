@@ -17,8 +17,8 @@ PostgreSQL 16 (the Clean MDM test fixtures) to:
 The datasets are registered with the test Rules authority
 (`tests.support.rules_authority`), not an approved Rules Database version:
 the readings are the repo's (ticket 18's), not yet approved there. Each
-manifest's attempt is journalled in MDM by the real coordinator; its root
-run start and reconcile, which write retired Bookkeeping tables, are skipped.
+manifest's run and attempts are recorded in MDM by the run coordinator
+(`mdm_v2.run` since platform validation slice 2a).
 
 Then everything is applied again; the second pass must change nothing.
 
@@ -64,16 +64,6 @@ AS_OF = "2026-09-29T15:00:00+00:00"
 # assertion carries its native record, so 1,000 of them came to 43 MB.
 GLEIF_BATCH = 200
 NAMED = {"0000320193": "Apple", "0000789019": "Microsoft", "0001306965": "Shell", "0000937966": "ASML"}
-
-
-class JournalOnly(RunCoordinator):
-    """The real per-attempt journal in MDM; no retired Bookkeeping root run."""
-
-    def start(self, *args, **kwargs) -> None:
-        return None
-
-    def reconcile(self, run_id: str) -> dict:
-        return {}
 
 
 def cohort_leis(bundles: list[Path]) -> set[str]:
@@ -141,7 +131,7 @@ def test_proving_run(database, tmp_path):
         register_dataset(conn, GLEIF, database.registry, dataset_contract("level1"))
         policy = register_policy(conn, POLICY)
     store = Store(database.application)
-    coordinator = JournalOnly(None, store)
+    coordinator = RunCoordinator(store)
     stage = MergeStage(store)
 
     bundles = [work / "bundles" / f"chunk{n}" for n in range(1, 8)]

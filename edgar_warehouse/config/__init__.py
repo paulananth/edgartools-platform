@@ -1,2 +1,0 @@
-"""Packaged warehouse configuration resources."""
-
