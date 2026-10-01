@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One repository skill shared by Codex and Claude, as in skills/rules/link.sh.
+# One repository skill shared by Codex and Claude, as in skills/data-onboarding/link.sh.
 set -euo pipefail
 
 task_home="${HOME}"

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rules"
-  short_description: "Add or change a Clean MDM source from its captured files"
-  default_prompt: "Use $rules to add the source whose captured files are in <folder>."

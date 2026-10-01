@@ -1,0 +1,753 @@
+{
+ "source_check": {
+  "source_in_person_defaults": true
+ },
+ "A": {
+  "label": "A: draft policy as written (classification not activated)",
+  "reasons": {
+   "classification_not_activated": 287,
+   "classification_entity_undetermined": 12,
+   "classification_deferred": 1
+  },
+  "classification_verdicts": {
+   "person@step3": 287,
+   "entity_undetermined@step2": 12,
+   "deferred@step4": 1
+  },
+  "blocking_reasons": {
+   "classification_not_activated": 287
+  },
+  "batch_would_stop": true,
+  "quality_counts": {},
+  "examples": {
+   "classification_not_activated": [
+    {
+     "file": "CIK0001013589.json",
+     "name": "SHAMASH YACOV A",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001017832.json",
+     "name": "SUTTER MARTIN P",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001052438.json",
+     "name": "SUBOTNICK STUART",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001087712.json",
+     "name": "PALUMBO LISA M",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001099636.json",
+     "name": "MAFFEI GREGORY B",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001107218.json",
+     "name": "JEWS WILLIAM L",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001125972.json",
+     "name": "SCHWAB CHARLES R JR.",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001138538.json",
+     "name": "ERGEN CANTEY",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001180763.json",
+     "name": "GILL SIMBA",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    },
+    {
+     "file": "CIK0001182829.json",
+     "name": "KLEIN WARD M",
+     "reason": "classification_not_activated",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3",
+       "verdict": "person"
+      }
+     },
+     "probable_kind": "person"
+    }
+   ],
+   "classification_entity_undetermined": [
+    {
+     "file": "CIK0001510001.json",
+     "name": "Bexil Securities LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001666670.json",
+     "name": "RYPS, LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001675124.json",
+     "name": "Eclipse Continuity GP I, LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001808660.json",
+     "name": "QH Hungary Holdings Ltd",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001827977.json",
+     "name": "GTCR INVESTMENT XI LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002052113.json",
+     "name": "BlackRock Portfolio Management LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002088446.json",
+     "name": "Man Investments Finance Inc.",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002110854.json",
+     "name": "Blue Bird Capital Enterprises LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002128290.json",
+     "name": "Futurewave Capital Solutions Ltd",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002136751.json",
+     "name": "GPG MTIF, LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    }
+   ],
+   "classification_deferred": [
+    {
+     "file": "CIK0002137613.json",
+     "name": "Kapitalo SND Master Fundo de Investimento Multimercado",
+     "reason": "classification_deferred",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "4",
+       "verdict": "deferred"
+      }
+     },
+     "probable_kind": null
+    }
+   ]
+  }
+ },
+ "B": {
+  "label": "B: TEST INPUT - person verdict activated in memory only",
+  "reasons": {
+   "accepted:person": 287,
+   "classification_entity_undetermined": 12,
+   "classification_deferred": 1
+  },
+  "classification_verdicts": {
+   "person@step3": 287,
+   "entity_undetermined@step2": 12,
+   "deferred@step4": 1
+  },
+  "blocking_reasons": {},
+  "batch_would_stop": false,
+  "quality_counts": {},
+  "examples": {
+   "accepted": [
+    {
+     "file": "CIK0001013589.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "SHAMASH YACOV A"
+      }
+     },
+     "identifiers": {
+      "cik": "0001013589"
+     },
+     "provenance": {
+      "record_key": "0001013589",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001017832.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "SUTTER MARTIN P"
+      }
+     },
+     "identifiers": {
+      "cik": "0001017832"
+     },
+     "provenance": {
+      "record_key": "0001017832",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001052438.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "SUBOTNICK STUART"
+      }
+     },
+     "identifiers": {
+      "cik": "0001052438"
+     },
+     "provenance": {
+      "record_key": "0001052438",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001087712.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "PALUMBO LISA M"
+      }
+     },
+     "identifiers": {
+      "cik": "0001087712"
+     },
+     "provenance": {
+      "record_key": "0001087712",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001099636.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "MAFFEI GREGORY B"
+      }
+     },
+     "identifiers": {
+      "cik": "0001099636"
+     },
+     "provenance": {
+      "record_key": "0001099636",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001107218.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "JEWS WILLIAM L"
+      }
+     },
+     "identifiers": {
+      "cik": "0001107218"
+     },
+     "provenance": {
+      "record_key": "0001107218",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001125972.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "SCHWAB CHARLES R JR."
+      }
+     },
+     "identifiers": {
+      "cik": "0001125972"
+     },
+     "provenance": {
+      "record_key": "0001125972",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001138538.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "ERGEN CANTEY"
+      }
+     },
+     "identifiers": {
+      "cik": "0001138538"
+     },
+     "provenance": {
+      "record_key": "0001138538",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001180763.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "GILL SIMBA"
+      }
+     },
+     "identifiers": {
+      "cik": "0001180763"
+     },
+     "provenance": {
+      "record_key": "0001180763",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    },
+    {
+     "file": "CIK0001182829.json",
+     "kind": "person",
+     "fields": {
+      "legal_name": {
+       "op": "value",
+       "value": "KLEIN WARD M"
+      }
+     },
+     "identifiers": {
+      "cik": "0001182829"
+     },
+     "provenance": {
+      "record_key": "0001182829",
+      "adapter_version": "sec-submissions-owner-json-v1",
+      "quality": {
+       "version": "sec-person-quality-v1"
+      },
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "3"
+      }
+     }
+    }
+   ],
+   "classification_entity_undetermined": [
+    {
+     "file": "CIK0001510001.json",
+     "name": "Bexil Securities LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001666670.json",
+     "name": "RYPS, LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001675124.json",
+     "name": "Eclipse Continuity GP I, LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001808660.json",
+     "name": "QH Hungary Holdings Ltd",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0001827977.json",
+     "name": "GTCR INVESTMENT XI LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002052113.json",
+     "name": "BlackRock Portfolio Management LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002088446.json",
+     "name": "Man Investments Finance Inc.",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002110854.json",
+     "name": "Blue Bird Capital Enterprises LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002128290.json",
+     "name": "Futurewave Capital Solutions Ltd",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    },
+    {
+     "file": "CIK0002136751.json",
+     "name": "GPG MTIF, LLC",
+     "reason": "classification_entity_undetermined",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "2",
+       "verdict": "entity_undetermined"
+      }
+     },
+     "probable_kind": null
+    }
+   ],
+   "classification_deferred": [
+    {
+     "file": "CIK0002137613.json",
+     "name": "Kapitalo SND Master Fundo de Investimento Multimercado",
+     "reason": "classification_deferred",
+     "detail": {
+      "classification": {
+       "rule_id": "sec-person-candidate",
+       "version": "2026-09-30.1",
+       "step": "4",
+       "verdict": "deferred"
+      }
+     },
+     "probable_kind": null
+    }
+   ]
+  }
+ }
+}

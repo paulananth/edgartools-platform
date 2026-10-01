@@ -136,7 +136,7 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `classification` | Instead of a kind: the Mastering Policy rule that decides it: `kind`, `rule_id`, `version`. |
 | `identifiers` | `namespace: path`, e.g. `lei: firm.lei`. |
 | `identifier_formats` | `namespace: format`, from `FORMATS`. |
-| `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `COMPANY_NAMED_FIELDS` in `edgar_warehouse/mdm/clean/store.py`). |
+| `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `FIELDS` in `edgar_warehouse/mdm/clean/company_source.py`; for a kind with no field list in code, its consumer spec, e.g. `docs/specs/person/consumer.md`). |
 | `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. Only `address` takes components; every other field is one path. |
 | `field_shape` | `nullable_text`: every field is text or empty. |
 | `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. |

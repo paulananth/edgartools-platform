@@ -19,7 +19,7 @@ def _selection(parser):
 def _approve_rule(args):
     """One merge rule, switched on in the files on the operator's words. It
     only edits `merge/policy.yaml`: the merge version that carries it is a
-    separate save, test run and approval (the rules skill's Approve steps)."""
+    separate save, test run and approval (the Approve steps, skills/data-onboarding/APPROVE.md)."""
     from datetime import datetime, timezone
 
     if args.merge != "platform" or args.version or args.evidence or args.overrule:
@@ -43,7 +43,7 @@ def _handle(args):
     from .db import Rules, get_engine, migrate
     if args.rules_command == "approve" and args.rule:
         return _approve_rule(args)
-    if args.rules_command == "init":
+    if args.rules_command in ("init", "migrate"):
         owner = create_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
         try:
             result = migrate(owner, agent_role=args.agent_role)
@@ -53,8 +53,8 @@ def _handle(args):
         rules_engine = get_engine()
         rules = Rules(rules_engine)
         try:
-            if args.rules_command == "migrate":
-                method = rules.from_files if args.to_db else rules.to_files
+            if args.rules_command in ("load", "unload"):
+                method = rules.from_files if args.rules_command == "load" else rules.to_files
                 result = method(Path(args.root), args.version)
                 print(json.dumps(result, default=str, indent=2, sort_keys=True))
                 return 0
@@ -187,16 +187,20 @@ def _catalog(args):
 def register(subparsers):
     parser = subparsers.add_parser("rules", help="Versioned Rules files, approvals and configured run submission")
     commands = parser.add_subparsers(dest="rules_command", required=True)
-    init = commands.add_parser("init")
-    init.add_argument("--agent-role", default="rules_agent")
-    init.set_defaults(handler=_handle)
-    migration = commands.add_parser("migrate")
-    direction = migration.add_mutually_exclusive_group(required=True)
-    direction.add_argument("--to-db", action="store_true")
-    direction.add_argument("--to-files", action="store_true")
-    migration.add_argument("--root", required=True)
-    migration.add_argument("--version", required=True)
-    migration.set_defaults(handler=_handle)
+    # init and migrate both create or upgrade the Rules Database schema:
+    # "migrate" means a schema upgrade in every store (platform validation,
+    # operator 2026-09-30).
+    for name, help_text in (("init", "Create the Rules Database schema (first time; rerunning changes nothing)"),
+                            ("migrate", "Upgrade the Rules Database schema after a new migration file lands")):
+        schema = commands.add_parser(name, help=help_text)
+        schema.add_argument("--agent-role", default="rules_agent")
+        schema.set_defaults(handler=_handle)
+    load = commands.add_parser("load", help="Save every rules file under --root as a version in the Rules Database")
+    unload = commands.add_parser("unload", help="Write the Rules Database's versions back to files under --root")
+    for command in (load, unload):
+        command.add_argument("--root", required=True)
+        command.add_argument("--version", required=True)
+        command.set_defaults(handler=_handle)
     mapping = commands.add_parser(
         "mapdoc", help="The Mapping Documents (spreadsheets) generated from the rules files")
     mapping.add_argument("action", choices=("write", "diff", "check"),

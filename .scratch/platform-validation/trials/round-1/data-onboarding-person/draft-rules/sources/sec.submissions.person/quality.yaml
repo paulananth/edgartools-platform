@@ -1,0 +1,13 @@
+# Data quality for SEC Person submissions (DRAFT, cold trial person-feed-1).
+# Profile: 0 of 300 records lack a name; no placeholder reaches a mapped field.
+version: sec-person-quality-v1
+quality:
+  sec.submissions.person.v1:
+    fixes: []
+    checks:
+    # A critical data element: without it the record never merges and never
+    # stops the run (operator, 2026-09-28).
+    - id: name_present
+      test: present@1
+      value: fields.legal_name
+      on_fail: exception

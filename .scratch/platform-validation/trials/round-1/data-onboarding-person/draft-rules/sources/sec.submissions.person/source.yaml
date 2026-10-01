@@ -1,0 +1,59 @@
+# SEC Person (DRAFT, cold trial person-feed-1): the MDM mapping of SEC submissions
+# main documents (data.sec.gov/submissions/CIK##########.json) for Form 3/4/5
+# reporting owners. No reader: the mapping reads the raw JSON document.
+# A separate folder from sec.submissions.company, which reads silver landing
+# records for Company (ASSUMED, trial Q2). No bookkeeping section yet: that
+# is the Bookkeeping skill's, and no general silver writer exists (ticket 05).
+source: sec.submissions.person
+bronze:
+  family: submissions
+mdm:
+  sec.submissions.person.v1:
+    contract:
+      provider: SEC
+      family: submissions
+      schema_version: sec-submissions-owner-json-v1
+      record_key: zero-padded 10-digit CIK
+      publication_key: one captured submissions JSON file for one CIK (its sha256)
+      effective_time: unknown; the file carries no as-of time
+      semantics: patch
+      completeness: one file per CIK, the whole main document for that CIK; no retirement
+        by absence
+      # quality_name_present: a data quality exception never stops the run
+      # (operator, 2026-09-28). classification_deferred and
+      # classification_entity_undetermined: held back by the classification
+      # rule, never stop the run (operator, 2026-09-27). ~4% of these owners
+      # are entities (LLCs, funds): they are set aside, not Persons.
+      nonblocking_deferred_reasons:
+      - quality_name_present
+      - classification_deferred
+      - classification_entity_undetermined
+      adapter:
+        version: sec-submissions-owner-json-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        record_key:
+        - cik
+        record_key_format: sec_cik
+        # Not a fixed kind: SEC types every one of these "other", and 13 of 300
+        # are entities. Rule C-J (Person ticket 03) ported to this source's paths
+        # (ASSUMED, trial Q3); declared, not activated.
+        classification:
+          kind: person
+          rule_id: sec-person-candidate
+          version: 2026-09-30.1
+        # ein and lei are left out: they appear only on the entity records (7 ein,
+        # 5 of them 000000000; 1 lei), which never become Persons (ASSUMED, trial Q5).
+        identifiers:
+          cik: cik
+        identifier_formats:
+          cik: sec_cik
+        # legal_name: the SEC-registered name, first in Person's legal_name rank
+        # (docs/specs/person/consumer.md). Left out: addresses (never captured for
+        # a Person, same spec), formerNames (a list; nullable_text cannot hold it;
+        # name_variants is a new-field question, trial Q6), tickers (Security),
+        # phone (not a Person field). filings.recent names no issuer, so no
+        # relationship can be mapped from this file.
+        fields:
+          legal_name: name

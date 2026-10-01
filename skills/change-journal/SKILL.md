@@ -5,6 +5,14 @@ description: Initialize or migrate the fresh Change Journal store, or plan, vali
 
 # Change Journal
 
+**Modes:** init, migrate, plan, validate, deploy, status, recover-delivery.
+
+**Use another skill when:**
+- running a feed or resuming a run: use **bookkeeping** (**run**,
+  **recover**);
+- a feed is new, or its rules change: use **data-onboarding** or
+  **refining-rules**.
+
 Invoke `$change-journal init|migrate` for the whole fresh store, or
 `$change-journal plan|validate|deploy --source <source> --feed <feed>` for a
 specific feed. Only the feed-scoped modes require both identities. Preserve
@@ -118,7 +126,15 @@ Fresh connection flags create separate journal task families with a read-only
 status default. Existing workflows keep their original task bindings. Select
 a fresh task for an approved feed only after full replacement stages qualify.
 
-## Recovery and result
+## Status
+
+```bash
+uv run --extra mdm --extra s3 edgar-warehouse change-journal status --source <source> --feed <feed>
+uv run --extra mdm --extra s3 edgar-warehouse change-journal events --source <source> --feed <feed> --limit 20
+uv run --extra mdm --extra s3 edgar-warehouse change-journal verify <receipt>
+```
+
+## Recover delivery
 
 Confirm commands through `edgar-warehouse change-journal --help`. Inspection is
 bounded. Receipt verification proves durable envelope delivery; the owning
@@ -126,6 +142,8 @@ artifact or MDM verifier proves business effects. `change-journal recover
 bookkeeping <run-id> --limit <bound>` delivers committed intent only. MDM
 recovery uses `recover mdm <batch-id> --worker <worker>` and the owning fence.
 Neither silently executes new provider work or redirects historical backlog.
+
+## Result
 
 Report mode, source/feed, exact members, retained bundles/root run, verified
 counts, receipts, backlog and remaining gaps. Keep planning, isolated

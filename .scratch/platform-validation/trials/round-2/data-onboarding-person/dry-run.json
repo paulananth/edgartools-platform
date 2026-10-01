@@ -1,0 +1,268 @@
+{
+ "as_written": {
+  "accepted": 0,
+  "deferred": {
+   "classification_not_activated": 287,
+   "classification_entity_undetermined": 12,
+   "classification_deferred": 1
+  },
+  "blocking": {
+   "classification_not_activated": 287
+  },
+  "quality_counts": {},
+  "examples_deferred": {
+   "classification_not_activated": [
+    [
+     "SHAMASH YACOV A",
+     "3",
+     "person"
+    ],
+    [
+     "SUTTER MARTIN P",
+     "3",
+     "person"
+    ],
+    [
+     "SUBOTNICK STUART",
+     "3",
+     "person"
+    ],
+    [
+     "PALUMBO LISA M",
+     "3",
+     "person"
+    ],
+    [
+     "MAFFEI GREGORY B",
+     "3",
+     "person"
+    ],
+    [
+     "JEWS WILLIAM L",
+     "3",
+     "person"
+    ],
+    [
+     "SCHWAB CHARLES R JR.",
+     "3",
+     "person"
+    ],
+    [
+     "ERGEN CANTEY",
+     "3",
+     "person"
+    ],
+    [
+     "GILL SIMBA",
+     "3",
+     "person"
+    ],
+    [
+     "KLEIN WARD M",
+     "3",
+     "person"
+    ]
+   ],
+   "classification_entity_undetermined": [
+    [
+     "Bexil Securities LLC",
+     "2",
+     null
+    ],
+    [
+     "RYPS, LLC",
+     "2",
+     null
+    ],
+    [
+     "Eclipse Continuity GP I, LLC",
+     "2",
+     null
+    ],
+    [
+     "QH Hungary Holdings Ltd",
+     "2",
+     null
+    ],
+    [
+     "GTCR INVESTMENT XI LLC",
+     "2",
+     null
+    ],
+    [
+     "BlackRock Portfolio Management LLC",
+     "2",
+     null
+    ],
+    [
+     "Man Investments Finance Inc.",
+     "2",
+     null
+    ],
+    [
+     "Blue Bird Capital Enterprises LLC",
+     "2",
+     null
+    ],
+    [
+     "Futurewave Capital Solutions Ltd",
+     "2",
+     null
+    ],
+    [
+     "GPG MTIF, LLC",
+     "2",
+     null
+    ]
+   ],
+   "classification_deferred": [
+    [
+     "Kapitalo SND Master Fundo de Investimento Multimercado",
+     "4",
+     null
+    ]
+   ]
+  },
+  "examples_accepted": []
+ },
+ "TEST_INPUT_person_verdict_on": {
+  "accepted": 287,
+  "deferred": {
+   "classification_entity_undetermined": 12,
+   "classification_deferred": 1
+  },
+  "blocking": {},
+  "quality_counts": {},
+  "examples_deferred": {
+   "classification_entity_undetermined": [
+    [
+     "Bexil Securities LLC",
+     "2",
+     null
+    ],
+    [
+     "RYPS, LLC",
+     "2",
+     null
+    ],
+    [
+     "Eclipse Continuity GP I, LLC",
+     "2",
+     null
+    ],
+    [
+     "QH Hungary Holdings Ltd",
+     "2",
+     null
+    ],
+    [
+     "GTCR INVESTMENT XI LLC",
+     "2",
+     null
+    ],
+    [
+     "BlackRock Portfolio Management LLC",
+     "2",
+     null
+    ],
+    [
+     "Man Investments Finance Inc.",
+     "2",
+     null
+    ],
+    [
+     "Blue Bird Capital Enterprises LLC",
+     "2",
+     null
+    ],
+    [
+     "Futurewave Capital Solutions Ltd",
+     "2",
+     null
+    ],
+    [
+     "GPG MTIF, LLC",
+     "2",
+     null
+    ]
+   ],
+   "classification_deferred": [
+    [
+     "Kapitalo SND Master Fundo de Investimento Multimercado",
+     "4",
+     null
+    ]
+   ]
+  },
+  "examples_accepted": [
+   {
+    "source_code": "sec.submissions.person.v1",
+    "record_key": "0001013589",
+    "publication_key": "dry-run",
+    "revision": 0,
+    "schema_version": "sec-submissions-person-json-v1",
+    "effective_at": null,
+    "kind": "person",
+    "subject": "00f53532c09c28fa39caac1c0d58d7d9cbe636374c23e84908bb4377b7239d32",
+    "fields": {
+     "legal_name": {
+      "op": "value",
+      "value": "SHAMASH YACOV A"
+     }
+    },
+    "identifiers": {
+     "cik": "0001013589"
+    },
+    "profiles": [],
+    "relationships": [],
+    "provenance": {
+     "record_key": "0001013589",
+     "adapter_version": "sec-submissions-person-json-v1",
+     "quality": {
+      "version": "sec-person-quality-v1"
+     },
+     "classification": {
+      "rule_id": "sec-person-candidate",
+      "version": "2026-09-30.1",
+      "step": "3"
+     }
+    },
+    "assertion_id": "546f93aa0a3f9ea7a5082cf771309946d7f52127650d28c9a18ba0fa7b8343b7"
+   },
+   {
+    "source_code": "sec.submissions.person.v1",
+    "record_key": "0001017832",
+    "publication_key": "dry-run",
+    "revision": 0,
+    "schema_version": "sec-submissions-person-json-v1",
+    "effective_at": null,
+    "kind": "person",
+    "subject": "3de290197a180e747b132c449d4b26aaf19a0a25ee9ba450d5ff311b6d523436",
+    "fields": {
+     "legal_name": {
+      "op": "value",
+      "value": "SUTTER MARTIN P"
+     }
+    },
+    "identifiers": {
+     "cik": "0001017832"
+    },
+    "profiles": [],
+    "relationships": [],
+    "provenance": {
+     "record_key": "0001017832",
+     "adapter_version": "sec-submissions-person-json-v1",
+     "quality": {
+      "version": "sec-person-quality-v1"
+     },
+     "classification": {
+      "rule_id": "sec-person-candidate",
+      "version": "2026-09-30.1",
+      "step": "3"
+     }
+    },
+    "assertion_id": "b4cc65ab6b7d198aed199357f5ab4f56d62cf4c3e125c89a0a431885ea33702a"
+   }
+  ]
+ }
+}

@@ -63,7 +63,7 @@ activate. Script: the session scratchpad `step1_walk.py`. Every stop:
   sets `proven`, and the trigger refuses a failing one. Nothing keeps the
   evidence of a failed run.
 - **Nothing produces a real proof.** The acquisition evidence above was built
-  by hand. `skills/bookkeeping/DEPLOY.md` names "the evaluator's real
+  by hand. `skills/bookkeeping/RUN.md` (was DEPLOY.md) names "the evaluator's real
   exact-digest proof", but no code writes one, and the proof has no place for
   the counts and examples the operator reads (skill step 8). This ticket adds
   `proof.evidence` (counts and examples) and shows it; a command that writes

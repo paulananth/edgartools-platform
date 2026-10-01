@@ -1,0 +1,515 @@
+{
+  "batch_hash": "b8553e6f16bd758239bff49187d83420c79de47c954abd09aed4dff0aa06b446",
+  "files_pinned": 7001,
+  "submissions_documents": 7000,
+  "pin_mismatches": 0,
+  "all_filers": {
+    "n": 7000,
+    "flags": {
+      "business_postcode_present": 659
+    },
+    "exceptions": {},
+    "postcode_flagged": 659,
+    "postcode_breakdown": {
+      "US": 78,
+      "foreign": 322,
+      "country_unknown": 259
+    }
+  },
+  "mdm_receives": {
+    "assertions": 6414,
+    "deferred": 586,
+    "deferred_reasons": {
+      "classification_deferred": 586
+    },
+    "quality_counts": {
+      "fixed:dc_state_is_empty": 4,
+      "fixed:standard_address": 5588,
+      "fixed:state_from_name_tag": 11,
+      "flagged:business_postcode_present": 403,
+      "withheld:matching.address": 6
+    },
+    "postcode_flagged": 403,
+    "postcode_breakdown": {
+      "US": 77,
+      "foreign": 320,
+      "country_unknown": 6
+    }
+  },
+  "repo_v1_quality_counts": {
+    "fixed:dc_state_is_empty": 4,
+    "fixed:standard_address": 5588,
+    "fixed:state_from_name_tag": 11,
+    "withheld:matching.address": 6
+  },
+  "before_after": {
+    "same_assertion_count": true,
+    "records_differing_other_than_new_flag": 0,
+    "records_gaining_flag": 403
+  },
+  "controls": {
+    "TEST INPUT: address without postcode": [
+      "business_postcode_present"
+    ],
+    "TEST INPUT: address with postcode": [],
+    "TEST INPUT: no business address": [
+      "business_postcode_present"
+    ]
+  },
+  "examples_all_filers": [
+    {
+      "cik": "0001000694",
+      "name": "NOVAVAX INC",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "21 FIRSTFIELD RD",
+        "street2": null,
+        "city": "GAITHERSBURG",
+        "region": "MD",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "MD"
+    },
+    {
+      "cik": "0001004156",
+      "name": "ARAUCO & CONSTITUTION PULP INC",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "EL GOLF NO 150",
+        "street2": "14TH FL.",
+        "city": "SANTIAGO",
+        "region": null,
+        "postal_code": null,
+        "country": "CL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0000100493",
+      "name": "TYSON FOODS, INC.",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "2200 W. DON TYSON PARKWAY",
+        "street2": null,
+        "city": "SPRINGDALE",
+        "region": "AR",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "AR"
+    },
+    {
+      "cik": "0001005516",
+      "name": "BOS BETTER ONLINE SOLUTIONS LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "20 FREIMAN STREET",
+        "street2": null,
+        "city": "RISHON LEZION",
+        "region": null,
+        "postal_code": null,
+        "country": "IL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001007587",
+      "name": "KVH INDUSTRIES INC \\DE\\",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "500 WOOD STREET",
+        "street2": "UNIT 320, 1ST FL",
+        "city": "BRISTOL",
+        "region": "RI",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "RI"
+    },
+    {
+      "cik": "0001009001",
+      "name": "CAMECO CORP",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "2121 11TH ST W",
+        "street2": null,
+        "city": "SASKATOON",
+        "region": null,
+        "postal_code": null,
+        "country": "CA"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001015650",
+      "name": "SK TELECOM CO LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "11, EULJIRO2-GA",
+        "street2": "JUNG-GU",
+        "city": "SEOUL",
+        "region": null,
+        "postal_code": null,
+        "country": "KR"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001016817",
+      "name": "SMITH DAVID D",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": null,
+        "street2": null,
+        "city": null,
+        "region": null,
+        "postal_code": null,
+        "country": null
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001023514",
+      "name": "HARMONY GOLD MINING CO LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "RANDFONTEIN OFFICE PARK",
+        "street2": "CAR MAIN REEF ROAD AND WARD AVENUE",
+        "city": "RANDFONTEIN",
+        "region": null,
+        "postal_code": null,
+        "country": "ZA"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001023582",
+      "name": "OBRIEN JAMES J /KY",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": null,
+        "street2": null,
+        "city": null,
+        "region": null,
+        "postal_code": null,
+        "country": null
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    }
+  ],
+  "examples_mdm_receives": [
+    {
+      "cik": "0001000694",
+      "name": "NOVAVAX INC",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "21 FIRSTFIELD RD",
+        "street2": null,
+        "city": "GAITHERSBURG",
+        "region": "MD",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "MD"
+    },
+    {
+      "cik": "0001004156",
+      "name": "ARAUCO & CONSTITUTION PULP INC",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "EL GOLF NO 150",
+        "street2": "14TH FL.",
+        "city": "SANTIAGO",
+        "region": null,
+        "postal_code": null,
+        "country": "CL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0000100493",
+      "name": "TYSON FOODS, INC.",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "2200 W. DON TYSON PARKWAY",
+        "street2": null,
+        "city": "SPRINGDALE",
+        "region": "AR",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "AR"
+    },
+    {
+      "cik": "0001005516",
+      "name": "BOS BETTER ONLINE SOLUTIONS LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "20 FREIMAN STREET",
+        "street2": null,
+        "city": "RISHON LEZION",
+        "region": null,
+        "postal_code": null,
+        "country": "IL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001007587",
+      "name": "KVH INDUSTRIES INC \\DE\\",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "500 WOOD STREET",
+        "street2": "UNIT 320, 1ST FL",
+        "city": "BRISTOL",
+        "region": "RI",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "RI"
+    },
+    {
+      "cik": "0001009001",
+      "name": "CAMECO CORP",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "2121 11TH ST W",
+        "street2": null,
+        "city": "SASKATOON",
+        "region": null,
+        "postal_code": null,
+        "country": "CA"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001015650",
+      "name": "SK TELECOM CO LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "11, EULJIRO2-GA",
+        "street2": "JUNG-GU",
+        "city": "SEOUL",
+        "region": null,
+        "postal_code": null,
+        "country": "KR"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001023514",
+      "name": "HARMONY GOLD MINING CO LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "RANDFONTEIN OFFICE PARK",
+        "street2": "CAR MAIN REEF ROAD AND WARD AVENUE",
+        "city": "RANDFONTEIN",
+        "region": null,
+        "postal_code": null,
+        "country": "ZA"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001024672",
+      "name": "ELTEK LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "BEN ZION GALIS 20",
+        "street2": null,
+        "city": "PETAH TIKVA",
+        "region": null,
+        "postal_code": null,
+        "country": "IL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001026785",
+      "name": "HIGHWAY HOLDINGS LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "LEVEL 18 LANDMARK N 39 LUNG SUM AVE",
+        "street2": "STE 1801",
+        "city": "SHEUNG SHUI",
+        "region": null,
+        "postal_code": null,
+        "country": "CN"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    }
+  ],
+  "examples_mdm_address_without_postcode": [
+    {
+      "cik": "0001000694",
+      "name": "NOVAVAX INC",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "21 FIRSTFIELD RD",
+        "street2": null,
+        "city": "GAITHERSBURG",
+        "region": "MD",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "MD"
+    },
+    {
+      "cik": "0001004156",
+      "name": "ARAUCO & CONSTITUTION PULP INC",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "EL GOLF NO 150",
+        "street2": "14TH FL.",
+        "city": "SANTIAGO",
+        "region": null,
+        "postal_code": null,
+        "country": "CL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0000100493",
+      "name": "TYSON FOODS, INC.",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "2200 W. DON TYSON PARKWAY",
+        "street2": null,
+        "city": "SPRINGDALE",
+        "region": "AR",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "AR"
+    },
+    {
+      "cik": "0001005516",
+      "name": "BOS BETTER ONLINE SOLUTIONS LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "20 FREIMAN STREET",
+        "street2": null,
+        "city": "RISHON LEZION",
+        "region": null,
+        "postal_code": null,
+        "country": "IL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001007587",
+      "name": "KVH INDUSTRIES INC \\DE\\",
+      "entity_type": "operating",
+      "business_address_mapped": {
+        "street": "500 WOOD STREET",
+        "street2": "UNIT 320, 1ST FL",
+        "city": "BRISTOL",
+        "region": "RI",
+        "postal_code": null,
+        "country": "US"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": "RI"
+    },
+    {
+      "cik": "0001009001",
+      "name": "CAMECO CORP",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "2121 11TH ST W",
+        "street2": null,
+        "city": "SASKATOON",
+        "region": null,
+        "postal_code": null,
+        "country": "CA"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001015650",
+      "name": "SK TELECOM CO LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "11, EULJIRO2-GA",
+        "street2": "JUNG-GU",
+        "city": "SEOUL",
+        "region": null,
+        "postal_code": null,
+        "country": "KR"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001023514",
+      "name": "HARMONY GOLD MINING CO LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "RANDFONTEIN OFFICE PARK",
+        "street2": "CAR MAIN REEF ROAD AND WARD AVENUE",
+        "city": "RANDFONTEIN",
+        "region": null,
+        "postal_code": null,
+        "country": "ZA"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001024672",
+      "name": "ELTEK LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "BEN ZION GALIS 20",
+        "street2": null,
+        "city": "PETAH TIKVA",
+        "region": null,
+        "postal_code": null,
+        "country": "IL"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    },
+    {
+      "cik": "0001026785",
+      "name": "HIGHWAY HOLDINGS LTD",
+      "entity_type": "other",
+      "business_address_mapped": {
+        "street": "LEVEL 18 LANDMARK N 39 LUNG SUM AVE",
+        "street2": "STE 1801",
+        "city": "SHEUNG SHUI",
+        "region": null,
+        "postal_code": null,
+        "country": "CN"
+      },
+      "raw_zip": null,
+      "raw_state_or_country": null
+    }
+  ]
+}
