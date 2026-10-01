@@ -1,7 +1,7 @@
 # Correct an incorrect Company link
 
 Type: task
-Status: built, reviewed, both readings confirmed (PR #748); merge on the operator's word
+Status: done, merged #748 (2026-09-29)
 Blocked by: 09, 10
 Blocks: activation of the SEC-to-GLEIF name matching rules
 

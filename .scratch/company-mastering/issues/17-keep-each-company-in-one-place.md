@@ -1,7 +1,7 @@
 # Keep each Company in one place
 
 Type: task
-Status: built and reviewed; PR (Claude, branch `claude/company-mastering-17-company-one-place`)
+Status: done, merged #751 (2026-09-29)
 Blocked by: none
 Blocks: Phase 2 of the Proving Run (ticket 05) at whole-population scale
 

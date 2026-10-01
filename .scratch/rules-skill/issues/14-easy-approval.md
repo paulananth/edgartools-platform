@@ -1,7 +1,7 @@
 # Approve a source or one rule by saying so, on its test evidence
 
 Type: task
-Status: in progress (Claude, branch `claude/rules-14-easy-approval`, 2026-09-29 18:15 ET)
+Status: done, merged #757 (2026-09-29)
 Blocked by: nothing
 Blocks: the GLEIF and SEC fixes of company mastering ticket 18 taking effect;
 ticket 20's approval
