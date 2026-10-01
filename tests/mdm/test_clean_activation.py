@@ -773,8 +773,10 @@ class TestTheNameMatchingRules:
 
     def test_an_activation_needs_the_operators_approval(self):
         unapproved = copy.deepcopy(POLICY)
-        for entry in unapproved["automatic_rules"][2:]:
-            entry["proof"] = {**entry["proof"], "approved_by": None}
+        # Every measured activation: both name rules and Person's classification.
+        for entry in unapproved["automatic_rules"]:
+            if entry["activation"] == "measured" and entry["rule_id"] != "sec-company-candidate":
+                entry["proof"] = {**entry["proof"], "approved_by": None}
         with pytest.raises(Conflict, match="lacks its approval"):
             check_policy(unapproved)
 
@@ -849,9 +851,10 @@ def test_kinds_that_read_one_namespace_differently_are_refused():
     kind that declares one, so their contracts must agree."""
     body = copy.deepcopy(POLICY)
     company = body["kinds"]["company"]
-    body["kinds"]["person"] = {"identifiers": {"cik": {**company["identifiers"]["cik"],
-                                                       "normalizer": "normalize_identifier@lei-v1"}}}
+    person = body["kinds"]["person"]
+    agreed = person["identifiers"]["cik"]
+    person["identifiers"] = {"cik": {**agreed, "normalizer": "normalize_identifier@lei-v1"}}
     with pytest.raises(Conflict, match="different authority or normalizer"):
         check_policy(body)
-    body["kinds"]["person"]["identifiers"]["cik"]["normalizer"] = company["identifiers"]["cik"]["normalizer"]
+    person["identifiers"]["cik"] = agreed
     check_policy(body)
