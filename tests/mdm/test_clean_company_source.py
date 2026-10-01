@@ -418,7 +418,8 @@ class TestTheCompanyRule:
         from edgar_warehouse.rules import files
 
         file = files.ROOT / "merge" / "kinds" / "company.yaml"
-        assert set(company_source.POLICY["kinds"]) == {"company"}
+        # Other kinds may sit beside it (platform validation 05a).
+        assert "company" in company_source.POLICY["kinds"]
         assert company_source.POLICY["kinds"]["company"] == files.load(file)
         assert company_source.POLICY["kinds"]["company"]["defaults"]["sources"] == [
             "sec.submissions.company.v1",

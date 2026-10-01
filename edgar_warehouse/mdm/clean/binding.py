@@ -180,25 +180,33 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
     }
 
 
-def _contract(policy: dict, namespace: str) -> tuple[dict, dict] | None:
-    """The namespace's Identifier Contract and the kind block declaring it."""
-    for block in (policy.get("kinds") or {}).values():
-        contract = (block.get("identifiers") or {}).get(namespace)
-        if contract:
-            return contract, block
-    return None
+def _contracts(policy: dict, namespace: str) -> list[tuple[dict, dict]]:
+    """Every kind's Identifier Contract for the namespace, with its kind block.
+
+    One authority issues each value once, whichever kind reads it: SEC gives a
+    CIK to a Company or a Person, never both (platform validation 05a).
+    `check_policy` refuses contracts that disagree on authority or normalizer.
+    """
+    return [
+        (contract, block)
+        for block in (policy.get("kinds") or {}).values()
+        if (contract := (block.get("identifiers") or {}).get(namespace))
+    ]
 
 
 def _issuers(policy: dict, namespace: str) -> list[str]:
-    declared = _contract(policy, namespace)
-    return list(declared[0]["sources"]) if declared else []
+    """The sources whose records hold the namespace, across every kind. A CIK
+    one kind holds therefore sends another kind's record to review
+    (`incompatible_identifier_kind`) instead of creating a second entity."""
+    return sorted({s for contract, _ in _contracts(policy, namespace) for s in contract["sources"]})
 
 
 def _normal(policy: dict, namespace: str, value: str) -> str:
-    declared = _contract(policy, namespace)
-    if declared is None:
+    declared = _contracts(policy, namespace)
+    if not declared:
         return value
-    contract, block = declared
+    # Any kind's contract will do: `check_policy` holds them to one normalizer.
+    contract, block = declared[0]
     return normalizer(contract["normalizer"], block)(value)
 
 
