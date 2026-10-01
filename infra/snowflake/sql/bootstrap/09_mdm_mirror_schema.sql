@@ -2,8 +2,8 @@
 --
 -- A frozen snapshot. Its generator (generate_mdm_mirror_ddl.py) and the
 -- legacy MDM models it read were deleted (platform validation 2a/2b,
--- 2026-09-30). The live dashboard still reads these tables.
--- Regenerate and diff before re-applying if the MDM models have changed.
+-- 2026-09-30). Nothing in the kept code reads these tables; the installer
+-- still creates them until the live-AWS/Snowflake teardown decides their fate.
 --
 -- Root cause this file exists to fix: EDGARTOOLS_PROD.MDM (the mirror
 -- edgar_warehouse.mdm.export._build_snowflake_mirror_writer writes to, and

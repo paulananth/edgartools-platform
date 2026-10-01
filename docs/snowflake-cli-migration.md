@@ -1,5 +1,11 @@
 # Snowflake CLI Migration & SQL Execution Best Practices
 
+> **Note (platform validation 2b, 2026-09-30):** `scripts/verify-pr1/` and
+> `scripts/test/smoke-test-single-cik.sh` were deleted with the retired AWS
+> pipeline. The `snow_sql_file()` helper this doc recommends is in git history
+> (`git show b8385a31:scripts/verify-pr1/00_lib.sh`); the advice on `snow`
+> versus `snowsql` still holds.
+
 **Status**: Active &middot; **Scope**: `scripts/verify-pr1/` and any future helper scripts that apply Snowflake DDL/DML from `.sql` files.
 
 This document captures the migration from legacy `snowsql` to the modern `snow` CLI, the eventual switch to the Python connector for files containing Snowflake Scripting blocks, and the SQL-tokenizer requirements that fall out of both.

@@ -95,9 +95,11 @@ Local runs, each under 5 minutes:
   (2026-09-30 21:00 ET)
 - [x] Deleted or trimmed the 12 test files that read them; the rest of
   `tests/architecture` + `tests/unit` pass (643 passed, 2026-09-30 20:58 ET)
-- [x] Kept, because they provision live things the dashboard still reads:
-  `install-neo4j-graph-app.sh`, the installer's mirror + graph schema stage,
-  `09_mdm_mirror_schema.sql` (header now says it is a frozen snapshot)
+- [x] Kept: `install-neo4j-graph-app.sh` and the installer's mirror + graph
+  schema stage, because the live dashboard reads `NEO4J_GRAPH_MIGRATION`
+  (`serving/dashboard_workflows.py`); `09_mdm_mirror_schema.sql` stays with
+  that stage, its header now saying it is a frozen snapshot that nothing in
+  the kept code reads
 - [x] `bootstrap-prod-mdm.sh`: no longer hands ownership of every MDM table
   to `application` (an owner bypasses Clean MDM's grants) or grants DML on
   `public`; its connectivity check reads the new one-line report. Verified
@@ -128,11 +130,35 @@ Local runs, each under 5 minutes:
   schema, only on the operator's word
 - [ ] ~~Drop legacy tables in the hosted Snowflake Postgres MDM~~ deferred:
   only on the operator's word for that database
-- [ ] Three-axis `/code-review`
+- [x] Three-axis `/code-review` (2026-09-30 21:19 ET):
+  - **GoF:** leave it.
+  - **Standards:** fixed the stale header line in `09_mdm_mirror_schema.sql`,
+    the gateway docstring naming a deleted script, and leftover "this fix"
+    wording in the installer; added a note to `docs/snowflake-cli-migration.md`.
+    The stranded graph-review dashboard and Terraform comments are follow-ups.
+  - **Spec:** fixed `TODOS.md` (note at the top), the installer's references
+    to a stage that no longer exists, and the unsupported "the dashboard
+    reads these tables" claim. Confirmed no `.tf` change and no live action;
+    `bootstrap-prod-mdm.sh` matches `store.migrate`'s grant model.
 - [ ] PR, CI green, merge on the operator's word
 
 ## Follow-ups found (not built here)
 
+- The live `MDM_GRAPH_DASHBOARD` Streamlit app keeps running on the files
+  already uploaded, but its source (`infra/snowflake/mdm_dashboard/`) is
+  deleted, so it can no longer be redeployed, and its data
+  (`MDM_GRAPH_REVIEW`) has no writer. Its Terraform module, grants SQL and
+  `check-dashboard-acceptance.py` views still name it. Retire it in the
+  teardown, on the operator's word.
+- The two deleted GitHub workflows stopped a weekly AWS cost cron. Its
+  Python was already deleted in 2a, so it could no longer have run.
+- Terraform comments and output descriptions still say "created by
+  deploy-aws-application.sh" (`warehouse_runtime/main.tf`, prod
+  `outputs.tf`, `scheduled_*.tf`). Fix them in the teardown, since the
+  ruling leaves Terraform untouched here.
+- `docs/aws-mdm-snowflake-postgres-cutover.md` and
+  `docs/prod-mdm-snowflake-graph-first-load.md` still name deleted scripts;
+  both carry the "Retired" banner.
 - Teardown of live AWS: the EventBridge schedules
   (`scheduled_daily_incremental.tf`, `scheduled_fence_monitor.tf`), the Step
   Functions state machines and ECS task definitions they start. They run

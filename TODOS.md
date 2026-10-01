@@ -1,5 +1,9 @@
 # TODOS
 
+> **Note (platform validation 2b, 2026-09-30):** `infra/scripts/deploy-aws-application.sh`
+> and the AWS pipeline it deployed were retired. Entries below that name it are
+> history; do not run them.
+
 Outstanding items surfaced during reviews or planning. Each entry has enough
 context to act without re-reading the source session.
 
