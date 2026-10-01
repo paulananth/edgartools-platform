@@ -60,7 +60,7 @@ GLEIF_DIR = Path.home() / ".local/share/edgartools/clean-mdm/research/gleif-2026
 ARCHIVE = GLEIF_DIR / "01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip"
 ARCHIVE_SHA256 = "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
 AS_OF = "2026-09-29T15:00:00+00:00"
-# A batch request is capped at 16 MiB (`commit_batch_core`); each GLEIF
+# A batch request is capped at 16 MiB (`write_batch`); each GLEIF
 # assertion carries its native record, so 1,000 of them came to 43 MB.
 GLEIF_BATCH = 200
 NAMED = {"0000320193": "Apple", "0000789019": "Microsoft", "0001306965": "Shell", "0000937966": "ASML"}

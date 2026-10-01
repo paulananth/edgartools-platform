@@ -47,22 +47,38 @@ Status: in progress (Claude, branch `claude/mdm-rebaseline-slice3`)
 
 ## Checklist
 
-- [ ] Dump the final schema of migrations 023–043 from a fresh PG16
-- [ ] GoF consult on `store.migrate` and the save functions
-- [ ] Build `001_mdm.sql`: renames, `write_batch`, generated per-kind
-  views, comments on everything
-- [ ] `store.py`: one baseline, new names in the grant list, refuse an
-  `mdm_v2` store
-- [ ] Every `mdm_v2` and old table name in `edgar_warehouse/`, `tests/`,
-  `skills/`, `docs/`, `AGENTS.md`, `rules/`, and the scripts that will run
-  (`27_proving_run.py`, the round-2 Person trial)
-- [ ] Comment-coverage test: every table, column, view and function in
-  `mdm` has a comment
-- [ ] Fresh PG16 from zero: only `mdm`, no `mdm_v2`, no `public.mdm_*`
-- [ ] Unit and MDM tests; each integration file under 5 minutes
-- [ ] Ticket 27 Proving Run on the new schema: same counts (6,414
-  Companies, 3,052 with CIK and LEI, second pass unchanged)
-- [ ] Three-axis `/code-review`
+- [x] Dump the final schema of migrations 023–043 from a fresh PG16
+  (2026-09-30 22:05 ET)
+- [x] GoF consult on `store.migrate` and the save functions: leave the
+  structure; drop `FUNCTION_MIGRATION` (2026-09-30 22:10 ET)
+- [x] Build `001_mdm.sql`: renames, `write_batch`, generated per-kind
+  views, comments on everything. Structural diff against the old schema
+  (renames applied): every table, key, reference, index, trigger and view
+  identical; only the intended functions differ (2026-09-30 22:45 ET)
+- [x] `store.py`: one baseline, `RUNTIME_FUNCTIONS` with the new names,
+  refuses an `mdm_v2` store (test) (2026-09-30 23:00 ET)
+- [x] Every `mdm_v2` and old table name in code, tests, skills, docs and the
+  two scripts that run. Dated reviews keep their names, with a note
+  (2026-09-30 23:10 ET)
+- [x] Comment-coverage test: `test_mdm_schema_comments.py`, 4 passed
+  (2026-10-01 00:12 ET)
+- [x] Fresh PG16 from zero: only `mdm` (21 tables, 33 views, 20 functions),
+  no `mdm_v2`, no `public.mdm_*` (test)
+- [x] Unit, MDM and architecture tests: 1,123 passed. Each MDM integration
+  file under 5 minutes: 16 files, all passed after two test fixes
+  (a `source_*` pattern that now matched `source_reading`; a test of the
+  deleted 033 kind-list guard, replaced by "every kind has its views")
+  (2026-09-30 23:40 ET)
+- [x] Ticket 27 Proving Run on the new schema: 6,414 Companies, 3,052 with
+  CIK and LEI, second pass unchanged; every count in the report equals the
+  pre-slice-3 report. **Took 19 min 10 s** (2026-10-01 00:05 ET)
+- [x] Three-axis `/code-review` (2026-10-01 00:30 ET): GoF "leave it" (the
+  merge removes the axis that changed in 14 of 17 old migrations);
+  Standards: three comments corrected, Company checks and two indexes
+  renamed, a populated-store migrate test added; Spec: living specs and the
+  Proving Run script renamed, a fresh-store `stage_waiting` test restored
+  (the deleted 036 test was its only database check). Database error
+  messages keep their wording: callers and tests match on it.
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Recreate the operator's `edgartools-clean-mdm-pg16`: only on their
   word, after merge

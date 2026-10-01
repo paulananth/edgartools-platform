@@ -388,3 +388,40 @@ def test_the_master_field_view_carries_the_kind_version_beside_the_digest(databa
     assert re.fullmatch(r"[0-9a-f]{64}", field.policy_digest)
 
 
+
+
+def test_stage_waiting_shows_every_waiting_record_with_its_probable_kind(database):
+    """A record no kind accepted waits in the Stage with the kind it probably
+    is, whether or not a classification step named one; an accepted record
+    is not waiting."""
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+
+    def waiting(line, **probable):
+        return deferred_record(
+            source_code="fixture.primary",
+            publication_key="p1",
+            record_locator=f"line:{line}",
+            schema_version="1",
+            reason="classification_deferred",
+            raw_record={"key": f"wait-{line}"},
+            provenance={
+                "adapter_version": "v1",
+                "classification": {"rule_id": "r", "version": "1", "step": "6", "verdict": "deferred"},
+            },
+            **probable,
+        )
+
+    core.apply(
+        database,
+        1,
+        assertions=[core.source(key="accepted", fields={"name": "Acme"})],
+        deferred=[waiting(1, probable_kind="person"), waiting(2)],
+    )
+    with database.application.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT record_locator, probable_kind, reason, rule_id, rule_step "
+            "FROM mdm.stage_waiting ORDER BY record_locator")).all()
+    assert [tuple(r) for r in rows] == [
+        ("line:1", "person", "classification_deferred", "r", "6"),
+        ("line:2", None, "classification_deferred", "r", "6"),
+    ]

@@ -132,7 +132,7 @@ not classification evidence; rule C-J and the Person normalizer read
 Flags, `entityType = 'other'` and deputization text are **evidence, never
 deciders** — `other` is 71% person and "10%-only" is 72% entity, so neither may
 decide. Category, asserted legal form and inferred kind are recorded separately
-in `assertion.body` with rule id and version (`domain-model.md:41-44`); a kind
+in `source_reading.body` with rule id and version (`domain-model.md:41-44`); a kind
 correction is review plus bounded rebuild, never a merge.
 
 The **entity arm is gated**: its post-hoc guards must be re-measured in
@@ -389,7 +389,7 @@ Legacy closed `IS_INSIDER` only when properties differed
   accepted with its consumer enabled. Covers unaccepted issuer Companies,
   unaccepted ADV firms, holdings and `MANAGES_FUND`. Legacy dropped these
   silently (`pipeline.py:1890`).
-- **Steward decisions** carry actor and reason; `commit_batch` rejects a
+- **Steward decisions** carry actor and reason; `save_batch` rejects a
   decision without them (foundation).
 
 ## Cadence and processing

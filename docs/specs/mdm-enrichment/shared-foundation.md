@@ -124,9 +124,9 @@ be released; see [release gates](#release-gates).
 spec owns it per the program's spec-index,
 [ticket 09](../../../.scratch/mdm-enrichment-shared-foundation/issues/09-confirm-generic-legal-entity-registry-representation.md)).
 There is no separate registry. `mdm.master_entity.kind` already admits
-`international_organization`; such an entity is one `identity` row, its
-bound `assertion` rows (names, addresses, legal form, status, identifiers,
-lifecycle, relationships), and one `projection` row — the same shape as
+`international_organization`; such an entity is one `master_entity` row, its
+bound `source_reading` rows (names, addresses, legal form, status, identifiers,
+lifecycle, relationships), and one `current_record` row — the same shape as
 Company. Source-classification history is the assertion chain: a
 reclassification is a new assertion under a new `publication_key`, never an
 overwrite. No `mdm_international_organization` table and no dedicated
@@ -151,10 +151,10 @@ none. Two states it relies on:
 
 - **Deferred**: an unsupported or unresolvable record is a
   `mdm.set_aside_record` with an open blocking review, enforced by
-  `commit_batch` (`027`). It stays evidence; it is never coerced into a
+  `save_batch` (`027`). It stays evidence; it is never coerced into a
   domain.
 - **Candidate under review**: the pre-merge staging state, *proposed*. Until
-  it exists, a Steward reviews before `commit_batch` only through the
+  it exists, a Steward reviews before `save_batch` only through the
   consumer's own preview path.
 
 ## Transaction boundary
@@ -179,7 +179,7 @@ Two transactions, fixed order, nothing spans databases
 4. **Observe** — Bookkeeping's `pipeline_run` status is set afterward from
    the committed batch and receipts.
 
-`commit_batch` checks write safety only — bounded batch; same batch key
+`save_batch` checks write safety only — bounded batch; same batch key
 returns the prior result and different content is an error; generation not
 stale; checkpoint expected and advancing; policy frozen; each assertion's
 dataset pinned and active at the right schema; assertion identity not
@@ -255,8 +255,8 @@ No new Postgres roles
 | Revision Claimer | `edgartools_acquisition_processor` | Marks a verified revision "being processed" so it is processed once |
 | Publication Verifier | `edgartools_acquisition_silver_finalizer` | Records that a publication's expected outputs were produced and verified, or failed; gates the consumer starting |
 | Ledger Repairer | `edgartools_acquisition_operator` | Human-driven quarantine, exclusion, superseded-artifact deletion evidence |
-| MDM Committer | Clean MDM runtime role via `commit_batch` | The only path that writes master tables; the application holds no direct table write |
-| Steward | `actor` in the decision body | The person or deterministic rule behind a decision; `commit_batch` rejects a decision without actor and reason |
+| MDM Committer | Clean MDM runtime role via `save_batch` | The only path that writes master tables; the application holds no direct table write |
+| Steward | `actor` in the decision body | The person or deterministic rule behind a decision; `save_batch` rejects a decision without actor and reason |
 
 Release Owner is a person approving a consumer's release evidence, not a
 runtime role. The S3 delete behind Ledger Repairer is an IAM permission,
@@ -330,7 +330,7 @@ implementation — only when all hold:
    Entity) and workstreams 02/04/06 name a legacy mechanism
    (`mdm_entity.entity_type` plus a per-domain `mdm_*` table); each decision
    stands and each mechanism is superseded by `mdm.master_entity.kind` +
-   `projection`, annotated in place. Every other ticket is evidence-level.
+   `current_record`, annotated in place. Every other ticket is evidence-level.
 
 ## Verification log
 

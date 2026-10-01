@@ -73,5 +73,5 @@ retain the evidence needed to investigate or rebuild prior progress.
 The migration updates only guarded checkpoint fragments in the installed core
 capability and assessment snapshot function. Original migration files are
 unchanged; an unexpected function shape aborts the migration. Restricted-role
-writes still go through `commit_batch`, and snapshot hashes remain time-zone
+writes still go through `save_batch`, and snapshot hashes remain time-zone
 independent.
