@@ -1,6 +1,6 @@
 """Real PG16: the latest-only Stage, written beside the history (ticket 10).
 
-`mdm_v2.stage_record` keeps one row per source record: the winning reading,
+`mdm.stage_record` keeps one row per source record: the winning reading,
 the snapshot the readings it accepted resolve to, and the bronze object the
 winner was delivered in. Nothing reads it yet. When each record's readings
 arrive in revision order, the tests hold it equal to what
@@ -13,13 +13,11 @@ from __future__ import annotations
 
 import json
 import random
-from unittest import mock
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, ProgrammingError
 
-from edgar_warehouse.mdm.clean import store as store_module
 from edgar_warehouse.mdm.clean.evidence import assertion
 from edgar_warehouse.mdm.clean.store import Conflict
 from edgar_warehouse.mdm.clean.survivorship import current_claims
@@ -40,7 +38,7 @@ def stage(db) -> dict[tuple[str, str], dict]:
             conn.execute(
                 text("""SELECT source_code,record_key,subject,kind,revision,
                    mapping_version,assertion_id,snapshot,bronze,batch_id
-                   FROM mdm_v2.stage_record""")
+                   FROM mdm.stage_record""")
             )
             .mappings()
             .all()
@@ -50,7 +48,7 @@ def stage(db) -> dict[tuple[str, str], dict]:
 
 def history(db) -> dict[str, dict]:
     with db.application.connect() as conn:
-        bodies = conn.scalars(text("SELECT body FROM mdm_v2.assertion")).all()
+        bodies = conn.scalars(text("SELECT body FROM mdm.source_reading")).all()
     return current_claims(list(bodies), EVER, set())
 
 
@@ -156,10 +154,10 @@ def test_two_revisions_in_one_batch_fold_in_revision_order(database):
 
 def call_stage(database, a, occurrence=None):
     with database.admin.begin() as conn:
-        batch = conn.scalar(text("SELECT batch_id FROM mdm_v2.batch LIMIT 1"))
+        batch = conn.scalar(text("SELECT batch_id FROM mdm.batch LIMIT 1"))
         conn.execute(
             text(
-                "SELECT mdm_v2.record_stage(CAST(:a AS jsonb), :b, CAST(:o AS jsonb))"
+                "SELECT mdm.record_stage(CAST(:a AS jsonb), :b, CAST(:o AS jsonb))"
             ),
             {
                 "a": json.dumps(a),
@@ -198,7 +196,7 @@ def test_a_profile_identifying_value_must_be_text(database):
         pytest.raises(DBAPIError, match="Profile identifying values must be text"),
     ):
         conn.scalar(
-            text("SELECT mdm_v2.stage_fold(NULL, CAST(:a AS jsonb))"),
+            text("SELECT mdm.stage_fold(NULL, CAST(:a AS jsonb))"),
             {"a": json.dumps(a)},
         )
 
@@ -342,7 +340,7 @@ def test_the_sql_fold_equals_current_claims_with_profiles(database):
         for a in readings:
             snapshot = conn.scalar(
                 text(
-                    "SELECT mdm_v2.stage_fold(CAST(:prev AS jsonb), CAST(:a AS jsonb))"
+                    "SELECT mdm.stage_fold(CAST(:prev AS jsonb), CAST(:a AS jsonb))"
                 ),
                 {
                     "prev": None if snapshot is None else json.dumps(snapshot),
@@ -358,53 +356,6 @@ def test_the_runtime_role_cannot_write_the_stage(database):
         pytest.raises(ProgrammingError, match="permission denied"),
         database.application.begin() as conn,
     ):
-        conn.execute(text("UPDATE mdm_v2.stage_record SET kind='person'"))
+        conn.execute(text("UPDATE mdm.stage_record SET kind='person'"))
 
 
-def test_a_populated_store_backfills_the_stage_in_arrival_order(postgres):
-    admin, app = postgres
-    migrations = store_module.CLEAN_MDM_MIGRATIONS
-    before = migrations[: migrations.index("038_clean_mdm_stage_record.sql")]
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", before):
-        db = core.initialize_database(admin, app)
-        core.apply(
-            db,
-            1,
-            assertions=[
-                reading("old", 1, {"name": "One", "sic": "1"}),
-                reading("kept", 2, {"name": "Kept"}),
-                # Two revisions in one batch fold in revision order.
-                reading("pair", 2, {"name": "P2"}),
-                reading("pair", 1, {"name": "P1", "sic": "7"}),
-            ],
-        )
-        core.apply(db, 2, assertions=[reading("old", 2, {"name": "Two"})])
-        # Delivered after revision 2: it keeps the row, as a live batch would.
-        core.apply(db, 3, assertions=[reading("kept", 1, {"name": "Late"})])
-        with app.connect() as conn:
-            assert (
-                conn.scalar(text("SELECT to_regclass('mdm_v2.stage_record')")) is None
-            )
-
-    store_module.migrate(admin, application_role="clean_application")
-    rows = stage(db)
-    assert {
-        k[1]: (r["revision"], r["snapshot"]["fields"]["name"]["value"])
-        for k, r in rows.items()
-    } == {
-        "old": (2, "Two"),
-        "kept": (2, "Kept"),
-        "pair": (2, "P2"),
-    }
-    assert rows[("fixture.primary", "old")]["snapshot"]["fields"]["sic"]["value"] == "1"
-    assert (
-        rows[("fixture.primary", "pair")]["snapshot"]["fields"]["sic"]["value"] == "7"
-    )
-    claims = history(db)
-    for key in ("old", "pair"):
-        row = rows[("fixture.primary", key)]
-        assert row["snapshot"] == claims[row["subject"]]
-    assert all(r["bronze"] is None for r in rows.values())
-    # The next live commit keeps the Stage through the evidence wrapper.
-    core.apply(db, 4, assertions=[reading("old", 3, {"name": "Three"})])
-    assert stage(db)[("fixture.primary", "old")]["revision"] == 3

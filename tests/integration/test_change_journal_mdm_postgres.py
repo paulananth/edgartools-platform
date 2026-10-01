@@ -207,11 +207,11 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
         with owner.connect() as conn:
             assert not conn.scalar(
                 text(
-                    "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE tablename LIKE 'source_%')"
+                    "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE tablename LIKE 'source\\_%' AND schemaname <> 'mdm')"
                 )
             )
             reading = conn.scalar(
-                text("SELECT body FROM mdm_v2.dataset_mapping WHERE source_code=:c"),
+                text("SELECT body FROM mdm.dataset_mapping WHERE source_code=:c"),
                 {"c": code},
             )
             assert reading["registry_evidence"]["rules"]["digest"] == saved["digest"]
@@ -274,7 +274,7 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
             assert (
                 conn.scalar(
                     text(
-                        "SELECT count(*) FROM mdm_v2.dataset_mapping WHERE source_code=:c"
+                        "SELECT count(*) FROM mdm.dataset_mapping WHERE source_code=:c"
                     ),
                     {"c": code},
                 )
@@ -283,7 +283,7 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
             assert (
                 conn.scalar(
                     text(
-                        "SELECT body FROM mdm_v2.dataset_mapping WHERE source_code=:c"
+                        "SELECT body FROM mdm.dataset_mapping WHERE source_code=:c"
                     ),
                     {"c": code},
                 )

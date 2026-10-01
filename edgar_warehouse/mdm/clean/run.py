@@ -1,6 +1,6 @@
 """A Merge Stage run: its frozen scope, attempts and reconciled outcome.
 
-The run lives in MDM itself (`mdm_v2.run`, migration 043), written only
+The run lives in MDM itself (`mdm.run`, migration 043), written only
 through `start_run` and `finish_run`; the legacy Bookkeeping `pipeline_run`
 it used is retired (platform validation slice 2a).
 """
@@ -21,7 +21,7 @@ class RunCoordinator:
     def _scope(self, run_id: str) -> dict | None:
         with self.mdm.engine.connect() as conn:
             return conn.scalar(
-                text("SELECT scope FROM mdm_v2.run WHERE run_id=CAST(:run AS uuid)"),
+                text("SELECT scope FROM mdm.run WHERE run_id=CAST(:run AS uuid)"),
                 {"run": run_id},
             )
 
@@ -37,7 +37,7 @@ class RunCoordinator:
             with self.mdm.engine.begin() as conn:
                 conn.execute(
                     text(
-                        "SELECT mdm_v2.record_attempt(CAST(:a AS uuid),CAST(:r AS uuid),:b,:p,CAST(:d AS jsonb))"
+                        "SELECT mdm.record_attempt(CAST(:a AS uuid),CAST(:r AS uuid),:b,:p,CAST(:d AS jsonb))"
                     ),
                     {
                         "a": attempt,
@@ -95,7 +95,7 @@ class RunCoordinator:
         # start_run refuses a changed scope too, for a concurrent start.
         with self.mdm.engine.begin() as conn:
             conn.execute(
-                text("SELECT mdm_v2.start_run(CAST(:run AS uuid),CAST(:scope AS jsonb))"),
+                text("SELECT mdm.start_run(CAST(:run AS uuid),CAST(:scope AS jsonb))"),
                 {"run": run_id, "scope": canonical(scope)},
             )
 
@@ -120,39 +120,39 @@ class RunCoordinator:
             observed = set(
                 conn.scalars(
                     text(
-                        "SELECT batch_id FROM mdm_v2.observation WHERE run_id=CAST(:run AS uuid)"
+                        "SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:run AS uuid)"
                     ),
                     {"run": run_id},
                 )
             )
             pending = conn.scalar(
                 text("""WITH root_batches AS (
-                  SELECT batch_id FROM mdm_v2.observation WHERE run_id=CAST(:run AS uuid)
+                  SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:run AS uuid)
                 ), review_ids AS (
                   SELECT old->>'object_id' AS id FROM root_batches r
-                  JOIN mdm_v2.batch b USING(batch_id), jsonb_array_elements(b.effects->'projections') old
+                  JOIN mdm.batch b USING(batch_id), jsonb_array_elements(b.effects->'projections') old
                   WHERE old->>'object_type'='review'
                 ), required_batches AS (
                   SELECT batch_id FROM root_batches UNION
-                  SELECT p.batch_id FROM mdm_v2.projection p JOIN review_ids r ON r.id=p.object_id
+                  SELECT p.batch_id FROM mdm.current_record p JOIN review_ids r ON r.id=p.object_id
                   WHERE p.object_type='review'
-                ) SELECT count(*) FROM mdm_v2.publication p JOIN required_batches r USING(batch_id)
+                ) SELECT count(*) FROM mdm.outbox p JOIN required_batches r USING(batch_id)
                 WHERE p.verified_at IS NULL"""),
                 {"run": run_id},
             )
             # Current review disposition, including a later valid correction,
             # is authoritative; an old publication receipt cannot clear it.
             unresolved = conn.scalar(
-                text("""SELECT count(*) FROM mdm_v2.projection p WHERE p.object_type='review'
-                AND p.body->>'open'='true' AND p.body->>'blocking' IS DISTINCT FROM 'false' AND EXISTS(SELECT 1 FROM mdm_v2.observation o
-                JOIN mdm_v2.batch b USING(batch_id),jsonb_array_elements(b.effects->'projections') old
+                text("""SELECT count(*) FROM mdm.current_record p WHERE p.object_type='review'
+                AND p.body->>'open'='true' AND p.body->>'blocking' IS DISTINCT FROM 'false' AND EXISTS(SELECT 1 FROM mdm.run_batch o
+                JOIN mdm.batch b USING(batch_id),jsonb_array_elements(b.effects->'projections') old
                 WHERE o.run_id=CAST(:run AS uuid) AND old->>'object_type'='review' AND old->>'object_id'=p.object_id)"""),
                 {"run": run_id},
             )
             attempts = {
                 event: count
                 for event, count in conn.execute(
-                    text("""SELECT event,count(*) FROM mdm_v2.attempt_event
+                    text("""SELECT event,count(*) FROM mdm.attempt_event
                 WHERE run_id=CAST(:run AS uuid) GROUP BY event"""),
                     {"run": run_id},
                 ).all()
@@ -172,7 +172,7 @@ class RunCoordinator:
                     coalesce(b.effects->'assertions','[]') || coalesce(b.effects->'deferred','[]')) r
                     WHERE r->>'source_code' IS DISTINCT FROM b.effects->'continuity_proof'->>'source_code'
                        OR r->>'publication_key' IS DISTINCT FROM b.effects->'continuity_proof'->>'publication') AS source_consistent
-                  FROM mdm_v2.batch b JOIN mdm_v2.observation o USING(batch_id)
+                  FROM mdm.batch b JOIN mdm.run_batch o USING(batch_id)
                   WHERE o.run_id=CAST(:run AS uuid)"""),
                     {"run": run_id},
                 ).mappings()
@@ -201,7 +201,7 @@ class RunCoordinator:
         # completion from retained MDM receipts and the frozen root scope.
         with self.mdm.engine.begin() as conn:
             conn.execute(
-                text("SELECT mdm_v2.finish_run(CAST(:run AS uuid),CAST(:report AS jsonb),:complete)"),
+                text("SELECT mdm.finish_run(CAST(:run AS uuid),CAST(:report AS jsonb),:complete)"),
                 {"run": run_id, "report": canonical(report), "complete": complete},
             )
         return report

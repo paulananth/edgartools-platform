@@ -205,7 +205,7 @@ class Rules:
                         selected_export = self.envelope(selected)
                         for code, entry in body["mdm"].items():
                             registration_authority(selected_export, code, entry["contract"])
-                            existing = destination.execute(text("SELECT mapping_version,body FROM mdm_v2.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
+                            existing = destination.execute(text("SELECT mapping_version,body FROM mdm.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
                             if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
                                 register_dataset(destination, code, entry["contract"], rules_authority=selected_export)
                             reading = current_reading(destination, code)

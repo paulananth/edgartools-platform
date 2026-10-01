@@ -708,7 +708,7 @@ cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql
   # Source data work stays disabled until its Rules/feed baseline qualifies.
   add_stage \
     "MDM: clean migration and connectivity" \
-    "Applies the Clean MDM migrations, then checks connectivity: the check reads mdm_v2.migration, which the migrations create. Source feeds remain disabled until configured Rules and Bookkeeping qualification." \
+    "Applies the Clean MDM migrations, then checks connectivity: the check reads mdm.migration, which the migrations create. Source feeds remain disabled until configured Rules and Bookkeeping qualification." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate
 uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity"
 

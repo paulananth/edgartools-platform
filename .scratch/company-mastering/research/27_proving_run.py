@@ -18,7 +18,7 @@ The datasets are registered with the test Rules authority
 (`tests.support.rules_authority`), not an approved Rules Database version:
 the readings are the repo's (ticket 18's), not yet approved there. Each
 manifest's run and attempts are recorded in MDM by the run coordinator
-(`mdm_v2.run` since platform validation slice 2a).
+(`mdm.run` since platform validation slice 2a).
 
 Then everything is applied again; the second pass must change nothing.
 
@@ -94,16 +94,16 @@ def counts(conn) -> dict:
     one = lambda sql: conn.execute(text(sql)).scalar()
     group = lambda sql: {str(k): v for k, v in conn.execute(text(sql)).all()}
     return {
-        "identities": group("SELECT kind, count(*) FROM mdm_v2.identity GROUP BY kind"),
-        "companies_open": one("SELECT count(*) FROM mdm_v2.current_entity WHERE kind='company' AND status<>'alias'"),
-        "stage_records": group("SELECT source_code||':'||kind, count(*) FROM mdm_v2.stage_record GROUP BY 1"),
-        "stage_bound": group("SELECT source_code, count(*) FROM mdm_v2.stage_record WHERE entity_id IS NOT NULL GROUP BY 1"),
-        "waiting": group("SELECT source_code||':'||coalesce(reason,'(none)'), count(*) FROM mdm_v2.stage_waiting GROUP BY 1"),
-        "open_reviews": group("SELECT coalesce(body->>'reason','(none)'), count(*) FROM mdm_v2.projection "
+        "identities": group("SELECT kind, count(*) FROM mdm.master_entity GROUP BY kind"),
+        "companies_open": one("SELECT count(*) FROM mdm.current_entity WHERE kind='company' AND status<>'alias'"),
+        "stage_records": group("SELECT source_code||':'||kind, count(*) FROM mdm.stage_record GROUP BY 1"),
+        "stage_bound": group("SELECT source_code, count(*) FROM mdm.stage_record WHERE entity_id IS NOT NULL GROUP BY 1"),
+        "waiting": group("SELECT source_code||':'||coalesce(reason,'(none)'), count(*) FROM mdm.stage_waiting GROUP BY 1"),
+        "open_reviews": group("SELECT coalesce(body->>'reason','(none)'), count(*) FROM mdm.current_record "
                               "WHERE object_type='review' AND body->'open'='true'::jsonb GROUP BY 1"),
-        "decisions": group("SELECT operation, count(*) FROM mdm_v2.decision GROUP BY 1"),
+        "decisions": group("SELECT operation, count(*) FROM mdm.decision GROUP BY 1"),
         "decisions_by_rule": group("SELECT coalesce(body->>'rule_id', body->'rule'->>'rule_id', '(none)'), count(*) "
-                                   "FROM mdm_v2.decision GROUP BY 1"),
+                                   "FROM mdm.decision GROUP BY 1"),
     }
 
 
@@ -112,7 +112,7 @@ def masters(conn) -> dict:
     out: dict[str, dict] = {}
     for entity, source, cik, lei in conn.execute(text(
         "SELECT entity_id::text, source_code, reading->'identifiers'->>'cik', reading->'identifiers'->>'lei' "
-        "FROM mdm_v2.stage_record WHERE entity_id IS NOT NULL"
+        "FROM mdm.stage_record WHERE entity_id IS NOT NULL"
     )):
         m = out.setdefault(entity, {"ciks": set(), "leis": set()})
         if cik:
@@ -195,7 +195,7 @@ def test_proving_run(database, tmp_path):
         after_second = counts(conn)
         second_masters = masters(conn)
         review_sample = [r[0] for r in conn.execute(text(
-            "SELECT body FROM mdm_v2.projection WHERE object_type='review' "
+            "SELECT body FROM mdm.current_record WHERE object_type='review' "
             "AND body->'open'='true'::jsonb LIMIT 5"))]
 
     both = [m for m in first_masters.values() if m["ciks"] and m["leis"]]

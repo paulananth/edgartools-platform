@@ -78,7 +78,7 @@ def companies(database):
 
 def operations(database):
     with database.application.connect() as conn:
-        return sorted(conn.execute(text("SELECT operation FROM mdm_v2.decision")).scalars())
+        return sorted(conn.execute(text("SELECT operation FROM mdm.decision")).scalars())
 
 
 def test_without_the_approval_the_policy_matches_nothing(database):

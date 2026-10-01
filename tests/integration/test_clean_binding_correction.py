@@ -41,7 +41,7 @@ AT = "2026-09-19T00:00:00+00:00"  # after the fixture loads (core.AS_OF)
 
 def policy_body(database, digest):
     with database.application.connect() as conn:
-        return conn.scalar(text("SELECT body FROM mdm_v2.policy WHERE digest=:d"), {"d": digest})
+        return conn.scalar(text("SELECT body FROM mdm.policy WHERE digest=:d"), {"d": digest})
 
 
 def correct(database, policy, batch, checkpoint, *, extra=()):
@@ -61,13 +61,13 @@ def correct(database, policy, batch, checkpoint, *, extra=()):
 
 def stage_entity(database, subject):
     with database.application.connect() as conn:
-        return conn.scalar(text("SELECT entity_id::text FROM mdm_v2.stage_record WHERE subject=:s"), {"s": subject})
+        return conn.scalar(text("SELECT entity_id::text FROM mdm.stage_record WHERE subject=:s"), {"s": subject})
 
 
 def versions(database, entity):
     with database.application.connect() as conn:
         return [dict(r) for r in conn.execute(text(
-            "SELECT lei, jurisdiction, quarantined, valid_to IS NULL AS current FROM mdm_v2.company "
+            "SELECT lei, jurisdiction, quarantined, valid_to IS NULL AS current FROM mdm.company "
             "WHERE entity_id=CAST(:e AS uuid) ORDER BY from_generation"), {"e": entity}).mappings()]
 
 
@@ -128,7 +128,7 @@ def test_a_new_rule_version_binds_the_record_again_in_the_same_batch(database):
     assert stage_entity(database, gleif()["subject"]) == entity
     with database.application.connect() as conn:
         binds = [r[0] for r in conn.execute(text(
-            "SELECT body->>'rule_version' FROM mdm_v2.decision WHERE operation='bind' "
+            "SELECT body->>'rule_version' FROM mdm.decision WHERE operation='bind' "
             "AND body->>'subject'=:s ORDER BY body->>'at'"), {"s": gleif()["subject"]})]
     assert binds[-1] == "2026-09-30.1"
 
@@ -150,7 +150,7 @@ def test_a_bind_revoked_twice_is_refused(database):
     (first,) = correct(database, fixed, "correct", 3)
     with database.application.connect() as conn:
         (bind,) = [r[0] for r in conn.execute(text(
-            "SELECT body FROM mdm_v2.decision WHERE decision_id=:d"), {"d": first["target"]})]
+            "SELECT body FROM mdm.decision WHERE decision_id=:d"), {"d": first["target"]})]
         (second,) = correction.revocations(conn, [bind], policy_digest=fixed, actor="operator",
                                            reason="revoked again", at="2026-09-20T00:00:00+00:00")
     with pytest.raises((Conflict, DBAPIError), match="already revoked"):
@@ -272,31 +272,6 @@ def test_a_record_still_bound_cannot_be_quarantined(database):
                     subject=stale["subject"], entity_id=entity, evidence=stale["evidence"], policy=fixed)
     with pytest.raises(Conflict, match="Revoke the record's bind"):
         apply(database, fixed, "hold", 3, [held], AT)
-
-
-def test_migration_041_applies_to_a_populated_store(postgres):
-    """CLAUDE.md: over real rows, in production's order. A store at 040 holds
-    a Company with a wrong link; after 041 its journal is intact, the link is
-    revoked and the record quarantined."""
-    from unittest import mock
-
-    import edgar_warehouse.mdm.clean.store as store_module
-
-    admin, app = postgres
-    through_040 = tuple(n for n in store_module.CLEAN_MDM_MIGRATIONS if n < "041")
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_040):
-        database = core.initialize_database(admin, app)
-        _wrong, entity = linked(database)
-    with database.application.connect() as conn:
-        journal = conn.scalar(text("SELECT count(*) FROM mdm_v2.decision"))
-    core.migrate(admin, application_role="clean_application")
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.decision")) == journal
-    fixed = name_policy(database, active=False)
-    (revocation,) = correct(database, fixed, "correct", 3)
-    apply(database, fixed, "hold", 4, [hold(revocation, fixed, at="2026-09-20T00:00:00+00:00")],
-          "2026-09-20T00:00:00+00:00")
-    assert [v["quarantined"] for v in versions(database, entity)][-1] is True
 
 
 def test_a_later_sec_batch_never_pairs_with_a_quarantined_record(database):

@@ -1,5 +1,7 @@
 # Database design review, 2026-09-30
 
+> **Applied (platform validation slice 3):** the schema is now `mdm`, re-baselined as one migration (`001_mdm.sql`) with the names ruled below and a comment on every object. This review keeps the names as they were when it was written.
+
 Validation slice 1 (`.scratch/platform-validation/`). This review reads the code and migrations of the four PostgreSQL 16 databases the rebuilt platform uses. It lists every table and says what it is for. It shows how the databases hand work to each other, sets the three operator skills side by side, and ranks what should change. Every finding names a file. Nothing here changes a database.
 
 ## The four databases

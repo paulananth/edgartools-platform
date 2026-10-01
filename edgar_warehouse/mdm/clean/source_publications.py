@@ -153,7 +153,7 @@ class PublicationVerifier:
         """
         with store.engine.connect() as conn:
             dataset = conn.execute(
-                text("SELECT body FROM mdm_v2.dataset WHERE source_code=:code"),
+                text("SELECT body FROM mdm.dataset WHERE source_code=:code"),
                 {"code": source_code},
             ).scalar_one_or_none()
         if dataset is None:

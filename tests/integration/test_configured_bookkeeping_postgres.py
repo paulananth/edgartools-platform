@@ -648,7 +648,7 @@ def mdm_submission(databases, tmp_path):
     target["steps"][0]["operation"] = "mdm.merge"
     target["checks"].append("mdm.publication")
     with databases.mdm.connect() as conn:
-        contract = conn.scalar(text("SELECT body FROM mdm_v2.dataset_mapping WHERE source_code='fixture.primary' ORDER BY mapping_version DESC LIMIT 1"))
+        contract = conn.scalar(text("SELECT body FROM mdm.dataset_mapping WHERE source_code='fixture.primary' ORDER BY mapping_version DESC LIMIT 1"))
     body["mdm"] = {"fixture.primary": {"contract": {k: v for k, v in contract.items() if k != "registry_evidence"}}}
     name = "mdm-" + uuid4().hex
     payload = {"version": 1, "command": {"batch_id": "mdm-" + uuid4().hex,
@@ -677,9 +677,9 @@ def test_actual_mdm_commit_keeps_hash_and_reconciles_lost_ack(databases, tmp_pat
     capability = book.registry.operations["mdm.merge"]
     receipt = capability.execute(book, book.item(claim), Authority(claim))
     with databases.mdm.connect() as conn:
-        retained = conn.execute(text("SELECT request_hash,effects FROM mdm_v2.batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]}).one()
+        retained = conn.execute(text("SELECT request_hash,effects FROM mdm.batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]}).one()
         assert "lease_proof" not in canonical(retained.effects)
-        assert str(conn.scalar(text("SELECT run_id FROM mdm_v2.observation WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]})) == rid
+        assert str(conn.scalar(text("SELECT run_id FROM mdm.run_batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]})) == rid
     expire(databases, claim)
     book.resume(rid)
     state = run(book, rid, databases.ledger)
@@ -693,8 +693,8 @@ def test_actual_mdm_commit_keeps_hash_and_reconciles_lost_ack(databases, tmp_pat
                                  batch_id=payload["command"]["batch_id"])
     assert book.finalize(rid)["run"]["state"] == "complete"
     with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT request_hash FROM mdm_v2.batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]}) == retained.request_hash
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
+        assert conn.scalar(text("SELECT request_hash FROM mdm.batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]}) == retained.request_hash
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
 
 
 def test_stage_manifest_chains_prepared_mdm_and_separate_publication_intents(databases, tmp_path):
@@ -759,7 +759,7 @@ def test_retired_rules_resume_original_export_and_reading(databases, tmp_path):
     book.resume(rid)
     assert book._run(rid)["submission"] == original
     with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT max(mapping_version) FROM mdm_v2.dataset_mapping WHERE source_code='fixture.primary'")) == 1
+        assert conn.scalar(text("SELECT max(mapping_version) FROM mdm.dataset_mapping WHERE source_code='fixture.primary'")) == 1
 
 
 def test_assessment_writes_reject_expired_authority(databases, tmp_path):
@@ -777,7 +777,7 @@ def test_assessment_writes_reject_expired_authority(databases, tmp_path):
     with pytest.raises(DBAPIError, match="Expired destination authority"):
         assessment.supersede(store, "missing-assessment", rid)
     with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 0
 
 
 def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases, tmp_path):
@@ -844,9 +844,9 @@ def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases
     assert state["counts"] == {"verified": 1} and state["items"][0]["receipt"] == receipt
     assert set(registry.operations) == before
     with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
-        assert conn.scalar(text("SELECT mapping_version FROM mdm_v2.assertion WHERE source_code=:c"), {"c": code}) == 1
-        assert conn.scalar(text("SELECT body->'fields'->'name'->>'value' FROM mdm_v2.current_entity")) == record["name"]
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
+        assert conn.scalar(text("SELECT mapping_version FROM mdm.source_reading WHERE source_code=:c"), {"c": code}) == 1
+        assert conn.scalar(text("SELECT body->'fields'->'name'->>'value' FROM mdm.current_entity")) == record["name"]
     for consumer in ("export", "graph"):
         assert Store(databases.mdm).deliver_one(consumer, "offline", LocalContractSink(tmp_path / consumer))
     assert book.finalize(rid)["run"]["state"] == "complete"
@@ -871,7 +871,7 @@ def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases
             run(book, bad_run, databases.ledger)
         assert book.status(bad_run)["run"]["state"] == "blocked"
     with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
 
 
 def test_configured_platform_publication_failure_and_recovery(databases, tmp_path):
@@ -911,7 +911,7 @@ def test_configured_platform_publication_failure_and_recovery(databases, tmp_pat
     publisher.resume(rid)
     assert run(publisher, rid, databases.ledger)["run"]["state"] == "complete"
     with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.publication_event WHERE batch_id=:b AND consumer='graph' AND event='verified'"), {"b": publication["batch_id"]}) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.outbox_event WHERE batch_id=:b AND consumer='graph' AND event='verified'"), {"b": publication["batch_id"]}) == 1
     assert book.finalize(source_run)["run"]["state"] == "waiting"  # export still absent
 
 

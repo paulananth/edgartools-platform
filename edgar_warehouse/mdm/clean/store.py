@@ -1,6 +1,6 @@
 """PostgreSQL transaction boundary and durable publication capabilities.
 
-Pure projection code prepares bounded effects; only commit_batch may persist
+Pure projection code prepares bounded effects; only save_batch may persist
 master changes. Network publication always runs outside that transaction.
 """
 
@@ -38,54 +38,49 @@ def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
     return [dict(r) for r in conn.execute(text(sql), params).mappings()]
 
 
-# Applied in order after 023, each once, by checksum. Named so that a test can
-# migrate a store to an earlier point and apply the rest over real rows.
-CLEAN_MDM_MIGRATIONS = (
-    "025_clean_mdm_indexes.sql",
-    "026_clean_mdm_attempts.sql",
-    "027_clean_mdm_deferred.sql",
-    "028_clean_mdm_assessment.sql",
-    "029_clean_mdm_family_checkpoint.sql",
-    "030_clean_mdm_evidence_disposition.sql",
-    "031_clean_mdm_mapping_version.sql",
-    "032_clean_mdm_deferred_reading.sql",
-    "033_clean_mdm_per_kind_views.sql",
-    "034_clean_mdm_stage_view_naming.sql",
-    "035_clean_mdm_automatic_assessment.sql",
-    "036_clean_mdm_stage_waiting.sql",
-    "037_clean_mdm_company_versions.sql",
-    "038_clean_mdm_stage_record.sql",
-    "039_clean_mdm_stage_binding.sql",
-    "040_clean_mdm_assessment_safety.sql",
-    "041_clean_mdm_binding_correction.sql",
-    "042_clean_mdm_company_one_place.sql",
-    "043_clean_mdm_run.sql",
-)
+# The schema's first file, then each later file once, in order, by checksum.
+# A later change to the schema is a new file added to MIGRATIONS.
+BASELINE = "001_mdm.sql"
+MIGRATIONS: tuple[str, ...] = ()
 
-# Functions the application login runs that a later migration adds, by the
-# migration that adds them.
-FUNCTION_MIGRATION = {
-    "start_run(uuid,jsonb)": "043_clean_mdm_run.sql",
-    "finish_run(uuid,jsonb,boolean)": "043_clean_mdm_run.sql",
-}
+# The functions the application login may run. It has no table rights beyond
+# SELECT: every change to master data goes through these.
+RUNTIME_FUNCTIONS = (
+    "save_batch(text,uuid)",
+    "preview_batch(text,uuid)",
+    "claim_outbox(text,text,integer)",
+    "finish_outbox(text,text,bigint,text,text)",
+    "record_attempt(uuid,uuid,text,text,jsonb)",
+    "start_run(uuid,jsonb)",
+    "finish_run(uuid,jsonb,boolean)",
+    "match_proposal_snapshot(jsonb)",
+    "record_match_proposal(text,uuid)",
+    "supersede_match_proposal(text,uuid)",
+)
 
 
 def migrate(engine: Engine, *, application_role: str) -> dict:
-    """Explicit isolated migration with checksum validation, never legacy DDL.
+    """Explicit isolated migration with checksum validation.
 
-    The acquisition registry may live in its own database. Role provisioning
-    stays outside this function; deployments provide the restricted login role.
+    Role provisioning stays outside this function; deployments provide the
+    restricted login role. A database that still holds the retired `mdm_v2`
+    schema is refused: it is recreated, not upgraded in place.
     """
     if engine.dialect.name != "postgresql":
-        raise ValueError("Clean MDM requires PostgreSQL 16")
-    path = Path(__file__).parents[1] / "migrations" / "023_clean_mdm.sql"
+        raise ValueError("MDM requires PostgreSQL 16")
+    path = Path(__file__).parents[1] / "migrations" / BASELINE
     source = path.read_text()
     checksum = hashlib.sha256(source.encode()).hexdigest()
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
-            raise ValueError("Clean MDM requires PostgreSQL 16")
+            raise ValueError("MDM requires PostgreSQL 16")
         conn.execute(text("SELECT pg_advisory_xact_lock(730233)"))
+        if conn.scalar(text("SELECT to_regnamespace('mdm_v2')")):
+            raise Conflict(
+                "This database holds the retired mdm_v2 schema. Recreate the "
+                "database and migrate it from empty; it is not upgraded in place."
+            )
         if conn.scalar(text("SELECT current_user")) == application_role:
             raise ValueError("Migration owner and runtime role must differ")
         role = rows(
@@ -97,10 +92,10 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             raise ValueError(
                 "Runtime role must exist without superuser/database/role creation privileges"
             )
-        installed = conn.scalar(text("SELECT to_regclass('mdm_v2.migration')"))
+        installed = conn.scalar(text("SELECT to_regclass('mdm.migration')"))
         if installed:
             saved = conn.scalar(
-                text("SELECT checksum FROM mdm_v2.migration WHERE name=:name"),
+                text("SELECT checksum FROM mdm.migration WHERE name=:name"),
                 {"name": path.name},
             )
             if saved != checksum:
@@ -109,23 +104,21 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             # Execute the real SQL file, including PL/pgSQL bodies, atomically.
             conn.execute(text(source))
             conn.execute(
-                text(
-                    "INSERT INTO mdm_v2.migration(name,checksum) VALUES(:name,:checksum)"
-                ),
+                text("INSERT INTO mdm.migration(name,checksum) VALUES(:name,:checksum)"),
                 {"name": path.name, "checksum": checksum},
             )
-        for name in CLEAN_MDM_MIGRATIONS:
+        for name in MIGRATIONS:
             extra = path.with_name(name)
             extra_source = extra.read_text()
             extra_hash = hashlib.sha256(extra_source.encode()).hexdigest()
             saved = conn.scalar(
-                text("SELECT checksum FROM mdm_v2.migration WHERE name=:n"),
+                text("SELECT checksum FROM mdm.migration WHERE name=:n"),
                 {"n": extra.name},
             )
             if saved is None:
                 conn.execute(text(extra_source))
                 conn.execute(
-                    text("INSERT INTO mdm_v2.migration(name,checksum) VALUES(:n,:h)"),
+                    text("INSERT INTO mdm.migration(name,checksum) VALUES(:n,:h)"),
                     {"n": extra.name, "h": extra_hash},
                 )
             elif saved != extra_hash:
@@ -137,51 +130,33 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             ):
                 role_sql = "PUBLIC" if inherited == "PUBLIC" else quote(inherited)
                 conn.exec_driver_sql(
-                    f"REVOKE ALL ON ALL TABLES IN SCHEMA mdm_v2 FROM {role_sql}"
+                    f"REVOKE ALL ON ALL TABLES IN SCHEMA mdm FROM {role_sql}"
                 )
                 conn.exec_driver_sql(
-                    f"REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mdm_v2 FROM {role_sql}"
+                    f"REVOKE ALL ON ALL FUNCTIONS IN SCHEMA mdm FROM {role_sql}"
                 )
-                conn.exec_driver_sql(f"REVOKE ALL ON SCHEMA mdm_v2 FROM {role_sql}")
+                conn.exec_driver_sql(f"REVOKE ALL ON SCHEMA mdm FROM {role_sql}")
         runtime = quote(application_role)
-        conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA mdm_v2 TO {runtime}")
-        conn.exec_driver_sql(
-            f"GRANT SELECT ON ALL TABLES IN SCHEMA mdm_v2 TO {runtime}"
-        )
-        for signature in (
-            "commit_batch(text,uuid)",
-            "claim_publication(text,text,integer)",
-            "finish_publication(text,text,bigint,text,text)",
-            "record_attempt(uuid,uuid,text,text,jsonb)",
-            "start_run(uuid,jsonb)",
-            "finish_run(uuid,jsonb,boolean)",
-            "assessment_snapshot(jsonb)",
-            "record_assessment(text,uuid)",
-            "supersede_assessment(text,uuid)",
-            "preview_batch(text,uuid)",
-        ):
-            # Only a store deliberately migrated part way (a test of a later
-            # migration over real rows) may lack a function; otherwise a
-            # missing one fails the migration.
-            if FUNCTION_MIGRATION.get(signature, "") not in ("", *CLEAN_MDM_MIGRATIONS):
-                continue
+        conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA mdm TO {runtime}")
+        conn.exec_driver_sql(f"GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO {runtime}")
+        for signature in RUNTIME_FUNCTIONS:
             conn.exec_driver_sql(
-                f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO {runtime}"
+                f"GRANT EXECUTE ON FUNCTION mdm.{signature} TO {runtime}"
             )
         if conn.scalar(
-            text("SELECT has_schema_privilege(:r,'mdm_v2','CREATE')"),
+            text("SELECT has_schema_privilege(:r,'mdm','CREATE')"),
             {"r": application_role},
         ):
             raise ValueError(
                 "Runtime role inherits schema ownership or CREATE privilege"
             )
         leaked = conn.scalar(
-            text("""SELECT count(*) FROM pg_tables WHERE schemaname='mdm_v2'
+            text("""SELECT count(*) FROM pg_tables WHERE schemaname='mdm'
             AND has_table_privilege(:r,format('%I.%I',schemaname,tablename),'INSERT,UPDATE,DELETE,TRUNCATE')"""),
             {"r": application_role},
         )
         if leaked:
-            raise ValueError("Runtime role inherits direct Clean MDM writes")
+            raise ValueError("Runtime role inherits direct MDM writes")
     return {
         "migration": path.name,
         "checksum": checksum,
@@ -202,7 +177,7 @@ def register_policy(conn: Connection, body: dict) -> str:
     check_policy(body)
     registered = [
         r["body"]
-        for r in rows(conn, "SELECT body FROM mdm_v2.policy WHERE body ? 'kinds'")
+        for r in rows(conn, "SELECT body FROM mdm.policy WHERE body ? 'kinds'")
     ]
     reused = rule_version_conflicts(body, registered)
     if reused:
@@ -228,7 +203,7 @@ def register_policy(conn: Connection, body: dict) -> str:
     key = digest(body)
     conn.execute(
         text(
-            "INSERT INTO mdm_v2.policy VALUES(:key,CAST(:body AS jsonb)) ON CONFLICT DO NOTHING"
+            "INSERT INTO mdm.policy VALUES(:key,CAST(:body AS jsonb)) ON CONFLICT DO NOTHING"
         ),
         {"key": key, "body": canonical(body)},
     )
@@ -294,7 +269,7 @@ def register_dataset(
     pinned = {**body, "registry_evidence": evidence}
     current = rows(
         conn,
-        """SELECT body,registry_version::text,mapping_version FROM mdm_v2.dataset_mapping
+        """SELECT body,registry_version::text,mapping_version FROM mdm.dataset_mapping
         WHERE source_code=:code ORDER BY mapping_version DESC LIMIT 1""",
         code=code,
     )
@@ -308,7 +283,7 @@ def register_dataset(
             )
         protected_change(stored, pinned)
         conn.execute(
-            text("""INSERT INTO mdm_v2.dataset_mapping(source_code,mapping_version,body,registry_version)
+            text("""INSERT INTO mdm.dataset_mapping(source_code,mapping_version,body,registry_version)
             VALUES(:code,:version,CAST(:body AS jsonb),:registry)"""),
             {
                 "code": code,
@@ -319,8 +294,8 @@ def register_dataset(
         )
         return
     for statement in (
-        "INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))",
-        """INSERT INTO mdm_v2.dataset_mapping(source_code,mapping_version,body,registry_version)
+        "INSERT INTO mdm.dataset VALUES(:code,:registry,CAST(:body AS jsonb))",
+        """INSERT INTO mdm.dataset_mapping(source_code,mapping_version,body,registry_version)
         VALUES(:code,1,CAST(:body AS jsonb),:registry)""",
     ):
         conn.execute(
@@ -358,12 +333,12 @@ def current_reading(conn: Connection, code: str) -> tuple[int, dict] | None:
     reading number that produced it. Reading them apart is how an adapter ends
     up stamping version 1 onto a record it read under a corrected mapping.
 
-    `mdm_v2.dataset` cannot answer this: migration 023 makes it append-only,
+    `mdm.dataset` cannot answer this: migration 023 makes it append-only,
     so its body stays whatever was registered first.
     """
     found = rows(
         conn,
-        """SELECT mapping_version,body FROM mdm_v2.dataset_mapping
+        """SELECT mapping_version,body FROM mdm.dataset_mapping
         WHERE source_code=:code ORDER BY mapping_version DESC LIMIT 1""",
         code=code,
     )
@@ -380,7 +355,7 @@ def reading_at(conn: Connection, code: str, mapping_version: int) -> tuple[int, 
     """
     found = rows(
         conn,
-        """SELECT mapping_version,body FROM mdm_v2.dataset_mapping
+        """SELECT mapping_version,body FROM mdm.dataset_mapping
         WHERE source_code=:code AND mapping_version=:version""",
         code=code,
         version=mapping_version,
@@ -438,7 +413,7 @@ class Store:
     def commit(self, conn: Connection, request: dict, run_id: str) -> dict:
         self._authorize(conn)
         return conn.scalar(
-            text("SELECT mdm_v2.commit_batch(:request,CAST(:run AS uuid))"),
+            text("SELECT mdm.save_batch(:request,CAST(:run AS uuid))"),
             {"request": canonical(request), "run": str(UUID(run_id))},
         )
 
@@ -454,7 +429,7 @@ class Store:
         with self.engine.begin() as conn:
             self._authorize(conn)
             claim_function = (
-                "SELECT mdm_v2.claim_publication(:c,:w,:seconds)"
+                "SELECT mdm.claim_outbox(:c,:w,:seconds)"
                 if batch_id is None else
                 "SELECT bookkeeping_guard.claim_publication(:c,:w,:seconds,:batch)"
             )
@@ -472,7 +447,7 @@ class Store:
             with self.engine.begin() as conn:
                 self._authorize(conn)
                 conn.execute(
-                    text("SELECT mdm_v2.finish_publication(:b,:c,:f,NULL,:err)"),
+                    text("SELECT mdm.finish_outbox(:b,:c,:f,NULL,:err)"),
                     {
                         "b": claim["batch_id"],
                         "c": consumer,
@@ -484,7 +459,7 @@ class Store:
         with self.engine.begin() as conn:
             self._authorize(conn)
             conn.execute(
-                text("SELECT mdm_v2.finish_publication(:b,:c,:f,:h,NULL)"),
+                text("SELECT mdm.finish_outbox(:b,:c,:f,:h,NULL)"),
                 {
                     "b": claim["batch_id"],
                     "c": consumer,
@@ -501,7 +476,7 @@ class Store:
                 conn,
                 """SELECT count(DISTINCT o.batch_id) AS batches,
               count(*) FILTER(WHERE p.verified_at IS NULL) AS pending
-              FROM mdm_v2.observation o JOIN mdm_v2.publication p USING(batch_id)
+              FROM mdm.run_batch o JOIN mdm.outbox p USING(batch_id)
               WHERE o.run_id=CAST(:run AS uuid)""",
                 run=run_id,
             )[0]

@@ -89,7 +89,7 @@ def _handle(args):
 
                         pending = conn.scalar(
                             text(
-                                "SELECT count(*) FROM mdm_v2.publication WHERE batch_id=:b AND consumer='journal' AND verified_at IS NULL"
+                                "SELECT count(*) FROM mdm.outbox WHERE batch_id=:b AND consumer='journal' AND verified_at IS NULL"
                             ),
                             {"b": args.batch_id},
                         )

@@ -15,7 +15,7 @@ document; the [release gates](#release-gates) say what must be true first.
 Read against: `origin/main` `7467b114` and Clean MDM's
 `origin/codex/clean-mdm-integration` `a19463be9be7` (read-only). Where this
 spec cites a Clean MDM migration it pins the sha256 that
-`edgar_warehouse/mdm/clean/store.py` records in `mdm_v2.migration.checksum`,
+`edgar_warehouse/mdm/clean/store.py` records in `mdm.migration.checksum`,
 so drift between this text and the installed table is visible by one
 `SELECT`.
 
@@ -24,10 +24,10 @@ so drift between this text and the installed table is visible by one
 Legacy MDM (`edgar_warehouse/mdm/` outside `clean/`, ADR 0007's
 `mdm_change_log`/`mdm_relationship_instance`/`mdm_entity`) is being
 decommissioned. **Nothing in this specification targets legacy MDM.** There
-is one MDM and one set of MDM tables: Clean MDM's `mdm_v2` schema
+is one MDM and one set of MDM tables: Clean MDM's `mdm` schema
 (`edgar_warehouse/mdm/clean/`, `docs/specs/clean-mdm/`). This spec points at
 those tables by name and defining migration and never restates their DDL.
-`mdm_v2` is Clean MDM's schema name, chosen to sit beside legacy until legacy
+`mdm` is Clean MDM's schema name, chosen to sit beside legacy until legacy
 is dropped; it is not a second MDM.
 
 ## Vocabulary
@@ -45,7 +45,7 @@ Verifier, Ledger Repairer, MDM Committer, Steward.
 One external source is one or more **publication families**. A publication
 family is the unit that is captured, verified complete, checkpointed, and
 recovered independently. It is a `source_family` value in the Change Ledger
-and a `source_code` row in `mdm_v2.dataset`.
+and a `source_code` row in `mdm.dataset`.
 
 GLEIF, the first source, is these families
 ([ticket 02](../../../.scratch/mdm-enrichment-shared-foundation/issues/02-decide-gleif-publication-family-taxonomy.md)):
@@ -84,18 +84,18 @@ to existing rows
 | Root run | `bookkeeping.pipeline_run` | existing Bookkeeping schema |
 | Source publication | **derived**: the `change_ledger.source_revision` rows sharing `(source_family, source_native_revision)`, manifest file included | migration `013_acquisition_ledger.sql` |
 | Publication artifact | one `change_ledger.source_revision` row per file | `013_acquisition_ledger.sql` |
-| Source record version | `mdm_v2.assertion` | `023_clean_mdm.sql` `44374b8b47061dd4aa8fc3b600a76bb2c5a28870f044f5f6834e4a701ca942a1` |
+| Source record version | `mdm.source_reading` | `023_clean_mdm.sql` `44374b8b47061dd4aa8fc3b600a76bb2c5a28870f044f5f6834e4a701ca942a1` |
 | Consumer candidate | not persisted today; the [pre-merge staging proposal](../../../.scratch/clean-mdm-premerge-staging-proposal/map.md) — *proposed, awaiting Clean MDM review* | — |
-| Stewardship decision | `mdm_v2.decision` | `023` as above |
-| Accepted binding / version | `mdm_v2.identity` (history) + `mdm_v2.projection` (current) | `023` as above |
-| Deferred evidence | `mdm_v2.deferred_record` | `027_clean_mdm_deferred.sql` `d34641669802a44924dde46c48239432927eaeb899bb03325a185075cd594c0e` |
-| Consumer checkpoint | `mdm_v2.checkpoint` — see dependency below | `023` as above |
-| Phase attempt | `mdm_v2.attempt_event` | `026_clean_mdm_attempts.sql` `1b8ce3ac39f71aadd985d1f3fe6ae9c3fa236b084d828461d4f3a0749b1060a3` |
+| Stewardship decision | `mdm.decision` | `023` as above |
+| Accepted binding / version | `mdm.master_entity` (history) + `mdm.current_record` (current) | `023` as above |
+| Deferred evidence | `mdm.set_aside_record` | `027_clean_mdm_deferred.sql` `d34641669802a44924dde46c48239432927eaeb899bb03325a185075cd594c0e` |
+| Consumer checkpoint | `mdm.checkpoint` — see dependency below | `023` as above |
+| Phase attempt | `mdm.attempt_event` | `026_clean_mdm_attempts.sql` `1b8ce3ac39f71aadd985d1f3fe6ae9c3fa236b084d828461d4f3a0749b1060a3` |
 
 **Root run.** `bookkeeping.pipeline_run` is the persistent root run
 ([ticket 01](../../../.scratch/mdm-enrichment-shared-foundation/issues/01-decide-root-run-location.md)).
 A new source is a new `command_name` value and new `source_family` values;
-no table changes. `mdm_v2.batch.run_id` and `mdm_v2.attempt_event.run_id`
+no table changes. `mdm.batch.run_id` and `mdm.attempt_event.run_id`
 are that `pipeline_run_id` — Clean MDM's `023` header states this itself.
 Bookkeeping is updated by observation after the MDM commit; it is not a
 participant in any transaction.
@@ -108,7 +108,7 @@ the transaction is safe because `source_revision` rows are immutable:
 complete cannot later become incomplete. Supersession is the newer
 `source_native_revision`.
 
-**Dependency — per-family checkpoint key.** `mdm_v2.checkpoint` as installed
+**Dependency — per-family checkpoint key.** `mdm.checkpoint` as installed
 is `(consumer PRIMARY KEY, position, batch_id)`: one scalar position per
 consumer. That cannot hold "Company is at Golden Copy 2026-09-19 but ISIN
 2026-09-18," and cannot honor "never advance a sibling family." The
@@ -123,7 +123,7 @@ be released; see [release gates](#release-gates).
 **Generic legal-entity registry** (International Organization route; this
 spec owns it per the program's spec-index,
 [ticket 09](../../../.scratch/mdm-enrichment-shared-foundation/issues/09-confirm-generic-legal-entity-registry-representation.md)).
-There is no separate registry. `mdm_v2.identity.kind` already admits
+There is no separate registry. `mdm.master_entity.kind` already admits
 `international_organization`; such an entity is one `identity` row, its
 bound `assertion` rows (names, addresses, legal form, status, identifiers,
 lifecycle, relationships), and one `projection` row — the same shape as
@@ -138,7 +138,7 @@ As Clean MDM's `source-evidence.md` defines and this foundation adopts:
 source effective time, publication time, observation time, and recorded
 time are separate; a missing effective time is explicit under a versioned
 dataset rule, never replaced by load time; publication order comes from the
-source contract, never from filename sort. `mdm_v2.assertion` carries
+source contract, never from filename sort. `mdm.source_reading` carries
 `effective_at`, `publication_key`, and `revision`; supersession within a
 source record/field chain is a new assertion.
 
@@ -150,7 +150,7 @@ and its `decision.operation` set (`bind`, `merge`, `reverse`, `override`,
 none. Two states it relies on:
 
 - **Deferred**: an unsupported or unresolvable record is a
-  `mdm_v2.deferred_record` with an open blocking review, enforced by
+  `mdm.set_aside_record` with an open blocking review, enforced by
   `commit_batch` (`027`). It stays evidence; it is never coerced into a
   domain.
 - **Candidate under review**: the pre-merge staging state, *proposed*. Until
@@ -168,7 +168,7 @@ Two transactions, fixed order, nothing spans databases
 2. **Completeness precondition** — no transaction. The consumer reads
    `change_ledger` and confirms the publication is complete. Not complete
    ⇒ step 3 does not open.
-3. **Consume** — database `mdm`. One `mdm_v2.commit_batch` call writes
+3. **Consume** — database `mdm`. One `mdm.save_batch` call writes
    assertions, decisions, projection, MDM Commit Evidence, Consumer
    Checkpoint, and every publication intent, or nothing. This is Clean
    MDM's boundary (`recovery.md`, "Transaction boundary"), adopted verbatim.
@@ -197,7 +197,7 @@ generalized from GLEIF Company ticket 14:
   (migration 014) **names** its continuity rule; it is a text policy name,
   not a field set. *Open (found in documentation review, 2026-09-19)*: where
   the rule's field definitions live. Recommended: the versioned dataset
-  contract in `mdm_v2.dataset.body`, which Clean MDM's `source-evidence.md`
+  contract in `mdm.dataset.body`, which Clean MDM's `source-evidence.md`
   already scopes to "publication key/order rules, time semantics, declared
   completeness scope" — one home, versioned by `registry_version`, no new
   column anywhere. Not decided here.
@@ -292,7 +292,7 @@ committed) per run.
   checkpoint restored, source evidence, decisions, and run lineage preserved.
 - Rollback of capture is unnecessary: a captured revision is immutable
   evidence; an unwanted publication is simply never consumed.
-- *Open*: the migration path for `mdm_v2.checkpoint` rows written under
+- *Open*: the migration path for `mdm.checkpoint` rows written under
   Clean MDM's current per-batch-consumer workaround, if the per-family key
   is accepted — listed as an open question on that proposal.
 
@@ -329,7 +329,7 @@ implementation — only when all hold:
    resolved tickets, only program tickets 10 (Branch) and 11 (Government
    Entity) and workstreams 02/04/06 name a legacy mechanism
    (`mdm_entity.entity_type` plus a per-domain `mdm_*` table); each decision
-   stands and each mechanism is superseded by `mdm_v2.identity.kind` +
+   stands and each mechanism is superseded by `mdm.master_entity.kind` +
    `projection`, annotated in place. Every other ticket is evidence-level.
 
 ## Verification log

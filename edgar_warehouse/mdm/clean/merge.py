@@ -71,7 +71,7 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
         before = set(keys)
         evidence = rows(
             conn,
-            """SELECT body FROM mdm_v2.assertion
+            """SELECT body FROM mdm.source_reading
             WHERE source_code=ANY(:retiring) OR body->>'subject'=ANY(:keys) OR EXISTS(
              SELECT 1 FROM jsonb_array_elements(body->'relationships') r WHERE r->>'target_subject'=ANY(:keys)) LIMIT :lim""",
             keys=sorted(keys),
@@ -80,7 +80,7 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
         )
         decision_rows = rows(
             conn,
-            """SELECT body FROM mdm_v2.decision WHERE
+            """SELECT body FROM mdm.decision WHERE
             body->>'subject'=ANY(:keys) OR body->>'entity_id'=ANY(:keys) OR body->>'left'=ANY(:keys)
             OR body->>'right'=ANY(:keys) OR body->>'target'=ANY(:keys) OR decision_id=ANY(:keys) LIMIT :lim""",
             keys=sorted(keys),
@@ -106,7 +106,7 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
     sources = sorted({a["source_code"] for a in [*stored_a.values(), *assertions]})
     for r in rows(
         conn,
-        "SELECT body FROM mdm_v2.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(:sources) LIMIT :lim",
+        "SELECT body FROM mdm.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(:sources) LIMIT :lim",
         sources=sources,
         lim=limit + 1,
     ):
@@ -119,7 +119,7 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
             pass
     identities = rows(
         conn,
-        "SELECT entity_id::text,kind,published_at::text FROM mdm_v2.identity WHERE entity_id::text=ANY(:keys) LIMIT :lim",
+        "SELECT entity_id::text,kind,published_at::text FROM mdm.master_entity WHERE entity_id::text=ANY(:keys) LIMIT :lim",
         keys=id_keys,
         lim=limit + 1,
     )
@@ -170,7 +170,7 @@ class MergeStage:
         """What the policy's active identifier and name rules would bind or create."""
         with self.store.engine.connect() as conn:
             policy = conn.scalar(
-                text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
+                text("SELECT body FROM mdm.policy WHERE digest=:digest"),
                 {"digest": command["policy_digest"]},
             )
             if policy is None:
@@ -403,7 +403,7 @@ class MergeStage:
         with self.store.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
             previous = conn.scalar(
-                text("SELECT effects FROM mdm_v2.batch WHERE batch_id=:id"),
+                text("SELECT effects FROM mdm.batch WHERE batch_id=:id"),
                 {"id": batch_id},
             )
             if previous is not None:
@@ -415,7 +415,7 @@ class MergeStage:
             if assessment_id is not None:
                 assessment.check(conn, assessment_id)
             policy = conn.scalar(
-                text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
+                text("SELECT body FROM mdm.policy WHERE digest=:digest"),
                 {"digest": policy_digest},
             )
             if policy is None:
@@ -640,7 +640,7 @@ class MergeStage:
                 row["source_code"]: row["body"]
                 for row in rows(
                     conn,
-                    "SELECT source_code,body FROM mdm_v2.dataset WHERE source_code=ANY(:codes)",
+                    "SELECT source_code,body FROM mdm.dataset WHERE source_code=ANY(:codes)",
                     codes=sorted({r["source_code"] for r in deferred}),
                 )
             }
@@ -666,7 +666,7 @@ class MergeStage:
             # Retire old projected edges/reviews in the affected component only.
             old = rows(
                 conn,
-                """SELECT object_type,object_id,body FROM mdm_v2.projection WHERE
+                """SELECT object_type,object_id,body FROM mdm.current_record WHERE
              (object_type='relationship' AND (body->>'source_id'=ANY(:ids) OR body->>'target_id'=ANY(:ids))) OR
              (object_type='review' AND (body->>'entity_id'=ANY(:ids) OR body->>'subject'=ANY(:subjects) OR body->'affected_subjects' ?| CAST(:subjects AS text[]))) LIMIT :lim""",
                 ids=sorted(all_ids),
@@ -684,7 +684,7 @@ class MergeStage:
             if len(projections) > self.closure_limit:
                 raise Conflict("Projection exceeds bounded budget")
             generation = conn.scalar(
-                text("SELECT coalesce(max(generation),0) FROM mdm_v2.batch")
+                text("SELECT coalesce(max(generation),0) FROM mdm.batch")
             )
             request = {
                 **command,
@@ -709,7 +709,7 @@ class MergeStage:
                 # Exercise the identical SQL validation/permissions boundary,
                 # through a capability that always rolls back its inner writes.
                 conn.execute(
-                    text("SELECT mdm_v2.preview_batch(:request,CAST(:run AS uuid))"),
+                    text("SELECT mdm.preview_batch(:request,CAST(:run AS uuid))"),
                     {"request": canonical(request), "run": run_id},
                 )
                 candidate = None
@@ -719,7 +719,7 @@ class MergeStage:
                     before = old + rows(
                         conn,
                         """SELECT 'entity' AS object_type,object_id,body
-                        FROM mdm_v2.current_entity
+                        FROM mdm.current_entity
                         WHERE object_id=ANY(:ids) LIMIT :lim""",
                         ids=sorted(all_ids),
                         lim=self.closure_limit + 1,

@@ -58,7 +58,7 @@ A contract may use no other domain term (acceptance check 7).
 ### 4.1 The Rules Database is the master
 
 - The **Rules Database** is a Postgres database of its own, separate from
-  Clean MDM's `mdm_v2`. It is local first. It holds every version of every
+  Clean MDM's `mdm`. It is local first. It holds every version of every
   Source Contract and Mastering Policy, with its state, its proof and its
   approval (ticket 06 Q1–Q2).
 - YAML is the authoring and export format. The database stores each version
@@ -69,7 +69,7 @@ A contract may use no other domain term (acceptance check 7).
 - **Production never reads the Rules Database.** When a version becomes
   active, the Dataset Contract is registered into Clean MDM through
   `register_dataset`, and a Mastering Policy through `register_policy`.
-  Production merges read only `mdm_v2`, pinned by digest.
+  Production merges read only `mdm`, pinned by digest.
 - **Proving Run merges happen beside the Rules Database** (ticket 06 Q3–Q4),
   in a throwaway database created for the run and dropped after it, never in
   production. The prototype used a throwaway Postgres 16 container for this.
