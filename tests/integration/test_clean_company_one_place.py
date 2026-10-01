@@ -2,9 +2,9 @@
 
 Company mastering ticket 17. The operator chose, on 2026-09-26 at 13:03 ET,
 to remove the Company copy steps rather than tune them. The Merge Stage
-writes a Company to `mdm_v2.company`, or `mdm_v2.company_alias` for a
-merged-away ID, and reads it there through `mdm_v2.current_entity`.
-`mdm_v2.projection` keeps every other kind, and all relationships and
+writes a Company to `mdm.company`, or `mdm.company_alias` for a
+merged-away ID, and reads it there through `mdm.current_entity`.
+`mdm.current_record` keeps every other kind, and all relationships and
 reviews.
 
 Before this ticket, `projection` held each Company as well. A trigger copied
@@ -14,25 +14,12 @@ with the bytes it already held.
 
 from __future__ import annotations
 
-from unittest import mock
-from uuid import uuid4
 
-import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 
-import edgar_warehouse.mdm.clean.store as store_module
 from edgar_warehouse.mdm.clean.consumer import ContractReader
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, canonical
+from edgar_warehouse.mdm.clean.store import canonical
 from tests.integration import test_clean_mdm_postgres as core
-from tests.integration.test_clean_identifier_binding import (
-    APPLE_CIK,
-    _command,
-    load,
-    matching_policy,
-    record,
-)
 
 postgres = core.postgres
 database = core.database
@@ -43,7 +30,7 @@ def companies_in_projection(db) -> dict[str, dict]:
         return dict(
             conn.execute(
                 text(
-                    "SELECT object_id, body FROM mdm_v2.projection "
+                    "SELECT object_id, body FROM mdm.current_record "
                     "WHERE object_type='entity' AND body->>'kind'='company'"
                 )
             ).all()
@@ -54,7 +41,7 @@ def computed(db, batch_id: str) -> dict[str, dict]:
     """The entity objects the Merge Stage sent in one batch."""
     with db.application.connect() as conn:
         effects = conn.scalar(
-            text("SELECT effects FROM mdm_v2.batch WHERE batch_id=:b"), {"b": batch_id}
+            text("SELECT effects FROM mdm.batch WHERE batch_id=:b"), {"b": batch_id}
         )
     return {
         p["object_id"]: p["body"]
@@ -92,7 +79,7 @@ def test_a_commit_writes_each_company_only_to_the_company_table(database):
         stored = dict(
             conn.execute(
                 text(
-                    "SELECT entity_id::text, body FROM mdm_v2.company WHERE valid_to IS NULL"
+                    "SELECT entity_id::text, body FROM mdm.company WHERE valid_to IS NULL"
                 )
             ).all()
         )
@@ -105,7 +92,7 @@ def test_a_merged_away_company_is_only_an_alias_row(database):
     with database.application.connect() as conn:
         aliases = conn.execute(
             text(
-                "SELECT alias_id::text, canonical_id::text FROM mdm_v2.company_alias "
+                "SELECT alias_id::text, canonical_id::text FROM mdm.company_alias "
                 "WHERE valid_to IS NULL"
             )
         ).all()
@@ -137,7 +124,7 @@ def test_a_person_stays_in_projection(database):
         kinds = (
             conn.execute(
                 text(
-                    "SELECT body->>'kind' FROM mdm_v2.projection WHERE object_type='entity'"
+                    "SELECT body->>'kind' FROM mdm.current_record WHERE object_type='entity'"
                 )
             )
             .scalars()
@@ -162,16 +149,16 @@ def test_a_company_change_alone_changes_the_assessment_snapshot(database):
         database, 2, assertions=[person], identities=[other], decisions=[bind_other]
     )
     scope = canonical({"keys": [identity["entity_id"]], "sources": []})
-    snapshot = text("SELECT mdm_v2.assessment_snapshot(CAST(:s AS jsonb))")
+    snapshot = text("SELECT mdm.match_proposal_snapshot(CAST(:s AS jsonb))")
     with database.admin.begin() as conn:
         before = conn.scalar(snapshot, {"s": scope})
         body = conn.scalar(
-            text("SELECT body FROM mdm_v2.company WHERE valid_to IS NULL")
+            text("SELECT body FROM mdm.company WHERE valid_to IS NULL")
         )
         body["fields"]["name"]["value"] = "Renamed"
         conn.execute(
             text(
-                "SELECT mdm_v2.record_company_projection(CAST(:b AS jsonb),'work-2',now())"
+                "SELECT mdm.record_company_version(CAST(:b AS jsonb),'work-2',now())"
             ),
             {"b": canonical(body)},
         )
@@ -194,7 +181,7 @@ def test_the_company_copy_steps_are_gone(database):
             conn.execute(
                 text(
                     "SELECT proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
-                    "WHERE n.nspname='mdm_v2' AND proname IN "
+                    "WHERE n.nspname='mdm' AND proname IN "
                     "('company_payload_from_table','publish_company_authority',"
                     "'project_company_version')"
                 )
@@ -212,103 +199,9 @@ def test_a_publication_carries_the_objects_the_merge_stage_computed(database):
         rows = conn.execute(
             text(
                 "SELECT p.batch_id, p.payload->'objects', b.effects->'projections' "
-                "FROM mdm_v2.publication p JOIN mdm_v2.batch b USING (batch_id)"
+                "FROM mdm.outbox p JOIN mdm.batch b USING (batch_id)"
             )
         ).all()
     assert rows and all(objects == sent for _, objects, sent in rows)
 
 
-def test_migration_042_applies_to_a_populated_store(postgres):
-    """CLAUDE.md: over real rows, in production's order.
-
-    A store at 040 holds a Company created by the CIK rule, two steward
-    Companies (one merged into the other), a Person, and a `ready` assessment
-    not yet applied. After 042:
-    - no Company is left in `projection`;
-    - each Company reads back unchanged;
-    - the stored assessment's snapshot still matches, so it applies without
-      being assessed again.
-    """
-    admin, app = postgres
-    names = list(store_module.CLEAN_MDM_MIGRATIONS)
-    through_041 = tuple(n for n in names if n < "042")
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_041):
-        db = core.initialize_database(admin, app)
-        policy = matching_policy(db)
-        load(db, policy, "b1", record("x", cik=APPLE_CIK))
-        merged_pair(db)
-        person = core.source("p", kind="person", fields={"name": "Jane Roe"})
-        identity, bind = core.identity_and_binding(person)
-        core.apply(db, 3, assertions=[person], identities=[identity], decisions=[bind])
-        stage = MergeStage(Store(db.application))
-        # A second record with Apple's CIK: its scope holds Apple's Company.
-        late = _command(policy, "late", record("m", cik=APPLE_CIK))
-        prepared = stage.assess(**late, automatic=stage.propose(**late))
-        before = core.documents(db, "entity")
-        held = companies_in_projection(db)
-        assert len(held) == 3  # the CIK rule's Company, the survivor, the alias
-        with db.application.connect() as conn:
-            keys = conn.scalar(
-                text(
-                    "SELECT body->'scope'->'keys' FROM mdm_v2.assessment WHERE assessment_id=:a"
-                ),
-                {"a": prepared["assessment_id"]},
-            )
-        assert set(keys) & set(held)
-    core.migrate(admin, application_role="clean_application")
-    assert companies_in_projection(db) == {}
-    assert core.documents(db, "entity") == before
-    with db.application.connect() as conn:
-        stored, now = conn.execute(
-            text(
-                "SELECT body->>'snapshot', mdm_v2.assessment_snapshot(body->'scope') "
-                "FROM mdm_v2.assessment WHERE assessment_id=:a"
-            ),
-            {"a": prepared["assessment_id"]},
-        ).one()
-    assert now == stored
-    MergeStage(Store(db.application)).apply_assessment(
-        prepared["assessment_id"], run_id=str(uuid4())
-    )
-    companies = [
-        v for v in core.documents(db, "entity").values() if v["kind"] == "company"
-    ]
-    # The late record joins Apple's Company: no fourth Company. Records held:
-    # the alias none, the steward survivor its own and the merged one, Apple
-    # both of its records.
-    assert len(companies) == 3
-    assert sorted(len(c.get("subjects", [])) for c in companies) == [0, 2, 2]
-
-
-def test_migration_042_refuses_a_company_that_differs_from_the_company_table(postgres):
-    """042 deletes Company rows from projection only after checking each one.
-
-    A store at 040 whose projection Company no longer matches its open Company
-    row makes 042 stop. Migrations apply in one transaction, so nothing is
-    deleted and 042 is not recorded.
-    """
-    admin, app = postgres
-    names = list(store_module.CLEAN_MDM_MIGRATIONS)
-    through_041 = tuple(n for n in names if n < "042")
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_041):
-        db = core.initialize_database(admin, app)
-        a = core.source("a")
-        identity, bind = core.identity_and_binding(a)
-        core.apply(db, 1, assertions=[a], identities=[identity], decisions=[bind])
-    # Drift the copy trigger never saw: triggers are off for this one edit.
-    with admin.begin() as conn:
-        conn.execute(text("SET LOCAL session_replication_role = replica"))
-        conn.execute(
-            text(
-                "UPDATE mdm_v2.projection SET body=jsonb_set(body,'{status}','\"review\"') "
-                "WHERE object_type='entity' AND body->>'kind'='company'"
-            )
-        )
-    held = companies_in_projection(db)
-    with pytest.raises(DBAPIError, match="differs from the Company table"):
-        core.migrate(admin, application_role="clean_application")
-    assert companies_in_projection(db) == held
-    with admin.connect() as conn:
-        assert not conn.scalar(
-            text("SELECT count(*) FROM mdm_v2.migration WHERE name LIKE '042%'")
-        )

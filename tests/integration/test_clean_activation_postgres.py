@@ -64,7 +64,7 @@ def test_a_body_that_bypassed_registration_is_refused_per_batch(database):
     key = digest(body)
     with database.admin.begin() as conn:
         conn.execute(
-            text("INSERT INTO mdm_v2.policy VALUES(:k,CAST(:b AS jsonb))"),
+            text("INSERT INTO mdm.policy VALUES(:k,CAST(:b AS jsonb))"),
             {"k": key, "b": canonical(body)},
         )
     with pytest.raises(Conflict, match="does not reproduce"):

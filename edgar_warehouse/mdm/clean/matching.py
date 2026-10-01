@@ -253,7 +253,7 @@ def _stored(conn, source: str, lookup: str, values: list[str]) -> list[dict]:
         r["reading"]
         for r in rows(
             conn,
-            f"""SELECT reading FROM mdm_v2.stage_record
+            f"""SELECT reading FROM mdm.stage_record
             WHERE source_code = :source AND {where} = ANY(:values)""",
             source=source,
             values=sorted(set(values)),
@@ -281,7 +281,7 @@ def _held_leis(conn, source: str, entities: set[str], released: set[str] = froze
     for r in rows(
         conn,
         """SELECT entity_id::text AS entity_id, reading->'identifiers'->>'lei' AS lei
-        FROM mdm_v2.stage_record
+        FROM mdm.stage_record
         WHERE entity_id = ANY(CAST(:entities AS uuid[])) AND source_code = :source
           AND reading->'identifiers'->>'lei' IS NOT NULL
           AND NOT subject = ANY(:released)""",

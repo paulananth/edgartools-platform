@@ -1,7 +1,7 @@
 # Publication-family checkpoints
 
 Migration 029 adapts Claude's per-family checkpoint proposal in the existing
-`mdm_v2.checkpoint` table. Its primary key is now `(consumer, source_family,
+`mdm.checkpoint` table. Its primary key is now `(consumer, source_family,
 publication_family)`. Each row retains its consumed publication reference,
 continuity-proof object and committed batch. Batch effects keep their immutable
 copy. No source-publication table or cross-database foreign key is introduced.
@@ -73,5 +73,5 @@ retain the evidence needed to investigate or rebuild prior progress.
 The migration updates only guarded checkpoint fragments in the installed core
 capability and assessment snapshot function. Original migration files are
 unchanged; an unexpected function shape aborts the migration. Restricted-role
-writes still go through `commit_batch`, and snapshot hashes remain time-zone
+writes still go through `save_batch`, and snapshot hashes remain time-zone
 independent.

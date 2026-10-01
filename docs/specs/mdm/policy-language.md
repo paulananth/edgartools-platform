@@ -24,7 +24,7 @@ code is what runs and this document is the defect.
 ## 1. Purpose
 
 Clean MDM's Merge Stage already runs under a **policy document**:
-`mdm_v2.policy (digest, body jsonb)` (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:10-13`),
+`mdm.policy (digest, body jsonb)` (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:10-13`),
 one immutable body pinned per batch and loaded at
 `edgar_warehouse/mdm/clean/merge.py:179-184`. Today that body is a Python
 dict (`clean/company_source.py:62-72`) whose only declarative content is
@@ -46,7 +46,7 @@ priority of sources and which fields will be in the final entity."*
 
 ## 2. Scope
 
-**In**: the schema of `mdm_v2.policy.body` for three rule families
+**In**: the schema of `mdm.policy.body` for three rule families
 (§4); the twelve-primitive vocabulary and its versioning (§5); rule shapes
 for classification, binding/consolidation, survivorship/projection
 (§6–§8); activation with its two kinds of proof (§9); the checks a
@@ -282,7 +282,7 @@ Rules:
   switched on is its own Probable Kind. The waiting record keeps it as
   `probable_kind`, written only when known, so a record given none keeps its
   id; a record given one waits differently when its publication is re-read,
-  and so collides, the limit accepted on 2026-09-23. `mdm_v2.stage_waiting`
+  and so collides, the limit accepted on 2026-09-23. `mdm.stage_waiting`
   lists the waiting records with it (migration 036). A contract that states kinds by a lookup table may name the Probable
   Kind of the values it does not accept in `probable_kind_values` (GLEIF:
   `FUND` → `fund_structure`, `BRANCH` → `branch`,
@@ -624,7 +624,7 @@ store.
 
 ## 13. Dependencies on Clean MDM and items raised for Codex
 
-This is a proposal against `mdm_v2.policy`, `clean/merge.py`,
+This is a proposal against `mdm.policy`, `clean/merge.py`,
 `clean/store.py` and `clean/adapters.py`, all Codex/Grok's. Items they must
 decide, in the order they bite:
 

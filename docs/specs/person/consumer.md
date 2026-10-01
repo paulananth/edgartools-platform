@@ -26,7 +26,7 @@ actors, retention, checkpoints and run evidence, and nothing else.
 ## Governing directive
 
 Legacy MDM is being decommissioned (operator, 2026-09-19). This consumer
-targets `mdm_v2` and the Merge Stage only. Legacy Person code is cited here
+targets `mdm` and the Merge Stage only. Legacy Person code is cited here
 only as evidence of current behaviour, and its decommissioning is inventoried
 in [ticket 22](../../../.scratch/person-consumer-contract/issues/22-decommission-legacy-person-code-and-tests.md).
 
@@ -132,7 +132,7 @@ not classification evidence; rule C-J and the Person normalizer read
 Flags, `entityType = 'other'` and deputization text are **evidence, never
 deciders** — `other` is 71% person and "10%-only" is 72% entity, so neither may
 decide. Category, asserted legal form and inferred kind are recorded separately
-in `assertion.body` with rule id and version (`domain-model.md:41-44`); a kind
+in `source_reading.body` with rule id and version (`domain-model.md:41-44`); a kind
 correction is review plus bounded rebuild, never a merge.
 
 The **entity arm is gated**: its post-hoc guards must be re-measured in
@@ -246,13 +246,13 @@ and CRD are two typed identifiers, not one mergeable key (research 15).
 
 | Concept | Home |
 | --- | --- |
-| Person | `mdm_v2.identity` (`kind = 'person'`) + `mdm_v2.projection` |
-| Relationship | `mdm_v2.projection` (`object_type = 'relationship'`) |
-| Evidence | `mdm_v2.assertion` — including compensation, which is never projected |
-| Waiting edge / unclassified owner | `mdm_v2.deferred_record` (migration 027) |
+| Person | `mdm.master_entity` (`kind = 'person'`) + `mdm.current_record` |
+| Relationship | `mdm.current_record` (`object_type = 'relationship'`) |
+| Evidence | `mdm.source_reading` — including compensation, which is never projected |
+| Waiting edge / unclassified owner | `mdm.set_aside_record` (migration 027) |
 | Pre-commit proposal | durable candidate assessment (migration 028, [candidate-assessments.md](../clean-mdm/candidate-assessments.md)) |
-| Checkpoint | `mdm_v2.checkpoint` keyed `(consumer, source_family, publication_family)` (migration 029, [family-checkpoints.md](../clean-mdm/family-checkpoints.md)) |
-| Rules | `mdm_v2.policy` body, per [policy-language.md](../mdm/policy-language.md) |
+| Checkpoint | `mdm.checkpoint` keyed `(consumer, source_family, publication_family)` (migration 029, [family-checkpoints.md](../clean-mdm/family-checkpoints.md)) |
+| Rules | `mdm.policy` body, per [policy-language.md](../mdm/policy-language.md) |
 
 ### The Person projection
 
@@ -389,7 +389,7 @@ Legacy closed `IS_INSIDER` only when properties differed
   accepted with its consumer enabled. Covers unaccepted issuer Companies,
   unaccepted ADV firms, holdings and `MANAGES_FUND`. Legacy dropped these
   silently (`pipeline.py:1890`).
-- **Steward decisions** carry actor and reason; `commit_batch` rejects a
+- **Steward decisions** carry actor and reason; `save_batch` rejects a
   decision without them (foundation).
 
 ## Cadence and processing

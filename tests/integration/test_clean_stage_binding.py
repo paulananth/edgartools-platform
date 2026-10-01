@@ -2,7 +2,7 @@
 (company mastering ticket 10, slice 2a).
 
 The matching rules' lookups move from the full history to
-`mdm_v2.stage_record`. Each test below holds a moved reader equal to the query
+`mdm.stage_record`. Each test below holds a moved reader equal to the query
 it replaced, kept here verbatim as the reference, over one seeded history: an
 identifier that changes between revisions, an older reading delivered later,
 a Name Census entry that changes, and bound and unbound records. The two
@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from unittest import mock
 from uuid import uuid4
 
 import pytest
@@ -22,7 +21,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean import binding, matching
-from edgar_warehouse.mdm.clean import store as store_module
 from edgar_warehouse.mdm.clean.store import rows
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_identifier_binding import CIK_ISSUED, LEI_CONTRACT
@@ -113,17 +111,17 @@ def old_holders(conn, policy, wanted):
             f"""WITH latest AS (
                 SELECT DISTINCT ON (a.source_code, a.record_key)
                        a.body->>'subject' AS subject, {path.replace("body", "a.body")} AS value
-                FROM mdm_v2.assertion a
+                FROM mdm.source_reading a
                 WHERE (a.source_code, a.record_key) IN (
-                    SELECT source_code, record_key FROM mdm_v2.assertion
+                    SELECT source_code, record_key FROM mdm.source_reading
                     WHERE {path} = ANY(:values) AND source_code = ANY(:sources))
                 ORDER BY a.source_code, a.record_key, a.revision DESC,
                          a.mapping_version DESC)
             SELECT l.value, d.body->>'entity_id' AS entity_id, i.kind
             FROM latest l
-            JOIN mdm_v2.decision d
+            JOIN mdm.decision d
               ON d.operation='bind' AND d.body->>'subject'=l.subject
-            JOIN mdm_v2.identity i ON i.entity_id=(d.body->>'entity_id')::uuid
+            JOIN mdm.master_entity i ON i.entity_id=(d.body->>'entity_id')::uuid
             WHERE l.value = ANY(:values)""",
             values=sorted(values),
             sources=binding._issuers(policy, namespace),
@@ -147,7 +145,7 @@ def old_stored(conn, source, lookup, values):
         for r in rows(
             conn,
             f"""SELECT DISTINCT ON (source_code, record_key) body
-            FROM mdm_v2.assertion
+            FROM mdm.source_reading
             WHERE source_code = :source AND {OLD_LOOKUPS[lookup]} = ANY(:values)
             ORDER BY source_code, record_key, revision DESC, mapping_version DESC""",
             source=source,
@@ -162,7 +160,7 @@ def old_bound_subjects(conn, subjects):
         for r in rows(
             conn,
             """SELECT body->>'subject' AS subject, body->>'entity_id' AS entity_id
-            FROM mdm_v2.decision
+            FROM mdm.decision
             WHERE operation='bind' AND body->>'subject' = ANY(:subjects)""",
             subjects=sorted(subjects),
         )
@@ -175,8 +173,8 @@ def old_held_leis(conn, source, entities):
         conn,
         """SELECT DISTINCT d.body->>'entity_id' AS entity_id,
                a.body->'identifiers'->>'lei' AS lei
-        FROM mdm_v2.decision d
-        JOIN mdm_v2.assertion a ON a.body->>'subject' = d.body->>'subject'
+        FROM mdm.decision d
+        JOIN mdm.source_reading a ON a.body->>'subject' = d.body->>'subject'
         WHERE d.operation='bind' AND d.body->>'entity_id' = ANY(:entities)
           AND a.source_code = :source
           AND a.body->'identifiers'->>'lei' IS NOT NULL""",
@@ -193,7 +191,7 @@ def bindings_on_stage(db) -> dict[str, str]:
         return dict(
             conn.execute(
                 text(
-                    "SELECT record_key, entity_id::text FROM mdm_v2.stage_record "
+                    "SELECT record_key, entity_id::text FROM mdm.stage_record "
                     "WHERE entity_id IS NOT NULL"
                 )
             ).all()
@@ -275,14 +273,14 @@ def test_the_winning_reading_is_kept_whole(database):
     seed(database)
     with database.application.connect() as conn:
         found = conn.execute(
-            text("SELECT record_key, reading, assertion_id FROM mdm_v2.stage_record")
+            text("SELECT record_key, reading, assertion_id FROM mdm.stage_record")
         ).all()
         latest = {
             r["record_key"]: r["body"]
             for r in rows(
                 conn,
                 """SELECT DISTINCT ON (source_code, record_key) record_key, body
-                FROM mdm_v2.assertion
+                FROM mdm.source_reading
                 ORDER BY source_code, record_key, revision DESC, mapping_version DESC""",
             )
         }
@@ -300,46 +298,15 @@ def test_a_binding_never_moves_on_the_stage(database):
     seeded = seed(database)
     with database.application.connect() as conn:
         (subject,) = conn.scalars(
-            text("SELECT subject FROM mdm_v2.stage_record WHERE record_key='a'")
+            text("SELECT subject FROM mdm.stage_record WHERE record_key='a'")
         ).all()
     same = {"subject": subject, "entity_id": seeded["e1"]}
-    call(database, "SELECT mdm_v2.record_binding(CAST(:d AS jsonb))", d=same)
+    call(database, "SELECT mdm.record_binding(CAST(:d AS jsonb))", d=same)
     moved = {"subject": subject, "entity_id": seeded["e2"]}
     with pytest.raises(DBAPIError, match="requires a correction contract"):
-        call(database, "SELECT mdm_v2.record_binding(CAST(:d AS jsonb))", d=moved)
+        call(database, "SELECT mdm.record_binding(CAST(:d AS jsonb))", d=moved)
     stray = {"subject": "no-such-record", "entity_id": seeded["e1"]}
     with pytest.raises(DBAPIError, match="names no Stage record"):
-        call(database, "SELECT mdm_v2.record_binding(CAST(:d AS jsonb))", d=stray)
+        call(database, "SELECT mdm.record_binding(CAST(:d AS jsonb))", d=stray)
 
 
-def test_a_populated_store_backfills_bindings_and_readings(postgres):
-    admin, app = postgres
-    migrations = store_module.CLEAN_MDM_MIGRATIONS
-    before = migrations[: migrations.index("039_clean_mdm_stage_binding.sql")]
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", before):
-        db = core.initialize_database(admin, app)
-        seeded = seed(db)
-    store_module.migrate(admin, application_role="clean_application")
-    bound_now = bindings_on_stage(db)
-    with db.application.connect() as conn:
-        wanted = {"cik": CIKS, "lei": {L1, L2, L3}}
-        assert binding.holders(conn, POLICY, wanted) == old_holders(
-            conn, POLICY, wanted
-        )
-        assert (
-            conn.scalar(
-                text("SELECT count(*) FROM mdm_v2.stage_record WHERE reading IS NULL")
-            )
-            == 0
-        )
-    assert bound_now == {
-        "a": seeded["e1"],
-        "g": seeded["e1"],
-        "c": seeded["e2"],
-        "h": seeded["e2"],
-    }
-    # The next live bind is kept through the evidence wrapper.
-    k = record("k", 1, source_code=GLEIF, lei=L1)
-    core.apply(db, 5, assertions=[k], decisions=[bind(k, seeded["e1"])])
-    with db.application.connect() as conn:
-        assert binding.bound(conn, {k["subject"]}) == {k["subject"]: seeded["e1"]}

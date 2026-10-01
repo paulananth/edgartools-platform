@@ -32,9 +32,9 @@ def normalize_input(book, spec: dict, export: dict, mdm_engine, policy_digest: s
     if not frozen or not declared:
         raise Blocked("Source input has no reading in the frozen Rules registration")
     with mdm_engine.connect() as conn:
-        contract = conn.scalar(text("SELECT body FROM mdm_v2.dataset_mapping WHERE source_code=:c AND mapping_version=:v"),
+        contract = conn.scalar(text("SELECT body FROM mdm.dataset_mapping WHERE source_code=:c AND mapping_version=:v"),
                                {"c": code, "v": frozen["mapping_version"]})
-        policy = conn.scalar(text("SELECT body FROM mdm_v2.policy WHERE digest=:d"), {"d": policy_digest})
+        policy = conn.scalar(text("SELECT body FROM mdm.policy WHERE digest=:d"), {"d": policy_digest})
     if (not contract or digest(contract) != frozen["digest"]
             or {k: v for k, v in contract.items() if k != "registry_evidence"} != declared["contract"]):
         raise Blocked("Frozen dataset reading is missing or differs from its registration")

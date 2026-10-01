@@ -15,7 +15,7 @@ def record(store, body: dict, run_id: str) -> dict:
     with store.engine.begin() as conn:
         store._authorize(conn)
         key = conn.scalar(
-            text("SELECT mdm_v2.record_assessment(:body,CAST(:run AS uuid))"),
+            text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
             {"body": canonical(body), "run": run_id},
         )
     return {"assessment_id": key, **body}
@@ -23,14 +23,14 @@ def record(store, body: dict, run_id: str) -> dict:
 
 def snapshot(conn, scope: dict) -> str:
     return conn.scalar(
-        text("SELECT mdm_v2.assessment_snapshot(CAST(:scope AS jsonb))"),
+        text("SELECT mdm.match_proposal_snapshot(CAST(:scope AS jsonb))"),
         {"scope": canonical(scope)},
     )
 
 
 def load(conn, key: str) -> dict:
     body = conn.scalar(
-        text("SELECT body FROM mdm_v2.assessment WHERE assessment_id=:key"),
+        text("SELECT body FROM mdm.match_proposal WHERE assessment_id=:key"),
         {"key": key},
     )
     if body is None:
@@ -43,7 +43,7 @@ def check(conn, key: str) -> None:
     if body["outcome"] != "ready":
         raise Conflict("Rejected identity assessment cannot be applied")
     if conn.scalar(
-        text("""SELECT EXISTS(SELECT 1 FROM mdm_v2.assessment_event
+        text("""SELECT EXISTS(SELECT 1 FROM mdm.match_proposal_event
         WHERE assessment_id=:key AND event IN ('applied','superseded'))"""),
         {"key": key},
     ) or body["snapshot"] != snapshot(conn, body["scope"]):
@@ -56,6 +56,6 @@ def supersede(store, key: str, run_id: str) -> None:
     with store.engine.begin() as conn:
         store._authorize(conn)
         conn.execute(
-            text("SELECT mdm_v2.supersede_assessment(:key,CAST(:run AS uuid))"),
+            text("SELECT mdm.supersede_match_proposal(:key,CAST(:run AS uuid))"),
             {"key": key, "run": run_id},
         )

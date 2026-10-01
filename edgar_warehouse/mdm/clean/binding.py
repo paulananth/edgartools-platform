@@ -53,7 +53,7 @@ def publish_floor(conn, kind: str, as_of: str) -> str:
     "earliest published" means earliest committed (ticket 04).
     """
     newest = conn.scalar(
-        text("SELECT max(published_at) FROM mdm_v2.identity WHERE kind=:kind"),
+        text("SELECT max(published_at) FROM mdm.master_entity WHERE kind=:kind"),
         {"kind": kind},
     )
     if newest is None or instant(as_of) > newest:
@@ -111,8 +111,8 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
         found_rows = rows(
             conn,
             f"""SELECT {path} AS value, s.entity_id::text AS entity_id, i.kind
-            FROM mdm_v2.stage_record s
-            JOIN mdm_v2.identity i ON i.entity_id = s.entity_id
+            FROM mdm.stage_record s
+            JOIN mdm.master_entity i ON i.entity_id = s.entity_id
             WHERE {path} = ANY(:values) AND s.source_code = ANY(:sources)
               AND NOT s.subject = ANY(:released)""",
             values=sorted(values),
@@ -137,7 +137,7 @@ def bound(conn, subjects) -> dict[str, str]:
         r["subject"]: r["entity_id"]
         for r in rows(
             conn,
-            """SELECT subject, entity_id::text AS entity_id FROM mdm_v2.stage_record
+            """SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record
             WHERE subject = ANY(:subjects) AND entity_id IS NOT NULL""",
             subjects=sorted(subjects),
         )
@@ -152,7 +152,7 @@ def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
         r["object_id"]: r["canonical_id"]
         for r in rows(
             conn,
-            """SELECT object_id, canonical_id FROM mdm_v2.current_entity
+            """SELECT object_id, canonical_id FROM mdm.current_entity
             WHERE object_id=ANY(:ids) AND canonical_id IS NOT NULL""",
             ids=sorted(entity_ids),
         )
@@ -173,7 +173,7 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
         r["object_id"]
         for r in rows(
             conn,
-            """SELECT object_id FROM mdm_v2.current_entity
+            """SELECT object_id FROM mdm.current_entity
             WHERE object_id=ANY(:ids) AND status='review'""",
             ids=sorted(entity_ids),
         )
@@ -415,7 +415,7 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
     return any(
         conn.scalar(
             text(
-                """SELECT EXISTS(SELECT 1 FROM mdm_v2.identity WHERE kind=:kind
+                """SELECT EXISTS(SELECT 1 FROM mdm.master_entity WHERE kind=:kind
                 AND published_at >= CAST(:at AS timestamptz))"""
             ),
             {"kind": kind, "at": at},

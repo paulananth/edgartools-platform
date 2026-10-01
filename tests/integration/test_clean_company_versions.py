@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from unittest import mock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
-from edgar_warehouse.mdm.clean import store as store_module
 from edgar_warehouse.mdm.clean.consumer import ContractReader
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
@@ -24,7 +22,7 @@ def versions(db):
         return conn.execute(
             text("""SELECT from_generation,to_generation,valid_from,valid_to,
                    cik,lei,name,address,status,fields,body
-                   FROM mdm_v2.company ORDER BY from_generation""")
+                   FROM mdm.company ORDER BY from_generation""")
         ).mappings().all()
 
 
@@ -66,62 +64,12 @@ def test_company_versions_close_only_when_master_changes(database):
     core.apply(database, 4, assertions=[cleared])
     assert versions(database)[-1]["address"] is None
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT to_regclass('mdm_v2.company_master')")) is None
+        assert conn.scalar(text("SELECT to_regclass('mdm.company_master')")) is None
     with (
         pytest.raises(ProgrammingError, match="permission denied"),
         database.application.begin() as conn,
     ):
-        conn.execute(text("UPDATE mdm_v2.company SET name='forged'"))
-
-
-def test_populated_store_backfills_company_versions_before_new_writes(postgres):
-    admin, app = postgres
-    migrations = store_module.CLEAN_MDM_MIGRATIONS
-    before_company = migrations[: migrations.index("037_clean_mdm_company_versions.sql")]
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", before_company):
-        db = core.initialize_database(admin, app)
-        first = core.source("backfill", fields={"name": "Old"}, identifiers={"cik": "1"})
-        identity, binding = core.identity_and_binding(first)
-        core.apply(db, 1, assertions=[first], identities=[identity], decisions=[binding])
-        revised = core.source(
-            "backfill", revision=2, fields={"name": "New"}, identifiers={"cik": "1"}
-        )
-        core.apply(db, 2, assertions=[revised])
-        with app.connect() as conn:
-            assert conn.scalar(text("SELECT to_regclass('mdm_v2.company')")) is None
-
-    store_module.migrate(admin, application_role="clean_application")
-    rows = versions(db)
-    assert [(row["from_generation"], row["to_generation"], row["name"]) for row in rows] == [
-        (1, 2, "Old"),
-        (2, None, "New"),
-    ]
-    assert rows[0]["valid_to"] == rows[1]["valid_from"]
-    # Both intents predate the migration. Delivery still rebuilds their
-    # Company objects from the newly backfilled dated authority.
-    destination = core.Destination()
-    destination.fail = False
-    store = Store(app)
-    assert store.deliver_one("export", "backfill-worker", destination)
-    assert store.deliver_one("export", "backfill-worker", destination)
-    assert {
-        item["body"]["fields"]["name"]["value"]
-        for payload, _ in destination.objects.values()
-        for item in payload["objects"] if item["object_type"] == "entity"
-    } == {"Old", "New"}
-    # An immediately subsequent live commit uses the installed trigger.
-    core.apply(
-        db,
-        3,
-        assertions=[
-            core.source(
-                "backfill", revision=3, fields={"name": "Newest"}, identifiers={"cik": "1"}
-            )
-        ],
-    )
-    assert [(r["from_generation"], r["name"]) for r in versions(db)] == [
-        (1, "Old"), (2, "New"), (3, "Newest")
-    ]
+        conn.execute(text("UPDATE mdm.company SET name='forged'"))
 
 
 def test_alias_and_reversal_read_from_dated_company_authority(database):
@@ -145,8 +93,8 @@ def test_alias_and_reversal_read_from_dated_company_authority(database):
         [left_source["subject"], right_source["subject"]]
     )
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company WHERE valid_to IS NULL")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_alias WHERE valid_to IS NULL")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.company WHERE valid_to IS NULL")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.company_alias WHERE valid_to IS NULL")) == 1
     reverse = core.decision(
         "reverse", actor="steward", reason="separate Companies",
         at="2026-03-01T00:00:00Z", target=merge["decision_id"],
@@ -155,8 +103,8 @@ def test_alias_and_reversal_read_from_dated_company_authority(database):
     assert reader.entity(right["entity_id"])["canonical_id"] == right["entity_id"]
     assert reader.entity(right["entity_id"], generation=2)["canonical_id"] == left["entity_id"]
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company WHERE valid_to IS NULL")) == 2
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_alias WHERE valid_to IS NULL")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM mdm.company WHERE valid_to IS NULL")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm.company_alias WHERE valid_to IS NULL")) == 0
     page = reader.snapshot_page("entity", generation=2)
     assert {item["object_id"] for item in page["items"]} == {
         left["entity_id"], right["entity_id"]
@@ -193,4 +141,4 @@ def test_company_fill_rule_refuses_an_unlisted_arriving_source(database):
             assertions=[incoming],
         )
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0

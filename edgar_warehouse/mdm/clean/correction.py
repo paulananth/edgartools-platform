@@ -32,7 +32,7 @@ def _revoking(conn, decisions: list[dict], operation: str) -> set[str]:
         r["decision_id"]
         for r in rows(
             conn,
-            """SELECT decision_id FROM mdm_v2.decision
+            """SELECT decision_id FROM mdm.decision
             WHERE operation = :operation AND decision_id = ANY(:targets)""",
             operation=operation,
             targets=sorted(targets),
@@ -72,9 +72,9 @@ def quarantined(conn, subjects: set[str], decisions: list[dict]) -> set[str]:
         (r["decision_id"], r["subject"])
         for r in rows(
             conn,
-            """SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm_v2.decision q
+            """SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm.decision q
             WHERE q.body->>'subject' = ANY(:subjects) AND q.operation = 'quarantine'
-              AND NOT EXISTS (SELECT 1 FROM mdm_v2.decision v
+              AND NOT EXISTS (SELECT 1 FROM mdm.decision v
                               WHERE v.operation = 'revoke' AND v.body->>'target' = q.decision_id)""",
             subjects=sorted(subjects),
         )
@@ -104,7 +104,7 @@ def readings(conn, subjects: set[str]) -> list[dict]:
         r["reading"]
         for r in rows(
             conn,
-            "SELECT reading FROM mdm_v2.stage_record WHERE subject = ANY(:subjects) ORDER BY subject",
+            "SELECT reading FROM mdm.stage_record WHERE subject = ANY(:subjects) ORDER BY subject",
             subjects=sorted(subjects),
         )
     ]
@@ -120,7 +120,7 @@ def refused(conn, subjects: set[str], decisions: list[dict]) -> set[tuple]:
             r["body"]
             for r in rows(
                 conn,
-                """SELECT body FROM mdm_v2.decision
+                """SELECT body FROM mdm.decision
                 WHERE operation = 'revoke' AND body->>'subject' = ANY(:subjects)""",
                 subjects=sorted(subjects),
             )
@@ -145,10 +145,10 @@ def stale_bindings(conn, policy: dict, *, limit: int) -> list[dict]:
         r["body"]
         for r in rows(
             conn,
-            """SELECT d.body FROM mdm_v2.decision d
+            """SELECT d.body FROM mdm.decision d
             WHERE d.operation = 'bind' AND d.body ? 'rule_id'
               AND NOT (d.body->>'rule_id') || '@' || (d.body->>'rule_version') = ANY(:active)
-              AND NOT EXISTS (SELECT 1 FROM mdm_v2.decision v
+              AND NOT EXISTS (SELECT 1 FROM mdm.decision v
                               WHERE v.operation = 'revoke' AND v.body->>'target' = d.decision_id)
             ORDER BY d.body->>'at', d.decision_id
             LIMIT :limit""",
@@ -167,7 +167,7 @@ def revocations(
         r["subject"]: r["bronze"]
         for r in rows(
             conn,
-            "SELECT subject, bronze FROM mdm_v2.stage_record WHERE subject = ANY(:subjects)",
+            "SELECT subject, bronze FROM mdm.stage_record WHERE subject = ANY(:subjects)",
             subjects=sorted({b["subject"] for b in binds}),
         )
     }
@@ -217,10 +217,10 @@ def correction_batch(
             r["body"]
             for r in rows(
                 conn,
-                """SELECT d.body FROM mdm_v2.decision d
+                """SELECT d.body FROM mdm.decision d
                 WHERE d.body->>'subject' = ANY(:subjects) AND d.operation = 'bind'
                   AND d.body ? 'rule_id'
-                  AND NOT EXISTS (SELECT 1 FROM mdm_v2.decision v
+                  AND NOT EXISTS (SELECT 1 FROM mdm.decision v
                                   WHERE v.operation = 'revoke' AND v.body->>'target' = d.decision_id)""",
                 subjects=sorted(quarantine),
             )
@@ -248,9 +248,9 @@ def correction_batch(
     if lift:
         found = rows(
             conn,
-            """SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm_v2.decision q
+            """SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm.decision q
             WHERE q.body->>'subject' = ANY(:subjects) AND q.operation = 'quarantine'
-              AND NOT EXISTS (SELECT 1 FROM mdm_v2.decision v
+              AND NOT EXISTS (SELECT 1 FROM mdm.decision v
                               WHERE v.operation = 'revoke' AND v.body->>'target' = q.decision_id)""",
             subjects=sorted(lift),
         )

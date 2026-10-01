@@ -213,10 +213,10 @@ def test_company_route_locally_with_and_without_pagination(databases, tmp_path, 
             assert conn.scalar(text("SELECT count(*) FROM journal.event WHERE run_id=CAST(:r AS uuid)"),
                                {"r": rid}) == 34
         with application.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
-            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company WHERE valid_to IS NULL")) == 2
-            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.current_entity WHERE kind='company' AND status<>'alias'")) == 2
-            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.publication WHERE verified_at IS NULL")) == 0
+            assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
+            assert conn.scalar(text("SELECT count(*) FROM mdm.company WHERE valid_to IS NULL")) == 2
+            assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity WHERE kind='company' AND status<>'alias'")) == 2
+            assert conn.scalar(text("SELECT count(*) FROM mdm.outbox WHERE verified_at IS NULL")) == 0
         with book.engine.connect() as conn:
             silver_row = dict(conn.execute(text("""SELECT * FROM bookkeeping.work_item
                 WHERE run_id=CAST(:r AS uuid) AND step='silver'

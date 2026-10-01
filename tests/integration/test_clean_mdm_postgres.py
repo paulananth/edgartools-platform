@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import time
@@ -15,16 +14,13 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean import store as store_module
 from edgar_warehouse.mdm.clean.store import (
     Conflict,
     Store,
-    canonical,
     migrate,
     register_policy,
-    rows,
 )
-from tests.support.rules_authority import authority, register_dataset
+from tests.support.rules_authority import register_dataset
 
 IMAGE = "postgres:16-alpine"
 
@@ -138,38 +134,12 @@ def database(postgres):
             conn.execute(text(f"DROP DATABASE {name} WITH (FORCE)"))
 
 
-COMPANY_ONE_PLACE = "042_clean_mdm_company_one_place.sql"
-
-
-def install_pre_042_reads(admin) -> None:
-    """Let today's code fill a store built at an older migration.
-
-    Today's code reads current entities through `mdm_v2.current_entity`, which
-    042 creates. Before 042 every entity was read from `projection`, so this
-    stand-in reads projection only. 042 replaces it with the real view.
-    """
-    with admin.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE VIEW mdm_v2.current_entity AS "
-                "SELECT object_id, body->>'kind' AS kind, body->>'status' AS status, "
-                "body->>'canonical_id' AS canonical_id, body "
-                "FROM mdm_v2.projection WHERE object_type = 'entity'"
-            )
-        )
-        conn.execute(text("GRANT SELECT ON mdm_v2.current_entity TO clean_application"))
-
-
 def initialize_database(admin, app):
     with admin.begin() as conn:
-        conn.execute(text("DROP SCHEMA IF EXISTS mdm_v2 CASCADE"))
+        conn.execute(text("DROP SCHEMA IF EXISTS mdm CASCADE"))
         version = str(uuid4())
     assert migrate(admin, application_role="clean_application")["installed"]
     assert not migrate(admin, application_role="clean_application")["installed"]
-    # A test that stops the store before 042 still fills it with today's
-    # code, which reads current_entity (install_pre_042_reads).
-    if COMPANY_ONE_PLACE not in store_module.CLEAN_MDM_MIGRATIONS:
-        install_pre_042_reads(admin)
     with admin.begin() as conn:
         policy = register_policy(
             conn,
@@ -238,12 +208,12 @@ def test_atomic_commit_rollback_and_lost_ack(database):
     with database.application.connect() as conn:
         for table in [
             "batch",
-            "projection",
-            "publication",
+            "current_record",
+            "outbox",
             "checkpoint",
-            "observation",
+            "run_batch",
         ]:
-            assert conn.scalar(text(f"SELECT count(*) FROM mdm_v2.{table}")) == 0
+            assert conn.scalar(text(f"SELECT count(*) FROM mdm.{table}")) == 0
     with database.application.begin() as conn:
         first = store.commit(conn, req, run)
     another = str(uuid4())
@@ -288,20 +258,20 @@ def test_checkpoint_and_concurrent_generation_fencing(database):
 
 def test_permissions_immutable_evidence_and_migration_drift(database, monkeypatch):
     with pytest.raises(DBAPIError), database.application.begin() as conn:
-        conn.execute(text("DELETE FROM mdm_v2.projection"))
+        conn.execute(text("DELETE FROM mdm.current_record"))
     with pytest.raises(DBAPIError), database.application.begin() as conn:
-        conn.execute(text("INSERT INTO mdm_v2.policy VALUES('x','{}')"))
+        conn.execute(text("INSERT INTO mdm.policy VALUES('x','{}')"))
     with pytest.raises(DBAPIError), database.application.begin() as conn:
-        conn.execute(text("CREATE TABLE mdm_v2.bypass(a int)"))
+        conn.execute(text("CREATE TABLE mdm.bypass(a int)"))
     with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
-        conn.execute(text("DELETE FROM mdm_v2.policy"))
+        conn.execute(text("DELETE FROM mdm.policy"))
     original = Path.read_text
     monkeypatch.setattr(
         Path,
         "read_text",
         lambda p, *a, **kw: (
             original(p, *a, **kw) + "\n"
-            if p.name == "023_clean_mdm.sql"
+            if p.name == "001_mdm.sql"
             else original(p, *a, **kw)
         ),
     )
@@ -351,16 +321,16 @@ def test_publication_expired_worker_cannot_acknowledge(database):
     store = Store(database.application)
     with database.application.begin() as conn:
         store.commit(conn, request(database), str(uuid4()))
-        first = conn.scalar(text("SELECT mdm_v2.claim_publication('export','old',300)"))
+        first = conn.scalar(text("SELECT mdm.claim_outbox('export','old',300)"))
     with database.admin.begin() as conn:
         conn.execute(
             text(
-                "UPDATE mdm_v2.publication SET lease_until=now()-interval '1 second' WHERE consumer='export'"
+                "UPDATE mdm.outbox SET lease_until=now()-interval '1 second' WHERE consumer='export'"
             )
         )
     with database.application.begin() as conn:
         second = conn.scalar(
-            text("SELECT mdm_v2.claim_publication('export','new',300)")
+            text("SELECT mdm.claim_outbox('export','new',300)")
         )
     assert second["fence"] == first["fence"] + 1
     with (
@@ -368,7 +338,7 @@ def test_publication_expired_worker_cannot_acknowledge(database):
         database.application.begin() as conn,
     ):
         conn.execute(
-            text("SELECT mdm_v2.finish_publication('batch-1','export',:f,:h,NULL)"),
+            text("SELECT mdm.finish_outbox('batch-1','export',:f,:h,NULL)"),
             {"f": first["fence"], "h": first["payload_hash"]},
         )
 
@@ -408,8 +378,8 @@ def test_evidence_delivery_collision_rolls_back_every_effect(database):
             run,
         )
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.source_reading")) == 1
 
 
 from edgar_warehouse.mdm.clean.evidence import assertion, decision
@@ -462,9 +432,9 @@ def documents(db, kind):
     """Current objects of one type. Entities come from `current_entity`,
     which holds the Companies (ticket 17); the rest from `projection`."""
     query = (
-        "SELECT object_id,body FROM mdm_v2.current_entity"
+        "SELECT object_id,body FROM mdm.current_entity"
         if kind == "entity"
-        else "SELECT object_id,body FROM mdm_v2.projection WHERE object_type=:kind"
+        else "SELECT object_id,body FROM mdm.current_record WHERE object_type=:kind"
     )
     with db.application.connect() as conn:
         return {r[0]: r[1] for r in conn.execute(text(query), {"kind": kind})}
@@ -809,8 +779,6 @@ def test_source_retirement_recomputes_from_remaining_evidence(database):
     )
 
 
-
-
 def test_authorized_clear_blocks_fallback_and_unknown_time_is_retained(database):
     with database.admin.begin() as conn:
         database.policy = register_policy(
@@ -855,7 +823,7 @@ def test_authorized_clear_blocks_fallback_and_unknown_time_is_retained(database)
         assert (
             conn.scalar(
                 text(
-                    "SELECT effective_at FROM mdm_v2.assertion WHERE assertion_id=:id"
+                    "SELECT effective_at FROM mdm.source_reading WHERE assertion_id=:id"
                 ),
                 {"id": unknown["assertion_id"]},
             )
@@ -1022,12 +990,6 @@ def test_versioned_representative_fixture_and_alias_read_contract(database):
     assert again["duplicate"] and documents(database, "entity") == entities
 
 
-
-
-
-
-
-
 def test_fresh_replay_preserves_business_results_across_batching_and_order(postgres):
     from edgar_warehouse.mdm.clean.consumer import ContractReader
 
@@ -1079,8 +1041,8 @@ def test_oversized_closure_rolls_back_every_effect(database):
         )
     assert documents(database, "entity") == before
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.source_reading")) == 1
 
 
 def test_retirement_closes_unbound_source_reviews(database):
@@ -1166,11 +1128,11 @@ def test_reversal_preview_rolls_back_and_matches_committed_replay(database):
     assert preview["preview"]
     assert documents(database, "entity") == before
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.publication")) == 4
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm.outbox")) == 4
         assert (
             conn.scalar(
-                text("SELECT position FROM mdm_v2.checkpoint WHERE consumer='fixture'")
+                text("SELECT position FROM mdm.checkpoint WHERE consumer='fixture'")
             )
             == 2
         )
@@ -1181,10 +1143,6 @@ def test_reversal_preview_rolls_back_and_matches_committed_replay(database):
         if p["object_type"] == "entity"
     }
     assert documents(database, "entity") == expected
-
-
-
-
 
 
 def test_temporal_parents_separate_ownership_reported_and_calculated(database):
@@ -1289,17 +1247,17 @@ def test_identity_assessment_is_durable_before_master_and_resumes(database):
     assert prepared["before"] == []
     # A new connection sees the assessment but no master/checkpoint/outbox.
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 1
         for table in (
             "batch",
-            "assertion",
-            "identity",
+            "source_reading",
+            "master_entity",
             "decision",
-            "projection",
+            "current_record",
             "checkpoint",
-            "publication",
+            "outbox",
         ):
-            assert conn.scalar(text(f"SELECT count(*) FROM mdm_v2.{table}")) == 0
+            assert conn.scalar(text(f"SELECT count(*) FROM mdm.{table}")) == 0
     assert stage.assess(**command)["assessment_id"] == prepared["assessment_id"]
     result = stage.apply_assessment(prepared["assessment_id"], run_id=command["run_id"])
     assert result["generation"] == 1
@@ -1308,14 +1266,14 @@ def test_identity_assessment_is_durable_before_master_and_resumes(database):
     with database.application.connect() as conn:
         events = (
             conn.execute(
-                text("SELECT event FROM mdm_v2.assessment_event ORDER BY event_id")
+                text("SELECT event FROM mdm.match_proposal_event ORDER BY event_id")
             )
             .scalars()
             .all()
         )
         assert events == ["ready", "observed", "applied"]
         assert (
-            conn.scalar(text("SELECT effects->>'assessment_id' FROM mdm_v2.batch"))
+            conn.scalar(text("SELECT effects->>'assessment_id' FROM mdm.batch"))
             == prepared["assessment_id"]
         )
     stage.apply(
@@ -1330,7 +1288,7 @@ def test_identity_assessment_is_durable_before_master_and_resumes(database):
         }
     )
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 1
 
 
 def test_assessment_stale_dependency_and_unrelated_progress(database):
@@ -1369,14 +1327,14 @@ def test_assessment_stale_dependency_and_unrelated_progress(database):
     with database.application.connect() as conn:
         assert (
             conn.scalar(
-                text("SELECT count(*) FROM mdm_v2.batch WHERE batch_id='link-second'")
+                text("SELECT count(*) FROM mdm.batch WHERE batch_id='link-second'")
             )
             == 0
         )
         assert (
             conn.scalar(
                 text(
-                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='superseded'"
+                    "SELECT count(*) FROM mdm.match_proposal_event WHERE event='superseded'"
                 )
             )
             == 1
@@ -1405,7 +1363,7 @@ def test_rejected_identity_proposal_retains_veto_without_master_change(database)
     with database.application.connect() as conn:
         rejected = conn.execute(
             text(
-                "SELECT assessment_id,body FROM mdm_v2.assessment WHERE body->>'outcome'='rejected'"
+                "SELECT assessment_id,body FROM mdm.match_proposal WHERE body->>'outcome'='rejected'"
             )
         ).one()
         assert rejected[1]["command"]["decisions"] == [merge]
@@ -1436,16 +1394,16 @@ def test_assessment_application_failure_rolls_back_applied_event(database, monke
     with pytest.raises(RuntimeError, match="crash"):
         stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
         assert (
             conn.scalar(
                 text(
-                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='applied'"
+                    "SELECT count(*) FROM mdm.match_proposal_event WHERE event='applied'"
                 )
             )
             == 0
         )
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 1
     monkeypatch.setattr(store, "commit", commit)
     stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])
 
@@ -1477,7 +1435,7 @@ def test_assessment_sql_fences_bypass_stale_and_modified_effects(database):
         database.application.begin() as conn,
     ):
         key = conn.scalar(
-            text("SELECT mdm_v2.record_assessment(:body,CAST(:run AS uuid))"),
+            text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
             {"body": canonical(body), "run": command["run_id"]},
         )
         stage.store.commit(conn, {**effects, "assessment_id": key}, command["run_id"])
@@ -1500,26 +1458,26 @@ def test_preview_capability_cannot_commit_or_leak_assessments(database):
     # Commit the caller transaction deliberately: SQL preview still persists none.
     with database.application.begin() as conn:
         conn.execute(
-            text("SELECT mdm_v2.preview_batch(:body,CAST(:run AS uuid))"),
+            text("SELECT mdm.preview_batch(:body,CAST(:run AS uuid))"),
             {"body": canonical(preview["effects"]), "run": command["run_id"]},
         )
     with database.application.connect() as conn:
         for table in (
             "batch",
-            "assessment",
-            "assessment_event",
-            "identity",
+            "match_proposal",
+            "match_proposal_event",
+            "master_entity",
             "checkpoint",
-            "publication",
+            "outbox",
         ):
-            assert conn.scalar(text(f"SELECT count(*) FROM mdm_v2.{table}")) == 0
-    for function in ("commit_batch_evidence", "commit_batch_core"):
+            assert conn.scalar(text(f"SELECT count(*) FROM mdm.{table}")) == 0
+    for function in ("write_batch",):
         with (
             pytest.raises(DBAPIError, match="permission denied"),
             database.application.begin() as conn,
         ):
             conn.execute(
-                text(f"SELECT mdm_v2.{function}('{{}}',CAST(:run AS uuid))"),
+                text(f"SELECT mdm.{function}('{{}}',CAST(:run AS uuid))"),
                 {"run": command["run_id"]},
             )
 
@@ -1539,22 +1497,22 @@ def test_assessment_history_permissions_and_concurrent_lost_ack(database):
         assert (
             conn.scalar(
                 text(
-                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='applied'"
+                    "SELECT count(*) FROM mdm.match_proposal_event WHERE event='applied'"
                 )
             )
             == 1
         )
-    for table in ("assessment", "assessment_event"):
+    for table in ("match_proposal", "match_proposal_event"):
         with (
             pytest.raises(DBAPIError, match="permission denied"),
             database.application.begin() as conn,
         ):
-            conn.execute(text(f"DELETE FROM mdm_v2.{table}"))
+            conn.execute(text(f"DELETE FROM mdm.{table}"))
         with (
             pytest.raises(DBAPIError, match="append-only"),
             database.admin.begin() as conn,
         ):
-            conn.execute(text(f"DELETE FROM mdm_v2.{table}"))
+            conn.execute(text(f"DELETE FROM mdm.{table}"))
 
 
 def test_automatic_progression_reassesses_a_concurrent_correction(
@@ -1580,11 +1538,11 @@ def test_automatic_progression_reassesses_a_concurrent_correction(
     entity = command["identities"][0]["entity_id"]
     assert documents(database, "entity")[entity]["fields"]["name"]["value"] == "Current"
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 2
         assert (
             conn.scalar(
                 text(
-                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='superseded'"
+                    "SELECT count(*) FROM mdm.match_proposal_event WHERE event='superseded'"
                 )
             )
             == 1
@@ -1592,7 +1550,7 @@ def test_automatic_progression_reassesses_a_concurrent_correction(
         assert (
             conn.scalar(
                 text(
-                    "SELECT count(*) FROM mdm_v2.assessment_event WHERE event='applied'"
+                    "SELECT count(*) FROM mdm.match_proposal_event WHERE event='applied'"
                 )
             )
             == 1
@@ -1657,7 +1615,7 @@ def test_family_checkpoints_isolate_progress_and_atomic_failure(database):
     with database.application.connect() as conn:
         state = conn.execute(
             text(
-                "SELECT publication_family,position,committed_publication,continuity_proof FROM mdm_v2.checkpoint ORDER BY publication_family"
+                "SELECT publication_family,position,committed_publication,continuity_proof FROM mdm.checkpoint ORDER BY publication_family"
             )
         ).all()
         assert [(r[0], r[1], r[2]) for r in state] == [
@@ -1668,9 +1626,9 @@ def test_family_checkpoints_isolate_progress_and_atomic_failure(database):
     with pytest.raises(DBAPIError, match="checkpoint"):
         stage.apply(**{**other, "batch_id": "stale-mapping", "checkpoint": 2})
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
         assert conn.execute(
-            text("SELECT position FROM mdm_v2.checkpoint ORDER BY publication_family")
+            text("SELECT position FROM mdm.checkpoint ORDER BY publication_family")
         ).scalars().all() == [1, 1]
     stage.apply(
         **{
@@ -1683,7 +1641,7 @@ def test_family_checkpoints_isolate_progress_and_atomic_failure(database):
     )
     with database.application.connect() as conn:
         assert conn.execute(
-            text("SELECT position FROM mdm_v2.checkpoint ORDER BY publication_family")
+            text("SELECT position FROM mdm.checkpoint ORDER BY publication_family")
         ).scalars().all() == [1, 2]
     assert stage.apply(**other)["duplicate"]
 
@@ -1696,7 +1654,7 @@ def test_family_checkpoint_keeps_legacy_cursor_and_guards_partial_metadata(datab
     with database.application.connect() as conn:
         assert conn.execute(
             text(
-                "SELECT source_family,publication_family,position FROM mdm_v2.checkpoint ORDER BY source_family"
+                "SELECT source_family,publication_family,position FROM mdm.checkpoint ORDER BY source_family"
             )
         ).all() == [("", "", 1), ("fixture", "golden_copy", 1)]
     with pytest.raises(ValueError, match="both families"):
@@ -1726,84 +1684,7 @@ def test_family_checkpoint_keeps_legacy_cursor_and_guards_partial_metadata(datab
             command["run_id"],
         )
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == 2
-
-
-def test_family_checkpoint_upgrade_preserves_old_batch_and_pending_assessment(database):
-    # Recreate 028 only in this disposable test database, then migrate normally.
-    with database.admin.begin() as conn:
-        policy_body = conn.scalar(
-            text("SELECT body FROM mdm_v2.policy WHERE digest=:d"),
-            {"d": database.policy},
-        )
-        datasets = conn.execute(
-            text("SELECT source_code,registry_version,body FROM mdm_v2.dataset")
-        ).all()
-        conn.execute(text("DROP SCHEMA mdm_v2 CASCADE"))
-        directory = Path(__file__).parents[2] / "edgar_warehouse/mdm/migrations"
-        for name in [
-            "023_clean_mdm.sql",
-            "025_clean_mdm_indexes.sql",
-            "026_clean_mdm_attempts.sql",
-            "027_clean_mdm_deferred.sql",
-            "028_clean_mdm_assessment.sql",
-        ]:
-            raw = (directory / name).read_text()
-            conn.execute(text(raw))
-            conn.execute(
-                text("INSERT INTO mdm_v2.migration(name,checksum) VALUES(:n,:h)"),
-                {"n": name, "h": hashlib.sha256(raw.encode()).hexdigest()},
-            )
-        register_policy(conn, policy_body)
-        for code, registry, body in datasets:
-            from edgar_warehouse.mdm.clean.store import canonical
-
-            conn.execute(
-                text("INSERT INTO mdm_v2.dataset VALUES(:c,:v,CAST(:b AS jsonb))"),
-                {"c": code, "v": registry, "b": canonical(body)},
-            )
-        conn.execute(text("GRANT USAGE ON SCHEMA mdm_v2 TO clean_application"))
-        conn.execute(
-            text("GRANT SELECT ON ALL TABLES IN SCHEMA mdm_v2 TO clean_application")
-        )
-        for signature in [
-            "commit_batch(text,uuid)",
-            "preview_batch(text,uuid)",
-            "record_assessment(text,uuid)",
-            "assessment_snapshot(jsonb)",
-        ]:
-            conn.execute(
-                text(
-                    f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO clean_application"
-                )
-            )
-    install_pre_042_reads(database.admin)
-    store = Store(database.application)
-    old_request = request(database)
-    run = str(uuid4())
-    with database.application.begin() as conn:
-        store.commit(conn, old_request, run)
-    command = assessment_command(database)
-    stage = MergeStage(store)
-    candidate = stage.assess(**command)
-    migrate(database.admin, application_role="clean_application")
-    with database.application.begin() as conn:
-        assert store.commit(conn, old_request, run)["duplicate"]
-    assert (
-        stage.apply_assessment(candidate["assessment_id"], run_id=run)["generation"]
-        == 2
-    )
-    with database.application.connect() as conn:
-        assert (
-            conn.scalar(
-                text(
-                    "SELECT count(*) FROM mdm_v2.checkpoint WHERE source_family='' AND publication_family=''"
-                )
-            )
-            == 2
-        )
-
-
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
 
 
 # --- Company mastering ticket 01: a mapping may be corrected ------------------
@@ -1834,7 +1715,7 @@ def register_reading(database, code, body):
     with database.application.connect() as conn:
         return conn.scalar(
             text(
-                "SELECT max(mapping_version) FROM mdm_v2.dataset_mapping WHERE source_code=:c"
+                "SELECT max(mapping_version) FROM mdm.dataset_mapping WHERE source_code=:c"
             ),
             {"c": code},
         )
@@ -1877,7 +1758,7 @@ def test_a_re_read_adds_a_row_and_the_newer_reading_wins(database):
 
     with database.application.connect() as conn:
         stored = conn.execute(
-            text("""SELECT assertion_id,mapping_version FROM mdm_v2.assertion
+            text("""SELECT assertion_id,mapping_version FROM mdm.source_reading
             WHERE record_key='reread-1' ORDER BY mapping_version""")
         ).all()
     # Both readings retained; neither row was rewritten and nothing was pruned.
@@ -1908,7 +1789,7 @@ def test_a_re_read_that_changes_nothing_is_still_a_second_row(database):
         assert (
             conn.scalar(
                 text(
-                    "SELECT count(*) FROM mdm_v2.assertion WHERE record_key='reread-2'"
+                    "SELECT count(*) FROM mdm.source_reading WHERE record_key='reread-2'"
                 )
             )
             == 2
@@ -1950,18 +1831,18 @@ def test_registering_a_corrected_mapping_keeps_every_earlier_reading(database):
     )
     with database.application.connect() as conn:
         readings = conn.execute(
-            text("""SELECT mapping_version,body->>'semantics' FROM mdm_v2.dataset_mapping
+            text("""SELECT mapping_version,body->>'semantics' FROM mdm.dataset_mapping
             WHERE source_code='fixture.secondary' ORDER BY mapping_version""")
         ).all()
     assert readings == [(1, "patch"), (2, "snapshot")]
     # The registered dataset row itself is append-only and never rewritten.
     with pytest.raises(DBAPIError, match="append-only"), database.admin.begin() as conn:
-        conn.execute(text("UPDATE mdm_v2.dataset SET body='{}'::jsonb"))
+        conn.execute(text("UPDATE mdm.dataset SET body='{}'::jsonb"))
     with (
         pytest.raises(DBAPIError, match="append-only"),
         database.admin.begin() as conn,
     ):
-        conn.execute(text("UPDATE mdm_v2.dataset_mapping SET mapping_version=9"))
+        conn.execute(text("UPDATE mdm.dataset_mapping SET mapping_version=9"))
 
 
 def test_a_change_that_would_move_a_record_identity_needs_a_new_source_code(database):
@@ -1989,126 +1870,11 @@ def test_a_change_that_would_move_a_record_identity_needs_a_new_source_code(data
             )
 
 
-def test_migration_031_applies_to_a_populated_store(postgres):
-    """CLAUDE.md: test every migration against a genuinely populated table.
-
-    The other tests here migrate an empty schema, so 031's backfill inserts no
-    rows and its uniqueness swap rewrites an empty index. This one commits real
-    evidence under migrations 023-030, then applies 031 over it.
-    """
-    from unittest import mock
-
-    admin, app = postgres
-    # Everything up to but not including 031, by position rather than by name.
-    # Excluding 031 alone left 032 in, so the test installed 032 first and
-    # stopped exercising the real upgrade order (Codex review of PR #695, P2).
-    names = list(store_module.CLEAN_MDM_MIGRATIONS)
-    cut = next(i for i, name in enumerate(names) if name.startswith("031"))
-    through_030 = tuple(names[:cut])
-    assert not any(name >= "031" for name in through_030)
-    assert names[cut:] == [n for n in names if n >= "031"], (
-        "migrations must be listed in order for a staged upgrade test to mean anything"
-    )
-
-    def register_pre_031(conn, code, registry_version, body):
-        """Register a dataset the way the store did before dataset_mapping."""
-        from edgar_warehouse.change_journal.authority import registration_authority
-
-        evidence = registration_authority(authority(code, body, registry_version), code, body)
-        conn.execute(
-            text(
-                "INSERT INTO mdm_v2.dataset VALUES(:code,:registry,CAST(:body AS jsonb))"
-            ),
-            {
-                "code": code,
-                "registry": evidence["version_id"],
-                "body": canonical({**body, "registry_evidence": evidence}),
-            },
-        )
-
-    with (
-        mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_030),
-        mock.patch(f"{__name__}.register_dataset", side_effect=register_pre_031),
-    ):
-        from edgar_warehouse.mdm.clean.evidence import deferred_record
-
-        database = initialize_database(admin, app)
-        a = source(key="populated-1", fields={"name": "Acme"})
-        identity, binding = identity_and_binding(a)
-        # Both kinds of retained evidence, because 031 alters the assertion
-        # table and 032 rewrites the deferred path's schema check.
-        d = deferred_record(
-            source_code="fixture.primary",
-            publication_key="p1",
-            record_locator="line:1",
-            schema_version="1",
-            reason="invalid_field_shape",
-            raw_record={"key": "populated-2"},
-            provenance={"adapter_version": "v1"},
-        )
-        apply(
-            database,
-            1,
-            assertions=[a],
-            deferred=[d],
-            identities=[identity],
-            decisions=[binding],
-        )
-        with database.application.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
-            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1
-            assert (
-                conn.scalar(text("SELECT to_regclass('mdm_v2.dataset_mapping')"))
-                is None
-            )
-
-    # Now apply 031 and 032, in order, over that populated store.
-    assert migrate(admin, application_role="clean_application")
-    with database.application.connect() as conn:
-        # Existing evidence takes the default reading and keeps its id.
-        assert conn.execute(
-            text("SELECT assertion_id,mapping_version FROM mdm_v2.assertion")
-        ).all() == [(a["assertion_id"], 1)]
-        # Every contract registered before the migration is backfilled.
-        assert conn.execute(
-            text(
-                "SELECT source_code,mapping_version FROM mdm_v2.dataset_mapping ORDER BY source_code"
-            )
-        ).all() == [("fixture.primary", 1), ("fixture.secondary", 1)]
-        assert (
-            conn.scalar(
-                text("""SELECT count(*) FROM pg_constraint WHERE conrelid='mdm_v2.assertion'::regclass
-            AND contype='u' AND array_length(conkey,1)=4""")
-            )
-            == 1
-        )
-        # Retained deferred evidence survives both migrations unchanged.
-        assert conn.execute(
-            text(
-                "SELECT deferred_id,body->>'schema_version' FROM mdm_v2.deferred_record"
-            )
-        ).all() == [(d["deferred_id"], "1")]
-    # The store still works, and a re-read of the pre-migration record lands.
-    corrected = reread(a, mapping_version=2, fields={"name": "Acme Holdings"})
-    register_reading(database, "fixture.primary", contract_body(semantics="snapshot"))
-    apply(database, 2, assertions=[corrected])
-    with database.application.connect() as conn:
-        assert conn.execute(
-            text(
-                "SELECT mapping_version FROM mdm_v2.assertion ORDER BY mapping_version"
-            )
-        ).scalars().all() == [1, 2]
-    assert (
-        documents(database, "entity")[identity["entity_id"]]["fields"]["name"]["value"]
-        == "Acme Holdings"
-    )
-
-
 def test_a_corrected_mapping_reaches_the_adapter_that_reads_the_source(database):
     """Registering a reading is worth nothing if no reader ever uses it.
 
     The store writes every reading, but the adapters used to load the contract
-    from mdm_v2.dataset, which migration 023 froze at the first registration,
+    from mdm.dataset, which migration 023 froze at the first registration,
     and to call normalize with no reading at all. Both readings then produced
     byte-identical assertion ids: the collision the feature exists to prevent.
     """
@@ -2159,7 +1925,7 @@ def test_a_deferred_record_and_an_assertion_agree_on_the_reading(database):
     """Both come out of one read of one artifact, so both must be accepted.
 
     The assertion path checks the schema against the reading that produced it
-    (migration 031). The deferred path checked it against mdm_v2.dataset, which
+    (migration 031). The deferred path checked it against mdm.dataset, which
     migration 023 froze at the first registration, so a corrected mapping had
     its assertions accepted and its deferred records refused.
     """
@@ -2181,8 +1947,8 @@ def test_a_deferred_record_and_an_assertion_agree_on_the_reading(database):
     )
     apply(database, 1, assertions=[a], deferred=[d])
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.source_reading")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.set_aside_record")) == 1
 
 
 def test_a_deferred_record_for_an_unregistered_schema_is_still_refused(database):
@@ -2223,4 +1989,4 @@ def test_a_deferred_record_that_defers_again_under_a_later_reading_is_one_row(da
     register_reading(database, "fixture.primary", contract_body(semantics="snapshot"))
     apply(database, 2, deferred=[d])
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.deferred_record")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.set_aside_record")) == 1

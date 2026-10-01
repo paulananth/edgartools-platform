@@ -54,12 +54,12 @@ def assertions_for(contract, policy, keep):
 
 def counts(conn):
     group = lambda sql: {str(k): v for k, v in conn.execute(text(sql)).all()}
-    return {"identities": group("SELECT kind, count(*) FROM mdm_v2.identity GROUP BY kind"),
-            "stage_records": group("SELECT source_code||':'||kind, count(*) FROM mdm_v2.stage_record GROUP BY 1"),
-            "stage_bound": group("SELECT source_code, count(*) FROM mdm_v2.stage_record WHERE entity_id IS NOT NULL GROUP BY 1"),
-            "decisions": group("SELECT operation, count(*) FROM mdm_v2.decision GROUP BY 1"),
+    return {"identities": group("SELECT kind, count(*) FROM mdm.master_entity GROUP BY kind"),
+            "stage_records": group("SELECT source_code||':'||kind, count(*) FROM mdm.stage_record GROUP BY 1"),
+            "stage_bound": group("SELECT source_code, count(*) FROM mdm.stage_record WHERE entity_id IS NOT NULL GROUP BY 1"),
+            "decisions": group("SELECT operation, count(*) FROM mdm.decision GROUP BY 1"),
             "ciks_on_two_persons": conn.execute(text(
-                "SELECT count(*) FROM (SELECT reading->'identifiers'->>'cik' c FROM mdm_v2.stage_record "
+                "SELECT count(*) FROM (SELECT reading->'identifiers'->>'cik' c FROM mdm.stage_record "
                 "WHERE entity_id IS NOT NULL GROUP BY 1 HAVING count(DISTINCT entity_id)>1) x")).scalar()}
 
 def test_person_proving_run(database):

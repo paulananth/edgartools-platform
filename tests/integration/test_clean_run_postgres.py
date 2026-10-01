@@ -1,7 +1,7 @@
 """Real PG16: a Merge Stage run kept in MDM itself (migration 043).
 
 The run's frozen scope and reconciled outcome were kept in the retired
-legacy Bookkeeping `pipeline_run`; they are now `mdm_v2.run`, written by the
+legacy Bookkeeping `pipeline_run`; they are now `mdm.run`, written by the
 application login only through `start_run` and `finish_run` (platform
 validation slice 2a).
 """
@@ -39,7 +39,7 @@ def load(database, run_id, batch, checkpoint):
 def run_row(database, run_id):
     with database.admin.connect() as conn:
         return conn.execute(
-            text("SELECT status, report, completed_at FROM mdm_v2.run WHERE run_id=CAST(:r AS uuid)"),
+            text("SELECT status, report, completed_at FROM mdm.run WHERE run_id=CAST(:r AS uuid)"),
             {"r": run_id},
         ).mappings().one()
 
@@ -78,7 +78,7 @@ def test_a_succeeded_run_stays_succeeded(database):
     coordinator.start(run_id, ["b1"], manifest_digest="d" * 64)
     with database.application.begin() as conn:
         for body, complete in (('{"end_to_end_complete": true}', True), ('{"end_to_end_complete": false}', False)):
-            conn.execute(text("SELECT mdm_v2.finish_run(CAST(:r AS uuid),CAST(:b AS jsonb),:c)"),
+            conn.execute(text("SELECT mdm.finish_run(CAST(:r AS uuid),CAST(:b AS jsonb),:c)"),
                          {"r": run_id, "b": body, "c": complete})
     row = run_row(database, run_id)
     assert row["status"] == "succeeded" and row["completed_at"] is not None
@@ -96,31 +96,8 @@ def test_the_application_login_cannot_write_the_run_table(database):
     with pytest.raises(DBAPIError):
         with database.application.begin() as conn:
             conn.execute(
-                text("INSERT INTO mdm_v2.run(run_id,scope) VALUES(CAST(:r AS uuid),'{}'::jsonb)"),
+                text("INSERT INTO mdm.run(run_id,scope) VALUES(CAST(:r AS uuid),'{}'::jsonb)"),
                 {"r": str(uuid4())},
             )
 
 
-def test_migration_043_applies_to_a_populated_store(postgres):
-    """CLAUDE.md: over real rows. A store at 042 holds a committed batch; 043
-    adds the run table without touching it, and a run can then reconcile the
-    batch that was committed before the table existed."""
-    from unittest import mock
-
-    import edgar_warehouse.mdm.clean.store as store_module
-
-    admin, app = postgres
-    through_042 = tuple(n for n in store_module.CLEAN_MDM_MIGRATIONS if n < "043")
-    run_id = str(uuid4())
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_042):
-        database = core.initialize_database(admin, app)
-        load(database, run_id, "b1", 1)
-    with database.admin.connect() as conn:
-        before = conn.scalar(text("SELECT count(*) FROM mdm_v2.batch"))
-        assert conn.scalar(text("SELECT to_regclass('mdm_v2.run')")) is None
-    core.migrate(admin, application_role="clean_application")
-    with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.batch")) == before
-    coordinator = RunCoordinator(Store(database.application))
-    coordinator.start(run_id, ["b1"], manifest_digest="d" * 64)
-    assert coordinator.reconcile(run_id)["observed_batches"] == 1

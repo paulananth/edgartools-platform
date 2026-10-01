@@ -19,14 +19,12 @@ generator still spells the Stage pair `_evidence` and cannot be corrected.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError, ProgrammingError
+from sqlalchemy.exc import ProgrammingError
 
-import edgar_warehouse.mdm.clean.store
 from edgar_warehouse.mdm.clean.classification import CLASSIFICATION_VERDICTS
 from edgar_warehouse.mdm.clean.evidence import KINDS
 from tests.integration import test_clean_mdm_postgres as core
@@ -44,14 +42,14 @@ def installed_views(database) -> set[str]:
             for r in conn.execute(
                 text(
                     "SELECT table_name FROM information_schema.views "
-                    "WHERE table_schema='mdm_v2'"
+                    "WHERE table_schema='mdm'"
                 )
             )
         }
 
 
 def permitted_kinds(database) -> set[str]:
-    """The kinds mdm_v2.identity itself allows, read from its constraint.
+    """The kinds mdm.master_entity itself allows, read from its constraint.
 
     Anchored on the kind list rather than scanning the whole definition, for the
     same reason migration 033 is: a later migration may add another condition to
@@ -62,12 +60,12 @@ def permitted_kinds(database) -> set[str]:
             r[0]
             for r in conn.execute(
                 text("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
-                WHERE conrelid='mdm_v2.identity'::regclass AND contype='c'
+                WHERE conrelid='mdm.master_entity'::regclass AND contype='c'
                   AND pg_get_constraintdef(oid) LIKE '%kind%'""")
             )
         ]
     assert len(definitions) == 1, (
-        f"expected exactly one kind CHECK on mdm_v2.identity, found {definitions}"
+        f"expected exactly one kind CHECK on mdm.master_entity, found {definitions}"
     )
     listed = re.search(r"kind[^=]*= ANY \(ARRAY\[(.*?)\]\)", definitions[0])
     assert listed, f"cannot read the permitted kinds out of {definitions[0]}"
@@ -81,7 +79,7 @@ def columns(database, relation: str) -> list[str]:
             for r in conn.execute(
                 text(
                     "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_schema='mdm_v2' AND table_name=:t "
+                    "WHERE table_schema='mdm' AND table_name=:t "
                     "ORDER BY ordinal_position"
                 ),
                 {"t": relation},
@@ -99,7 +97,7 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     """
     schema_kinds = permitted_kinds(database)
     assert schema_kinds == KINDS, (
-        "mdm_v2.identity and evidence.KINDS name different kinds"
+        "mdm.master_entity and evidence.KINDS name different kinds"
     )
     # classification.CLASSIFICATION_VERDICTS is derived from KINDS rather than
     # restated, so it needs no copy of its own -- only its two extra verdicts.
@@ -119,16 +117,16 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
 # name, and why. Anything outside this map must appear, or a structural column
 # has gone missing from a view without anyone deciding that it should.
 RENAMED_OR_DROPPED = {
-    "assertion": {},
+    "source_reading": {},
     # object_id is the entity under this view; object_type is constant 'entity'
     # for every row a <kind>_master view can return, so it carries no meaning.
-    "projection": {"object_id": "entity_id", "object_type": None},
+    "current_record": {"object_id": "entity_id", "object_type": None},
 }
 
 
 @pytest.mark.parametrize(
     ("base", "view"),
-    [("assertion", "company_stage"), ("projection", "person_master")],
+    [("source_reading", "company_stage"), ("current_record", "person_master")],
 )
 def test_a_whole_record_view_shows_every_column_of_its_base_table(database, base, view):
     """A view freezes its column list at creation.
@@ -138,8 +136,8 @@ def test_a_whole_record_view_shows_every_column_of_its_base_table(database, base
     than a silent omission: with SELECT * the views would keep serving the old
     column set for ever, and nothing would say so.
 
-    This is what makes it deliberate. Add a column to mdm_v2.assertion or to
-    mdm_v2.projection and it fails here until 033's column lists are updated, or
+    This is what makes it deliberate. Add a column to mdm.source_reading or to
+    mdm.current_record and it fails here until 033's column lists are updated, or
     until the column is named in RENAMED_OR_DROPPED with a reason.
     """
     shown = set(columns(database, view))
@@ -149,7 +147,7 @@ def test_a_whole_record_view_shows_every_column_of_its_base_table(database, base
         if alias is not None and alias not in shown:
             missing.add(column)
     assert not missing, (
-        f"mdm_v2.{base} has columns {sorted(missing)} that mdm_v2.{view} does "
+        f"mdm.{base} has columns {sorted(missing)} that mdm.{view} does "
         "not show; add them to migration 033's column lists, or to "
         "RENAMED_OR_DROPPED with the reason they are left out"
     )
@@ -159,7 +157,7 @@ def test_a_reader_may_select_from_a_view_but_never_write_through_it(database):
     """A single-table view with no set-returning function is auto-updatable.
 
     company_stage is exactly that shape, so an INSERT through it would reach
-    mdm_v2.assertion and bypass commit_batch entirely. The immutable_row trigger
+    mdm.source_reading and bypass save_batch entirely. The immutable_row trigger
     does not help: it fires on UPDATE and DELETE, not INSERT. What refuses the
     write is the privilege, and this proves the privilege rather than trusting
     store.migrate()'s blanket re-grant to have covered views.
@@ -167,15 +165,15 @@ def test_a_reader_may_select_from_a_view_but_never_write_through_it(database):
     a = core.source(key="write-probe", fields={"name": "Acme"})
     core.apply(database, 1, assertions=[a])
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_stage")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.company_stage")) == 1
     for statement in (
         (
-            "INSERT INTO mdm_v2.company_stage(assertion_id,source_code,record_key,"
+            "INSERT INTO mdm.company_stage(assertion_id,source_code,record_key,"
             "publication_key,revision,effective_at,batch_id,body) "
             "VALUES('forged','fixture.primary','x','p1',1,now(),'work-1','{}'::jsonb)"
         ),
-        "UPDATE mdm_v2.company_stage SET record_key='moved'",
-        "DELETE FROM mdm_v2.company_stage",
+        "UPDATE mdm.company_stage SET record_key='moved'",
+        "DELETE FROM mdm.company_stage",
     ):
         with (
             pytest.raises(ProgrammingError, match="permission denied"),
@@ -183,7 +181,7 @@ def test_a_reader_may_select_from_a_view_but_never_write_through_it(database):
         ):
             conn.execute(text(statement))
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM mdm.source_reading")) == 1
 
 
 def test_the_privilege_is_what_refuses_the_write_not_the_view_shape(database):
@@ -198,52 +196,40 @@ def test_the_privilege_is_what_refuses_the_write_not_the_view_shape(database):
         assert conn.execute(
             text(
                 "SELECT is_insertable_into,is_updatable FROM information_schema.views "
-                "WHERE table_schema='mdm_v2' AND table_name='company_stage'"
+                "WHERE table_schema='mdm' AND table_name='company_stage'"
             )
         ).all() == [("YES", "YES")]
         # The exploded shape is inherently safe: jsonb_each makes it read-only.
         assert conn.execute(
             text(
                 "SELECT is_insertable_into,is_updatable FROM information_schema.views "
-                "WHERE table_schema='mdm_v2' AND table_name='company_stage_field'"
+                "WHERE table_schema='mdm' AND table_name='company_stage_field'"
             )
         ).all() == [("NO", "NO")]
         assert conn.execute(
             text(
                 "SELECT privilege_type FROM information_schema.table_privileges "
-                "WHERE table_schema='mdm_v2' AND table_name='company_stage' "
+                "WHERE table_schema='mdm' AND table_name='company_stage' "
                 "AND grantee='clean_application' ORDER BY privilege_type"
             )
         ).all() == [("SELECT",)]
 
 
-def test_the_migration_refuses_a_kind_list_that_has_drifted(database):
-    """Migration 033's own guard, run against a deliberately wrong list.
-
-    The guard is the only thing standing between a future ninth kind and a set
-    of views that quietly omits it, and a guard that cannot fail is not a guard.
-
-    This runs the migration's real text rather than a copy of it: the file's own
-    DO block, with nothing changed but the kind array. A transcribed guard would
-    only ever prove the transcription, and would keep passing after the original
-    was edited or deleted.
-    """
-    source = (
-        Path(edgar_warehouse.mdm.clean.store.__file__).parents[1] / "migrations"
-        / "033_clean_mdm_per_kind_views.sql"
-    ).read_text()
-    block = source[source.index("DO $$") : source.index("$$;") + 3]
-    declared = re.search(r"kinds text\[\] := ARRAY\[[^\]]*\];", block)
-    assert declared, "migration 033 no longer declares its kind array as expected"
-    drifted = block.replace(
-        declared.group(0), "kinds text[] := ARRAY['company','person'];"
-    )
-    assert drifted != block
-    with (
-        pytest.raises(DBAPIError, match="but mdm_v2.identity permits"),
-        database.admin.begin() as conn,
-    ):
-        conn.execute(text(drifted))
+def test_every_permitted_kind_has_its_views(database):
+    """The views are generated from master_entity's own kind check, so a new
+    kind gets its views without a second list that could drift from it."""
+    with database.admin.connect() as conn:
+        permitted = set(conn.scalars(text(
+            "SELECT m[1] FROM pg_constraint c, "
+            "LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m "
+            "WHERE c.conname = 'master_entity_kind_check'")))
+        views = set(conn.scalars(text(
+            "SELECT viewname FROM pg_views WHERE schemaname = 'mdm'")))
+    assert len(permitted) == 8
+    for kind in permitted:
+        assert {kind + "_stage", kind + "_stage_field"} <= views
+        if kind != "company":
+            assert {kind + "_master", kind + "_master_field"} <= views
 
 
 def test_two_kinds_from_one_batch_separate_into_their_own_views(database):
@@ -258,14 +244,14 @@ def test_two_kinds_from_one_batch_separate_into_their_own_views(database):
     with database.application.connect() as conn:
         assert [
             r[0]
-            for r in conn.execute(text("SELECT record_key FROM mdm_v2.company_stage"))
+            for r in conn.execute(text("SELECT record_key FROM mdm.company_stage"))
         ] == ["issuer-1"]
         assert [
             r[0]
-            for r in conn.execute(text("SELECT record_key FROM mdm_v2.person_stage"))
+            for r in conn.execute(text("SELECT record_key FROM mdm.person_stage"))
         ] == ["owner-1"]
         # A kind nothing asserted is empty, not missing.
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.venue_stage")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM mdm.venue_stage")) == 0
 
 
 def test_a_field_no_view_names_needs_no_migration(database):
@@ -285,7 +271,7 @@ def test_a_field_no_view_names_needs_no_migration(database):
             conn.execute(
                 text(
                     "SELECT field_name,field_value,operation "
-                    "FROM mdm_v2.company_stage_field ORDER BY field_name"
+                    "FROM mdm.company_stage_field ORDER BY field_name"
                 )
             ).all()
         ) == [
@@ -325,7 +311,7 @@ def test_the_master_field_view_names_the_source_that_won_each_field(database):
         assert conn.execute(
             text(
                 "SELECT field_name,field_value,source_code,conflict_count "
-                "FROM mdm_v2.company_master_field ORDER BY field_name"
+                "FROM mdm.company_master_field ORDER BY field_name"
             )
         ).all() == [
             ("address", "1 Way", "fixture.primary", 0),
@@ -334,10 +320,10 @@ def test_the_master_field_view_names_the_source_that_won_each_field(database):
             ("name", "Acme", "fixture.primary", 1),
         ]
         assert conn.execute(
-            text("SELECT entity_id::text,status FROM mdm_v2.company WHERE valid_to IS NULL")
+            text("SELECT entity_id::text,status FROM mdm.company WHERE valid_to IS NULL")
         ).all() == [(identity["entity_id"], "accepted")]
         # The same entity is absent from every other kind's master view.
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.person_master")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM mdm.person_master")) == 0
 
 
 def test_the_master_field_view_carries_the_kind_version_beside_the_digest(database):
@@ -388,7 +374,7 @@ def test_the_master_field_view_carries_the_kind_version_beside_the_digest(databa
         field = conn.execute(
             text(
                 "SELECT field_name,kind_version,policy_digest "
-                "FROM mdm_v2.company_master_field"
+                "FROM mdm.company_master_field"
             )
         ).one()
     assert field.field_name == "name"
@@ -402,158 +388,39 @@ def test_the_master_field_view_carries_the_kind_version_beside_the_digest(databa
     assert re.fullmatch(r"[0-9a-f]{64}", field.policy_digest)
 
 
-def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
-    """CLAUDE.md: test every migration against a genuinely populated table.
-
-    Every other test here migrates an empty schema, so 033's two new indexes are
-    built over nothing and the views are created against empty tables. This one
-    commits real evidence and a real master record under 023-032 first, then
-    applies 033 and 034 over it, which is the only order production will ever
-    see: the live store is still at 026, so it has never run either.
-    """
-    from unittest import mock
-
-    import edgar_warehouse.mdm.clean.store as store_module
-
-    admin, app = postgres
-    names = list(store_module.CLEAN_MDM_MIGRATIONS)
-    cut = next(i for i, name in enumerate(names) if name.startswith("033"))
-    through_032 = tuple(names[:cut])
-    assert names[cut:] == [n for n in names if n >= "033"], (
-        "migrations must be listed in order for a staged upgrade test to mean anything"
-    )
-
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_032):
-        database = core.initialize_database(admin, app)
-        company = core.source(key="pop-1", fields={"name": "Acme"})
-        person = core.source(key="pop-2", kind="person", fields={"name": "Ada"})
-        identity, binding = core.identity_and_binding(company)
-        core.apply(
-            database,
-            1,
-            assertions=[company, person],
-            identities=[identity],
-            decisions=[binding],
-        )
-        with database.application.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM mdm_v2.assertion")) == 2
-            assert (
-                conn.scalar(text("SELECT to_regclass('mdm_v2.company_stage')")) is None
-            )
-
-    core.migrate(admin, application_role="clean_application")
-    with database.application.connect() as conn:
-        # migrate() returns a dict that is always truthy, so asserting on it
-        # would prove nothing. Ask the store what it recorded instead.
-        assert [
-            r[0]
-            for r in conn.execute(
-                text(
-                    "SELECT name FROM mdm_v2.migration "
-                    "WHERE name >= '033' ORDER BY name"
-                )
-            )
-        ] == [
-            "033_clean_mdm_per_kind_views.sql",
-            "034_clean_mdm_stage_view_naming.sql",
-            "035_clean_mdm_automatic_assessment.sql",
-            "036_clean_mdm_stage_waiting.sql",
-            "037_clean_mdm_company_versions.sql",
-            "038_clean_mdm_stage_record.sql",
-            "039_clean_mdm_stage_binding.sql",
-            "040_clean_mdm_assessment_safety.sql",
-            "041_clean_mdm_binding_correction.sql",
-            "042_clean_mdm_company_one_place.sql",
-            "043_clean_mdm_run.sql",
-        ]
-        # 034 renamed rather than duplicated: the name 033 created is gone.
-        assert (
-            conn.scalar(text("SELECT to_regclass('mdm_v2.company_evidence')")) is None
-        )
-    # The views see evidence and master records written before they existed.
-    with database.application.connect() as conn:
-        assert [
-            r[0]
-            for r in conn.execute(text("SELECT record_key FROM mdm_v2.company_stage"))
-        ] == ["pop-1"]
-        assert [
-            r[0]
-            for r in conn.execute(text("SELECT record_key FROM mdm_v2.person_stage"))
-        ] == ["pop-2"]
-        assert conn.execute(
-            text("SELECT entity_id::text FROM mdm_v2.company WHERE valid_to IS NULL")
-        ).all() == [(identity["entity_id"],)]
-        assert (
-            conn.scalar(text("SELECT count(*) FROM mdm_v2.company_master_field")) == 1
-        )
-    # The store still commits after the migration, and new evidence shows up.
-    later = core.source(key="pop-3", fields={"name": "Beta"})
-    core.apply(database, 2, assertions=[later])
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm_v2.company_stage")) == 2
 
 
-def test_migration_036_shows_records_already_waiting_with_their_probable_kind(
-    postgres,
-):
-    """CLAUDE.md: test every migration against a genuinely populated table.
-
-    Waiting records are committed under 025-035 first, one with a Probable Kind
-    and one without, and one assertion beside them; 036 is then applied over
-    them, the only order production will see.
-    """
-    from unittest import mock
-
-    import edgar_warehouse.mdm.clean.store as store_module
+def test_stage_waiting_shows_every_waiting_record_with_its_probable_kind(database):
+    """A record no kind accepted waits in the Stage with the kind it probably
+    is, whether or not a classification step named one; an accepted record
+    is not waiting."""
     from edgar_warehouse.mdm.clean.evidence import deferred_record
 
-    admin, app = postgres
-    names = list(store_module.CLEAN_MDM_MIGRATIONS)
-    cut = names.index("036_clean_mdm_stage_waiting.sql")
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", tuple(names[:cut])):
-        database = core.initialize_database(admin, app)
-
-        def waiting(line, **probable):
-            return deferred_record(
-                source_code="fixture.primary",
-                publication_key="p1",
-                record_locator=f"line:{line}",
-                schema_version="1",
-                reason="classification_deferred",
-                raw_record={"key": f"wait-{line}"},
-                provenance={
-                    "adapter_version": "v1",
-                    "classification": {
-                        "rule_id": "r",
-                        "version": "1",
-                        "step": "6",
-                        "verdict": "deferred",
-                    },
-                },
-                **probable,
-            )
-
-        core.apply(
-            database,
-            1,
-            assertions=[core.source(key="accepted", fields={"name": "Acme"})],
-            deferred=[waiting(1, probable_kind="person"), waiting(2)],
+    def waiting(line, **probable):
+        return deferred_record(
+            source_code="fixture.primary",
+            publication_key="p1",
+            record_locator=f"line:{line}",
+            schema_version="1",
+            reason="classification_deferred",
+            raw_record={"key": f"wait-{line}"},
+            provenance={
+                "adapter_version": "v1",
+                "classification": {"rule_id": "r", "version": "1", "step": "6", "verdict": "deferred"},
+            },
+            **probable,
         )
-        with database.application.connect() as conn:
-            assert (
-                conn.scalar(text("SELECT to_regclass('mdm_v2.stage_waiting')")) is None
-            )
 
-    core.migrate(admin, application_role="clean_application")
+    core.apply(
+        database,
+        1,
+        assertions=[core.source(key="accepted", fields={"name": "Acme"})],
+        deferred=[waiting(1, probable_kind="person"), waiting(2)],
+    )
     with database.application.connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT record_locator, probable_kind, reason, rule_id, rule_step "
-                "FROM mdm_v2.stage_waiting ORDER BY record_locator"
-            )
-        ).all()
-    # Every waiting record, whether or not a step named its kind; the accepted
-    # record is not waiting and is not here.
+        rows = conn.execute(text(
+            "SELECT record_locator, probable_kind, reason, rule_id, rule_step "
+            "FROM mdm.stage_waiting ORDER BY record_locator")).all()
     assert [tuple(r) for r in rows] == [
         ("line:1", "person", "classification_deferred", "r", "6"),
         ("line:2", None, "classification_deferred", "r", "6"),

@@ -152,7 +152,7 @@ def batch_input(
     if contract["adapter"].get("classification"):
         with store.engine.connect() as conn:
             policy = conn.scalar(
-                text("SELECT body FROM mdm_v2.policy WHERE digest=:digest"),
+                text("SELECT body FROM mdm.policy WHERE digest=:digest"),
                 {"digest": policy_digest},
             )
         if policy is None:
@@ -273,14 +273,14 @@ def execute_manifest(
         observed = set(
             conn.scalars(
                 text(
-                    "SELECT batch_id FROM mdm_v2.observation WHERE run_id=CAST(:run AS uuid)"
+                    "SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:run AS uuid)"
                 ),
                 {"run": run_id},
             )
         )
         retained = set(
             conn.scalars(
-                text("SELECT batch_id FROM mdm_v2.batch WHERE batch_id=ANY(:ids)"),
+                text("SELECT batch_id FROM mdm.batch WHERE batch_id=ANY(:ids)"),
                 {"ids": [b["batch_id"] for b in manifest["batches"]]},
             )
         )
@@ -444,13 +444,13 @@ def _print_mdm_report(read) -> int:
 def check_connectivity(args) -> int:
     return _print_mdm_report(lambda conn: {
         "sql": conn.scalar(text("SELECT 1")) == 1,
-        "migrations": conn.scalar(text("SELECT count(*) FROM mdm_v2.migration")),
+        "migrations": conn.scalar(text("SELECT count(*) FROM mdm.migration")),
     })
 
 
 def counts(args) -> int:
     return _print_mdm_report(lambda conn: dict(conn.execute(text(
-        "SELECT 'entity',count(*) FROM mdm_v2.current_entity "
-        "UNION ALL SELECT object_type,count(*) FROM mdm_v2.projection "
+        "SELECT 'entity',count(*) FROM mdm.current_entity "
+        "UNION ALL SELECT object_type,count(*) FROM mdm.current_record "
         "WHERE object_type<>'entity' GROUP BY object_type"
     )).all()))

@@ -129,7 +129,7 @@ def open_reviews(database):
 
 def assessments(database):
     with database.application.connect() as conn:
-        return conn.scalar(text("SELECT count(*) FROM mdm_v2.assessment"))
+        return conn.scalar(text("SELECT count(*) FROM mdm.match_proposal"))
 
 
 def test_a_new_cik_creates_one_company_and_a_second_record_joins_it(database):
@@ -152,7 +152,7 @@ def test_a_new_cik_creates_one_company_and_a_second_record_joins_it(database):
     assert assessments(database) == 2
     with database.application.connect() as conn:
         actors = conn.execute(
-            text("SELECT body->>'actor' FROM mdm_v2.decision WHERE operation='bind'")
+            text("SELECT body->>'actor' FROM mdm.decision WHERE operation='bind'")
         ).scalars()
         # SEC's record created the Company; the other dataset's record joined.
         assert sorted(actors) == [
@@ -373,47 +373,6 @@ def test_without_an_activation_nothing_matches_automatically(database):
     assert assessments(database) == 0
 
 
-def test_migration_035_applies_to_a_populated_store(postgres):
-    """CLAUDE.md: a migration is tested over real rows, in production's order.
-
-    A store at 034 already holds an assessment of a caller's binding. 035
-    replaces the function that records assessments; the old one must survive,
-    and a rule's proposal, kept beside the command, must then be accepted.
-    """
-    from unittest import mock
-
-    import edgar_warehouse.mdm.clean.store as store_module
-
-    admin, app = postgres
-    names = list(store_module.CLEAN_MDM_MIGRATIONS)
-    through_034 = tuple(n for n in names if n < "035")
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_034):
-        database = core.initialize_database(admin, app)
-        company = core.source(key="pop-1", fields={"name": "Acme"})
-        identity, binding = core.identity_and_binding(company)
-        core.apply(
-            database,
-            1,
-            assertions=[company],
-            identities=[identity],
-            decisions=[binding],
-        )
-        assert assessments(database) == 1
-    core.migrate(admin, application_role="clean_application")
-    with database.application.connect() as conn:
-        assert (
-            conn.scalar(
-                text("SELECT count(*) FROM mdm_v2.migration WHERE name LIKE '035%'")
-            )
-            == 1
-        )
-    assert assessments(database) == 1
-    policy = matching_policy(database)
-    load(database, policy, "after-035", record("new", cik=APPLE_CIK), consumer="after")
-    assert assessments(database) == 2
-    assert len(companies(database)) == 2
-
-
 def _issuer_conflict(database, policy, *also):
     """A Company whose two SEC records came to name two CIKs (Q9's contradiction).
 
@@ -529,15 +488,15 @@ def test_an_orphaned_assessment_is_closed_when_its_batch_commits(database):
     with database.application.connect() as conn:
         events = conn.execute(
             text(
-                "SELECT event, batch_id FROM mdm_v2.assessment_event "
+                "SELECT event, batch_id FROM mdm.match_proposal_event "
                 "WHERE assessment_id=:a ORDER BY event_id"
             ),
             {"a": orphan},
         ).all()
         still_open = conn.scalar(
-            text("""SELECT count(*) FROM mdm_v2.assessment a
+            text("""SELECT count(*) FROM mdm.match_proposal a
             WHERE a.body->>'outcome'='ready' AND NOT EXISTS(
-              SELECT 1 FROM mdm_v2.assessment_event e WHERE e.assessment_id=a.assessment_id
+              SELECT 1 FROM mdm.match_proposal_event e WHERE e.assessment_id=a.assessment_id
               AND e.event IN ('applied','superseded'))""")
         )
     assert [tuple(e) for e in events][-1] == ("superseded", "late")
@@ -550,7 +509,7 @@ def published(database) -> list:
         return list(
             conn.scalars(
                 text(
-                    "SELECT published_at FROM mdm_v2.identity "
+                    "SELECT published_at FROM mdm.master_entity "
                     "WHERE kind='company' ORDER BY published_at"
                 )
             )
@@ -596,7 +555,7 @@ def test_a_newer_company_committed_meanwhile_makes_a_proposal_stale(database):
 
 
 def test_the_sql_refuses_a_backdated_new_company_too(database):
-    """The same refusal holds in commit_batch (040), past the Python check."""
+    """The same refusal holds in save_batch, past the Python check."""
     policy = matching_policy(database)
     stage = MergeStage(Store(database.application))
     early = _command(
@@ -611,11 +570,11 @@ def test_the_sql_refuses_a_backdated_new_company_too(database):
     with database.application.connect() as conn:
         effects = conn.scalar(
             text(
-                "SELECT body->'effects' FROM mdm_v2.assessment WHERE assessment_id=:k"
+                "SELECT body->'effects' FROM mdm.match_proposal WHERE assessment_id=:k"
             ),
             {"k": key},
         )
-        generation = conn.scalar(text("SELECT max(generation) FROM mdm_v2.batch"))
+        generation = conn.scalar(text("SELECT max(generation) FROM mdm.batch"))
     request = {**effects, "assessment_id": key, "expected_generation": generation}
     with (
         pytest.raises(
@@ -624,7 +583,7 @@ def test_the_sql_refuses_a_backdated_new_company_too(database):
         database.application.begin() as conn,
     ):
         conn.execute(
-            text("SELECT mdm_v2.commit_batch(:r, CAST(:run AS uuid))"),
+            text("SELECT mdm.save_batch(:r, CAST(:run AS uuid))"),
             {"r": json.dumps(request), "run": str(uuid4())},
         )
 
@@ -668,57 +627,6 @@ def test_two_runs_at_once_create_one_company_for_one_cik(database):
     (only,) = companies(database).values()
     assert only["identifiers"] == {"cik": [APPLE_CIK]}
     assert len(only["subjects"]) == 3
-
-
-def test_migration_040_applies_to_a_populated_store(postgres):
-    """CLAUDE.md: over real rows, in production's order.
-
-    A store at 039 holds a committed Company and an orphaned assessment left
-    by a crash. After 040 the Company survives, the next commit of the
-    orphan's batch closes it, and a late batch's new Company is published
-    after the newest.
-    """
-    from unittest import mock
-
-    import edgar_warehouse.mdm.clean.store as store_module
-
-    admin, app = postgres
-    names = list(store_module.CLEAN_MDM_MIGRATIONS)
-    through_039 = tuple(n for n in names if n < "040")
-    with mock.patch.object(store_module, "CLEAN_MDM_MIGRATIONS", through_039):
-        database = core.initialize_database(admin, app)
-        policy = matching_policy(database)
-        load(database, policy, "b1", record("a", cik=APPLE_CIK))
-        stage = MergeStage(Store(database.application))
-        late = _command(policy, "late", record("m", cik="0000789019"))
-        orphan = stage.assess(**late, automatic=stage.propose(**late))["assessment_id"]
-    core.migrate(admin, application_role="clean_application")
-    assert len(companies(database)) == 1
-    stage = MergeStage(Store(database.application))
-    stage.apply(**{**late, "run_id": str(uuid4())})
-    assert len(companies(database)) == 2
-    with database.application.connect() as conn:
-        assert (
-            conn.scalar(
-                text(
-                    "SELECT count(*) FROM mdm_v2.assessment_event "
-                    "WHERE assessment_id=:a AND event='superseded'"
-                ),
-                {"a": orphan},
-            )
-            == 1
-        )
-    # A batch delivered late still creates its Company, published after the newest.
-    stage.apply(
-        **_command(
-            policy,
-            "old",
-            record("x", cik="0000000009"),
-            as_of="2026-01-01T00:00:00+00:00",
-        )
-    )
-    times = published(database)
-    assert len(times) == 3 and times[-1] > times[-2]
 
 
 def test_a_join_rechecks_every_identifier_that_pointed_at_its_company(database):
@@ -806,7 +714,7 @@ def test_the_earlier_committed_company_survives_a_merge(database):
             for r in conn.execute(
                 text(
                     "SELECT entity_id::text, kind, published_at::text "
-                    "FROM mdm_v2.identity WHERE kind='company'"
+                    "FROM mdm.master_entity WHERE kind='company'"
                 )
             ).mappings()
         ]

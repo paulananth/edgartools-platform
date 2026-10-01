@@ -65,9 +65,9 @@ Read recent assessments without scanning an unbounded candidate set:
 SELECT a.assessment_id, a.body->>'outcome' AS initial_outcome,
        a.body->'command'->>'batch_id' AS batch_id,
        e.event AS current_status, e.batch_id AS applied_batch
-FROM mdm_v2.assessment a
+FROM mdm.match_proposal a
 LEFT JOIN LATERAL (
-    SELECT event, batch_id FROM mdm_v2.assessment_event e
+    SELECT event, batch_id FROM mdm.match_proposal_event e
     WHERE e.assessment_id = a.assessment_id AND event <> 'observed'
     ORDER BY event_id DESC LIMIT 1
 ) e ON true

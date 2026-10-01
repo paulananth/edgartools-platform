@@ -62,7 +62,7 @@ def register_mdm(registry, mdm_engine, *, publisher_factory=None):
     def observation(book, item):
         batch = command(book, item)
         with mdm_engine.connect() as conn:
-            row = conn.execute(text("SELECT b.batch_id,b.generation,b.request_hash FROM mdm_v2.batch b JOIN mdm_v2.observation o USING(batch_id) WHERE o.run_id=CAST(:r AS uuid) AND b.batch_id=:b"),
+            row = conn.execute(text("SELECT b.batch_id,b.generation,b.request_hash FROM mdm.batch b JOIN mdm.run_batch o USING(batch_id) WHERE o.run_id=CAST(:r AS uuid) AND b.batch_id=:b"),
                                {"r": str(item["run_id"]), "b": batch["batch_id"]}).mappings().first()
         if row is None:
             return None
@@ -118,9 +118,9 @@ def register_mdm(registry, mdm_engine, *, publisher_factory=None):
                 # Check the exact required consumer set, not merely zero
                 # pending rows in a possibly incomplete set of intents.
                 row = conn.execute(text("""SELECT p.body->'required_consumers' AS required,
-                  (SELECT jsonb_agg(q.consumer ORDER BY q.consumer) FROM mdm_v2.publication q WHERE q.batch_id=b.batch_id) AS actual,
-                  (SELECT count(*) FROM mdm_v2.publication q WHERE q.batch_id=b.batch_id AND q.verified_at IS NULL) AS pending
-                  FROM mdm_v2.batch b JOIN mdm_v2.policy p ON p.digest=b.policy_digest WHERE b.batch_id=:b"""), {"b": key}).mappings().first()
+                  (SELECT jsonb_agg(q.consumer ORDER BY q.consumer) FROM mdm.outbox q WHERE q.batch_id=b.batch_id) AS actual,
+                  (SELECT count(*) FROM mdm.outbox q WHERE q.batch_id=b.batch_id AND q.verified_at IS NULL) AS pending
+                  FROM mdm.batch b JOIN mdm.policy p ON p.digest=b.policy_digest WHERE b.batch_id=:b"""), {"b": key}).mappings().first()
             if row is None or sorted(row["required"]) != (row["actual"] or []) or row["pending"] != 0:
                 return False
         return True
@@ -141,7 +141,7 @@ def register_mdm(registry, mdm_engine, *, publisher_factory=None):
                 or any(item["unit"]["keys"].get(key, spec[key]) != spec[key] for key in ("batch_id", "consumer"))):
             raise Blocked("Publication work does not own its configured consumer")
         with mdm_engine.connect() as conn:
-            row = conn.execute(text("SELECT * FROM mdm_v2.publication WHERE batch_id=:b AND consumer=:c"),
+            row = conn.execute(text("SELECT * FROM mdm.outbox WHERE batch_id=:b AND consumer=:c"),
                                {"b": spec["batch_id"], "c": spec["consumer"]}).mappings().first()
         if row is None:
             raise Blocked("Required publication intent is missing")

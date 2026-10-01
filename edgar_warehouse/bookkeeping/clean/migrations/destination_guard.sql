@@ -43,10 +43,10 @@ CREATE FUNCTION bookkeeping_guard.claim_publication(destination text,owner_name 
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bookkeeping_guard AS $$
 DECLARE next_batch text;
 BEGIN
-  SELECT q.batch_id INTO next_batch FROM mdm_v2.publication q JOIN mdm_v2.batch b USING(batch_id)
+  SELECT q.batch_id INTO next_batch FROM mdm.outbox q JOIN mdm.batch b USING(batch_id)
     WHERE q.consumer=destination AND q.verified_at IS NULL ORDER BY b.generation LIMIT 1 FOR UPDATE OF q;
   IF next_batch IS DISTINCT FROM batch_key THEN RETURN NULL; END IF;
-  RETURN mdm_v2.claim_publication(destination,owner_name,seconds);
+  RETURN mdm.claim_outbox(destination,owner_name,seconds);
 END;
 $$;
 REVOKE ALL ON ALL TABLES IN SCHEMA bookkeeping_guard FROM PUBLIC;
