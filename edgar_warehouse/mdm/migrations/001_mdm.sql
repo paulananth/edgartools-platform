@@ -134,9 +134,9 @@ CREATE TABLE mdm.company (
     gleif_entity_creation_date text,
     fields jsonb NOT NULL,
     body jsonb NOT NULL,
-    CONSTRAINT company_check CHECK (((valid_to IS NULL) = (to_generation IS NULL))),
-    CONSTRAINT company_check1 CHECK (((valid_to IS NULL) OR (valid_from < valid_to))),
-    CONSTRAINT company_check2 CHECK (((to_generation IS NULL) OR (from_generation < to_generation))),
+    CONSTRAINT company_open_version_has_no_end CHECK (((valid_to IS NULL) = (to_generation IS NULL))),
+    CONSTRAINT company_valid_period CHECK (((valid_to IS NULL) OR (valid_from < valid_to))),
+    CONSTRAINT company_generation_period CHECK (((to_generation IS NULL) OR (from_generation < to_generation))),
     CONSTRAINT company_status_check CHECK ((status = ANY (ARRAY['accepted'::text, 'review'::text])))
 );
 
@@ -148,10 +148,10 @@ CREATE TABLE mdm.company_alias (
     valid_from timestamp with time zone NOT NULL,
     valid_to timestamp with time zone,
     batch_id text NOT NULL,
-    CONSTRAINT company_alias_check CHECK ((alias_id <> canonical_id)),
-    CONSTRAINT company_alias_check1 CHECK (((valid_to IS NULL) = (to_generation IS NULL))),
-    CONSTRAINT company_alias_check2 CHECK (((valid_to IS NULL) OR (valid_from < valid_to))),
-    CONSTRAINT company_alias_check3 CHECK (((to_generation IS NULL) OR (from_generation < to_generation)))
+    CONSTRAINT company_alias_not_itself CHECK ((alias_id <> canonical_id)),
+    CONSTRAINT company_alias_open_version_has_no_end CHECK (((valid_to IS NULL) = (to_generation IS NULL))),
+    CONSTRAINT company_alias_valid_period CHECK (((valid_to IS NULL) OR (valid_from < valid_to))),
+    CONSTRAINT company_alias_generation_period CHECK (((to_generation IS NULL) OR (from_generation < to_generation)))
 );
 
 CREATE TABLE mdm.dataset (
@@ -444,10 +444,6 @@ ALTER TABLE ONLY mdm.stage_record
 ALTER TABLE ONLY mdm.stage_record
     ADD CONSTRAINT stage_record_source_code_fkey FOREIGN KEY (source_code) REFERENCES mdm.dataset(source_code);
 
-
---
--- PostgreSQL database dump complete
---
 
 -- Functions -----------------------------------------------------------------
 
@@ -805,7 +801,7 @@ $$;
 CREATE FUNCTION mdm.immutable_row() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-BEGIN RAISE EXCEPTION 'Clean MDM evidence and decisions are append-only'; END;
+BEGIN RAISE EXCEPTION 'MDM rows of this table are never changed (append-only)'; END;
 $$;
 
 CREATE FUNCTION mdm.keep_stage(r jsonb) RETURNS void
@@ -1330,7 +1326,8 @@ CREATE VIEW mdm.stage_waiting AS
 -- Source readings and current records stay in one table each, with the kind
 -- as a value inside them. These views present each table as if it were split
 -- per kind, so a reader asks for Person readings without repeating the
--- filter, and a new kind needs only its value added to master_entity's check.
+-- filter. A later migration that adds a kind to master_entity's check must
+-- create that kind's four views too: this block runs once, here.
 --
 --   <kind>_stage         each source reading of that kind
 --   <kind>_stage_field   the same readings, one row per field
@@ -1430,7 +1427,7 @@ CREATE INDEX match_proposal_created_at_assessment_id_idx ON mdm.match_proposal U
 
 CREATE INDEX match_proposal_event_assessment_id_event_id_idx ON mdm.match_proposal_event USING btree (assessment_id, event_id DESC);
 
-CREATE INDEX match_proposal_expr_idx ON mdm.match_proposal USING btree ((((body -> 'command'::text) ->> 'batch_id'::text)));
+CREATE INDEX match_proposal_batch ON mdm.match_proposal USING btree ((((body -> 'command'::text) ->> 'batch_id'::text)));
 
 CREATE INDEX source_reading_identifier_cik ON mdm.source_reading USING btree ((((body -> 'identifiers'::text) ->> 'cik'::text)));
 
@@ -1452,7 +1449,7 @@ CREATE INDEX decision_subject ON mdm.decision USING btree (((body ->> 'subject':
 
 CREATE INDEX decision_target ON mdm.decision USING btree (((body ->> 'target'::text)));
 
-CREATE INDEX deferred_probable_kind ON mdm.set_aside_record USING btree (((body ->> 'probable_kind'::text)));
+CREATE INDEX set_aside_record_probable_kind ON mdm.set_aside_record USING btree (((body ->> 'probable_kind'::text)));
 
 CREATE INDEX master_entity_kind_published_at ON mdm.master_entity USING btree (kind, published_at);
 
@@ -1522,7 +1519,7 @@ COMMENT ON SCHEMA mdm IS
 -- Master data -------------------------------------------------------------
 
 COMMENT ON TABLE mdm.master_entity IS
-    'One row per master entity (a Company, a Person, ...): its id and kind, and when it was published. Never changed. Written by save_batch; read by the Merge Stage and the per-kind views.';
+    'One row per master entity (a Company, a Person, ...): its id and kind, and when it was published. Never changed. Written by save_batch; read by save_batch and match_proposal_snapshot, and referenced by company, company_alias and stage_record.';
 COMMENT ON COLUMN mdm.master_entity.published_at IS
     'When MDM first published the entity. Of two merged entities, the earlier-published one survives.';
 
@@ -1689,6 +1686,7 @@ COMMENT ON COLUMN mdm.migration.installed_at IS 'When it was applied.';
 COMMENT ON VIEW mdm.current_entity IS
     'The one read of every current master entity of every kind: Companies from company (and their aliases), the rest from current_record.';
 COMMENT ON COLUMN mdm.current_entity.object_id IS 'The entity''s id.';
+COMMENT ON COLUMN mdm.current_entity.status IS 'accepted, review when a person must look at it, or alias for a merged-away Company id.';
 COMMENT ON COLUMN mdm.current_entity.body IS 'The whole current master record.';
 
 COMMENT ON VIEW mdm.company_master_field IS
@@ -1707,7 +1705,7 @@ COMMENT ON COLUMN mdm.stage_waiting.raw_record IS 'The record as the source deli
 -- Functions -----------------------------------------------------------------
 
 COMMENT ON FUNCTION mdm.save_batch(text, uuid) IS
-    'Save one batch of Merge Stage work atomically: whole or not at all. A batch that joins or merges must carry a ready match proposal whose snapshot still holds. Then write_batch saves it, and the proposal is marked applied. The one function the application login calls to change master data.';
+    'Save one batch of Merge Stage work atomically: whole or not at all. A batch that joins or merges must carry a ready match proposal whose snapshot still holds. Then write_batch saves it, and the proposal is marked applied. The only way the application login changes master data; it records proposals, tries and runs through their own functions.';
 COMMENT ON FUNCTION mdm.write_batch(text, uuid) IS
     'The writes of save_batch, without its match-proposal check: refuses a batch that is unbounded (over 16 MiB, 1,000 readings or decisions, 10,000 current records), stale or from an unregistered source; then saves the batch, its readings, entities, decisions, current records, checkpoint, outbox rows, set-aside records and Stage. Called by save_batch and preview_batch only; not granted to the application login.';
 COMMENT ON FUNCTION mdm.preview_batch(text, uuid) IS
@@ -1761,7 +1759,7 @@ DECLARE
         'mapping_version', 'The version of the source''s mapping (dataset_mapping) that read it.',
         'effective_at', 'When the source says the reading took effect.',
         'batch_id', 'The saved batch that wrote this row (batch.batch_id).',
-        'subject', 'The source record''s subject: its source and record key, the name the Merge Stage joins to an entity.',
+        'subject', 'The source record''s subject: a digest of its source and record key, the name the Merge Stage joins to an entity.',
         'schema_version', 'The source''s schema version the record was read under.',
         'kind', 'The kind of master entity: company, person, security, fund_structure, branch, government, international_organization or venue.',
         'entity_id', 'The master entity (master_entity.entity_id).',

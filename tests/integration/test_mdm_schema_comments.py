@@ -55,3 +55,18 @@ def test_a_store_with_the_retired_mdm_v2_schema_is_refused(database):
         conn.execute(text("CREATE SCHEMA mdm_v2"))
     with pytest.raises(Conflict, match="retired mdm_v2 schema"):
         migrate(database.admin, application_role="clean_application")
+
+
+def test_migrating_a_store_that_holds_data_changes_nothing(database):
+    """A second `mdm migrate` over a store with rows installs nothing, keeps
+    the rows, and leaves the application login its read access."""
+    with database.admin.connect() as conn:
+        before = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}"))
+                  for t in ("policy", "dataset", "dataset_mapping", "migration")}
+    assert before["policy"] and before["dataset"]
+    assert not migrate(database.admin, application_role="clean_application")["installed"]
+    with database.admin.connect() as conn:
+        after = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in before}
+    assert after == before
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm.policy")) == before["policy"]

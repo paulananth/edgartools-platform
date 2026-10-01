@@ -333,7 +333,7 @@ def current_reading(conn: Connection, code: str) -> tuple[int, dict] | None:
     reading number that produced it. Reading them apart is how an adapter ends
     up stamping version 1 onto a record it read under a corrected mapping.
 
-    `mdm.dataset` cannot answer this: migration 023 makes it append-only,
+    `mdm.dataset` cannot answer this: it is append-only,
     so its body stays whatever was registered first.
     """
     found = rows(
@@ -398,7 +398,7 @@ class Publisher(Protocol):
 class Store:
     def __init__(self, engine: Engine, *, lease_authority=None):
         if engine.dialect.name != "postgresql":
-            raise ValueError("Clean MDM requires PostgreSQL")
+            raise ValueError("MDM requires PostgreSQL")
         self.engine = engine
         self.lease_authority = lease_authority
 
