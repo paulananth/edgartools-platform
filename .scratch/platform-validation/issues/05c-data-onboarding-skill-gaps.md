@@ -30,6 +30,11 @@ given.
 - [ ] 8. Quality counts need code: part of `rules check`
 - [ ] 9. Adding a kind broke pinned tests: fixed by #769 (05a). Add a line to
   the skill that a new kind leaves Company's pins alone
+- [x] 10 (part). Fixed in #770: plain words for `token_match@1` and
+  `name_shape@1`, "NOT (...)" for a negated condition, excluded words named,
+  and a ceiling of 1 or more shown (2026-10-01 18:34 ET). Still open: Company's
+  `max_count: 0` reads "at least  of the list", and the identifier words say
+  "Company" for every kind.
 - [ ] 10. Mapping Document bugs for a second kind:
   - a negated step is shown without "not";
   - "Company" is hard-coded in the matching rule text;

@@ -7,6 +7,11 @@ from edgar_warehouse.rules.files import load
 from .config import digest
 
 
+def _acquires(body: dict, feed: str) -> bool:
+    declared = body.get("acquisition", {}).get("feeds", {})
+    return feed in declared or any(feed in value["datasets"] for value in declared.values())
+
+
 def resolve_feed(root: Path, source: str, feed: str) -> dict:
     if not source or not feed:
         raise ValueError("Both source and feed are required")
@@ -24,6 +29,15 @@ def resolve_feed(root: Path, source: str, feed: str) -> dict:
                 for entry in body.get("mdm", {}).values()
             )
         ]
+    if len(matches) > 1:
+        # Several documents may read one provider's files (SEC submissions
+        # feed Company and Person); the one that acquires the feed answers.
+        matches = [(name, body) for name, body in matches if _acquires(body, feed)]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Source {source!r} names several Rules documents, and {len(matches)} of them "
+                f"acquire feed {feed!r}; exactly one must"
+            )
     if len(matches) != 1:
         raise ValueError(
             f"Source {source!r} must resolve to exactly one Rules document"

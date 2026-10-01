@@ -147,7 +147,13 @@ only configuring". Every step that needs code is a SKILL-GAP in the log.
 - [x] Skill gaps ticketed: `05c-data-onboarding-skill-gaps.md` (16 items,
   including the Mapping Document bugs and the identifier-approval gap)
   (2026-10-01 18:25 ET)
-- [ ] Three-axis `/code-review`; PR; CI green; merge on the operator's word
+- [x] Three-axis `/code-review` (2026-10-01 18:25 ET); PR #770 opened
+- [x] CI's first run failed three unit tests I had not run locally. Fixed with
+  the operator's "yes" (code): `resolve_feed` picks the document that acquires
+  the feed; Mapping Document words (05c item 10, part); the pinned document
+  set. Reviewed on three axes. Unit 394, MDM 484, architecture 249 passed
+  locally (2026-10-01 18:34 ET)
+- [ ] CI green; merge on the operator's word
 
 ## Out of this PR
 
