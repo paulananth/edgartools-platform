@@ -450,9 +450,9 @@ Named profile:
   aws_secret_access_key = $secret_key
   region                = $REGION
 
-Use for application rollout only:
+Use for application rollout only (for example, publishing images):
 
-  bash infra/scripts/deploy-aws-application.sh --env $ENV --aws-profile ${DEPLOYER_NAME} --aws-account-id ${ACCOUNT_ID}
+  AWS_PROFILE=${DEPLOYER_NAME} bash infra/scripts/publish-warehouse-image.sh --aws-region $REGION ...
 
 Do not use this key for Terraform admin applies. Store it immediately and rotate
 or delete it when you move to IAM Identity Center or CI OIDC.

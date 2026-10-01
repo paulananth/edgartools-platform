@@ -201,12 +201,11 @@ conn.close()
 # Take ownership back from `application` before migrating. On a first-ever
 # bootstrap there's nothing to reassign yet (fine -- `application` may not
 # even exist as a role, handled below). On a *re*-bootstrap (this database
-# already went through one full cycle), the end-of-run REASSIGN OWNED BY
-# snowflake_admin TO application below already moved everything to
-# `application`, so this freshly-rotated snowflake_admin session no longer
-# owns any table -- `mdm migrate`'s CREATE INDEX IF NOT EXISTS statements
-# require ownership (unlike CREATE TABLE IF NOT EXISTS, which only needs
-# schema USAGE), and fail with InsufficientPrivilege without this step.
+# already went through a cycle of an earlier version of this script), that
+# version's end-of-run REASSIGN OWNED BY snowflake_admin TO application moved
+# everything to `application`, so this freshly-rotated snowflake_admin
+# session no longer owns any table -- `mdm migrate` needs ownership, and
+# fails with InsufficientPrivilege without this step.
 conn = connect(database)
 conn.autocommit = True
 cur = conn.cursor()
@@ -258,27 +257,11 @@ if result.returncode != 0:
 conn = connect(database)
 conn.autocommit = True
 cur = conn.cursor()
-for stmt in [
-    # `mdm migrate` above ran as snowflake_admin, so it owns every table,
-    # index, and sequence it just created. Ownership (not just DML grants)
-    # is required for DDL the runtime re-issues idempotently on every
-    # `mdm migrate` call (e.g. `CREATE INDEX IF NOT EXISTS`) — Postgres
-    # gates CREATE INDEX/ALTER TABLE on ownership regardless of IF NOT
-    # EXISTS, unlike CREATE TABLE IF NOT EXISTS which only needs schema
-    # USAGE. Reassign first so `application` (the long-lived runtime role)
-    # owns everything snowflake_admin (the one-shot provisioning role) just
-    # created.
-    "REASSIGN OWNED BY snowflake_admin TO application;",
-    "GRANT CONNECT ON DATABASE %s TO application;" % database,
-    "GRANT USAGE ON SCHEMA public TO application;",
-    "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO application;",
-    "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO application;",
-    "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO application;",
-    "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO application;",
-    # Acquisition and registry control tables are retired; MDM migration
-    # applies only MDM-owned objects here.
-]:
-    cur.execute(stmt)
+# Clean MDM's `mdm migrate` keeps snowflake_admin as the owner and grants
+# `application` only what the runtime needs (SELECT, and EXECUTE on the save
+# functions). Ownership must stay with snowflake_admin: an owner bypasses
+# those grants. `application` needs only to connect.
+cur.execute("GRANT CONNECT ON DATABASE %s TO application;" % database)
 cur.close()
 conn.close()
 pw = None
@@ -419,13 +402,9 @@ MDM_DATABASE_URL="$(aws_cli secretsmanager get-secret-value --secret-id "${MDM_P
   uv run --project "$REPO_ROOT" --extra mdm-runtime edgar-warehouse mdm check-connectivity \
   | python3 -c "
 import json, sys
-lines = sys.stdin.read().splitlines()
-# The CLI emits one structured-log JSON object per line, then a final
-# pretty-printed JSON summary block starting with a line containing only '{'.
-start = max(i for i, line in enumerate(lines) if line.strip() == '{')
-payload = json.loads('\n'.join(lines[start:]))
-sql = payload.get('sql', {})
-print(json.dumps({'connected': sql.get('connected'), 'missing_tables': sql.get('missing_tables')}))
+# The CLI's last line is its report: {\"migrations\": <n>, \"sql\": true}.
+payload = json.loads(sys.stdin.read().splitlines()[-1])
+print(json.dumps({'connected': payload.get('sql'), 'migrations': payload.get('migrations')}))
 "
 unset MDM_DATABASE_URL
 

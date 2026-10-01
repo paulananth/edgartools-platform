@@ -112,8 +112,8 @@ step over ten minutes, so the operator can see where the time went.
 | Snowflake AWS native-pull Terraform | `infra/terraform/snowflake/accounts/{dev,prod}/` |
 | Snowflake access Terraform | `infra/terraform/access/snowflake/accounts/{dev,prod}/` |
 | dbt gold models | `infra/snowflake/dbt/edgartools_gold/` |
-| AWS deploy/publish scripts | `infra/scripts/deploy-aws-application.sh`, `infra/scripts/publish-warehouse-image.sh` |
-| AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh`, `infra/scripts/audit-mdm-snowflake-postgres-cutover.py`, `infra/scripts/remove-aws-mdm-rds-after-cutover.sh`, `infra/scripts/run-aws-mdm-e2e.sh` |
+| AWS image publish script | `infra/scripts/publish-warehouse-image.sh` |
+| AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh` |
 | Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
 
 Large files should be read in chunks before editing: `edgar_warehouse/runtime.py`, `edgar_warehouse/silver.py`, and `edgar_warehouse/gold.py`.
@@ -287,130 +287,13 @@ aws secretsmanager put-secret-value \
   --secret-string "Your Name your@email.com"
 ```
 
-## AWS Image And Application Rollout
+## AWS Image Publish
 
-Deploy active AWS components outside Terraform:
-
-```bash
-bash infra/scripts/deploy-aws-application.sh \
-  --env prod \
-  --aws-profile sec_platform_deployer \
-  --aws-region us-east-1 \
-  --build-image \
-  --publish-mode linux \
-  --output-file infra/aws-prod-application.json
-```
-
-The deploy script can:
-
-- Build and push the warehouse image.
-- Register ECS Fargate task definitions.
-- Create or update Step Functions state machines.
-- Discover passive resources from Terraform outputs.
-- Deploy MDM task definitions/state machines when `--enable-mdm` is used and MDM secret ARNs exist.
-
-Standalone image publish. One shared repo (`edgartools-<env>-images`) holds
-both warehouse and mdm images (final and deps); role is encoded in the tag
-prefix, applied automatically from `--role`:
-
-```bash
-bash infra/scripts/publish-warehouse-image.sh \
-  --aws-region us-east-1 \
-  --ecr-repository edgartools-dev-images \
-  --role warehouse \
-  --image-tag sha-$(git rev-parse --short=12 HEAD) \
-  --mode docker \
-  --cache-from-tag dev \
-  --also-tag dev
-```
-
-Use `--role mdm` with the same `--ecr-repository edgartools-<env>-images` when
-publishing the separate MDM image — it lands as `mdm-*` tags instead of
-`warehouse-*`.
-
-Image tags (role-prefixed: `warehouse-*` / `mdm-*`):
-
-- `warehouse-dev` / `mdm-dev`: mutable latest dev image, per role.
-- `warehouse-sha-<hash>` / `mdm-sha-<hash>`: immutable rollback/audit tag, per role.
-- `warehouse-prod` / `mdm-prod`: manually promoted production tag, per role.
-
-## ECS Cost-Sizing Evidence Rules
-
-- Size for cost per **successful validated output**, not for low CPU/memory or
-  a Step Functions `SUCCEEDED` status alone. A profile change needs repeated
-  current-image candidate runs and a matched control with the same immutable
-  orchestration, input envelope, and record funnel.
-- Promotion is fail-closed unless correctness, completeness, identity parity,
-  recovery, and cross-run idempotency pass; candidate p95 duration is no more
-  than 5% slower; and validated-output cost is at least 10% lower.
-- Ticket 28 rejected the `mdm.residual_security` medium downgrade despite low
-  memory use and three execution-local successes: cross-run idempotency failed,
-  shared mutable input broke control-funnel comparability, equal-work
-  `MdmSecurities` was 17.07% slower, and comparable p95 cost improvement was
-  not demonstrated.
-  Keep `mdm-large` operational for this workload; do not infer that
-  `mdm-small` is safe or change production references from this cohort.
-- Ticket 29's current-image `warehouse.gold_standalone` cohort passed exact
-  five-table/470,101-row output parity, cross-run idempotency, full-window
-  no-overlap, p95 duration (0.45% faster), and estimated compute-cost (48.69%
-  lower) gates on `warehouse-medium`. This does not approve the downgrade:
-  matched Snowflake input-envelope identity and exercised recovery evidence
-  are still missing. Keep `warehouse-large` operational; do not update
-  production references or start the bake window from this cohort.
-- The current-image unbounded `sync-graph` canary on `mdm-large` passed its
-  execution-local gates. This does not approve the residual-security profile
-  downgrade.
-- Do not run candidate and control concurrently against the same mutable MDM
-  state. Any residual-pipeline parallelization must first pass the disposable
-  two-wave canary in `.scratch/ecs-parallel-runs/`, including failure,
-  retry/recovery, parity, quota, p95, and validated-output cost gates; only then
-  may its implementation ticket proceed.
-- Canonical Ticket 28 analysis and durable evidence live in
-  `.scratch/ecs-cost-sizing/issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md`
-  and `.scratch/ecs-cost-sizing/evidence/ticket28/`.
-- Canonical Ticket 29 analysis and durable evidence live in
-  `.scratch/ecs-cost-sizing/issues/29-run-warehouse-gold-standalone-medium-canaries.md`
-  and `.scratch/ecs-cost-sizing/evidence/ticket29/`.
-
-## Warehouse Commands
-
-Core CLI commands live in `edgar_warehouse/cli.py`:
-
-```bash
-edgar-warehouse --help
-edgar-warehouse seed-universe --limit 100
-edgar-warehouse bootstrap --tracking-status-filter active
-edgar-warehouse bootstrap-full --tracking-status-filter active
-edgar-warehouse bootstrap-next --limit 100
-edgar-warehouse bootstrap-batch --cik-list 0000320193,0000789019
-edgar-warehouse daily-incremental --start-date YYYY-MM-DD --end-date YYYY-MM-DD
-edgar-warehouse load-daily-form-index-for-date YYYY-MM-DD
-edgar-warehouse catch-up-daily-form-index --end-date YYYY-MM-DD
-edgar-warehouse targeted-resync --scope-type cik --scope-key 0000320193
-```
-
-Step Functions execution example:
-
-```bash
-STATE_MACHINE_ARN="$(
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_machines"]["bootstrap"])' \
-    infra/aws-prod-application.json
-)"
-
-aws stepfunctions start-execution \
-  --profile sec_platform_deployer \
-  --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap"}'
-```
-
-For bounded replay:
-
-```bash
-aws stepfunctions start-execution \
-  --profile sec_platform_deployer \
-  --state-machine-arn "$STATE_MACHINE_ARN" \
-  --input '{"trigger":"operator","workflow":"bootstrap","cik_list":"0000320193,0000789019"}'
-```
+The AWS pipeline deploy script (`deploy-aws-application.sh`: ECS task
+definitions and Step Functions) was retired with the commands it ran
+(platform validation 2b, 2026-09-30). Terraform and the live AWS objects are
+untouched until a teardown the operator approves. Publish images with
+`infra/scripts/publish-warehouse-image.sh`.
 
 ## AWS MDM
 
@@ -434,21 +317,6 @@ printf '%s' "$SNOWFLAKE_APPLICATION_MDM_DSN" | \
     --dsn-stdin
 ```
 
-Then deploy app components with MDM enabled:
-
-```bash
-bash infra/scripts/deploy-aws-application.sh \
-  --env dev \
-  --aws-profile sec_platform_deployer \
-  --aws-region us-east-1 \
-  --skip-build \
-  --image-ref <warehouse-image-digest-ref> \
-  --mdm-image-ref <mdm-image-digest-ref> \
-  --enable-mdm \
-  --mdm-database-source snowflake-postgres \
-  --output-file infra/aws-dev-application.json
-```
-
 Snowflake Postgres cutover and RDS removal runbook:
 
 ```bash
@@ -464,13 +332,6 @@ edgar-warehouse mdm check-connectivity
 edgar-warehouse mdm counts
 edgar-warehouse mdm name-census ...
 edgar-warehouse mdm prepare-clean-company ...
-```
-
-AWS-only MDM e2e:
-
-```bash
-bash infra/scripts/run-aws-mdm-e2e.sh --env dev --aws-profile sec_platform_deployer
-bash infra/scripts/run-aws-mdm-e2e.sh --env dev --status-only
 ```
 
 **One-time backfill CLIs must expose a `--limit`/bounded-sample mode, not just `--dry-run`.**

@@ -384,41 +384,9 @@ infra/snowflake/dbt/edgartools_gold/profiles.yml
 EOF
 }
 
-application_manifest_value() {
-  local key="$1" file="${REPO_ROOT}/infra/aws-${ENVIRONMENT}-application.json"
-  [[ -f "$file" ]] || return 1
-  python3 - "$file" "$key" <<'PY'
-import json
-import sys
-
-path, dotted_key = sys.argv[1:3]
-try:
-    value = json.loads(open(path, encoding="utf-8").read())
-except Exception:
-    raise SystemExit(1)
-
-for part in dotted_key.split("."):
-    if not isinstance(value, dict) or part not in value:
-        raise SystemExit(1)
-    value = value[part]
-
-if not isinstance(value, str):
-    raise SystemExit(1)
-print(value)
-PY
-}
-
 known_install_notes_markdown() {
   cat <<'EOF'
-- `bronze_seed_silver_gold` now needs the Step Functions `batch_size` input defaulted and stringified before ECS `ContainerOverrides.Command`; older deployed definitions can fail immediately in `SeedFromBronze`.
-- Fresh silver stores may not contain the legacy `sec_tracked_universe` table; table-count reporting must treat that missing table as zero so `seed-bronze-batches` can finish after writing the CIK batch manifest.
-- First-time copied-bronze loads may not have `warehouse/silver/sec/shard-manifest.json`; `bootstrap-batch` and `mdm mastering`'s silver reader both fall back to the monolith `silver.duckdb` when no shard manifest exists yet (write side: `warehouse_orchestrator.py`'s `shard_manifest_missing_monolith_fallback`; read side: `mdm/cli.py`'s `_silver_reader()`). Because all concurrent batches in this fallback mode write to the same single monolith file, `BatchSilver`'s `MaxConcurrency` is a write-race risk lever, not just a throughput one. `MaxConcurrency=2` was validated end-to-end in prod (run `bronze-seed-silver-gold-1782351277`, 2026-06-24/25: `SeedFromBronze` → `BatchSilver` (zero `sec_pull_started`) → `Mastering` → `Infer Relationships` → `Publish Relationships` → `Reconcile` → `GoldRefresh` all `SUCCEEDED`). Current source is `MaxConcurrency=4`, which is **unvalidated** -- watch the next live run closely for monolith write contention (DuckDB lock errors, partial/duplicate rows) before trusting it.
-- `bootstrap-batch`'s idempotency check only consulted the silver checkpoint table, not S3 bronze existence directly -- on a fresh silver DB this caused real per-CIK SEC API calls during `BatchSilver` despite the bronze already existing in S3 (confirmed live: ~1 batch/hour with live `sec_pull_started` events). Fixed via a CIK-prefix glob fallback (`StorageLocation.find_existing`) and PR95's `merge_filings` bulk-upsert path. Always publish and deploy a fresh warehouse image that contains PR95 before using the one-click stage, and verify a `bronze_seed_silver_gold` run's first batch shows zero `sec_pull_started` events in CloudWatch within minutes of starting -- don't wait an hour to check.
-- Do not treat `BatchSilver` succeeding as proof the whole chain works: the first time this chain ever reached `Mastering` in prod, it failed separately (read-side shard-manifest-missing bug, distinct from the write-side bug above). Do not flip Blocker 4 / hosted graph E2E to PASS until `SeedFromBronze`, `BatchSilver`, `Mastering`, `Infer Relationships`, `Publish Relationships`, `Reconcile`, and `GoldRefresh` all succeed in prod and the run shows zero `sec_pull_started` events during `BatchSilver`.
-- **Do not redrive a failed `bronze_seed_silver_gold` execution after deploying a fix.** AWS Step Functions pins a redriven execution to the exact task-definition revision that was active when that execution last reached the failed state -- it does NOT pick up newly deployed revisions. Confirmed live: redriving after deploying a fix still ran the OLD task-definition revision and reproduced the OLD failure. Always start a fresh execution to pick up a new image/fix; only redrive when no relevant image has changed since the failure (e.g. a transient network blip) and you want to skip re-running already-succeeded `BatchSilver` batches.
-- `deploy-aws-application.sh --enable-mdm` silently defaults MDM task definitions to the *warehouse* image ref when `--mdm-image-ref` is omitted -- they need different images (MDM installs `.[s3,mdm-runtime]`, warehouse installs `.[s3]`). Always pass `--mdm-image-ref` explicitly; the install wizard's stages now do this automatically by publishing and resolving both image refs separately.
 - `cleanup-ecr-images.sh` only protects image digests referenced by *currently active* ECS task definitions. If you redeploy with a stale cached image ref (e.g. from an old `infra/aws-<env>-application.json` or a manually-typed digest) and then run cleanup, the digest you're about to deploy can be deleted out from under you if it isn't the one already active. Always redeploy with a freshly published or freshly verified-present image ref before running ECR cleanup, not after assuming an old digest is still around.
-- `sec_platform_runner_step_functions` needs `states:RedriveExecution` (in addition to `StartExecution`/`DescribeExecution`/`StopExecution`) for redrive to work at all -- this was missing and is now in Terraform (`infra/terraform/access/aws/modules/runtime_access/main.tf`). If a redrive call fails with an IAM authorization error, check this policy is actually applied (`terraform apply` in `infra/terraform/access/aws/accounts/<env>/`, not a CLI-only patch that can drift from source).
 EOF
 }
 
@@ -553,26 +521,6 @@ run_checks() {
     add_check "local config files" "warn" "missing ignored local config files:${missing_configs}"
   fi
 
-  # The application summary is generated and gitignored. It does not survive
-  # a fresh checkout, but is still needed for the production bucket checks.
-  if [[ -f "${REPO_ROOT}/infra/aws-${ENVIRONMENT}-application.json" ]]; then
-    add_check "prod application summary" "pass" "infra/aws-${ENVIRONMENT}-application.json present"
-    if [[ "$ENVIRONMENT" == "prod" ]]; then
-      for bucket in bronze_bucket_name warehouse_bucket_name snowflake_export_bucket_name; do
-        expected_bucket="edgartools-prod-${bucket%_bucket_name}-${EXPECTED_AWS_ACCOUNT_ID}"
-        [[ "$bucket" == "snowflake_export_bucket_name" ]] && expected_bucket="edgartools-prod-snowflake-export-${EXPECTED_AWS_ACCOUNT_ID}"
-        if [[ "$(application_manifest_value "$bucket" 2>/dev/null || true)" == "$expected_bucket" ]]; then
-          add_check "canonical ${bucket}" "pass" "manifest uses canonical production bucket"
-        else
-          add_check "canonical ${bucket}" "fail" "manifest does not use ${expected_bucket}"
-        fi
-      done
-    fi
-  else
-    add_check "prod application summary" "warn" "infra/aws-${ENVIRONMENT}-application.json missing; regenerate via the 'AWS: ECS task definitions' stage"
-  fi
-
-
   for image_ref in "${REPO_ROOT}/infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt" "${REPO_ROOT}/infra/aws-${ENVIRONMENT}-mdm-image-ref.txt"; do
     if [[ -s "$image_ref" ]]; then
       add_check "image:$(basename "$image_ref")" "pass" "resolved image reference is available"
@@ -647,7 +595,7 @@ AWS_PROFILE=${aws_profile_q} AWS_DEFAULT_REGION=${region_q} terraform apply -var
 
   add_stage \
     "Snowflake: Neo4j Native App install" \
-    "Installs the Neo4j Graph Analytics Native App, which nothing in this repo previously did: infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql (run by the 'MDM + graph: connectivity, migrations, sync, verification' stage below) only GRANTs against an application it assumes already exists, so every prior install silently depended on someone having installed it out of band -- an assumption that does not hold for a brand-new account. Placed this early deliberately (wayfinder ticket 05): installing requires a one-time, per-organization ORGADMIN acceptance of the Snowflake Provider and Consumer Terms in Snowsight, which wayfinder ticket 02 established has no SQL or API equivalent. Running it here means that human step is in flight while the AWS and Snowflake stages that do not depend on it proceed, instead of stalling the wizard mid-run. Idempotent: exits cleanly if the application is already installed. The Marketplace listing is resolved at run time rather than hardcoded, because ticket 02's candidate global name was transcribed from a guide URL rather than read off SHOW AVAILABLE LISTINGS and is explicitly unverified. NOTE: this stage is necessary but not sufficient for the graph half of a brand-new environment -- the later grants stage grants against {{ database }}.NEO4J_GRAPH_MIGRATION, a schema that mdm publish-relationships does not create until the 'MDM + graph: connectivity, migrations, sync, verification' stage runs, so on a genuinely new account the grants stage still runs ahead of its own prerequisite. See wayfinder ticket 07. Its position within the provision phase is otherwise unpinned (install-sh-provision-deploy-data map, Ticket 01) -- it only needs to precede the Postgres/graph prerequisites stage below, not literally be the second stage." \
+    "Installs the Neo4j Graph Analytics Native App, which nothing in this repo previously did: infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql (run by the 'Snowflake: MDM mirror + graph schema' stage below) only GRANTs against an application it assumes already exists, so every prior install silently depended on someone having installed it out of band -- an assumption that does not hold for a brand-new account. Placed this early deliberately (wayfinder ticket 05): installing requires a one-time, per-organization ORGADMIN acceptance of the Snowflake Provider and Consumer Terms in Snowsight, which wayfinder ticket 02 established has no SQL or API equivalent. Running it here means that human step is in flight while the AWS and Snowflake stages that do not depend on it proceed, instead of stalling the wizard mid-run. Idempotent: exits cleanly if the application is already installed. The Marketplace listing is resolved at run time rather than hardcoded, because ticket 02's candidate global name was transcribed from a guide URL rather than read off SHOW AVAILABLE LISTINGS and is explicitly unverified. NOTE: the later 'Snowflake: MDM mirror + graph schema' stage creates {{ database }}.NEO4J_GRAPH_MIGRATION (10_graph_schema.sql) before it grants against it. Its position within the provision phase is otherwise unpinned (install-sh-provision-deploy-data map, Ticket 01) -- it only needs to precede the Postgres/graph prerequisites stage below, not literally be the second stage." \
     "bash infra/scripts/install-neo4j-graph-app.sh --snow-connection ${SNOW_CONNECTION}"
 
   add_stage \
@@ -683,7 +631,7 @@ cat infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql; } | snow sql
 
   add_stage \
     "Snowflake Postgres / graph prerequisites" \
-    "Creates the MDM schema and its Snowflake Postgres network policy/instance (wayfinder snowflake-account-cutover ticket 03), then delegates credential rotation, migration, and AWS secret bootstrap to the maintained bootstrap script. Finishes wiring the mdm_schema_name/mdm_network_policy_name/mdm_network_rule_name values this function already computed but, before this change, never referenced. The Neo4j grants SQL that used to run here has moved to the first line of the 'MDM + graph: connectivity...' stage below (wayfinder ticket 01): it grants against {{ database }}.NEO4J_GRAPH_MIGRATION, a schema mdm publish-relationships doesn't create until that later stage runs, so it needs to run there, not here." \
+    "Creates the MDM schema and its Snowflake Postgres network policy/instance (wayfinder snowflake-account-cutover ticket 03), then delegates credential rotation, migration, and AWS secret bootstrap to the maintained bootstrap script. Finishes wiring the mdm_schema_name/mdm_network_policy_name/mdm_network_rule_name values this function already computed but, before this change, never referenced. The Neo4j grants SQL runs in the 'Snowflake: MDM mirror + graph schema' stage below, after 10_graph_schema.sql creates the schema it grants against." \
     "snow sql --connection ${SNOW_CONNECTION} -q \"CREATE SCHEMA IF NOT EXISTS ${mdm_schema_name};\"
 snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_network_policy.sql -D schema=${mdm_schema_name} -D network_rule_name=${mdm_network_rule_name} -D network_policy_name=${mdm_network_policy_name}
 snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_instance.sql -D instance_name=${mdm_instance_name} -D network_policy=${mdm_network_policy_name} -D comment_env=${ENVIRONMENT}
@@ -696,7 +644,7 @@ bash infra/scripts/bootstrap-prod-mdm.sh --env-name ${ENVIRONMENT} --snow-connec
 
   add_stage \
     "Snowflake: MDM mirror + graph schema" \
-    "Creates the 19 MDM Postgres-mirror tables in ${db_name}.MDM (09_mdm_mirror_schema.sql, now running as EDGARTOOLS_PROD_INSTALLER -- see the 'Snowflake: installer role' stage above) and the NEO4J_GRAPH_MIGRATION graph destination schema plus its CREATE-SCHEMA-ON-DATABASE grant (10_graph_schema.sql, still ACCOUNTADMIN -- that database-level grant is exactly the kind of statement the installer role deliberately doesn't cover; then re-applies the Neo4j Native App grants against that same schema) -- all three previously created only by an uncommitted manual shell session during the original go-live cutover, so a fresh account rebuild silently came back with an empty MDM schema and no graph schema at all (CLAUDE.md's 'MDM Snowflake mirror schema lost on cutover' incident; reproduced live 2026-08-22 while writing this stage -- ${db_name}.MDM had zero tables and ${db_name}.NEO4J_GRAPH_MIGRATION did not exist at all, both blocking a live bronze_seed_silver_gold execution's Publish/Publish Relationships steps until fixed by hand). Must run after 'Snowflake: installer role' above and 'Snowflake Postgres / graph prerequisites' further above, which creates the MDM schema itself but not its tables. Running the Native App grants here too (ahead of the 'MDM + graph: connectivity...' stage's own, still-idempotent re-application further below) corrects that later stage's own comment, which assumed 'mdm publish-relationships' creates NEO4J_GRAPH_MIGRATION on its own -- it can't: CREATE SCHEMA IF NOT EXISTS evaluates the CREATE SCHEMA privilege before checking existence, so EDGARTOOLS_${ENV_UPPER}_LOADER needs that grant (applied here) before it can create the schema at all, not just before its later grants can be re-applied." \
+    "Creates the 19 MDM Postgres-mirror tables in ${db_name}.MDM (09_mdm_mirror_schema.sql, now running as EDGARTOOLS_PROD_INSTALLER -- see the 'Snowflake: installer role' stage above) and the NEO4J_GRAPH_MIGRATION graph destination schema plus its CREATE-SCHEMA-ON-DATABASE grant (10_graph_schema.sql, still ACCOUNTADMIN -- that database-level grant is exactly the kind of statement the installer role deliberately doesn't cover; then re-applies the Neo4j Native App grants against that same schema) -- all three previously created only by an uncommitted manual shell session during the original go-live cutover, so a fresh account rebuild silently came back with an empty MDM schema and no graph schema at all (CLAUDE.md's 'MDM Snowflake mirror schema lost on cutover' incident; reproduced live 2026-08-22 while writing this stage -- ${db_name}.MDM had zero tables and ${db_name}.NEO4J_GRAPH_MIGRATION did not exist at all, both blocking a live bronze_seed_silver_gold execution's Publish/Publish Relationships steps until fixed by hand). Must run after 'Snowflake: installer role' above and 'Snowflake Postgres / graph prerequisites' further above, which creates the MDM schema itself but not its tables. The Native App grants run here because nothing else creates NEO4J_GRAPH_MIGRATION: CREATE SCHEMA IF NOT EXISTS evaluates the CREATE SCHEMA privilege before checking existence, so EDGARTOOLS_${ENV_UPPER}_LOADER needs that grant (applied here) before it can create the schema at all, not just before its later grants can be re-applied." \
     "snow sql --connection ${SNOW_CONNECTION} -f infra/snowflake/sql/bootstrap/09_mdm_mirror_schema.sql
 snow sql --connection ${SNOW_CONNECTION} -f infra/snowflake/sql/bootstrap/10_graph_schema.sql
 snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql -D database=${db_name}"
@@ -706,26 +654,9 @@ snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename in
   # Streamlit dashboard). No real SEC data is fetched in this phase.
   add_stage \
     "AWS: ECR image publish" \
-    "Publishes the warehouse AND MDM images to AWS ECR with dev and immutable rollback/audit tags. Writes both resolved digest-pinned image refs to local files so the next stage can pick them up automatically. Publishing both here (not just warehouse) is required: deploy-aws-application.sh silently defaults the MDM task definitions to the warehouse image ref when --mdm-image-ref is omitted, which is wrong (MDM has different runtime deps, .[s3,mdm-runtime] vs .[s3]) and was hit live in production on 2026-06-23. Both roles publish to the same consolidated edgartools-<env>-images repository (CLAUDE.md's 'Image management' section) -- the old per-role edgartools-<env>-warehouse/-mdm repos this stage used before this fix are a read-only rollback archive nothing pushes to anymore; confirmed live (aws ecr describe-repositories) that only the consolidated repo exists in this account, so the pre-fix stage would have failed outright with RepositoryNotFoundException." \
+    "Publishes the warehouse AND MDM images to AWS ECR with dev and immutable rollback/audit tags. Writes both resolved digest-pinned image refs to local files. Both roles publish to the same consolidated edgartools-<env>-images repository (CLAUDE.md's 'Image management' section); the old per-role edgartools-<env>-warehouse/-mdm repos are a read-only rollback archive nothing pushes to." \
     "AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-images --role warehouse --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT} --output-file infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt
 AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-region ${AWS_REGION_NAME} --ecr-repository edgartools-${ENVIRONMENT}-images --role mdm --image-tag ${image_tag} --mode auto --cache-from-tag ${ENVIRONMENT} --also-tag ${ENVIRONMENT} --output-file infra/aws-${ENVIRONMENT}-mdm-image-ref.txt"
-
-  add_stage \
-    "AWS: ECS task definitions" \
-    "Registers ECS task definitions for the locally qualified image and wires application CloudWatch logs. Legacy Step Functions remain disabled pending source/feed qualification. Auto-resolves both image refs from the ECR publish stage's output files; falls back to WAREHOUSE_IMAGE_REF/MDM_IMAGE_REF only if those files are missing. Always passes --mdm-image-ref explicitly and --enable-mdm." \
-    "warehouse_image_ref_file=\"infra/aws-${ENVIRONMENT}-warehouse-image-ref.txt\"
-mdm_image_ref_file=\"infra/aws-${ENVIRONMENT}-mdm-image-ref.txt\"
-if [[ -s \"\${warehouse_image_ref_file}\" ]]; then
-  resolved_warehouse_image_ref=\"\$(cat \"\${warehouse_image_ref_file}\")\"
-else
-  resolved_warehouse_image_ref=\"\${WAREHOUSE_IMAGE_REF:?set WAREHOUSE_IMAGE_REF, or run the ECR image publish stage first so \${warehouse_image_ref_file} is created}\"
-fi
-if [[ -s \"\${mdm_image_ref_file}\" ]]; then
-  resolved_mdm_image_ref=\"\$(cat \"\${mdm_image_ref_file}\")\"
-else
-  resolved_mdm_image_ref=\"\${MDM_IMAGE_REF:?set MDM_IMAGE_REF, or run the ECR image publish stage first so \${mdm_image_ref_file} is created}\"
-fi
-AWS_PROFILE=${deployer_q} bash infra/scripts/deploy-aws-application.sh --env ${ENVIRONMENT} --aws-profile ${DEPLOYER_PROFILE} --aws-account-id ${expected_account_q} --aws-region ${AWS_REGION_NAME} --skip-build --image-ref \"\${resolved_warehouse_image_ref}\" --mdm-image-ref \"\${resolved_mdm_image_ref}\" --enable-mdm --output-file infra/aws-${ENVIRONMENT}-application.json"
 
   add_stage \
     "Snowflake: MDM export targets" \
@@ -777,9 +708,9 @@ cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql
   # Source data work stays disabled until its Rules/feed baseline qualifies.
   add_stage \
     "MDM: clean migration and connectivity" \
-    "Checks MDM connectivity and applies clean migrations. Source feeds remain disabled until configured Rules and Bookkeeping qualification." \
-    "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity
-uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate"
+    "Applies the Clean MDM migrations, then checks connectivity: the check reads mdm_v2.migration, which the migrations create. Source feeds remain disabled until configured Rules and Bookkeeping qualification." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate
+uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity"
 
 
 }

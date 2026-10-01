@@ -62,8 +62,8 @@ modules/
    - `edgartools-<env>-edgar-identity`
    - `edgartools-<env>/mdm/postgres_dsn` for the operational store
    - `edgartools-<env>/mdm/snowflake` for graph/export settings
-7. Deploy active AWS application components from the operator script:
-   `bash infra/scripts/deploy-aws-application.sh --env dev --aws-profile sec_platform_deployer --aws-account-id 690839588395 --build-image`.
+7. The AWS application deploy script was retired (platform validation 2b,
+   2026-09-30); publish images with `infra/scripts/publish-warehouse-image.sh`.
 
 AWS Terraform no longer accepts warehouse image, workflow schedule, app command,
 Snowflake trust principal, IAM role, or EDGAR identity value inputs.
@@ -105,16 +105,7 @@ buckets, databases, or Snowflake database objects.
 
 Run workload actions explicitly after infra has been applied:
 
-- Deploy AWS application components with
-  `infra/scripts/deploy-aws-application.sh --aws-profile sec_platform_deployer --aws-account-id 690839588395`.
-  This script can build/push the
-  warehouse image, registers ECS task definitions, and creates or updates Step
-  Functions state machines using AWS CLI calls. When MDM secret ARNs are present
-  in Terraform outputs, it also registers MDM task definitions and state
-  machines for migrate, connectivity, run, graph sync/verify, and counts.
-  Runner role ARNs are read from the AWS access root when available.
-- Publish a standalone AWS image with `infra/scripts/publish-warehouse-image.sh`
-  when you need to separate image build from application rollout.
+- Publish AWS images with `infra/scripts/publish-warehouse-image.sh`.
 - Run MDM migrations/pipelines only from operator-owned jobs or local operator
   commands, not from Terraform.
 - Provision Snowflake database objects from `infra/terraform/snowflake/` and

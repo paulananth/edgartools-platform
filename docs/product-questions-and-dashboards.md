@@ -135,7 +135,7 @@ Grouped by domain. Each item notes the **primary gold/MDM source**.
 | G2 | Which funds does adviser A manage? | `MANAGES_FUND` |
 | G3 | Does person P appear across multiple issuers? | Person entity + edges |
 | G4 | Who audits company X? | `AUDITED_BY` |
-| G5 | Is graph parity healthy (MDM vs hosted graph)? | `mdm reconcile` / operator status |
+| G5 | Is graph parity healthy (MDM vs hosted graph)? | retired (`mdm reconcile` was removed 2026-09-30) |
 
 ### H. Platform health (operators)
 
@@ -154,7 +154,6 @@ Grouped by domain. Each item notes the **primary gold/MDM source**.
 | --- | --- |
 | `infra/snowflake/streamlit/streamlit_app.py` | Summary KPIs, company search, financial factors, filing mix, pipeline status hooks |
 | `examples/dashboard/edgar_universe_dashboard.py` | Overview, maps, industry, filings, ownership/funds, company lookup |
-| `examples/mdm_graph_dashboard/` | MDM / graph operator review |
 
 **Gap vs opportunity:** existing UIs are strong on **coverage and volume** and
 light on **investigative workflows** (insider around earnings, 13F QoQ change,

@@ -35,14 +35,9 @@
 #   bash deploy.sh --skip-tests          # skip the pre-flight test run (not recommended)
 #   bash deploy.sh --rollback sha-abc123def456
 #
-# Usage (a different app, e.g. GH-252's MDM dashboard):
-#   DASHBOARD_APP_NAME=mdm-dashboard \
-#   DASHBOARD_SOURCE_DIR="${REPO_ROOT}/infra/snowflake/mdm_dashboard" \
-#   DASHBOARD_SCHEMA=MDM_GRAPH_REVIEW_DASHBOARD \
-#   DASHBOARD_STREAMLIT_OBJECT=MDM_GRAPH_DASHBOARD \
-#   DASHBOARD_RELEASE_FILES="streamlit_app.py environment.yml" \
-#   DASHBOARD_TEST_PATHS="tests/architecture/test_mdm_dashboard_streamlit.py" \
-#   SNOW_CONNECTION=edgartools-prod bash deploy.sh
+# Usage (a different app): set DASHBOARD_APP_NAME, DASHBOARD_SOURCE_DIR,
+#   DASHBOARD_SCHEMA, DASHBOARD_STREAMLIT_OBJECT, DASHBOARD_RELEASE_FILES and
+#   DASHBOARD_TEST_PATHS before running deploy.sh.
 #
 # Rollback: each release's evidence.json records a `rollback_command` field
 # pointing at the release this one is about to replace. Run that recorded

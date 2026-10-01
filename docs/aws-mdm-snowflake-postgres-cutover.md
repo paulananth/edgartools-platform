@@ -1,5 +1,9 @@
 # AWS MDM Snowflake Postgres Cutover
 
+> **Retired (platform validation 2b, 2026-09-30).** This describes the AWS
+> pipeline and legacy MDM commands that were removed. Kept as history; do
+> not run the commands below.
+
 This runbook moves MDM runtime writes from AWS RDS PostgreSQL to Snowflake Postgres. Runtime code still reads `MDM_DATABASE_URL`; the cutover is instance provisioning, restore, Secrets Manager update, redeploy, audit, and RDS removal.
 
 Snowflake Postgres is created with Snowflake SQL, not Terraform. The SQL syntax follows Snowflake's `CREATE POSTGRES INSTANCE` command reference: https://docs.snowflake.com/en/sql-reference/sql/create-postgres-instance

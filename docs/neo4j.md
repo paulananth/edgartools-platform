@@ -1,5 +1,9 @@
 # Snowflake-Hosted Neo4j Graph Analytics
 
+> **Retired (platform validation 2b, 2026-09-30).** This describes the AWS
+> pipeline and legacy MDM commands that were removed. Kept as history; do
+> not run the commands below.
+
 Neo4j graph analytics for this platform is hosted in Snowflake. Do not treat
 Neo4j as an external Aura or Bolt runtime for the supported analytics path, and
 do not add operator guidance that depends on `NEO4J_URI`, `NEO4J_USER`,

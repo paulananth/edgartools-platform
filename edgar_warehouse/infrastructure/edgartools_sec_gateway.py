@@ -80,8 +80,8 @@ def ensure_identity(identity: str) -> None:
 def _emit_gateway_event(event: str, **payload: object) -> None:
     """Debug visibility for each individual SEC network call this gateway makes.
 
-    Matches sec_client.py's _emit_sec_pull_event JSON-line shape so existing
-    log tooling (diagnose-execution.sh) picks these up the same way, for the
+    Matches sec_client.py's _emit_sec_pull_event JSON-line shape so log
+    tooling reads both the same way, for the
     edgartools-routed object classes (catalogs/submissions/companyfacts) that
     previously only reported an aggregate network_fetches count with no
     per-call visibility.
