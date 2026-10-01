@@ -61,6 +61,16 @@ MIN = datetime.min.replace(tzinfo=UTC)
 MAX = datetime.max.replace(tzinfo=UTC)
 
 
+# What makes two statements one relationship (operator, 2026-10-01, design 1):
+# its type, its two ends and its scope. Dates, status and other properties are
+# a period of that relationship, so a restatement keeps the relationship's id.
+IDENTITY = ("type", "source_id", "target_id", "scope")
+# What a reported link names that is not a period: its identity, its ends as
+# records, and the keys a projected link adds. Everything else is the period.
+NOT_PERIOD = {*IDENTITY, "source_subject", "target_subject", "relationship_id", "derived",
+              "periods", "evidence", "last_seen"}
+
+
 def interval(edge):
     return instant(edge["valid_from"]) if edge.get("valid_from") else MIN, instant(
         edge["valid_to"]
@@ -80,10 +90,15 @@ def project(
     reviews = []
 
     def review(reason, **context):
-        reviews.append({"reason": reason, **context})
+        # A link checked once per period can find one problem twice.
+        if {"reason": reason, **context} not in reviews:
+            reviews.append({"reason": reason, **context})
 
     for subject, record in sorted(claims.items()):
         for reported in record["relationships"]:
+            # A link starts at the reading's own record unless it names another
+            # (a GLEIF relationship record starts at its child's Level 1 record).
+            start = reported.get("source_subject") or subject
             target = reported.get("target_subject")
             kind = reported.get("type")
             contract = CONTRACTS.get(kind)
@@ -95,10 +110,10 @@ def project(
             if not contract:
                 review("unsupported_relationship", **context)
                 continue
-            if subject not in state.bindings or target not in state.bindings:
+            if start not in state.bindings or target not in state.bindings:
                 review("unresolved_endpoint", **context)
                 continue
-            source_id = state.canonical[state.bindings[subject]]
+            source_id = state.canonical[state.bindings[start]]
             target_id = state.canonical[state.bindings[target]]
             if source_id == target_id:
                 review("self_relationship", **context)
@@ -114,13 +129,8 @@ def project(
             if not reported.get("valid_from"):
                 review("unknown_relationship_start", **context)
                 continue
-            edge = {
-                **reported,
-                "source_id": source_id,
-                "target_id": target_id,
-                "derived": False,
-            }
-            if interval(edge)[0] >= interval(edge)[1]:
+            period = {k: v for k, v in reported.items() if k not in NOT_PERIOD}
+            if interval(period)[0] >= interval(period)[1]:
                 review("invalid_relationship_interval", **context)
                 continue
             required_profiles = [(source, contract[2]), (dest, contract[3])]
@@ -128,8 +138,8 @@ def project(
             for entity, role in required_profiles:
                 if role and not any(
                     p["role"] == role
-                    and interval(p)[0] <= interval(edge)[0]
-                    and interval(p)[1] >= interval(edge)[1]
+                    and interval(p)[0] <= interval(period)[0]
+                    and interval(p)[1] >= interval(period)[1]
                     for p in entity["profiles"]
                 ):
                     review("missing_endpoint_profile", **context)
@@ -137,22 +147,40 @@ def project(
                     break
             if not eligible:
                 continue
-            identity = {k: v for k, v in edge.items() if k != "target_subject"}
-            key = digest(identity)
+            identity = {
+                "type": kind,
+                "source_id": source_id,
+                "target_id": target_id,
+                "scope": reported.get("scope", ""),
+            }
+            key = digest([identity[k] for k in IDENTITY])
             value = edges.setdefault(
-                key, {**identity, "relationship_id": key, "evidence": []}
+                key,
+                {**identity, "derived": False, "relationship_id": key, "periods": [],
+                 "evidence": [], "last_seen": None},
             )
+            if period not in value["periods"]:
+                value["periods"].append(period)
+            seen = record.get("source_meta", {}).get("effective_at")
+            # Absence never closes a link (design 2): readers compare when it
+            # was last stated with the latest publication.
+            if seen and (value["last_seen"] is None or instant(seen) > instant(value["last_seen"])):
+                value["last_seen"] = seen
             value["evidence"].append(
                 {
                     "assertion_id": record["assertion_id"],
-                    "source_subject": subject,
+                    "source_subject": start,
                     "target_subject": target,
                 }
             )
     invalid = set()
     grouped = defaultdict(list)
     for key, e in edges.items():
-        grouped[(e["type"], e.get("scope", ""))].append((key, e))
+        e["periods"] = sorted(e["periods"], key=lambda p: (interval(p), digest(p)))
+        # Each period is checked on its own, never merged into one span: a
+        # parent held, left and held again does not overlap the one between.
+        for period in e["periods"]:
+            grouped[(e["type"], e["scope"])].append((key, {**e, **period}))
     for (kind, scope), group in grouped.items():
         if kind in {
             "ACCOUNTING_PARENT",

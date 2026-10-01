@@ -325,10 +325,18 @@ def normalize(
                 raise UnsupportedRecord("unsupported_relationship_type")
         try:
             target = record_key(row, spec["target_key"])
+            # A link may start at another record (a GLEIF relationship record
+            # starts at its child's Level 1 record), as it ends at one.
+            start = (
+                {"source_subject": subject_key(spec["source_source"], record_key(row, spec["source_key"]))}
+                if spec.get("source_key")
+                else {}
+            )
         except ValueError:
             continue
         relationships.append(
             {
+                **start,
                 "type": relationship_type,
                 "target_subject": subject_key(spec["target_source"], target),
                 "scope": spec.get("scope", ""),
