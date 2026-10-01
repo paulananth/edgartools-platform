@@ -31,10 +31,10 @@ Stage reads back from Postgres is `jsonb`, which orders keys by length, so
   contract; a CIK one kind holds sends another kind's record to review. It
   follows the 2026-09-29 ruling (SEC issues every CIK, so both SEC feeds are
   issuers); stated in the PR, no new question (operator: "do not ask me too
-  many questions") (2026-10-01 09:05 ET)
+  many questions") (2026-10-01 09:02 ET)
 - [x] GoF consult on `binding.py` and `activation.check_policy`: leave the
   structure; `company_part` is a filter before the layers, not a layer
-  (2026-10-01 09:08 ET)
+  (2026-10-01 09:04 ET)
 - [x] `binding.py`: `_contracts` reads every kind; `_issuers` is their union
 - [x] `check_policy` refuses kinds whose contracts for one namespace disagree
   on authority or normalizer (unit test)
@@ -46,7 +46,7 @@ Stage reads back from Postgres is `jsonb`, which orders keys by length, so
   - `test_clean_company_source.py`
 - [x] `test_clean_cik_contract.py`: each mapped identifier is issued by some
   kind's contract
-- [x] `tests/integration/test_clean_shared_cik.py`, 3 passed (2026-10-01 09:40 ET):
+- [x] `tests/integration/test_clean_shared_cik.py`, 3 passed (2026-10-01 09:15 ET):
   - a Person's CIK finds its Person;
   - a Company-held CIK sends the Person record to review;
   - a Person-held CIK sends the Company record to review (added on the Spec
@@ -55,14 +55,14 @@ Stage reads back from Postgres is `jsonb`, which orders keys by length, so
   policy is `jsonb`, which orders keys by length, so "person" comes before
   "company" and the old code would have taken Person's contract. Every
   Company CIK would then have been looked up among Person records only.
-- [x] Named files pass locally, each under 5 minutes (2026-10-01 09:20 ET):
+- [x] Named files pass locally, each under 5 minutes (2026-10-01 09:12 ET):
   - unit: 150 passed;
   - `test_clean_identifier_binding` 24, `test_clean_stage_binding` 7,
     `test_clean_cik_rule` 6 + 1 xfail;
   - architecture tests;
   - with Person feed 1's rules copied in temporarily, the four pinned files
     and `test_rules_catalog` all pass (159).
-- [x] Three-axis `/code-review` (2026-10-01 09:40 ET):
+- [x] Three-axis `/code-review` (2026-10-01 09:15 ET):
   - GoF: leave it.
   - Standards: the test reuses `core.contract_body()` and `APPLE_CIK`; the
     check uses named variables; comments say why the first contract is safe
@@ -71,4 +71,5 @@ Stage reads back from Postgres is `jsonb`, which orders keys by length, so
     pin is stated in the PR. `_check_deterministic` and `_check_creates`
     still say "creates Companies" in their errors (wording only, a follow-up
     for the Person PR).
-- [ ] PR; CI green; merge on the operator's word
+- [x] PR #769; CI green, all five checks (2026-10-01 09:21 ET)
+- [ ] Merge on the operator's word
