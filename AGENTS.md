@@ -126,6 +126,7 @@ Large files should be read in chunks before editing: `edgar_warehouse/runtime.py
 - Project dependency source is PyPI. `edgartools>=5.29.0` is not vendored here.
 - Docker images use AWS ECR for deployable artifacts.
 - On macOS, use Colima for local Docker fast feedback. On Linux/CI, `docker buildx` with registry cache is the default path.
+- After local Docker builds on macOS, inspect `docker system df -v` and clear unused build cache with `docker builder prune` while Colima is running. To reclaim host space afterward, run `colima ssh -- sudo fstrim -a` and compare `du -h ~/.colima/_lima/_disks/colima/datadisk` and `df -h` before and after. `colima prune` clears downloaded assets, not the VM disk. Preserve Docker volumes and the Colima VM unless the user authorizes their exact removal; do not use `docker system prune -a --volumes` or delete VM disk files for routine cleanup. If Colima or the Docker socket is unavailable, report that blocker.
 
 ## GoF Design Review
 
