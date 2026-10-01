@@ -1,0 +1,51 @@
+{
+ "rule": {
+  "kind": "person",
+  "rule_id": "sec-person-candidate",
+  "version": "2026-09-30.1"
+ },
+ "labels": 1380,
+ "steps": {
+  "1 (deferred)": {
+   "verdict": "deferred",
+   "labels": {
+    "entity": 31
+   }
+  },
+  "2 (entity_undetermined)": {
+   "verdict": "entity_undetermined",
+   "labels": {
+    "entity": 476
+   },
+   "correct": 476,
+   "total": 476,
+   "wilson_lower_95": 0.992,
+   "wilson_lower_975": 0.9896
+  },
+  "2-guard (deferred)": {
+   "verdict": "deferred",
+   "labels": {
+    "entity": 6,
+    "person": 2
+   }
+  },
+  "3 (person)": {
+   "verdict": "person",
+   "labels": {
+    "person": 841
+   },
+   "correct": 841,
+   "total": 841,
+   "wilson_lower_95": 0.9955,
+   "wilson_lower_975": 0.9941
+  },
+  "4 (deferred)": {
+   "verdict": "deferred",
+   "labels": {
+    "person": 9,
+    "entity": 15
+   }
+  }
+ },
+ "wrong": []
+}

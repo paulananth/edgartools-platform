@@ -64,7 +64,10 @@ ON_FAIL_WORDS = {
 CONDITION_WORDS = {
     "field_in_set@1": "{field} is one of: {values}",
     "fields_all_empty@1": "{fields} is empty",
+    "token_match@1": "{field} holds at least {min_count} word(s) of the list {token_list}",
     "token_match@2": "{field} holds at least {min_count} word(s) of the list {token_list}",
+    "name_shape@1": "{field} is shaped like a person's name: {min_tokens} to {max_tokens} words, "
+                    "no digits or forbidden characters (suffixes from {suffix_list} allowed)",
     "values_overlap@1": "{field} holds at least {min_count} of the list {values}",
     "evidence_present@1": "The record has {document}",
     "name_census_match@1": "The names are equal, legal form kept, and exactly one SEC filer and one GLEIF "
@@ -245,9 +248,17 @@ def _conditions(items: list[dict]) -> str:
         found = w.get("args") or {}
         if "namespace" in found:  # an identifier, as the business writes it: CIK, LEI
             found = {**found, "namespace": str(found["namespace"]).upper()}
+        if (found.get("max_count") or 0) >= 1:  # a ceiling as well as a floor
+            found = {**found, "min_count": f"{found.get('min_count', 0)} and at most {found['max_count']}"}
+        if found.get("exclude_list"):  # words of the list that do not count
+            found = {**found, "token_list": f"{found['token_list']} (not counting {found['exclude_list']})"}
         return {**found, "compare": _compare(found.get("compare"))} if w.get("primitive") == "cascade_pass@1" else found
 
-    return "; and ".join(words(CONDITION_WORDS, w.get("primitive"), args(w)) for w in items)
+    def condition(w: dict) -> str:
+        text = words(CONDITION_WORDS, w.get("primitive"), args(w))
+        return f"NOT ({text})" if w.get("negate") else text
+
+    return "; and ".join(condition(w) for w in items)
 
 
 def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict[str, list[list[str]]]:

@@ -61,3 +61,57 @@ sec-gleif-name-postal:
   approved_at: null
   reason: 'ticket 08 Proving Run, the Postcode rule with state veto: fresh draw excluding
     every earlier CIK, 300/300, 0 adversarial violations'
+# Person feed 1 (2026-10-01): rule C-J (operator: "agreed", 2026-09-20, person
+# consumer contract ticket 03), ported to sec.submissions.person.v1 as
+# sec-person-candidate 2026-09-30.1.
+#
+# Proof: a fresh seeded random draw from this feed's pinned capture (all-76230),
+# research 18's 1,380 CIKs excluded (Q7 "B, agent drafts labels, I'll check";
+# Q12 "Agreed": 570 the rule calls a person plus 150 it does not). Labels drafted
+# by agents blind to the rule. The operator checked the 6 uncertain ones one by
+# one and 100 more in batches, then accepted the remainder ("Ok most your analysis is
+# fine only ask the real harder once"). Step 3 (`person`): 570 of 570. Step 2
+# (entity_undetermined, a hold-back, not a kind): 102 of 102. The lower bound is
+# n/(n+z^2) at z = 1.959964 (one-sided 0.975), cut to six places.
+#
+# Adversarial: 57 hard cases from real filers (Q8 "yes"), 51 checked by the
+# operator. A violation is an entity the rule calls a person: 0 (13 people
+# called people). One person was called entity_undetermined (HOLDING FRANK B JR:
+# HOLDING is a legal-form word), a missed person, not a false one.
+#
+# Earlier evidence, kept for reference: research 18's labels (Form 3/4/5 owners,
+# an earlier session's reading), step 3 841/841, step 2 476/476.
+#
+# Carries no approval. Approving it is the operator's step.
+sec-person-candidate:
+  method: wilson_lower_bound
+  one_sided_confidence: 0.975
+  n: 570
+  correct: 570
+  lower_bound: 0.993305
+  adversarial:
+    fixture_sha256: 7ffa3ed524df553a1338c3f0bbd322339ccd35fbfc5476fa389f5b6ee2461509
+    n: 57
+    violations: 0
+  cohort:
+    receipts_sha256: 3aee020551b37090e638b4e73d24a0119cc59456548557c883d1c032b6d5c247
+    sec_filers: 76230
+    labels: 720
+    by_step:
+      "3":
+        n: 570
+        correct: 570
+        lower_bound: 0.993305
+    files:
+      fresh-sample.jsonl: 0b3f1427587dc237f378a1a387340734161f78ec8df473cb2e3cfde2f7a01865
+      fresh-sample-key.jsonl: eabb7af717dd3414748dbf610358db8a85965e763ca443e39055b3295ccc9a33
+      fresh-labels-draft.jsonl: abfdb134f2a52fab84a8dfd774662adc1c322824c9472215c583e8aed42e73c7
+      fresh-labels-draft-extension.jsonl: 6bf5e9b7169fdb237ced3e28574a42bd603f9f4f972e1bef9b1539924cf90cf1
+      operator-checks.jsonl: 96347a9cf15005884596abd3cfeab8e9cc76ad8d7e910d6af1874fd9d320c24e
+      draw_sample.py: 3bfce607c2984eb66b1aac8c40086fdba41394a7f3b1302a1c9f54068a85b26e
+      hard-cases-checked.jsonl: 7ffa3ed524df553a1338c3f0bbd322339ccd35fbfc5476fa389f5b6ee2461509
+      score_hard_cases.py: b37ee84465c6c5d6ea89248fce5d6f94bf8679373cb779f2d79abe11cf970ea7
+  approved_by: null
+  approved_at: null
+  reason: 'person feed 1, rule C-J ported to SEC submissions: fresh random draw, step 3 person
+    570/570, step 2 entity 102/102; 57 hard cases, 0 entities called a person'

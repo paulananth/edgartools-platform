@@ -1,0 +1,333 @@
+{
+ "after_first_pass": {
+  "decisions": {
+   "bind": 4044
+  },
+  "decisions_by_actor": {
+   "rule:person-cik@2026-09-30": 4044
+  },
+  "identities": {
+   "person": 4044
+  },
+  "open_reviews": {
+   "classification_deferred": 1486,
+   "classification_entity_undetermined": 4470
+  },
+  "stage_bound": 4044,
+  "stage_records": {
+   "person": 4044
+  },
+  "waiting": {
+   "classification_deferred / -": 335,
+   "classification_deferred / company": 1151,
+   "classification_entity_undetermined / -": 4470
+  }
+ },
+ "after_second_pass": {
+  "decisions": {
+   "bind": 4044
+  },
+  "decisions_by_actor": {
+   "rule:person-cik@2026-09-30": 4044
+  },
+  "identities": {
+   "person": 4044
+  },
+  "open_reviews": {
+   "classification_deferred": 1486,
+   "classification_entity_undetermined": 4470
+  },
+  "stage_bound": 4044,
+  "stage_records": {
+   "person": 4044
+  },
+  "waiting": {
+   "classification_deferred / -": 335,
+   "classification_deferred / company": 1151,
+   "classification_entity_undetermined / -": 4470
+  }
+ },
+ "cik_on_two_persons": [],
+ "cohort": {
+  "limit": null,
+  "sample": 10000,
+  "seed": 20261001
+ },
+ "company_cohort_ciks": 6726,
+ "documents": 10000,
+ "person_ciks_in_company_cohort": [
+  "0001162095"
+ ],
+ "person_with_two_ciks": 0,
+ "persons": 4044,
+ "policy_digest": "d5289e088ef790dc52ac4954920f0166280734a7d63853d02c533f93691a0d8f",
+ "population": {
+  "company_cohort_ciks": 6726,
+  "filers": 76230,
+  "person_ciks_in_company_cohort": [
+   "0001162095",
+   "0001251956",
+   "0001299903",
+   "0001389964"
+  ],
+  "persons": 31097,
+  "steps": {
+   "1 (deferred)": 8809,
+   "2 (entity_undetermined)": 34038,
+   "2-guard (deferred)": 35,
+   "3 (person)": 31097,
+   "4 (deferred)": 2251
+  }
+ },
+ "read": {
+  "assertion": 4044,
+  "deferred: classification_deferred": 1486,
+  "deferred: classification_entity_undetermined": 4470
+ },
+ "receipts_sha256": "3aee020551b37090e638b4e73d24a0119cc59456548557c883d1c032b6d5c247",
+ "review_sample": [
+  {
+   "blocking": false,
+   "deferred_id": "0b6023704d2bd04d2cb646279bbae856ca97b89ed11bae59092390899b6b1c8d",
+   "open": true,
+   "publication_key": "submissions/sec/cik=1015820/main/2026/06/27/CIK0001015820.json@8fcd1753fd9ad49c9a895f25fab456b9c06b9c0c6f9b59840074f38a62d4c066",
+   "reason": "classification_entity_undetermined",
+   "record_locator": "submissions/sec/cik=1015820/main/2026/06/27/CIK0001015820.json",
+   "source_code": "sec.submissions.person.v1"
+  },
+  {
+   "blocking": false,
+   "deferred_id": "0e2d3ebf05abd4bc271bbc20d495ded925ac3822b5b46f78b0b2687d0a50ee44",
+   "open": true,
+   "publication_key": "submissions/sec/cik=1035674/main/2026/06/23/CIK0001035674.json@602f97a3ad7e567f9f1848869e002650ac8ee4fe6cf9b592655a166e67c2c110",
+   "reason": "classification_entity_undetermined",
+   "record_locator": "submissions/sec/cik=1035674/main/2026/06/23/CIK0001035674.json",
+   "source_code": "sec.submissions.person.v1"
+  },
+  {
+   "blocking": false,
+   "deferred_id": "114afe5f7fed9b6d136c972693223e648fc131dbcf505ef6874cfd24f1444014",
+   "open": true,
+   "publication_key": "submissions/sec/cik=1048911/main/2026/07/01/CIK0001048911.json@cd15d1b802adbe9dae5ec1e6e602f334888e8122d9cdbe48f66c463908ae7119",
+   "reason": "classification_deferred",
+   "record_locator": "submissions/sec/cik=1048911/main/2026/07/01/CIK0001048911.json",
+   "source_code": "sec.submissions.person.v1"
+  },
+  {
+   "blocking": false,
+   "deferred_id": "116e0912321b434edb9ba1851ea6cc358554b75584595b18f5a665438fae0cf1",
+   "open": true,
+   "publication_key": "submissions/sec/cik=1023875/main/2026/05/14/CIK0001023875.json@0947e5c0b46cde4d2c0a463462d4c51498b8b04310b2482bd9936c5bd3209351",
+   "reason": "classification_entity_undetermined",
+   "record_locator": "submissions/sec/cik=1023875/main/2026/05/14/CIK0001023875.json",
+   "source_code": "sec.submissions.person.v1"
+  },
+  {
+   "blocking": false,
+   "deferred_id": "147a348af389a49cba47957aadd2ee67e97ecc1bf1dae131a69e19d0686699a1",
+   "open": true,
+   "publication_key": "submissions/sec/cik=1051324/main/2026/08/28/CIK0001051324.json@56e0b2a9cf9432d4cd527b3f5db2dc7574f2ae5ac137e1cf61e7eb43ec66f44d",
+   "reason": "classification_deferred",
+   "record_locator": "submissions/sec/cik=1051324/main/2026/08/28/CIK0001051324.json",
+   "source_code": "sec.submissions.person.v1"
+  }
+ ],
+ "run": "person feed 1, Proving Run of person-cik",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 850.0,
+  "second_pass": 571.8
+ },
+ "timings": [
+  {
+   "assertions": 1000,
+   "batch": "first-1",
+   "seconds": 24.6
+  },
+  {
+   "assertions": 1000,
+   "batch": "first-2",
+   "seconds": 80.4
+  },
+  {
+   "assertions": 1000,
+   "batch": "first-3",
+   "seconds": 113.4
+  },
+  {
+   "assertions": 1000,
+   "batch": "first-4",
+   "seconds": 93.5
+  },
+  {
+   "assertions": 44,
+   "batch": "first-5",
+   "seconds": 5.8
+  },
+  {
+   "batch": "first-6",
+   "deferred": 136,
+   "seconds": 38.0
+  },
+  {
+   "batch": "first-7",
+   "deferred": 168,
+   "seconds": 19.8
+  },
+  {
+   "batch": "first-8",
+   "deferred": 206,
+   "seconds": 10.2
+  },
+  {
+   "batch": "first-9",
+   "deferred": 193,
+   "seconds": 24.7
+  },
+  {
+   "batch": "first-10",
+   "deferred": 297,
+   "seconds": 33.7
+  },
+  {
+   "batch": "first-11",
+   "deferred": 459,
+   "seconds": 28.7
+  },
+  {
+   "batch": "first-12",
+   "deferred": 628,
+   "seconds": 35.5
+  },
+  {
+   "batch": "first-13",
+   "deferred": 1000,
+   "seconds": 39.9
+  },
+  {
+   "batch": "first-14",
+   "deferred": 1000,
+   "seconds": 19.8
+  },
+  {
+   "batch": "first-15",
+   "deferred": 1000,
+   "seconds": 13.2
+  },
+  {
+   "batch": "first-16",
+   "deferred": 544,
+   "seconds": 20.0
+  },
+  {
+   "batch": "first-17",
+   "deferred": 113,
+   "seconds": 13.3
+  },
+  {
+   "batch": "first-18",
+   "deferred": 105,
+   "seconds": 13.9
+  },
+  {
+   "batch": "first-19",
+   "deferred": 107,
+   "seconds": 4.8
+  },
+  {
+   "assertions": 1000,
+   "batch": "second-1",
+   "seconds": 10.3
+  },
+  {
+   "assertions": 1000,
+   "batch": "second-2",
+   "seconds": 7.7
+  },
+  {
+   "assertions": 1000,
+   "batch": "second-3",
+   "seconds": 14.5
+  },
+  {
+   "assertions": 1000,
+   "batch": "second-4",
+   "seconds": 13.8
+  },
+  {
+   "assertions": 44,
+   "batch": "second-5",
+   "seconds": 1.3
+  },
+  {
+   "batch": "second-6",
+   "deferred": 136,
+   "seconds": 37.8
+  },
+  {
+   "batch": "second-7",
+   "deferred": 168,
+   "seconds": 22.4
+  },
+  {
+   "batch": "second-8",
+   "deferred": 206,
+   "seconds": 21.8
+  },
+  {
+   "batch": "second-9",
+   "deferred": 193,
+   "seconds": 21.0
+  },
+  {
+   "batch": "second-10",
+   "deferred": 297,
+   "seconds": 16.8
+  },
+  {
+   "batch": "second-11",
+   "deferred": 459,
+   "seconds": 22.2
+  },
+  {
+   "batch": "second-12",
+   "deferred": 628,
+   "seconds": 25.2
+  },
+  {
+   "batch": "second-13",
+   "deferred": 1000,
+   "seconds": 39.2
+  },
+  {
+   "batch": "second-14",
+   "deferred": 1000,
+   "seconds": 25.5
+  },
+  {
+   "batch": "second-15",
+   "deferred": 1000,
+   "seconds": 18.7
+  },
+  {
+   "batch": "second-16",
+   "deferred": 544,
+   "seconds": 18.8
+  },
+  {
+   "batch": "second-17",
+   "deferred": 113,
+   "seconds": 15.9
+  },
+  {
+   "batch": "second-18",
+   "deferred": 105,
+   "seconds": 18.2
+  },
+  {
+   "batch": "second-19",
+   "deferred": 107,
+   "seconds": 11.5
+  }
+ ]
+}

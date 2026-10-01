@@ -1,0 +1,63 @@
+# SEC Person: the MDM mapping of the SEC submissions document of each filer, read for
+# the Person kind (sec.submissions.person.v1). Same captured files as
+# sec.submissions.company; a second kind gets its own folder (data-onboarding, Names).
+# Every filer's document is read; the classification rule below decides which are
+# people. No Person reader exists: paths are the raw submissions JSON. The acquisition
+# and bookkeeping sections belong to the Bookkeeping skill (person feed 1, 2026-10-01;
+# log: .scratch/onboarding/sec.submissions.person/onboarding-log.md).
+source: sec.submissions.person
+bronze:
+  family: submissions
+mdm:
+  sec.submissions.person.v1:
+    contract:
+      provider: SEC
+      family: submissions
+      schema_version: sec-submissions-person-json-v1
+      record_key: zero-padded 10-digit CIK of the filer the submissions document describes
+      publication_key: exact captured submissions document (member name and sha256)
+      effective_time: unknown; the document states no effective time
+      semantics: patch
+      completeness: one filer per document; a capture covers the filers listed in its manifest;
+        no retirement by absence
+      # Classification hold-backs never stop the run (operator, 2026-09-27);
+      # a data quality exception never does either (operator, 2026-09-28).
+      # A company's document (SEC `operating`/`investment`, 8,809 of the 76,230
+      # captured) is held back by step 1 as classification_deferred, so it never
+      # blocks this feed.
+      nonblocking_deferred_reasons:
+      - classification_deferred
+      - classification_entity_undetermined
+      - quality_legal_name_present
+      adapter:
+        version: sec-submissions-person-json-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        record_key:
+        - cik
+        record_key_format: sec_cik
+        # Rule C-J (Person ticket 03), ported to this source: SEC types people and
+        # firms alike as `other`. Declared in merge/kinds/person.yaml; switched on by the
+        # operator (2026-10-01 09:39 ET, "Approved").
+        classification:
+          kind: person
+          rule_id: sec-person-candidate
+          version: 2026-09-30.1
+        # Only the CIK, the identifier SEC issues to the filer (operator, Q2 "yes",
+        # 2026-10-01; see the log). SEC's `ein` (42,456 of 76,230 documents, 15,061 of them
+        # the placeholder 000000000) and its stated `lei` (392) are firm identifiers; for
+        # a person they would be lookup-only at most, and the contract has no lookup-only
+        # syntax yet (ticket). Identifiers are fixed within a source code: adding one
+        # later needs sec.submissions.person.v2.
+        identifiers:
+          cik: cik
+        identifier_formats:
+          cik: sec_cik
+        # `legal_name` per the Person projection (consumer.md). `display_name` is derived
+        # by the policy, never here. `formerNames` (a list; non-empty in 9,580 of 76,230
+        # documents) would feed `name_variants[]`, but the contract has no list-shaped
+        # field: left out, logged for a ticket. Addresses are never captured into MDM for
+        # reporting owners (consumer.md, The Person projection).
+        fields:
+          legal_name: name

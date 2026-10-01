@@ -1,0 +1,15 @@
+# Data quality for SEC submissions read as Person (person feed 1). Checks run on
+# each record after the mapping and before the merge.
+#
+# Only one check: a Person with no name never merges and never stops the run; it
+# waits as an open exception (operator, 2026-09-28; for Person, Q5 "yes",
+# 2026-10-01). No fix is needed for the EIN placeholder 000000000:
+# `ein` is not mapped here.
+version: sec-person-quality-v1
+quality:
+  sec.submissions.person.v1:
+    checks:
+    - id: legal_name_present
+      test: present@1
+      value: fields.legal_name
+      on_fail: exception
