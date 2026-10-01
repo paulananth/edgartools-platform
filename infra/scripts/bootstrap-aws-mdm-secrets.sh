@@ -186,4 +186,3 @@ aws_cli secretsmanager put-secret-value \
   --output text >/dev/null
 
 log "Done. MDM_DATABASE_URL secret now points at ${MASKED_DSN}"
-log "Next: deploy with deploy-aws-application.sh --enable-mdm --mdm-database-source snowflake-postgres"

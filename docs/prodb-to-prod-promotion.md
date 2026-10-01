@@ -41,7 +41,7 @@ Checkpoint C: retain the former database and Postgres instance without writes. R
 
 ## 4. Application cutover
 
-Confirm the EDGAR identity secret contains a name and email, both warehouse and MDM images resolve to ECR digests, and the generated `infra/aws-prod-application.json` contains only canonical bucket and role identifiers. Deploy through `deploy-aws-application.sh`; deploy Snowflake through `deploy-snowflake-stack.sh`; use the go-live wizard only with explicit per-stage approval.
+Confirm the EDGAR identity secret contains a name and email, both warehouse and MDM images resolve to ECR digests, Deploy Snowflake through `deploy-snowflake-stack.sh`; use the go-live wizard only with explicit per-stage approval.
 
 Run bounded warehouse and MDM validation, native-pull validation, dbt tests, Streamlit smoke tests, Postgres connectivity/migrations/counts, and Neo4j graph verification. Confirm no unintended SEC pulls and validate manifest ingestion end to end.
 

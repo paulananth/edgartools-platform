@@ -1,5 +1,9 @@
 # Production MDM Snowflake Graph First Load
 
+> **Retired (platform validation 2b, 2026-09-30).** This describes the AWS
+> pipeline and legacy MDM commands that were removed. Kept as history; do
+> not run the commands below.
+
 This runbook documents the first-time production load path for the
 Snowflake-hosted MDM graph:
 

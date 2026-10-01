@@ -117,14 +117,10 @@ provide both `BOOKKEEPING_VALIDATION_DATABASE_URL` and
 The helper verifies the actual completed root, frozen submission, counts,
 checks, backlog and journal receipts; a local report alone is insufficient.
 
-AWS application rollout uses `infra/scripts/deploy-aws-application.sh` only
-after all affected feed gates pass. Finish or retain legacy runs on their
-original stack and drain their pending intent there. Never import history or
-relabel an old event for the fresh journal. Physical retirement is separate;
-preserve the archive indefinitely by default.
-Fresh connection flags create separate journal task families with a read-only
-status default. Existing workflows keep their original task bindings. Select
-a fresh task for an approved feed only after full replacement stages qualify.
+There is no AWS rollout for the journal: the AWS pipeline deploy script was
+retired (platform validation 2b, 2026-09-30). Never import history or relabel
+an old event for the fresh journal. Physical retirement of the legacy archive
+is separate; preserve it indefinitely by default.
 
 ## Status
 

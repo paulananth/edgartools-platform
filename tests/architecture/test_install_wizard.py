@@ -41,7 +41,6 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Snowflake: installer role",
     "Snowflake: MDM mirror + graph schema",
     "AWS: ECR image publish",
-    "AWS: ECS task definitions",
     "Snowflake: MDM export targets",
     "Snowflake: MDM export deployer read",
     "Snowflake: silver-landing schema + ingest",
@@ -383,7 +382,7 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "AWS: passive infrastructure" in out
     assert "AWS: access roles/policies" in out
     assert "AWS: ECR image publish" in out
-    assert "AWS: ECS task definitions" in out
+    assert "AWS: ECS task definitions" not in out
     assert "CloudWatch logs" in out
     assert "Secrets Manager containers" in out
     assert "Snowflake: native-pull foundation" in out
@@ -397,9 +396,8 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "Data: bounded smoke only" not in out
     assert "bootstrap-next --limit 100" not in out
     assert "Current install notes and issues:" in out
-    assert "batch_size" in out
-    assert "shard-manifest.json" in out
-    assert "Blocker 4" in out
+    assert "cleanup-ecr-images.sh" in out
+    assert "shard-manifest.json" not in out
     assert "bootstrap-full" not in out
     assert "full bootstrap" not in out.lower()
     assert not workspace.exists()
@@ -411,8 +409,7 @@ def test_prod_plan_uses_canonical_names_and_maintained_delegates(tmp_path: Path)
     out = result.stdout
     assert "EDGARTOOLS_PROD" in out
     assert "edgartools-prod" in out
-    assert "infra/aws-prod-application.json" in out
-    assert "deploy-aws-application.sh" in out
+    assert "deploy-aws-application.sh" not in out
     assert "deploy-snowflake-stack.sh" in out
     assert "bootstrap-prod-mdm.sh" in out
     assert "infra/snowflake/streamlit/deploy.sh" in out
@@ -548,7 +545,7 @@ def test_report_redacts_sensitive_values_from_state_and_commands(tmp_path: Path)
     assert "<redacted-dsn>" in report
     assert "<redacted-image-digest>" in report
     assert "## Current Notes and Issues" in report
-    assert "shard-manifest.json" in report
+    assert "cleanup-ecr-images.sh" in report
 
 
 def test_gum_is_used_when_present_and_forced(tmp_path: Path) -> None:
@@ -762,7 +759,7 @@ def test_snowflake_delegates_get_env_name_and_aws_delegates_keep_env(
 
     assert "deploy-snowflake-stack.sh --env-name prod" in combined
     assert "bootstrap-prod-mdm.sh --env-name prod" in combined
-    assert "deploy-aws-application.sh --env prod" in combined
+    assert "deploy-aws-application.sh" not in combined
     assert "run-aws-mdm-e2e.sh --env prod" not in combined
 
 

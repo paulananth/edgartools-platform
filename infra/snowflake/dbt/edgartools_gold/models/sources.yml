@@ -150,21 +150,19 @@ sources:
           business key that a Scope Completion proved dropped. Collapsed
           silver models anti-join the latest event per key.
 
-  # MDM's golden-record export lands directly in EDGARTOOLS_GOLD via
-  # edgar_warehouse/mdm/export.py's MERGE path (Python/SQLAlchemy from MDM's
-  # own Postgres) — a categorically different write mechanism from the S3
-  # native-pull the edgartools_source source above documents. Declared as its
-  # own dbt source (not folded into edgartools_source) so that distinction
-  # stays visible in the DAG rather than implying a single write path.
+  # MDM's golden-record export table in EDGARTOOLS_GOLD. Its writer, the
+  # legacy edgar_warehouse/mdm/export.py, was deleted (platform validation
+  # 2a, 2026-09-30), so the table keeps its last rows and gets no new ones
+  # until a Clean MDM export to Snowflake exists. COMPANY and MDM_COMPANY
+  # still read it.
   - name: mdm_export
     database: "{{ target.database }}"
     schema: "{{ env_var('DBT_GOLD_SCHEMA', 'EDGARTOOLS_GOLD') }}"
     tables:
       - name: MDM_COMPANY_ENTITY
         description: >
-          MDM golden-record company entity, MERGEd by MDMExporter.export_pending()
-          (edgar_warehouse/mdm/export.py) directly into EDGARTOOLS_GOLD — not a
-          dbt model. Renamed from MDM_COMPANY (ticket 06,
+          MDM golden-record company entity, last written by the deleted legacy
+          MDMExporter (no writer today) — not a dbt model. Renamed from MDM_COMPANY (ticket 06,
           .scratch/unified-company-dimension/issues/06-resolve-mdm-company-export-target-circularity.md)
           to free that name for the COMPANY compat view (ticket 05). Left-joined
           into COMPANY by cik.

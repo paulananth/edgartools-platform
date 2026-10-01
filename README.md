@@ -9,10 +9,9 @@ Bookkeeping work/recovery, Rules policy authority and Change Journal evidence.
 The new PostgreSQL 16 path is locally qualified in bounded fixtures;
 legacy caller migration and production cutover remain incomplete.
 
-AWS application rollout is handled by `infra/scripts/deploy-aws-application.sh`
-after the AWS provisioning and access Terraform roots have been applied. That
-script builds/pushes the warehouse image when requested, registers ECS task
-definitions, and deploys Step Functions outside Terraform.
+The AWS pipeline deploy script (ECS task definitions and Step Functions) was
+retired with the commands it ran (platform validation 2b, 2026-09-30); images
+are published with `infra/scripts/publish-warehouse-image.sh`.
 
 AWS uses three principal classes. An admin profile applies the Terraform roots.
 `sec_platform_deployer` deploys images, task definitions, state machines, and

@@ -108,20 +108,7 @@ aws sts get-caller-identity --profile aws-admin-prod
 
 Always keep the same verified admin profile selected through bootstrap, passive-infrastructure apply, and access apply for one environment. Do not switch from dev to prod merely by changing the Terraform directory while leaving an unverified profile active.
 
-For application rollout, pass the expected account to the deployment script as a second, executable identity gate:
-
-```bash
-bash infra/scripts/deploy-aws-application.sh \
-  --env dev \
-  --aws-profile sec_platform_deployer \
-  --aws-account-id 690839588395 \
-  --aws-region us-east-1 \
-  --build-image \
-  --also-tag dev \
-  --output-file infra/aws-dev-application.json
-```
-
-Use the same `--aws-account-id 690839588395` argument for prod, changing `--env` and the output filename to `prod`. The script compares the argument with `aws sts get-caller-identity` before ECR cleanup, image building, task registration, or state-machine updates.
+The application deploy script (`deploy-aws-application.sh`) that took this account check was retired (platform validation 2b, 2026-09-30).
 
 ## Bootstrap and backend configuration
 

@@ -1,5 +1,9 @@
 # AWS MDM: Source to MDM Load Path (Phase 5)
 
+> **Retired (platform validation 2b, 2026-09-30).** This describes the AWS
+> pipeline and legacy MDM commands that were removed. Kept as history; do
+> not run the commands below.
+
 This document covers running the MDM entity loaders against a local or S3-backed silver DuckDB
 produced from already-captured SEC EDGAR bronze artifacts. It does not describe bronze artifact
 capture, Neo4j graph sync, or relationship derivation — those belong to later phases.

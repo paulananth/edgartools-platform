@@ -1,5 +1,9 @@
 # EdgarTools Platform — Project Overview
 
+> **Retired (platform validation 2b, 2026-09-30).** This describes the AWS
+> pipeline and legacy MDM commands that were removed. Kept as history; do
+> not run the commands below.
+
 A plain-language guide to what this repository is, how it uses the
 [edgartools](https://github.com/dgunning/edgartools) Python library, and how
 the pieces fit together.

@@ -176,8 +176,7 @@ problem entirely.
 | Batch scripts per form type | `scripts/batch/` |
 | dbt gold models (23 dynamic tables — the actual gold layer) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
-| MDM graph (Snowflake-hosted, NOT external Neo4j) | `edgar_warehouse/mdm/graph_readonly.py`, `mdm publish-relationships`/`mdm reconcile` CLI, `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql` |
-| Operator MDM/graph review dashboard | `examples/mdm_graph_dashboard/` |
+| MDM graph tables (Snowflake `NEO4J_GRAPH_MIGRATION`, still read by the live dashboard; their writers and the graph review dashboard were retired, platform validation 2a/2b, 2026-09-30) | `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`, `infra/scripts/install-neo4j-graph-app.sh` |
 | Clean MDM rules (source mappings, merge rules) | `rules/` (YAML people edit, reviewed in PRs), read by `edgar_warehouse/rules/files.py`; map `.scratch/rules-skill/` |
 | Onboard a new feed or domain / refine live rules (the `data-onboarding` and `refining-rules` skills) | `skills/data-onboarding/SKILL.md` (+ shared `REFERENCE.md`, `APPROVE.md`) and `skills/refining-rules/SKILL.md`; link each with its `link.sh`; trials and their evidence in `.scratch/platform-validation/trials/` (and the earlier `.scratch/rules-skill/trials/`) |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
@@ -235,7 +234,7 @@ Streamlit dashboard                            |                      |
                                              v
                                        Operator MDM/graph review
                                        dashboard
-                                       (examples/mdm_graph_dashboard/)
+                                       (retired 2026-09-30)
 ```
 
 MDM's own silver reader is **always** Snowflake `EDGARTOOLS_SILVER` via
@@ -698,7 +697,7 @@ own docstring.
 **The generation-scoped operator review contract** (GH-251):
 `edgar_warehouse/mdm/graph_review_publish.py` persists `mdm reconcile`'s
 payload into a bounded, read-only `MDM_GRAPH_REVIEW` schema that a managed
-dashboard (`examples/mdm_graph_dashboard/`) can query through a plain
+dashboard (retired with its example, 2026-09-30) could query through a plain
 Snowpark session — no MDM Postgres DSN, no direct Neo4j credential needed by
 that dashboard.
 
@@ -1017,8 +1016,8 @@ while `deploy-snowflake-stack.sh` string-built `edgartools-${ENVIRONMENT}`, i.e.
 (`prod`, `eu-prod`); hyphens map to underscores for Snowflake identifiers
 (`eu-prod` → `EDGARTOOLS_EU_PROD`). There is **no `--env` back-compat alias** — the
 rename was clean, since dev is decommissioned and prod was the only live caller.
-The AWS-side scripts (`deploy-aws-application.sh`, `run-aws-mdm-e2e.sh`) deliberately
-still take `--env`; `install.sh` threads one identifier to both flag names.
+The AWS-side scripts that took `--env` (`deploy-aws-application.sh`, `run-aws-mdm-e2e.sh`)
+were retired (platform validation 2b, 2026-09-30).
 
 ## Image management
 
@@ -1058,8 +1057,9 @@ CI (GitHub Actions `deploy.yml`, the "Deploy" workflow — `build-images.yml`
 no longer exists) builds and pushes the DEV images automatically on every push
 to `main` in ~30-45s via buildx registry cache, retagging `warehouse-dev`/
 `mdm-dev` each time. It does NOT promote to prod or register task
-definitions — prod promotion (build/push under `edgartools-prod-images` +
-`deploy-aws-application.sh`) is still manual. Use the steps below for prod
+definitions — prod promotion (build/push under `edgartools-prod-images`) is still
+manual; the AWS pipeline deploy script was retired (platform validation 2b,
+2026-09-30). Use the steps below for prod
 promotion, ad-hoc builds, or when CI is unavailable; for a dev image of
 current `main`, prefer CI's digest (`gh run list --workflow deploy.yml`) over
 rebuilding locally.
@@ -1111,14 +1111,6 @@ MDM_REF=$(aws ecr describe-images \
   --repository-name edgartools-dev-images \
   --query "sort_by(imageDetails[?contains(imageTags[0], 'mdm-sha-')],&imagePushedAt)[-1].imageDigest" \
   --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-images@{}")
-
-# 5. Deploy ECS task definitions and Step Functions state machines.
-bash infra/scripts/deploy-aws-application.sh \
-  --env dev \
-  --skip-build \
-  --image-ref "$WAREHOUSE_REF" \
-  --mdm-image-ref "$MDM_REF" \
-  --enable-mdm
 ```
 
 **If publish-warehouse-image.sh fails with a cache layer error (Colima cache corruption)**

@@ -49,20 +49,12 @@ directly. Dataset registration and policy registration use owner-only functions
 in `clean.store`; dataset contracts must attest an active, approved acquisition
 registry version. Do not manufacture activation authority to make a run pass.
 
-After those contracts and a pinned manifest have been registered:
-
-```bash
-edgar-warehouse mdm mastering --model clean --manifest "$CLEAN_MDM_MANIFEST" \
-  --run-id "$CLEAN_MDM_RUN_ID" --limit 100
-edgar-warehouse mdm derive-relationships --model clean --manifest "$CLEAN_MDM_MANIFEST" \
-  --run-id "$CLEAN_MDM_RUN_ID" --limit 100
-edgar-warehouse mdm publish --model clean --consumer journal --run-id "$CLEAN_MDM_RUN_ID" --limit 100
-edgar-warehouse mdm publish --model clean --consumer export --run-id "$CLEAN_MDM_RUN_ID" \
-  --contract-output "$CLEAN_MDM_CONTRACT_OUTPUT" --limit 100
-edgar-warehouse mdm publish --model clean --consumer graph --run-id "$CLEAN_MDM_RUN_ID" \
-  --contract-output "$CLEAN_MDM_CONTRACT_OUTPUT" --limit 100
-edgar-warehouse mdm reconcile --model clean --run-id "$CLEAN_MDM_RUN_ID"
-```
+After those contracts and a pinned manifest have been registered, mastering
+has no `edgar-warehouse` command yet: the `mdm mastering`, `derive-relationships`,
+`publish` and `reconcile` commands were deleted (platform validation 2a), and a
+Clean MDM run command is an open finding (design review 2026-09-30, finding 3).
+Run the Merge Stage as the Proving Run does:
+`.scratch/company-mastering/research/27_proving_run.py`.
 
 Repeat bounded stages until their frozen batches are observed. Manifest order
 is authoritative; a later stage cannot pass missing preceding batches. An

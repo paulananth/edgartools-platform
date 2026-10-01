@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Clean up unused ECR images before a deploy.
-# Called automatically by deploy-aws-application.sh before every build/deploy.
+# Clean up unused ECR images. Run it by hand; nothing calls it automatically.
 #
 # RETENTION POLICY (single shared repo -- warehouse/mdm x final/deps, role
 # encoded in the tag prefix, e.g. warehouse-sha-*, mdm-deps-*):
