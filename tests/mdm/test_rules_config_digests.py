@@ -87,6 +87,10 @@ GLEIF_BEFORE = {
 }
 
 
+# Company's part of the policy: a new kind does not move these pins
+# (platform validation 05a).
+COMPANY = policy_layers.company_part(company_source.POLICY)
+
 SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9be4"
 
 
@@ -94,7 +98,7 @@ def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
     layered = (WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
-    assert policy_layers.digests(company_source.POLICY) == [pins["policy"] for pins in layered]
+    assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
     assert digest(company_source.CONTRACT) == SEC_READING_V7
@@ -105,10 +109,10 @@ def test_the_company_configuration_is_unchanged():
     assert digest(company_source.FIELDS) == BEFORE["fields"]
     assert digest(company_source.PROOF) == BEFORE["proof"]
     assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
-    assert digest(company_source.NAME_PROOFS) == BEFORE["name_proofs"]
+    assert digest(policy_layers.company_proofs(company_source.NAME_PROOFS, COMPANY)) == BEFORE["name_proofs"]
     # Each switched-on name rule carries its measured proof, unchanged, with
     # the operator's approval added.
-    for entry in company_source.POLICY["automatic_rules"]:
+    for entry in COMPANY["automatic_rules"]:
         if entry["rule_id"] in policy_layers.NAME_RULES:
             stamped = {"approved_by", "approved_at", "approved_words"}
             measured = company_source.NAME_PROOFS[entry["rule_id"]]

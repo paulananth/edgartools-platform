@@ -86,6 +86,7 @@ def check_policy(body: dict) -> None:
     for kind, block in sorted(kinds.items()):
         for family, bar in sorted((block.get("bars") or {}).items()):
             _check_bar(kind, family, bar)
+    _check_shared_namespaces(kinds)
     seen = set()
     for kind, rule in _rules(body):
         key = (kind, rule.get("rule_id"), rule.get("version"))
@@ -122,6 +123,25 @@ def check_policy(body: dict) -> None:
             raise Conflict(f"Verdict {key} is activated twice")
         active.add(key)
         _check_activation(kinds, entry)
+
+
+def _check_shared_namespaces(kinds: dict) -> None:
+    """Kinds that each declare a namespace share its values: the Merge Stage
+    looks one up across every kind's issuers (platform validation 05a). So
+    their contracts must name one authority and one normalizer, or one value
+    could read as two. Each kind keeps its own sources, claim, compatibility
+    and verification: those are checked per kind when its rule activates."""
+    found: dict[str, tuple[str, tuple]] = {}
+    for kind, block in sorted(kinds.items()):
+        for namespace, contract in sorted((block.get("identifiers") or {}).items()):
+            name = contract.get("normalizer")
+            terms = (contract.get("authority"), (block.get("normalizers") or {}).get(name, name))
+            first_kind, first_terms = found.setdefault(namespace, (kind, terms))
+            if first_terms != terms:
+                raise Conflict(
+                    f"Kinds {first_kind} and {kind} declare Identifier Contract {namespace} "
+                    "with a different authority or normalizer"
+                )
 
 
 def _check_bar(kind: str, family: str, bar: dict) -> None:

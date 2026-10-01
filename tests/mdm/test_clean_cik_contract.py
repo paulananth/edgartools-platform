@@ -20,21 +20,28 @@ def test_the_sec_record_key_is_its_cik():
 
 
 def _issuers() -> dict[str, set[str]]:
-    """Who issues each identifier: the Identifier Contract's sources where one
-    is declared. The LEI has no contract yet; GLEIF's Level 1 issues it."""
-    declared = company_source.POLICY["kinds"]["company"]["identifiers"]
-    return {"lei": {"gleif.level1.v1"}} | {ns: set(c["sources"]) for ns, c in declared.items()}
+    """Who issues each identifier: every kind's Identifier Contract sources,
+    as the Merge Stage reads them (platform validation 05a). The LEI has no
+    contract yet; GLEIF's Level 1 issues it."""
+    issuers: dict[str, set[str]] = {"lei": {"gleif.level1.v1"}}
+    for block in company_source.POLICY["kinds"].values():
+        for namespace, contract in (block.get("identifiers") or {}).items():
+            issuers.setdefault(namespace, set()).update(contract["sources"])
+    return issuers
 
 
 def test_each_feed_maps_only_the_identifiers_it_issues():
     """Operator, 2026-09-29 (ticket 15, question 2): only the issuer's own
-    records count toward an identifier conflict. Today no feed maps an
-    identifier it does not issue, so the Merge Stage's conflict count has not
-    been changed. A feed that starts to must bring that change with it."""
+    records count toward an identifier conflict. So a feed maps only an
+    identifier some kind's Identifier Contract names it as issuing. A second
+    kind's feed that reads SEC's CIK (Person) declares itself there, and the
+    Merge Stage counts it across kinds (platform validation 05a). A feed that
+    maps one it does not issue must bring a change to the conflict count."""
     issuers = _issuers()
     mapped = {}
     for folder in sorted((files.ROOT / "sources").iterdir()):
         for code, body in (files.source(folder.name).get("mdm") or {}).items():
             for namespace in ((body.get("contract") or {}).get("adapter") or {}).get("identifiers") or {}:
                 mapped[(code, namespace)] = code in issuers.get(namespace, set())
-    assert mapped == {("sec.submissions.company.v1", "cik"): True, ("gleif.level1.v1", "lei"): True}
+    assert {("sec.submissions.company.v1", "cik"), ("gleif.level1.v1", "lei")} <= set(mapped)
+    assert all(mapped.values()), {pair for pair, issued in mapped.items() if not issued}

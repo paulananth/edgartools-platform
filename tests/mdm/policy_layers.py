@@ -19,6 +19,23 @@ def _copy(policy: dict) -> dict:
 NAME_RULES = ("sec-gleif-name-jurisdiction", "sec-gleif-name-postal")
 
 
+def company_part(policy: dict) -> dict:
+    """The policy as Company sees it: every other kind and its switched-on
+    rules left out, so a new kind does not move Company's pins (platform
+    validation 05a, operator Q9: "A"). The shared body and reference tables
+    stay, because Company's rules read them."""
+    body = _copy(policy)
+    body["kinds"] = {"company": body["kinds"]["company"]}
+    body["automatic_rules"] = [r for r in body.get("automatic_rules") or [] if r.get("kind") == "company"]
+    return body
+
+
+def company_proofs(proofs: dict, policy: dict) -> dict:
+    """The pending proofs of the rules Company declares."""
+    declared = {rule["rule_id"] for rule in policy["kinds"]["company"].get("rules") or []}
+    return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
+
+
 def without_name_rules_on(policy: dict) -> dict:
     """Company mastering ticket 25: the two name matching rules switched on,
     on the operator's approval ("yes", 2026-09-29 21:04 ET)."""

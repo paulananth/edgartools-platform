@@ -533,7 +533,7 @@ class TestTheCompanyPolicy:
         assert APPROVED_ACTIVATION["proof"] is PROOF
         # The pending policy the operator approved, before rules skill ticket
         # 08 added the SEC place-code table to the body.
-        pending = policy_layers.peel(POLICY)
+        pending = policy_layers.peel(policy_layers.company_part(POLICY))
         pending["automatic_rules"] = []
         assert digest(pending) == (
             "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
@@ -548,7 +548,7 @@ class TestTheCompanyPolicy:
         # ticket 15 the CIK matching rule, all switched off; without them the
         # policy is unchanged.
         # Ticket 25 switched the two name matching rules on.
-        assert policy_layers.digests(POLICY) == [
+        assert policy_layers.digests(policy_layers.company_part(POLICY)) == [
             "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
             "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6",
             "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702",
@@ -765,8 +765,9 @@ class TestTheNameMatchingRules:
     def test_both_name_matching_rules_are_on_by_the_operators_approval(self):
         # The classification rule, the CIK matching rule (ticket 15), and the
         # two name matching rules (ticket 25, "yes", 2026-09-29 21:04 ET).
-        assert POLICY["automatic_rules"][:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
-        assert [e["rule_id"] for e in POLICY["automatic_rules"][2:]] == [
+        company = policy_layers.company_part(POLICY)["automatic_rules"]
+        assert company[:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
+        assert [e["rule_id"] for e in company[2:]] == [
             "sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
         check_policy(POLICY)
 
@@ -841,3 +842,16 @@ def test_two_cascade_passes_with_one_name_are_refused():
     second["when"][0]["args"]["pass"] = "P1"
     with pytest.raises(Conflict, match="must be unique"):
         check_policy(body)
+
+
+def test_kinds_that_read_one_namespace_differently_are_refused():
+    """Platform validation 05a: the Merge Stage looks a CIK up across every
+    kind that declares one, so their contracts must agree."""
+    body = copy.deepcopy(POLICY)
+    company = body["kinds"]["company"]
+    body["kinds"]["person"] = {"identifiers": {"cik": {**company["identifiers"]["cik"],
+                                                       "normalizer": "normalize_identifier@lei-v1"}}}
+    with pytest.raises(Conflict, match="different authority or normalizer"):
+        check_policy(body)
+    body["kinds"]["person"]["identifiers"]["cik"]["normalizer"] = company["identifiers"]["cik"]["normalizer"]
+    check_policy(body)
