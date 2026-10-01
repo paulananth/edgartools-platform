@@ -26,7 +26,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, ProgrammingError
 
-import edgar_warehouse.mdm.migrations
+import edgar_warehouse.mdm.clean.store
 from edgar_warehouse.mdm.clean.classification import CLASSIFICATION_VERDICTS
 from edgar_warehouse.mdm.clean.evidence import KINDS
 from tests.integration import test_clean_mdm_postgres as core
@@ -229,7 +229,7 @@ def test_the_migration_refuses_a_kind_list_that_has_drifted(database):
     was edited or deleted.
     """
     source = (
-        Path(edgar_warehouse.mdm.migrations.__file__).parent
+        Path(edgar_warehouse.mdm.clean.store.__file__).parents[1] / "migrations"
         / "033_clean_mdm_per_kind_views.sql"
     ).read_text()
     block = source[source.index("DO $$") : source.index("$$;") + 3]
@@ -464,6 +464,7 @@ def test_migrations_033_and_034_apply_to_a_populated_store(postgres):
             "040_clean_mdm_assessment_safety.sql",
             "041_clean_mdm_binding_correction.sql",
             "042_clean_mdm_company_one_place.sql",
+            "043_clean_mdm_run.sql",
         ]
         # 034 renamed rather than duplicated: the name 033 created is gone.
         assert (

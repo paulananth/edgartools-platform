@@ -15,7 +15,7 @@ from sqlalchemy import create_engine, event, text
 
 from .activation import check_policy
 from .adapters import UnsupportedRecord, normalize
-from .bookkeeping import RunCoordinator
+from .run import RunCoordinator
 from .evidence import deferred_record
 from .merge import MergeStage
 from .quality import counts as quality_counts
@@ -396,79 +396,61 @@ def execute_manifest(
     }
 
 
-def handle(command: str, args) -> int:
-    if command == "prepare-clean-company":
-        from .company_source import prepare_company_bundle
+def prepare_clean_company(args) -> int:
+    from .company_source import prepare_company_bundle
 
-        report = prepare_company_bundle(
-            landing_root=args.landing_root,
-            landing_manifest=args.landing_manifest,
-            ticker_manifest=args.ticker_manifest,
-            name_census=args.name_census,
-            output=args.output,
-            limit=args.limit,
-            as_of=args.as_of,
-            revision=args.revision,
-            bronze_receipts_path=getattr(args, "bronze_receipts", None),
-        )
-        print(json.dumps(report, sort_keys=True))
-        return 0
-    if command == "name-census":
-        from .company_source import write_name_census
-
-        report = write_name_census(
-            landing_root=args.landing_root,
-            landing_manifests=args.landing_manifests,
-            gleif_archive=args.gleif_archive,
-            gleif_metadata=args.gleif_metadata,
-            gleif_sha256=args.gleif_sha256,
-            output=args.output,
-        )
-        print(json.dumps(report, sort_keys=True))
-        return 0
-    if command == "correction-batch":
-        from .correction import correction_batch
-
-        mdm = engine_from_env("MDM_DATABASE_URL")
-        try:
-            with mdm.connect() as conn:
-                policy = conn.scalar(
-                    text("SELECT body FROM mdm_v2.policy WHERE digest=:d"),
-                    {"d": args.policy_digest},
-                )
-                if policy is None:
-                    raise ValueError("The policy is not registered")
-                decisions = correction_batch(
-                    conn,
-                    policy,
-                    args.policy_digest,
-                    actor=args.actor,
-                    reason=args.reason,
-                    at=args.at,
-                    limit=args.limit,
-                    quarantine=tuple(args.quarantine or ()),
-                    lift=tuple(args.lift or ()),
-                )
-        finally:
-            mdm.dispose()
-        Path(args.output).write_text(
-            json.dumps({"decisions": decisions}, sort_keys=True, indent=1) + "\n"
-        )
-        print(json.dumps({"decisions": len(decisions), "output": args.output}))
-        return 0
-    if command == "counts":
-        mdm = engine_from_env("MDM_DATABASE_URL")
-        try:
-            with mdm.connect() as conn:
-                report = dict(conn.execute(text(
-                    "SELECT 'entity',count(*) FROM mdm_v2.current_entity "
-                    "UNION ALL SELECT object_type,count(*) FROM mdm_v2.projection "
-                    "WHERE object_type<>'entity' GROUP BY object_type"
-                )).all())
-            print(json.dumps(report, sort_keys=True))
-            return 0
-        finally:
-            mdm.dispose()
-    raise ValueError(
-        f"{command} depends on retired control tables; submit configured work through Rules and Bookkeeping"
+    report = prepare_company_bundle(
+        landing_root=args.landing_root,
+        landing_manifest=args.landing_manifest,
+        ticker_manifest=args.ticker_manifest,
+        name_census=args.name_census,
+        output=args.output,
+        limit=args.limit,
+        as_of=args.as_of,
+        revision=args.revision,
+        bronze_receipts_path=getattr(args, "bronze_receipts", None),
     )
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
+def name_census(args) -> int:
+    from .company_source import write_name_census
+
+    report = write_name_census(
+        landing_root=args.landing_root,
+        landing_manifests=args.landing_manifests,
+        gleif_archive=args.gleif_archive,
+        gleif_metadata=args.gleif_metadata,
+        gleif_sha256=args.gleif_sha256,
+        output=args.output,
+    )
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
+def _print_mdm_report(read) -> int:
+    """Run one read on the MDM database as the application role and print it."""
+    mdm = engine_from_env("MDM_DATABASE_URL")
+    try:
+        with mdm.connect() as conn:
+            report = read(conn)
+    finally:
+        mdm.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
+def check_connectivity(args) -> int:
+    return _print_mdm_report(lambda conn: {
+        "sql": conn.scalar(text("SELECT 1")) == 1,
+        "migrations": conn.scalar(text("SELECT count(*) FROM mdm_v2.migration")),
+    })
+
+
+def counts(args) -> int:
+    return _print_mdm_report(lambda conn: dict(conn.execute(text(
+        "SELECT 'entity',count(*) FROM mdm_v2.current_entity "
+        "UNION ALL SELECT object_type,count(*) FROM mdm_v2.projection "
+        "WHERE object_type<>'entity' GROUP BY object_type"
+    )).all()))

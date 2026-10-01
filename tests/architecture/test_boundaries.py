@@ -51,11 +51,6 @@ class BoundaryTests(unittest.TestCase):
 
     def test_bronze_and_serving_modules_do_not_hardcode_warehouse_path_prefixes(self) -> None:
         targets = [
-            PACKAGE_ROOT / "application" / "warehouse_orchestrator.py",
-            PACKAGE_ROOT / "bronze_filing_artifacts.py",
-            PACKAGE_ROOT / "filing_text_projection.py",
-            PACKAGE_ROOT / "serving" / "source_dimensional_export.py",
-            PACKAGE_ROOT / "infrastructure" / "run_manifest_builder.py",
         ]
         forbidden_fragments = (
             "reference/sec/",
@@ -78,7 +73,6 @@ class BoundaryTests(unittest.TestCase):
         for path in _python_sources():
             text = path.read_text(encoding="utf-8")
             if path in {
-                PACKAGE_ROOT / "serving" / "targets" / "snowflake.py",
             }:
                 continue
             if "def write_source_dimensional_export_to_snowflake" in text or "def write_ticker_reference_to_snowflake_export" in text:
@@ -88,8 +82,6 @@ class BoundaryTests(unittest.TestCase):
     def test_filing_document_content_uses_only_the_narrow_raw_gateway(self) -> None:
         """Ticket 56: content may reach sec_client only through its adapter."""
         targets = [
-            PACKAGE_ROOT / "bronze_filing_artifacts.py",
-            PACKAGE_ROOT / "infrastructure" / "filing_artifact_service.py",
         ]
         forbidden = (
             "download_sec_bytes",
@@ -105,23 +97,11 @@ class BoundaryTests(unittest.TestCase):
                     offenders.append(f"{path.name}:{fragment}")
         self.assertEqual(offenders, [])
 
-    def test_filing_document_gateway_marker_declares_raw_sec_http(self) -> None:
-        text = (PACKAGE_ROOT / "bronze_filing_artifacts.py").read_text(encoding="utf-8")
-        self.assertIn("FILING_DOCUMENT_NETWORK_GATEWAY", text)
-        self.assertIn('"raw_sec_http"', text)
-
-        content_gateway = PACKAGE_ROOT / "infrastructure" / "filing_content_gateway.py"
-        gateway_text = content_gateway.read_text(encoding="utf-8")
-        self.assertIn("from edgar_warehouse.infrastructure.sec_client import download_sec_bytes", gateway_text)
-        self.assertNotIn("import edgar", gateway_text)
-
     def test_catalog_and_facts_use_edgartools_gateway_not_parallel_sec_client(self) -> None:
         """Ticket 07: catalogs + companyfacts network must not import download_sec_bytes
         from sec_client; they route through edgartools_sec_gateway.
         """
         targets = [
-            PACKAGE_ROOT / "application" / "warehouse_orchestrator.py",
-            PACKAGE_ROOT / "application" / "workflows" / "fundamentals_ingest.py",
             PACKAGE_ROOT / "infrastructure" / "edgartools_sec_gateway.py",
         ]
         forbidden_import = "from edgar_warehouse.infrastructure.sec_client import"

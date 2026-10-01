@@ -59,7 +59,15 @@ CLEAN_MDM_MIGRATIONS = (
     "040_clean_mdm_assessment_safety.sql",
     "041_clean_mdm_binding_correction.sql",
     "042_clean_mdm_company_one_place.sql",
+    "043_clean_mdm_run.sql",
 )
+
+# Functions the application login runs that a later migration adds, by the
+# migration that adds them.
+FUNCTION_MIGRATION = {
+    "start_run(uuid,jsonb)": "043_clean_mdm_run.sql",
+    "finish_run(uuid,jsonb,boolean)": "043_clean_mdm_run.sql",
+}
 
 
 def migrate(engine: Engine, *, application_role: str) -> dict:
@@ -145,11 +153,18 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             "claim_publication(text,text,integer)",
             "finish_publication(text,text,bigint,text,text)",
             "record_attempt(uuid,uuid,text,text,jsonb)",
+            "start_run(uuid,jsonb)",
+            "finish_run(uuid,jsonb,boolean)",
             "assessment_snapshot(jsonb)",
             "record_assessment(text,uuid)",
             "supersede_assessment(text,uuid)",
             "preview_batch(text,uuid)",
         ):
+            # Only a store deliberately migrated part way (a test of a later
+            # migration over real rows) may lack a function; otherwise a
+            # missing one fails the migration.
+            if FUNCTION_MIGRATION.get(signature, "") not in ("", *CLEAN_MDM_MIGRATIONS):
+                continue
             conn.exec_driver_sql(
                 f"GRANT EXECUTE ON FUNCTION mdm_v2.{signature} TO {runtime}"
             )

@@ -14,35 +14,9 @@ from datetime import date
 
 import pytest
 
-from edgar_warehouse.application import warehouse_orchestrator as orch
 from edgar_warehouse.application.errors import WarehouseRuntimeError
 from edgar_warehouse.loaders.bronze_submission_extractors import filter_rows_by_min_filing_date
 from edgar_warehouse.silver_landing_store import SilverLandingStore
-
-
-class TestResolveFilingLookbackYears:
-    def test_default_is_zero_disabled(self, monkeypatch):
-        monkeypatch.delenv("WAREHOUSE_FILING_LOOKBACK_YEARS", raising=False)
-        assert orch._resolve_filing_lookback_years(None) == 0
-        assert orch._resolve_filing_lookback_years("") == 0
-
-    def test_explicit_override(self, monkeypatch):
-        monkeypatch.delenv("WAREHOUSE_FILING_LOOKBACK_YEARS", raising=False)
-        assert orch._resolve_filing_lookback_years(5) == 5
-        assert orch._resolve_filing_lookback_years("3") == 3
-
-    def test_env_override(self, monkeypatch):
-        monkeypatch.setenv("WAREHOUSE_FILING_LOOKBACK_YEARS", "4")
-        assert orch._resolve_filing_lookback_years(None) == 4
-
-    def test_explicit_beats_env(self, monkeypatch):
-        monkeypatch.setenv("WAREHOUSE_FILING_LOOKBACK_YEARS", "4")
-        assert orch._resolve_filing_lookback_years(2) == 2
-
-    def test_rejects_negative(self, monkeypatch):
-        monkeypatch.delenv("WAREHOUSE_FILING_LOOKBACK_YEARS", raising=False)
-        with pytest.raises(WarehouseRuntimeError, match=">= 0"):
-            orch._resolve_filing_lookback_years(-1)
 
 
 class TestFilterRowsByMinFilingDate:
