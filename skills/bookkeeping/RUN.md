@@ -3,7 +3,7 @@
 Load the source/feed plan and validation evidence. Check their hashes against
 the intended Rules body, processing versions and frozen manifest; resolve every
 declared feed member. Confirm the requested environment, target and bound.
-Use existing authorization for the deployment scope. Missing validation or an
+Use existing authorization for the run scope. Missing validation or an
 unsupported required stage is a blocker, not a reason to drop that stage.
 
 ## Configuration and execution
@@ -60,11 +60,11 @@ original Rules reading, processing versions and business idempotency keys.
 Verified effects reconcile before execution. A fresh Rules version or a changed
 authoring file is not a substitute for missing original evidence.
 
-Deployment of the requested run completes only when `run.state` is `complete`,
+The requested run completes only when `run.state` is `complete`,
 expected work and required checks passed, and pending journal delivery is zero.
 A status command's exit code 0 is not that proof. A bounded Rules run or
 Bookkeeping resume can return 3 while more work remains; inspect the returned
 state before deciding the recovery action. Exceptions also require inspection.
-Report partial progress and the exact recovery action instead of claiming deployment
-success. AWS cutover, history retirement or schema provisioning occur only
-when included in the authorized deployment scope and qualified separately.
+Report partial progress and the exact recovery action instead of claiming the run
+succeeded. AWS cutover, history retirement or schema provisioning occur only
+when included in the authorized run scope and qualified separately.

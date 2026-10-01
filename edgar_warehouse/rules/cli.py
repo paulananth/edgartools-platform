@@ -190,8 +190,9 @@ def register(subparsers):
     # init and migrate both create or upgrade the Rules Database schema:
     # "migrate" means a schema upgrade in every store (platform validation,
     # operator 2026-09-30).
-    for name in ("init", "migrate"):
-        schema = commands.add_parser(name, help="Create or upgrade the Rules Database schema")
+    for name, help_text in (("init", "Create the Rules Database schema (first time; rerunning changes nothing)"),
+                            ("migrate", "Upgrade the Rules Database schema after a new migration file lands")):
+        schema = commands.add_parser(name, help=help_text)
         schema.add_argument("--agent-role", default="rules_agent")
         schema.set_defaults(handler=_handle)
     load = commands.add_parser("load", help="Save every rules file under --root as a version in the Rules Database")

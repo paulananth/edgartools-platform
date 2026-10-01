@@ -160,7 +160,7 @@ manifest hashes, processing versions, sample bounds, actual run/receipt
 references, expected/verified counts, check/delivery results and remaining gaps.
 Only mark the requested scope passed when its required work and verification
 were exercised successfully. Partial validation stays explicit and cannot
-qualify the omitted stages for deployment. Validation executes isolated samples;
+qualify the omitted stages for a run. Validation executes isolated samples;
 it does not activate live Rules, publish to live destinations or perform AWS
 cutover. This is Bookkeeping validation, not the unfinished Rules Batch Gate
 evaluator, and does not grant a person's MDM approval.
@@ -173,7 +173,7 @@ validation evidence and frozen inputs still match the requested source/feed.
 Run mode uses the existing Rules lifecycle and Bookkeeping runner; it does
 not introduce a new command, store or source callback. Unsupported scope stays
 blocked. Infrastructure rollout belongs here only when explicitly included
-in the user's deployment request and independently qualified.
+in the user's run request and independently qualified.
 
 ## Status mode
 
@@ -199,4 +199,4 @@ Change Journal skill's **recover-delivery**.
 Report mode, source, feed, resolved target, bundle/run references, commands,
 verification and concrete remaining gaps. Record unsupported commands and
 operational assumptions in the current workstream's log. Never present a plan
-as validation, or isolated validation as completed live deployment.
+as validation, or isolated validation as a completed live run.

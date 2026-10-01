@@ -90,6 +90,23 @@ The logs are in `trials/round-2/`.
     - CLI start-up times;
     - excluding earlier trials from searches.
 
+## After merge
+
+- Run `skills/data-onboarding/link.sh` and `skills/refining-rules/link.sh`
+  from the main checkout. The old `rules` link is already gone.
+
+## Review (three axes)
+
+- **Standards:** no hard violations. `init` and `migrate` now have
+  different help text. The tests' reliance on exact wording is kept on
+  purpose: the wording is the contract with agents.
+- **Spec:** four gaps fixed:
+  - the CLAUDE.md pointer to the trials;
+  - "deploy" wording left in Bookkeeping;
+  - `rules/outputs.yaml` is named as not existing yet;
+  - the link step after merge.
+- **GoF:** leave it.
+
 ## Tickets found (not built here)
 
 - `rules mapdoc` writes "the one a Company holds" in every kind's

@@ -58,8 +58,8 @@ Every step says what differs for each target.
   `bookkeeping.targets` pipeline (`company.silver`). The Bookkeeping skill
   writes and runs that section.
 
-  A general silver writer (Delta or Lakebase tables from `rules/outputs.yaml`)
-  is **not built** (rules-skill ticket 05). For a new feed with no reader,
+  A general silver writer (Delta or Lakebase tables, configured in a
+  `rules/outputs.yaml` that does not exist yet) is **not built** (rules-skill ticket 05). For a new feed with no reader,
   say so, log it, and onboard the MDM target only.
 
 ## How to run commands
