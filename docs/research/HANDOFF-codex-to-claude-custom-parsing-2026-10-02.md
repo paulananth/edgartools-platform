@@ -2,8 +2,8 @@
 
 ## Start here
 
-Review this branch's research and experiments:
-`codex/custom-parsing-research-20261002`. The PR description links this note.
+Review [PR #784](https://github.com/paulananth/edgartools-platform/pull/784)
+and its research/experiments on `codex/custom-parsing-research-20261002`.
 Use your own `claude/<topic>` branch and dedicated worktree for implementation.
 Fetch current main and reconcile its source with the research baseline before
 selecting work. The Codex branch remains owned by Codex.
