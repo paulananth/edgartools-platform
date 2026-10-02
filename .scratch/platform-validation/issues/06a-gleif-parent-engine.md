@@ -2,7 +2,7 @@
 
 Type: task (code)
 Status: done (merged as #771)
-Parent: `06-relationship-rules.md` (branch `claude/relationship-rules-inventory`)
+Parent: `06-relationship-rules.md`
 
 ## Operator rulings (2026-10-01)
 

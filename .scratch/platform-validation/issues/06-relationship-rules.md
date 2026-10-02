@@ -1,7 +1,8 @@
 # Relationship rules for Companies and People
 
 Type: task (wayfinding first, then onboarding)
-Status: in progress (Claude, branch `claude/relationship-rules-inventory`)
+Status: in progress. 06a (GLEIF accounting parent) merged and approved; step 2
+(the relationship rules document) is next
 
 ## Operator rulings
 
@@ -39,13 +40,21 @@ Status: in progress (Claude, branch `claude/relationship-rules-inventory`)
 
 - [x] 1. Inventory written (2026-10-01 19:00 ET, research agent, read-only; key claims spot-checked: parsers deleted in #764, `gleif.relationships.v1` absent from Company sources):
   `.scratch/platform-validation/research/06-relationship-inventory.md`
-- [ ] 1. Inventory reviewed with the operator
+- [x] 1. Inventory reviewed with the operator: the operator chose to start with
+  the GLEIF accounting parent ("Yes", 2026-10-01 19:05 ET)
 - [ ] 2. Relationship rules design: the operator's answers to the inventory's
-  questions, then the design
-- [ ] 06a: GLEIF accounting parent (direct, with the reported ultimate)
+  questions, then the design. Includes whether the 72 links waiting for
+  their other end are open reviews or wait quietly (06a2), and whether link
+  ends stop the closure at full GLEIF scale (05b)
+- [x] 06a: GLEIF accounting parent (direct, with the reported ultimate).
+  Engine #771 (2026-10-01 20:32 ET); configuration #773 (22:19 ET); merge
+  version "GLEIF parents" and GLEIF source version "parent links" approved on
+  the local Rules Database ("approve", 22:21 ET); recorded in #775. Test run:
+  86 direct, 110 ultimate and 86 calculated parents; 72 links wait for their
+  other end. Tickets `06a-gleif-parent-engine.md`, `06a2-gleif-parent-config.md`
 - [ ] 06b: Forms 3/4/5 capture and reader. Not started: needs the operator's
   permission for SEC requests and code
 - [ ] 3. First relationship feeds onboarded: tickets after the design
 - [ ] 4. Switch-on of Person feed 1 with the relationship feeds
-- [ ] Map entry for slice 6 in `map.md`
+- [x] Map entry for slice 6 in `map.md` (2026-10-02)
 - [ ] PR; CI green; merge on the operator's word
