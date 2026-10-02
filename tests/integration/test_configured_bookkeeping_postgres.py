@@ -955,7 +955,7 @@ def test_source_configs_use_same_control_contract():
     from edgar_warehouse.rules.files import source
     from edgar_warehouse.bookkeeping.clean.config import validate
     registry = standard_registry()
-    from edgar_warehouse.change_journal.capture import register_capture
+    from edgar_warehouse.acquisition.capture import register_capture
     register_capture(registry, None)
     for name in ("sec.submissions.company",):
         selected = validate(source(name), "capture", registry)

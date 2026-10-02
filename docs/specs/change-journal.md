@@ -18,6 +18,32 @@ artifacts retain their original paths and terminology. Current ownership is:
 
 ## Empty journal and receipts
 
+### Independent implementation boundary (2026-10-02)
+
+The journal core contains only `store.py`, `database.py`, `cli.py`, exports and
+checksummed SQL migrations. Its warehouse dependency is the pure
+`control_contract.py` module. It imports no Bookkeeping, Rules, MDM, acquisition,
+Silver, loader or parser implementation. Standalone operations are available as
+`uv run python -m edgar_warehouse.change_journal.cli` with init/migrate/status/
+events/verify; no domain registry or callback is constructed there.
+
+Provider capture belongs to `acquisition.capture`; policy/registration authority
+to `rules.acquisition_authority`; source inventories to
+`application.source_evidence`; MDM delivery to `mdm.clean.journal_delivery`.
+The application composes existing owner recovery routes through
+`application.journal_recovery`, and producer workflow evidence through
+`application.journal_evidence`. These integrations depend on the journal
+interface; the journal does not depend on them.
+
+Independent-package architecture and PostgreSQL acceptance tests prove this
+boundary. `packages/change-journal` builds the independent journal wheel with
+SQLAlchemy and the PostgreSQL driver as its only direct dependencies. Install
+it in a dedicated virtual environment; its `edgar_warehouse` namespace overlaps
+the full warehouse distribution. See the
+[installation and verification boundary](../../skills/change-journal/INDEPENDENCE.md).
+The full warehouse distribution still carries its other commands' dependencies.
+No container rollout or package publication is included in this refactor.
+
 Provision the new `change_journal_clean` database on PostgreSQL 16. The `journal`
 schema contains exactly one append-only `event` table. Checksummed migrations
 are recorded in its schema comment. Migration and runtime connections are
@@ -138,7 +164,8 @@ Configured Rules submission supports an exact `--feed` binding. Install the
 shared source/feed skill with `bash skills/change-journal/link.sh` (or a
 temporary `--home` for installation tests). Both runtimes use one skill file.
 
-Skill deployment reads back the actual completed validation root, exact frozen
+Producer workflow qualification in `skills/bookkeeping/scripts/journal_evidence.py`
+reads back the actual completed validation root, exact frozen
 submission, verified work counts, checks, zero delivery backlog and journal
 receipts. An edited validation report cannot replace that authority. When
 deploying to different stores, retain the validation databases and explicitly

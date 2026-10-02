@@ -118,7 +118,7 @@ The census reuses registered versioned name normalizers, but those source field 
 
 ### 6. Ticker-catalog completeness grammar
 
-[`_is_valid_ticker_catalog_json`](../../edgar_warehouse/acquisition/source_family_registry.py#L192) recognizes SEC's `fields/data` and numbered `cik_str` object shapes in Python. [`change_journal.capture.complete`](../../edgar_warehouse/change_journal/capture.py#L43) calls it when configured format is `ticker_catalog`.
+[`_is_valid_ticker_catalog_json`](../../edgar_warehouse/acquisition/source_family_registry.py#L192) recognizes SEC's `fields/data` and numbered `cik_str` object shapes in Python. [`acquisition.capture.complete`](../../edgar_warehouse/acquisition/capture.py#L43) calls it when configured format is `ticker_catalog`. This integration was moved out of Change Journal during the independent-core refactor.
 
 This is reachable source-specific validation, **not a ticker row parser or an active ticker acquisition workflow by itself**. The surrounding source-family policy classes also contain historical comments about retired orchestration paths; comments are not current caller evidence.
 
@@ -165,7 +165,7 @@ There are **28 Python files under `scripts/batch/`**; this is a file count, not 
 
 These scripts can make SEC requests when run. This research did not execute them or infer that they are deployed.
 
-Other custom decoding includes strict JSON envelope handling in [`bookkeeping.clean.artifacts`](../../edgar_warehouse/bookkeeping/clean/artifacts.py#L15), fixed NDJSON reading in [`source_input`](../../edgar_warehouse/bookkeeping/clean/source_input.py#L12), generic JSON/XML/ZIP completeness checks in [`capture.complete`](../../edgar_warehouse/change_journal/capture.py#L35), manifest/config readers, SQL/CLI response decoding in infrastructure scripts, and dashboard numeric-input parsing in [`streamlit_app.py`](../../infra/snowflake/streamlit/streamlit_app.py#L788). These are format/control interfaces, not evidence of hidden SEC filing parsers.
+Other custom decoding includes strict JSON envelope handling in [`bookkeeping.clean.artifacts`](../../edgar_warehouse/bookkeeping/clean/artifacts.py#L15), fixed NDJSON reading in [`source_input`](../../edgar_warehouse/bookkeeping/clean/source_input.py#L12), generic JSON/XML/ZIP completeness checks in [`capture.complete`](../../edgar_warehouse/acquisition/capture.py#L35), manifest/config readers, SQL/CLI response decoding in infrastructure scripts, and dashboard numeric-input parsing in [`streamlit_app.py`](../../infra/snowflake/streamlit/streamlit_app.py#L788). These are format/control interfaces, not evidence of hidden SEC filing parsers.
 
 Snowflake load wrappers decode their export manifests, for example [`JSON.parse` in the fundamentals loader](../../infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql#L150). They load already produced warehouse artifacts. A `parser_version` column or SQL regex over filing metadata does not establish a custom filing-body parser.
 

@@ -14,7 +14,7 @@ from edgar_warehouse.bookkeeping.clean.capabilities import standard_registry
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.runner import Authority, run
-from edgar_warehouse.change_journal.capture import register_capture
+from edgar_warehouse.acquisition.capture import register_capture
 from edgar_warehouse.infrastructure.sec_client import ConditionalSecResponse
 from tests.integration.test_configured_bookkeeping_postgres import (
     complete,

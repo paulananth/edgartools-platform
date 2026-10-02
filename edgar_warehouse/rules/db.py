@@ -90,7 +90,7 @@ class Rules:
                 or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", version)):
             raise Blocked("A supported document kind, name and version are required")
         if "acquisition" in body:
-            from edgar_warehouse.change_journal.authority import acquisition
+            from edgar_warehouse.rules.acquisition_authority import acquisition
             acquisition(body)
         with self.engine.begin() as conn:
             conn.execute(text("INSERT INTO rules.rule_version(kind,name,version,body,digest) VALUES(:k,:n,:v,:b,:d) ON CONFLICT DO NOTHING"),
@@ -123,7 +123,7 @@ class Rules:
         row = self.version(kind, name, version)
         body = json.loads(row["body"])
         if "acquisition" in body and proof["passed"]:
-            from edgar_warehouse.change_journal.authority import validation_proof
+            from edgar_warehouse.rules.acquisition_authority import validation_proof
             validation_proof(body, proof, artifacts=Artifacts())
         with self.engine.begin() as conn:
             conn.execute(text("UPDATE rules.rule_version SET status=:s,proof=CAST(:p AS jsonb),batch_hash=:h WHERE kind=:k AND name=:n AND version=:v"),
@@ -182,7 +182,7 @@ class Rules:
                 raise Blocked("Only a proven version can activate")
             body = json.loads(selected["body"])
             if "acquisition" in body:
-                from edgar_warehouse.change_journal.authority import validation_proof
+                from edgar_warehouse.rules.acquisition_authority import validation_proof
                 validation_proof(body, selected["proof"], artifacts=Artifacts())
             requires_handoff = kind == "merge" or (kind == "source" and "mdm" in body)
             receipts = None
@@ -201,7 +201,7 @@ class Rules:
                     if kind == "merge":
                         receipts["policy_digest"] = register_policy(destination, body)
                     elif "acquisition" in body:
-                        from edgar_warehouse.change_journal.authority import registration_authority
+                        from edgar_warehouse.rules.acquisition_authority import registration_authority
                         selected_export = self.envelope(selected)
                         for code, entry in body["mdm"].items():
                             registration_authority(selected_export, code, entry["contract"])

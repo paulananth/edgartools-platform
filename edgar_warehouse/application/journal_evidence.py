@@ -1,4 +1,4 @@
-"""Executable skill modes; planning never opens a database connection."""
+"""Producer workflow evidence; planning never opens a database connection."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
 from edgar_warehouse.bookkeeping.clean.mdm_capabilities import register_mdm
 from edgar_warehouse.rules.files import load
 
-from .capture import register_capture
-from .source_evidence import register_source_evidence
+from edgar_warehouse.acquisition.capture import register_capture
+from edgar_warehouse.application.source_evidence import register_source_evidence
 
 
 def verify_validation(bundle, evidence, *, book_engine, journal_engine, artifacts):
@@ -33,7 +33,7 @@ def verify_validation(bundle, evidence, *, book_engine, journal_engine, artifact
     to the retained validation stores. Never infer an old ledger connection.
     This function performs no control or provider mutations.
     """
-    from .store import ChangeJournal
+    from edgar_warehouse.change_journal.store import ChangeJournal
 
     urls = (
         os.environ.get("BOOKKEEPING_VALIDATION_DATABASE_URL"),
@@ -254,8 +254,8 @@ def execute(
     from edgar_warehouse.rules.db import Rules
     from edgar_warehouse.rules.db import get_engine as rules_engine
 
-    from .store import ChangeJournal
-    from .store import get_engine as journal_engine
+    from edgar_warehouse.change_journal.store import ChangeJournal
+    from edgar_warehouse.change_journal.store import get_engine as journal_engine
 
     book = configured_bookkeeping()
     rules, journal = rules_engine(), journal_engine()

@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.config import Blocked
-from edgar_warehouse.change_journal.skill import execute, plan
+from edgar_warehouse.application.journal_evidence import execute, plan
 from edgar_warehouse.infrastructure.sec_client import ConditionalSecResponse
 from edgar_warehouse.rules.files import dumps
 from tests.integration.test_change_journal_acquisition_postgres import capture_run
@@ -59,7 +59,7 @@ def test_plan_has_no_live_changes_validate_executes_and_deploy_requires_matching
         calls.append(url)
         return ConditionalSecResponse(False, b'{"records":[1]}', None, None)
 
-    monkeypatch.setattr("edgar_warehouse.change_journal.capture._http", provider)
+    monkeypatch.setattr("edgar_warehouse.acquisition.capture._http", provider)
     validated = execute("validate", bundle, source=name, feed="new-feed")
     assert validated["qualified"] is True and validated["verified"] == {"capture": 1}
     assert len(calls) == 1 and len(validated["receipts"]) == 2

@@ -20,9 +20,9 @@ from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.mdm_capabilities import register_mdm
 from edgar_warehouse.bookkeeping.clean.runner import run
-from edgar_warehouse.change_journal.capture import register_capture
-from edgar_warehouse.change_journal.publication import JournalPublisher
-from edgar_warehouse.change_journal.source_evidence import register_source_evidence
+from edgar_warehouse.acquisition.capture import register_capture
+from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
+from edgar_warehouse.application.source_evidence import register_source_evidence
 from edgar_warehouse.infrastructure.sec_client import ConditionalSecResponse
 from edgar_warehouse.mdm.clean.name_census import (
     VERSION, SEC_NORMALIZER, GLEIF_NORMALIZER, sec_legal_form_key,

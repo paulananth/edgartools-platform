@@ -29,7 +29,7 @@ from edgar_warehouse.bookkeeping.clean.config import (
     digest,
 )
 
-from .authority import frozen_authority
+from edgar_warehouse.rules.acquisition_authority import frozen_authority
 
 
 def complete(data: bytes, definition: dict) -> bool:

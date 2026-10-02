@@ -18,7 +18,7 @@ from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.bookkeeping.clean.config import Blocked
 from edgar_warehouse.rules import db as rules_db
-from edgar_warehouse.change_journal.authority import proof_holds
+from edgar_warehouse.rules.acquisition_authority import proof_holds
 from edgar_warehouse.rules.db import Rules, migrate
 from tests.support.rules_approval import approve
 
