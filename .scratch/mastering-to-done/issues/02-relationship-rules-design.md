@@ -17,15 +17,15 @@ Open points:
 
 ## Checklist
 
-Status: claimed (Claude, branch `claude/mastering-02-relationship-rules`, 2026-10-02 11:05 ET).
+Status: claimed (Claude, branch `claude/mastering-02-relationship-rules`, 2026-10-02 by 10:53 ET).
 
-- [x] D1. Scope of the first relationship rules document. Operator, 2026-10-02 11:08 ET: "GLEIF + Forms 3/4/5 (Recommended)".
-- [x] D2. The GLEIF links waiting for their other end. Operator, 2026-10-02 11:10 ET: "Wait quietly (Recommended)".
-- [x] D3. How a Forms 3/4/5 link builds history. Operator, 2026-10-02 11:12 ET: "Each filing a record (Recommended)".
-- [x] D4. What ends an insider link: already decided in `docs/specs/person/consumer.md` ("What closes an interval"), so not asked again. 2026-10-02 11:14 ET
+- [x] D1. Scope of the first relationship rules document. Operator, 2026-10-02 by 10:53 ET: "GLEIF + Forms 3/4/5 (Recommended)".
+- [x] D2. The GLEIF links waiting for their other end. Operator, 2026-10-02 by 10:53 ET: "Wait quietly (Recommended)".
+- [x] D3. How a Forms 3/4/5 link builds history. Operator, 2026-10-02 by 10:53 ET: "Each filing a record (Recommended)".
+- [x] D4. What ends an insider link: already decided in `docs/specs/person/consumer.md` ("What closes an interval"), so not asked again. 2026-10-02 by 10:53 ET
 - [ ] ~~D5. Whether link ends stop the closure at full scale~~ deferred to ticket 06: an engine decision, settled by the full-scale measurement there, not asked
 - [x] Write the decisions into `.scratch/platform-validation/issues/06-relationship-rules.md` step 2 and the inventory's open questions
-- [x] Graduate the build work into tickets 13 (waiting links wait quietly) and 14 (the Person link engine). 2026-10-02 11:20 ET
+- [x] Graduate the build work into tickets 13 (waiting links wait quietly) and 14 (the Person link engine). 2026-10-02 by 10:53 ET
 - [ ] PR, CI green, merge on the operator's word
 
 ## Answer

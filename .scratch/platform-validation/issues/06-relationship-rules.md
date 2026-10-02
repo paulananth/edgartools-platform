@@ -42,7 +42,7 @@ Status: in progress. 06a (GLEIF accounting parent) merged and approved; step 2
   `.scratch/platform-validation/research/06-relationship-inventory.md`
 - [x] 1. Inventory reviewed with the operator: the operator chose to start with
   the GLEIF accounting parent ("Yes", 2026-10-01 19:05 ET)
-- [x] 2. Relationship rules design, decided in `.scratch/mastering-to-done/issues/02-relationship-rules-design.md`. 2026-10-02 11:20 ET
+- [x] 2. Relationship rules design, decided in `.scratch/mastering-to-done/issues/02-relationship-rules-design.md`. 2026-10-02 by 10:53 ET
   - Scope: GLEIF parents plus Forms 3/4/5 insider links.
   - Waiting links wait quietly; the code change is ticket 13.
   - One record per filing.
