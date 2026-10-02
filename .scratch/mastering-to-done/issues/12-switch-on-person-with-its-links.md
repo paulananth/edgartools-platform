@@ -2,7 +2,7 @@
 
 Type: task, then approval
 Status: open
-Blocked by: 03, 06, 10, 11
+Blocked by: 03, 06, 10, 11, 18, 19
 
 ## Question
 
