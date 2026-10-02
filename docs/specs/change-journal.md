@@ -109,7 +109,7 @@ acknowledgement. No storage listing establishes success.
 ## Rules and source-owned evidence
 
 The acquisition section and integration boundary are described in
-[the Rules contract](../../.planning/workstreams/change-journal/RULES-INTEGRATION.md).
+[the Rules contract](../../.planning/archive/codex/2026-10-02/change-journal/RULES-INTEGRATION.md).
 Source files and `rules.rule_version` are the only configuration owners.
 Proof baseline manifest bytes are read back by hash before proving/activating
 a version and during fresh submission/recovery.
@@ -182,7 +182,7 @@ resource CAS/holes and bounded capture fixtures across the acquisition
 families. Fixture capture alone does not qualify family parsers, Snowflake
 producer barriers, every legacy acquisition caller or AWS cutover.
 
-[The inventory](../../.planning/workstreams/change-journal/LEGACY-INVENTORY.md)
+[The inventory](../../.planning/archive/codex/2026-10-02/change-journal/LEGACY-INVENTORY.md)
 tracks remaining active uses and replacement tests. Keep old stacks available
 for their runs/backlog; fresh roots are marked `change-journal-v1` and reject
 historical roots. Do not import historical decisions, checkpoints or pending

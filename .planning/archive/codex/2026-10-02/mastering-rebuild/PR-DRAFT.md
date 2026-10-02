@@ -39,8 +39,8 @@ The EMPLOYED_BY fixture is synthetic and establishes no employment fact. A full 
 
 [Source draft PR #780](https://github.com/paulananth/edgartools-platform/pull/780), created and verified 2026-10-02 08:52 ET. GitHub access is restored; Colima, Docker server 29.5.2 and the PostgreSQL 16 image are available. Qualification has not been rerun after access was restored.
 
-[Continuation instructions](https://github.com/paulananth/edgartools-platform/blob/codex/mastering-rebuild-20261001/.planning/workstreams/mastering-rebuild/HANDOFF-to-claude-20261002.md)
-[Task checklist and evidence](https://github.com/paulananth/edgartools-platform/blob/codex/mastering-rebuild-20261001/.planning/workstreams/mastering-rebuild/TICKET.md)
-[Deletion inventory](https://github.com/paulananth/edgartools-platform/blob/codex/mastering-rebuild-20261001/.planning/workstreams/mastering-rebuild/INVENTORY.md)
+[Continuation instructions](https://github.com/paulananth/edgartools-platform/blob/744cba55ce1671e5e034d087142b8968ab7de443/.planning/workstreams/mastering-rebuild/HANDOFF-to-claude-20261002.md)
+[Task checklist and evidence](https://github.com/paulananth/edgartools-platform/blob/744cba55ce1671e5e034d087142b8968ab7de443/.planning/workstreams/mastering-rebuild/TICKET.md)
+[Deletion inventory](https://github.com/paulananth/edgartools-platform/blob/744cba55ce1671e5e034d087142b8968ab7de443/.planning/workstreams/mastering-rebuild/INVENTORY.md)
 
 Claude should continue from this PR head on a dedicated `claude/` branch/worktree and link a continuation PR, preserving the Codex branch and unrelated shared work.
