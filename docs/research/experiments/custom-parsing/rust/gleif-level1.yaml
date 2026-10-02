@@ -1,0 +1,16 @@
+source: research.gleif.level1
+version: experiment-1
+read:
+  format: xml
+  root: LEIData
+  tables:
+    gleif_projection:
+      each: LEIRecords.LEIRecord
+      columns:
+        ordinal: { ordinal: {} }
+        lei: { text: { path: LEI.$, default: null } }
+        name: { text: { path: Entity.LegalName.$, default: null } }
+        category: { text: { path: Entity.EntityCategory.$, default: null } }
+        country: { text: { path: Entity.LegalAddress.Country.$, default: null } }
+        postal_code: { text: { path: Entity.LegalAddress.PostalCode.$, default: null } }
+        language: { text: { path: Entity.LegalName.@lang, default: null } }

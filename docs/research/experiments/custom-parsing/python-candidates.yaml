@@ -1,0 +1,84 @@
+# Experimental only: no registered mappings or approved policies are changed.
+sec_company_fields:
+  entity_name: name
+  entity_type: entityType
+  sic: sic
+  sic_description: sicDescription
+  state_of_incorporation: stateOfIncorporation
+  state_of_incorporation_desc: stateOfIncorporationDescription
+  fiscal_year_end: fiscalYearEnd
+  ein: ein
+  description: description
+  category: category
+
+# Direct raw GLEIF paths replace only the intermediate record's projections.
+# Scope, deletion flags, endpoint types and period selection are NOT implemented.
+gleif_relationship_adapter:
+  version: gleif-native-record-v1
+  native_member: relationships
+  retain_deferred: true
+  source_record_provenance: true
+  field_shape: nullable_text
+  kind: company
+  fields: {}
+  provenance:
+    native_record: _native
+  record_key:
+    - RelationshipRecord.Relationship.StartNode.NodeID.$
+    - RelationshipRecord.Relationship.EndNode.NodeID.$
+    - RelationshipRecord.Relationship.RelationshipType.$
+  relationships:
+    - type_field: RelationshipRecord.Relationship.RelationshipType.$
+      type_values:
+        IS_DIRECTLY_CONSOLIDATED_BY: IS_DIRECTLY_CONSOLIDATED_BY
+        IS_ULTIMATELY_CONSOLIDATED_BY: IS_ULTIMATELY_CONSOLIDATED_BY
+      source_key:
+        - RelationshipRecord.Relationship.StartNode.NodeID.$
+      source_source: gleif.level1.v1
+      target_key:
+        - RelationshipRecord.Relationship.EndNode.NodeID.$
+      target_source: gleif.level1.v1
+      valid_from: RelationshipRecord.Relationship.RelationshipPeriods.RelationshipPeriod.StartDate.$
+      valid_to: RelationshipRecord.Relationship.RelationshipPeriods.RelationshipPeriod.EndDate.$
+      scope: GLEIF accounting consolidation
+      properties:
+        source_relationship_status: RelationshipRecord.Relationship.RelationshipStatus.$
+        source_registration_status: RelationshipRecord.Registration.RegistrationStatus.$
+
+sec_address:
+  components:
+    street: street1
+    street2: street2
+    city: city
+    region: state_or_country
+    postcode: zip_code
+    country: country_code
+
+# An overlap rule is a bounded candidate, NOT an equivalent subset check.
+individual_candidate:
+  family: classification
+  rule_id: research-individual-overlap
+  version: research-only
+  emits: [person, company]
+  steps:
+    - step: ownership_only_candidate
+      verdict: person
+      when:
+        - primitive: field_in_set@1
+          args: {field: entityType, values: [other]}
+        - primitive: fields_all_empty@1
+          args: {fields: [sic, tickers]}
+        - primitive: values_overlap@1
+          args:
+            field: filings.recent.form
+            values: ["3", "3/A", "4", "4/A", "5", "5/A", "144", "144/A", "SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A", "SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A"]
+            min_count: 1
+        - primitive: values_overlap@1
+          negate: true
+          args:
+            field: filings.recent.form
+            values: [10-K, 10-Q, 8-K, 20-F, 40-F, 6-K, D, 13F-HR]
+            min_count: 1
+    - step: keep_entity
+      otherwise: true
+      verdict: company
