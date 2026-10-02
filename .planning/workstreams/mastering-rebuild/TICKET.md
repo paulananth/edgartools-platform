@@ -1,6 +1,6 @@
 # Fresh Company, Person, and Relationship mastering
 
-Status: incomplete — PostgreSQL/Docker and external memory access blocked
+Status: incomplete — draft PR #780 published; PostgreSQL qualification and cleanup pending
 Branch: `codex/mastering-rebuild-20261001`
 Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (GitHub main verified 2026-10-02 08:12 ET, PR #779)
 
@@ -11,7 +11,8 @@ Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (GitHub main verified 2026-10-0
 - [x] Document draft PR continuation ownership for Claude in the handoff and CLAUDE.md — scoped instruction pointer, source PR discovery/creation, separate Claude branch and replacement PR procedure, ready gates and blocker status; three local links verified and git diff --check passes; 2026-10-02 08:17 ET.
 - [x] Write and verify Claude's continuation handoff with ownership, evidence and remaining gates — HANDOFF-to-claude-20261002.md checked against current main, branch, implementation, ticket and prerequisite failures; git diff --check; 2026-10-02 07:12 ET.
 - [x] Publish the owned branch — git push succeeded through b35f8da3; 2026-10-02 07:13 ET.
-- [ ] Create a draft PR and verify its metadata — connector requires approval unavailable under session policy; two gh attempts failed to connect to api.github.com; prepared body in PR-DRAFT.md.
+- [x] Create a draft PR and verify its metadata — [PR #780](https://github.com/paulananth/edgartools-platform/pull/780), OPEN and draft, base main, head codex/mastering-rebuild-20261001 at 30c4f3c1; gh pr view verification; 2026-10-02 08:52 ET.
+- [ ] Refresh and publish the handoff with the verified PR URL and resolved sandbox prerequisites.
 - [x] Create an isolated Codex branch and verify its base against current main — dedicated worktree; GitHub commit/blob/tree hashes verified; fast-forward to #774; 2026-10-01 22:52 ET.
 - [x] Inventory active acquisition, rules, mastering, publication and tests; review code and change history — AST import inventory plus executable/skill/script searches and GoF review recorded in INVENTORY.md; 2026-10-01 23:10 ET.
 - [x] Implement bounded integrated Company/Person/Relationship acceptance and fail-closed local runner — four normalized records pass; five new cases collect; missing image, timeout and skipped-PostgreSQL report checks pass; 2026-10-01 23:14 ET.
@@ -23,7 +24,7 @@ Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (GitHub main verified 2026-10-0
 - [ ] Inventory unused databases, review exact targets and recoverability, delete authorized unused targets, and verify remaining stores.
 - [x] Consolidate CLAUDE.md and AGENTS.md around current executable architecture and operator rules — shared guide plus Claude pointer and mastering operations reference; 1,796 always-loaded lines reduced to 140; inspected references and git diff --check; 2026-10-01 23:14 ET.
 - [x] Prepare authorized Codex/Claude memory corrections — MEMORY-CLEANUP.md preserves operator decisions and identifies stale schema/skill references; 2026-10-01 23:10 ET.
-- [ ] Submit the authorized external memory cleanup — Codex/Claude memory directories are outside the allowed writable roots; prepared note is not applied.
+- [ ] Submit the authorized external memory cleanup — prepared note is not applied; Codex notes directory verified writable after permissions refresh, 2026-10-02 08:52 ET; inspect Claude memory targets before changes.
 - [x] Verify all non-database cases and shell syntax — 1,132 passed in 107.90s; 25 shell scripts pass bash -n; 2026-10-01 23:14 ET.
 - [x] Commit code cleanup and qualification on the owned branch — c936bd60 and d0733de7, clean staged diff checks; 2026-10-01 23:14 ET.
 - [ ] Run PostgreSQL integration and the complete qualification gate — 292 cases collect; new acceptance errors at Docker image inspection; no prerequisite skips and no database qualification claimed.
@@ -36,7 +37,7 @@ and Relationship mastering, unused code/test/database removal, and cleanup
 of memory and runtime instruction files. Existing unrelated work and rollback
 artifacts in the shared checkout are protected. The operator selected **Local
 qualification only**. Existing database deletion needs exact current no-use
-evidence; Docker access is unavailable, so no deletion targets were qualified.
+evidence; no deletion targets have been qualified.
 Additional Person/role/entity source feeds are not fabricated from names.
 
 ## Evidence
@@ -65,11 +66,14 @@ complete environment was removed by external workspace cleanup; this rerun
 used the primary Python environment and cached ijson read-only, without changes
 to another runtime's dependencies. PostgreSQL qualification remains incomplete.
 
-## Remaining blockers
+## Prerequisite refresh (2026-10-02 08:52 ET)
 
-Colima is stopped and the session cannot access its Docker socket. Start Colima
-and provide Docker access to run fresh PostgreSQL qualification and inventory
-existing local databases. External memory folders need writable access before
-the prepared cleanup note can be submitted. Shell network access is restricted.
+The earlier sandbox blockers are resolved in the refreshed session. gh auth
+status confirms paulananth and PR #780 was created and verified. colima status
+confirms it is running; docker version reports server 29.5.2; docker image
+inspect confirms postgres:16-alpine is available. The Codex memory notes
+directory is writable. These prerequisite checks do not qualify mastering,
+approve database removal or apply the prepared memory corrections. Claude owns
+the continuation gates in the handoff.
 
 This ticket remains incomplete until all unchecked parts have real evidence.

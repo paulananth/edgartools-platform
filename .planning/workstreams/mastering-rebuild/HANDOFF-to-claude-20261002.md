@@ -11,13 +11,13 @@ hosted deployment and merge are outside this handoff.
 
 The source branch is `codex/mastering-rebuild-20261001`, based on GitHub main
 `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (PR #779), reverified at rebase.
-The rebased branch is pushed. **No PR has been created as of the latest
-2026-10-02 check.** PR creation is blocked in this session: the GitHub connector
-requires approval unavailable under the session policy, and `gh pr create`
-could not connect to api.github.com. The prepared draft PR body is PR-DRAFT.md
-beside this handoff. Claude owns the publication and qualification continuation
-described below. Verify live state before acting; a later session may create
-the PR after this note.
+The rebased branch is pushed. **Source draft: [PR #780](https://github.com/paulananth/edgartools-platform/pull/780).**
+Verified 2026-10-02 08:52 ET: OPEN, draft, base main, source head
+`30c4f3c1a3d5253cc17ef88f1dae84c46d303e3e` at creation. Later documentation
+commits update this handoff; verify the live head before continuation. GitHub
+access now works after the session permissions refresh. The draft body is
+PR-DRAFT.md beside this handoff. Claude owns review and qualification
+continuation described below.
 Original implementation commits:
 
 - `c936bd60`: remove three unreachable modules and five obsolete cases.
@@ -59,19 +59,15 @@ Codex's branch are protected.
    is closed unmerged, inspect why before replacing it. If it is open, record
    its URL, head SHA, checks and review threads in the continuation ticket.
 
-2. If no source PR exists, create the prepared draft from the pushed Codex
-   head, from Claude's continuation worktree:
+2. Verify the source PR metadata and retain it in the continuation ticket:
 
    ```bash
-   gh pr create --repo paulananth/edgartools-platform \
-     --head codex/mastering-rebuild-20261001 --base main --draft \
-     --title 'Prepare fresh mastering qualification, remove unused callers, and hand off to Claude' \
-     --body-file .planning/workstreams/mastering-rebuild/PR-DRAFT.md
+   gh pr view 780 --repo paulananth/edgartools-platform \
+     --json url,state,isDraft,baseRefName,headRefName,headRefOid
    ```
 
-   Record the returned URL and verify the draft flag, base and head. Creating
-   a PR is already authorized by the operator. Authentication/connectivity
-   must work; any failed attempt remains an unchecked ticket part.
+   Continue from the verified current source head. If source state has changed,
+   follow step 1 before carrying work forward.
 
 3. Review Standards, Spec and GoF, then complete the pending local gates below
    on Claude's branch. Maintain a checklist and evidence, including the
@@ -164,11 +160,12 @@ main's platform-validation ticket 06. Synthetic acceptance is no rule approval.
 
 ### Continuation checklist
 
-- [ ] Resolve source draft publication according to the ownership instructions
-  above, and record its URL and verified remote head in the continuation ticket.
-- [ ] Establish Docker access. At 2026-10-02 07:08 ET, `colima status` said
-  stopped and Docker socket access was denied. Start Colima in a session with
-  access; provision `postgres:16-alpine`.
+- [x] Publish and verify the source draft — PR #780 is OPEN and draft against
+  main, head 30c4f3c1 at creation; gh pr view; 2026-10-02 08:52 ET. Record its
+  current URL and head again in Claude's continuation ticket.
+- [x] Establish Docker access — colima status confirms running, Docker server
+  29.5.2 and postgres:16-alpine image inspection succeed; 2026-10-02 08:52 ET.
+  Recheck these prerequisites in Claude's session before acceptance.
 - [ ] Review Standards, Spec and GoF for the implementation before changes.
   Pay attention to the unexecuted new integration case and timeout behavior:
   killing pytest can bypass fixture teardown and leave its temporary container.
@@ -183,8 +180,9 @@ main's platform-validation ticket 06. Synthetic acceptance is no rule approval.
   connections, callers, retention and recovery. Remove only operator-authorized
   targets with current no-use evidence and recoverability; verify remaining
   stores. No existing database or Docker volume has been deleted by this task.
-- [ ] Apply authorized memory corrections with filesystem access. Submit one
-  Codex note under `~/.codex/memories/extensions/ad_hoc/notes/`; use the prepared
+- [ ] Apply authorized memory corrections. The Codex notes directory is writable
+  in the refreshed session (2026-10-02 08:52 ET); corrections remain unapplied.
+  Submit one Codex note under `~/.codex/memories/extensions/ad_hoc/notes/`; use the prepared
   MEMORY-CLEANUP.md. Scope Claude corrections to stale implementation references
   and retain the operator's relationships-with-MDM and governance decisions.
 - [ ] Update the continuation checklist, commit on Claude's branch, create a
