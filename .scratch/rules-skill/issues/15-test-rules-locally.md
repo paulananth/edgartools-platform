@@ -1,10 +1,13 @@
 # Test a rules version locally, on a pinned capture, and record the run
 
 Type: task
-Status: in progress (Claude, branch `claude/rules-15-local-test`, 2026-09-29)
+Status: open, not started. The design and the facts below were written on
+2026-09-29; no code was written. Kept as its own ticket (operator, 2026-10-02:
+"agreed").
 Blocked by: nothing (ticket 14 merged, #757)
-Blocks: the first approvals on evidence: ticket 18's GLEIF and SEC source
-versions, and the merge version that switches the two name rules on
+Related: platform validation `05c-data-onboarding-skill-gaps.md` items 2 (a
+proving run as a command), 3 (a command writes the input manifest) and 12
+(what `batch_hash` covers). This ticket's `rules test` would close all three.
 
 ## Operator rulings
 
@@ -57,6 +60,22 @@ versions, and the merge version that switches the two name rules on
 - Size: a full Golden Copy is millions of records and Colima has 8 GB (a run
   was killed for low memory before). First run on 10,000 records, streamed,
   and tell the operator the projected full time before running it.
+
+## Update (2026-10-02)
+
+- Approvals have gone ahead with hand-built test runs, because `rules test`
+  does not exist. The GLEIF parent approvals (platform validation 06a2,
+  2026-10-01 22:21 ET) used an input list and two proof files written by hand
+  from a test-run report, then `rules record-proof`. That is the gap this
+  ticket closes.
+- Ticket 18's versions, named above as the first target, have moved on. The
+  first target is now the latest version of each source and of the merge
+  rules when this ticket starts: today GLEIF `gleif-2026-10-01.parent-links`
+  and the merge rules `platform-2026-10-01.gleif-parents`, plus Person feed 1
+  (`sec.submissions.person-2026-10-01.first`).
+- Since 2026-09-29: the schema is `mdm` (slice 3); the Rules Database can be a
+  local throwaway (`rules-local-person-feed-1`); a test run's report shape is
+  in `.scratch/platform-validation/research/06a2-report.json`.
 
 ## Design
 

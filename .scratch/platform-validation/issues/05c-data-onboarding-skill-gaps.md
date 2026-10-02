@@ -17,7 +17,8 @@ given.
   04), or ship `proving_run.py`'s shape as a command. It must stand in for a
   missing reader, and must not hang on store growth (05b)
 - [ ] 3. Digest and input manifest need code: `rules save` prints the digest;
-  a command writes the input manifest
+  a command writes the input manifest. Rules-skill ticket 15 (`rules test`)
+  would write both, with items 2 and 12
 - [ ] 4. The proof entry's shape is incomplete in the skill. Say:
   - the lower bound is cut to six places, never rounded (a rounded bound was
     refused);
