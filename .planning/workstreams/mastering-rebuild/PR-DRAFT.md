@@ -1,4 +1,13 @@
 ## Scope
+
+> **Superseded in part by Claude's continuation (2026-10-02 ET),
+> `.planning/workstreams/mastering-qualification-claude/TICKET.md`:**
+> - The acceptance's synthetic EMPLOYED_BY link is replaced. It now uses a GLEIF accounting parent between two Companies, read by the real GLEIF reader. The test passes on PostgreSQL 16.
+> - The CLAUDE.md/AGENTS.md consolidation is reverted. It is now its own ticket (`.scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md`; operator, 2026-10-02: "Split it out (Recommended)").
+> - The local database inventory is done; see that ticket.
+>
+> Lines below that say otherwise are history.
+
 Fresh local Company, Person and Relationship mastering qualification and proved unused code/test cleanup. **Draft: the original task remains incomplete.** The operator selected local qualification only; no hosted deployment or merge is included.
 
 ## Changes

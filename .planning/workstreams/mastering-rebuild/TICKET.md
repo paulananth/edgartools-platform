@@ -1,5 +1,13 @@
 # Fresh Company, Person, and Relationship mastering
 
+> **Superseded in part by Claude's continuation (2026-10-02 ET),
+> `.planning/workstreams/mastering-qualification-claude/TICKET.md`:**
+> - The acceptance's synthetic EMPLOYED_BY link is replaced. It now uses a GLEIF accounting parent between two Companies, read by the real GLEIF reader. The test passes on PostgreSQL 16.
+> - The CLAUDE.md/AGENTS.md consolidation is reverted. It is now its own ticket (`.scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md`; operator, 2026-10-02: "Split it out (Recommended)").
+> - The local database inventory is done; see that ticket.
+>
+> Lines below that say otherwise are history.
+
 Status: incomplete — draft PR #780 published; PostgreSQL qualification and cleanup pending
 Branch: `codex/mastering-rebuild-20261001`
 Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (GitHub main verified 2026-10-02 08:12 ET, PR #779)
@@ -22,7 +30,7 @@ Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (GitHub main verified 2026-10-0
 - [ ] Execute fresh local qualification and verify physical outputs — operator selected local qualification only; Docker preflight failed, report qualified=false; no hosted deployment is in scope.
 - [x] Delete unused code and tests only after checking executable callers and retained contracts; record the deletion inventory — three unreachable modules, five obsolete cases; active loader/boundary checks and full non-database suite pass; c936bd60; 2026-10-01 23:14 ET.
 - [ ] Inventory unused databases, review exact targets and recoverability, delete authorized unused targets, and verify remaining stores.
-- [x] Consolidate CLAUDE.md and AGENTS.md around current executable architecture and operator rules — shared guide plus Claude pointer and mastering operations reference; 1,796 always-loaded lines reduced to 140; inspected references and git diff --check; 2026-10-01 23:14 ET.
+- [ ] ~~Consolidate CLAUDE.md and AGENTS.md around current executable architecture and operator rules — shared guide plus Claude pointer and mastering operations reference; 1,796 always-loaded lines reduced to 140; inspected references and git diff --check; 2026-10-01 23:14 ET.~~ deferred to .scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md: operator split it out, 2026-10-02
 - [x] Prepare authorized Codex/Claude memory corrections — MEMORY-CLEANUP.md preserves operator decisions and identifies stale schema/skill references; 2026-10-01 23:10 ET.
 - [ ] Submit the authorized external memory cleanup — prepared note is not applied; Codex notes directory verified writable after permissions refresh, 2026-10-02 08:52 ET; inspect Claude memory targets before changes.
 - [x] Verify all non-database cases and shell syntax — 1,132 passed in 107.90s; 25 shell scripts pass bash -n; 2026-10-01 23:14 ET.

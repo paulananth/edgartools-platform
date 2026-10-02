@@ -1,5 +1,13 @@
 # Authorized memory cleanup, prepared but not applied
 
+> **Superseded in part by Claude's continuation (2026-10-02 ET),
+> `.planning/workstreams/mastering-qualification-claude/TICKET.md`:**
+> - The acceptance's synthetic EMPLOYED_BY link is replaced. It now uses a GLEIF accounting parent between two Companies, read by the real GLEIF reader. The test passes on PostgreSQL 16.
+> - The CLAUDE.md/AGENTS.md consolidation is reverted. It is now its own ticket (`.scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md`; operator, 2026-10-02: "Split it out (Recommended)").
+> - The local database inventory is done; see that ticket.
+>
+> Lines below that say otherwise are history.
+
 Operator requested memory cleanup on 2026-10-01 as part of the fresh mastering
 branch. External Codex and Claude memory folders are outside this session's
 writable roots. This file is the reviewable update; it is not evidence those

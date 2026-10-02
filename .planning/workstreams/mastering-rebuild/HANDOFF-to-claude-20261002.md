@@ -1,5 +1,13 @@
 # Claude continuation: fresh mastering
 
+> **Superseded in part by Claude's continuation (2026-10-02 ET),
+> `.planning/workstreams/mastering-qualification-claude/TICKET.md`:**
+> - The acceptance's synthetic EMPLOYED_BY link is replaced. It now uses a GLEIF accounting parent between two Companies, read by the real GLEIF reader. The test passes on PostgreSQL 16.
+> - The CLAUDE.md/AGENTS.md consolidation is reverted. It is now its own ticket (`.scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md`; operator, 2026-10-02: "Split it out (Recommended)").
+> - The local database inventory is done; see that ticket.
+>
+> Lines below that say otherwise are history.
+
 Prepared 2026-10-02 07:10 ET. Operator: "create pr and write handoff to claude".
 Updated for the operator's "update the handoff and instructions to hand over
 the draft pr to claude" (2026-10-02).

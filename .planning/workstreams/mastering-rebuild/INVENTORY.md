@@ -1,5 +1,13 @@
 # Mastering rebuild inventory
 
+> **Superseded in part by Claude's continuation (2026-10-02 ET),
+> `.planning/workstreams/mastering-qualification-claude/TICKET.md`:**
+> - The acceptance's synthetic EMPLOYED_BY link is replaced. It now uses a GLEIF accounting parent between two Companies, read by the real GLEIF reader. The test passes on PostgreSQL 16.
+> - The CLAUDE.md/AGENTS.md consolidation is reverted. It is now its own ticket (`.scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md`; operator, 2026-10-02: "Split it out (Recommended)").
+> - The local database inventory is done; see that ticket.
+>
+> Lines below that say otherwise are history.
+
 Base: GitHub main `5b59f72ff85bfac2eda9be014cb15d7e2aa8af77` (PR #774).
 Verified through the GitHub read connector. Shell fetch failed DNS; the one
 missing upstream commit and its five changed blobs were imported through

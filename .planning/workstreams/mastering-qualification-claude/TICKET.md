@@ -19,7 +19,18 @@ Standing operator rules that override the handoff where they differ:
   - Locally: 1 failed, 4 passed in 65 s; no leftover test container.
   - CI integration job: 1 failed, 290 passed in 137 s.
   - 2026-10-02 09:03 ET
-- [ ] Review: Standards, Spec, GoF
+- [x] Review: Standards, Spec, GoF (three parallel reviewers over `git diff origin/main...HEAD`). 2026-10-02 09:55 ET
+  - [x] GoF: leave the code as is; no change has repeated along any one line. Noted only: the skip rule in the runner is keyed by suite name.
+  - [x] Standards:
+    - Fixed: import order, a lambda assigned to a name, and an unclear `[1]` tuple index.
+    - Not taken: the two "hard" findings, that the runner can't pass the known-failure list or the 16-minute integration run. Both rest on old CLAUDE.md figures; today's CI integration job had 290 passed, with only this test failing, in 137 s.
+    - Docs and `TODOS.md` still name the deleted loaders; that is history, left.
+  - [x] Spec:
+    - The refusals now assert SQLSTATE 42501, not any database error.
+    - Publication read-back now asserts files on disk for each consumer.
+    - The calculated ultimate-parent link's ends are now checked.
+    - Codex's five docs carry a "superseded in part" note, and the consolidation tick in its TICKET is struck through as deferred.
+    - Locally: 2 passed in 31 s, no leftover container.
   - [x] The CLAUDE.md/AGENTS.md rewrite was a finding for the operator. Operator, 2026-10-02: "Split it out (Recommended)". Both files are back to main's text in commit `b9e3628d`; the rewrite is now `.scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md`. 2026-10-02 09:25 ET
     - CLAUDE.md shrinks to 17 lines and mentions AGENTS.md only in prose, with no `@AGENTS.md` import.
     - Dropped from always-loaded text:
@@ -31,7 +42,7 @@ Standing operator rules that override the handoff where they differ:
       - known open items;
       - 5-whys;
       - the BIGINT rule.
-  - [x] `qualify_local_mastering.py` runs all four suites locally. It is kept as Codex wrote it. `docs/agents/mastering-operations.md` now says it is the long run, used only when it is the evidence asked for; everyday work runs the affected tests locally. 2026-10-02 09:30 ET This conflicts with the operator's affected-tests rule. CI already runs the full integration suite in about 2 minutes.
+  - [x] `qualify_local_mastering.py` runs all four suites locally. It is kept as Codex wrote it. `docs/agents/mastering-operations.md` now says it is the long run, used only when it is the evidence asked for; everyday work runs the affected tests locally. 2026-10-02 09:30 ET
 - [x] Fix the acceptance test so it uses a relationship the approved rules allow.
   - Two GLEIF Level 1 records (Apple, Microsoft) and one synthetic accounting-parent record go through the real `gleif_source.record_evidence` reader.
   - The GLEIF records wait for binding under the approved rules, so a steward binds each to its SEC Company.

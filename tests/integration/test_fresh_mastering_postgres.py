@@ -15,11 +15,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean.consumer import ContractReader
+from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.publication import LocalContractSink
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
-from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
 from tests.support.fresh_mastering import AS_OF, cohort, gleif_cohort
 from tests.support.rules_authority import register_dataset
 
@@ -57,8 +57,10 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
     assert bindings[child["subject"]] is None and bindings[owner["subject"]] is None
     # A steward binds each GLEIF record to its SEC Company; the link then
     # resolves to those canonical Companies.
-    steward = [core.identity_and_binding(g, bindings[sec["subject"]])[1]
-               for g, sec in ((child, apple), (owner, microsoft))]
+    steward = []
+    for gleif_record, sec in ((child, apple), (owner, microsoft)):
+        _, bind = core.identity_and_binding(gleif_record, bindings[sec["subject"]])
+        steward.append(bind)
     second_command = {**command, "batch_id": "fresh-links", "assertions": [link],
                       "decisions": steward, "expected_checkpoint": 1, "checkpoint": 2}
     second = stage.apply(**second_command)
@@ -72,6 +74,8 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
         assert direct[0]["target_id"] == bindings[microsoft["subject"]]
         assert direct[0]["type"] == "IS_DIRECTLY_CONSOLIDATED_BY"
         assert sorted(e["type"] for e in edges) == ["CALCULATED_ULTIMATE_PARENT", "IS_DIRECTLY_CONSOLIDATED_BY"]
+        assert {(e["source_id"], e["target_id"]) for e in edges} == {
+            (bindings[apple["subject"]], bindings[microsoft["subject"]])}
     reader = ContractReader(database.application)
     for record in (person, apple):
         found = reader.entity(bindings[record["subject"]])
@@ -87,6 +91,7 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
         sink = LocalContractSink(tmp_path / consumer)
         while store.deliver_one(consumer, "local-qualification", sink):
             pass
+        assert any(p.is_file() for p in (tmp_path / consumer).rglob("*")), consumer
     assert store.run_status(run_id)["publication_complete"]
     assert stage.apply(**command)["duplicate"]
     assert stage.apply(**second_command)["duplicate"]
@@ -96,5 +101,6 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
     # A restricted runtime cannot erase or bypass the newly mastered state.
     for sql in ("DELETE FROM mdm.master_entity", "DELETE FROM mdm.source_reading",
                 "CREATE TABLE mdm.bypass(id int)"):
-        with pytest.raises(DBAPIError), database.application.begin() as conn:
+        with pytest.raises(DBAPIError) as denied, database.application.begin() as conn:
             conn.execute(text(sql))
+        assert denied.value.orig.pgcode == "42501", (sql, denied.value.orig.pgcode)

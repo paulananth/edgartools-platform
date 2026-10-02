@@ -53,6 +53,10 @@ def cohort():
     return policy, contracts, readings
 
 
+def _node(lei):
+    return {"NodeID": {"$": lei}, "NodeIDType": {"$": "LEI"}}
+
+
 def _gleif(member, row, ordinal):
     publication = {"publication_key": f"offline-cohort/gleif/{member}", "revision": 1,
                    "artifact_sha256": digest(row), "member": member,
@@ -70,10 +74,9 @@ def gleif_cohort():
     fixture = json.loads(FIXTURE.read_text())
     level1 = [_gleif("level1", row, n) for n, row in enumerate(fixture["gleif"])
               if row["LEI"]["$"] in {CHILD_LEI, PARENT_LEI}]
-    node = lambda lei: {"NodeID": {"$": lei}, "NodeIDType": {"$": "LEI"}}
     link = _gleif("relationships", {"RelationshipRecord": {
         "Relationship": {
-            "StartNode": node(CHILD_LEI), "EndNode": node(PARENT_LEI),
+            "StartNode": _node(CHILD_LEI), "EndNode": _node(PARENT_LEI),
             "RelationshipType": {"$": "IS_DIRECTLY_CONSOLIDATED_BY"},
             "RelationshipPeriods": {"RelationshipPeriod": {
                 "PeriodType": {"$": "RELATIONSHIP_PERIOD"},
