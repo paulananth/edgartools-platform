@@ -34,7 +34,7 @@ Work in this order. A ticket starts when everything it is blocked by is resolved
 | 01 | [Correct stale ticket statuses](issues/01-correct-stale-ticket-statuses.md) | resolved (#787) |
 | 02 | [Relationship rules design](issues/02-relationship-rules-design.md) | resolved (#786) |
 | 03 | [Data quality for Person and links](issues/03-data-quality-for-person-and-links.md) | resolved (#791) |
-| 04 | [The command that runs mastering](issues/04-the-command-that-runs-mastering.md) | resolved (#788) |
+| 04 | [The command that runs mastering](issues/04-the-command-that-runs-mastering.md) | resolved (#788); the command is down from 20a until 20e |
 | 05 | [Review findings 5 and 6](issues/05-review-findings-5-and-6.md) | resolved (#789) |
 | 13 | [Waiting links wait quietly](issues/13-waiting-links-wait-quietly.md) | resolved (#793) |
 | 08 | [Configured parsing: engine or per-source readers](issues/08-configured-parsing-engine.md) | resolved (#790) |
@@ -44,12 +44,13 @@ Work in this order. A ticket starts when everything it is blocked by is resolved
 | 07 | [Cascade passes: label and switch on](issues/07-cascade-passes-switch-on.md) | 06 |
 | 15 | [Rust engine core behind Python](issues/15-rust-engine-core-behind-python.md) | 08 |
 | 16 | [GLEIF on the engine](issues/16-gleif-on-the-engine.md) | 15 |
-| 17 | [SEC Company on the engine](issues/17-sec-company-on-the-engine.md) | 15 |
+| 17 | [SEC Company on the engine](issues/17-sec-company-on-the-engine.md) | absorbed into 20c |
 | 09 | [Test, check and Preview for onboarding](issues/09-test-check-and-preview-for-onboarding.md) | 15 |
 | 10 | [Forms 3/4/5 capture and reader](issues/10-forms-345-capture-and-reader.md) | 02, 09, 14, 15 |
 | 18 | [Person and link quality rules](issues/18-person-and-link-quality-rules.md) | 03, 14 |
 | 19 | [Restore the catalog and publish Person and links](issues/19-restore-the-catalog-and-publish-person.md) | 11, 18 |
-| 12 | [Switch on Person feed 1 with its links](issues/12-switch-on-person-with-its-links.md) | 03, 06, 10, 11, 18, 19 |
+| 20 | [Bookkeeping without legacy or custom code for Company and Person](issues/20-bookkeeping-without-legacy-or-custom-code.md) | none (slices 20a–20e) |
+| 12 | [Switch on Person feed 1 with its links](issues/12-switch-on-person-with-its-links.md) | 03, 06, 10, 11, 18, 19, 20 |
 
 ## Decisions so far
 
