@@ -262,8 +262,10 @@ class Bookkeeping:
                 results[name] = True
             elif name == "work.accounting":
                 results[name] = status["counts"].get("verified", 0) == run["expected_count"]
-            else:  # journal.delivered: RUN_CHECKS has no other name
+            elif name == "journal.delivered":
                 results[name] = status["pending_deliveries"] == 0
+            else:
+                raise Blocked(f"Unsupported run check: {name}")
         return results
 
     # The task protocol. A worker pulls an envelope, renews it while it works
@@ -277,12 +279,7 @@ class Bookkeeping:
         run, config, _, _ = self._frozen(claim.run_id)
         step = next(s for s in config["steps"] if s["name"] == claim.step)
         row = self._row(claim.run_id, claim.step, claim.key)
-        try:
-            item = self._resolve_item(row)
-        except (Blocked, KeyError, TypeError) as exc:
-            # Corrupt or missing prerequisite evidence: no work starts on it.
-            self._call("SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)", r=claim.run_id, m=str(exc))
-            raise Blocked(str(exc)) from exc
+        item = self._resolve_item(row)
         rules = run["submission"]["rules"]
         return {"protocol": PROTOCOL, "profile": step["operation"],
                 "claim": {"run_id": claim.run_id, "step": claim.step, "key": claim.key,
@@ -293,7 +290,8 @@ class Bookkeeping:
                 "rules": rules, "input": item["unit"]["input"], "output": item["unit"]["output"],
                 "keys": row["unit"]["keys"], "cursor": row["unit"]["cursor"],
                 "checks": [name for name in step["checks"] if name not in STEP_CHECKS],
-                "heartbeat_seconds": config["heartbeat_seconds"]}
+                "heartbeat_seconds": config["heartbeat_seconds"],
+                "deadline": min(str(p["expires_at"]) for p in claim.proof)}
 
     @staticmethod
     def _claim_of(envelope: dict) -> Claim:
@@ -307,8 +305,8 @@ class Bookkeeping:
 
     def _same_work(self, envelope: dict, claim: Claim) -> dict:
         current = self.envelope(claim)
-        if {k: v for k, v in envelope.items() if k not in ("claim", "candidate")} != {
-                k: v for k, v in current.items() if k != "claim"}:
+        if {k: v for k, v in envelope.items() if k not in ("claim", "candidate", "deadline")} != {
+                k: v for k, v in current.items() if k not in ("claim", "deadline")}:
             raise Blocked("Envelope differs from the frozen work")
         return current
 
@@ -323,15 +321,22 @@ class Bookkeeping:
             if step["operation"] != profile or len(found) >= limit:
                 continue
             with self.engine.connect() as conn:
+                # A reported unit belongs to verifiers, never to another worker.
                 keys = conn.scalars(text("""SELECT unit_key FROM bookkeeping.work_item w
-                    WHERE run_id=CAST(:r AS uuid) AND step=:s AND state<>'verified'
+                    WHERE run_id=CAST(:r AS uuid) AND step=:s AND state NOT IN ('verified','reported')
                     AND NOT EXISTS(SELECT 1 FROM bookkeeping.lease l WHERE l.run_id=w.run_id
                         AND l.attempt=w.attempt AND l.expires_at>clock_timestamp())
                     ORDER BY ordinal LIMIT :n"""), {"r": run_id, "s": step["name"], "n": limit - len(found)}).all()
             for key in keys:
                 claim = self.claim(run_id, step["name"], key, sleep=lambda _: None)
-                if claim is not None:
+                if claim is None:
+                    continue
+                try:
                     found.append(self.envelope(claim))
+                except (Blocked, KeyError, TypeError) as exc:
+                    # Corrupt or missing prerequisite evidence: no work starts on it.
+                    self._call("SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)", r=run_id, m=str(exc))
+                    raise Blocked(str(exc)) from exc
         return found
 
     def renew(self, envelope: dict) -> dict:
@@ -342,6 +347,8 @@ class Bookkeeping:
         claim = self._claim_of(envelope)
         reference(candidate)
         current = self._same_work(envelope, claim)
+        if candidate["uri"] != current["output"]:
+            raise Blocked("A candidate must be written to the work's intended output")
         self._call("SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
                    r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof),
                    c=canonical({"uri": candidate["uri"], "sha256": candidate["sha256"]}), f=current["profile"], t=runtime)
@@ -352,25 +359,31 @@ class Bookkeeping:
         self.wait(self._claim_of(envelope), message[:200])
 
     def verifications(self, run_id: str, profile: str, *, limit: int = 10) -> list[dict]:
-        """Reported candidates of a profile's steps whose attempt still holds
-        its lease: the verifier works under that same live authority."""
+        """Reported candidates of a profile's steps. The verifier works under
+        the reporting attempt's leases, renewed or re-taken here; a unit whose
+        resource another attempt holds is skipped."""
         if not 1 <= limit <= 1000:
             raise ValueError("Verification limit must be 1..1000")
         _, config, _, _ = self._frozen(run_id)
         steps = [s["name"] for s in config["steps"] if s["operation"] == profile]
         with self.engine.connect() as conn:
-            rows = _rows(conn, """SELECT w.step,w.unit_key,w.attempt,w.candidate FROM bookkeeping.work_item w
-                WHERE w.run_id=CAST(:r AS uuid) AND w.step = ANY(:s) AND w.state='reported'
-                ORDER BY w.step,w.ordinal LIMIT :n""", r=run_id, s=steps, n=limit)
-            found = []
-            for row in rows:
-                proof = conn.scalar(text("""SELECT jsonb_agg(jsonb_build_object('resource',resource,'token',token,
-                    'run_id',run_id,'attempt',attempt,'expires_at',expires_at) ORDER BY resource)
-                    FROM bookkeeping.lease WHERE run_id=CAST(:r AS uuid) AND attempt=:a
-                    HAVING bool_and(expires_at>clock_timestamp())"""), {"r": run_id, "a": row["attempt"]})
-                if proof:
-                    found.append((Claim(run_id, row["step"], row["unit_key"], str(row["attempt"]), proof), row["candidate"]))
-        return [{**self.envelope(claim), "candidate": candidate} for claim, candidate in found]
+            rows = _rows(conn, """SELECT step,unit_key,attempt,candidate FROM bookkeeping.work_item
+                WHERE run_id=CAST(:r AS uuid) AND step = ANY(:s) AND state='reported'
+                ORDER BY step,ordinal LIMIT :n""", r=run_id, s=steps, n=limit)
+        found = []
+        for row in rows:
+            try:
+                proof = self._call("SELECT bookkeeping.verify_claim(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),:d)",
+                                   r=run_id, s=row["step"], k=row["unit_key"], a=str(row["attempt"]),
+                                   d=config["lease_seconds"])
+            except DBAPIError as exc:
+                if getattr(exc.orig, "pgcode", None) != "55P03":
+                    raise
+                continue
+            if proof:
+                claim = Claim(run_id, row["step"], row["unit_key"], str(row["attempt"]), proof)
+                found.append({**self.envelope(claim), "candidate": row["candidate"]})
+        return found
 
     def admit(self, verification: dict, report_ref: dict) -> dict:
         """Complete a unit from a verifier's report: every binding, the
@@ -380,7 +393,7 @@ class Bookkeeping:
         reference(report_ref)
         run, config, _, _ = self._frozen(claim.run_id)
         step = next(s for s in config["steps"] if s["name"] == claim.step)
-        self._same_work(verification, claim)
+        current = self._same_work(verification, claim)
         row = self._row(claim.run_id, claim.step, claim.key)
         if row["state"] == "verified" and str(row["attempt"]) == claim.attempt:
             # A lost acknowledgement: the same report is admitted again; any
@@ -408,10 +421,9 @@ class Bookkeeping:
         for proof in report["proofs"]:
             self.artifacts.verified(reference(proof))
         receipt = {"uri": candidate["uri"], "sha256": candidate["sha256"], "evidence": report_ref}
-        item = self._resolve_item(row)
         checks = dict(reported)
         if "input.hash" in step["checks"]:
-            self.artifacts.verified(item["unit"]["input"])
+            self.artifacts.verified(current["input"])
             checks["input.hash"] = True
         if "output.receipt" in step["checks"]:
             self.artifacts.verified(candidate)

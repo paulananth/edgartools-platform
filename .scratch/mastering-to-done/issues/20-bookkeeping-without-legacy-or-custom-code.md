@@ -24,16 +24,17 @@ This is the explicit instruction that Codex's design ticket (`.planning/workstre
 
 ## The protocol (20a), pull not push
 
-Workers pull work through `edgar-warehouse bookkeeping …` commands that print JSON; Bookkeeping spawns nothing and names no worker module.
+Workers pull work through `edgar-warehouse bookkeeping …` commands that print JSON; Bookkeeping spawns nothing and names no worker module. (Built under these names; Codex's design calls them `submit`, `verify_claim` and `verify_report`.)
 
-- `submit`: freeze the approved Rules export and the input manifest (today's `start`).
-- `claim --run R --profile P --limit N`: hand out task envelopes (run, step, key, attempt, fence, the resolved input reference, the Rules digest, the intended output, the effect key, the deadline). The step's `operation` names the worker profile.
-- `renew --envelope E`: renew the lease while the worker runs.
-- `report --envelope E --candidate URI --sha256 H --runtime D`: the worker reports its candidate; the item becomes `reported`. The first admitted report pins the profile's runtime digest for the run; a different digest later blocks.
-- `verify-claim --run R --limit N` and `verify-report --verification V --report URI --sha256 H`: a separate verifier process reads the destination and reports the required check IDs; Bookkeeping checks every binding, the required checks and the live fence, then completes the work (`finish`, `finish_resource` or `finish_expand`).
+- Submission is `rules run` (Bookkeeping's `start`): it freezes the approved Rules export and the input manifest, and does no work.
+- `claim <run> --profile P --limit N`: task envelopes (run, step, key, attempt, lease proof, deadline, the resolved input, the frozen Rules reference, the intended output, the effect key, the step's domain checks). The step's `operation` names the worker profile. A reported unit is never handed to a worker.
+- `renew --envelope -`: renew the lease while the worker runs.
+- `report --envelope - --candidate URI --sha256 H --runtime D`: the worker's output, which must be the envelope's intended output; the unit becomes `reported`. The first report of a profile pins its runtime digest for the run; a different digest later is refused.
+- `verifications <run> --profile P` and `admit --verification - --report URI --sha256 H`: a verifier, a separate process, takes the reporting attempt's leases (renewed, or re-taken once lapsed), reads the destination and reports the step's checks; Bookkeeping checks every binding, the required checks and the live fence, then completes the unit (`finish`, `finish_resource` or `finish_expand`).
+- `fail --envelope - --message M` gives an attempt up; `finalize <run>` delivers control's events and records the run's checks.
 - Control's own checks (`input.hash`, `output.receipt`, `manifest.hash`, `work.accounting`, `journal.delivered`) are a fixed list in control. Every other check ID a step names must come back true in the verifier's report.
 - Control emits only its lifecycle event (`work.verified`). Domain events go through the worker's own Journal intent.
-- New tables and functions come in migration `005`; 001–004 stay as they are.
+- Migration `005` adds the state, two columns, `report()`, `verify_claim()` and the completion trigger, and drops `authorize_request()`; 001–004 stay as they are.
 
 ## What 20a takes down until 20c and 20e
 
@@ -57,6 +58,7 @@ Each test file 20a deletes holds assertions a later slice must prove again on th
 | Preparation pins a bounded revision with no provider; Company routes with and without pagination | `test_company_only_postgres` | 20c |
 | Planning makes no live change; validation executes; deployment needs the matching validation proof | `test_change_journal_skill_postgres` | 20c |
 | A retired Rules version's run resumes from its original export and mapping | `test_configured_bookkeeping_postgres::test_retired_rules_resume_*` | 20e |
+| A bounded `rules run --limit` leaves the rest pending, and a resume finishes it; `bookkeeping checks` shows every check true | `test_configured_bookkeeping_postgres::test_operator_cli_submits_and_resumes_frozen_work` | 20a in part (submit, resume and finalize in the two-worker test); the bounded worker limit with `--limit` in 20c |
 | A real MDM commit keeps its hash and reconciles a lost acknowledgement; assessment writes reject expired authority; source ingest pins the mapping; platform publication fails and recovers | `test_configured_bookkeeping_postgres::test_actual_mdm_commit_*`, `test_assessment_writes_*`, `test_configured_source_ingest_*`, `test_configured_platform_publication_*`, `test_stage_manifest_chains_prepared_mdm_*` | 20e |
 | Crash after the destination commit, before control, reconciles; the destination's transaction fence rejects expiry at commit | `test_configured_bookkeeping_postgres::test_crash_after_destination_*`, `test_destination_transaction_fence_*` | 20a (copy worker) and 20b |
 
@@ -79,8 +81,14 @@ Each test file 20a deletes holds assertions a later slice must prove again on th
 - [x] 20a: the task protocol: migration `005_task_protocol.sql` (state `reported`, `work_item.candidate`, `pipeline_run.runtimes`, `report()`, and a trigger that refuses any completion other than the reported candidate); engine `envelope`, `tasks`, `renew`, `report`, `fail`, `verifications`, `admit`; commands `claim`, `renew`, `report`, `fail`, `verifications`, `admit`, `finalize`. Tested: forged bindings and checks refused, runtime pinned, lost acknowledgements idempotent, populated-table migration. 2026-10-02 18:20 ET
 - [x] 20a: workers `edgar_warehouse/workers` (`artifact.copy`, `jsonl.count`), each run with `python -m edgar_warehouse.workers work|verify`, reaching control only through the commands in a subprocess. `test_two_workers_in_their_own_processes_complete_a_cli_submitted_run` submits with `rules run`, runs both workers and verifiers as processes with control's domain imports blocked, and finalizes: complete, 4 verified, both runtimes pinned. 2026-10-02 18:20 ET
 - [x] 20a: deleted `bookkeeping/clean/{capabilities,company,mdm_capabilities,source_input,runner}.py`, `edgar_warehouse/acquisition/`, `application/source_evidence.py`, the Journal operation branches and `authorize_request`; `journal_evidence` keeps planning only; `rules run` submits only; 5 test files retired (their assertions are in the table above); the control tests moved to the protocol. Local: Bookkeeping, generated-work and Journal Postgres tests 59 passed; unit, architecture and MDM tests 900 passed, 15 failed only because `jq` is not installed on this Mac since Homebrew was removed (CI has it). Skill and spec docs updated. 2026-10-02 18:20 ET
-- [ ] 20a: three-axis `/code-review`; PR; CI green; merge on the operator's word
-- [ ] 20b: the PostgreSQL 16 gates, plus: per-profile issuer roles; lease expiry during verification; destination re-verification on resume (today resume rechecks the candidate bytes and the report's binding only)
+- [x] 20a: three-axis `/code-review`, findings fixed, each with a test. 2026-10-02 18:29 ET
+  - **GoF:** leave the structure; the verification report's shape was written in two places, now one `report_document`.
+  - **Standards, fixed:** a reported unit whose lease lapsed was handed to another worker and redone, and `verifications` applied its limit before the live-lease filter (now a reported unit belongs to verifiers, which re-take its lease: `verify_claim`); `authorize_request` stayed callable (dropped); run checks fell through to `journal.delivered`; `envelope` blocked the run from a read path (now only `tasks` blocks); the run row was locked on every report (only the first pin locks it); the renewal error was ignored and control calls had no timeout; the glossary lacked the new terms (`CONTEXT.md`).
+  - **Spec, fixed:** a candidate could be reported anywhere (it must be the intended output); the envelope had no deadline; resource checkpoints and the restricted functions were not proved again (two tests); gate 1 claimed more than the tests show (now "Partly"); the protocol section used the design's command names; a deleted test had no row.
+  - **Spec, moved to 20b:** a control-only wheel; a verifier profile and runtime of its own; retry limits in the envelope.
+  - Local after the fixes: Bookkeeping, generated-work and Journal Postgres tests 59 passed; architecture and contract tests 46 passed.
+- [ ] 20a: PR; CI green; merge on the operator's word
+- [ ] 20b: the PostgreSQL 16 gates, plus: a control-only wheel installed without the domain packages; a verifier profile and runtime digest of its own in each report; retry limits in the envelope; per-profile issuer roles; lease expiry during verification; destination re-verification on resume (today resume rechecks the candidate bytes and the report's binding only)
 - [ ] 20c: SEC Company through the engine
 - [ ] 20d: Person through the engine
 - [ ] 20e: MDM behind the protocol; ticket 04's proof; `mdm/clean/journal_delivery.py` still reads Bookkeeping's private `_frozen` and `_resolve_item`, which 20e removes

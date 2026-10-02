@@ -7,6 +7,7 @@ worker's commands call, so a control test stays fast and exact.
 from __future__ import annotations
 
 from edgar_warehouse.workers import copy
+from edgar_warehouse.workers.control import report_document
 
 RUNTIME = "a" * 64
 WORKERS = {"artifact.copy": copy}
@@ -18,12 +19,7 @@ def reports_root(envelope: dict) -> str:
 
 def verification_report(book, verification: dict, worker) -> dict:
     checks, proofs = worker.verify(verification, book.artifacts)
-    claim = verification["claim"]
-    report = {"protocol": verification["protocol"], "checks": checks, "proofs": proofs,
-              "binding": {"run_id": claim["run_id"], "step": claim["step"], "key": claim["key"],
-                          "attempt": claim["attempt"], "effect_key": verification["effect_key"],
-                          "candidate": verification["candidate"]}}
-    return book.artifacts.put(reports_root(verification), report)
+    return book.artifacts.put(reports_root(verification), report_document(verification, checks, proofs))
 
 
 def envelope_for(book, claim) -> dict:
@@ -50,29 +46,23 @@ def complete(book, rid, key="0", step="s0", worker=copy, profile="artifact.copy"
 
 
 def drive(book, rid, ledger, *, workers=None, limit=1000) -> dict:
-    """Work every step in order until nothing more can run, then deliver
-    control's events and record the run's checks (the runner's old order)."""
-    from sqlalchemy import text
-
+    """What a worker and a verifier per profile do, in step order, until
+    nothing more can run; then deliver control's events and record the run's
+    checks. Claims go through `tasks`, as the worker commands' do."""
     workers = workers or WORKERS
     _, config, _, _ = book._frozen(rid)
     done = 0
     for step in config["steps"]:
-        worker = workers[step["operation"]]
-        with book.engine.connect() as conn:
-            keys = conn.scalars(text("SELECT unit_key FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) "
-                                     "AND step=:s AND state<>'verified' ORDER BY ordinal LIMIT :n"),
-                                {"r": rid, "s": step["name"], "n": limit - done}).all()
-        for key in keys:
-            claim = book.claim(rid, step["name"], key, sleep=lambda _: None)
-            if claim is None:
-                continue
-            envelope = book.envelope(claim)
-            book.report(envelope, worker.execute(envelope, book.artifacts), RUNTIME)
-            verification = verification_for(book, rid, step["name"], key, step["operation"])
-            book.admit(verification, verification_report(book, verification, worker))
-            done += 1
-        if done >= limit:
-            break
+        profile = step["operation"]
+        worker = workers[profile]
+        while done < limit:
+            envelopes = book.tasks(rid, profile, limit=limit - done)
+            for envelope in envelopes:
+                book.report(envelope, worker.execute(envelope, book.artifacts), RUNTIME)
+            for verification in book.verifications(rid, profile, limit=1000):
+                book.admit(verification, verification_report(book, verification, worker))
+                done += 1
+            if not envelopes:
+                break
     book.deliver(ledger, rid, limit=1000)
     return book.finalize(rid)

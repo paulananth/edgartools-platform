@@ -33,10 +33,10 @@ reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
 
 | Gate | State |
 | --- | --- |
-| 1. Control starts and builds every command with domain packages blocked | Passed: `tests/architecture/test_bookkeeping_control_only.py`, and the control processes of the two-worker test run under the same import guard |
+| 1. Control starts and builds every command with domain packages blocked | Partly: an import guard in a child process blocks every domain package while control starts and builds each command (`tests/architecture/test_bookkeeping_control_only.py`), and the two-worker test's control processes run under it. A control-only wheel installed without those packages is not built yet (20b) |
 | 2. Two workers on one protocol, no Bookkeeping change between them | Passed: `artifact.copy` and `jsonl.count`, in their own processes (`test_two_workers_in_their_own_processes_complete_a_cli_submitted_run`) |
-| 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, forged or missing checks, conflicting reports and stale fencing are refused (`test_admission_refuses_*`, `test_renewal_takeover_*`); per-profile issuer roles are mastering to-do 20b |
-| 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage and a changed runtime are covered; lease expiry during verification and destination re-verification on resume are 20b |
+| 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, a candidate outside its intended output, forged or missing checks, conflicting reports, stale or missing fencing and unreported completion are refused (`test_admission_refuses_*`, `test_a_candidate_must_be_*`, `test_restricted_functions_*`, `test_renewal_takeover_*`). Per-profile issuer roles and a verifier's own runtime in its report are 20b |
+| 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage, a changed runtime, resource checkpoints across runs, and a report whose lease lapsed before verification (the verifier re-takes it; no worker repeats it) are covered. Lease expiry while a verifier runs and destination re-verification on resume are 20b |
 
 Company, Person and MDM have no worker yet (to-do 20c, 20d and 20e). Report
 their execution as unsupported; never add a callback back into control.

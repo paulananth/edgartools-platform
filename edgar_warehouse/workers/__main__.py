@@ -56,6 +56,8 @@ def work(name: str, run_id: str, limit: int) -> int:
         try:
             with Renewal(envelope) as renewal:
                 candidate = module.execute(envelope, artifacts)
+            if renewal.error is not None:
+                raise renewal.error  # the lease lapsed while the work ran
             control.report(renewal.envelope, candidate, digest)
         except Exception as exc:
             failed += 1
@@ -74,14 +76,12 @@ def verify(name: str, run_id: str, reports: str, limit: int) -> int:
         try:
             with Renewal(verification) as renewal:
                 checks, proofs = module.verify(verification, artifacts)
+            if renewal.error is not None:
+                raise renewal.error
             if any(value is not True for value in checks.values()):
                 raise ValueError("A check failed")
-            report = {"protocol": verification["protocol"], "checks": checks, "proofs": proofs,
-                      "binding": {"run_id": claim["run_id"], "step": claim["step"], "key": claim["key"],
-                                  "attempt": claim["attempt"], "effect_key": verification["effect_key"],
-                                  "candidate": verification["candidate"]}}
             control.admit({**renewal.envelope, "candidate": verification["candidate"]},
-                          artifacts.put(reports, report))
+                          artifacts.put(reports, control.report_document(verification, checks, proofs)))
         except Exception as exc:
             failed += 1
             print(f"{claim['step']}/{claim['key']}: {exc}", file=sys.stderr)

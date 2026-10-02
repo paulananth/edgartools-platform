@@ -133,7 +133,7 @@ def approved_acquisition(body, name, contracts, manifest):
                         "checks": {"fixture": True}}}
 
 
-def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None):
+def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None, cursor=None):
     book = book or Bookkeeping(databases.runtime)
     body = body or config()
     name = f"fixture-{uuid4().hex}"
@@ -143,7 +143,8 @@ def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=No
     for n in range(count):
         source = artifacts.put(tmp_path.as_uri() + "/inputs", {"row": n})
         output = (output_root or tmp_path) / f"output-{n}"
-        units.append({"keys": {"id": str(n), "destination": output.as_uri()}, "input": source, "output": output.as_uri(), "cursor": {"offset": n}})
+        units.append({"keys": {"id": str(n), "destination": output.as_uri()}, "input": source, "output": output.as_uri(),
+                      "cursor": cursor(n) if cursor else {"offset": n}})
     inputs = artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": units})
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
     if body.get("mdm"):
@@ -632,6 +633,72 @@ def test_completion_must_be_the_reported_candidate(databases, tmp_path):
         book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
                    r=rid, s="s0", k="0", a=claim.attempt, p=canonical(claim.proof),
                    v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}), e=str(uuid4()))
+
+
+def test_a_lapsed_report_is_verified_not_worked_again(databases, tmp_path):
+    """A reported unit belongs to verifiers: once its lease lapses, the
+    verifier re-takes it for the same attempt; no worker claims it again."""
+    book, rid, _, _ = submit(databases, tmp_path, count=12)
+    for key in map(str, range(12)):
+        envelope = book.envelope(book.claim(rid, "s0", key))
+        book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+        expire(databases, book._claim_of(envelope))
+    assert book.tasks(rid, "artifact.copy", limit=20) == []
+    found = book.verifications(rid, "artifact.copy", limit=12)
+    assert len(found) == 12 and all(v["claim"]["proof"][0]["token"] >= 2 for v in found)
+    for verification in found:
+        book.admit(verification, verification_report(book, verification, copy))
+    assert book.status(rid)["counts"] == {"verified": 12}
+
+
+def test_a_candidate_must_be_the_intended_output(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    envelope = book.envelope(book.claim(rid, "s0", "0"))
+    elsewhere = book.artifacts.put_bytes((tmp_path / "elsewhere").as_uri(), b"x")
+    with pytest.raises(Blocked, match="intended output"):
+        book.report(envelope, elsewhere, RUNTIME)
+
+
+def test_resource_checkpoints_span_runs_and_refuse_a_stale_comparison(databases, tmp_path):
+    shared = tmp_path / "checkpointed"
+
+    def run_at(folder, revision, position):
+        return submit(databases, tmp_path / folder, count=1, output_root=shared / folder,
+                      body=config(resource="feed:checkpointed"),
+                      cursor=lambda n: {"resource_checkpoint": {"resource": "feed:checkpointed",
+                                                                "revision": revision, "position": position}})
+
+    first, r1, _, _ = run_at("a", 0, -1)
+    complete(first, r1)
+    assert first.resource_checkpoint("feed:checkpointed")["revision"] == 1
+    stale, r2, _, _ = run_at("b", 0, -1)
+    with pytest.raises(DBAPIError, match="comparison failed"):
+        complete(stale, r2)
+    with databases.admin.begin() as conn:  # the refused run gives its lease up
+        conn.execute(text("UPDATE bookkeeping.lease SET expires_at=clock_timestamp() WHERE run_id=CAST(:r AS uuid)"), {"r": r2})
+    current, r3, _, _ = run_at("c", 1, 0)
+    complete(current, r3)
+    assert current.resource_checkpoint("feed:checkpointed")["revision"] == 2
+
+
+def test_restricted_functions_refuse_missing_fencing_or_unreported_completion(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    claim = book.claim(rid, "s0", "0")
+    candidate = copy.execute(book.envelope(claim), book.artifacts)
+    for proof in ([], [{**claim.proof[0], "token": claim.proof[0]["token"] + 1}], None):
+        with pytest.raises(DBAPIError):
+            book._call("SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
+                       r=rid, s="s0", k="0", a=claim.attempt, p=None if proof is None else canonical(proof),
+                       c=canonical(candidate), f="artifact.copy", t=RUNTIME)
+    evidence = book.artifacts.put(tmp_path.as_uri() + "/evidence", {"unreported": True})
+    with pytest.raises(DBAPIError, match="reported candidate"):
+        book._call("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:x,0,-1)",
+                   r=rid, s="s0", k="0", a=claim.attempt, p=canonical(claim.proof),
+                   v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}),
+                   e=str(uuid4()), x=claim.proof[0]["resource"])
+    with databases.runtime.connect() as conn:
+        assert not conn.scalar(text("SELECT has_function_privilege('bk_runtime','bookkeeping.verify_claim(uuid,text,text,uuid,integer)','EXECUTE') IS FALSE"))
+        assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname='authorize_request')"))
 
 
 def test_zero_work_explicit_configuration_and_manifest_evidence(databases, tmp_path):
