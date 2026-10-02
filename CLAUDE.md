@@ -1156,6 +1156,7 @@ docker push "${ECR}/${REPO}:mdm-dev"
 | `Dockerfile` / `Dockerfile.warehouse-deps` | warehouse (+ deps if lock changed) |
 | `Dockerfile.mdm-neo4j` / `Dockerfile.mdm-deps` | MDM (+ deps if lock changed) |
 | `uv.lock` | deps images for both — run without `--skip-build` |
+| `crates/source-contract/**` (the source engine) | deps images for both: they build its wheel, and the deps tag hashes the crate |
 
 **Clean up local images before a build (run this first every time)**
 

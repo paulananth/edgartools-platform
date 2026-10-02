@@ -1,5 +1,10 @@
 # Tested configuration replacement opportunities
 
+> **Later (2026-10-02, mastering to-do 15):** the Rust probes became the engine's
+> acceptance suite, `crates/source-contract/tests/acceptance.rs`, with each
+> counterexample turned around; `config_replacement_research.rs` is gone. The
+> findings below are the record of the prototype as it was.
+
 Date: 2026-10-02. Baseline: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15`.
 Branch: `codex/custom-parsing-research-20261002`.
 

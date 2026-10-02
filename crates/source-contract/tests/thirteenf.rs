@@ -1,12 +1,21 @@
 use std::path::PathBuf;
 
-use source_contract::{blank_missing_token, Engine, Val};
+use source_contract::{Engine, Lookups, Step, Steps, Val};
+
+/// The Python step `blank_missing_token@1` (`edgar_warehouse/rules/steps.py`)
+/// is the one the engine runs; this copy only lets the Rust tests read 13F.
+fn blank_missing_token(value: &Val) -> Result<Val, String> {
+    let Val::Str(text) = value else { return Ok(value.clone()) };
+    let text = text.trim();
+    let blank = text.is_empty() || text.eq_ignore_ascii_case("none") || text.eq_ignore_ascii_case("nan");
+    Ok(if blank { Val::Null } else { Val::Str(text.to_string()) })
+}
 
 fn engine() -> Engine {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("contracts/thirteenf/contract.yaml");
-    Engine::load(&path)
-        .unwrap()
-        .with_step("blank_missing_token@1", blank_missing_token)
+    let mut steps = Steps::new();
+    steps.insert("blank_missing_token@1".into(), Box::new(blank_missing_token) as Step);
+    Engine::load(&path, steps).unwrap()
 }
 
 #[test]
@@ -14,7 +23,7 @@ fn one_information_table_row_matches_the_contract_case() {
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("contracts/thirteenf/fixtures/one-row.xml");
     let bytes = std::fs::read(fixture).unwrap();
-    let tables = engine().parse(&bytes).unwrap();
+    let tables = engine().read(&bytes, &Lookups::new()).unwrap().tables;
     let rows = &tables["sec_thirteenf_holding"];
     assert_eq!(rows.len(), 1);
     let row = &rows[0];
@@ -30,12 +39,13 @@ fn one_information_table_row_matches_the_contract_case() {
     assert_eq!(row["put_call"], Val::Null);
 }
 
+// The prototype read a different root as no rows; the engine fails closed
+// (mastering to-do 15). 13F is not on the engine yet.
 #[test]
-fn a_different_root_yields_no_rows() {
+fn a_different_root_is_rejected() {
     let bytes =
         br#"<ownershipDocument><infoTable><cusip>1</cusip></infoTable></ownershipDocument>"#;
-    let tables = engine().parse(bytes).unwrap();
-    assert!(tables["sec_thirteenf_holding"].is_empty());
+    assert_eq!(engine().read(bytes, &Lookups::new()).unwrap_err().code, "wrong_root");
 }
 
 #[test]
@@ -50,7 +60,7 @@ fn the_literal_title_none_is_null() {
             <shrsOrPrnAmt><sshPrnamt>2</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
           </infoTable>
         </informationTable>"#;
-    let tables = engine().parse(bytes).unwrap();
+    let tables = engine().read(bytes, &Lookups::new()).unwrap().tables;
     assert_eq!(
         tables["sec_thirteenf_holding"][0]["security_title"],
         Val::Null

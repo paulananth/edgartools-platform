@@ -1,5 +1,10 @@
 # Existing Rust configuration replacement experiments
 
+> **Later (2026-10-02, mastering to-do 15):** the Rust probes became the engine's
+> acceptance suite, `crates/source-contract/tests/acceptance.rs`, with each
+> counterexample turned around; `config_replacement_research.rs` is gone. The
+> findings below are the record of the prototype as it was.
+
 These probes use the unchanged `source-contract` Rust engine from baseline
 `542a9fa0`. They register **no custom function**, so a successful extraction
 demonstrates an existing configured primitive rather than another custom parser.

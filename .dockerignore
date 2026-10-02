@@ -50,3 +50,6 @@ pytest-cache-files-*/
 =
 [internal]
 transferring
+
+# Rust build output (the engine's wheel is built inside the image)
+crates/*/target

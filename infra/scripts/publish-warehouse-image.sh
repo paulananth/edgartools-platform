@@ -132,8 +132,18 @@ import sys
 root = pathlib.Path(sys.argv[1])
 deps_dockerfile = pathlib.Path(sys.argv[2])
 hasher = hashlib.sha256()
-for path in [root / "pyproject.toml", root / "uv.lock", deps_dockerfile]:
-    hasher.update(path.name.encode())
+# The deps images build the source engine's wheel from crates/source-contract
+# (mastering to-do 15), so a change there is a new deps image too.
+engine = root / "crates" / "source-contract"
+engine_files = sorted(
+    p for p in engine.rglob("*")
+    if p.is_file() and "target" not in p.relative_to(engine).parts
+    and not p.relative_to(engine).parts[0] == "tests"
+)
+named = [(p.name, p) for p in (root / "pyproject.toml", root / "uv.lock", deps_dockerfile)]
+named += [(p.relative_to(root).as_posix(), p) for p in engine_files]
+for name, path in named:
+    hasher.update(name.encode())
     hasher.update(b"\0")
     hasher.update(path.read_bytes())
     hasher.update(b"\0")

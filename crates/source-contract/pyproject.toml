@@ -1,0 +1,17 @@
+# The engine's Python binding (mastering to-do 15). The main project installs
+# it through its `engine` extra; nothing but `edgar_warehouse/rules/source_engine.py`
+# imports it.
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "source-contract"
+version = "0.1.0"
+description = "The configured source engine, behind Python."
+requires-python = ">=3.12"
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "source_contract"
+features = ["python"]

@@ -1,3 +1,19 @@
+# The configured source engine (mastering to-do 15): build its Python wheel
+# with the Rust toolchain, then install the wheel below. The toolchain stays
+# in this stage; the image gets only the wheel.
+FROM public.ecr.aws/docker/library/rust:1-slim-bookworm AS rust
+FROM public.ecr.aws/docker/library/python:3.12-slim-bookworm AS engine
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:${PATH}
+COPY --from=rust /usr/local/rustup /usr/local/rustup
+COPY --from=rust /usr/local/cargo /usr/local/cargo
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN python -m pip install --no-cache-dir "maturin>=1.7,<2"
+COPY crates/source-contract /src/source-contract
+RUN maturin build --release --locked --compatibility linux \
+    --manifest-path /src/source-contract/Cargo.toml --out /wheels
+
 FROM public.ecr.aws/docker/library/python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1
@@ -22,3 +38,6 @@ COPY pyproject.toml uv.lock README.md /app/
 
 RUN uv sync --frozen --no-dev --extra s3 --extra mdm-runtime --no-install-project \
     && uv cache clean
+
+COPY --from=engine /wheels /wheels
+RUN uv pip install --no-deps /wheels/*.whl && rm -rf /wheels

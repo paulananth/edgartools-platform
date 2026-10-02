@@ -1,0 +1,31 @@
+# The research contract (docs/research/experiments/custom-parsing/rust/), with
+# the document and record checks the native GLEIF reader applies in code.
+source: acceptance.gleif.level1
+version: acceptance-1
+read:
+  format: xml
+  root: LEIData
+  namespace: http://www.gleif.org/data/schema/leidata/2016
+  require: [LEIHeader.ContentDate.$, LEIHeader.RecordCount.$]
+  record_count: { path: LEIHeader.RecordCount.$, table: gleif_projection }
+  limits: { max_bytes: 1048576, max_records: 100 }
+  tables:
+    gleif_projection:
+      each: LEIRecords.LEIRecord
+      columns:
+        ordinal: { ordinal: {} }
+        lei: { text: { path: LEI.$, default: null } }
+        name: { text: { path: Entity.LegalName.$, default: null } }
+        category: { text: { path: Entity.EntityCategory.$, default: null } }
+        country: { text: { path: Entity.LegalAddress.Country.$, default: null } }
+        postal_code: { text: { path: Entity.LegalAddress.PostalCode.$, default: null } }
+        language: { text: { path: Entity.LegalName.@lang, default: null } }
+      checks:
+        - { check: lei, column: lei, on_fail: defer }
+        - { check: in_lookup, column: lei, lookup: eligible_leis, on_fail: defer, reason: outside_approved_company_scope }
+        - { check: absent, path: Extension.Deletion, on_fail: defer, reason: gleif_deletion_flag }
+        - check: in_set
+          column: category
+          values: [GENERAL, BRANCH, FUND, SOLE_PROPRIETOR, INTERNATIONAL_ORGANIZATION, RESIDENT_GOVERNMENT_ENTITY]
+          on_fail: defer
+          reason: invalid_identity_kind
