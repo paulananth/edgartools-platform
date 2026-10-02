@@ -61,6 +61,10 @@ MIN = datetime.min.replace(tzinfo=UTC)
 MAX = datetime.max.replace(tzinfo=UTC)
 
 
+# A link stated before its other end is an accepted entity waits for it,
+# quietly: it is not a steward's review (mastering to-do 13).
+WAITING = {"unresolved_endpoint", "unresolved_endpoint_identity"}
+
 # What makes two statements one relationship (operator, 2026-10-01, design 1):
 # its type, its two ends and its scope. Dates, status and other properties are
 # a period of that relationship, so a restatement keeps the relationship's id.
@@ -113,7 +117,9 @@ def project(
                 review("unsupported_relationship", **context)
                 continue
             if start not in state.bindings or target not in state.bindings:
-                review("unresolved_endpoint", **context)
+                review("unresolved_endpoint", **context,
+                       missing=[end for end, key in (("source", start), ("target", target))
+                                if key not in state.bindings])
                 continue
             source_id = state.canonical[state.bindings[start]]
             target_id = state.canonical[state.bindings[target]]
@@ -126,7 +132,9 @@ def project(
                 review("incompatible_endpoint", **context)
                 continue
             if source.get("status") != "accepted" or dest.get("status") != "accepted":
-                review("unresolved_endpoint_identity", **context)
+                review("unresolved_endpoint_identity", **context,
+                       missing=[end for end, entity in (("source", source), ("target", dest))
+                                if entity.get("status") != "accepted"])
                 continue
             if not reported.get("valid_from"):
                 review("unknown_relationship_start", **context)

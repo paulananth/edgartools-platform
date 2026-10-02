@@ -14,6 +14,12 @@ from sqlalchemy import text
 from .store import Conflict, Store, canonical
 
 
+def _count_waiting_links(mdm) -> int:
+    with mdm.engine.connect() as conn:
+        return conn.scalar(text("""SELECT count(*) FROM mdm.current_record WHERE object_type='review'
+            AND body->>'waiting_for_end'='true' AND body->>'retired' IS DISTINCT FROM 'true'"""))
+
+
 class RunCoordinator:
     def __init__(self, mdm: Store):
         self.mdm = mdm
@@ -149,6 +155,14 @@ class RunCoordinator:
                 WHERE o.run_id=CAST(:run AS uuid) AND old->>'object_type'='review' AND old->>'object_id'=p.object_id)"""),
                 {"run": run_id},
             )
+            # Every link waiting for its other end, in this run or an earlier
+            # one: counted and listed, never unresolved (mastering to-do 13).
+            waiting = [dict(r) for r in conn.execute(
+                text("""SELECT p.body->>'subject' AS subject, p.body->'relationship'->>'type' AS type,
+                p.body->'relationship'->>'target_subject' AS target_subject, p.body->'missing' AS missing,
+                p.body->>'reason' AS reason FROM mdm.current_record p WHERE p.object_type='review'
+                AND p.body->>'waiting_for_end'='true' AND p.body->>'retired' IS DISTINCT FROM 'true'
+                ORDER BY p.object_id LIMIT 101""")).mappings()]
             attempts = {
                 event: count
                 for event, count in conn.execute(
@@ -187,6 +201,8 @@ class RunCoordinator:
             "unexpected_batches": sorted(observed - expected),
             "pending_publications": pending,
             "unresolved_reviews": unresolved,
+            "waiting_links": len(waiting) if len(waiting) <= 100 else _count_waiting_links(self.mdm),
+            "waiting_link_list": waiting[:100],
             "attempt_events": attempts,
             **source_report,
         }
