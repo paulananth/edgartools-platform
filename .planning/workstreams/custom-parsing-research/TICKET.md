@@ -1,6 +1,6 @@
 # Custom parsing outside configuration
 
-Status: in progress
+Status: complete — source research and documentation; no runtime changes
 Branch: `codex/custom-parsing-research-20261002`
 Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (origin/main, fetched 2026-10-02 09:31 ET)
 
@@ -18,7 +18,7 @@ validation distinct so the findings identify actual source-specific logic.
 - [x] Trace the configuration-driven path and verify which behaviors are configured versus fixed in Python — canonical rules loader and CLI probe confirmed three source documents/five Dataset Contracts, no read block, fixed Company operation names and config-selected adapter formats; source_input, adapters, quality and primitives inspected; 2026-10-02 09:36 ET.
 - [x] Record active, uncalled and historical parsing findings in a research report, with limits of the evidence — separates reachable Python source readers, config-selected primitives, retained helpers, external-library smoke tools, generic validation and configured Rust prototype; source baseline and absence of deployment proof explicit; 2026-10-02 09:39 ET.
 - [x] Verify report references and branch diff — 68 source links and line anchors resolve; staged git diff --check passes; only the research report and this ticket changed; 2026-10-02 09:41 ET.
-- [ ] Commit and publish the research documents on the owned branch, then verify the remote head.
+- [x] Commit and publish the research documents on the owned branch, then verify the remote head — 84a3cb6b pushed; git ls-remote confirms matching remote SHA; 2026-10-02 09:42 ET.
 
 ## Scope
 
@@ -44,3 +44,6 @@ loaded every source through `edgar_warehouse.rules.files.load_source`.
 
 This is source/CLI/configuration verification, not a database integration test
 or evidence that a source runs in a hosted deployment.
+
+Research and document verification took approximately 11 minutes (09:31–09:42
+ET), including background source/caller inventory and the configuration probe.
