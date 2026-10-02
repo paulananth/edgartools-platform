@@ -1,6 +1,6 @@
 # Clean old Codex branches and workstreams
 
-Owner: Codex. Status: in progress. Branch: `codex/cleanup-old-workstreams-20261002`.
+Owner: Codex. Status: complete — local cleanup verified; planning archive PR #797 open. Branch: `codex/cleanup-old-workstreams-20261002`.
 Scope: old Codex refs, worktrees and completed or superseded Codex planning.
 Preserve other runtimes, active work, dirty files, stashes and runtime skills.
 
@@ -12,7 +12,7 @@ Preserve other runtimes, active work, dirty files, stashes and runtime skills.
 - [x] Remove eligible old Codex local/remote branches and worktrees; verify other runtimes are unchanged. — 10 local and 7 remote refs retired with SHA checks/atomic remote leases; four worktrees relocated; non-Codex refs excluded; 2026-10-02 13:44 ET.
 - [x] Archive completed/superseded Codex workstreams with references preserved; retain active/shared/uncertain ownership. — 10 folders / 21 tracked files archived; historical pending items retained; Claude handoff redirect preserved; 2026-10-02 13:44 ET.
 - [x] Verify restoration, skill discovery, links, preserved shared dirtiness and final inventories. — 36 local Markdown links checked; 19 restored SHAs and 15 dirty-file hashes match; shared protected hashes/stashes match; concurrent other-runtime edits left alone; 2026-10-02 13:44 ET.
-- [ ] Commit/push the planning cleanup and create a review PR.
+- [x] Commit/push the planning cleanup and create a review PR. — published 2e8ed941; GitHub confirms PR #797 open against main with matching head; 2026-10-02 13:47 ET.
 
 ## Evidence and limits
 
@@ -37,3 +37,5 @@ verification covers document links, preserved contents, JSON, skill resolution,
 exact Git recovery, branch inventory and protected file hashes. Full runtime
 pytest was not repeated for these planning moves; GitHub CI remains enabled.
 The inventory and recovery work took about 17 minutes before final publication.
+
+PR: https://github.com/paulananth/edgartools-platform/pull/797. Merge is outside this task.
