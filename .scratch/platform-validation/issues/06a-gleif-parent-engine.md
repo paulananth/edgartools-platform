@@ -1,7 +1,7 @@
 # The relationship engine follows the operator's design (GLEIF accounting parent, code)
 
 Type: task (code)
-Status: in progress (Claude, branch `claude/gleif-parent-engine`)
+Status: done (merged as #771)
 Parent: `06-relationship-rules.md` (branch `claude/relationship-rules-inventory`)
 
 ## Operator rulings (2026-10-01)
@@ -81,8 +81,8 @@ rules declared and proven.
     migration test now checks behaviour; idiom fixed.
   - Spec: no blockers. Added the adapter test and the guards on `last_seen`
     and period keys.
-- [ ] PR; CI green; merge on the operator's word
-- [ ] Tell the operator:
+- [x] PR #771; CI green; merged on the operator's "Yes" (2026-10-01 20:32 ET)
+- [x] Tell the operator (2026-10-02, with the approvals PR):
   - GLEIF gives one period per record, so multi-period history comes with
     Forms 3/4/5 (06b);
   - "not seen recently" is the `last_seen` date, not a flag;
