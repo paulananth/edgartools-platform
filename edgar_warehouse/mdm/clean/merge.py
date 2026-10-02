@@ -682,8 +682,14 @@ class MergeStage:
                         "object_id": digest(r),
                         "body": {
                             **r,
-                            "open": True,
-                            "blocking": r["reason"] != "override_source_disagreement",
+                            # A link whose other end is not an entity yet waits
+                            # quietly: no steward review, never blocking, and
+                            # re-checked when that end is saved (mastering
+                            # to-do 02, D2; ticket 13).
+                            **({"open": False, "blocking": False, "waiting": True}
+                               if r["reason"] in relationships.WAITING else
+                               {"open": True,
+                                "blocking": r["reason"] != "override_source_disagreement"}),
                             "affected_subjects": subjects,
                             "affected_entities": entities,
                         },

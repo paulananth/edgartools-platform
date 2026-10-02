@@ -101,3 +101,27 @@ def test_the_application_login_cannot_write_the_run_table(database):
             )
 
 
+
+
+def test_a_waiting_link_is_counted_and_does_not_hold_the_run_open(database):
+    # Mastering to-do 13: a link waiting for its other end is reported, not
+    # an unresolved review, so the run can complete.
+    store = Store(database.application)
+    coordinator = RunCoordinator(store)
+    run_id = str(uuid4())
+    coordinator.start(run_id, ["w1"], manifest_digest="w" * 64)
+    child = core.source(key="w1", relationships=[{
+        "type": "IS_DIRECTLY_CONSOLIDATED_BY", "target_subject": "not-a-company-yet",
+        "valid_from": core.AT, "valid_to": None, "scope": "consolidated"}])
+    identity, binding = core.identity_and_binding(child)
+    MergeStage(store).apply(
+        batch_id="w1", run_id=run_id, policy_digest=database.policy, consumer="load",
+        expected_checkpoint=0, checkpoint=1, as_of=core.AS_OF, assertions=[child],
+        identities=[identity], decisions=[binding])
+    with database.admin.connect() as conn:
+        reasons = conn.execute(text(
+            "SELECT body->>'reason', body->>'open' FROM mdm.current_record WHERE object_type='review'")).all()
+    assert reasons == [("unresolved_endpoint", "false")], reasons
+    report = coordinator.reconcile(run_id)
+    assert report["waiting_links"] == 1
+    assert report["unresolved_reviews"] == 0

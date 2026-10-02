@@ -123,3 +123,22 @@ def test_a_match_proposals_snapshot_sees_a_link_that_starts_at_its_key(database)
                     relationships=[parent(owner, source_subject=child["subject"])])
     apply(database, 2, assertions=[record])
     assert snapshot() != before
+
+
+def test_a_link_whose_parent_is_not_a_company_yet_waits_quietly(database):
+    """Mastering to-do 02, D2 (operator, 2026-10-02: "Wait quietly"): a link
+    whose other end is not an entity yet is not an open steward review. It
+    waits, is counted, and becomes a link once that end is bound."""
+    owner = source("owner")
+    child = source("child", relationships=[parent(owner)])
+    (child_pair,) = bound(child)
+    apply(database, 1, assertions=[child, owner], identities=[child_pair[0]], decisions=[child_pair[1]])
+    assert links(database) == []
+    (waiting,) = [r for r in documents(database, "review").values() if r["reason"] == "unresolved_endpoint"]
+    assert (waiting["open"], waiting["blocking"], waiting["waiting"]) == (False, False, True)
+    (owner_pair,) = bound(owner)
+    apply(database, 2, identities=[owner_pair[0]], decisions=[owner_pair[1]])
+    (link,) = links(database)
+    assert link["target_id"] == owner_pair[0]["entity_id"]
+    assert not [r for r in documents(database, "review").values()
+                if r["reason"] == "unresolved_endpoint" and not r.get("retired")]

@@ -149,6 +149,14 @@ class RunCoordinator:
                 WHERE o.run_id=CAST(:run AS uuid) AND old->>'object_type'='review' AND old->>'object_id'=p.object_id)"""),
                 {"run": run_id},
             )
+            # Links waiting for their other end: counted, never unresolved.
+            waiting = conn.scalar(
+                text("""SELECT count(*) FROM mdm.current_record p WHERE p.object_type='review'
+                AND p.body->>'waiting'='true' AND EXISTS(SELECT 1 FROM mdm.run_batch o
+                JOIN mdm.batch b USING(batch_id),jsonb_array_elements(b.effects->'projections') old
+                WHERE o.run_id=CAST(:run AS uuid) AND old->>'object_type'='review' AND old->>'object_id'=p.object_id)"""),
+                {"run": run_id},
+            )
             attempts = {
                 event: count
                 for event, count in conn.execute(
@@ -187,6 +195,7 @@ class RunCoordinator:
             "unexpected_batches": sorted(observed - expected),
             "pending_publications": pending,
             "unresolved_reviews": unresolved,
+            "waiting_links": waiting,
             "attempt_events": attempts,
             **source_report,
         }

@@ -61,6 +61,10 @@ MIN = datetime.min.replace(tzinfo=UTC)
 MAX = datetime.max.replace(tzinfo=UTC)
 
 
+# A link stated before its other end is an entity waits for it, quietly: it is
+# not a steward's review (operator, 2026-10-02, mastering to-do 02, D2).
+WAITING = {"unresolved_endpoint"}
+
 # What makes two statements one relationship (operator, 2026-10-01, design 1):
 # its type, its two ends and its scope. Dates, status and other properties are
 # a period of that relationship, so a restatement keeps the relationship's id.
