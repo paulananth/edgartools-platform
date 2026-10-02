@@ -2,7 +2,7 @@
 
 Type: grilling (HITL)
 Status: open
-Blocked by: none
+Blocked by: Codex's custom-parsing research (`codex/custom-parsing-research-20261002`, `docs/research/custom-parsing-inventory-2026-10-02.md`)
 
 ## Question
 

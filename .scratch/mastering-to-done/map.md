@@ -25,6 +25,25 @@ Company, Person and their relationships are switched on in a fresh local Clean M
   - `change-journal`: init, migrate, status, events, verify, recover;
   - `rules`: init, migrate, load, unload, mapdoc, catalog, pending, save, status, export, record-proof, approve, activate, run.
 
+## Sequence
+
+Work in this order. A ticket starts when everything it is blocked by is resolved.
+
+| # | Ticket | Blocked by |
+|---|---|---|
+| 01 | [Correct stale ticket statuses](issues/01-correct-stale-ticket-statuses.md) | none (any time) |
+| 02 | [Relationship rules design](issues/02-relationship-rules-design.md) | none: **next** |
+| 03 | [Data quality for Person and links](issues/03-data-quality-for-person-and-links.md) | 02 |
+| 04 | [The command that runs mastering](issues/04-the-command-that-runs-mastering.md) | none |
+| 05 | [Review findings 5 and 6](issues/05-review-findings-5-and-6.md) | none |
+| 06 | [Switch on Company and the GLEIF parents](issues/06-switch-on-company-and-gleif-parents.md) | 02, 04, 05 |
+| 07 | [Cascade passes: label and switch on](issues/07-cascade-passes-switch-on.md) | 06 |
+| 08 | [Configured parsing: engine or per-source readers](issues/08-configured-parsing-engine.md) | Codex's custom-parsing research |
+| 09 | [Test, check and Preview for onboarding](issues/09-test-check-and-preview-for-onboarding.md) | 08 |
+| 10 | [Forms 3/4/5 capture and reader](issues/10-forms-345-capture-and-reader.md) | 02, 08, 09 |
+| 11 | [Data Catalog for Person and links](issues/11-data-catalog-for-person-and-links.md) | 02 |
+| 12 | [Switch on Person feed 1 with its links](issues/12-switch-on-person-with-its-links.md) | 03, 06, 10, 11 |
+
 ## Decisions so far
 
 ## Not yet specified
