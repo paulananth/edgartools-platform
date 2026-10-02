@@ -49,25 +49,6 @@ class BoundaryTests(unittest.TestCase):
         ]
         self.assertEqual(offenders, [])
 
-    def test_bronze_and_serving_modules_do_not_hardcode_warehouse_path_prefixes(self) -> None:
-        targets = [
-        ]
-        forbidden_fragments = (
-            "reference/sec/",
-            "submissions/sec/",
-            "daily_index/sec/",
-            "filings/sec/",
-            "text/sec/",
-            "gold/{table_name}/run_id=",
-            "manifests/workflow_name=",
-        )
-        offenders = [
-            path
-            for path in targets
-            if any(fragment in path.read_text(encoding="utf-8") for fragment in forbidden_fragments)
-        ]
-        self.assertEqual(offenders, [])
-
     def test_snowflake_publishers_only_live_in_target_module(self) -> None:
         offenders = []
         for path in _python_sources():
@@ -77,24 +58,6 @@ class BoundaryTests(unittest.TestCase):
                 continue
             if "def write_source_dimensional_export_to_snowflake" in text or "def write_ticker_reference_to_snowflake_export" in text:
                 offenders.append(path)
-        self.assertEqual(offenders, [])
-
-    def test_filing_document_content_uses_only_the_narrow_raw_gateway(self) -> None:
-        """Ticket 56: content may reach sec_client only through its adapter."""
-        targets = [
-        ]
-        forbidden = (
-            "download_sec_bytes",
-            "from edgar_warehouse.infrastructure.sec_client",
-            "import httpx",
-            "sec_client.download",
-        )
-        offenders: list[str] = []
-        for path in targets:
-            text = path.read_text(encoding="utf-8")
-            for fragment in forbidden:
-                if fragment in text:
-                    offenders.append(f"{path.name}:{fragment}")
         self.assertEqual(offenders, [])
 
     def test_catalog_and_facts_use_edgartools_gateway_not_parallel_sec_client(self) -> None:
