@@ -17,6 +17,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from edgar_warehouse.mdm.clean.relationships import fold_sightings, project
+from edgar_warehouse.mdm.clean.store import digest
 
 D1, D2, D3, D4 = (f"2024-0{m}-15T00:00:00+00:00" for m in (1, 3, 6, 9))
 
@@ -135,3 +136,50 @@ def test_a_contradicted_stated_end_names_the_link_and_both_ends_for_a_steward():
 def test_insider_of_is_no_longer_a_link_type():
     _, reviews = engine([form4(D1, "director", kind="INSIDER_OF")])
     assert [r["reason"] for r in reviews] == ["unsupported_relationship"]
+
+
+# Review findings (three-axis review, 2026-10-02).
+
+def test_a_stated_sighting_outranks_an_observed_one_on_the_same_day():
+    periods, _ = fold_sightings([seen(D1), seen(D2, held=False, n=2),
+                                 seen(D2, basis="stated", n=3)])
+    assert [(p["valid_from"], p["valid_to"]) for p in periods] == [(D1, None)]
+
+
+def test_a_stated_end_after_an_observed_close_replaces_it_and_still_holds():
+    periods, contradictions = fold_sightings(
+        [seen(D1), seen(D2, held=False, n=2), seen(D3, held=False, basis="stated", n=3),
+         seen(D4, n=4)])
+    assert [(p["valid_to"], p["valid_to_basis"]) for p in periods] == [(D3, "stated")]
+    assert [c["on"] for c in contradictions] == [D4]
+
+
+def test_held_and_dropped_on_one_day_is_no_period():
+    assert fold_sightings([seen(D1), seen(D1, held=False, n=2)]) == ([], [])
+
+
+def test_a_link_without_a_capacity_keeps_the_id_it_had():
+    state = SimpleNamespace(bindings={"a": "x", "b": "y"}, canonical={"x": "x", "y": "y"})
+    entities = {e: {"kind": "company", "status": "accepted", "profiles": []} for e in ("x", "y")}
+    claims = {"a": {"assertion_id": "a1", "relationships": [
+        {"type": "IS_DIRECTLY_CONSOLIDATED_BY", "target_subject": "b", "valid_from": D1,
+         "scope": "GLEIF accounting consolidation"}]}}
+    links, _ = project(claims, state, entities, D4)
+    direct = [e for e in links if not e["derived"]]
+    assert [e["relationship_id"] for e in direct] == [
+        digest(["IS_DIRECTLY_CONSOLIDATED_BY", "x", "y", "GLEIF accounting consolidation"])]
+    assert "capacity" not in direct[0]
+
+
+def test_a_person_link_needs_a_dated_sighting_with_a_known_basis():
+    links, reviews = engine([{"type": "EMPLOYED_BY", "capacity": "director", "valid_from": D1}],
+                            [form4(D1, "officer", basis="guessed")])
+    assert links == []
+    assert [r["reason"] for r in reviews] == ["unknown_relationship_start", "unknown_date_basis"]
+
+
+def test_a_link_contradicted_twice_has_one_review():
+    _, reviews = engine([form4(D1, "officer")],
+                        [form4(D2, "officer", held=False, basis="stated")],
+                        [form4(D3, "officer")], [form4(D4, "officer")])
+    assert [(r["reason"], r["on"]) for r in reviews] == [("contradicts_stated_end", D3)]

@@ -17,7 +17,7 @@ CREATE VIEW mdm.is_insider AS
     AND ((p.body ->> 'retired'::text) IS DISTINCT FROM 'true'::text));
 
 COMMENT ON VIEW mdm.is_insider IS
-    'Each Person who is a Section 16 insider of a Company: a director, officer or 10% owner link, read from current_record. Not a link of its own: the EMPLOYED_BY and CONTROLS links it shows are the mastered facts. For readers that ask for insiders by that name.';
+    'Each Person who is or was a Section 16 insider of a Company: a director, officer or 10% owner link, read from current_record; its periods say when. Not a link of its own: the EMPLOYED_BY and CONTROLS links it shows are the mastered facts. For readers that ask for insiders by that name.';
 COMMENT ON COLUMN mdm.is_insider.relationship_id IS 'The id of the EMPLOYED_BY or CONTROLS link it shows.';
 COMMENT ON COLUMN mdm.is_insider.person_id IS 'The Person.';
 COMMENT ON COLUMN mdm.is_insider.company_id IS 'The Company the Person is an insider of.';

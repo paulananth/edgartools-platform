@@ -80,6 +80,7 @@ IDENTITY = ("type", "source_id", "target_id", "scope", "capacity")
 # What a dated sighting says: on which event date, on what basis, whether the
 # capacity was held, and the title then.
 SIGHTING = {"on", "basis", "held", "title"}
+BASES = {"observed", "stated"}
 # What a reported link names that is not a period: its identity, its ends as
 # records, and the keys a projected link adds. Everything else is the period.
 NOT_PERIOD = {*IDENTITY, "source_subject", "target_subject", "relationship_id", "derived",
@@ -104,21 +105,30 @@ def fold_sightings(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
     A Forms 3/4/5 filing restates the owner's capacities on every filing, so
     the first sighting opens a period with an observed start, and a later one
     that drops the capacity ends it at its event date. A sighting after an
-    observed end opens a new period. Silence ends nothing. A sighting after a
-    stated end does not reopen the link: it is returned as a contradiction for
-    a steward, who rescinds the end or opens a new period. A sighting on the
-    day of a stated end is ordinary reporting lag (spec, "Conflict and review
-    states").
+    observed end opens a new period. Silence ends nothing.
+
+    Stated outranks observed (spec, "Conflict and review states"): on a day
+    with a stated sighting, that day's observed ones are left out, and a stated
+    end replaces the observed end before it. A sighting after a stated end does
+    not reopen the link: it is returned as a contradiction for a steward. A
+    sighting on the day of a stated end is ordinary reporting lag.
     """
+    stated_days = {instant(s["on"]) for s in sightings if s["basis"] == "stated"}
     periods, contradictions = [], []
     current = stated_end = None
     # A drop on the same day as a sighting comes after it.
     for s in sorted(sightings, key=lambda s: (instant(s["on"]), not s["held"], s["assertion_id"])):
+        if s["basis"] == "observed" and instant(s["on"]) in stated_days:
+            continue
         if not s["held"]:
             if current:
-                periods.append({**current, "valid_to": s["on"], "valid_to_basis": s["basis"]})
+                # Held and dropped on one day is no period.
+                if instant(s["on"]) > instant(current["valid_from"]):
+                    periods.append({**current, "valid_to": s["on"], "valid_to_basis": s["basis"]})
                 current = None
-                stated_end = s["on"] if s["basis"] == "stated" else None
+            elif s["basis"] == "stated" and periods and periods[-1]["valid_to_basis"] == "observed":
+                periods[-1] = {**periods[-1], "valid_to": s["on"], "valid_to_basis": "stated"}
+            stated_end = s["on"] if s["basis"] == "stated" else None
             continue
         if not current:
             if stated_end and s["basis"] == "observed":
@@ -172,6 +182,15 @@ def project(
             if kind in CAPACITIES and reported.get("capacity") not in CAPACITIES[kind]:
                 review("unsupported_capacity", **context)
                 continue
+            # A Person link is stated as dated sightings, folded below; an
+            # observed start is enough. Other links state their periods.
+            sighting = reported.get("on")
+            if kind in CAPACITIES and not sighting:
+                review("unknown_relationship_start", **context)
+                continue
+            if sighting and reported.get("basis", "observed") not in BASES:
+                review("unknown_date_basis", **context)
+                continue
             if start not in state.bindings or target not in state.bindings:
                 review("unresolved_endpoint", **context,
                        missing=[end for end, key in (("source", start), ("target", target))
@@ -192,9 +211,6 @@ def project(
                        missing=[end for end, entity in (("source", source), ("target", dest))
                                 if entity.get("status") != "accepted"])
                 continue
-            # A Person link is stated as dated sightings, folded below; an
-            # observed start is enough. Other links state their periods.
-            sighting = reported.get("on")
             if sighting:
                 period = {"valid_from": sighting}
             else:
@@ -224,9 +240,11 @@ def project(
                 "source_id": source_id,
                 "target_id": target_id,
                 "scope": reported.get("scope", ""),
-                "capacity": reported.get("capacity", ""),
             }
-            key = digest([identity[k] for k in IDENTITY])
+            # Only a Person link has a capacity, so every other link keeps its id.
+            if reported.get("capacity"):
+                identity["capacity"] = reported["capacity"]
+            key = digest([identity[k] for k in IDENTITY if k in identity])
             value = edges.setdefault(
                 key,
                 {**identity, "derived": False, "relationship_id": key, "periods": [],
@@ -255,8 +273,9 @@ def project(
         if "sightings" not in e:
             continue
         e["periods"], contradictions = fold_sightings(e.pop("sightings"))
-        for c in contradictions:
-            review("contradicts_stated_end", relationship_id=key, **c,
+        # One review per link, naming the first sighting after the stated end.
+        if contradictions:
+            review("contradicts_stated_end", relationship_id=key, **contradictions[0],
                    entities=sorted({e["source_id"], e["target_id"]}))
         # Only drops, and nothing ever held: no link.
         if not e["periods"]:
