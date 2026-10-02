@@ -19,7 +19,7 @@ For each, record merged (with the PR), superseded (by what), or still open (with
 
 ## Answer
 
-On 2026-10-02 (11:40 ET), 31 tickets got a corrected `Status:` line naming the PR or the ticket that replaced them. The old status is kept beneath it as `Was:`, and no checklist item was deleted. Each status was checked against `git log` on main, `gh pr list` for the ticket's branch, and the current code.
+On 2026-10-02 (by 10:55 ET), 31 tickets got a corrected `Status:` line naming the PR or the ticket that replaced them. The old status is kept beneath it as `Was:`, and no checklist item was deleted. Each status was checked against `git log` on main, `gh pr list` for the ticket's branch, and the current code.
 
 | Outcome | Tickets |
 |---|---|
